@@ -1,11 +1,13 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types';
+import { getHome } from '../../lib/home';
 import {
     assertJson,
     authedRequest,
     driveGet,
     drivePost,
     driveUpload,
+    findOrFail,
     getTestContext,
     setMaxUploadSizeMB,
 } from '../setup';
@@ -240,6 +242,38 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 aliceRootId,
                 file,
             );
+
+            await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 1);
+            try {
+                const res = await importFromDrive(
+                    ctx.alice.user.sessionToken,
+                    ctx.alice.user.id,
+                    mountId,
+                    targetDocId,
+                    { sourceOwnerId: source.ownerId, sourceMountId: source.mountId, sourcePathId: source.id },
+                );
+                expect(res.status).toBe(413);
+            } finally {
+                await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
+            }
+        });
+
+        // The recorded size is a claim: a source that grew since it was written must be refused as it is
+        // read, not buffered whole into the heap of the thread that serves every app.
+        test('returns 413 when the file outgrew the size its row claims', async () => {
+            const file = new File(['small for now'], 'grew.docx', {
+                type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            });
+            const source = await driveUpload<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                aliceRootId,
+                file,
+            );
+            const home = await getHome(ctx.alice.user.id);
+            const mount = findOrFail(home.drive.getMounts(), (m) => m.id === mountId);
+            await mount.storage.write(await mount.getStorageKey(source.id), Buffer.alloc(2 * 1024 * 1024, 0x41));
 
             await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 1);
             try {
