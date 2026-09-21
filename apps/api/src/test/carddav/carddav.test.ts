@@ -1,10 +1,11 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { statSync, utimesSync, writeFileSync } from 'node:fs';
+import { rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { CARD_MAX_BYTES, cardPath } from '../../lib/contacts/card-store';
 import { computeResourceEtag, PATHS } from '../../lib/core';
 import { encodePathSegment } from '../../lib/dav/href';
+import { REPORT_DATA_BUDGET_BYTES } from '../../lib/dav/report-row';
 import { getHome } from '../../lib/home';
 import { basicAuth, davRequest } from '../dav-test-helpers';
 import { app, getTestContext } from '../setup';
@@ -620,6 +621,43 @@ describe('CardDAV', () => {
 
     // The <D:sync-token> the server appends after the responses (urn:eigen:sync:<syncGen>-<ctag>).
     const syncTokenOf = (xml: string) => xml.match(/<D:sync-token>([^<]+)<\/D:sync-token>/)![1];
+
+    test('an address-data REPORT serves up to its byte budget and lists the rest by etag alone', async () => {
+        const padding = 'x'.repeat(4_000_000);
+        const count = Math.ceil(REPORT_DATA_BUDGET_BYTES / 4_000_000) + 1;
+        const uris: string[] = [];
+        for (let i = 0; i < count; i++) {
+            const uid = randomUUID();
+            const uri = `${uid}.vcf`;
+            expect((await putCard(uri, vcard(uid, [`NOTE:${padding}`]), { 'If-None-Match': '*' })).status).toBe(201);
+            uris.push(uri);
+        }
+
+        const res = await report(multigetBody(uris.map(cardHref)));
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        // Every card is still named; the ones past the budget carry their data as a 404 prop, so a client sees
+        // them and multigets them instead of losing them. Both halves are asserted: a budget that serves
+        // nothing, or spends nothing, would answer this REPORT too.
+        expect((xml.match(/<D:response>/g) ?? []).length).toBe(count);
+        const served = (xml.match(/<CARD:address-data>/g) ?? []).length;
+        const withheld = (xml.match(/<CARD:address-data\/>/g) ?? []).length;
+        expect(served).toBeGreaterThan(0);
+        expect(withheld).toBeGreaterThan(0);
+        expect(served + withheld).toBe(count);
+        expect(xml.length).toBeLessThan(REPORT_DATA_BUDGET_BYTES);
+    }, 120_000);
+
+    test('a card whose file vanished is a 404 row in a multiget, never a 200 without its data', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
+        rmSync(join((await getHome(userId)).homeDir, PATHS.CONTACTS.ROOT, cardPath(uri)));
+
+        const xml = await (await report(multigetBody([cardHref(uri)]))).text();
+        expect(xml).toContain('<D:status>HTTP/1.1 404 Not Found</D:status>');
+        expect(xml).not.toContain('<CARD:address-data>');
+    });
 
     test('addressbook-multiget returns address-data for existing hrefs and a 404 row for a missing one', async () => {
         const uidA = randomUUID();

@@ -23,9 +23,10 @@ import * as schema from './schema';
 
 // The CardDAV store seam over the Contacts facade. See docs/CONTACTS.md § CardDAV surface.
 
-// The index projection the sync layer reads for a resource; the etag is the hash the handler quotes.
-export type CardRow = { uri: string; etag: string };
-const CARD_ROW = { uri: schema.contacts.uri, etag: schema.contacts.etag };
+// The index projection the sync layer reads for a resource: the etag is the hash the handler quotes, the
+// size is what a REPORT weighs against its byte budget before reading the file at all.
+export type CardRow = { uri: string; etag: string; size: number };
+const CARD_ROW = { uri: schema.contacts.uri, etag: schema.contacts.etag, size: schema.contacts.size };
 
 // ctag advances on each change, syncGen rotates on an index rebuild so stale sync tokens are refused.
 export type CardBook = { ctag: number; syncGen: number };
