@@ -19,12 +19,12 @@ function parseCalDavDate(value: string): Date | undefined {
     }
 }
 
-const parser = new XMLParser({
+// One parser for every CalDAV request body, REPORT and PROPPATCH alike: fxp's default numeric coercion
+// mangles digit-only values (a calendar named `0612`, the carddav twin's <text-match> phone bug).
+export const caldavXmlParser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
     removeNSPrefix: true,
-    // Keep element text as text — fxp's default numeric coercion mangles digit-only values (the carddav
-    // twin's <text-match> phone bug); nothing here is meant to be numeric.
     parseTagValue: false,
     isArray: (name) => ['href', 'comp'].includes(name),
 });
@@ -85,7 +85,7 @@ export type ReportRequest =
     | { type: 'sync-collection'; syncToken?: string; wantsData: boolean };
 
 export function parseReport(xml: string): ReportRequest {
-    const parsed = parser.parse(xml);
+    const parsed = caldavXmlParser.parse(xml);
 
     // removeNSPrefix strips the D:/C: prefixes, so a report's root is always unprefixed — no fallback needed.
     // An empty body or an unknown root matches nothing and throws: a bodyless or unknown REPORT must 400,

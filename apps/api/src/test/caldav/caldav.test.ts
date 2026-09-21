@@ -1445,9 +1445,9 @@ describe('CalDAV', () => {
         expect(xml).toContain('#00ff00');
     });
 
-    test('MKCALENDAR keeps a purely numeric displayname (fxp coerces it to a number)', async () => {
+    test('MKCALENDAR keeps a purely numeric displayname verbatim', async () => {
         const calId = 'numeric-name-cal';
-        const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname>2026</D:displayname></D:prop></D:set></C:mkcalendar>`;
+        const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname>0612</D:displayname></D:prop></D:set></C:mkcalendar>`;
         const res = await app.handle(
             new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
                 method: 'MKCALENDAR',
@@ -1462,7 +1462,34 @@ describe('CalDAV', () => {
                 headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
             }),
         );
-        expect(await propRes.text()).toContain('<D:displayname>2026</D:displayname>');
+        expect(await propRes.text()).toContain('<D:displayname>0612</D:displayname>');
+    });
+
+    test('PROPPATCH keeps a purely numeric displayname verbatim', async () => {
+        const calId = 'numeric-rename-cal';
+        await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: '',
+            }),
+        );
+        const body = `<?xml version="1.0"?><D:propertyupdate xmlns:D="DAV:"><D:set><D:prop><D:displayname>0612</D:displayname></D:prop></D:set></D:propertyupdate>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPPATCH',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(res.status).toBe(207);
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(await propRes.text()).toContain('<D:displayname>0612</D:displayname>');
     });
 
     test('MKCALENDAR with an empty <displayname/> falls back to the URL segment', async () => {

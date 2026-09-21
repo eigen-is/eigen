@@ -1,18 +1,15 @@
-import { XMLParser } from 'fast-xml-parser';
 import type { Calendar } from '../calendar/calendar';
 import { sanitizeCalendarId } from '../calendar/resource-store';
 import { ApiError } from '../core';
 import { multistatusResponse, propstatOk, response } from '../dav/xml';
 import { isXmlNode, type XmlNode } from '../dav/xml-node';
 import { calendarHref } from './discovery';
+import { caldavXmlParser } from './xml-parser';
 
-// removeNSPrefix strips the D:/C:/ICAL: prefixes, so property lookups below stay unprefixed — no fallback needed.
-const parser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
-
-// A prop element is either the bare text (fxp coerces purely numeric text to a number) or, when it carried an
-// attribute (e.g. xml:lang), an object with the value under '#text'. Return the string form; null when absent.
+// A prop element is either the bare text or, when it carried an attribute (e.g. xml:lang), an object with
+// the value under '#text'. Return the string form; null when absent.
 function textOf(value: unknown): string | null {
-    if (typeof value === 'string' || typeof value === 'number') return String(value);
+    if (typeof value === 'string') return value;
     if (isXmlNode(value) && '#text' in value) return String(value['#text']);
     return null;
 }
@@ -41,7 +38,7 @@ export async function handleMkcalendar(
     let props: { name?: string; color?: string } = {};
     if (body?.trim()) {
         try {
-            const parsed = parser.parse(body);
+            const parsed = caldavXmlParser.parse(body);
             const mkcal = parsed['mkcalendar'] || {};
             const set = mkcal['set'] || {};
             props = extractCalendarProps(set['prop'] || {});
@@ -93,7 +90,7 @@ export async function handleProppatch(
 
     if (body?.trim()) {
         try {
-            const parsed = parser.parse(body);
+            const parsed = caldavXmlParser.parse(body);
             const propertyupdate = parsed['propertyupdate'] || {};
             const set = propertyupdate['set'] || {};
             const props = extractCalendarProps(set['prop'] || {});
