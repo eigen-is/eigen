@@ -480,6 +480,43 @@ describe('calendar file store', () => {
         expect((await harness.instance.getCollection(calendarId))!.ctag).toBeGreaterThan(ctag);
     });
 
+    test('a linked copy takes the alarms a client sends, never the Eigen lines inside them', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        await put(harness.instance, calendarId, 'linked.ics', vcal(event('linked@eigen', 'Linked')));
+        const path = fileOf(harness, calendarId, 'linked.ics');
+        // The organizer stamp the server writes on an attendee's copy: a PUT may re-alarm it and no more.
+        writeFileSync(
+            path,
+            readFileSync(path, 'utf8').replace(
+                'SUMMARY:Linked',
+                'SUMMARY:Linked\r\nX-EIGEN-ORGANIZER-EVENT:organizer-1',
+            ),
+        );
+
+        const result = await put(
+            harness.instance,
+            calendarId,
+            'linked.ics',
+            vcal(
+                event('linked@eigen', 'Renamed', [
+                    'BEGIN:VALARM',
+                    'ACTION:DISPLAY',
+                    'DESCRIPTION:Reminder',
+                    'TRIGGER:-PT10M',
+                    'X-EIGEN-EVENT-ID:forged-by-the-client',
+                    'END:VALARM',
+                ]),
+            ),
+        );
+        expect(result.ok).toBe(true);
+
+        const stored = readFileSync(path, 'utf8');
+        expect(stored).toContain('TRIGGER:-PT10M');
+        expect(stored).toContain('SUMMARY:Linked');
+        expect(stored).not.toContain('forged-by-the-client');
+    });
+
     test('a name a file system cannot hold is refused, never rewritten', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);

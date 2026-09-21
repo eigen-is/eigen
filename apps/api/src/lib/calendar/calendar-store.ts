@@ -11,7 +11,7 @@ import {
     uriKeyOf,
     writeResourceFile,
 } from '../core';
-import { parseResource, projectResource, restampResource, serializeResource } from '../ical';
+import { parseResource, projectResource, restampResource, serializeResource, stripEigenStamps } from '../ical';
 import { EIGEN, readStamp, recurrenceKeyOf, seriesTimezones, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import type { EventRowInput } from './resource-store';
@@ -273,7 +273,11 @@ function adoptAlarms(stored: ICAL.Component, incoming: ICAL.Component): void {
         const match = byKey.get(`${uid}|${recurrenceKeyOf(vevent, storedZones.get(uid) ?? null) ?? ''}`);
         if (!match) continue;
         vevent.removeAllSubcomponents('valarm');
-        for (const alarm of match.getAllSubcomponents('valarm')) vevent.addSubcomponent(alarm);
+        for (const alarm of match.getAllSubcomponents('valarm')) {
+            // The one write path that keeps a client's own subcomponents: its Eigen lines are still untrusted.
+            stripEigenStamps(alarm);
+            vevent.addSubcomponent(alarm);
+        }
     }
 }
 
