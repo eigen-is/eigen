@@ -261,7 +261,7 @@ Reuse `parseIcs()`. Both routes:
 
 1. Take the target as a `calendarId` — a query parameter on the raw-body route, a body field beside the Drive source on the other. It names an existing calendar the Home owns; "New calendar" in the picker is the existing `useCreateCalendar` followed by the import, so there is no multipart body and no `mode` union. A subscribed target is rejected by the read-only guard.
 2. Parse, then write the masters in file order under one ctag bump and one SSE broadcast, with the import-specific rules: `data.organizer` **and** `data.attendees` are stripped (a stored organizer makes `updateEvent`'s linked-event guard treat the copy as an attendee's, and an attendee list mails the file author's addresses on every later edit), `METHOD` is ignored, and no invitation propagation runs.
-3. Answer the three counts (`ImportEventsResult`), as a vCard import does.
+3. Answer the three counts (`ImportCountsResult`), as a vCard import does.
 
 Once imported, events are normal owned events — no `subscription`, fully editable, identical to
 hand-created ones.

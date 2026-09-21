@@ -14,7 +14,15 @@ data/team/{teamId}/eigen.calendar/calendar.db
 
 Follows the Contacts/Mail pattern — per-user Home directory, not Drive.
 
-Calendar is the one domain whose truth is the database: mail is a Maildir plus `mail.db` and contacts are `cards/*.vcf` plus `contacts.db`, each with SQLite as a rebuildable index, while an event exists only as a row here. Moving events to one `.ics` file per UID with `calendar.db` as the index is designed in [PROPOSAL_CALENDAR_ICS_FILES.md](proposals/PROPOSAL_CALENDAR_ICS_FILES.md). Like contacts and unlike mail, every write goes through the API process; no other process opens this folder.
+Calendar is the one domain whose truth is the database: mail is a Maildir plus `mail.db` and contacts are `cards/*.vcf` plus `contacts.db`, each with SQLite as a rebuildable index, while an event exists only as a row here. Like contacts and unlike mail, every write goes through the API process; no other process opens this folder.
+
+| | Lives in | Rebuilds from the files |
+|---|---|---|
+| Events, their exceptions and the links an invitation keeps between two Homes | `calendar.db` | no — database-only, there are no files to rebuild from |
+| Calendars, their color, visibility, shares and `ctag` | `calendar.db` | no — database-only |
+| Event tombstones (the CalDAV sync 404 rows) | `calendar.db` | no — database-only |
+
+Moving events to one `.ics` file per UID, with `calendar.db` as an index that rebuilds from them like the other two domains' do, is designed in [PROPOSAL_CALENDAR_ICS_FILES.md](proposals/PROPOSAL_CALENDAR_ICS_FILES.md).
 
 ## Schema
 
@@ -190,9 +198,10 @@ the target sees a changed event. Moving a lone recurrence occurrence (an excepti
 
 `POST /calendar/:ownerId/import?calendarId=` takes the file as the raw body; `POST /calendar/:ownerId/import-from-drive` takes the same `calendarId` plus the picked Drive file and reads its bytes server-side through `readImportSourceBytes`. Both are the contacts and mail import pair with a calendar target — same guards (`requireNonGuest` + `requireSelf`), same statuses — and both answer `ImportCountsResult` (`{imported, skipped, failed}`). The target is a calendar this Home owns: an unknown id and a calendar shared *with* the caller both answer 404, because writing into someone else's calendar crosses homes and only the relay may do that. "New calendar" in the picker is `useCreateCalendar` followed by an import, so the route carries no mode union. Both routes exempt themselves from the server idle timeout (`server?.timeout(request, 0)`), because a file of a thousand events writes a row apiece before either answers.
 
-`Calendar.importEvents(calendarId, bytes)` takes the file's bytes and owns the decode, as `Mail.messageImport` and `Contacts.importCards` do: iCalendar is UTF-8 (RFC 5545 §3.1), so another encoding is a 400 "File is not UTF-8 encoded" and bytes that are no calendar at all a 400 `NOT_A_CALENDAR_FILE` — both with nothing written, and one over `ICS_MAX_BYTES` a 413. The three rejection strings a whole-file transfer answers with are spelled once in `packages/lib/src/constants/transfer.ts`, shared with the preview guards. It then groups the VEVENTs by UID and writes the masters in file order:
+`Calendar.importEvents(calendarId, bytes)` takes the file's bytes and owns the decode, as `Mail.messageImport` and `Contacts.importCards` do: iCalendar is UTF-8 (RFC 5545 §3.1), so another encoding is a 400 "File is not UTF-8 encoded" and bytes ical.js refuses to parse at all a 400 `NOT_A_CALENDAR_FILE` — both with nothing written, and one over `ICS_MAX_BYTES` a 413. The strict decode (`decodeUtf8Strict`) and the rejection strings live once in `apps/api/src/lib/core/transfer.ts`, with the ceilings every whole-file transfer is bounded by, shared with the preview guards; `packages/lib` keeps only the byte sizes a surface refuses a file at. It then groups the VEVENTs by UID and writes the masters in file order:
 
-- More than `ICS_IMPORT_MAX_EVENTS` VEVENTs — masters and overrides together, because each one is a row → 413 before anything is written. One series fits ~37 000 `RECURRENCE-ID` VEVENTs inside `ICS_MAX_BYTES`, so a ceiling on masters alone bounds nothing.
+- More than `ICS_IMPORT_MAX_EVENTS` VEVENTs — masters and overrides together, because each one is a row → 413 before anything is written, counted twice: once on the `BEGIN:VEVENT` lines of the decoded text, before ical.js builds a component tree per VEVENT, and again on what the parser returned. The route runs with the idle timeout off on the thread that serves every app, and parsing a file far past the ceiling costs tens of seconds ([ROADMAP.md](ROADMAP.md)). One series fits ~37 000 `RECURRENCE-ID` VEVENTs inside `ICS_MAX_BYTES`, so a ceiling on masters alone bounds nothing.
+- A VEVENT the parser could not read (no DTSTART), and an override whose master the file does not hold, count as `failed`: one malformed member costs the file that member, never the rest of it, the way one refused card costs a vCard import that card.
 - A UID that is empty, longer than 255 characters or carrying a control character → `failed`. It travels into etags and sync deltas, so it has to be storable.
 - A UID any calendar of the Home already holds → `skipped`, so a re-import is a no-op and an invitation already linked never gets a twin.
 - Everything else is inserted as the importing user's own event under a fresh `uri` of `${randomUUID()}.ics`, overrides included — the file's UID is its author's string (it may carry `/`, `..` or quotes), the uri is a CalDAV resource name, and two files that share a UID collide on the `(calendarId, uri)` unique index.
@@ -333,7 +342,7 @@ REPORT calendar-query/multiget/sync-collection, MKCALENDAR, DELETE on the collec
 `verifyProtocolAuth()`. One `.ics` resource per UID: the master VEVENT plus one override VEVENT per
 stored exception — exception rows are internal and never appear as their own resources.
 
-**MKCALENDAR creates the calendar at the client-chosen URL segment** (sanitized by `sanitizeCalendarId`, which is `isSafePathSegment` in `lib/core/path-utils.ts` over the NFC form — the one rule CardDAV resource names and mail draft ids take too; 405 when the id already exists, 201 with a `Location` header), so a client's follow-up PROPFIND of the URL it chose resolves — previously the segment was discarded for a random UUID and the 404 made retries create duplicates. **DELETE on that same URL removes the calendar** (204; 404 for an unknown id, 403 for the default one), through the very `deleteCalendar()` the web route calls, so the guard and the `calendar:calendar-deleted` SSE event are shared by both surfaces. **PROPFIND honors the requested prop list** via the shared core in `lib/dav/propfind.ts` (both DAV surfaces use it): requested props we have come back in the 200 propstat, unknown ones in a 404 propstat echoing their namespace (omitted under `Brief: t` / `Prefer: return=minimal`), a bodyless PROPFIND stays allprop, and member rows carry an empty `resourcetype`. Every multiget href gets a response row — malformed or out-of-collection hrefs come back as 404 rows echoing the original href.
+**MKCALENDAR creates the calendar at the client-chosen URL segment** (sanitized by `sanitizeCalendarId`, which is `isSafePathSegment` in `lib/core/path-utils.ts` over the NFC form — the one rule CardDAV resource names and mail draft ids take too; 405 when the id already exists, 201 with a `Location` header), so a client's follow-up PROPFIND of the URL it chose resolves. **DELETE on that same URL removes the calendar** (204; 404 for an unknown id, 403 for the default one), through the very `deleteCalendar()` the web route calls, so the guard and the `calendar:calendar-deleted` SSE event are shared by both surfaces. **PROPFIND honors the requested prop list** via the shared core in `lib/dav/propfind.ts` (both DAV surfaces use it): requested props we have come back in the 200 propstat, unknown ones in a 404 propstat echoing their namespace (omitted under `Brief: t` / `Prefer: return=minimal`), a bodyless PROPFIND stays allprop, and member rows carry an empty `resourcetype`. Every multiget href gets a response row — malformed or out-of-collection hrefs come back as 404 rows echoing the original href.
 
 **Serialization** (`ical-serialize.ts`):
 
@@ -358,9 +367,18 @@ stored exception — exception rows are internal and never appear as their own r
 - The series timezone is resolved per UID, from that UID's master VEVENT (the one without a
   RECURRENCE-ID). A CalDAV resource holds a single series, but a previewed or imported file holds every
   series a calendar has, each in its author's own zone — one file-wide series tz would key a second
-  series' UTC-`Z` overrides through the first one's. An override no UID groups with — an exporter wrote
-  the UID on one side of the pair only — falls back to its own DTSTART zone and then to the first
+  series' UTC-`Z` overrides through the first one's. A master that named no TZID keeps its series in
+  UTC: that is a resolved answer, not a missing one. Only an override no UID groups with — an exporter
+  wrote the UID on one side of the pair only — falls back to its own DTSTART zone and then to the first
   master's, so a file that names a single series still keys through that series' zone
+- The end of an event is its `DTEND`, or its `DURATION` when it names one (RFC 5545 §3.6.1, which Apple
+  and Outlook both emit), through `ICAL.Event.endDate`. A VEVENT with neither keeps the hour a timed row
+  is drawn as and the day an all-day row is
+- A VEVENT the parser cannot read — no DTSTART, a value it cannot make a date of — is skipped and
+  counted in `IcsParseResult.skipped` instead of failing the file, the way the vCard builder counts a
+  card the parser refuses. Each caller answers for its own surface: a CalDAV PUT is one series a client
+  just wrote, so any skipped VEVENT makes the payload a 400; a preview counts them in `dropped` and an
+  import in `failed`
 - Each VEVENT is wrapped in an `ICAL.Event` constructed with `{ exceptions: [] }`. Handed an exception
   list, ical.js skips the scan of every sibling VEVENT it otherwise runs to relate a series' overrides —
   a scan per VEVENT, quadratic over a whole file (20,000 events: 17s, and a 5 MiB export minutes). This
