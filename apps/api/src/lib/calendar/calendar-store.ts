@@ -233,6 +233,11 @@ export async function writeResource(
         await enforceHomeDataQuota(calendar.home.user.id, bytes.byteLength, existing?.size ?? 0);
     }
     const etag = computeResourceEtag(bytes);
+    // A name no row holds can still be a file: a dedupe loser, an unparseable resource, a calendar whose
+    // index phase threw. A create that replaced it would destroy bytes nothing carries any more.
+    if (!existing && (await calendar.storage.exists(resourcePath(calendarId, uri)))) {
+        throw new ApiError(412, 'A file already exists under this name');
+    }
 
     try {
         // Only a replacement can land bytes a later stat diff cannot see; a new name is always visible.
@@ -411,6 +416,8 @@ export async function putResource(
         } catch (e) {
             if (e instanceof ApiError && e.status === 413) return { ok: false, error: 'too-large' };
             if (e instanceof ApiError && e.status === 507) return { ok: false, error: 'quota' };
+            // The same answer a create gets when the name is taken: the client re-reads and picks another.
+            if (e instanceof ApiError && e.status === 412) return { ok: false, error: 'precondition' };
             throw e;
         }
 

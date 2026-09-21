@@ -520,6 +520,20 @@ describe('calendar file store', () => {
         expect((await harness.instance.getCollection(calendarId))!.ctag).toBeGreaterThan(ctag);
     });
 
+    test('a create never replaces a file the index does not know', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        // What a dedupe loser, an unparseable file or a calendar whose index phase threw leaves behind.
+        const planted = vcal(event('planted@eigen', 'Planted'));
+        writeFileSync(fileOf(harness, calendarId, 'planted.ics'), planted);
+
+        const result = await put(harness.instance, calendarId, 'planted.ics', vcal(event('new@eigen', 'New')));
+
+        expect(result).toEqual({ ok: false, error: 'precondition' });
+        expect(readFileSync(fileOf(harness, calendarId, 'planted.ics'), 'utf8')).toBe(planted);
+        expect(await harness.instance.listResources(calendarId)).toHaveLength(0);
+    });
+
     test('a linked copy takes the alarms a client sends, never the Eigen lines inside them', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);
@@ -911,6 +925,21 @@ describe('calendar file store', () => {
             expect(names).toHaveLength(2);
             expect(names).toContain('taken.ics');
             expect(await harness.instance.listResources(source)).toHaveLength(0);
+        });
+
+        test('a name the target holds as a file the index does not know becomes a fresh one', async () => {
+            const harness = await makeCalendar();
+            const source = await defaultCalendarId(harness);
+            const target = (await harness.instance.createCalendar({ name: 'Target', color: '#2563eb' })).id;
+            const moved = await seriesOf(harness, source, 'move-6@eigen', 'planted.ics');
+            const planted = vcal(event('planted@eigen', 'Planted'));
+            writeFileSync(join(calendarsDirOf(harness.dir), target, 'planted.ics'), planted);
+
+            await harness.instance.moveEvent(source, moved.id, target);
+
+            expect(readFileSync(join(calendarsDirOf(harness.dir), target, 'planted.ics'), 'utf8')).toBe(planted);
+            expect(readdirSync(join(calendarsDirOf(harness.dir), target))).toHaveLength(2);
+            expect((await harness.instance.getRawEvents(target)).map((e) => e.id)).toEqual([moved.id]);
         });
 
         test('a transaction that fails after the rename puts the file back where its row still names it', async () => {

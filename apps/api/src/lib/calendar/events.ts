@@ -364,10 +364,12 @@ export async function moveEvent(
         if (uidHolder(calendar, targetCalendarId, resource.uid)) {
             throw new ApiError(409, 'The target calendar already holds this event');
         }
-        // A name the target already uses becomes a fresh one; a client sees a delete plus a create either way.
-        const targetUri = store.resourceRowOf(calendar, targetCalendarId, resource.uri)
-            ? `${randomUUID()}.ics`
-            : resource.uri;
+        // A name the target already uses becomes a fresh one; a client sees a delete plus a create either
+        // way. A file no row of the target holds counts as used too, or the rename would destroy it.
+        const taken =
+            !!store.resourceRowOf(calendar, targetCalendarId, resource.uri) ||
+            (await calendar.storage.exists(resourcePath(targetCalendarId, resource.uri)));
+        const targetUri = taken ? `${randomUUID()}.ics` : resource.uri;
         await calendar.storage.moveDurable(
             resourcePath(calendarId, resource.uri),
             resourcePath(targetCalendarId, targetUri),
