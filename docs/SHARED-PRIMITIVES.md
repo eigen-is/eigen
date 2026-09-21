@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1514 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1524 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -206,7 +206,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyGestureContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (279)
+## Hooks (281)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -257,6 +257,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useVerifyTotp` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-security.ts |
 | `useAllSharedCalendarEvents` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useCalendarAccess` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
+| `useCalendarOptions` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useCalendars` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useCreateCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useCreateEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
@@ -266,6 +267,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useEvents` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useExportCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
 | `useImportCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
+| `useImportToCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
 | `useMoveEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useRsvp` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useSharedCalendarLabel` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
@@ -490,13 +492,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (354)
+## Types (356)
 
 | Name | Import from | File |
 |------|-------------|------|
 | `AuthContextType` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
 | `AuthUser` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
 | `RouterAppContext` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
+| `ImportCalendarTarget` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
 | `ViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `LocalCommand` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `EmoteDefinition` | `@workspace/lib/chat/built-in-emotes` | packages/lib/src/core/chat/built-in-emotes.ts |
@@ -559,6 +562,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CalendarEventOccurrence` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CalendarInvite` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `CalendarItem` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `CalendarOption` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CalendarShare` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `ChatAttachment` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `ChatMatch` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
@@ -849,7 +853,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (701)
+## Utilities & constants (707)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -967,6 +971,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ICS_METHOD_LABEL` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/preview-lines.ts |
 | `isFreeBusyEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isInvitationFromOthers` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `isSeriesOccurrence` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `isTransferableCalendarHome` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
+| `normalizeTimezone` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `occurrenceDateToString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `parseOccurrenceDate` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `rruleToText` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
@@ -1028,6 +1035,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BACKUP_UPLOAD_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `BACKUP_UPLOAD_MAX_LABEL` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `BROWSER_IMAGE_MIMES` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
+| `CALENDAR_NAME_MAX_LENGTH` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `canonicalMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `CANVAS_PREVIEW_HEIGHT` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `CANVAS_PREVIEW_WIDTH` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
@@ -1036,6 +1044,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `COLLAB_HOME_REPLACED_REASON` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
 | `COLLAB_STORAGE_UNAVAILABLE_CLOSE` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
 | `commentIndicatorColor` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
+| `DEFAULT_CALENDAR_COLOR` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `EIGEN_ACCENT_COLOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_ACCENT_COLORS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
@@ -1103,6 +1112,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `neuterParamValue` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
 | `stripControlChars` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
 | `stripLineBreaks` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
+| `unfoldContentLines` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
 | `dateFormatter` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatDate` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatDateOnly` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
