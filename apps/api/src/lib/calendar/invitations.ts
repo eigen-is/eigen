@@ -58,6 +58,11 @@ async function unlessTooLarge<T>(uid: string, apply: () => Promise<T>, dropped: 
 
 const TOO_LARGE: InboundRequestOutcome = { kind: 'dropped', reason: 'the message is too large to store' };
 
+// One guest's PARTSTAT moved on a list that is otherwise untouched; addresses match case-insensitively.
+function withAttendeeStatus(attendees: Attendee[], email: string, status: Attendee['status']): Attendee[] {
+    return attendees.map((a) => (a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a));
+}
+
 // The relay carries the same REQUEST an iMIP mail does, so it takes the same decision over the same shape.
 function relayedRequest(payload: ReceiveInvitationPayload): ParsedEvent {
     return {
@@ -531,9 +536,7 @@ export async function updateAttendeeStatus(
         const resource = events.resourceOf(calendar, eventId);
         if (!resource) return;
 
-        const attendees = event.data.attendees.map((a) =>
-            a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a,
-        );
+        const attendees = withAttendeeStatus(event.data.attendees, email, status);
         const key = event.recurrenceDate ? storedRecurrenceKey(event.recurrenceDate) : null;
         await events.patchResource(
             calendar,
@@ -568,7 +571,7 @@ export async function rsvpForOccurrence(
         // Only recorded invitees may leave a PARTSTAT; someone can be invited to a single occurrence only.
         const invitees = data.attendees ?? parent.data?.attendees ?? [];
         if (!invitees.some((a) => a.email.toLowerCase() === email.toLowerCase())) return null;
-        const attendees = invitees.map((a) => (a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a));
+        const attendees = withAttendeeStatus(invitees, email, status);
 
         if (existing && existing.status !== 'cancelled') {
             const resource = events.resourceOf(calendar, existing.id);
