@@ -1,8 +1,9 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { getHome } from '../../lib/home';
-import { assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
+import { assertJson, authedRequest, collectSSE, eventually, findOrFail, getTestContext } from '../setup';
 
 describe('Calendar Invites', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -206,6 +207,51 @@ describe('Calendar Invites', () => {
             // Organizer should see declined status
             await aliceEvent((e) => e.title === 'Optional Meeting' && e.data?.attendees?.[0].status === 'declined');
         });
+    });
+
+    // Cancelling one occurrence writes the attendee's own calendar, so every Home that calendar is shared
+    // with owes an announcement — the attendee's own tabs already hear it as CALENDAR_INVITE_CANCELLED.
+    test('cancelling one occurrence of a linked series reaches the Homes the calendar is shared with', async () => {
+        const home = await getHome(ctx.alice.user.id);
+        const shared = await home.calendar.createCalendar({ name: 'Shared invites', color: '#aabbcc' });
+        await home.calendar.updateCalendar(shared.id, {
+            shares: [{ targetId: ctx.charlie.user.email, permission: 'read' }],
+        });
+
+        const orgEventId = `ext-occurrence-${randomUUID()}`;
+        const orgUserId = 'external_org@example.com';
+        await home.calendar.createEvent(shared.id, {
+            title: 'Weekly Sync',
+            startTime: new Date('2026-07-06T09:00:00Z'),
+            endTime: new Date('2026-07-06T10:00:00Z'),
+            allDay: false,
+            rrule: 'FREQ=WEEKLY;COUNT=5',
+            data: {
+                organizer: { userId: orgUserId, email: 'org@example.com', name: 'Org' },
+                organizerEventId: orgEventId,
+                attendees: [{ email: ctx.alice.user.email, status: 'accepted', role: 'required' }],
+            },
+        });
+
+        const sse = collectSSE(ctx.charlie.user.id);
+        // collectSSE subscribes on the home it opens, and this await settles behind that subscription.
+        await getHome(ctx.charlie.user.id);
+        try {
+            await home.calendar.cancelInvitationOccurrence(
+                orgEventId,
+                orgUserId,
+                '2026-07-13',
+                new Date('2026-07-13T09:00:00Z'),
+                { sequence: 1, dtstamp: new Date() },
+            );
+
+            await eventually(
+                async () => (sse.events.some((e) => e.type === SSEventType.CALENDAR_EVENT_UPDATED) ? true : undefined),
+                "the sharee's tabs to hear about the cancelled occurrence",
+            );
+        } finally {
+            sse.stop();
+        }
     });
 
     // A re-received invite lands under a fresh name, so one sync delta carries the deleted resource as a

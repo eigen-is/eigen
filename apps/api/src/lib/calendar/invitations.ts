@@ -490,24 +490,27 @@ export async function cancelInvitationOccurrence(
     recurrenceInstant: Date | null | undefined,
     revision: Revision,
 ): Promise<void> {
-    const cancelled = await unlessTooLarge(
+    // The calendar the write landed in, so the announcement after the gate reaches the Homes it is shared with.
+    const cancelledIn = await unlessTooLarge(
         orgEventId,
         () =>
             calendar.gate.run(async () => {
                 const linked = findLinkedEvent(calendar, orgEventId, orgUserId);
-                if (!linked) return false;
+                if (!linked) return null;
                 const resource = events.resourceOf(calendar, linked.id);
-                if (!resource) return false;
+                if (!resource) return null;
                 const component = await events.loadResource(calendar, resource.calendarId, resource.uri);
-                if (!component) return false;
+                if (!component) return null;
                 const key = recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, linked.timezone);
-                if (!isNewerRevision(revision, storedRevision(component, key))) return false;
+                if (!isNewerRevision(revision, storedRevision(component, key))) return null;
                 await removeOccurrence(calendar, linked.id, key, revision);
-                return true;
+                return linked.calendarId;
             }),
-        false,
+        null,
     );
-    if (cancelled) calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, orgUserId));
+    if (!cancelledIn) return;
+    calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, orgUserId));
+    calendar.announce(cancelledIn, SSEventType.CALENDAR_EVENT_UPDATED);
 }
 
 export async function removeInvitation(calendar: Calendar, orgEventId: string, orgUserId: string): Promise<void> {
