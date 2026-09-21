@@ -19,7 +19,7 @@ import { eventForFile, validateEventInput } from './event-input';
 import { composeRsvpReply } from './imip';
 import { propagateCancellation, propagateDecline, propagateInvitation } from './invite-propagation';
 import { toEvent } from './mappers';
-import { gateKey, resourcePath, sanitizeEventUri } from './resource-store';
+import { gateKey, resourcePath } from './resource-store';
 import * as schema from './schema';
 import type { CreateEventArgs, UpdateEventArgs } from './types';
 
@@ -141,8 +141,8 @@ export async function writeEvent(
     validateEventInput(input);
     if (input.parentEventId) return writeOverride(calendar, calendarId, input);
 
-    const uri = input.uri ?? `${randomUUID()}.ics`;
-    if (sanitizeEventUri(uri) !== uri) throw new ApiError(400, 'Invalid event name');
+    // Eigen mints every name it writes: a UID is its author's string and may carry `/`, `..` or quotes.
+    const uri = `${randomUUID()}.ics`;
     const uid = input.uid || randomUUID();
     if (uidHolder(calendar, calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
     const event = eventForFile({ id: randomUUID(), calendarId, uid, input, now: new Date() });

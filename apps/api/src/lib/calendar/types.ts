@@ -63,7 +63,7 @@ export type InvitationExceptionPayload = MessageRevision & {
 // Server-side input shapes for Calendar.createEvent / updateEvent. Distinct from the shared
 // `CreateEventInput` / `UpdateEventInput` (FE wire shape — see packages/lib/src/types/calendar.ts)
 // because they (a) take calendarId as a separate positional arg and (b) carry internal CalDAV
-// fields (createByUserId, uid, uri, sequence) that the FE must never set.
+// fields (createByUserId, uid, sequence) that the FE must never set.
 export type CreateEventArgs = {
     title: string;
     startTime: Date;
@@ -83,7 +83,6 @@ export type CreateEventArgs = {
     data?: EventData | null;
     createByUserId?: string | null;
     uid?: string | null;
-    uri?: string | null;
 };
 
 export type UpdateEventArgs = {
