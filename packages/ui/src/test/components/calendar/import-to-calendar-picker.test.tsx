@@ -1,7 +1,9 @@
 // The one thing an .ics import needs that the other two do not: a target. What is pinned here is which
 // calendars are offered (the home's own — a calendar shared with the viewer lives in another home and
 // the import route refuses it), that "New calendar" creates before it imports, that the defaults land
-// once, and that a retry after a failed import reuses the calendar the first attempt created.
+// once, that a retry after a failed import reuses the calendar the first attempt created, that a list
+// that would not load offers a retry rather than loading for ever, and that a new calendar nothing
+// landed in goes again.
 import { expect, mock, test } from 'bun:test';
 import { subjectFromMailAttachment } from '@workspace/lib/file-subject';
 import { installHappyDom } from '../../happy-dom';
@@ -9,40 +11,57 @@ import { installHappyDom } from '../../happy-dom';
 installHappyDom();
 
 type ImportCall = { calendarId: string; url?: string };
+type ImportCounts = { imported: number; skipped: number; failed: number };
 type Calendar = { id: string; name: string; color: string; isDefault: boolean };
 
-const calls: { created: string[]; imported: ImportCall[] } = { created: [], imported: [] };
+const calls: { created: string[]; imported: ImportCall[]; deleted: string[] } = {
+    created: [],
+    imported: [],
+    deleted: [],
+};
 const calendars: Calendar[] = [
     { id: 'cal-work', name: 'Work', color: '#111111', isDefault: false },
     { id: 'cal-home', name: 'Home', color: '#222222', isDefault: true },
 ];
 // What the hooks answer for the render under test: the list may not have arrived, and an import may fail.
-const served: { calendars: Calendar[] | undefined; failNextImport: boolean } = {
+const served: {
+    calendars: Calendar[] | undefined;
+    isError: boolean;
+    failNextImport: boolean;
+    counts: ImportCounts;
+} = {
     calendars,
+    isError: false,
     failNextImport: false,
+    counts: { imported: 2, skipped: 0, failed: 0 },
 };
 
-const importOnce = async (input: ImportCall) => {
+const importOnce = async (input: ImportCall): Promise<ImportCounts> => {
     if (served.failNextImport) {
         served.failNextImport = false;
         throw new Error('import failed');
     }
     calls.imported.push(input);
+    return served.counts;
 };
 
 const realCalendarModule = await import('@workspace/lib/calendar');
 mock.module('@workspace/lib/calendar', () => ({
     ...realCalendarModule,
     // The picker asks for the home's own calendars only; useSharedCalendars is never reached from here.
-    useCalendars: () => ({ data: served.calendars }),
+    useCalendars: () => ({ data: served.calendars, isError: served.isError, refetch: () => {} }),
     useCreateCalendar: () => ({
         mutateAsync: async ({ name }: { name: string }) => {
             calls.created.push(name);
             return { id: 'cal-new' };
         },
     }),
-    useImportCalendarFromDrive: () => ({ mutateAsync: importOnce }),
-    useImportCalendarFromUrl: () => ({ mutateAsync: importOnce }),
+    useDeleteCalendar: () => ({
+        mutateAsync: async (id: string) => {
+            calls.deleted.push(id);
+        },
+    }),
+    useImportCalendar: () => ({ mutateAsync: importOnce }),
 }));
 
 mock.module('@workspace/lib/auth', () => ({ useAuth: () => ({ user: { id: 'owner-1' } }) }));
@@ -60,6 +79,7 @@ const subject = subjectFromMailAttachment('owner-1', 'message-1', 0, {
 async function open() {
     calls.created = [];
     calls.imported = [];
+    calls.deleted = [];
     const closed = { count: 0 };
     const container = document.createElement('div');
     document.body.append(container);
@@ -188,5 +208,39 @@ test('a retry after a failed import reuses the calendar the first attempt create
     await click('button', 'Import');
     expect(calls.created).toEqual(['Autumn market']);
     expect(calls.imported.map((call) => call.calendarId)).toEqual(['cal-new']);
+    await cleanup();
+});
+
+test('a calendar list that would not load offers a retry instead of loading for ever', async () => {
+    served.isError = true;
+    const { button, cleanup, dialog } = await open();
+    expect(dialog().textContent).toContain('Could not load your calendars');
+    expect(dialog().textContent).not.toContain('Loading calendars');
+    expect(button('Try again')).toBeDefined();
+    expect(button('Import')?.disabled).toBe(true);
+
+    served.isError = false;
+    await cleanup();
+});
+
+test('a new calendar nothing landed in goes again', async () => {
+    served.counts = { imported: 0, skipped: 4, failed: 0 };
+    const { chooseCalendar, click, cleanup } = await open();
+    await chooseCalendar('New calendar');
+
+    await click('button', 'Import');
+    expect(calls.created).toEqual(['Autumn market']);
+    expect(calls.deleted).toEqual(['cal-new']);
+
+    served.counts = { imported: 2, skipped: 0, failed: 0 };
+    await cleanup();
+});
+
+test('a calendar that took the file is kept', async () => {
+    const { chooseCalendar, click, cleanup } = await open();
+    await chooseCalendar('New calendar');
+
+    await click('button', 'Import');
+    expect(calls.deleted).toEqual([]);
     await cleanup();
 });

@@ -1,5 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
-import { MAILBOX_DRAFTS, mailboxRouteSegment } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_DRAFTS, MAILBOX_INBOX, mailboxRouteSegment } from '@workspace/lib/constants/mailboxes';
+import { invalidateHomeSize } from '../../home';
 
 export const emailKeys = {
     all: ['emails'] as const,
@@ -38,6 +39,14 @@ export function invalidateMailboxes(queryClient: QueryClient, ownerId: string): 
 
 export function invalidateMailReceived(queryClient: QueryClient, ownerId: string, mailbox: string): void {
     queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, mailbox) });
+}
+
+// An imported message lands unread in the inbox, so the open list and the unread counts both refresh, and
+// its bytes are metered against the home the way a saved draft's are.
+export function invalidateMailImported(queryClient: QueryClient, ownerId: string): void {
+    invalidateMailReceived(queryClient, ownerId, MAILBOX_INBOX);
+    invalidateMailboxes(queryClient, ownerId);
+    invalidateHomeSize(queryClient, ownerId);
 }
 
 export function invalidateMailDeleted(

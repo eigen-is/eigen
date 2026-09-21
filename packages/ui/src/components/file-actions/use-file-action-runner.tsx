@@ -1,11 +1,11 @@
 import { openDocument } from '@workspace/lib/api';
-import { useImportContactsFromDrive, useImportContactsFromUrl } from '@workspace/lib/contacts';
+import { useImportContactsFile } from '@workspace/lib/contacts';
 import { triggerDownload } from '@workspace/lib/download';
 import { useConvertDocument } from '@workspace/lib/drive';
 import { importSourceOf, subjectInfo } from '@workspace/lib/file-subject';
-import { useImportMailFromDrive, useImportMailFromUrl } from '@workspace/lib/mail';
-import type { ConvertTarget, DriveImportSource, DrivePath } from '@workspace/lib/types/drive';
-import type { FileAction, FileActionId, FileSubject } from '@workspace/lib/types/file-subject';
+import { useImportMail } from '@workspace/lib/mail';
+import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
+import type { FileAction, FileActionId, FileImportSource, FileSubject } from '@workspace/lib/types/file-subject';
 import { type ReactNode, useState } from 'react';
 import { ImportToCalendarPicker } from '../calendar/import-to-calendar-picker';
 import { ProgressDialog } from '../drive/progress-dialog';
@@ -40,10 +40,8 @@ export function useFileActionRunner(
 ): FileActionRunner {
     const { openPreview } = usePreview();
     const convertDocument = useConvertDocument();
-    const importContactsFromDrive = useImportContactsFromDrive();
-    const importContactsFromUrl = useImportContactsFromUrl();
-    const importMailFromDrive = useImportMailFromDrive();
-    const importMailFromUrl = useImportMailFromUrl();
+    const importContacts = useImportContactsFile();
+    const importMail = useImportMail();
     const actions = useFileActions(subject, exclude);
     // Open is its own flag: the closed picker keeps its subjects so its title holds through the exit animation.
     const [picker, setPicker] = useState<PickerState>({ subjects: [] });
@@ -70,14 +68,12 @@ export function useFileActionRunner(
         else convertPath(subject.drive, targetType);
     };
 
-    // Where the bytes come from is one derivation, shared with the calendar picker; only the pair of
-    // hooks differs per format.
-    const runImport = (fromDrive: (source: DriveImportSource) => void, fromUrl: (input: { url: string }) => void) => {
+    // Where the bytes come from is one derivation, shared with the calendar picker; the mutation that
+    // takes it is the only thing that differs per format.
+    const runImport = (mutate: (source: FileImportSource) => void) => {
         if (!subject) return;
         const source = importSourceOf(subject);
-        if (!source) return;
-        if (source.drive) fromDrive(source.drive);
-        else fromUrl({ url: source.url });
+        if (source) mutate(source);
     };
 
     const run = (action: FileAction) => {
@@ -101,10 +97,10 @@ export function useFileActionRunner(
                 convert('eigendoc', action.label);
                 return;
             case 'import-contacts':
-                runImport(importContactsFromDrive.mutate, importContactsFromUrl.mutate);
+                runImport(importContacts.mutate);
                 return;
             case 'import-mail':
-                runImport(importMailFromDrive.mutate, importMailFromUrl.mutate);
+                runImport(importMail.mutate);
                 return;
             // Unlike its siblings this import needs a target first, so the row opens the picker and
             // the picker runs the import it chose a calendar for. Snapshotted like a save: the menu
@@ -150,11 +146,6 @@ export function useFileActionRunner(
             </>
         ),
         isDialogOpen: pickerOpen || calendarPickerOpen || convertDocument.isPending,
-        isPending:
-            convertDocument.isPending ||
-            importContactsFromDrive.isPending ||
-            importContactsFromUrl.isPending ||
-            importMailFromDrive.isPending ||
-            importMailFromUrl.isPending,
+        isPending: convertDocument.isPending || importContacts.isPending || importMail.isPending,
     };
 }

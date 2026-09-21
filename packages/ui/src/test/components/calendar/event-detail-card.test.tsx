@@ -56,7 +56,7 @@ test('a multi-day all-day event names its last day, not the exclusive bound', as
     expect(text).toContain('Tuesday, 22 Sep 2026');
 });
 
-test('a cancelled event says so, whether or not the surface draws the title', async () => {
+test('a canceled event says so, whether or not the surface draws the title', async () => {
     const withTitle = await render({
         title: 'Autumn market',
         start: new Date('2026-09-20T09:00:00Z'),
@@ -64,7 +64,7 @@ test('a cancelled event says so, whether or not the surface draws the title', as
         allDay: false,
         status: 'cancelled',
     });
-    expect(withTitle).toContain('Cancelled');
+    expect(withTitle).toContain('Canceled');
 
     const titleless = await render({
         start: new Date('2026-09-20T09:00:00Z'),
@@ -72,7 +72,7 @@ test('a cancelled event says so, whether or not the surface draws the title', as
         allDay: false,
         status: 'cancelled',
     });
-    expect(titleless).toContain('Cancelled');
+    expect(titleless).toContain('Canceled');
 });
 
 // A payload lists only the first ICS_PREVIEW_MAX_ATTENDEES guests, so the card says how many it is not showing.
@@ -82,10 +82,12 @@ test('the guests an event holds beyond the ones listed are counted', async () =>
         end: new Date('2026-09-20T10:00:00Z'),
         allDay: false,
         attendees: [{ email: 'ada@example.com', name: 'Ada', status: 'accepted', role: 'required' }],
-        remainingAttendees: 49,
+        remainingAttendees: 150,
     });
 
-    expect(text).toContain('and 49 more guests');
+    // The header counts every guest the event has, not the ones the payload happened to carry.
+    expect(text).toContain('151 guests');
+    expect(text).toContain('and 150 more guests');
 });
 
 test('what the event does not carry draws nothing', async () => {
@@ -100,7 +102,7 @@ test('what the event does not carry draws nothing', async () => {
     });
 
     expect(text).toContain('Amsterdam time zone');
-    expect(text).toContain('every week on Sunday');
+    expect(text).toContain('Every week on Sunday');
     expect(text).toContain('Grote Markt');
     expect(text).toContain('Bring a bag.');
     expect(text).not.toContain('guest');

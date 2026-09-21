@@ -11,6 +11,7 @@ import { installHappyDom } from '../../happy-dom';
 installHappyDom();
 
 type ImportCall = { calendarId: string; url?: string };
+type ImportCounts = { imported: number; skipped: number; failed: number };
 
 const calls: { imported: ImportCall[] } = { imported: [] };
 const calendars = [{ id: 'cal-home', name: 'Home', color: '#222222', isDefault: true }];
@@ -18,16 +19,13 @@ const calendars = [{ id: 'cal-home', name: 'Home', color: '#222222', isDefault: 
 const realCalendarModule = await import('@workspace/lib/calendar');
 mock.module('@workspace/lib/calendar', () => ({
     ...realCalendarModule,
-    useCalendars: () => ({ data: calendars }),
+    useCalendars: () => ({ data: calendars, isError: false, refetch: () => {} }),
     useCreateCalendar: () => ({ mutateAsync: async () => ({ id: 'cal-new' }) }),
-    useImportCalendarFromDrive: () => ({
-        mutateAsync: async (input: ImportCall) => {
+    useDeleteCalendar: () => ({ mutateAsync: async () => {} }),
+    useImportCalendar: () => ({
+        mutateAsync: async (input: ImportCall): Promise<ImportCounts> => {
             calls.imported.push(input);
-        },
-    }),
-    useImportCalendarFromUrl: () => ({
-        mutateAsync: async (input: ImportCall) => {
-            calls.imported.push(input);
+            return { imported: 1, skipped: 0, failed: 0 };
         },
     }),
 }));

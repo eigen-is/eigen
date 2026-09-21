@@ -24,15 +24,17 @@ export const ATTENDEE_STATUS_LABEL: Record<Attendee['status'], string> = {
 type AttendeeListProps = {
     attendees: Attendee[];
     organizer?: { userId?: string; email: string; name?: string } | null;
+    // Guests a capped payload did not carry: they count in the header, but there is no reply to show.
+    remaining?: number;
 };
 
 // The guests of an event, read-only: the organizer first, then everyone else with the reply they gave.
-export function AttendeeList({ attendees, organizer }: AttendeeListProps) {
+export function AttendeeList({ attendees, organizer, remaining = 0 }: AttendeeListProps) {
     const filteredAttendees = organizer
         ? attendees.filter((a) => a.email.toLowerCase() !== organizer.email.toLowerCase())
         : attendees;
 
-    const count = filteredAttendees.length + (organizer ? 1 : 0);
+    const count = filteredAttendees.length + (organizer ? 1 : 0) + remaining;
     const title = count === 1 ? '1 guest' : `${count} guests`;
     const summary = buildAttendeeSummary(attendees);
 
@@ -65,10 +67,11 @@ export function AttendeeList({ attendees, organizer }: AttendeeListProps) {
                     </Badge>
                 </div>
             )}
-            {filteredAttendees.map((attendee) => {
+            {filteredAttendees.map((attendee, index) => {
                 const StatusIcon = ATTENDEE_STATUS_ICON[attendee.status];
+                // Index beside the address: a file may list the same one twice.
                 return (
-                    <div key={attendee.email} className="flex items-center justify-between">
+                    <div key={`${index}-${attendee.email}`} className="flex items-center justify-between">
                         <UserItem email={attendee.email} name={attendee.name} />
                         <Badge variant="outline" className="text-xs gap-1">
                             <StatusIcon className="h-3 w-3" />

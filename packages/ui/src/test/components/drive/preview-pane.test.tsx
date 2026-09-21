@@ -8,9 +8,9 @@ import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
 
-type QueryResult = { data: undefined; isPending: boolean; isError: boolean };
+type QueryResult = { data: undefined; status: 'pending' | 'error' | 'success' };
 
-const served: { result: QueryResult } = { result: { data: undefined, isPending: true, isError: false } };
+const served: { result: QueryResult } = { result: { data: undefined, status: 'pending' } };
 
 const realDrive = await import('@workspace/lib/drive');
 mock.module('@workspace/lib/drive', () => ({
@@ -65,11 +65,11 @@ async function renderAll(): Promise<string[]> {
 }
 
 test('a query that has not answered yet reads as loading, not as an unreadable file', async () => {
-    served.result = { data: undefined, isPending: true, isError: false };
+    served.result = { data: undefined, status: 'pending' };
     for (const text of await renderAll()) expect(text).not.toContain('Could not read this file');
 });
 
 test('a query that failed reads as an unreadable file', async () => {
-    served.result = { data: undefined, isPending: false, isError: true };
+    served.result = { data: undefined, status: 'error' };
     for (const text of await renderAll()) expect(text).toContain('Could not read this file');
 });

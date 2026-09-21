@@ -1,10 +1,9 @@
 import { getDriveItemThumbnail } from '@workspace/lib/api';
-import { droppedEventsLine, formatEventWhen, remainingEventsLine, viewerTimeZone } from '@workspace/lib/calendar';
+import { formatEventWhen, viewerTimeZone } from '@workspace/lib/calendar';
 import { CANVAS_PREVIEW_WIDTH, getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
-import { droppedContactsLine, remainingContactsLine } from '@workspace/lib/contacts';
 import { formatDateTime } from '@workspace/lib/date';
 import { A4_WIDTH_PX } from '@workspace/lib/docs/eigendoc';
 import { useEmlPreview, useIcsPreview, useTextPreview, useVCardPreview } from '@workspace/lib/drive';
@@ -17,6 +16,7 @@ import { useElementSize } from '../../hooks/use-element-size';
 import { cn, IMAGE_CHECKERBOARD_STYLE } from '../../lib/utils';
 import { UserAvatar } from '../user/user-avatar';
 import { getFilePresentation } from './file-presentation';
+import { PreviewCounts } from './preview-pane';
 
 type DrivePreviewProps = {
     path: DrivePath;
@@ -114,12 +114,7 @@ function VCardHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; c
             {contacts.map(({ contact }, index) => (
                 <VCardRow key={index} contact={contact} />
             ))}
-            {remaining > 0 && (
-                <p className="truncate text-xs text-muted-foreground">{remainingContactsLine(remaining)}</p>
-            )}
-            {data.dropped > 0 && (
-                <p className="truncate text-xs text-muted-foreground">{droppedContactsLine(data.dropped)}</p>
-            )}
+            <PreviewCounts remaining={remaining} dropped={data.dropped} noun="contact" className="truncate text-xs" />
         </div>
     );
 }
@@ -179,12 +174,7 @@ function IcsHero({ path, icon, color }: { path: DrivePath; icon: LucideIcon; col
                     </p>
                 </div>
             ))}
-            {remaining > 0 && (
-                <p className="truncate text-xs text-muted-foreground">{remainingEventsLine(remaining)}</p>
-            )}
-            {data.dropped > 0 && (
-                <p className="truncate text-xs text-muted-foreground">{droppedEventsLine(data.dropped)}</p>
-            )}
+            <PreviewCounts remaining={remaining} dropped={data.dropped} noun="event" className="truncate text-xs" />
         </div>
     );
 }

@@ -43,8 +43,6 @@ export function useMailEmlPreview(ownerId: string, messageId: string, index: num
     return useQuery({
         queryKey: emailKeys.emlPreview(ownerId, messageId, index),
         queryFn: async () => {
-            // mailEmlPreviewRoute, not mailApi: `date` is an ISO instant declared as a string, and the
-            // default treaty's reviver would hand the renderer a Date the type does not admit (api.ts).
             const response = await mailEmlPreviewRoute(ownerId, messageId, index).get();
             if (response.error) throw new AppError(response);
             return response.data;
@@ -59,9 +57,6 @@ export function useMailIcsPreview(ownerId: string, messageId: string, index: num
     return useQuery({
         queryKey: emailKeys.icsPreview(ownerId, messageId, index),
         queryFn: async () => {
-            // mailIcsPreviewRoute, not mailApi: an all-day bound is a bare YYYY-MM-DD and an event
-            // titled after a date is a string the card prints — the reviver would make a Date of
-            // either (api.ts).
             const response = await mailIcsPreviewRoute(ownerId, messageId, index).get();
             if (response.error) throw new AppError(response);
             return response.data;

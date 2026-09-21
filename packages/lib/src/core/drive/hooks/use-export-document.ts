@@ -1,29 +1,15 @@
 import { getDriveExportUrl } from '@workspace/lib/api';
-import { useCallback, useState } from 'react';
-import { onMutationError } from '../../api-error';
-import { downloadBlob, filenameFromDisposition } from '../../download';
+import { useCallback } from 'react';
+import { useFileDownload } from '../../download';
 
 export function useExportDocument() {
-    const [isExporting, setIsExporting] = useState(false);
+    const { download, isDownloading } = useFileDownload();
 
-    const exportDocument = useCallback(async (ownerId: string, mountId: string, pathId: string, format: string) => {
-        setIsExporting(true);
-        try {
-            const url = getDriveExportUrl(ownerId, mountId, pathId, format);
-            const response = await fetch(url, { credentials: 'include' });
-            if (!response.ok) {
-                const text = await response.text();
-                throw new Error(text || `Export failed (${response.status})`);
-            }
-            const blob = await response.blob();
-            const name = filenameFromDisposition(response.headers.get('Content-Disposition'), `export.${format}`);
-            downloadBlob(blob, name);
-        } catch (e) {
-            onMutationError(e);
-        } finally {
-            setIsExporting(false);
-        }
-    }, []);
+    const exportDocument = useCallback(
+        (ownerId: string, mountId: string, pathId: string, format: string) =>
+            download(getDriveExportUrl(ownerId, mountId, pathId, format), `export.${format}`),
+        [download],
+    );
 
-    return { exportDocument, isExporting };
+    return { exportDocument, isExporting: isDownloading };
 }
