@@ -4,6 +4,7 @@ import { CARD_MAX_BYTES, sanitizeCardUri } from '../contacts/card-store';
 import { getContacts } from '../contacts/contacts';
 import { requireSelf } from '../core/access';
 import { readBoundedBody } from '../core/http';
+import { type CollectionPath, parseCollectionPath } from '../dav/href';
 import {
     ADDRESSBOOK_ID,
     handleAddressbookHomePropfind,
@@ -14,35 +15,13 @@ import { handleCardReport } from './report';
 import { handleDeleteCard, handleGetCard, handlePutCard } from './resource';
 import { DAV_BODY_MAX_BYTES, davError, parsePropfind, wantsBrief } from './xml-builder';
 
-// The wildcard decodes to at most two segments — the book and an optional card name. Card names are
-// client-chosen, so every segment is percent-decoded (the webdav/xml.ts convention); a malformed escape or a
-// third segment is a client error, not a silent misroute.
-type ParsedPath = { ok: true; book: string | null; uri: string | null } | { ok: false };
-
-function parseAddressbookPath(wildcard: string): ParsedPath {
-    const parts = wildcard
-        .replace(/^\/+|\/+$/g, '')
-        .split('/')
-        .filter(Boolean);
-    if (parts.length > 2) return { ok: false };
-    const decoded: string[] = [];
-    for (const part of parts) {
-        try {
-            decoded.push(decodeURIComponent(part));
-        } catch {
-            return { ok: false };
-        }
-    }
-    return { ok: true, book: decoded[0] ?? null, uri: decoded[1] ?? null };
-}
-
 // The shared GET/PUT/DELETE card-resource tail: fixed-book check, then sanitize the client-chosen name before
 // it can become a filename (the AGENTS.md path rule). Returns the refusal Response to serve as-is.
-function resolveCardUri(parsed: ParsedPath): { uri: string } | Response {
+function resolveCardUri(parsed: CollectionPath): { uri: string } | Response {
     if (!parsed.ok) return new Response('Bad Request', { status: 400 });
-    if (parsed.book !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
-    if (!parsed.uri) return new Response('Bad Request', { status: 400 });
-    const uri = sanitizeCardUri(parsed.uri);
+    if (parsed.collection !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
+    if (!parsed.resource) return new Response('Bad Request', { status: 400 });
+    const uri = sanitizeCardUri(parsed.resource);
     if (!uri) return new Response('Bad Request', { status: 400 });
     return { uri };
 }
@@ -82,7 +61,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
     .route('PROPFIND', '/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const parsed = parseAddressbookPath(params['*']);
+        const parsed = parseCollectionPath(params['*']);
         if (!parsed.ok) return new Response('Bad Request', { status: 400 });
 
         const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
@@ -93,13 +72,13 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         const book = await contacts.getBook();
         const depth = request.headers.get('Depth') || '0';
 
-        if (!parsed.book) return handleAddressbookHomePropfind(params.ownerId, book, depth, req, brief);
+        if (!parsed.collection) return handleAddressbookHomePropfind(params.ownerId, book, depth, req, brief);
         // One fixed book named 'contacts'; any other name is a 404 (no MKADDRESSBOOK).
-        if (parsed.book !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
+        if (parsed.collection !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
 
         // A second segment is a single-resource PROPFIND — index-only lookup by folded uri key, 404 if unknown.
-        if (parsed.uri) {
-            const card = await contacts.getCardMeta(parsed.uri);
+        if (parsed.resource) {
+            const card = await contacts.getCardMeta(parsed.resource);
             if (!card) return new Response('Not Found', { status: 404 });
             return handleCardPropfind(params.ownerId, card.uri, card.etag, req, brief);
         }
@@ -112,9 +91,9 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
     .get('/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const parsed = parseAddressbookPath(params['*']);
+        const parsed = parseCollectionPath(params['*']);
         // The stub answers any well-formed collection URL before the book check — the CalDAV twin's order.
-        if (parsed.ok && !parsed.uri) {
+        if (parsed.ok && !parsed.resource) {
             return new Response('This is a CardDAV endpoint. Use a CardDAV client.', {
                 status: 200,
                 headers: { 'Content-Type': 'text/plain' },
@@ -130,7 +109,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
     .put('/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const resolved = resolveCardUri(parseAddressbookPath(params['*']));
+        const resolved = resolveCardUri(parseCollectionPath(params['*']));
         if (resolved instanceof Response) return resolved;
 
         // Bound the body before buffering (1 GB server cap → heap); putCard re-checks CARD_MAX_BYTES as the
@@ -146,7 +125,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
     .delete('/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const resolved = resolveCardUri(parseAddressbookPath(params['*']));
+        const resolved = resolveCardUri(parseCollectionPath(params['*']));
         if (resolved instanceof Response) return resolved;
 
         const ifMatch = request.headers.get('If-Match');
@@ -159,10 +138,10 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
     .route('REPORT', '/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const parsed = parseAddressbookPath(params['*']);
+        const parsed = parseCollectionPath(params['*']);
         if (!parsed.ok) return new Response('Bad Request', { status: 400 });
-        if (!parsed.book) return new Response('Bad Request', { status: 400 });
-        if (parsed.book !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
+        if (!parsed.collection) return new Response('Bad Request', { status: 400 });
+        if (parsed.collection !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
 
         const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
