@@ -9,8 +9,10 @@ import {
     processInboundImip,
 } from '../../lib/calendar/imip';
 import { getMailDomain } from '../../lib/config/server-config';
+import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
 import { buildResource, parseIcs, serializeEventForImip, serializeResource } from '../../lib/ical';
+import { verifyImipSender } from '../../lib/mail/imip-auth';
 import { basicAuth } from '../dav-test-helpers';
 import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
@@ -19,6 +21,20 @@ import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../s
 // domain. getMailDomain() is read lazily (after setup writes the test domain) so the authserv-id matches.
 const arHeaderValue = (fromDomain: string) => `${getMailDomain()}; dkim=pass header.d=${fromDomain}`;
 const arHeaderLine = (fromEmail: string) => `Authentication-Results: ${arHeaderValue(fromEmail.split('@')[1])}`;
+
+// What mailboxDeliver does with a message that carries a calendar part: read our MTA's verdict out of
+// the headers it delivered, then hand mail and verdict to the calendar.
+const deliverImip = (
+    home: Home,
+    mail: { attachments: Attachment[]; from: AddressObject; authenticationResults: string[] },
+): Promise<void> => {
+    const from = mail.from.value[0]?.address?.toLowerCase() ?? null;
+    return processInboundImip(
+        home,
+        mail,
+        verifyImipSender(mail.authenticationResults, getMailDomain(), from?.split('@')[1] ?? null),
+    );
+};
 
 const MOCK_EVENT: CalendarEvent = {
     id: 'evt-1',
@@ -1380,7 +1396,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 'END:VEVENT',
             ].join('\r\n'),
         );
-        await processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
+        await deliverImip(home, icsMail(fullRequest, 'REQUEST'));
 
         const before = await home.calendar.getEventsByUid(UID);
         expect(before).toHaveLength(1);
@@ -1402,7 +1418,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 'END:VEVENT',
             ].join('\r\n'),
         );
-        await processInboundImip(home, icsMail(exceptionOnly, 'REQUEST'));
+        await deliverImip(home, icsMail(exceptionOnly, 'REQUEST'));
 
         const after = await home.calendar.getEventsByUid(UID);
         const master = after.find((e) => !e.parentEventId);
@@ -1436,7 +1452,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 'END:VEVENT',
             ].join('\r\n'),
         );
-        await processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
+        await deliverImip(home, icsMail(fullRequest, 'REQUEST'));
         expect(await home.calendar.getEventsByUid(UID)).toHaveLength(1);
 
         const cancelOne = withMethod(
@@ -1455,7 +1471,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 'END:VEVENT',
             ].join('\r\n'),
         );
-        await processInboundImip(home, icsMail(cancelOne, 'CANCEL'));
+        await deliverImip(home, icsMail(cancelOne, 'CANCEL'));
 
         const after = await home.calendar.getEventsByUid(UID);
         const master = after.find((e) => !e.parentEventId && e.rrule);
@@ -1493,7 +1509,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 'END:VEVENT',
             ].join('\r\n'),
         );
-        await processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
+        await deliverImip(home, icsMail(fullRequest, 'REQUEST'));
         expect(await home.calendar.getEventsByUid(UID)).toHaveLength(1);
 
         // Apr 8 21:00 NY = Apr 9 01:00Z. No VTIMEZONE, no TZID: only the linked tz supplies the wall date.
@@ -1515,7 +1531,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'END:VEVENT',
             'END:VCALENDAR',
         ].join('\r\n');
-        await processInboundImip(home, icsMail(exceptionOnly, 'REQUEST'));
+        await deliverImip(home, icsMail(exceptionOnly, 'REQUEST'));
 
         const after = await home.calendar.getEventsByUid(UID);
         expect(after.find((e) => !e.parentEventId)!.rrule).toContain('WEEKLY');
@@ -1546,7 +1562,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 'END:VEVENT',
             ].join('\r\n'),
         );
-        await processInboundImip(home, icsMail(fullRequest, 'REQUEST'));
+        await deliverImip(home, icsMail(fullRequest, 'REQUEST'));
 
         const excReq = (summary: string, start: string, end: string, seq: number) =>
             withMethod(
@@ -1567,12 +1583,9 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             );
 
         // Newer move (SEQUENCE 5): the occurrence is rescheduled to 15:00 (19:00Z).
-        await processInboundImip(
-            home,
-            icsMail(excReq('Moved to 3pm', '20260408T150000', '20260408T160000', 5), 'REQUEST'),
-        );
+        await deliverImip(home, icsMail(excReq('Moved to 3pm', '20260408T150000', '20260408T160000', 5), 'REQUEST'));
         // Stale replay (SEQUENCE 3) carrying a different time must be ignored.
-        await processInboundImip(
+        await deliverImip(
             home,
             icsMail(excReq('Stale move to 9am', '20260408T090000', '20260408T100000', 3), 'REQUEST'),
         );
@@ -1605,7 +1618,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260101T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        await processInboundImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
+        await deliverImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
 
         const cancelOne = withMethod(
             'CANCEL',
@@ -1623,7 +1636,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 'END:VEVENT',
             ].join('\r\n'),
         );
-        await processInboundImip(home, icsMail(cancelOne, 'CANCEL'));
+        await deliverImip(home, icsMail(cancelOne, 'CANCEL'));
 
         // The organizer re-instates the occurrence (moved to 11:00) with a newer SEQUENCE.
         const reinstate = [
@@ -1639,7 +1652,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260103T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        await processInboundImip(home, icsMail(withMethod('REQUEST', reinstate), 'REQUEST'));
+        await deliverImip(home, icsMail(withMethod('REQUEST', reinstate), 'REQUEST'));
 
         const findException = async () =>
             (await home.calendar.getEventsByUid(UID)).find((e) => e.parentEventId && e.recurrenceDate === '2026-04-08');
@@ -1647,7 +1660,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
 
         // The original CANCEL (SEQUENCE 1) is redelivered: stale against the stored exception
         // (SEQUENCE 2), so it must be ignored.
-        await processInboundImip(home, icsMail(cancelOne, 'CANCEL'));
+        await deliverImip(home, icsMail(cancelOne, 'CANCEL'));
         expect((await findException())!.status).toBe('confirmed'); // pre-fix: 'cancelled' — wrong state sticks
     });
 
@@ -1670,7 +1683,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260101T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        await processInboundImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
+        await deliverImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
 
         // Move the occurrence (SEQUENCE 1), then cancel it WITHOUT bumping (still SEQUENCE 1).
         const move = [
@@ -1686,7 +1699,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260102T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        await processInboundImip(home, icsMail(withMethod('REQUEST', move), 'REQUEST'));
+        await deliverImip(home, icsMail(withMethod('REQUEST', move), 'REQUEST'));
 
         const cancelSameSeq = [
             'BEGIN:VEVENT',
@@ -1701,7 +1714,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260103T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        await processInboundImip(home, icsMail(withMethod('CANCEL', cancelSameSeq), 'CANCEL'));
+        await deliverImip(home, icsMail(withMethod('CANCEL', cancelSameSeq), 'CANCEL'));
 
         const exception = (await home.calendar.getEventsByUid(UID)).find(
             (e) => e.parentEventId && e.recurrenceDate === '2026-04-08',
@@ -1728,7 +1741,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260101T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        await processInboundImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
+        await deliverImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
 
         const cancelNewer = [
             'BEGIN:VEVENT',
@@ -1743,7 +1756,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260102T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        await processInboundImip(home, icsMail(withMethod('CANCEL', cancelNewer), 'CANCEL'));
+        await deliverImip(home, icsMail(withMethod('CANCEL', cancelNewer), 'CANCEL'));
 
         // A stale occurrence move (SEQUENCE 3) is redelivered after the newer CANCEL — ignore it.
         const staleMove = [
@@ -1759,7 +1772,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260103T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        await processInboundImip(home, icsMail(withMethod('REQUEST', staleMove), 'REQUEST'));
+        await deliverImip(home, icsMail(withMethod('REQUEST', staleMove), 'REQUEST'));
 
         const exception = (await home.calendar.getEventsByUid(UID)).find(
             (e) => e.parentEventId && e.recurrenceDate === '2026-04-08',
@@ -1795,7 +1808,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260102T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        await processInboundImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', ATT));
+        await deliverImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', ATT));
 
         const rows = await home.calendar.getEventsByUid(event.uid);
         const master = rows.find((e) => !e.parentEventId);
@@ -1846,7 +1859,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260102T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        await processInboundImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', ATT));
+        await deliverImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', ATT));
 
         const rows = await home.calendar.getEventsByUid(event.uid);
         const exception = rows.find((e) => e.parentEventId);
@@ -1897,7 +1910,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260102T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        await processInboundImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', OCC));
+        await deliverImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', OCC));
 
         const exception = (await home.calendar.getEventsByUid(event.uid)).find((e) => e.parentEventId);
         expect(exception!.data?.attendees?.[0].status).toBe('accepted'); // pre-fix: 'pending' — REPLY dropped
@@ -1931,7 +1944,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260102T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        await processInboundImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', STRANGER));
+        await deliverImip(home, icsMail(withMethod('REPLY', reply), 'REPLY', STRANGER));
 
         expect((await home.calendar.getEventsByUid(event.uid)).find((e) => e.parentEventId)).toBeUndefined();
     });
@@ -1955,7 +1968,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'DTSTAMP:20260101T000000Z',
             'END:VEVENT',
         ].join('\r\n');
-        await processInboundImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
+        await deliverImip(home, icsMail(withMethod('REQUEST', master), 'REQUEST'));
 
         const excVevent = (lines: string[], seq: number, dtstamp: string) =>
             [
@@ -1971,7 +1984,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             ].join('\r\n');
 
         // Move the occurrence (SEQUENCE 1) — creates the exception row.
-        await processInboundImip(
+        await deliverImip(
             home,
             icsMail(
                 withMethod(
@@ -1990,7 +2003,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             ),
         );
         // Cancel it with SEQUENCE 5 — must stamp 5 on the EXISTING exception.
-        await processInboundImip(
+        await deliverImip(
             home,
             icsMail(
                 withMethod(
@@ -2009,7 +2022,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             ),
         );
         // A stale move (SEQUENCE 3) is redelivered — must stay canceled.
-        await processInboundImip(
+        await deliverImip(
             home,
             icsMail(
                 withMethod(
@@ -2094,7 +2107,7 @@ describe('iMIP inbound self-addressed messages', () => {
             'END:VCALENDAR',
         ].join('\r\n');
 
-        await processInboundImip(home, selfMail(ics, 'REQUEST', ctx.charlie.user.email.toUpperCase()));
+        await deliverImip(home, selfMail(ics, 'REQUEST', ctx.charlie.user.email.toUpperCase()));
 
         const rows = await home.calendar.getEventsByUid(uid);
         expect(rows).toHaveLength(1);
@@ -2152,7 +2165,7 @@ describe('iMIP inbound self-addressed messages', () => {
             'END:VCALENDAR',
         ].join('\r\n');
 
-        await processInboundImip(home, selfMail(ics, 'CANCEL', ctx.charlie.user.email));
+        await deliverImip(home, selfMail(ics, 'CANCEL', ctx.charlie.user.email));
 
         expect(await home.calendar.getEventsByUid(`${uid}-linked`)).toHaveLength(1);
     });

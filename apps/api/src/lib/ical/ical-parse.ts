@@ -499,7 +499,13 @@ function readResource(comp: ICAL.Component): ReadResult {
                                 recurrenceInstant: null,
                                 data: null,
                             },
-                            stamps: { ...NO_STAMPS, eventId: stamp?.id ?? null, sequence: stamp?.sequence ?? null },
+                            stamps: {
+                                ...NO_STAMPS,
+                                eventId: stamp?.id ?? null,
+                                sequence: stamp?.sequence ?? null,
+                                // The revision the stamp records, so a projection does not re-mint one.
+                                updatedAt: stamp?.dtstamp ?? null,
+                            },
                         });
                     }
                 }

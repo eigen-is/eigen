@@ -17,17 +17,12 @@ export async function notifySharedCalendarUsers(
 
     const userIds = new Set<string>();
 
+    // Named users only: a team's members re-sync the team's calendars on their own, which costs nothing
+    // here, while resolving every member on every share change does.
     for (const share of shares) {
-        const parsed = parseOwnerId(share.targetId);
-        if (parsed.type === 'user') {
-            const user = await getUserByEmail(share.targetId);
-            if (user) userIds.add(user.id);
-        } else if (parsed.type === 'team') {
-            // Team members are not notified via SSE for calendar share changes.
-            // Instead, the frontend uses TanStack Query's staleTime to periodically
-            // re-sync team calendars (via syncTeamCalendars in get-calendar.ts).
-            // This avoids the cost of resolving all team members on every share change.
-        }
+        if (parseOwnerId(share.targetId).type !== 'user') continue;
+        const user = await getUserByEmail(share.targetId);
+        if (user) userIds.add(user.id);
     }
 
     userIds.delete(ownerHome.user.id);

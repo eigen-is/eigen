@@ -223,6 +223,32 @@ describe('relayed invitation', () => {
         expect(rows[0].title).toBe('Quarterly review (mine)');
     });
 
+    // An organizer's client restates WHEN the event is in every message, so a REQUEST that moved nothing
+    // must leave the stored bounds exactly as they came — a DURATION is not a DTEND.
+    test('a REQUEST that moves nothing leaves the stored DURATION alone', async () => {
+        const duration = vcal([
+            'BEGIN:VEVENT',
+            `UID:${UID}`,
+            'SUMMARY:Quarterly review (mine)',
+            'DTSTART:20260501T090000Z',
+            'DURATION:PT1H',
+            `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+            'DTSTAMP:20260101T000000Z',
+            'END:VEVENT',
+        ]);
+        const { calendar, id } = await harnessWith(duration);
+
+        await calendar.receiveImipRequest(parsedOf(request()), ORG);
+
+        const row = (await calendar.getEventsByUid(UID))[0];
+        expect(row.data?.organizerEventId).toBe(UID);
+        expect(row.title).toBe('Quarterly review');
+        const body = await calendar.getResource(id, 'mine.ics');
+        const ics = Buffer.from(body!.bytes).toString();
+        expect(ics).toContain('DURATION:PT1H');
+        expect(ics).not.toContain('DTEND');
+    });
+
     test('the organizer an event in another calendar names adopts it in place', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
