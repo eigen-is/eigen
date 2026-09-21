@@ -436,6 +436,14 @@ export class Calendar {
         return store.getResource(this, calendarId, uri);
     }
 
+    // For a caller that already holds the row: a listing serves its members from the rows it read.
+    public async readResource(
+        calendarId: string,
+        row: ResourceRow,
+    ): Promise<{ bytes: Uint8Array; etag: string } | null> {
+        return store.readResource(this, calendarId, row);
+    }
+
     public async putResource(
         calendarId: string,
         uri: string,

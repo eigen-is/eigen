@@ -191,16 +191,14 @@ export async function getDeletedResourcesSince(
 
 // ---- Bytes ----
 
-// Hashing the bytes just read keeps body and validator one revision; a durably stale row would otherwise
-// 412 every conditional write forever.
-export async function getResource(
+// The bytes of a resource whose row the caller already read — a REPORT holds one per member. Hashing the
+// bytes just read keeps body and validator one revision; a durably stale row would otherwise 412 every
+// conditional write forever.
+export async function readResource(
     calendar: Calendar,
     calendarId: string,
-    uri: string,
+    row: { uri: string; etag: string },
 ): Promise<{ bytes: Uint8Array; etag: string } | null> {
-    await calendar.gate.ensureDrained();
-    const row = resourceRowOf(calendar, calendarId, uri);
-    if (!row) return null;
     const bytes = await readResourceFile(calendar.storage, resourcePath(calendarId, row.uri));
     if (!bytes) {
         calendar.gate.markDirty(gateKey(calendarId, row.uri));
@@ -209,6 +207,16 @@ export async function getResource(
     const etag = computeResourceEtag(bytes);
     if (etag !== row.etag) calendar.gate.markDirty(gateKey(calendarId, row.uri));
     return { bytes, etag };
+}
+
+export async function getResource(
+    calendar: Calendar,
+    calendarId: string,
+    uri: string,
+): Promise<{ bytes: Uint8Array; etag: string } | null> {
+    await calendar.gate.ensureDrained();
+    const row = resourceRowOf(calendar, calendarId, uri);
+    return row ? readResource(calendar, calendarId, row) : null;
 }
 
 // ---- Writes ----
