@@ -716,7 +716,7 @@ export class Calendar {
     }
 
     public async updateAttendeeStatus(eventId: string, email: string, status: Attendee['status']): Promise<void> {
-        return invitations.updateAttendeeStatus(this, eventId, email, status);
+        return invitations.receiveAttendeeStatus(this, eventId, email, status);
     }
 
     public async rsvpForOccurrence(
@@ -727,7 +727,7 @@ export class Calendar {
         recurrenceInstant?: Date | null,
         restoreCancelled = true,
     ): Promise<void> {
-        return invitations.rsvpForOccurrence(
+        return invitations.receiveRsvpForOccurrence(
             this,
             eventId,
             email,

@@ -535,7 +535,34 @@ export async function removeInvitation(calendar: Calendar, orgEventId: string, o
     });
 }
 
-export async function updateAttendeeStatus(
+// The organizer's side of a REPLY, inbound over iMIP or over the relay: fire-and-forget like every other
+// receiver here, so a refused PARTSTAT drops and the rest of the message still files.
+export function receiveAttendeeStatus(
+    calendar: Calendar,
+    eventId: string,
+    email: string,
+    status: Attendee['status'],
+): Promise<void> {
+    return unlessRefused(eventId, () => updateAttendeeStatus(calendar, eventId, email, status), undefined);
+}
+
+export function receiveRsvpForOccurrence(
+    calendar: Calendar,
+    eventId: string,
+    email: string,
+    status: Attendee['status'],
+    recurrenceDate: string,
+    recurrenceInstant: Date | null | undefined,
+    restoreCancelled: boolean,
+): Promise<void> {
+    return unlessRefused(
+        eventId,
+        () => rsvpForOccurrence(calendar, eventId, email, status, recurrenceDate, recurrenceInstant, restoreCancelled),
+        undefined,
+    );
+}
+
+async function updateAttendeeStatus(
     calendar: Calendar,
     eventId: string,
     email: string,
@@ -562,7 +589,7 @@ export async function updateAttendeeStatus(
 
 // `restoreCancelled`: an attendee may un-cancel their own occurrence, an organizer-side receiver only
 // moves PARTSTAT — it never resurrects an occurrence the organizer deleted (RFC 5546).
-export async function rsvpForOccurrence(
+async function rsvpForOccurrence(
     calendar: Calendar,
     eventId: string,
     email: string,

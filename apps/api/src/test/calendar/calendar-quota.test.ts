@@ -384,6 +384,88 @@ describe('Calendar storage quota', () => {
         expect(events.some((e) => e.uid === uid)).toBe(false);
     });
 
+    test('a refused inbound REPLY is dropped, and the rest of the message still files', async () => {
+        const user = await makeUser();
+        const calendarId = await defaultCalendarOf(user);
+        const replier = 'replier@partner.com';
+        const attendees = [{ email: replier, status: 'pending', role: 'required' }];
+        const invite = (title: string, padding: number, extra: Record<string, unknown>) =>
+            authedRequest(user.sessionToken, `/calendar/${user.id}/calendars/${calendarId}/events`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...eventBody(title, padding), ...extra, data: { attendees } }),
+            });
+
+        await withBudget(null, async () => {
+            // The REPLY to the series files a whole new override, description and all, where the REPLY to
+            // the single event moves one PARTSTAT.
+            const series = await assertJson<CalendarEvent>(
+                await invite('Fat weekly', 2 * MB, { rrule: 'FREQ=WEEKLY;COUNT=5' }),
+            );
+            const single = await assertJson<CalendarEvent>(
+                await invite('Thin one-off', 0, {
+                    startTime: new Date('2026-05-06T10:00:00Z'),
+                    endTime: new Date('2026-05-06T11:00:00Z'),
+                }),
+            );
+
+            const home = await getHome(user.id);
+            const used = (await home.size()).mailAndContacts.used;
+            await updateServerSettings({ quotas: { mailAndContactsMaxMB: (used + 256 * 1024) / MB } });
+
+            const reply = (uid: string, recurrenceId: string[]) => [
+                'BEGIN:VEVENT',
+                `UID:${uid}`,
+                ...recurrenceId,
+                'SUMMARY:Reply',
+                'DTSTART:20260504T100000Z',
+                'DTEND:20260504T110000Z',
+                `ORGANIZER:mailto:${user.email}`,
+                `ATTENDEE;PARTSTAT=ACCEPTED:mailto:${replier}`,
+                'END:VEVENT',
+            ];
+            const ics = [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'METHOD:REPLY',
+                'PRODID:-//Partner//EN',
+                ...reply(series.uid, ['RECURRENCE-ID:20260511T100000Z']),
+                ...reply(single.uid, []),
+                'END:VCALENDAR',
+            ].join('\r\n');
+            const eml = [
+                `From: ${replier}`,
+                `Authentication-Results: ${getMailDomain()}; dkim=pass header.d=partner.com`,
+                `To: ${user.email}`,
+                'Subject: Accepted: Reply',
+                'MIME-Version: 1.0',
+                'Content-Type: multipart/mixed; boundary="reply-quota"',
+                '',
+                '--reply-quota',
+                'Content-Type: text/plain',
+                '',
+                'Reply attached.',
+                '--reply-quota',
+                'Content-Type: text/calendar; method=REPLY; charset=utf-8',
+                'Content-Disposition: attachment; filename="reply.ics"',
+                '',
+                ics,
+                '--reply-quota--',
+            ].join('\r\n');
+
+            const delivered = await authedRequest(user.sessionToken, `/mail/deliver/${user.email}`, {
+                method: 'POST',
+                body: new TextEncoder().encode(eml).buffer,
+            });
+            expect(delivered.status).toBe(200);
+
+            // The series keeps its master alone — the override the reply asked for did not fit.
+            expect(await home.calendar.getEventsByUid(series.uid)).toHaveLength(1);
+            const [replied] = await home.calendar.getEventsByUid(single.uid);
+            expect(replied.data?.attendees?.[0].status).toBe('accepted');
+        });
+    });
+
     test('a relayed invitation over the budget stores nothing and the sender is not thrown at', async () => {
         const user = await makeUser();
         const calendarId = await defaultCalendarOf(user);
