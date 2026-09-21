@@ -132,24 +132,24 @@ export function parseIcs(icsText: string): IcsParseResult {
         const allDay = event.startDate.isDate;
         const tzid = propTzid(dtstart);
 
+        // An event states its length as a DTEND or as a DURATION (RFC 5545 §3.6.1) and ICAL.Event.endDate
+        // resolves either, plus the next day a bare all-day DTSTART means. A bare timed DTSTART is the one
+        // case it reads as zero-length, where a row needs the hour it is drawn as.
         // For all-day events (VALUE=DATE), construct UTC midnight manually.
         // ical.js toJSDate() converts through local timezone, shifting the date.
         let startTime: Date;
         let endTime: Date;
         if (allDay) {
             const s = event.startDate;
+            const e = event.endDate;
             startTime = new Date(Date.UTC(s.year, s.month - 1, s.day));
-            if (dtend) {
-                const e = event.endDate;
-                endTime = new Date(Date.UTC(e.year, e.month - 1, e.day));
-            } else {
-                endTime = new Date(startTime.getTime() + 86400_000);
-            }
+            endTime = new Date(Date.UTC(e.year, e.month - 1, e.day));
         } else {
             startTime = icalTimeToInstant(event.startDate, tzid);
-            endTime = dtend
-                ? icalTimeToInstant(event.endDate, propTzid(dtend) ?? tzid)
-                : new Date(startTime.getTime() + 3600_000);
+            endTime =
+                dtend || vevent.getFirstProperty('duration')
+                    ? icalTimeToInstant(event.endDate, propTzid(dtend) ?? tzid)
+                    : new Date(startTime.getTime() + 3600_000);
         }
 
         const rruleProp = vevent.getFirstPropertyValue('rrule');

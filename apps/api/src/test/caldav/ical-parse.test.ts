@@ -97,6 +97,46 @@ describe('parseIcs over a file whose UIDs do not line up', () => {
     });
 });
 
+// RFC 5545 §3.6.1 lets an event state its length as a DURATION instead of a DTEND, which Apple and
+// Outlook both emit — an end derived from DTSTART alone turns a three-hour meeting into an hour and a
+// three-day trip into one day.
+describe('parseIcs over an event whose length is a DURATION', () => {
+    const only = (lines: string[]) =>
+        parseIcs(vcal(['BEGIN:VEVENT', 'UID:duration@eigen', ...lines, 'END:VEVENT'])).events[0];
+
+    test('a timed event ends a DURATION after its start', () => {
+        expect(only(['DTSTART:20260601T100000Z', 'DURATION:PT3H']).endTime.toISOString()).toBe(
+            '2026-06-01T13:00:00.000Z',
+        );
+    });
+
+    test('a zoned timed event ends a DURATION after its start in its own zone', () => {
+        // 10:00 Amsterdam on 1 June is 08:00Z, so 90 minutes later is 09:30Z.
+        expect(only(['DTSTART;TZID=Europe/Amsterdam:20260601T100000', 'DURATION:PT90M']).endTime.toISOString()).toBe(
+            '2026-06-01T09:30:00.000Z',
+        );
+    });
+
+    test('an all-day event spans the whole DURATION, exclusive end', () => {
+        const event = only(['DTSTART;VALUE=DATE:20260601', 'DURATION:P3D']);
+
+        expect(event.allDay).toBe(true);
+        expect(event.startTime.toISOString()).toBe('2026-06-01T00:00:00.000Z');
+        expect(event.endTime.toISOString()).toBe('2026-06-04T00:00:00.000Z');
+    });
+
+    test('a DTEND still wins over a DURATION the same VEVENT carries', () => {
+        expect(
+            only(['DTSTART:20260601T100000Z', 'DTEND:20260601T110000Z', 'DURATION:PT5H']).endTime.toISOString(),
+        ).toBe('2026-06-01T11:00:00.000Z');
+    });
+
+    test('an event with neither keeps the hour and the day a bare DTSTART means', () => {
+        expect(only(['DTSTART:20260601T100000Z']).endTime.toISOString()).toBe('2026-06-01T11:00:00.000Z');
+        expect(only(['DTSTART;VALUE=DATE:20260601']).endTime.toISOString()).toBe('2026-06-02T00:00:00.000Z');
+    });
+});
+
 describe('parseIcs over a calendar export', () => {
     // ICAL.Event walks every sibling VEVENT to relate the overrides of the series it is given, unless it
     // is handed the exceptions itself — which makes parsing a whole file quadratic in its event count.

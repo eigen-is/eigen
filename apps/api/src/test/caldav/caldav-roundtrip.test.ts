@@ -395,6 +395,30 @@ describe('CalDAV round-trip fidelity', () => {
             expect(reparsed!.title).toBe(title);
             expect(reparsed!.description).toBe(description);
         });
+
+        // A client that states the length as a DURATION (RFC 5545 §3.6.1) stores the same event as one
+        // that spells the DTEND; the resource it reads back carries the end it meant.
+        test('a PUT that states its length as a DURATION stores and serves the end it means', async () => {
+            const body = vcal(
+                [
+                    'BEGIN:VEVENT',
+                    'UID:rt-duration@eigen',
+                    'DTSTART:20260601T100000Z',
+                    'DURATION:PT3H',
+                    'SUMMARY:Workshop',
+                    'END:VEVENT',
+                ].join('\r\n'),
+            );
+            const put = await putIcs('rt-duration.ics', body);
+            expect(put.status).toBe(201);
+
+            const reparsed = parseIcs(await getIcs('rt-duration.ics')).events.find(
+                (e) => e.uid === 'rt-duration@eigen',
+            );
+            expect(reparsed).toBeDefined();
+            expect(reparsed!.startTime.toISOString()).toBe('2026-06-01T10:00:00.000Z');
+            expect(reparsed!.endTime.toISOString()).toBe('2026-06-01T13:00:00.000Z');
+        });
     });
 
     // Rows written before the route validated recurrenceDate can hold a full ISO datetime or
