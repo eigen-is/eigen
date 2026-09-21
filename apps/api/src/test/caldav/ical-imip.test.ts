@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, ImipMethod } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment } from '@workspace/lib/types/mail';
+import { eventsToIcs, serializeEventForImip } from '../../lib/caldav/ical-component';
 import { parseIcs } from '../../lib/caldav/ical-parse';
-import { eventsToIcs, serializeEventForImip } from '../../lib/caldav/ical-serialize';
 import {
     composeCancelEmail,
     composeInviteEmail,

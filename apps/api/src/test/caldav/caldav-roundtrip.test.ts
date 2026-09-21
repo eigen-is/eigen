@@ -7,8 +7,8 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
+import { serializeEventForImip } from '../../lib/caldav/ical-component';
 import { parseIcs } from '../../lib/caldav/ical-parse';
-import { serializeEventForImip } from '../../lib/caldav/ical-serialize';
 import { getHome } from '../../lib/home';
 import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 

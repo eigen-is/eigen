@@ -344,16 +344,25 @@ stored exception — exception rows are internal and never appear as their own r
 
 **MKCALENDAR creates the calendar at the client-chosen URL segment** (sanitized by `sanitizeCalendarId`, which is `isSafePathSegment` in `lib/core/path-utils.ts` over the NFC form — the one rule CardDAV resource names and mail draft ids take too; 405 when the id already exists, 201 with a `Location` header), so a client's follow-up PROPFIND of the URL it chose resolves. **DELETE on that same URL removes the calendar** (204; 404 for an unknown id, 403 for the default one), through the very `deleteCalendar()` the web route calls, so the guard and the `calendar:calendar-deleted` SSE event are shared by both surfaces. **PROPFIND honors the requested prop list** via the shared core in `lib/dav/propfind.ts` (both DAV surfaces use it): requested props we have come back in the 200 propstat, unknown ones in a 404 propstat echoing their namespace (omitted under `Brief: t` / `Prefer: return=minimal`), a bodyless PROPFIND stays allprop, and member rows carry an empty `resourcetype`. Every multiget href gets a response row — malformed or out-of-collection hrefs come back as 404 rows echoing the original href.
 
-**Serialization** (`ical-serialize.ts`):
+**Serialization** (`ical-component.ts`):
 
+- `ICAL.Component.toString()` is the one serializer. `buildResource(events)` assembles a VCALENDAR from
+  projected rows and `patchEvent` / `putOverride` / `addExclusion` / `removeExclusion` edit a stored
+  component in place, so folding, escaping and parameter quoting are ical.js's problem and an Eigen edit
+  leaves every property it did not touch as the client wrote it
+- Per-event state Eigen owns rides as `X-EIGEN-*` properties inside the VEVENT (the event id, the
+  creator, the invitation link, the color, one stamp per `EXDATE` carrying that exclusion's id and
+  SEQUENCE). `restampResource` discards every incoming one and copies the server-owned lines back from
+  the stored resource, matched on UID plus recurrence key; `stripEigenStamps` removes them from anything
+  that leaves the Home
 - Every referenced TZID gets a generated VTIMEZONE block (RFC 5545 §3.6.5). `vtimezone.ts` builds it
   from Intl offset data: transitions compressed to two open-ended RRULE observances when the zone's
   DST rule is regular, one observance per transition otherwise
 - RECURRENCE-ID names the ORIGINAL occurrence — computed from the master via
   `computeOccurrenceTimes(master, recurrenceDate)` — in the master's TZID form, never the exception's
   moved startTime (which would orphan the override)
-- The same serializer produces outbound iMIP bodies (`serializeEventForImip`), so Eigen↔Eigen
-  federation keeps instants intact for non-server timezones
+- The same builder produces outbound iMIP bodies (`serializeEventForImip`), so Eigen↔Eigen federation
+  keeps instants intact for non-server timezones, and the body is stripped of every `X-EIGEN-` line
 
 **Parsing** (`ical-parse.ts`):
 
@@ -374,6 +383,14 @@ stored exception — exception rows are internal and never appear as their own r
 - The end of an event is its `DTEND`, or its `DURATION` when it names one (RFC 5545 §3.6.1, which Apple
   and Outlook both emit), through `ICAL.Event.endDate`. A VEVENT with neither keeps the hour a timed row
   is drawn as and the day an all-day row is
+- `X-EIGEN-*` lines project back onto the row they came from: the event id, the creator, the color, the
+  imported organizer, `data.organizer.userId` and `data.organizerEventId` from the two organizer stamps,
+  `CREATED`/`LAST-MODIFIED` into `createdAt`/`updatedAt`, and an `EXDATE`'s stamp into the cancelled
+  row's id and SEQUENCE (an unstamped `EXDATE` the client added takes the master's SEQUENCE). A stamp
+  with a malformed id, sequence or key is absent, never fatal: the body is untrusted
+- `IcsParseResult.hasUnindexedRecurrence` marks a file whose recurrence the index cannot expand — a
+  stripped sub-daily or out-of-range rule, or an `RDATE` — so a time-range REPORT can answer with that
+  resource for every window rather than lose an occurrence
 - A VEVENT the parser cannot read — no DTSTART, a value it cannot make a date of — is skipped and
   counted in `IcsParseResult.skipped` instead of failing the file, the way the vCard builder counts a
   card the parser refuses. Each caller answers for its own surface: a CalDAV PUT is one series a client
@@ -407,7 +424,8 @@ Regression nets: `caldav.test.ts` (protocol), `caldav-roundtrip.test.ts` (serial
 round-trips, TZ-pinned floating tests), `vtimezone.test.ts` (generator vs Intl),
 `calendar-timezone.test.ts` (occurrence keying), `ical-imip.test.ts` (iMIP scoping),
 `caldav-client-sync.test.ts` (client-faithful sync flows against web-created events),
-`ical-parse.test.ts` (multi-series files, the shape a preview and an import feed the parser).
+`ical-parse.test.ts` (multi-series files, the shape a preview and an import feed the parser),
+`ical-component.test.ts` (kitchen-sink fidelity under a patch, the SEQUENCE rule, stamp trust).
 
 ### Known limits of the regenerate model
 
@@ -423,7 +441,7 @@ Both follow from storing columns and re-synthesizing the resource on GET, and bo
   `mappers.ts` for row→domain + `computeEtag`), the storage layer (`schema.ts`, `db-config.ts`, `types.ts`), access
   resolution (`get-calendar.ts`, the Drive `get-drive.ts` analogue), the two propagators
   (`share-propagation.ts`, `invite-propagation.ts`), `imip.ts`, and `sse-events.ts`.
-- **`apps/api/src/lib/caldav/`** — the protocol layer: router, REPORT handlers, `ical-serialize.ts`,
+- **`apps/api/src/lib/caldav/`** — the protocol layer: router, REPORT handlers, `ical-component.ts`,
   `ical-parse.ts`, `vtimezone.ts`, `resource.ts`.
 - **`apps/api/src/routes/calendar.ts`** — thin route bindings.
 - **`packages/lib/src/core/calendar/`** — FE hooks + SSE handlers, `calendar-utils.ts` (`formatEventWhen`,

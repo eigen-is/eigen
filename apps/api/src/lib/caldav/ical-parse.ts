@@ -1,8 +1,19 @@
-import { type Attendee, type EventData, IMIP_METHODS, type ImipMethod } from '@workspace/lib/types/calendar';
+import { type EventData, IMIP_METHODS, type ImipMethod } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
-import { localToUtc, utcToLocal } from '../calendar/recurrence';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../calendar/recurrence-limits';
-import { normalizeTimezone } from '../calendar/timezone';
+import {
+    calAddress,
+    EIGEN,
+    icalTimeToInstant,
+    icalTimeToRecurrenceKey,
+    projectAttendees,
+    projectReminders,
+    propTzid,
+    readExclusionStamps,
+    readStamp,
+    readTimestamp,
+    seriesTimezones,
+} from './ical-component';
 
 export type ParsedEvent = {
     uid: string;
@@ -21,6 +32,13 @@ export type ParsedEvent = {
     // derived from a series tz. An inbound iMIP single-VEVENT has no master here to supply that tz, so
     // the caller re-keys against the linked event's stored timezone (audit #8). Null otherwise.
     recurrenceInstant: Date | null;
+    // Eigen's own lines. Null on a body Eigen never stamped (an import, a client PUT, an inbound
+    // invitation); the store re-stamps before it projects, so a committed resource always names them.
+    eventId: string | null;
+    createByUserId: string | null;
+    importedOrganizer: string | null;
+    createdAt: Date | null;
+    updatedAt: Date | null;
     data: EventData | null;
 };
 
@@ -31,63 +49,15 @@ export type IcsParseResult = {
     // malformed event does not cost the file the rest of it, so every caller counts these as the members
     // they are: a CalDAV PUT refuses the payload, a preview drops them, an import fails them.
     skipped: number;
+    // The file holds recurrence the index cannot expand: a stripped sub-daily or out-of-range rule, or an
+    // RDATE. A time-range REPORT returns such a resource for every window rather than lose an occurrence.
+    hasUnindexedRecurrence: boolean;
 };
 
 function parseImipMethod(raw: unknown): ImipMethod | undefined {
     if (typeof raw !== 'string') return undefined;
     const upper = raw.toUpperCase();
     return IMIP_METHODS.includes(upper as ImipMethod) ? (upper as ImipMethod) : undefined;
-}
-
-// A property's normalized IANA TZID parameter, or null.
-function propTzid(prop: ICAL.Property | null | undefined): string | null {
-    const raw = prop?.getParameter('tzid') || null;
-    return normalizeTimezone(Array.isArray(raw) ? raw[0] : raw);
-}
-
-// Resolve an ICAL.Time to its absolute instant. ical.js leaves a datetime whose TZID has no
-// VTIMEZONE in the payload as *floating*, and toJSDate() reinterprets floating times through the
-// server's local zone — shifting the instant on any non-UTC server (audit #G). TZID params name
-// IANA zones in practice (RFC 7809 even allows omitting their VTIMEZONE), and the rest of the
-// pipeline (timezone column, rrule expansion) already trusts them, so interpret the wall components
-// in that zone. A genuinely floating time maps via Date.UTC, mirroring the all-day path.
-function icalTimeToInstant(t: ICAL.Time, tzid: string | null): Date {
-    if (t.zone !== ICAL.Timezone.localTimezone) return t.toJSDate();
-    if (tzid) return localToUtc(tzid, t.year, t.month, t.day, t.hour, t.minute, t.second);
-    return new Date(Date.UTC(t.year, t.month - 1, t.day, t.hour, t.minute, t.second));
-}
-
-// The address behind an ATTENDEE / ORGANIZER value. A CAL-ADDRESS is a URI, so its scheme is
-// case-insensitive (RFC 3986) and clients emit both `mailto:` and `MAILTO:` — a surviving prefix
-// matches no address anywhere, and the row reads as someone else's invitation.
-function calAddress(raw: unknown): string {
-    return (typeof raw === 'string' ? raw : String(raw ?? '')).trim().replace(/^mailto:\s*/i, '');
-}
-
-// The wall-clock day a RECURRENCE-ID / EXDATE keys to. Occurrence expansion and keying work in
-// wall-clock space (occurrenceDateToString, expandRecurrence), so an exception must be stored under
-// the same wall-clock date to attach to the right instance. `tz` is the timezone the series is
-// expanded in (the master VEVENT's DTSTART tz), used only for the UTC-Z form.
-function icalTimeToRecurrenceKey(t: ICAL.Time, tz: string | null): string {
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const raw = () => `${t.year}-${pad(t.month)}-${pad(t.day)}`;
-    // Floating (no/unresolvable TZID) or DATE-only value: the literal components ARE the key. toJSDate()
-    // would reinterpret a floating time through the server's local zone and shift the date.
-    if (t.isDate || t.zone === ICAL.Timezone.localTimezone) return raw();
-    // Resolvable NON-UTC zone (a TZID with a VTIMEZONE): RFC 5545 requires RECURRENCE-ID to be in the
-    // master DTSTART's tz, so the value's own wall components ARE the canonical occurrence key — use
-    // them directly. Converting the instant through a different tz would mis-key a cross-tz moved
-    // occurrence (the exception's own DTSTART may be in another zone).
-    if (t.zone !== ICAL.Timezone.utcTimezone) return raw();
-    // UTC-Z form: the instant is exact, but for a timed series that crosses midnight UTC its UTC day is
-    // off by one. Convert to the SERIES timezone wall date. This is the shape Exchange-lineage clients —
-    // and Eigen's own tz-null exceptions — emit, where the exception VEVENT itself carries no usable tz.
-    const instant = t.toJSDate();
-    if (tz) {
-        const { year, month, day } = utcToLocal(instant, tz);
-        return `${year}-${pad(month)}-${pad(day)}`;
-    }
-    return `${instant.getUTCFullYear()}-${pad(instant.getUTCMonth() + 1)}-${pad(instant.getUTCDate())}`;
 }
 
 export function parseIcs(icsText: string): IcsParseResult {
@@ -97,25 +67,17 @@ export function parseIcs(icsText: string): IcsParseResult {
 
     const vevents = comp.getAllSubcomponents('vevent');
 
-    // The timezone each recurring series is expanded in — that UID's master VEVENT's DTSTART tz (the
-    // VEVENT without a RECURRENCE-ID). A UTC-Z RECURRENCE-ID / EXDATE (Exchange clients; Eigen's own
-    // tz-null exceptions) keys to a wall-clock date in THIS tz, not the exception's own (absent) tz
-    // (audit #8). Keyed by UID because a CalDAV resource holds one series but a previewed or imported
-    // file holds every series a calendar has, each in its author's own zone. An override no UID groups
-    // with — an exporter wrote the UID on one side of the pair only — falls back to its own DTSTART tz
-    // and then to `fileTz`, the first master's: a file that names one series still keys through it.
-    const seriesTzByUid = new Map<string, string | null>();
-    let fileTz: string | null = null;
-    for (const vevent of vevents) {
-        if (vevent.getFirstProperty('recurrence-id')) continue;
-        const uid = String(vevent.getFirstPropertyValue('uid') ?? '');
-        const tz = propTzid(vevent.getFirstProperty('dtstart'));
-        if (!seriesTzByUid.has(uid)) seriesTzByUid.set(uid, tz);
-        fileTz ??= tz;
-    }
+    // A UTC-Z RECURRENCE-ID / EXDATE (Exchange clients; Eigen's own tz-null exceptions) keys to a
+    // wall-clock date in the SERIES timezone, not the exception's own (absent) tz (audit #8). An
+    // override no UID groups with — an exporter wrote the UID on one side of the pair only — falls back
+    // to its own DTSTART tz and then to `fileTz`, the first master's: a file that names one series still
+    // keys through it.
+    const seriesTzByUid = seriesTimezones(vevents);
+    const fileTz = seriesTzByUid.values().next().value ?? null;
 
     const results: ParsedEvent[] = [];
     let skipped = 0;
+    let hasUnindexedRecurrence = false;
 
     for (const vevent of vevents) {
         // Every row this VEVENT yields, so a failure halfway through leaves none of it behind.
@@ -165,9 +127,11 @@ export function parseIcs(icsText: string): IcsParseResult {
             // Strip a sub-daily recurrence — or any recurrence anchored at an out-of-range dtstart — from
             // untrusted ICS the same way a non-IANA TZID is nulled above: both make rrule iterate to the
             // query window (DoS) and no real client emits them, so degrade to a single event rather than
-            // reject the whole invite / CalDAV PUT.
-            const rrule =
-                rruleRaw && (isSubDailyRrule(rruleRaw) || isOutOfRangeRecurrenceStart(startTime)) ? null : rruleRaw;
+            // reject the whole invite / CalDAV PUT. The file keeps the rule, so the resource is flagged and
+            // a time-range REPORT answers with it for every window.
+            const stripped = !!rruleRaw && (isSubDailyRrule(rruleRaw) || isOutOfRangeRecurrenceStart(startTime));
+            const rrule = stripped ? null : rruleRaw;
+            if (stripped || vevent.hasProperty('rdate')) hasUnindexedRecurrence = true;
 
             const rawStatus = (vevent.getFirstPropertyValue('status') || 'CONFIRMED').toString().toLowerCase();
             const status = (
@@ -183,7 +147,7 @@ export function parseIcs(icsText: string): IcsParseResult {
             let recurrenceDate: string | null = null;
             let recurrenceInstant: Date | null = null;
             if (recurrenceId) {
-                const rid = recurrenceId.getFirstValue() as ICAL.Time | string | null;
+                const rid = recurrenceId.getFirstValue();
                 if (rid instanceof ICAL.Time) {
                     // A master that named no TZID keeps its series in UTC: only a UID the file holds no master
                     // for falls back to this VEVENT's own zone and then to the file's first master's.
@@ -195,70 +159,35 @@ export function parseIcs(icsText: string): IcsParseResult {
                 }
             }
 
-            const attendeeProps = vevent.getAllProperties('attendee');
-            const attendees: Attendee[] = attendeeProps.map((prop) => {
-                const email = calAddress(prop.getFirstValue());
-                const cnRaw = prop.getParameter('cn') || email;
-                const cn: string = Array.isArray(cnRaw) ? (cnRaw[0] ?? email) : cnRaw;
-                const partstatRaw = prop.getParameter('partstat') || 'NEEDS-ACTION';
-                const partstatStr = Array.isArray(partstatRaw) ? (partstatRaw[0] ?? 'NEEDS-ACTION') : partstatRaw;
-                const partstat = partstatStr.toUpperCase();
-                const roleRaw = prop.getParameter('role') || 'REQ-PARTICIPANT';
-                const roleStr = Array.isArray(roleRaw) ? (roleRaw[0] ?? 'REQ-PARTICIPANT') : roleRaw;
-                const role = roleStr.toUpperCase();
-
-                const statusMap: Record<string, Attendee['status']> = {
-                    'NEEDS-ACTION': 'pending',
-                    ACCEPTED: 'accepted',
-                    DECLINED: 'declined',
-                    TENTATIVE: 'tentative',
-                };
-                const roleMap: Record<string, Attendee['role']> = {
-                    'REQ-PARTICIPANT': 'required',
-                    'OPT-PARTICIPANT': 'optional',
-                };
-
-                return {
-                    email,
-                    name: cn !== email ? cn : undefined,
-                    status: statusMap[partstat] || 'pending',
-                    role: roleMap[role] || 'required',
-                };
-            });
+            const attendees = projectAttendees(vevent);
+            const reminders = projectReminders(vevent);
 
             const organizerProp = vevent.getFirstProperty('organizer');
             let organizer: EventData['organizer'] | undefined;
             if (organizerProp) {
                 const orgEmail = calAddress(organizerProp.getFirstValue());
-                const orgCnRaw = organizerProp.getParameter('cn') || orgEmail;
-                const orgCn: string = Array.isArray(orgCnRaw) ? (orgCnRaw[0] ?? orgEmail) : orgCnRaw;
+                const orgCn = organizerProp.getFirstParameter('cn') || orgEmail;
                 organizer = {
-                    userId: '',
+                    // The invitation link rides in the file, not only in ORGANIZER: rsvp() routes replies on
+                    // data.organizer.userId, so an empty one sends every reply after a rebuild down the wrong
+                    // transport.
+                    userId: readStamp(vevent, EIGEN.organizerUser) ?? '',
                     email: orgEmail,
                     name: orgCn !== orgEmail ? orgCn : undefined,
                 };
             }
 
-            const valarms = vevent.getAllSubcomponents('valarm');
-            const reminders = valarms.map((alarm) => {
-                const trigger = alarm.getFirstPropertyValue('trigger') as ICAL.Duration | string | null;
-                let minutes = 15;
-                if (trigger instanceof ICAL.Duration) {
-                    minutes = Math.abs(Math.round(trigger.toSeconds() / 60));
-                }
-                const action = (alarm.getFirstPropertyValue('action') || 'DISPLAY').toString().toUpperCase();
-                return {
-                    type: (action === 'EMAIL' ? 'email' : 'notification') as 'notification' | 'email',
-                    minutes,
-                };
-            });
+            const organizerEventId = readStamp(vevent, EIGEN.organizerEvent);
+            const color = readStamp(vevent, EIGEN.color);
 
             const data: EventData | null =
-                attendees.length || organizer || reminders.length
+                attendees.length || organizer || reminders.length || organizerEventId || color
                     ? {
                           attendees: attendees.length ? attendees : undefined,
                           organizer,
+                          organizerEventId: organizerEventId ?? undefined,
                           reminders: reminders.length ? reminders : undefined,
+                          color: color ?? undefined,
                       }
                     : null;
 
@@ -276,20 +205,27 @@ export function parseIcs(icsText: string): IcsParseResult {
                 sequence,
                 recurrenceDate,
                 recurrenceInstant,
+                eventId: readStamp(vevent, EIGEN.eventId),
+                createByUserId: readStamp(vevent, EIGEN.createdBy),
+                importedOrganizer: readStamp(vevent, EIGEN.importedOrganizer),
+                createdAt: readTimestamp(vevent, 'created'),
+                updatedAt: readTimestamp(vevent, 'last-modified'),
                 data,
             });
 
-            // EXDATE: Thunderbird uses EXDATE to exclude dates from recurring events
-            // (instead of separate VEVENT with STATUS:CANCELLED).
-            // Convert each EXDATE to a synthetic canceled ParsedEvent.
+            // EXDATE is how every client round-trips a deleted occurrence, so each one becomes a synthetic
+            // cancelled row. Its id and SEQUENCE come from the X-EIGEN-EXDATE stamp beside it, matched on the
+            // recurrence key; an EXDATE the client added itself has no stamp and inherits the master's
+            // SEQUENCE, which is what the RFC 5546 replay guard compares.
             if (rrule) {
-                const exdateProps = vevent.getAllProperties('exdate');
-                for (const exdateProp of exdateProps) {
+                const stamps = readExclusionStamps(vevent);
+                for (const exdateProp of vevent.getAllProperties('exdate')) {
                     const exTzid = propTzid(exdateProp) ?? tzid;
-                    const values = exdateProp.getValues() as ICAL.Time[];
-                    for (const exVal of values) {
+                    for (const exVal of exdateProp.getValues()) {
+                        if (!(exVal instanceof ICAL.Time)) continue;
                         const isDateOnly = exVal.isDate;
                         const exDateStr = icalTimeToRecurrenceKey(exVal, tzid);
+                        const stamp = stamps.get(exDateStr);
 
                         let exStartTime: Date;
                         let exEndTime: Date;
@@ -312,9 +248,14 @@ export function parseIcs(icsText: string): IcsParseResult {
                             rrule: null,
                             timezone: tzid,
                             status: 'cancelled',
-                            sequence,
+                            sequence: stamp?.sequence ?? sequence,
                             recurrenceDate: exDateStr,
                             recurrenceInstant: null,
+                            eventId: stamp?.id ?? null,
+                            createByUserId: null,
+                            importedOrganizer: null,
+                            createdAt: null,
+                            updatedAt: null,
                             data: null,
                         });
                     }
@@ -327,5 +268,5 @@ export function parseIcs(icsText: string): IcsParseResult {
         results.push(...parsed);
     }
 
-    return { method, events: results, skipped };
+    return { method, events: results, skipped, hasUnindexedRecurrence };
 }
