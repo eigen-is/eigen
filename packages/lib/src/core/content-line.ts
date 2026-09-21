@@ -12,7 +12,7 @@ export function isIllegalC0(code: number): boolean {
 
 // Drop illegal C0 bytes. TAB is a legal TEXT/fold char; CR and LF stay so each caller applies its own CR/LF
 // semantics (escaped, or stripped) afterwards.
-function stripControlChars(s: string): string {
+export function stripControlChars(s: string): string {
     let out = '';
     for (const ch of s) {
         if (isIllegalC0(ch.charCodeAt(0))) continue;

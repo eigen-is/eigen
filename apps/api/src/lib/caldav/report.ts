@@ -2,7 +2,7 @@ import type { CalendarItem } from '@workspace/lib/types/calendar';
 import type { Calendar } from '../calendar/calendar';
 import type { CalendarEventRow } from '../calendar/types';
 import { calendarHref, eventHref } from './discovery';
-import { eventsToIcs } from './ical-serialize';
+import { eventsToIcs } from './ical-component';
 import {
     calendarDataProp,
     eventEtagProp,

@@ -52,22 +52,24 @@ export function localToUtc(
     minute: number,
     second: number,
 ): Date {
-    const guessMs = Date.UTC(year, month - 1, day, hour, minute, second);
-    const local = utcToLocal(new Date(guessMs), tz);
-    const localMs = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second);
-    const offsetMs = localMs - guessMs;
-    const adjusted = new Date(guessMs - offsetMs);
-    const verify = utcToLocal(adjusted, tz);
-    const verifyMs = Date.UTC(verify.year, verify.month - 1, verify.day, verify.hour, verify.minute, verify.second);
-    if (verifyMs !== guessMs) {
-        const offsetMs2 = verifyMs - guessMs;
-        return new Date(guessMs - offsetMs2);
+    const targetMs = Date.UTC(year, month - 1, day, hour, minute, second);
+    const offsetAt = (ms: number): number => {
+        const local = utcToLocal(new Date(ms), tz);
+        return Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second) - ms;
+    };
+
+    let resolved = targetMs - offsetAt(targetMs);
+    if (resolved + offsetAt(resolved) !== targetMs) {
+        // The first guess landed the other side of a transition: solve again with the offset in effect there.
+        const corrected = targetMs - offsetAt(resolved);
+        // A wall time the spring-forward gap skips resolves with the pre-transition offset — the later instant.
+        if (corrected + offsetAt(corrected) !== targetMs) return new Date(Math.max(resolved, corrected));
+        resolved = corrected;
     }
+
     // RFC 5545: an ambiguous fall-back time resolves to the first (pre-transition) occurrence
-    const earlier = new Date(adjusted.getTime() - 3600_000);
-    const el = utcToLocal(earlier, tz);
-    if (Date.UTC(el.year, el.month - 1, el.day, el.hour, el.minute, el.second) === guessMs) return earlier;
-    return adjusted;
+    const earlier = resolved - 3600_000;
+    return new Date(earlier + offsetAt(earlier) === targetMs ? earlier : resolved);
 }
 
 // Convert a real UTC instant to the Date whose UTC fields hold its wall-clock time in tz — the space

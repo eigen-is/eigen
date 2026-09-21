@@ -266,9 +266,9 @@ describe('Calendar Timezone', () => {
             expect(starts).toContain('2025-11-02T01:30:00.000Z'); // 02:30 CET
         });
 
-        test('weekly recurring event at nonexistent 02:30 Amsterdam keeps its spring-forward resolution', async () => {
-            // Sunday 2025-03-16 02:30 CET (UTC+1) = 01:30Z. On 2025-03-30 the clock jumps 02:00→03:00,
-            // so 02:30 never occurs; pins the current resolution (03:30Z) so the fall-back fix can't drift it.
+        test('weekly recurring event at nonexistent 02:30 Amsterdam resolves with the pre-transition offset', async () => {
+            // Sunday 2025-03-16 02:30 CET (UTC+1) = 01:30Z. On 2025-03-30 the clock jumps 02:00→03:00, so
+            // 02:30 never occurs and resolves through the offset before the gap: 01:30Z, which reads 03:30.
             const sundayStart = new Date('2025-03-16T01:30:00Z');
 
             await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
@@ -288,7 +288,7 @@ describe('Calendar Timezone', () => {
                 .map((e) => new Date(e.startTime).toISOString());
 
             expect(starts).toContain('2025-03-23T01:30:00.000Z'); // 02:30 CET
-            expect(starts).toContain('2025-03-30T03:30:00.000Z'); // gap time: characterized current output
+            expect(starts).toContain('2025-03-30T01:30:00.000Z'); // gap time: 02:30 CET = 03:30 CEST on the clock
             expect(starts).toContain('2025-04-06T00:30:00.000Z'); // 02:30 CEST
         });
 

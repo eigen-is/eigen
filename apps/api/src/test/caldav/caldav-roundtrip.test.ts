@@ -6,9 +6,9 @@
 // in calendar-timezone.test.ts, iMIP instance scoping (#A/#B/#H) in ical-imip.test.ts.
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
-import ICAL from 'ical.js';
-import { parseIcs } from '../../lib/caldav/ical-parse';
-import { serializeEventForImip } from '../../lib/caldav/ical-serialize';
+import type ICAL from 'ical.js';
+import { serializeEventForImip } from '../../lib/caldav/ical-component';
+import { parseIcs, parseResource } from '../../lib/caldav/ical-parse';
 import { getHome } from '../../lib/home';
 import { basicAuth, davRequest } from '../dav-test-helpers';
 import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
@@ -202,7 +202,7 @@ describe('CalDAV round-trip fidelity', () => {
 
             // The emitted VTIMEZONE must resolve the instant on its own — through ical.js proper,
             // without the parser's IANA-TZID fallback.
-            const comp = new ICAL.Component(ICAL.parse(ics));
+            const comp = parseResource(ics);
             const vtz = comp.getFirstSubcomponent('vtimezone');
             expect(vtz).toBeDefined();
             const vevent = comp
@@ -239,7 +239,7 @@ describe('CalDAV round-trip fidelity', () => {
             expect(put.status).toBe(201);
 
             const ics = await getIcs('rt-rid.ics');
-            const comp = new ICAL.Component(ICAL.parse(ics));
+            const comp = parseResource(ics);
             const override = comp
                 .getAllSubcomponents('vevent')
                 .find((v) => v.getFirstProperty('recurrence-id') != null);
@@ -619,6 +619,35 @@ describe('CalDAV round-trip fidelity', () => {
             expect(parseIcs(await getIcs(uri)).events[0].data?.organizer).toBeUndefined();
         });
 
+        test('a PUT cannot forge the organizer link a reply is routed on', async () => {
+            const uri = 'rt-forged-link.ics';
+            const res = await putIcs(
+                uri,
+                vcal(
+                    [
+                        'BEGIN:VEVENT',
+                        'UID:rt-forged-link@eigen',
+                        'DTSTART:20260520T090000Z',
+                        'DTEND:20260520T100000Z',
+                        'SUMMARY:Forged link',
+                        'ORGANIZER;CN=Mallory:mailto:mallory@evil.example',
+                        'X-EIGEN-ORGANIZER-USER:victim-uuid',
+                        'X-EIGEN-ORGANIZER-EVENT:victim-event',
+                        'X-EIGEN-EVENT-ID:victim-row',
+                        'X-EIGEN-COLOR:#000000',
+                        'END:VEVENT',
+                    ].join('\r\n'),
+                ),
+            );
+            expect(res.status).toBe(201);
+
+            const stored = (await getHome(userId)).calendar.getEventByUri(calendarId, uri)!;
+            expect(stored.data?.organizer?.userId).toBe('');
+            expect(stored.data?.organizerEventId).toBeUndefined();
+            expect(stored.data?.color).toBeUndefined();
+            expect(stored.id).not.toBe('victim-row');
+        });
+
         test('an upper-case MAILTO: scheme names the same owner, and the same guest', async () => {
             const uri = 'rt-organizer-uppercase.ics';
             const ics = (summary: string) =>
@@ -812,7 +841,7 @@ describe('CalDAV round-trip fidelity', () => {
             expect(reparsed.timezone).toBe('America/New_York');
 
             // ical.js proper (no IANA-TZID fallback) must resolve it through the emitted VTIMEZONE.
-            const comp = new ICAL.Component(ICAL.parse(ics));
+            const comp = parseResource(ics);
             const dtstart = comp
                 .getFirstSubcomponent('vevent')!
                 .getFirstProperty('dtstart')!

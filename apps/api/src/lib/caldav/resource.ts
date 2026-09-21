@@ -5,8 +5,8 @@ import { storedRecurrenceKey } from '../calendar/recurrence';
 import type { CalendarEventRow } from '../calendar/types';
 import { matchesIfMatch, matchesIfNoneMatch } from '../core/http';
 import { eventHref } from './discovery';
+import { eventsToIcs } from './ical-component';
 import { type IcsParseResult, type ParsedEvent, parseIcs } from './ical-parse';
-import { eventsToIcs } from './ical-serialize';
 
 // A calendar resource runs larger than a vCard (a recurring series carries an overridden VEVENT per exception),
 // so the raw-body ceiling is ~4× CardDAV's CARD_MAX_BYTES; the router bounds the PUT body against it before buffering.

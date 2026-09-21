@@ -112,6 +112,25 @@ describe('buildIcsPreviewPayload', () => {
         ]);
     });
 
+    // The card draws a stranger's file: an `X-EIGEN-*` line in it is the stranger's, never Eigen's.
+    test('a forged Eigen stamp never reaches the payload', () => {
+        const payload = payloadOf(
+            vcal(
+                event('forged@eigen', [
+                    'DTSTART:20260420T180000Z',
+                    'DTEND:20260420T190000Z',
+                    'SUMMARY:Forged',
+                    'ORGANIZER;CN=Ada Lovelace:mailto:ada@external.com',
+                    'X-EIGEN-ORGANIZER-USER:victim-uuid',
+                    'X-EIGEN-ORGANIZER-EVENT:victim-event',
+                    'X-EIGEN-COLOR:#000000',
+                ]),
+            ),
+        );
+
+        expect(payload.events[0]?.organizer).toEqual({ userId: '', email: 'ada@external.com', name: 'Ada Lovelace' });
+    });
+
     // An override moves one occurrence of a series; it is not an event of its own in a quick look.
     test('an override and its series are one row', () => {
         const payload = payloadOf(
