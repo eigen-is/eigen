@@ -96,7 +96,9 @@ drains both before anything is served. A drain that fails inside init is logged,
 - **The restore rule**: a per-home restore does not preserve mtimes, so every card drifts at once. A drifted
   file whose bytes still hash to the row's `etag`, under the same name and holding the same self-link,
   changed nothing: it refreshes only the row's `mtime`/`size` — no `ctag` bump, no `cardCtag` re-stamp, no
-  tombstone, no SSE — and the refreshed stats keep the next init off the files. A pass in which every drifted
+  tombstone, no SSE — and the refreshed stats keep the next init off the files. Every card the pass settled,
+  restored ones included, also drops its `pending_card_writes` row: an etag match proves the file and the row
+  are a pair, so the recovery drain behind init owes it nothing. A pass in which every drifted
   card turns out unchanged is a clean pass for sync, so a restored book costs its clients zero re-downloads.
   A card whose derived avatar cache is missing is excluded: the stats cannot see that drift, and the card is
   in the re-read set to have its cache regenerated.

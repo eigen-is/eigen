@@ -1340,6 +1340,50 @@ describe('crash recovery (durable journals)', () => {
         }
     });
 
+    test('a restored card the pass settled carries no write intent into the recovery drain', async () => {
+        const { contacts, db, dir, user } = await makeContacts();
+        const id = await contacts.addContact(
+            validContact({ firstName: 'Restored', email: ['restored-crash@example.com'] }),
+        );
+        const before = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+        const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
+
+        // What a per-home restore replays: the indexed bytes under a moved mtime, plus the journal row a
+        // crash left behind. The etag match proves the pair is settled, so the pass owes that uri nothing.
+        db.insert(contactsSchema.pendingCardWrites).values({ uri: before.uri }).run();
+        const future = new Date(Date.now() + 5000);
+        utimesSync(cardPathOf(dir, before.uri), future, future);
+
+        let drainCalls = 0;
+        type Drain = (uris: string[], settled: (uri: string) => void) => Promise<void>;
+        const proto = Object.getPrototypeOf(contacts) as { drainDirty: Drain };
+        const origDrain = proto.drainDirty;
+        proto.drainDirty = function (this: Contacts, uris: string[], settled: (uri: string) => void) {
+            drainCalls++;
+            return origDrain.call(this, uris, settled);
+        };
+        let restarted!: Awaited<ReturnType<typeof restart>>;
+        try {
+            restarted = await restart(dir, user);
+        } finally {
+            proto.drainDirty = origDrain;
+        }
+
+        try {
+            expect(restarted.db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([]);
+            expect(drainCalls).toBe(0);
+            expect(restarted.db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore);
+            const after = restarted.db
+                .select()
+                .from(contactsSchema.contacts)
+                .where(eq(contactsSchema.contacts.id, id))
+                .get()!;
+            expect(after.cardCtag).toBe(before.cardCtag);
+        } finally {
+            await restarted.close();
+        }
+    });
+
     test('a rename killed mid-fan-out finishes on init, and a later rebuild changes nothing', async () => {
         const { contacts, db, dir, user } = await makeContacts();
         const labelId = await contacts.addLabel({ name: 'Bandmates', color: '#abcdef' });

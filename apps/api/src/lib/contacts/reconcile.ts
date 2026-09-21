@@ -240,8 +240,11 @@ export async function reconcileIndex(contacts: Contacts): Promise<void> {
                     .run();
                 // A present card is alive again, so a card re-planted at a deleted uri drops its stale removal.
                 tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uriKey, row.uriKey)).run();
-                // This pass just paid whatever write intent the uri carried, so the recovery drain that
-                // follows init's reconcile won't re-parse and re-bump the very card it re-indexed.
+            }
+            // This pass paid whatever write intent each settled uri carried — a drifted card by re-indexing
+            // it, a restored one because an etag match proves the file and the row are already a pair — so
+            // the recovery drain that follows init's reconcile has nothing left to do for them.
+            for (const { row } of prepared) {
                 tx.delete(schema.pendingCardWrites).where(eq(schema.pendingCardWrites.uri, row.uri)).run();
             }
             for (const { row, categories } of changed) contacts.syncCardLabels(tx, row.id, categories, createdLabelIds);
