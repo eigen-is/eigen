@@ -59,9 +59,7 @@ export async function writeResourceFile(
     return statResourceFile(storage, filePath);
 }
 
-// A name free in the index can still be a file on disk (a dedupe loser, bytes that will not parse, a
-// collection whose index phase threw). Its bytes move aside under a `.`-prefixed name nothing lists, sweeps
-// or addresses, so a create destroys nothing and no name is wedged against every later verb.
+// An unindexed file moves aside under a `.`-prefixed name nothing lists or sweeps, so a create destroys no bytes and wedges no name.
 export async function displaceUnindexedFile(storage: LocalFilesystem, dir: string, uri: string): Promise<boolean> {
     if (!(await storage.exists(`${dir}/${uri}`))) return false;
     const displaced = `.${uri}.displaced-${randomUUID()}`;
