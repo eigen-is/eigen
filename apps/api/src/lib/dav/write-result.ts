@@ -3,11 +3,7 @@ import type { DeleteResourceResult, PutResourceResult } from '../core';
 import { encodePathSegment } from './href';
 import { davError } from './xml';
 
-// The store result → HTTP mapping both DAV write surfaces sit on: CardDAV (RFC 6352 § 6.3.2.1) and CalDAV
-// (RFC 4791 § 5.3.2.1) define the same preconditions, so only the namespace prefix of the precondition
-// elements and the collection the resource hrefs hang under differ. One implementation so they can't drift.
-
-// `ns` is the precondition prefix lib/dav/xml.ts declares; `collectionHref` ends in a slash.
+// CardDAV (RFC 6352 § 6.3.2.1) and CalDAV (RFC 4791 § 5.3.2.1) share these preconditions, so one mapping serves both.
 export function davPutResponse(
     result: PutResourceResult,
     ns: 'C' | 'CARD',
@@ -25,8 +21,7 @@ export function davPutResponse(
         return new Response(null, { status: 204, headers: { ETag: `"${result.etag}"` } });
     }
     if (result.error === 'precondition') return new Response('Precondition Failed', { status: 412 });
-    // 409, not 403: the user can retire the other resource and resubmit (RFC 4918 § 16). A PUT that only
-    // changes its own resource's UID violates the same precondition with no other resource to name.
+    // 409, not 403: the user can retire the other resource and resubmit (RFC 4918 § 16).
     if (result.error === 'uid-conflict') {
         return davError(
             409,

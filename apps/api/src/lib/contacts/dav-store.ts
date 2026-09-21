@@ -22,9 +22,7 @@ import type { Contacts } from './contacts';
 import { selfClaimRank } from './reconcile';
 import * as schema from './schema';
 
-// The CardDAV store seam over the Contacts facade: the index reads the protocol handlers sit on, and the
-// PUT/DELETE write seams behind them — preconditions, UID rules, the quota gate and the self-link decision,
-// all evaluated inside the facade's write gate. See docs/CONTACTS.md § CardDAV surface.
+// The CardDAV store seam over the Contacts facade. See docs/CONTACTS.md § CardDAV surface.
 
 // The index projection the sync layer reads for a resource; the etag is the hash the handler quotes.
 export type CardRow = { uri: string; etag: string };
@@ -33,7 +31,6 @@ const CARD_ROW = { uri: schema.contacts.uri, etag: schema.contacts.etag };
 // ctag advances on each change, syncGen rotates on an index rebuild so stale sync tokens are refused.
 export type CardBook = { ctag: number; syncGen: number };
 
-// The shared DAV delete result plus the one refusal only this book has: a 403 for your own card.
 export type DeleteCardResult = DeleteResourceResult | { ok: false; error: 'self-delete' };
 
 // The index-only reads the protocol handlers sit on. Each drains a pending failed pair before observing the
@@ -68,10 +65,7 @@ export async function getDeletedCardsSince(contacts: Contacts, sinceCtag: number
         .all();
 }
 
-// The stored bytes for a resource (GET/multiget). A row whose file has vanished is not a 500: mark it so the
-// next drain tombstones it and answer this request as a miss. The etag hashes the bytes just read, so body
-// and validator are one revision by construction even when the read raced a write or the row is stale — and a
-// row that turned out stale is marked too, or every conditional write against the etag served here is a 412.
+// Hashing the bytes just read keeps body and validator one revision; a disagreeing row is marked, or writes loop on 412.
 export async function getCard(contacts: Contacts, uri: string): Promise<{ bytes: Uint8Array; etag: string } | null> {
     await contacts.gate.ensureDrained();
     const row = contacts.db
@@ -132,10 +126,7 @@ function resolveSelfLinkOnPut(
     return { eigenId, bytes };
 }
 
-// A DAV PUT: store the client's card verbatim (after the 4.0→3.0 transcode), with every precondition, UID
-// rule, quota gate and self-link decision evaluated INSIDE the write gate against the state the write
-// overwrites. The router already sanitizes the client-chosen uri, but this is a public method that turns it
-// into a filesystem path, so it re-validates before any write.
+// Preconditions, UID rules, quota and the self-link are decided inside the gate, against the state the write overwrites.
 export async function putCard(
     contacts: Contacts,
     uri: string,
@@ -176,8 +167,7 @@ export async function putCard(
         // bytes, silently reverting the accepted write.
         const storedUri = existing?.uri ?? uri;
 
-        // A card carries one UID for its life, and one another resource owns is a conflict, not a raw 500. The
-        // holder is named so the client can point at it; a card changing only its own UID has none to name.
+        // A UID another resource owns is a conflict the client can act on, not a raw 500 on the UNIQUE index.
         if (!parsed.uid) return { ok: false, error: 'invalid', message: 'UID is required' };
         const holder = contacts.db
             .select({ id: schema.contacts.id, uri: schema.contacts.uri })

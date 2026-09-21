@@ -3,8 +3,7 @@ import { Semaphore } from '../../utils/semaphore';
 import type { LocalFilesystem } from './local-filesystem';
 import { isSafePathSegment } from './path-utils';
 
-// The domain-neutral half of a file+index store: file/key rules, the write gate and the stat diff, with no SQL.
-// See docs/CONTACTS.md § Storage model — files as truth.
+// The domain-neutral half of a file+index store, with no SQL. See docs/CONTACTS.md § Storage model — files as truth.
 
 // Safe as both a filename and a DAV href: the shared segment rule plus the suffix the resource carries.
 export function sanitizeResourceUri(raw: string, suffix: string): string | null {
@@ -17,10 +16,7 @@ export function uriKeyOf(uri: string): string {
     return uri.normalize('NFC').toLowerCase();
 }
 
-// The generation a from-scratch rebuild stamps into its sync tokens. Counting up from the stored value alone
-// hands a rebuild that LOST that value the same number twice, so a client can replay a token of the dead
-// history against the new one; the wall clock in seconds floors it. A repeat then takes two lost rows inside
-// one second, since both floor to the same second.
+// A rebuild that lost the stored value would reissue its generation, so the wall clock in seconds floors it.
 export function nextSyncGen(stored: number | undefined, now: number): number {
     return Math.max((stored ?? 0) + 1, Math.floor(now / 1000));
 }
@@ -29,9 +25,7 @@ export function computeResourceEtag(bytes: Uint8Array): string {
     return new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
 }
 
-// The typed outcome of a DAV write, which the protocol handler turns into a 4xx or a 201/204. No raw throw
-// crosses this seam for a client-caused failure — only genuine IO errors bubble. `conflictUri` names the
-// resource that already owns the UID, where one exists (RFC 6352 § 6.3.2.1 and its CalDAV twin).
+// A client-caused failure is a value here, not a throw: only genuine IO errors bubble past this seam.
 export type PutResourceResult =
     | { ok: true; etag: string; created: boolean }
     | {
@@ -41,8 +35,6 @@ export type PutResourceResult =
           conflictUri?: string;
       };
 
-// The delete twin: a 404 for an unknown uri, a 412 for a stale If-Match. A domain with its own refusal
-// extends this union rather than widening it here.
 export type DeleteResourceResult = { ok: true } | { ok: false; error: 'not-found' | 'precondition' };
 
 // The mtime is rounded here, once, so a writer and every later pass compare the same number.
@@ -53,7 +45,6 @@ export async function statResourceFile(storage: LocalFilesystem, filePath: strin
     return { mtime: Math.round(stat.mtimeMs), size: stat.size };
 }
 
-// The canonical write: temp file → fsync → rename, then the stat the index row is committed with.
 export async function writeResourceFile(
     storage: LocalFilesystem,
     filePath: string,
@@ -157,8 +148,7 @@ export function dedupeByUid<T>(
     return kept;
 }
 
-// One slot, so a file write and its index commit stay a pair; a torn write's key stays dirty until `recover`
-// settles it, and the next call in — mutation or read — re-indexes it before observing the index.
+// One slot, so a file write and its index commit stay a pair; a torn write's key stays dirty until a drain settles it.
 export class WriteGate {
     private readonly lock = new Semaphore(1);
     private readonly dirty = new Set<string>();
@@ -192,8 +182,7 @@ export class WriteGate {
         this.dirty.add(key);
     }
 
-    // Recovery at init may not be fatal — a home whose init throws cannot be opened at all — so a key that
-    // won't recover is dropped here and its durable journal row brings it back on the next init.
+    // Init must not throw — a home that can't init can't be opened — so an unrecoverable key waits for the next one.
     async recoverPending(keys: string[]): Promise<void> {
         for (const key of keys) {
             this.markDirty(key);

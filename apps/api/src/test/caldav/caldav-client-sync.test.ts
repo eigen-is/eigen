@@ -5,6 +5,7 @@
 // calendar-timezone.test.ts (occurrence keying).
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
+import { basicAuth, davRequest } from '../dav-test-helpers';
 import { app, assertJson, authedRequest, getTestContext } from '../setup';
 
 function epoch(iso: string): number {
@@ -17,20 +18,17 @@ describe('CalDAV client sync on web-created events', () => {
     let token: string;
     let calendarId: string;
 
-    const basicAuth = (email: string) => `Basic ${btoa(`${email}:testpassword123`)}`;
+    const eventPath = (uri: string) => `/dav/calendars/${userId}/${calendarId}/${uri}`;
 
     async function davPut(uri: string, body: string, ifMatch?: string): Promise<Response> {
-        return app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/${uri}`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar; charset=utf-8',
-                    ...(ifMatch ? { 'If-Match': ifMatch } : {}),
-                },
-                body,
-            }),
-        );
+        return davRequest('PUT', eventPath(uri), {
+            email: ctx.alice.user.email,
+            headers: {
+                'Content-Type': 'text/calendar; charset=utf-8',
+                ...(ifMatch ? { 'If-Match': ifMatch } : {}),
+            },
+            body,
+        });
     }
 
     async function davSync(token?: string): Promise<string> {
@@ -40,24 +38,17 @@ describe('CalDAV client sync on web-created events', () => {
   ${tokenEl}
   <D:prop><D:getetag/></D:prop>
 </D:sync-collection>`;
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/`, {
-                method: 'REPORT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body,
-            }),
-        );
+        const res = await davRequest('REPORT', `/dav/calendars/${userId}/${calendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body,
+        });
         expect(res.status).toBe(207);
         return res.text();
     }
 
     async function davGet(uri: string): Promise<{ ics: string; etag: string | null }> {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/${uri}`, {
-                method: 'GET',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const res = await davRequest('GET', eventPath(uri), { email: ctx.alice.user.email });
         expect(res.status).toBe(200);
         return { ics: await res.text(), etag: res.headers.get('ETag') };
     }

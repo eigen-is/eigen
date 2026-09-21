@@ -10,6 +10,7 @@ import ICAL from 'ical.js';
 import { parseIcs } from '../../lib/caldav/ical-parse';
 import { serializeEventForImip } from '../../lib/caldav/ical-serialize';
 import { getHome } from '../../lib/home';
+import { basicAuth, davRequest } from '../dav-test-helpers';
 import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 const VTZ_NY = [
@@ -72,28 +73,18 @@ describe('CalDAV round-trip fidelity', () => {
     let userId: string;
     let calendarId: string;
 
-    const basicAuth = (email: string, password = 'testpassword123') => `Basic ${btoa(`${email}:${password}`)}`;
+    const eventPath = (uri: string) => `/dav/calendars/${userId}/${calendarId}/${uri}`;
 
     async function putIcs(uri: string, body: string): Promise<Response> {
-        return app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/${uri}`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar; charset=utf-8',
-                },
-                body,
-            }),
-        );
+        return davRequest('PUT', eventPath(uri), {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar; charset=utf-8' },
+            body,
+        });
     }
 
     async function getIcs(uri: string): Promise<string> {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/${uri}`, {
-                method: 'GET',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const res = await davRequest('GET', eventPath(uri), { email: ctx.alice.user.email });
         expect(res.status).toBe(200);
         return res.text();
     }

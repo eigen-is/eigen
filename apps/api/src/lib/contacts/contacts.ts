@@ -108,9 +108,7 @@ export class Contacts {
     home: Home; // internal — used by contacts/*.ts
     storage: LocalFilesystem; // internal — used by contacts/*.ts
 
-    // Every card mutation (REST and DAV) serializes through the gate's one slot, and a card whose file wrote
-    // but whose index commit threw is re-indexed by the next call in — mutation or read — before it observes
-    // the index. Process death takes the gate's dirty set with it, which is what `pending_card_writes` is for.
+    // Process death takes the gate's dirty set with it, which is what `pending_card_writes` is for.
     gate = new WriteGate((uris, settled) => this.drainDirty(uris, settled)); // internal — used by contacts/*.ts
 
     // Only the reconcile/rebuild/drain machinery bumps this; the mutation paths parse for their own merges.
@@ -341,9 +339,7 @@ export class Contacts {
         for (const id of createdLabelIds) this.emitLabel(SSEventType.LABEL_CREATED, id);
     }
 
-    // The gate's re-index: a commit that threw after its file was already persisted left the index behind
-    // that file, so re-commit each dirty uri (or tombstone a vanished one) before the caller reads the index.
-    // Caller holds the lock.
+    // The gate's re-index, caller holding the lock: the file is persisted, the index is behind it.
     private async drainDirty(uris: string[], settled: (uri: string) => void): Promise<void> {
         for (const uri of uris) {
             const existing = this.db
@@ -352,8 +348,8 @@ export class Contacts {
                 .where(eq(schema.contacts.uriKey, uriKeyOf(uri)))
                 .get();
             const bytes = await readResourceFile(this.storage, cardPath(uri));
-            // A file the row already describes is settled, not re-committed: a lock-free read that raced a
-            // PUT marks a pair that is whole, and a commit would bump the ctag for a book that never changed.
+            // A file the row already describes settles without a commit: a lock-free read that raced a PUT
+            // marks a pair that is whole, and a commit would bump the ctag for a book that never changed.
             if (bytes && computeResourceEtag(bytes) !== existing?.etag) {
                 // cardUpdateSet omits eigenId, so this value drives only a freshly-INSERTED row; an
                 // incumbent's self-link rides the omission untouched, which is why ranking against the
@@ -388,9 +384,7 @@ export class Contacts {
         this.db.delete(schema.pendingCardWrites).where(eq(schema.pendingCardWrites.uri, uri)).run();
     }
 
-    // Init's recovery seam: finish the work a process death cut in half. Neither half may be fatal — a home
-    // whose init throws is a home the user cannot open at all — so an unrecoverable card keeps its journal
-    // row for the next init, and a rename that cannot finish stays recorded for the next label mutation.
+    // Neither half may be fatal — a home whose init throws can't be opened — so unfinished work waits for the next init.
     private async recoverPendingWork(): Promise<void> {
         await this.gate.recoverPending(
             this.db
@@ -475,9 +469,7 @@ export class Contacts {
         return claimed ? '' : eigenId;
     }
 
-    // The resource ceiling (it bounds what a device sync and every later reconcile has to parse) plus the
-    // mail+contacts quota, credited with the bytes of the card this one replaces. Called inside the gate
-    // and before any write intent is recorded, so a refusal leaves nothing for a drain to chase.
+    // Runs before any write intent is recorded, so a refusal leaves nothing for a drain to chase.
     // internal — used by contacts/*.ts
     async enforceCardBudget(bytes: Uint8Array, creditBytes: number): Promise<void> {
         if (bytes.byteLength > CARD_MAX_BYTES) {
@@ -665,8 +657,7 @@ export class Contacts {
         });
     }
 
-    // The delete tail shared by REST deleteContact and DAV deleteCard. Callers hold the gate and have
-    // already run their own guards (self-delete, preconditions).
+    // Callers hold the gate and have already run their own guards (self-delete, preconditions).
     // internal — used by contacts/*.ts
     async purgeCard(row: typeof schema.contacts.$inferSelect): Promise<void> {
         await this.storage.unlinkDurable(cardPath(row.uri));

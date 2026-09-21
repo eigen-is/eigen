@@ -10,10 +10,8 @@ import { mergeVCard } from '../../lib/carddav/vcard-serialize';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { labelColorFor, normalizeLabelName } from '../../lib/contacts/card-store';
 import { Contacts } from '../../lib/contacts/contacts';
-import { CONTACTS_DB_CONFIG } from '../../lib/contacts/db-config';
 import * as contactsSchema from '../../lib/contacts/schema';
-import { ManagedDatabase, PATHS, uriKeyOf } from '../../lib/core';
-import type { Home } from '../../lib/home';
+import { PATHS, uriKeyOf } from '../../lib/core';
 import { parseVCard } from '../../lib/vcard';
 import {
     avatarsDirOf,
@@ -23,6 +21,7 @@ import {
     stageAvatar,
     validContact,
 } from '../contacts-test-helpers';
+import { openTestHome, type TestHomeUser } from '../home-test-helpers';
 import { ensureServer } from '../setup';
 
 afterAll(() => {
@@ -1183,18 +1182,10 @@ describe('fail-closed drain guard', () => {
 describe('crash recovery (durable journals)', () => {
     // A fresh Contacts over the same home dir and user — a process restart, carrying none of the first
     // instance's in-memory state.
-    const restart = async (dir: string, user: Awaited<ReturnType<typeof makeContacts>>['user']) => {
-        const managed = new ManagedDatabase(CONTACTS_DB_CONFIG, join(dir, 'eigen.contacts', 'contacts.db'));
-        await managed.open(0);
-        const home = {
-            homeDir: dir,
-            user,
-            getLocalDatabase: async () => managed,
-            broadcast: () => {},
-        } as unknown as Home;
-        const contacts = new Contacts(home);
-        await contacts.init();
-        return { contacts, db: managed.db, close: () => managed.close() };
+    const restart = async (dir: string, user: TestHomeUser) => {
+        const reopened = await openTestHome((home) => new Contacts(home), dir, user);
+        const managed = await reopened.database<typeof contactsSchema>(PATHS.CONTACTS.DB);
+        return { contacts: reopened.instance, db: managed.db, close: reopened.close };
     };
 
     test('a card write killed before its index commit is re-indexed on init, same stat or not', async () => {

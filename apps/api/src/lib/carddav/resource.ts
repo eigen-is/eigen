@@ -19,10 +19,7 @@ export async function handleGetCard(contacts: Contacts, uri: string): Promise<Re
     });
 }
 
-// PUT /dav/addressbooks/:ownerId/contacts/:uri — store the client's card and hand the typed result to the
-// shared DAV mapping. Preconditions, UID rules, quota, transcode, and the self-link decision all live in
-// putCard, evaluated inside the mutation lock. The etag hashes the stored bytes, so a 4.0 client that PUT gets
-// the 3.0 form's etag back and re-converges on its next fetch.
+// PUT /dav/addressbooks/:ownerId/contacts/:uri — preconditions, UID rules and quota are putCard's, inside its lock.
 export async function handlePutCard(
     contacts: Contacts,
     ownerId: string,
@@ -35,8 +32,7 @@ export async function handlePutCard(
     return davPutResponse(result, 'CARD', bookHref(ownerId), uri);
 }
 
-// DELETE /dav/addressbooks/:ownerId/contacts/:uri — remove the resource. Your own card is a 403 (mirrors
-// deleteContact); every other outcome is the shared DAV delete mapping.
+// DELETE /dav/addressbooks/:ownerId/contacts/:uri — your own card is a 403, mirroring deleteContact.
 export async function handleDeleteCard(contacts: Contacts, uri: string, ifMatch: string | null): Promise<Response> {
     const result = await contacts.deleteCard(uri, { ifMatch });
     if (!result.ok && result.error === 'self-delete') return new Response('Forbidden', { status: 403 });

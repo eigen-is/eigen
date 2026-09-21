@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { getHome } from '../../lib/home';
-import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+import { davRequest } from '../dav-test-helpers';
+import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 describe('Calendar Timezone', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -642,7 +643,6 @@ describe('Calendar Timezone', () => {
     // next-day 04:00Z), the pre-fix parser stored the UTC date, so exceptions attached to the wrong
     // occurrence: the cancellation killed a neighbor and the modification duplicated.
     describe('#8 RECURRENCE-ID keyed on wall-clock date (CalDAV PUT)', () => {
-        const basicAuth = (email: string, password = 'testpassword123') => `Basic ${btoa(`${email}:${password}`)}`;
         const VTIMEZONE_NY = [
             'BEGIN:VTIMEZONE',
             'TZID:America/New_York',
@@ -673,13 +673,11 @@ describe('Calendar Timezone', () => {
             ].join('\r\n');
         const sec = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
         const davPut = (email: string, ownerId: string, calId: string, uri: string, body: string) =>
-            app.handle(
-                new Request(`http://localhost/dav/calendars/${ownerId}/${calId}/${uri}`, {
-                    method: 'PUT',
-                    headers: { Authorization: basicAuth(email), 'Content-Type': 'text/calendar' },
-                    body,
-                }),
-            );
+            davRequest('PUT', `/dav/calendars/${ownerId}/${calId}/${uri}`, {
+                email,
+                headers: { 'Content-Type': 'text/calendar' },
+                body,
+            });
 
         test('cross-midnight-UTC exceptions store the wall-clock date and attach to the intended occurrence', async () => {
             const UID = 'audit8-daily@test';

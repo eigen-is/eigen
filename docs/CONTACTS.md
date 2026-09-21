@@ -1,15 +1,6 @@
 # Contacts & CardDAV
 
-> **TLDR**: Contacts follow the **mail model, not the calendar model** — one vCard file per contact under
-> `eigen.contacts/cards/*.vcf` is the source of truth, and `contacts.db` is a rebuildable index over those
-> files (plus the sync/label metadata that lives only in the DB). That makes round-trips lossless by
-> construction: a CardDAV GET returns the exact bytes the client PUT, unknown properties and all. The
-> `apps/api/src/lib/carddav/` layer serves RFC 6352 at `/dav/addressbooks/:ownerId/…`, a near-clone of the
-> CalDAV layer minus recurrence and timezones, with the same Basic-auth app-password story. One address book
-> per user named "Contacts", vCard 3.0 on disk and on the wire, `requireSelf`-only. The domain lives in
-> `apps/api/src/lib/contacts/`; the REST surface gains a required conditional-write `etag` (a body field on
-> update, a `?etag=` param on delete), and the app UI grows a contact-menu, a field-array edit form, and an
-> Integrations card.
+> **TLDR**: Contacts follow the **mail model, not the calendar model** — one vCard file per contact under `eigen.contacts/cards/*.vcf` is the source of truth, and `contacts.db` is a rebuildable index over those files (plus the sync/label metadata that lives only in the DB). That makes round-trips lossless by construction: a CardDAV GET returns the exact bytes the client PUT, unknown properties and all. The `apps/api/src/lib/carddav/` layer serves RFC 6352 at `/dav/addressbooks/:ownerId/…`, a near-clone of the CalDAV layer minus recurrence and timezones, with the same Basic-auth app-password story. One address book per user named "Contacts", vCard 3.0 on disk and on the wire, `requireSelf`-only. The domain lives in `apps/api/src/lib/contacts/`; the REST surface gains a required conditional-write `etag` (a body field on update, a `?etag=` param on delete), and the app UI grows a contact-menu, a field-array edit form, and an Integrations card.
 
 ## Storage model — files as truth
 
@@ -20,14 +11,7 @@ eigen.contacts/
   contacts.db                   ← index over the cards + authoritative sync/label metadata
 ```
 
-**The honest contract** (`contacts.db` is index *plus* authoritative metadata, not a disposable cache): what
-the index **projects re-derives from `cards/` alone** — the card row's names, the `data` JSON projection,
-the content-hash `etag`, and label *membership* (each card's `CATEGORIES`). What the DB **owns** lives
-nowhere else and survives in backups: label ids + colors, the one-row `book` (`ctag`, `syncGen`,
-`ownerSeeded`), the `contact_tombstones` log, and the two crash-recovery journals. A rebuild that starts from
-`cards/` alone therefore reproduces identical projections, etags and category membership, but loses the
-authoritative half — so any from-scratch rebuild **rotates `syncGen`** (below), forcing clients into a full
-resync rather than trusting a counter that reset under them.
+**The honest contract** (`contacts.db` is index *plus* authoritative metadata, not a disposable cache): what the index **projects re-derives from `cards/` alone** — the card row's names, the `data` JSON projection, the content-hash `etag`, and label *membership* (each card's `CATEGORIES`). What the DB **owns** lives nowhere else and survives in backups: label ids + colors, the one-row `book` (`ctag`, `syncGen`, `ownerSeeded`), the `contact_tombstones` log, and the two crash-recovery journals. A rebuild that starts from `cards/` alone therefore reproduces identical projections, etags and category membership, but loses the authoritative half — so any from-scratch rebuild **rotates `syncGen`** (below), forcing clients into a full resync rather than trusting a counter that reset under them.
 
 | | Lives in | Rebuilds from the files |
 |---|---|---|
@@ -36,12 +20,7 @@ resync rather than trusting a counter that reset under them.
 | Label ids and colors, the `book` row (`ctag`, `syncGen`, `ownerSeeded`), `contact_tombstones`, the two journals | `contacts.db` | no — database-only, which is why a from-scratch rebuild rotates `syncGen` |
 | Avatar renditions | `avatars/` | yes, re-derived from each card's `PHOTO` |
 
-The index is reshaped for this by a **v2 migration** on `contacts.db` (`db-config.ts`, `currentVersion: 4`)
-that **drops the v1 tables** and creates the cards-as-truth shape; the emptied book reseeds through the normal
-fresh-account path (yourself, plus the org owner if `onboarding.autoAddOwnerContact`). v3 heals an early
-tombstone column, v4 adds the two recovery journals — both pure additive migrations. See the reset-on-deploy
-note at the end: existing contact data is **dropped, not migrated** (a decided trade — eigen.is books are
-seed-scale, and zero export code beats carrying a legacy path forever).
+The index is reshaped for this by a **v2 migration** on `contacts.db` (`db-config.ts`, `currentVersion: 4`) that **drops the v1 tables** and creates the cards-as-truth shape; the emptied book reseeds through the normal fresh-account path (yourself, plus the org owner if `onboarding.autoAddOwnerContact`). v3 heals an early tombstone column, v4 adds the two recovery journals — both pure additive migrations. See the reset-on-deploy note at the end: existing contact data is **dropped, not migrated** (a decided trade — eigen.is books are seed-scale, and zero export code beats carrying a legacy path forever).
 
 ### Index schema (`schema.ts`)
 
@@ -56,72 +35,25 @@ seed-scale, and zero export code beats carrying a legacy path forever).
 
 ## The Contacts class — write path
 
-`apps/api/src/lib/contacts/contacts.ts` (`class Contacts`) keeps the REST method signatures
-(`addContact`/`updateContact`/`deleteContact`/`getContacts`/`getContactById`/`getMe` + the label methods) and
-adds the CardDAV store seam. Every mutation serializes through a one-slot write gate (`WriteGate`, a
-`Semaphore(1)` in `lib/core/indexed-file-store.ts`) — the same job `MaildirStore.storeLock` does — so a
-file+index pair never straddles a reconcile or a racing write.
+`apps/api/src/lib/contacts/contacts.ts` (`class Contacts`) keeps the REST method signatures (`addContact`/`updateContact`/`deleteContact`/`getContacts`/`getContactById`/`getMe` + the label methods) and adds the CardDAV store seam. Every mutation serializes through a one-slot write gate (`WriteGate`, a `Semaphore(1)` in `lib/core/indexed-file-store.ts`) — the same job `MaildirStore.storeLock` does — so a file+index pair never straddles a reconcile or a racing write.
 
-**Atomic, fail-closed writes.** Each card write goes temp file → `fsync` → rename via
-`LocalFilesystem.writeAtomic` (`writeDurable` + `renameDurable` under it, the maildir delivery precedent —
-[MAIL.md](MAIL.md) § durability spells the family out), then a
-single SQLite transaction (`commitCard`) commits the index row, label junction, `cardCtag`, book `ctag` and
-tombstone changes together. A delete is the same protocol in reverse: `unlinkDurable` removes the file and
-fsyncs `cards/`, so no power loss hands the name back under an acknowledged delete. The exact sequence every mutation runs: `gate.run()` (which drains first) → `enforceCardBudget`
-(the quota gate, *before* any intent is recorded) → `recordCardWrite(uri)` → `writeResourceFile` → (photo cache) →
-`commitCard` inside `try/catch`, and on any failure `gate.markDirty(uri)` + rethrow. `commitCard` is the single
-index-write seam: ctag bump, junction rebuild (`syncCardLabels`), tombstone clear by `uriKey`, and the
-pending-write clear, all in one transaction.
+**Atomic, fail-closed writes.** Each card write goes temp file → `fsync` → rename via `LocalFilesystem.writeAtomic` (`writeDurable` + `renameDurable` under it, the maildir delivery precedent — [MAIL.md](MAIL.md) § durability spells the family out), then a single SQLite transaction (`commitCard`) commits the index row, label junction, `cardCtag`, book `ctag` and tombstone changes together. A delete is the same protocol in reverse: `unlinkDurable` removes the file and fsyncs `cards/`, so no power loss hands the name back under an acknowledged delete. The exact sequence every mutation runs: `gate.run()` (which drains first) → `enforceCardBudget` (the quota gate, *before* any intent is recorded) → `recordCardWrite(uri)` → `writeResourceFile` → (photo cache) → `commitCard` inside `try/catch`, and on any failure `gate.markDirty(uri)` + rethrow. `commitCard` is the single index-write seam: ctag bump, junction rebuild (`syncCardLabels`), tombstone clear by `uriKey`, and the pending-write clear, all in one transaction.
 
-**Two failure windows, two guards.** If the index step throws *after* a successful rename, the uri is marked
-in the gate's in-memory dirty set and the book **fails closed**: the next public call — mutation *or read* — drains it
-(`gate.run()` at its entry, `gate.ensureDrained()` for a lock-free read) and re-indexes that card before observing
-the index, so no read is served past a torn write. A dirty card whose file already hashes to the row's `etag` is settled without a commit — no `ctag` bump, no `cardCtag` re-stamp, no SSE — because a lock-free read that raced a PUT marks a pair that is whole. A uri leaves the dirty set as its own re-index settles, so one card that can never recover does not re-commit the healthy ones — and the book `ctag` — on every later drain; `gate.run()` refuses re-entry outright and `gate.ensureDrained()` from inside the lock is a no-op. Process death takes that set with it, which is what `pending_card_writes` is
-for: a uri recorded there before its file was renamed and cleared inside the commit that settled the pair; a
-survivor means the pair never completed, so `recoverPendingWork` at init re-indexes it. This covers the one
-case a stat-only reconcile cannot see — a replacement carrying the very same `mtime` and `size`.
-`pending_label_renames` `{labelId, oldName, newName}` is the label-fan-out twin (see Labels below). Init
-drains both before anything is served. A drain that fails inside init is logged, not fatal (a home whose init throws cannot be opened at all): the card's journal row stays so the next init retries it, and until then its index row is served as it is — the one place a stale row can outlive a torn write.
+**Two failure windows, two guards.** If the index step throws *after* a successful rename, the uri is marked in the gate's in-memory dirty set and the book **fails closed**: the next public call — mutation *or read* — drains it (`gate.run()` at its entry, `gate.ensureDrained()` for a lock-free read) and re-indexes that card before observing the index, so no read is served past a torn write. A dirty card whose file already hashes to the row's `etag` is settled without a commit — no `ctag` bump, no `cardCtag` re-stamp, no SSE — because a lock-free read that raced a PUT marks a pair that is whole. A uri leaves the dirty set as its own re-index settles, so one card that can never recover does not re-commit the healthy ones — and the book `ctag` — on every later drain; `gate.run()` refuses re-entry outright and `gate.ensureDrained()` from inside the lock is a no-op. Process death takes that set with it, which is what `pending_card_writes` is for: a uri recorded there before its file was renamed and cleared inside the commit that settled the pair; a survivor means the pair never completed, so `recoverPendingWork` at init re-indexes it. This covers the one case a stat-only reconcile cannot see — a replacement carrying the very same `mtime` and `size`. `pending_label_renames` `{labelId, oldName, newName}` is the label-fan-out twin (see Labels below). Init drains both before anything is served. A drain that fails inside init is logged, not fatal (a home whose init throws cannot be opened at all): the card's journal row stays so the next init retries it, and until then its index row is served as it is — the one place a stale row can outlive a torn write.
 
 ## Reconcile vs. rebuild
 
-`init` brings the index in line with `cards/` before seeding: `reconcileIndex()` on a healthy book
-(`indexIsIntact()` — the `book` row exists), or `rebuildIndex()` when the authoritative bookkeeping is gone.
+`init` brings the index in line with `cards/` before seeding: `reconcileIndex()` on a healthy book (`indexIsIntact()` — the `book` row exists), or `rebuildIndex()` when the authoritative bookkeeping is gone.
 
-- **`reconcileIndex` is stat-only** (the always-in-practice case, spec Performance invariant): one directory
-  listing plus a `(mtime, size)` comparison against the index — zero file reads, zero parses. Only entries
-  whose stat drifted get read, hashed and re-parsed; rows whose file vanished get tombstoned; the `ctag` bumps
-  only if something actually changed. `cardParseCount` stays at `0` on a second init over an unchanged book
-  (a pinned test).
-- **The restore rule**: a per-home restore does not preserve mtimes, so every card drifts at once. A drifted
-  file whose bytes still hash to the row's `etag`, under the same name and holding the same self-link,
-  changed nothing: it refreshes only the row's `mtime`/`size` — no `ctag` bump, no `cardCtag` re-stamp, no
-  tombstone, no SSE — and the refreshed stats keep the next init off the files. Every card the pass settled,
-  restored ones included, also drops its `pending_card_writes` row: an etag match proves the file and the row
-  are a pair, so the recovery drain behind init owes it nothing. A pass in which every drifted
-  card turns out unchanged is a clean pass for sync, so a restored book costs its clients zero re-downloads.
-  A card whose derived avatar cache is missing is excluded: the stats cannot see that drift, and the card is
-  in the re-read set to have its cache regenerated.
-- **`rebuildIndex` full-rehashes** every card — it runs when the book row is missing or on demand after manual
-  disk surgery, and it catches the same-`stat` replacement (a selective `cp -p` restore) that the stat-only
-  pass is blind to. It clears the index, re-derives every row, drops all tombstones, bumps `ctag`, and
-  **rotates `syncGen`** — a rebuilt book can't honor old sync tokens, so the rotation forces
-  every client through the RFC 6578 recovery instead of silently telling them "nothing changed" while
-  gap-deletions become ghosts. The new generation is `nextSyncGen` (`lib/core/indexed-file-store.ts`):
-  `max(stored + 1, now in seconds)`, because the stored value is exactly what a lost book row takes with it —
-  counting from nothing alone would hand two rebuilds the same generation and let a client replay a token of
-  the dead history against the new one. The floor is one-second grained, so the one repeat left needs two
-  index losses inside the same second: a rebuild whose row survived is always strictly greater.
+- **`reconcileIndex` is stat-only** (the always-in-practice case, spec Performance invariant): one directory listing plus a `(mtime, size)` comparison against the index — zero file reads, zero parses. Only entries whose stat drifted get read, hashed and re-parsed; rows whose file vanished get tombstoned; the `ctag` bumps only if something actually changed. `cardParseCount` stays at `0` on a second init over an unchanged book (a pinned test).
+- **The restore rule**: a per-home restore does not preserve mtimes, so every card drifts at once. A drifted file whose bytes still hash to the row's `etag`, under the same name and holding the same self-link, changed nothing: it refreshes only the row's `mtime`/`size` — no `ctag` bump, no `cardCtag` re-stamp, no tombstone, no SSE — and the refreshed stats keep the next init off the files. Every card the pass settled, restored ones included, also drops its `pending_card_writes` row: an etag match proves the file and the row are a pair, so the recovery drain behind init owes it nothing. A pass in which every drifted card turns out unchanged is a clean pass for sync, so a restored book costs its clients zero re-downloads. A card whose derived avatar cache is missing is excluded: the stats cannot see that drift, and the card is in the re-read set to have its cache regenerated.
+- **`rebuildIndex` full-rehashes** every card — it runs when the book row is missing or on demand after manual disk surgery, and it catches the same-`stat` replacement (a selective `cp -p` restore) that the stat-only pass is blind to. It clears the index, re-derives every row, drops all tombstones, bumps `ctag`, and **rotates `syncGen`** — a rebuilt book can't honor old sync tokens, so the rotation forces every client through the RFC 6578 recovery instead of silently telling them "nothing changed" while gap-deletions become ghosts. The new generation is `nextSyncGen` (`lib/core/indexed-file-store.ts`): `max(stored + 1, now in seconds)`, because the stored value is exactly what a lost book row takes with it — counting from nothing alone would hand two rebuilds the same generation and let a client replay a token of the dead history against the new one. The floor is one-second grained, so the one repeat left needs two index losses inside the same second: a rebuild whose row survived is always strictly greater.
 
-There are **no fs-watchers**: unlike mail (Dovecot moves `new/` → `cur/` out of process), contacts have no
-out-of-process writer, so every in-process mutation updates file + index together under the lock, and
-reconcile-on-open plus the explicit `rebuildIndex` cover manual disk edits.
+There are **no fs-watchers**: unlike mail (Dovecot moves `new/` → `cur/` out of process), contacts have no out-of-process writer, so every in-process mutation updates file + index together under the lock, and reconcile-on-open plus the explicit `rebuildIndex` cover manual disk edits.
 
 ## CardDAV surface
 
-`apps/api/src/lib/carddav/` mirrors `caldav/` file-for-file, mounted in `app.ts` next to `caldavRouter`. Every
-route is `authenticateBasic` (app password → primary-password fallback, shared `protocol-auth.ts`) +
-`requireSelf`.
+`apps/api/src/lib/carddav/` mirrors `caldav/` file-for-file, mounted in `app.ts` next to `caldavRouter`. Every route is `authenticateBasic` (app password → primary-password fallback, shared `protocol-auth.ts`) + `requireSelf`.
 
 ```
 PROPFIND /dav/addressbooks/:ownerId              addressbook home collection
@@ -133,130 +65,45 @@ REPORT   /dav/addressbooks/:ownerId/contacts/     addressbook-multiget · addres
 MKCOL / MKADDRESSBOOK                             → 403 (one fixed book, spec Non-goals)
 ```
 
-**One book, `contacts`.** The URL segment is `contacts`, the displayname "Contacts"; any other book name is a
-404, and there is no `MKADDRESSBOOK`. The wildcard decodes to at most two segments (book + optional card
-name); a third segment or a malformed percent-escape is a 400.
+**One book, `contacts`.** The URL segment is `contacts`, the displayname "Contacts"; any other book name is a 404, and there is no `MKADDRESSBOOK`. The wildcard decodes to at most two segments (book + optional card name); a third segment or a malformed percent-escape is a 400.
 
 **PROPFIND honors the requested prop list** via the shared core in `lib/dav/propfind.ts` (the CalDAV twin uses the same): requested props we have come back in the 200 propstat, unknown ones in a 404 propstat echoing their namespace (omitted under `Brief: t` / `Prefer: return=minimal`), a bodyless PROPFIND stays allprop, and card member rows carry an empty `resourcetype`.
 
-**Discovery** is edge + principal chain. `/.well-known/carddav` redirects to `/dav/` at the Caddy edge (the
-CalDAV twin — no API route). From there: `PROPFIND /dav/` → `current-user-principal` →
-`/dav/principals/:userId/` whose `principalProps` carry **both** `calendar-home-set` *and*
-`CARD:addressbook-home-set` → `/dav/addressbooks/:userId/`. One principal serves both protocols; a client
-reads only the props it knows. The book collection advertises: `CARD:addressbook` resourcetype, displayname
-"Contacts", `getctag`, `sync-token`, `supported-address-data` (vCard 3.0), `max-resource-size` (5 MiB), and a
-`supported-report-set` listing exactly the three REPORTs that exist. **OPTIONS + realm live in `app.ts`, not
-the cloned dir**: one combined header for the whole `/dav` tree, `DAV: 1, 2, 3, calendar-access, addressbook`
-(clients check for the `addressbook` token before trusting the account), and the 401 realm is the
-protocol-neutral `Basic realm="Eigen DAV"`.
+**Discovery** is edge + principal chain. `/.well-known/carddav` redirects to `/dav/` at the Caddy edge (the CalDAV twin — no API route). From there: `PROPFIND /dav/` → `current-user-principal` → `/dav/principals/:userId/` whose `principalProps` carry **both** `calendar-home-set` *and* `CARD:addressbook-home-set` → `/dav/addressbooks/:userId/`. One principal serves both protocols; a client reads only the props it knows. The book collection advertises: `CARD:addressbook` resourcetype, displayname "Contacts", `getctag`, `sync-token`, `supported-address-data` (vCard 3.0), `max-resource-size` (5 MiB), and a `supported-report-set` listing exactly the three REPORTs that exist. **OPTIONS + realm live in `app.ts`, not the cloned dir**: one combined header for the whole `/dav` tree, `DAV: 1, 2, 3, calendar-access, addressbook` (clients check for the `addressbook` token before trusting the account), and the 401 realm is the protocol-neutral `Basic realm="Eigen DAV"`.
 
-**vCard 3.0, with a 4.0→3.0 transcode at PUT.** The book is 3.0 on disk and on the wire (what iOS and DAVx⁵
-speak, and every client accepts). Thunderbird 102+ PUTs `VERSION:4.0` regardless, and 4.0 bytes served
-verbatim lose the photo on iOS, so `transcodeTo30` rewrites a 4.0 card before storage: `VERSION`, `PHOTO`
-`data:`-URI → `ENCODING=b`, `tel:`-scheme `TEL` unwrapped, ISO-basic `BDAY` → extended form, numeric `PREF` →
-`TYPE=PREF`; every construct with no 3.0 equivalent rides through verbatim. The response ETag hashes the
-stored (3.0) bytes, so a 4.0 client re-converges on its next fetch. The **verbatim-bytes contract holds
-exactly for 3.0 clients** and semantically for 4.0 ones.
+**vCard 3.0, with a 4.0→3.0 transcode at PUT.** The book is 3.0 on disk and on the wire (what iOS and DAVx⁵ speak, and every client accepts). Thunderbird 102+ PUTs `VERSION:4.0` regardless, and 4.0 bytes served verbatim lose the photo on iOS, so `transcodeTo30` rewrites a 4.0 card before storage: `VERSION`, `PHOTO` `data:`-URI → `ENCODING=b`, `tel:`-scheme `TEL` unwrapped, ISO-basic `BDAY` → extended form, numeric `PREF` → `TYPE=PREF`; every construct with no 3.0 equivalent rides through verbatim. The response ETag hashes the stored (3.0) bytes, so a 4.0 client re-converges on its next fetch. The **verbatim-bytes contract holds exactly for 3.0 clients** and semantically for 4.0 ones.
 
-**ETag = content hash.** The resource *is* the bytes, so the etag is the SHA-256 hex of the file — simpler and
-more honest than the calendar's field-hash, and it lets reconcile detect out-of-band edits trivially.
+**ETag = content hash.** The resource *is* the bytes, so the etag is the SHA-256 hex of the file — simpler and more honest than the calendar's field-hash, and it lets reconcile detect out-of-band edits trivially.
 
-**Preconditions inside the lock.** `If-Match`/`If-None-Match` are **not** checked handler-side (the CalDAV
-code is race-free only because nothing awaits between check and write — a property an async file write loses).
-`putCard`/`deleteCard` evaluate them *inside* the write gate, against the state the write overwrites, so two
-racing `If-Match` PUTs serialize and the loser gets a typed precondition result → 412. UID is required and
-immutable: a UID another resource already owns → 409 `CARDDAV:no-uid-conflict` carrying that resource's
-`DAV:href`, and a PUT that changes an existing resource's own UID → the bare 409 element (never a raw
-constraint 500). Oversize → 413 `CARDDAV:max-resource-size`
-(`CARD_MAX_BYTES` = 5 MiB). The client-chosen name becomes a filename, so `sanitizeCardUri` runs before any
-store call: NFC-normalized, then `isSafePathSegment` (`lib/core/path-utils.ts`, the one rule every
-client-chosen segment takes — mail draft ids and calendar ids included) plus the `.vcf` suffix; a case/NFC-colliding
-name can't alias one file. Anything else → 400.
+**Preconditions inside the lock.** `If-Match`/`If-None-Match` are **not** checked handler-side (the CalDAV code is race-free only because nothing awaits between check and write — a property an async file write loses). `putCard`/`deleteCard` evaluate them *inside* the write gate, against the state the write overwrites, so two racing `If-Match` PUTs serialize and the loser gets a typed precondition result → 412. UID is required and immutable: a UID another resource already owns → 409 `CARDDAV:no-uid-conflict` carrying that resource's `DAV:href`, and a PUT that changes an existing resource's own UID → the bare 409 element (never a raw constraint 500). Oversize → 413 `CARDDAV:max-resource-size` (`CARD_MAX_BYTES` = 5 MiB). The client-chosen name becomes a filename, so `sanitizeCardUri` runs before any store call: NFC-normalized, then `isSafePathSegment` (`lib/core/path-utils.ts`, the one rule every client-chosen segment takes — mail draft ids and calendar ids included) plus the `.vcf` suffix; a case/NFC-colliding name can't alias one file. Anything else → 400.
 
 ### The three REPORTs
 
-- **`addressbook-multiget`** — hrefs → etag + `CARD:address-data` per card. Hrefs are **percent-decoded**
-  before matching and **percent-encoded** on every emission (the WebDAV convention the CalDAV template skips,
-  safe there only because its uris are server-generated). Capped at 500 hrefs and **deduped per resource** so a
-  repeated href can't amplify the response.
-- **`addressbook-query`** — real **match-only** server-side filtering (RFC 6352 § 8.6: clients treat every
-  returned card as a match). The engine (`query-filter.ts`) evaluates `prop-filter` / `param-filter` /
-  `is-not-defined` / `text-match` (with negation and equals/contains/starts-with/ends-with) under `anyof` /
-  `allof`, in-memory over every parsed card (group cards included — DAV sees the whole book). Exactly the two
-  RFC-required collations are supported (`i;ascii-casemap`, `i;unicode-casemap`); an unsupported collation →
-  403 `CARDDAV:supported-collation`, an unmappable filter → 403 `CARDDAV:supported-filter`, never a superset.
-  Results honor the client `limit` then a server cap of 1000 (truncate + log, never unbounded assembly).
-- **`sync-collection`** (RFC 6578) — generation-stamped tokens `urn:eigen:sync:<syncGen>-<ctag>`, emitted and
-  parsed in `lib/dav/sync-token.ts` (the CalDAV twin shares its `invalidSyncToken` and keeps its own
-  generation-less grammar until its calendars carry one). The delta is
-  `cardCtag > sinceCtag` as 200 rows plus tombstones as 404 rows. A token whose generation is **stale** (index
-  rebuilt) **or whose ctag is ahead** of the current book → 403 `D:valid-sync-token` (sabre's status, which
-  clients key their full resync on), forcing the full
-  comparison that heals ghost deletions. (The ctag-ahead case is the live CalDAV bug this design must not
-  inherit — the calendar answers a post-rebuild future token with an empty delta and a *lower* token,
-  permanently stalling that client.)
+- **`addressbook-multiget`** — hrefs → etag + `CARD:address-data` per card. Hrefs are **percent-decoded** before matching and **percent-encoded** on every emission (the WebDAV convention the CalDAV template skips, safe there only because its uris are server-generated). Capped at 500 hrefs and **deduped per resource** so a repeated href can't amplify the response.
+- **`addressbook-query`** — real **match-only** server-side filtering (RFC 6352 § 8.6: clients treat every returned card as a match). The engine (`query-filter.ts`) evaluates `prop-filter` / `param-filter` / `is-not-defined` / `text-match` (with negation and equals/contains/starts-with/ends-with) under `anyof` / `allof`, in-memory over every parsed card (group cards included — DAV sees the whole book). Exactly the two RFC-required collations are supported (`i;ascii-casemap`, `i;unicode-casemap`); an unsupported collation → 403 `CARDDAV:supported-collation`, an unmappable filter → 403 `CARDDAV:supported-filter`, never a superset. Results honor the client `limit` then a server cap of 1000 (truncate + log, never unbounded assembly).
+- **`sync-collection`** (RFC 6578) — generation-stamped tokens `urn:eigen:sync:<syncGen>-<ctag>`, emitted and parsed in `lib/dav/sync-token.ts` (the CalDAV twin shares its `invalidSyncToken` and keeps its own generation-less grammar until its calendars carry one). The delta is `cardCtag > sinceCtag` as 200 rows plus tombstones as 404 rows. A token whose generation is **stale** (index rebuilt) **or whose ctag is ahead** of the current book → 403 `D:valid-sync-token` (sabre's status, which clients key their full resync on), forcing the full comparison that heals ghost deletions. (The ctag-ahead case is the live CalDAV bug this design must not inherit — the calendar answers a post-rebuild future token with an empty delta and a *lower* token, permanently stalling that client.)
 
-**Partial `address-data`.** When a query or multiget asks for a property subset (RFC 6352 § 10.4.2), the row
-serves the AST projected down to that subset plus the mandatory skeleton (`address-data.ts`); a full request,
-or a card that won't parse, serves the whole bytes.
+**Partial `address-data`.** When a query or multiget asks for a property subset (RFC 6352 § 10.4.2), the row serves the AST projected down to that subset plus the mandatory skeleton (`address-data.ts`); a full request, or a card that won't parse, serves the whole bytes.
 
-**Request bounds.** REPORT bodies are capped at 1 MiB (enforced in the router *before* the body reaches the
-XML parser), multiget hrefs at 500, query results at 1000.
+**Request bounds.** REPORT bodies are capped at 1 MiB (enforced in the router *before* the body reaches the XML parser), multiget hrefs at 500, query results at 1000.
 
-Reads touch `.vcf` files only where the payload *is* the card: `PROPFIND` Depth 1 is pure SQLite (uris, etags,
-tombstones), and so is `sync-collection` — unless the client also requests `address-data`, in which case each
-changed row streams its file bytes (as multiget does). GET / multiget / query always stream file bytes. Query
-filtering runs over a small book on a rare request, never on an app hot path. A GET reads the index row and then the file without taking the write lock, and the etag it serves hashes **the bytes it just read** (`getCard`), not the row's — so body and validator are one revision by construction, whatever a racing PUT or a stale row does, and the read stays lock-free. A hash that differs from the row's marks the uri dirty, so the next drain re-indexes the card: otherwise the etag a GET serves is one the row's own etag refuses and the client loops on 412 forever, since `putCard`/`deleteCard` match `If-Match` against the row. Every response that carries card bytes follows that rule (multiget, `addressbook-query`, and a `sync-collection` row that also streams `address-data`); a response that reads no file — PROPFIND, a plain `sync-collection` row — quotes the index row's etag, which is what the book knows.
+Reads touch `.vcf` files only where the payload *is* the card: `PROPFIND` Depth 1 is pure SQLite (uris, etags, tombstones), and so is `sync-collection` — unless the client also requests `address-data`, in which case each changed row streams its file bytes (as multiget does). GET / multiget / query always stream file bytes. Query filtering runs over a small book on a rare request, never on an app hot path. A GET reads the index row and then the file without taking the write lock, and the etag it serves hashes **the bytes it just read** (`getCard`), not the row's — so body and validator are one revision by construction, whatever a racing PUT or a stale row does, and the read stays lock-free. A hash that differs from the row's marks the uri dirty, so the next drain re-indexes the card: otherwise the etag a GET serves is one the row's own etag refuses and the client loops on 412 forever, since `putCard`/`deleteCard` match `If-Match` against the row. Every response that carries card bytes follows that rule (multiget, `addressbook-query`, and a `sync-collection` row that also streams `address-data`); a response that reads no file — PROPFIND, a plain `sync-collection` row — quotes the index row's etag, which is what the book knows.
 
 ## Labels ↔ CATEGORIES
 
-Membership truth lives **in the file** (`CATEGORIES:Friends,Work`) — otherwise the junction and the file are
-two sources of one fact and every DAV rewrite risks drift. The `labels` table is the *definition* store (id,
-name, **color** — color has no vCard home). Parse aggregates **every** `CATEGORIES` line of a card (external
-clients legitimately split them) and rebuilds the junction, auto-creating an unknown label name via a
-conflict-safe upsert keyed on the **normalized name** (`nameKey` = NFC + trim + lowercase, uniquely indexed)
-with a deterministic color (FNV-1a hash of the key into `EIGEN_ACCENT_COLORS`). A DAV write that creates a
-label emits `LABEL_CREATED` too (label and contact caches invalidate separately), and REST `addLabel` /
-`updateLabel` enforce the same uniqueness (duplicate normalized name → 409).
+Membership truth lives **in the file** (`CATEGORIES:Friends,Work`) — otherwise the junction and the file are two sources of one fact and every DAV rewrite risks drift. The `labels` table is the *definition* store (id, name, **color** — color has no vCard home). Parse aggregates **every** `CATEGORIES` line of a card (external clients legitimately split them) and rebuilds the junction, auto-creating an unknown label name via a conflict-safe upsert keyed on the **normalized name** (`nameKey` = NFC + trim + lowercase, uniquely indexed) with a deterministic color (FNV-1a hash of the key into `EIGEN_ACCENT_COLORS`). A DAV write that creates a label emits `LABEL_CREATED` too (label and contact caches invalidate separately), and REST `addLabel` / `updateLabel` enforce the same uniqueness (duplicate normalized name → 409).
 
-**Rename fans out.** A label rename rewrites `CATEGORIES` in every member file (their etags change — correct,
-clients must re-fetch). The fan-out is owed from the moment the row changes, so the intent is durable from that
-same moment: `pending_label_renames` is written in the same transaction that renames the row and cleared only
-once every member card is rewritten; a crash mid-fan-out leaves unreached files stat-clean (no reconcile can
-find them), so the record is the only thing that can, and `updateLabel`/`deleteLabel`/`addLabel` each resume a
-pending rename first. Label delete strips the category from member files; the junction rows cascade with the
-label row.
+**Rename fans out.** A label rename rewrites `CATEGORIES` in every member file (their etags change — correct, clients must re-fetch). The fan-out is owed from the moment the row changes, so the intent is durable from that same moment: `pending_label_renames` is written in the same transaction that renames the row and cleared only once every member card is rewritten; a crash mid-fan-out leaves unreached files stat-clean (no reconcile can find them), so the record is the only thing that can, and `updateLabel`/`deleteLabel`/`addLabel` each resume a pending rename first. Label delete strips the category from member files; the junction rows cascade with the label row.
 
 ## Photos
 
-Inline `PHOTO` in the file is **canonical**; `avatars/` is a **derived cache**. Cache files are named
-`<contactId>-<hash8>.webp` (`avatarCacheName` — first 8 chars of the embedded photo's hash), so a changed
-photo yields a new filename and the sweep reclaims the superseded one. The index `data.avatar` projection
-carries only that URL string — **base64 `PHOTO` bytes never enter the index, the list response, or an SSE
-event** (the one place the design could silently multiply the list payload by ~1000×, so it's an invariant).
+Inline `PHOTO` in the file is **canonical**; `avatars/` is a **derived cache**. Cache files are named `<contactId>-<hash8>.webp` (`avatarCacheName` — first 8 chars of the embedded photo's hash), so a changed photo yields a new filename and the sweep reclaims the superseded one. The index `data.avatar` projection carries only that URL string — **base64 `PHOTO` bytes never enter the index, the list response, or an SSE event** (the one place the design could silently multiply the list payload by ~1000×, so it's an invariant).
 
-The app side keeps `uploadAvatar` as a pure staging endpoint (a file in, a webp URL out, before the contact
-even exists) — but it now stages a **first-generation sibling pair** from the pristine upload: the 512px webp
-Eigen serves (`<uuid>.webp`, alpha and animation preserved) and an Apple-safe embed (`<uuid>.embed.<ext>` —
-JPEG q80 for opaque stills, PNG for alpha, animated GIF for animated sources with a 2 MiB fallback to
-first-frame JPEG, since Apple Contacts decodes only JPEG/BMP/PNG/GIF, never webp). Save embeds the staged
-embed bytes **verbatim** into `PHOTO` and promotes the sibling webp into the cache under
-`avatarCacheName(contactId, embedBytes)` — the exact name a reindex derives from the card, so a reconcile
-that finds it present keeps the promoted copy (never re-derives over it), while any change to the embedded
-bytes yields a new name and the missing-cache paths regenerate from the embed (one generation older —
-accepted; it's what an external DAV PUT gets anyway). A DAV PUT carrying an inline photo is decoded and
-thumbnailed into the same hash-named webp cache (`cacheCardPhoto`, animation and alpha carried through);
-`prepareCardRow` regenerates a missing cache from the file's inline photo on reconcile/rebuild. Remote
-`PHOTO;VALUE=uri` images are kept verbatim in the file and **never fetched server-side** (SSRF, spec
-Non-goals). Staged orphans — both siblings — are swept by `cleanupAvatarImages`.
+The app side keeps `uploadAvatar` as a pure staging endpoint (a file in, a webp URL out, before the contact even exists) — but it now stages a **first-generation sibling pair** from the pristine upload: the 512px webp Eigen serves (`<uuid>.webp`, alpha and animation preserved) and an Apple-safe embed (`<uuid>.embed.<ext>` — JPEG q80 for opaque stills, PNG for alpha, animated GIF for animated sources with a 2 MiB fallback to first-frame JPEG, since Apple Contacts decodes only JPEG/BMP/PNG/GIF, never webp). Save embeds the staged embed bytes **verbatim** into `PHOTO` and promotes the sibling webp into the cache under `avatarCacheName(contactId, embedBytes)` — the exact name a reindex derives from the card, so a reconcile that finds it present keeps the promoted copy (never re-derives over it), while any change to the embedded bytes yields a new name and the missing-cache paths regenerate from the embed (one generation older — accepted; it's what an external DAV PUT gets anyway). A DAV PUT carrying an inline photo is decoded and thumbnailed into the same hash-named webp cache (`cacheCardPhoto`, animation and alpha carried through); `prepareCardRow` regenerates a missing cache from the file's inline photo on reconcile/rebuild. Remote `PHOTO;VALUE=uri` images are kept verbatim in the file and **never fetched server-side** (SSRF, spec Non-goals). Staged orphans — both siblings — are swept by `cleanupAvatarImages`.
 
 ## Quotas
 
-Two ceilings guard the PUT path. `CARD_MAX_BYTES` (5 MiB) is the whole-vCard safety ceiling — checked on the
-raw body before any parse and re-checked on the stored bytes (413 / `max-resource-size`). Beyond it, contacts
-share the **mail + contacts** storage budget: `enforceCardBudget` runs `enforceMailAndContactsQuota`, crediting the
-size of the card being replaced, and a projection over budget → 507. `Contacts.size()` answers from in-memory
-byte counters (`cardsBytes + avatarsBytes`), so contact growth is always exact. The mail half of the budget is the index sum plus the bytes staged in `draft-attachments/`, both answered from in-memory counters `MaildirStore` keeps live (`MaildirStore.size()`), not a maildir walk and nothing memoized, so a device sync that PUTs hundreds of cards costs no query per card and every write is charged to the very next check ([QUOTA.md](QUOTA.md)).
+Two ceilings guard the PUT path. `CARD_MAX_BYTES` (5 MiB) is the whole-vCard safety ceiling — checked on the raw body before any parse and re-checked on the stored bytes (413 / `max-resource-size`). Beyond it, contacts share the **mail + contacts** storage budget: `enforceCardBudget` runs `enforceMailAndContactsQuota`, crediting the size of the card being replaced, and a projection over budget → 507. `Contacts.size()` answers from in-memory byte counters (`cardsBytes + avatarsBytes`), so contact growth is always exact. The mail half of the budget is the index sum plus the bytes staged in `draft-attachments/`, both answered from in-memory counters `MaildirStore` keeps live (`MaildirStore.size()`), not a maildir walk and nothing memoized, so a device sync that PUTs hundreds of cards costs no query per card and every write is charged to the very next check ([QUOTA.md](QUOTA.md)).
 
 ## vCard import / export
 
@@ -288,35 +135,16 @@ Two accepted limitations. The email-dedupe set is built once before the loop and
 
 ## Client setup
 
-Same credential story as CalDAV/IMAP: HTTP Basic auth, app password (primary-password fallback fails under
-2FA). Point clients at `https://<domain>/` (or `/.well-known/carddav` discovery) with the Eigen email as
-username. The device-setup how-to is the help-center article
-[connect/contacts-client](../apps/index/src/data/support/connect/contacts-client.md) (Apple Contacts on
-macOS/iOS, DAVx⁵ on Android). The **Integrations** page (`apps/space/src/routes/_auth.services.tsx`) surfaces a
-CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
+Same credential story as CalDAV/IMAP: HTTP Basic auth, app password (primary-password fallback fails under 2FA). Point clients at `https://<domain>/` (or `/.well-known/carddav` discovery) with the Eigen email as username. The device-setup how-to is the help-center article [connect/contacts-client](../apps/index/src/data/support/connect/contacts-client.md) (Apple Contacts on macOS/iOS, DAVx⁵ on Android). The **Integrations** page (`apps/space/src/routes/_auth.services.tsx`) surfaces a CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
 
 ## Caveats & decisions
 
 - **Apple clients require `current-user-privilege-set` + `owner` on the home and collection, or they treat every existing resource as read-only** — and macOS Contacts silently saves each edit of a "read-only" card as a NEW card with a fresh UID (`If-None-Match: *` create), producing server-side duplicates while linking the pair locally so the Mac shows one contact. Wire-diagnosed on eigen.is 2026-08-18 (tcpdump: perfect sync-collection + multiget ingest, then create-only PUTs; fixed by `ownershipProps` in `lib/dav/xml.ts`, served by both CardDAV and CalDAV prop builders and pinned by tests in both suites). The privileges are truthful: the DAV surface is single-owner behind `requireSelf`.
-- **Apple group cards.** Apple Contacts creates groups as separate `X-ADDRESSBOOKSERVER-KIND:group` cards.
-  v1 stores them **verbatim** (fidelity) but hides them from the app's contact list (`isGroup`). Known
-  cosmetic consequence: an Apple-created group card renders as a **blank contact** in DAVx⁵'s default
-  per-contact `CATEGORIES` mode and in Thunderbird (Mozilla bug 1807394). Mapping group cards to labels is
-  deferred.
-- **Thunderbird does not render animated GIF contact photos** (verified live 2026-08-17: the GIF embed syncs
-  byte-correct and round-trips TB edits untouched, TB just doesn't display it; transparent PNG and JPEG show
-  fine). Client rendering limitation, not a sync defect — noted in the help-center article's troubleshooting.
-- **The deploy resets every contact book** to the seeded state (yourself + org owner) — decided, not
-  accidental. The v2 migration drops v1 data; eigen.is books are seed-scale, and anyone with manual entries
-  re-adds them or syncs them back from a phone once CardDAV is live. Say so in the release note.
-- **SSE under bulk sync.** An initial device sync PUTs hundreds of cards, each its own request, so there is no
-  server-side loop to batch them the way an import batches its file: every PUT broadcasts its own contact
-  event and the client's 250 ms debounce is what turns the burst into one list refetch (above).
-- **Self-link.** The `eigenId` ↔ user link rides as `X-EIGEN-ID`. It is server-owned in the index (accepted
-  only when it equals the account owner's id; at most one row per book), and a rematch on the account owner's
-  own email restores it when a client strips the property. Only a client edit that strips the property *and*
-  changes the email in one go loses the link until the user re-saves their profile. A `DELETE` of the self card
-  is refused **403** (`deleteCard` → `self-delete`); because a client like Thunderbird drops the card from its view before the request and ignores the 403, the refusal also **touches** the self card (bumps the book `ctag` and re-stamps its `cardCtag`, bytes/etag untouched) so the next `sync-collection` delta lists it as an unchanged 200 row and any client that locally dropped it re-downloads it — the refused delete self-heals on the client's own schedule, at the cost of one phantom re-fetch row for other clients.
+- **Apple group cards.** Apple Contacts creates groups as separate `X-ADDRESSBOOKSERVER-KIND:group` cards. v1 stores them **verbatim** (fidelity) but hides them from the app's contact list (`isGroup`). Known cosmetic consequence: an Apple-created group card renders as a **blank contact** in DAVx⁵'s default per-contact `CATEGORIES` mode and in Thunderbird (Mozilla bug 1807394). Mapping group cards to labels is deferred.
+- **Thunderbird does not render animated GIF contact photos** (verified live 2026-08-17: the GIF embed syncs byte-correct and round-trips TB edits untouched, TB just doesn't display it; transparent PNG and JPEG show fine). Client rendering limitation, not a sync defect — noted in the help-center article's troubleshooting.
+- **The deploy resets every contact book** to the seeded state (yourself + org owner) — decided, not accidental. The v2 migration drops v1 data; eigen.is books are seed-scale, and anyone with manual entries re-adds them or syncs them back from a phone once CardDAV is live. Say so in the release note.
+- **SSE under bulk sync.** An initial device sync PUTs hundreds of cards, each its own request, so there is no server-side loop to batch them the way an import batches its file: every PUT broadcasts its own contact event and the client's 250 ms debounce is what turns the burst into one list refetch (above).
+- **Self-link.** The `eigenId` ↔ user link rides as `X-EIGEN-ID`. It is server-owned in the index (accepted only when it equals the account owner's id; at most one row per book), and a rematch on the account owner's own email restores it when a client strips the property. Only a client edit that strips the property *and* changes the email in one go loses the link until the user re-saves their profile. A `DELETE` of the self card is refused **403** (`deleteCard` → `self-delete`); because a client like Thunderbird drops the card from its view before the request and ignores the 403, the refusal also **touches** the self card (bumps the book `ctag` and re-stamps its `cardCtag`, bytes/etag untouched) so the next `sync-collection` delta lists it as an unchanged 200 row and any client that locally dropped it re-downloads it — the refused delete self-heals on the client's own schedule, at the cost of one phantom re-fetch row for other clients.
 - **Editing a value keeps its params only when the change is unambiguous.** The app diffs a multi-value property (`EMAIL`, `TEL`, `ADR`) by *value*, so changing one value is a dropped line plus an appended one; when a single save drops exactly one line of a property and appends exactly one value, the merge pairs them and the replacement inherits the dropped line's group and params (`TYPE=WORK`, a grouped `item1.X-ABLabel`), which also keeps the label anchored to its group. Any other shape — one out and two in, a swap of two values in one save — has no unambiguous pairing, so those values append bare and re-picking the type on the client restores the label.
 
 ## Where the code lives
