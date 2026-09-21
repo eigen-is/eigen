@@ -293,7 +293,8 @@ describe('Calendar', () => {
                 },
             );
             const event = await assertJson<CalendarEvent>(res);
-            expect(event.rrule).toBe('FREQ=MONTHLY;BYMONTHDAY=15;COUNT=12');
+            // ical.js owns the serialization, so the parts round-trip by meaning, not by order.
+            expect(event.rrule!.split(';').sort()).toEqual(['BYMONTHDAY=15', 'COUNT=12', 'FREQ=MONTHLY']);
         });
 
         test('daily with interval', async () => {
@@ -2189,7 +2190,7 @@ describe('Event move across calendars (finding #1)', () => {
         expect(moved.id).toBe(created.id); // UPDATE re-home, not create+delete
         expect(moved.calendarId).toBe(targetCalId);
         expect(moved.timezone).toBe('America/New_York');
-        expect(moved.rrule).toBe('FREQ=WEEKLY;BYDAY=TU;COUNT=4');
+        expect(moved.rrule!.split(';').sort()).toEqual(['BYDAY=TU', 'COUNT=4', 'FREQ=WEEKLY']);
         expect(moved.data?.attendees?.[0]?.email).toBe('guest@example.com');
         expect(moved.data?.reminders?.[0]?.minutes).toBe(15);
 
