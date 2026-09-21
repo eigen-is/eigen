@@ -386,9 +386,8 @@ export async function putResource(
             return { ok: true, etag: text === body ? stamped : null, created: false };
         }
 
-        // The stamps and the stored alarms can push an accepted body past the ceiling, and the Home's budget
-        // is only known against the state this write overwrites: both refusals are client errors the
-        // protocol has an element for, not a 500.
+        // The stamps and the stored alarms decide the bytes, so both refusals are raised below the accepted
+        // body — and each is a client error the protocol has an element for, not a 500.
         let etag: string;
         try {
             ({ etag } = await writeResource(calendar, calendarId, storedUri, resource, existing ?? null));

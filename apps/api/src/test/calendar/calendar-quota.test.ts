@@ -12,6 +12,7 @@ import { getServerSettings, updateServerSettings } from '../../lib/config/server
 import { PATHS } from '../../lib/core';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import { pullHomeSize, sendToHome } from '../../lib/home/home-relay';
+import { makeCalendar } from '../calendar-test-helpers';
 import { basicAuth } from '../dav-test-helpers';
 import { app, assertJson, authedRequest, createTestUser, findOrFail, getTestContext, type TestUser } from '../setup';
 
@@ -463,7 +464,29 @@ describe('Calendar storage quota', () => {
         expect(await agree()).toBeLessThan(afterDelete);
     });
 
-    test('a Home reopened over its files opens without deadlocking, and meters the next write', async () => {
+    // What `meteredIngest = atHome(...)` is for: a Calendar over a home no factory holds has no Home to ask
+    // for a quota, and asking would boot a second one over its very files.
+    test('a home nobody registered stores past a budget that refuses a booted one', async () => {
+        const user = await makeUser();
+        const calendarId = await defaultCalendarOf(user);
+        const harness = await makeCalendar();
+        const unregistered = (await harness.instance.getCalendars())[0].id;
+
+        await withBudget(0, async () => {
+            expect((await createEvent(user, calendarId, 'Refused')).status).toBe(507);
+
+            const stored = await harness.instance.putResource(
+                unregistered,
+                'unmetered.ics',
+                icsResource('unmetered@test', 'Kept'),
+                { ifMatch: null, ifNoneMatch: null },
+            );
+            expect(stored.ok).toBe(true);
+        });
+        await harness.close();
+    });
+
+    test('a Home reopened over its files seeds its counter from disk and meters the next write', async () => {
         const user = await makeUser();
         const calendarId = await defaultCalendarOf(user);
         await assertJson<CalendarEvent>(await createEvent(user, calendarId, 'Fat', 1.5 * MB));

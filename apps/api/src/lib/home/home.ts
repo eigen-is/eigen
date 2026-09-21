@@ -151,9 +151,8 @@ export class Home {
         this.sseListeners = this.sseListeners.filter((l) => l !== listener);
     }
 
-    // The mail + contacts + calendar bytes this Home holds: the one data budget every quota check meters
-    // against. Reads the fields, not the getters, because a team Home's calendar getter refuses a calendar
-    // the team disabled, and its bytes are on disk either way.
+    // Reads the fields, not the getters: a team Home's calendar getter refuses a calendar the team disabled,
+    // and its bytes are on disk either way.
     public async dataSize(): Promise<number> {
         const [mail, contacts, calendar] = await Promise.all([
             this._mail?.size(),

@@ -116,10 +116,8 @@ export class Calendar {
             });
         }
 
-        // Metering starts only here: the quota lookup goes through getHome, which during this home's init
-        // would await the very init doing the write — and the copy rule above does write. An unregistered
-        // home (a test harness, a seeding script) stays unmetered; EVENT_MAX_BYTES still bounds every
-        // resource either way.
+        // A home nobody registered — a test harness, a seeding script — stays unmetered: its quota lookup
+        // would boot a second Home over these very files. EVENT_MAX_BYTES bounds every resource either way.
         this.meteredIngest = atHome(this.home.user.id);
     }
 
