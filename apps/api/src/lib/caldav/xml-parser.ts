@@ -31,20 +31,13 @@ const parser = new XMLParser({
 
 export type ReportType = 'calendar-query' | 'calendar-multiget' | 'sync-collection';
 
-// A filter naming something the server cannot evaluate. RFC 4791 § 7.8 makes a query response a set of
-// objects that MATCHED, and clients do not re-filter, so an unevaluable filter is refused with its
-// precondition rather than answered with a superset the client would treat as all-matching.
-export class UnsupportedFilterError extends Error {}
-
-// One <comp-filter> as fast-xml-parser hands it over: its name, what it nests, and the tests the server
-// cannot run.
+// One <comp-filter> as fast-xml-parser hands it over: its name, whether it asks for the component to be
+// absent, what it nests, and the window it bounds.
 type CompFilter = {
     '@_name'?: string;
+    'is-not-defined'?: unknown;
     'comp-filter'?: CompFilter | CompFilter[];
     'time-range'?: { '@_start'?: string; '@_end'?: string };
-    'prop-filter'?: unknown;
-    'param-filter'?: unknown;
-    'text-match'?: unknown;
 };
 
 function compFilters(node: CompFilter | undefined): CompFilter[] {
@@ -57,12 +50,11 @@ function named(filters: CompFilter[], name: string): CompFilter | undefined {
     return filters.find((filter) => String(filter['@_name'] ?? '').toUpperCase() === name);
 }
 
-function evaluable(node: CompFilter): boolean {
-    return !node['prop-filter'] && !node['param-filter'] && !node['text-match'];
-}
-
 // What a calendar-query selects. Eigen stores VEVENTs, so only VCALENDAR > VEVENT can match anything: a
-// VTODO, VJOURNAL or VFREEBUSY filter matches nothing at all rather than every event in the collection.
+// VTODO, VJOURNAL or VFREEBUSY filter matches nothing at all rather than every event in the collection,
+// and so does a VEVENT filter that asks for the component to be absent. A prop-filter, param-filter or
+// text-match the index cannot evaluate is ignored: they are mandatory grammar (RFC 4791 § 9.7) and every
+// client that looks an event up by UID sends one, so refusing them refuses the whole collection.
 function readFilter(filter: CompFilter | undefined): {
     matchesEvents: boolean;
     timeRange?: { start: Date; end: Date };
@@ -70,14 +62,13 @@ function readFilter(filter: CompFilter | undefined): {
     if (!filter) return { matchesEvents: true };
     const vcalendar = named(compFilters(filter), 'VCALENDAR');
     if (!vcalendar) return { matchesEvents: compFilters(filter).length === 0 };
-    if (!evaluable(vcalendar)) throw new UnsupportedFilterError();
 
     const components = compFilters(vcalendar);
     if (!components.length) return { matchesEvents: true };
     const vevent = named(components, 'VEVENT');
-    if (!vevent) return { matchesEvents: false };
-    if (!evaluable(vevent)) throw new UnsupportedFilterError();
+    if (!vevent || vevent['is-not-defined'] !== undefined) return { matchesEvents: false };
 
+    // The VEVENT's own window only: a range on a nested VALARM filter bounds the alarms, not the events.
     const range = vevent['time-range'];
     const start = range?.['@_start'] ? parseCalDavDate(range['@_start']) : undefined;
     const end = range?.['@_end'] ? parseCalDavDate(range['@_end']) : undefined;

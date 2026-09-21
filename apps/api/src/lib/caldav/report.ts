@@ -6,7 +6,6 @@ import { uriKeyOf } from '../core';
 import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
 import { formatSyncToken, invalidSyncToken, parseSyncToken } from '../dav/sync-token';
 import {
-    davError,
     memberProps,
     multistatusResponse,
     notFoundRow,
@@ -17,7 +16,7 @@ import {
 } from '../dav/xml';
 import { calendarHref, eventHref } from './discovery';
 import { calendarDataProp } from './xml-builder';
-import { parseReport, type ReportRequest, UnsupportedFilterError } from './xml-parser';
+import { parseReport, type ReportRequest } from './xml-parser';
 
 // How many bytes of calendar data one REPORT serves. Past it a row still appears, with its etag and a 404
 // for the data the client then multigets (RFC 4918 § 9.1): a truncated collection loses events silently.
@@ -34,8 +33,7 @@ export async function handleReport(
     let report: ReportRequest;
     try {
         report = parseReport(body);
-    } catch (e) {
-        if (e instanceof UnsupportedFilterError) return davError(403, '<C:supported-filter/>');
+    } catch {
         // Empty body, unparseable XML, or an unknown REPORT root all reject here — never a silent etag dump.
         return new Response('Bad Request: invalid REPORT', { status: 400 });
     }

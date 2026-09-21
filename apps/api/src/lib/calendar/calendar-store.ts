@@ -11,7 +11,7 @@ import {
     uriKeyOf,
     writeResourceFile,
 } from '../core';
-import { parseResource, projectResource, restampResource, serializeResource } from '../ical';
+import { parseResource, projectResource, restampResource, serializeResource, stripEigenStamps } from '../ical';
 import { EIGEN, readStamp, recurrenceKeyOf, seriesTimezones, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import type { EventRowInput } from './resource-store';
@@ -273,7 +273,11 @@ function adoptAlarms(stored: ICAL.Component, incoming: ICAL.Component): void {
         const match = byKey.get(`${uid}|${recurrenceKeyOf(vevent, storedZones.get(uid) ?? null) ?? ''}`);
         if (!match) continue;
         vevent.removeAllSubcomponents('valarm');
-        for (const alarm of match.getAllSubcomponents('valarm')) vevent.addSubcomponent(alarm);
+        for (const alarm of match.getAllSubcomponents('valarm')) {
+            // The one write path that keeps a client's own subcomponents: its Eigen lines are still untrusted.
+            stripEigenStamps(alarm);
+            vevent.addSubcomponent(alarm);
+        }
     }
 }
 
@@ -365,9 +369,10 @@ export async function putResource(
         if (Buffer.byteLength(text) > EVENT_MAX_BYTES) return { ok: false, error: 'too-large' };
 
         // Re-PUTting what is already stored changes nothing: writing it would bump the ctag and send every
-        // other client back for a resource that never moved.
+        // other client back for a resource that never moved. Judged against the bytes, never the row: a
+        // stale row would answer a PUT that does change the file with a no-op nobody ever learns about.
         const stamped = computeResourceEtag(new TextEncoder().encode(text));
-        if (existing && stamped === existing.etag) {
+        if (storedBytes && stamped === computeResourceEtag(storedBytes)) {
             return { ok: true, etag: text === body ? stamped : null, created: false };
         }
 

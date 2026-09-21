@@ -56,7 +56,7 @@ import { eventForFile, validateEventInput } from './event-input';
 import { composeRsvpReply } from './imip';
 import { propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp } from './invite-propagation';
 import { dbCalendarToCalendarItem, dbEventToCalendarEvent } from './mappers';
-import { reconcileIndex } from './reconcile';
+import { reconcileIndex, stagedDeletesOf } from './reconcile';
 import { constrainRRule, expandRecurrence } from './recurrence';
 import type { CalendarCollection } from './resource-store';
 import {
@@ -442,6 +442,10 @@ export class Calendar {
         if (sanitizeCalendarId(id) !== id) throw new ApiError(400, 'Invalid calendar name');
         if (this.calendarIdTaken(id)) throw new ApiError(409, 'Calendar already exists');
 
+        // An id is free only because the delete that held it committed, so its leftover staging is deleted
+        // data: dropping it here is what stops a later sweep rolling it into this calendar.
+        for (const staged of await stagedDeletesOf(this, id)) await this.storage.removeDir(staged);
+
         // The directory first: an empty calendar survives a lost database only if it is on disk.
         await this.storage.mkdir(calendarDir(id));
         this.db
@@ -524,7 +528,14 @@ export class Calendar {
             // Staged first, committed second: the init sweep decides by the row, so a crash in between
             // rolls the directory back rather than losing every event of a delete nobody acknowledged.
             await this.storage.moveDurable(calendarDir(id), staged);
-            this.db.delete(schema.calendars).where(eq(schema.calendars.id, id)).run();
+            try {
+                this.db.delete(schema.calendars).where(eq(schema.calendars.id, id)).run();
+            } catch (e) {
+                // A live process rolls its own rename back: leaving it for the sweep would let any write in
+                // between recreate the directory, and the delete would then read as one that committed.
+                await this.storage.moveDurable(staged, calendarDir(id));
+                throw e;
+            }
             await this.storage.removeDir(staged);
             this.eventsBytes -= bytes;
         });

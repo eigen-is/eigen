@@ -12,15 +12,39 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { sql } from 'drizzle-orm';
 import { Calendar } from '../../lib/calendar/calendar';
 import { calendarStorage } from '../../lib/calendar/resource-store';
-import { PATHS } from '../../lib/core';
+import { LocalFilesystem, PATHS } from '../../lib/core';
 import { CALENDAR_TEST_ROOT, calendarsDirOf, DyingFilesystem, makeCalendar } from '../calendar-test-helpers';
 import { makeTestHome, type TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
 // The file store behind every calendar write: what lands on disk, what the index says about it, and what
 // each of them looks like after a crash. See docs/CALENDAR.md § Storage.
+
+// A filesystem whose next directory move fails, the way a roll-back can fail once and still be owed.
+class MoveFailingFilesystem extends LocalFilesystem {
+    static failNextMove = false;
+
+    override async moveDurable(from: string, to: string): Promise<void> {
+        if (MoveFailingFilesystem.failNextMove) {
+            MoveFailingFilesystem.failNextMove = false;
+            throw new Error('the directory move failed');
+        }
+        await super.moveDurable(from, to);
+    }
+}
+
+// A filesystem whose staging removal fails, which is what leaves a committed delete its directory.
+class RemoveFailingFilesystem extends LocalFilesystem {
+    static failRemoveDir = false;
+
+    override async removeDir(dirPath: string): Promise<void> {
+        if (RemoveFailingFilesystem.failRemoveDir) throw new Error('the directory removal failed');
+        await super.removeDir(dirPath);
+    }
+}
 
 // A home whose index transaction fails where a real one can: the Home-wide phase of the reconcile.
 class TombstoneFailingCalendar extends Calendar {
@@ -172,6 +196,82 @@ describe('calendar file store', () => {
         try {
             expect((await restarted.instance.getCalendarById(cal.id))?.name).toBe('Rollback');
             expect((await restarted.instance.getRawEvents(cal.id)).map((r) => r.title)).toEqual(['Kept']);
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('a roll-back that failed once is owed at the next open, with every event back under its id', async () => {
+        const harness = await makeCalendar((homeDir) => new MoveFailingFilesystem(`${homeDir}/${PATHS.CALENDAR.ROOT}`));
+        const cal = await harness.instance.createCalendar({ name: 'Retried', color: '#2563eb' });
+        await put(harness.instance, cal.id, 'kept.ics', vcal(event('kept@eigen', 'Kept')));
+        const storedId = (await harness.instance.getRawEvents(cal.id))[0].id;
+
+        renameSync(
+            join(calendarsDirOf(harness.dir), cal.id),
+            join(calendarsDirOf(harness.dir), `.${cal.id}.deleting-${randomUUID()}`),
+        );
+
+        // The sweep's roll-back throws, and the index pass behind it leaves an empty directory under the id.
+        MoveFailingFilesystem.failNextMove = true;
+        const failed = await harness.reopen();
+        expect(await failed.instance.getRawEvents(cal.id)).toHaveLength(0);
+
+        const restarted = await failed.reopen();
+        try {
+            expect((await restarted.instance.getRawEvents(cal.id)).map((r) => r.id)).toEqual([storedId]);
+            expect(readFileSync(fileOf(harness, cal.id, 'kept.ics'), 'utf8')).toContain('SUMMARY:Kept');
+            expect(readdirSync(calendarsDirOf(harness.dir)).some((name) => name.includes('.deleting-'))).toBe(false);
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('a calendar delete whose commit fails keeps its events, and a PUT in between loses nothing', async () => {
+        const harness = await makeCalendar();
+        const cal = await harness.instance.createCalendar({ name: 'Refused', color: '#2563eb' });
+        await put(harness.instance, cal.id, 'kept.ics', vcal(event('kept@eigen', 'Kept')));
+
+        harness.instance.db.run(
+            sql`CREATE TRIGGER refuse_delete BEFORE DELETE ON calendars BEGIN SELECT RAISE(ABORT, 'the index transaction failed'); END`,
+        );
+        await expect(harness.instance.deleteCalendar(cal.id)).rejects.toThrow('the index transaction failed');
+        harness.instance.db.run(sql`DROP TRIGGER refuse_delete`);
+
+        // The rename is rolled back where it happened, so the next write lands beside what was staged.
+        expect(readFileSync(fileOf(harness, cal.id, 'kept.ics'), 'utf8')).toContain('SUMMARY:Kept');
+        expect((await put(harness.instance, cal.id, 'added.ics', vcal(event('added@eigen', 'Added')))).ok).toBe(true);
+
+        const restarted = await harness.reopen();
+        try {
+            expect((await restarted.instance.getRawEvents(cal.id)).map((r) => r.title).sort()).toEqual([
+                'Added',
+                'Kept',
+            ]);
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('a calendar created at a deleted id starts empty, and the staging that delete left is gone', async () => {
+        const harness = await makeCalendar(
+            (homeDir) => new RemoveFailingFilesystem(`${homeDir}/${PATHS.CALENDAR.ROOT}`),
+        );
+        const cal = await harness.instance.createCalendar({ name: 'Reused', color: '#2563eb', id: 'reused' });
+        await put(harness.instance, cal.id, 'old.ics', vcal(event('old@eigen', 'Old')));
+
+        // The row delete committed; removing the staged directory is what died.
+        RemoveFailingFilesystem.failRemoveDir = true;
+        await expect(harness.instance.deleteCalendar(cal.id)).rejects.toThrow('the directory removal failed');
+        RemoveFailingFilesystem.failRemoveDir = false;
+        expect(await harness.instance.getCalendarById(cal.id)).toBeNull();
+
+        const fresh = await harness.instance.createCalendar({ name: 'Fresh', color: '#16a34a', id: 'reused' });
+        expect(readdirSync(calendarsDirOf(harness.dir)).some((name) => name.includes('.deleting-'))).toBe(false);
+
+        const restarted = await harness.reopen();
+        try {
+            expect(await restarted.instance.getRawEvents(fresh.id)).toHaveLength(0);
         } finally {
             await restarted.close();
         }
@@ -344,6 +444,62 @@ describe('calendar file store', () => {
         }
     });
 
+    test('a PUT that puts back what an out-of-band edit changed is written, not answered as a no-op', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        await put(harness.instance, calendarId, 'restored.ics', vcal(event('restored@eigen', 'Original')));
+        const original = readFileSync(fileOf(harness, calendarId, 'restored.ics'), 'utf8');
+        const ctag = (await harness.instance.getCollection(calendarId))!.ctag;
+
+        // An edit the index never saw: the row still describes the bytes that were there before it.
+        writeFileSync(
+            fileOf(harness, calendarId, 'restored.ics'),
+            original.replace('SUMMARY:Original', 'SUMMARY:Tampered'),
+        );
+
+        const result = await put(harness.instance, calendarId, 'restored.ics', original);
+        expect(result.ok).toBe(true);
+        expect(readFileSync(fileOf(harness, calendarId, 'restored.ics'), 'utf8')).toContain('SUMMARY:Original');
+        expect((await harness.instance.getCollection(calendarId))!.ctag).toBeGreaterThan(ctag);
+    });
+
+    test('a linked copy takes the alarms a client sends, never the Eigen lines inside them', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        await put(harness.instance, calendarId, 'linked.ics', vcal(event('linked@eigen', 'Linked')));
+        const path = fileOf(harness, calendarId, 'linked.ics');
+        // The organizer stamp the server writes on an attendee's copy: a PUT may re-alarm it and no more.
+        writeFileSync(
+            path,
+            readFileSync(path, 'utf8').replace(
+                'SUMMARY:Linked',
+                'SUMMARY:Linked\r\nX-EIGEN-ORGANIZER-EVENT:organizer-1',
+            ),
+        );
+
+        const result = await put(
+            harness.instance,
+            calendarId,
+            'linked.ics',
+            vcal(
+                event('linked@eigen', 'Renamed', [
+                    'BEGIN:VALARM',
+                    'ACTION:DISPLAY',
+                    'DESCRIPTION:Reminder',
+                    'TRIGGER:-PT10M',
+                    'X-EIGEN-EVENT-ID:forged-by-the-client',
+                    'END:VALARM',
+                ]),
+            ),
+        );
+        expect(result.ok).toBe(true);
+
+        const stored = readFileSync(path, 'utf8');
+        expect(stored).toContain('TRIGGER:-PT10M');
+        expect(stored).toContain('SUMMARY:Linked');
+        expect(stored).not.toContain('forged-by-the-client');
+    });
+
     test('a name a file system cannot hold is refused, never rewritten', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);
@@ -381,20 +537,22 @@ describe('calendar file store', () => {
         }
     });
 
-    test('a staged delete whose calendar directory is back is dropped, not rolled onto it', async () => {
+    test('a staged delete is left alone while its calendar holds files again, and never merged into it', async () => {
         const harness = await makeCalendar();
         const cal = await harness.instance.createCalendar({ name: 'Recreated', color: '#2563eb' });
         await put(harness.instance, cal.id, 'live.ics', vcal(event('live@eigen', 'Live')));
 
-        // The delete staged its directory, died before removing it, and the id was created again since.
+        // Two directories both holding files: whichever delete left this one, no sweep may destroy it.
         const staged = join(calendarsDirOf(harness.dir), `.${cal.id}.deleting-${randomUUID()}`);
         mkdirSync(staged, { recursive: true });
         writeFileSync(join(staged, 'stale.ics'), vcal(event('stale@eigen', 'Stale')));
 
         const restarted = await harness.reopen();
         try {
-            expect(readdirSync(calendarsDirOf(harness.dir)).some((name) => name.includes('.deleting-'))).toBe(false);
             expect((await restarted.instance.getRawEvents(cal.id)).map((r) => r.title)).toEqual(['Live']);
+            const leftovers = readdirSync(calendarsDirOf(harness.dir)).filter((name) => name.includes('.deleting-'));
+            expect(leftovers).toHaveLength(1);
+            expect(readdirSync(join(calendarsDirOf(harness.dir), leftovers[0]))).toEqual(['stale.ics']);
         } finally {
             await restarted.close();
         }
