@@ -105,6 +105,35 @@ describe('Calendar transfer routes', () => {
             }),
         );
 
+    // An iMIP REQUEST the verifying MTA stamped as an aligned DKIM pass — a sender the Home acts on.
+    const deliverImipRequest = (uid: string, summary: string, from: string): Promise<Response> =>
+        app.handle(
+            new Request(`http://localhost/mail/deliver/${alice.email}`, {
+                method: 'POST',
+                headers: { 'Content-Type': EML_MIME },
+                body: [
+                    `From: ${from}`,
+                    `Authentication-Results: ${getMailDomain()}; dkim=pass header.d=${from.split('@')[1]}`,
+                    `To: ${alice.email}`,
+                    `Subject: Invitation: ${summary}`,
+                    'Date: Mon, 20 Apr 2026 10:00:00 +0000',
+                    'MIME-Version: 1.0',
+                    'Content-Type: text/calendar; method=REQUEST; charset=utf-8',
+                    '',
+                    'BEGIN:VCALENDAR',
+                    'VERSION:2.0',
+                    'METHOD:REQUEST',
+                    'PRODID:-//Another Client//EN',
+                    ...vevent(uid, summary, '20260414T090000Z', '20260414T100000Z', [
+                        'SEQUENCE:4',
+                        `ORGANIZER:mailto:${from}`,
+                        `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${alice.email}`,
+                    ]),
+                    'END:VCALENDAR',
+                ].join('\r\n'),
+            }),
+        );
+
     // The stored bytes, the way a device reads them back.
     const davGet = async (path: string): Promise<string> => {
         const res = await app.handle(
@@ -417,8 +446,47 @@ describe('Calendar transfer routes', () => {
         expect(after['organizer']).toBeUndefined();
         expect(after['attendee']).toBeUndefined();
         // The organizer address travels as one inert line, lower-cased, for the inbound-REQUEST rule to match.
-        expect(served).toContain('X-EIGEN-IMPORTED-ORGANIZER:kitchen.org@external.com');
+        expect(after['x-eigen-imported-organizer']).toEqual([
+            ['x-eigen-imported-organizer', {}, 'unknown', 'kitchen.org@external.com'],
+        ]);
         expect(served).toContain('BEGIN:VTIMEZONE');
+    });
+
+    // R19: an imported invitation is the user's own event, filed under the address that organized it — so
+    // that organizer, and nobody else, may later claim it back over iMIP.
+    test('an inbound REQUEST from the address an import filed adopts that event in place', async () => {
+        const stamp = randomUUID();
+        const uid = `adopt-${stamp}@external.com`;
+        const organizer = `adopt-org-${stamp}@external.com`;
+        const stranger = `adopt-other-${stamp}@external.com`;
+        const file = vcal(
+            vevent(uid, 'Adoptable', '20260414T090000Z', '20260414T100000Z', [
+                `ORGANIZER;CN="External Org":mailto:${organizer}`,
+                `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:${alice.email}`,
+            ]),
+        );
+        expect((await importRequest(alice, calendarId, file)).status).toBe(200);
+
+        const before = findOrFail(await april(), (e) => e.uid === uid);
+        const served = await davGet(`/dav/calendars/${alice.id}/${calendarId}/${before.uri}`);
+        expect(served).not.toContain('ATTENDEE');
+        expect(served).not.toContain('ORGANIZER;');
+        expect(veventOf(served, uid).getFirstPropertyValue('x-eigen-imported-organizer')).toBe(organizer);
+
+        // A verified stranger asking for the same UID has nothing to claim.
+        expect((await deliverImipRequest(uid, 'Hijacked', stranger)).status).toBe(200);
+        const untouched = findOrFail(await april(), (e) => e.uid === uid);
+        expect(untouched.title).toBe('Adoptable');
+        expect(untouched.data?.organizerEventId).toBeUndefined();
+
+        // The organizer's own REQUEST adopts it: same file, same row.
+        expect((await deliverImipRequest(uid, 'Adopted', organizer)).status).toBe(200);
+        const after = findOrFail(await april(), (e) => e.uid === uid);
+        expect(after.id).toBe(before.id);
+        expect(after.uri).toBe(before.uri);
+        expect(after.title).toBe('Adopted');
+        expect(after.data?.organizerEventId).toBe(uid);
+        expect(after.data?.organizer?.email).toBe(organizer);
     });
 
     test('a forged iMIP REPLY for an imported UID has no attendee list to move', async () => {
@@ -467,6 +535,50 @@ describe('Calendar transfer routes', () => {
 
         const stored = findOrFail(await april(), (e) => e.uid === uid);
         expect(stored.data?.attendees).toBeUndefined();
+    });
+
+    // RFC 5545 §3.4: a `.ics` may be a stream of VCALENDAR objects, which several exporters emit one per
+    // event. A series split across two objects is still one series.
+    test('a stream of several VCALENDAR objects imports as one file', async () => {
+        const stamp = randomUUID();
+        const uid = `stream-series-${stamp}@other`;
+        const file = [
+            vcal(vevent(`stream-1-${stamp}@other`, 'First object', '20260416T090000Z', '20260416T100000Z')),
+            vcal(vevent(uid, 'Split series', '20260416T110000Z', '20260416T113000Z', ['RRULE:FREQ=DAILY;COUNT=3'])),
+            vcal(
+                vevent(uid, 'Split series moved', '20260417T140000Z', '20260417T143000Z', [
+                    'RECURRENCE-ID:20260417T110000Z',
+                ]),
+            ),
+        ].join('\r\n');
+
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
+            imported: 2,
+            skipped: 0,
+            failed: 0,
+        });
+        const series = (await april()).filter((e) => e.uid === uid);
+        expect(series.length).toBe(3);
+        expect(findOrFail(series, (e) => e.occurrenceDate === '2026-04-17').title).toBe('Split series moved');
+    });
+
+    test('a VEVENT naming no UID is imported under a minted one', async () => {
+        const stamp = randomUUID();
+        const file = vcal([
+            'BEGIN:VEVENT',
+            `SUMMARY:Nameless ${stamp}`,
+            'DTSTART:20260418T090000Z',
+            'DTEND:20260418T100000Z',
+            'END:VEVENT',
+        ]);
+
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
+            imported: 1,
+            skipped: 0,
+            failed: 0,
+        });
+        const stored = findOrFail(await april(), (e) => e.title === `Nameless ${stamp}`);
+        expect(stored.uid).toMatch(/^[0-9a-f-]{36}$/);
     });
 
     test('an unusable UID fails while the rest of the file imports', async () => {
