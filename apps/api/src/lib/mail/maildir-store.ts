@@ -156,10 +156,7 @@ export class MaildirStore implements MailStore {
     async mailboxesList(): Promise<MaildirMailbox[]> {
         const mailboxes: MaildirMailbox[] = [];
         for (const name of await this.listMailboxPaths()) {
-            // Counts come from the index, never from a sync this waits on: messageMoveToTrash lists on each
-            // trash action. A folder outside the standard six has no watcher, so this is where it reconciles
-            // — in the background and at most once a minute, with a later listing and the sync's own SSE
-            // events landing the counts.
+            // Counts come from the index; a folder without a watcher reconciles here, in the background.
             if (!isStandardMailbox(name) && this.reconcileDue(name)) {
                 this.syncMailbox(name).catch((err) => console.error('maildir: background mailbox sync failed', err));
             }
