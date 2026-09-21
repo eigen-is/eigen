@@ -26,6 +26,7 @@ import {
 } from '../core';
 import type { DeleteResourceResult, ManagedDatabase } from '../core/';
 import type { Home } from '../home';
+import { atHome } from '../home';
 import { parseResource } from '../ical';
 import type { Revision } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
@@ -74,6 +75,9 @@ export class Calendar {
     // Bytes on disk under `calendars/`, unindexable files included; size() answers from here and never drains.
     eventsBytes = 0;
 
+    // Whether resource writes are quota-metered — see the assignment in init() for what turns it on.
+    meteredIngest = false;
+
     // Bulk writes in flight; while any runs, per-resource events are held and the last one out closes them.
     private readonly batch = new BroadcastBatch(() => this.flushHeldAnnouncements());
 
@@ -111,6 +115,10 @@ export class Calendar {
                 isDefault: true,
             });
         }
+
+        // A home nobody registered — a test harness, a seeding script — stays unmetered: its quota lookup
+        // would boot a second Home over these very files. EVENT_MAX_BYTES bounds every resource either way.
+        this.meteredIngest = atHome(this.home.user.id);
     }
 
     // Never drains and never locks: a quota check reaches it from inside the write gate.
@@ -416,7 +424,7 @@ export class Calendar {
 
         await this.gate.run(async () => {
             const staged = `${PATHS.CALENDAR.CALENDARS}/.${id}.deleting-${randomUUID()}`;
-            // What the directory holds, not what the index indexed: the counter carries every file on disk.
+            // What the directory holds, not what the index indexed: the counter carries every `.ics` on disk.
             const scan = await statCalendarDir(this.storage, id);
             const bytes = [...scan.files.values()].reduce((sum, file) => sum + file.size, 0);
             // Staged first, committed second: the init sweep decides by the row, so a crash in between rolls back.
@@ -707,11 +715,11 @@ export class Calendar {
         return invitations.removeInvitation(this, orgEventId, orgUserId);
     }
 
-    public async updateAttendeeStatus(eventId: string, email: string, status: Attendee['status']): Promise<void> {
-        return invitations.updateAttendeeStatus(this, eventId, email, status);
+    public async receiveAttendeeStatus(eventId: string, email: string, status: Attendee['status']): Promise<void> {
+        return invitations.receiveAttendeeStatus(this, eventId, email, status);
     }
 
-    public async rsvpForOccurrence(
+    public async receiveRsvpForOccurrence(
         eventId: string,
         email: string,
         status: Attendee['status'],
@@ -719,7 +727,7 @@ export class Calendar {
         recurrenceInstant?: Date | null,
         restoreCancelled = true,
     ): Promise<void> {
-        return invitations.rsvpForOccurrence(
+        return invitations.receiveRsvpForOccurrence(
             this,
             eventId,
             email,

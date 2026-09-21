@@ -2096,7 +2096,7 @@ describe('Calendar occurrence timezone consistency (audit #24)', () => {
         expect(linked.timezone).toBe(NY);
     });
 
-    test('rsvpForOccurrence stores an etag that includes the timezone', async () => {
+    test('receiveRsvpForOccurrence stores an etag that includes the timezone', async () => {
         const rsvp = (status: string) =>
             authedRequest(
                 testCtx.bob.user.sessionToken,

@@ -264,11 +264,11 @@ export async function processInboundImip(
                     if (!sentBy(attendee.email)) continue;
                     if (parsed.recurrenceDate) {
                         // An attendee replying to ONE occurrence: land the PARTSTAT on that instance's
-                        // exception — updateAttendeeStatus would mark them for the whole series.
-                        // rsvpForOccurrence self-guards on membership (exception-aware: someone can be
+                        // exception — receiveAttendeeStatus would mark them for the whole series.
+                        // receiveRsvpForOccurrence self-guards on membership (exception-aware: someone can be
                         // invited to a single occurrence only) and, with restoreCancelled=false, never
                         // resurrects an occurrence the organizer deleted.
-                        await calendar.rsvpForOccurrence(
+                        await calendar.receiveRsvpForOccurrence(
                             ownerEvent.id,
                             attendee.email,
                             attendee.status,
@@ -282,7 +282,7 @@ export async function processInboundImip(
                             (a) => a.email.toLowerCase() === attendee.email.toLowerCase(),
                         );
                         if (!invited) continue;
-                        await calendar.updateAttendeeStatus(ownerEvent.id, attendee.email, attendee.status);
+                        await calendar.receiveAttendeeStatus(ownerEvent.id, attendee.email, attendee.status);
                     }
                 }
             }

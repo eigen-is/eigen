@@ -326,7 +326,7 @@ describe('CalDAV client sync on web-created events', () => {
             const etagBefore = (await davGet(uri)).etag;
             const before = await syncToken();
 
-            await (await getHome(userId)).calendar.updateAttendeeStatus(eventId, ctx.alice.user.email, 'accepted');
+            await (await getHome(userId)).calendar.receiveAttendeeStatus(eventId, ctx.alice.user.email, 'accepted');
 
             expect(await delta(before)).toContain(uri);
             expect((await davGet(uri)).etag).not.toBe(etagBefore);
@@ -337,10 +337,10 @@ describe('CalDAV client sync on web-created events', () => {
             const { uri, eventId } = await seedInvitation(uid, 'FREQ=WEEKLY;COUNT=5');
             const home = await getHome(userId);
             // The first RSVP writes the exception; the second moves the PARTSTAT on the one that exists.
-            await home.calendar.rsvpForOccurrence(eventId, ctx.alice.user.email, 'accepted', '2026-05-11');
+            await home.calendar.receiveRsvpForOccurrence(eventId, ctx.alice.user.email, 'accepted', '2026-05-11');
             const before = await syncToken();
 
-            await home.calendar.rsvpForOccurrence(eventId, ctx.alice.user.email, 'tentative', '2026-05-11');
+            await home.calendar.receiveRsvpForOccurrence(eventId, ctx.alice.user.email, 'tentative', '2026-05-11');
 
             expect(await delta(before)).toContain(uri);
             expect((await davGet(uri)).ics).toContain('PARTSTAT=TENTATIVE');
@@ -375,7 +375,7 @@ describe('CalDAV client sync on web-created events', () => {
             const uid = `l43-cancel-${Date.now()}@external.com`;
             const { uri, eventId } = await seedInvitation(uid, 'FREQ=WEEKLY;COUNT=5');
             const home = await getHome(userId);
-            await home.calendar.rsvpForOccurrence(eventId, ctx.alice.user.email, 'accepted', '2026-05-11');
+            await home.calendar.receiveRsvpForOccurrence(eventId, ctx.alice.user.email, 'accepted', '2026-05-11');
             const before = await syncToken();
 
             await home.calendar.removeInvitation(uid, ORGANIZER);

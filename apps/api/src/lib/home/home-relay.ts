@@ -23,6 +23,7 @@ import type { NotificationPersistInput } from '@workspace/lib/types/notification
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
+import { readCalendarTotalSize } from '../calendar/resource-store';
 import type {
     CreateEventArgs,
     InvitationUpdatePayload,
@@ -31,6 +32,7 @@ import type {
 } from '../calendar/types';
 import { getAvatarsDir, getUserHomePath } from '../config/paths';
 import { resolveUserQuotas } from '../config/quota';
+import { readCardsTotalSize } from '../contacts/card-store';
 import { LocalFilesystem, PATHS } from '../core';
 import { readMailTotalSize } from '../mail/maildb';
 import { readDraftStagingSize } from '../mail/maildir-store';
@@ -119,7 +121,7 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
             if (message.recurrenceDate) {
                 // Organizer-side reception of an attendee RSVP: PARTSTAT only, never resurrect an
                 // occurrence the organizer deleted (same rule as the iMIP REPLY path).
-                await home.calendar.rsvpForOccurrence(
+                await home.calendar.receiveRsvpForOccurrence(
                     message.eventId,
                     message.attendeeEmail,
                     message.status,
@@ -128,7 +130,7 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
                     false,
                 );
             } else {
-                await home.calendar.updateAttendeeStatus(message.eventId, message.attendeeEmail, message.status);
+                await home.calendar.receiveAttendeeStatus(message.eventId, message.attendeeEmail, message.status);
             }
             break;
         case 'broadcast':
@@ -177,10 +179,11 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
     const homeDir = getUserHomePath(ownerUserId);
     // A user who has never signed in has no home folder yet, and sizing must not create one.
     const homeFs = fs.existsSync(homeDir) ? new LocalFilesystem(homeDir) : null;
-    const [cards, avatars, staged] = await Promise.all([
-        homeFs?.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.CARDS}`) ?? 0,
+    const [cards, avatars, staged, calendars] = await Promise.all([
+        homeFs ? readCardsTotalSize(homeFs) : 0,
         homeFs?.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.AVATARS}`) ?? 0,
         homeFs ? readDraftStagingSize(homeFs) : 0,
+        homeFs ? readCalendarTotalSize(homeFs) : 0,
     ]);
     const mail = readMailTotalSize(path.join(homeDir, PATHS.MAIL.DB)) + staged;
     const driveUsed = readMountTotalSize(
@@ -196,11 +199,11 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
         teamIds,
     );
 
-    const mailAndContactsUsed = mail + cards + avatars;
+    const dataUsed = mail + cards + avatars + calendars;
     return {
-        mailAndContacts: { used: mailAndContactsUsed, max: quotas.mailAndContactsMax },
+        mailAndContacts: { used: dataUsed, max: quotas.homeDataMax },
         drive: { default: { used: driveUsed, max: quotas.mountMax } },
-        total: { used: mailAndContactsUsed + driveUsed, max: quotas.mailAndContactsMax + quotas.mountMax },
+        total: { used: dataUsed + driveUsed, max: quotas.homeDataMax + quotas.mountMax },
     };
 }
 

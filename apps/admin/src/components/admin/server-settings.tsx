@@ -108,7 +108,7 @@ export function ServerSettingsPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                        <Label>Mail & Contacts (MB)</Label>
+                        <Label>Mail, Contacts & Calendar (MB)</Label>
                         <Input
                             type="number"
                             min={10}

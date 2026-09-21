@@ -5,7 +5,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import { enforceMailAndContactsQuota } from '../config/enforcement';
+import { enforceHomeDataQuota } from '../config/enforcement';
 import { getServerSettings } from '../config/server-settings';
 import type { ManagedDatabase, PutResourceResult } from '../core';
 import {
@@ -113,7 +113,7 @@ export class Contacts {
     // Only the reconcile/rebuild/drain machinery bumps this; the mutation paths parse for their own merges.
     private cardParses = 0;
 
-    // Running byte totals so size() answers from memory — enforceMailAndContactsQuota calls it on every metered
+    // Running byte totals so size() answers from memory — enforceHomeDataQuota calls it on every metered
     // write, and a directory walk per call would make an N-card device sync O(N²) stats.
     cardsBytes = 0; // internal — used by contacts/*.ts
     avatarsBytes = 0; // internal — used by contacts/*.ts
@@ -463,7 +463,7 @@ export class Contacts {
             throw new ApiError(413, 'Contact card is too large');
         }
         if (this.meteredIngest) {
-            await enforceMailAndContactsQuota(this.home.user.id, bytes.byteLength, creditBytes);
+            await enforceHomeDataQuota(this.home.user.id, bytes.byteLength, creditBytes);
         }
     }
 

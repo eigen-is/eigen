@@ -18,7 +18,7 @@ import {
 } from '@workspace/lib/types/mail';
 import { type SSEventMail, SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
-import { enforceMailAndContactsQuota } from '../config/enforcement';
+import { enforceHomeDataQuota } from '../config/enforcement';
 import { isDemo } from '../config/env';
 import { isInternalAddress } from '../config/server-config';
 import { ApiError, isSafePathSegment, NOT_AN_EMAIL_FILE } from '../core';
@@ -151,7 +151,7 @@ export class Mail {
         if (!headers.from && !headers.date && headers.subject === undefined && !headers.messageId) {
             throw new ApiError(400, NOT_AN_EMAIL_FILE);
         }
-        await enforceMailAndContactsQuota(this.home.user.id, bytes.byteLength);
+        await enforceHomeDataQuota(this.home.user.id, bytes.byteLength);
 
         const id = await this.store.append('', bytes, { arrival: false });
         return { id };

@@ -605,7 +605,7 @@ describe('Contacts', () => {
             ...over,
         });
 
-        test('a create overflows at 507, a growing update too, and a shrinking rewrite still fits', async () => {
+        test('a create overflows at 507, a growing update too, and an edit or a shrink still fits', async () => {
             const token = ctx.alice.user.sessionToken;
             const url = `/contacts/${ctx.alice.user.id}/contacts`;
             const originalMaxMB = getServerSettings().quotas.mailAndContactsMaxMB;
@@ -623,9 +623,9 @@ describe('Contacts', () => {
             try {
                 const home = await getHome(ctx.alice.user.id);
                 const used = (await home.mail.size()) + (await home.contacts.size());
-                // Floor to whole MB (the setting's unit): the ceiling now sits at or just under what the book
-                // already uses, so anything that adds bytes overflows and only a shrinking rewrite fits.
-                await updateServerSettings({ quotas: { mailAndContactsMaxMB: Math.floor(used / MB) } });
+                // The ceiling now sits at exactly what the book already uses, so anything that adds bytes
+                // overflows and only an edit inside the headroom or a shrinking rewrite fits.
+                await updateServerSettings({ quotas: { mailAndContactsMaxMB: used / MB } });
 
                 const create = await authedRequest(token, url, {
                     method: 'POST',
@@ -642,10 +642,22 @@ describe('Contacts', () => {
                 });
                 expect(grow.status).toBe(507);
 
+                // A correction on a card the budget has no room for: the edit grace is what keeps a book at
+                // its ceiling editable, and cleanable, at all.
+                const edit = await authedRequest(token, `${url}/${fatId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(
+                        body({ notes: 'n'.repeat(2 * MB), jobTitle: 'Head of Storage', etag: fat.etag }),
+                    ),
+                });
+                expect(edit.status).toBe(200);
+
+                const edited = await assertJson<Contact>(await authedRequest(token, `${url}/${fatId}`));
                 const shrink = await authedRequest(token, `${url}/${fatId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body({ notes: '', etag: fat.etag })),
+                    body: JSON.stringify(body({ notes: '', etag: edited.etag })),
                 });
                 expect(shrink.status).toBe(200);
             } finally {
@@ -726,7 +738,7 @@ describe('Contacts', () => {
     });
 });
 
-// enforceMailAndContactsQuota's mail half is a live byte counter, so mail that arrives between two metered
+// enforceHomeDataQuota's mail half is a live byte counter, so mail that arrives between two metered
 // card writes is charged to the second one. makeContacts homes are deliberately unmetered (never registered,
 // so atHome is false), so this pins it against a real registered home where putCard's quota gate runs.
 describe('CardDAV quota gate', () => {

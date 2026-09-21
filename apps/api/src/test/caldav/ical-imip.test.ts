@@ -1717,7 +1717,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
     });
 
     // A REPLY carrying a RECURRENCE-ID scopes the sender's PARTSTAT to that one occurrence —
-    // updateAttendeeStatus on the master would mark the attendee declined for the whole series.
+    // receiveAttendeeStatus on the master would mark the attendee declined for the whole series.
     test('a REPLY with a RECURRENCE-ID scopes the PARTSTAT to that occurrence', async () => {
         const ATT = 'occurrence.decliner@external.com';
         const home = await getHome(ctx.alice.user.id);

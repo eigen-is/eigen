@@ -119,8 +119,8 @@ describe('calendar file store', () => {
         });
 
         await Promise.all([
-            harness.instance.updateAttendeeStatus(created.id, 'one@test.local', 'accepted'),
-            harness.instance.updateAttendeeStatus(created.id, 'two@test.local', 'declined'),
+            harness.instance.receiveAttendeeStatus(created.id, 'one@test.local', 'accepted'),
+            harness.instance.receiveAttendeeStatus(created.id, 'two@test.local', 'declined'),
         ]);
 
         const stored = (await harness.instance.getRawEvents(calendarId))[0];
