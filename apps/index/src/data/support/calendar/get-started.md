@@ -7,7 +7,7 @@ tags: [calendar, getting-started, events, scheduling]
 related: [calendar/create-event, calendar/views]
 crossSections: [getting-started]
 order: 10
-updated: 2026-09-20
+updated: 2026-09-21
 ---
 
 Calendar is where you keep your schedule in Eigen. You can create events, invite other people, and see calendars that
@@ -72,3 +72,4 @@ The event appears in the grid straight away. Click it to see its details.
 - [Invite people and manage attendees](/support/calendar/invite-people) explains how to add guests and track responses.
 - [Share a calendar](/support/calendar/share-calendar) shows how to give other people access to one of your calendars.
 - [Import events from a calendar file](/support/calendar/import-events) brings an `.ics` file into one of your calendars.
+- [Export a calendar or an event as a calendar file](/support/calendar/export-events) hands you an `.ics` file to take elsewhere.
