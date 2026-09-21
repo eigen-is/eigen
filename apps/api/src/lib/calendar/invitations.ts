@@ -15,7 +15,7 @@ import type { Calendar } from './calendar';
 import * as store from './calendar-store';
 import * as events from './events';
 import { composeRsvpReply } from './imip';
-import { propagateRsvp } from './invite-propagation';
+import { answeredOccurrence, propagateRsvp } from './invite-propagation';
 import { toEvent } from './mappers';
 import { constrainRRule } from './recurrence';
 import * as schema from './schema';
@@ -765,6 +765,8 @@ export async function rsvp(
     const organizerUserId = event.data.organizer.userId;
     const organizerEventId = event.data.organizerEventId!;
     const isExternalOrganizer = isExternalOwnerId(organizerUserId);
+    // A copy that IS one occurrence of an unheld series answers for that occurrence, and the organizer keeps its guest list on their override.
+    const ownOccurrence = answeredOccurrence(event);
 
     const sendRsvpReply = (status: Attendee['status'], recurrenceDate?: string) => {
         const mail = composeRsvpReply(event, user.email, user.name ?? user.email, status, recurrenceDate);
@@ -798,7 +800,11 @@ export async function rsvp(
     } else {
         await updateAttendeeStatus(calendar, eventId, user.email, input.status);
         if (isExternalOrganizer) sendRsvpReply(input.status);
-        else propagateRsvp(organizerUserId, organizerEventId, user.email, input.status).catch(console.error);
+        else {
+            propagateRsvp(organizerUserId, organizerEventId, user.email, input.status, ownOccurrence).catch(
+                console.error,
+            );
+        }
     }
 }
 

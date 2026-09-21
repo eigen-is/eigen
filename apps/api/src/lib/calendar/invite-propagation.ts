@@ -18,7 +18,51 @@ function occurrenceRevision(
     return recurrenceDate ? { recurrenceDate, sequence: event.sequence, dtstamp: event.updatedAt } : undefined;
 }
 
-// `series` set means `event` is one occurrence: the messages name the series id plus the occurrence key, the shape an iMIP REQUEST with a RECURRENCE-ID has (docs/CALENDAR.md § Invitations).
+// Right after the invitation that files the series, and one message per exception row: the guest's ordering guard takes each against the occurrence it names, which their fresh copy holds nothing for.
+async function sendSeriesExceptions(
+    targetUserId: string,
+    organizerHome: Home,
+    organizerEventId: string,
+    exceptions: CalendarEvent[],
+    seriesAttendees: Attendee[],
+): Promise<void> {
+    for (const exception of exceptions) {
+        if (!exception.recurrenceDate) continue;
+        const occurrence = occurrenceRevision(exception, exception.recurrenceDate);
+        if (exception.status === 'cancelled') {
+            await sendToHome(targetUserId, {
+                type: 'calendar:invitation-removal',
+                orgEventId: organizerEventId,
+                orgUserId: organizerHome.user.id,
+                occurrence,
+            });
+            continue;
+        }
+        await sendToHome(targetUserId, {
+            type: 'calendar:invitation-update',
+            orgEventId: organizerEventId,
+            orgUserId: organizerHome.user.id,
+            payload: {
+                recurrenceDate: exception.recurrenceDate,
+                title: exception.title,
+                description: exception.description,
+                location: exception.location,
+                startTime: exception.startTime,
+                endTime: exception.endTime,
+                allDay: exception.allDay,
+                rrule: null,
+                timezone: exception.timezone,
+                status: exception.status,
+                sequence: exception.sequence,
+                dtstamp: exception.updatedAt,
+                // The organizer's list for that occurrence, so an answer the guest already gave to it stands.
+                attendees: exception.data?.attendees ?? seriesAttendees,
+            },
+        });
+    }
+}
+
+// `series` set means `event` is one occurrence: the messages name the series id plus the occurrence key, the shape an iMIP REQUEST with a RECURRENCE-ID has (docs/CALENDAR.md § Invitations). `exceptions` are the series' own, delivered to a newly added guest so a moved occurrence does not render at its original slot and a deleted one does not render at all.
 export async function propagateInvitation(
     organizerHome: Home,
     event: CalendarEvent,
@@ -26,6 +70,7 @@ export async function propagateInvitation(
     oldAttendees: Attendee[],
     newAttendees: Attendee[],
     series?: CalendarEvent,
+    exceptions: CalendarEvent[] = [],
 ): Promise<void> {
     const organizerEventId = series?.id ?? event.id;
     const recurrenceDate = series ? event.recurrenceDate : null;
@@ -77,6 +122,7 @@ export async function propagateInvitation(
                     organizerUserId: organizerHome.user.id,
                 },
             });
+            await sendSeriesExceptions(targetUser.id, organizerHome, organizerEventId, exceptions, newAttendees);
             if (getServerSettings().notifications.email.userOnCalendarInvite) {
                 const organizer = { userId: user.id, email: user.email, name: user.name };
                 const mail = composeInviteEmail(event, organizer, [attendee], series);
@@ -203,6 +249,12 @@ export async function propagateDecline(
     organizerUserId: string,
     organizerEventId: string,
     attendeeEmail: string,
+    recurrenceDate?: string,
 ): Promise<void> {
-    await propagateRsvp(organizerUserId, organizerEventId, attendeeEmail, 'declined');
+    await propagateRsvp(organizerUserId, organizerEventId, attendeeEmail, 'declined', recurrenceDate);
+}
+
+// The occurrence a linked copy answers for: a copy that IS one occurrence of a series the guest does not hold. An exception answers through the master it hangs on.
+export function answeredOccurrence(event: CalendarEvent): string | undefined {
+    return event.parentEventId ? undefined : (event.recurrenceDate ?? undefined);
 }

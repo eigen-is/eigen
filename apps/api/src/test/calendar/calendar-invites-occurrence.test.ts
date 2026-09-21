@@ -237,6 +237,46 @@ describe('Occurrence edits of an invited series', () => {
         expect(occurrences.filter((e) => e.title === 'Series Renamed')).toHaveLength(3);
     });
 
+    // A series-wide edit carries the fields an occurrence never claimed for itself: one that was only
+    // MOVED takes the new title and keeps its slot, for the organizer and for every guest. Times never follow.
+    test('a series-wide rename reaches an occurrence that was only moved', async () => {
+        const { series, target } = await seeded('Weekly Occurrence Inherit');
+        const movedStart = new Date(Date.parse(`${target}T09:00:00Z`) + HOUR);
+
+        await editOccurrence(series.id, target, {
+            title: 'Weekly Occurrence Inherit',
+            startTime: movedStart,
+            endTime: new Date(movedStart.getTime() + HOUR),
+        });
+        await untilBob(series.uid, (occ) => occ.some((e) => new Date(e.startTime).getTime() === movedStart.getTime()));
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${series.id}`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: 'All Events', data: { attendees: guests() } }),
+            },
+        );
+        expect(res.status).toBe(200);
+
+        const mine = await aliceOccurrences(series.uid);
+        expect(mine.filter((e) => e.title === 'All Events')).toHaveLength(4);
+        expect(new Date(findOrFail(mine, (e) => e.occurrenceDate === target).startTime).toISOString()).toBe(
+            movedStart.toISOString(),
+        );
+
+        const theirs = await untilBob(series.uid, (occ) => occ.every((e) => e.title === 'All Events'));
+        expect(theirs).toHaveLength(4);
+        expect(new Date(findOrFail(theirs, (e) => e.occurrenceDate === target).startTime).toISOString()).toBe(
+            movedStart.toISOString(),
+        );
+        const { overrides } = await bobStored(series.uid);
+        expect(overrides).toHaveLength(1);
+        expect(overrides[0].title).toBe('All Events');
+    });
+
     test("the guest's RSVP to the edited occurrence lands on the organizer's occurrence only", async () => {
         const { series, target } = await seeded('Weekly Occurrence RSVP');
         const movedStart = new Date(Date.parse(`${target}T09:00:00Z`) + HOUR);
