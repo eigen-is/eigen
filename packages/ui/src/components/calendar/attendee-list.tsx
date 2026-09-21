@@ -36,7 +36,8 @@ export function AttendeeList({ attendees, organizer, remaining = 0 }: AttendeeLi
 
     const count = filteredAttendees.length + (organizer ? 1 : 0) + remaining;
     const title = count === 1 ? '1 guest' : `${count} guests`;
-    const summary = buildAttendeeSummary(attendees);
+    // The replies of the listed guests are the whole event's only when the payload carried them all.
+    const summary = remaining === 0 ? buildAttendeeSummary(attendees) : '';
 
     const handleCopyEmails = () => {
         const emails = filteredAttendees.map((a) => a.email);
