@@ -6,9 +6,9 @@
 // in calendar-timezone.test.ts, iMIP instance scoping (#A/#B/#H) in ical-imip.test.ts.
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
-import ICAL from 'ical.js';
+import type ICAL from 'ical.js';
 import { serializeEventForImip } from '../../lib/caldav/ical-component';
-import { parseIcs } from '../../lib/caldav/ical-parse';
+import { parseIcs, parseResource } from '../../lib/caldav/ical-parse';
 import { getHome } from '../../lib/home';
 import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
@@ -211,7 +211,7 @@ describe('CalDAV round-trip fidelity', () => {
 
             // The emitted VTIMEZONE must resolve the instant on its own — through ical.js proper,
             // without the parser's IANA-TZID fallback.
-            const comp = new ICAL.Component(ICAL.parse(ics));
+            const comp = parseResource(ics);
             const vtz = comp.getFirstSubcomponent('vtimezone');
             expect(vtz).toBeDefined();
             const vevent = comp
@@ -248,7 +248,7 @@ describe('CalDAV round-trip fidelity', () => {
             expect(put.status).toBe(201);
 
             const ics = await getIcs('rt-rid.ics');
-            const comp = new ICAL.Component(ICAL.parse(ics));
+            const comp = parseResource(ics);
             const override = comp
                 .getAllSubcomponents('vevent')
                 .find((v) => v.getFirstProperty('recurrence-id') != null);
@@ -850,7 +850,7 @@ describe('CalDAV round-trip fidelity', () => {
             expect(reparsed.timezone).toBe('America/New_York');
 
             // ical.js proper (no IANA-TZID fallback) must resolve it through the emitted VTIMEZONE.
-            const comp = new ICAL.Component(ICAL.parse(ics));
+            const comp = parseResource(ics);
             const dtstart = comp
                 .getFirstSubcomponent('vevent')!
                 .getFirstProperty('dtstart')!

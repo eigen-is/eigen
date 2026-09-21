@@ -5,7 +5,7 @@
 // name-present assert passes on a mangled parameter.
 import { describe, expect, test } from 'bun:test';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
-import ICAL from 'ical.js';
+import type ICAL from 'ical.js';
 import {
     addExclusion,
     buildResource,
@@ -23,7 +23,6 @@ import { vcal } from '../ics-test-helpers';
 
 const CTX = { now: new Date('2026-06-01T10:00:00Z'), actorIsOrganizer: true };
 
-const parse = (ics: string): ICAL.Component => new ICAL.Component(ICAL.parse(ics));
 const masterOf = (resource: ICAL.Component): ICAL.Component =>
     resource.getAllSubcomponents('vevent').find((v) => !v.getFirstProperty('recurrence-id'))!;
 const overridesOf = (resource: ICAL.Component): ICAL.Component[] =>
@@ -193,8 +192,8 @@ const EXCLUSION: CalendarEvent = {
 
 describe('kitchen-sink fidelity under a patch', () => {
     test('a title patch leaves every other property of the master jCal-equal', () => {
-        const before = masterOf(parse(KITCHEN_SINK));
-        const resource = parse(KITCHEN_SINK);
+        const before = masterOf(parseResource(KITCHEN_SINK));
+        const resource = parseResource(KITCHEN_SINK);
         patchEvent(resource, null, { title: 'Renamed sink' }, CTX);
 
         expect(changedProperties(before, masterOf(resource))).toEqual(['dtstamp', 'last-modified', 'summary']);
@@ -202,16 +201,16 @@ describe('kitchen-sink fidelity under a patch', () => {
     });
 
     test('a title patch leaves the override untouched', () => {
-        const before = overridesOf(parse(KITCHEN_SINK))[0];
-        const resource = parse(KITCHEN_SINK);
+        const before = overridesOf(parseResource(KITCHEN_SINK))[0];
+        const resource = parseResource(KITCHEN_SINK);
         patchEvent(resource, null, { title: 'Renamed sink' }, CTX);
 
         expect(changedProperties(before, overridesOf(resource)[0])).toEqual([]);
     });
 
     test('patching one attendee status changes only that ATTENDEE property', () => {
-        const before = masterOf(parse(KITCHEN_SINK));
-        const resource = parse(KITCHEN_SINK);
+        const before = masterOf(parseResource(KITCHEN_SINK));
+        const resource = parseResource(KITCHEN_SINK);
         patchEvent(
             resource,
             null,
@@ -233,12 +232,12 @@ describe('kitchen-sink fidelity under a patch', () => {
         expect(bob.getFirstParameter('x-num-guests')).toBe('2');
         expect(bob.getFirstParameter('rsvp')).toBe('TRUE');
         expect(bob.getFirstParameter('cutype')).toBe('INDIVIDUAL');
-        expect(JSON.stringify(room.toJSON())).toBe(JSON.stringify(before.getAllProperties('attendee')[1].toJSON()));
+        expect(room.toJSON()).toEqual(before.getAllProperties('attendee')[1].toJSON());
     });
 
     test('removing an attendee drops that property and keeps the other whole', () => {
-        const before = masterOf(parse(KITCHEN_SINK));
-        const resource = parse(KITCHEN_SINK);
+        const before = masterOf(parseResource(KITCHEN_SINK));
+        const resource = parseResource(KITCHEN_SINK);
         patchEvent(
             resource,
             null,
@@ -248,13 +247,11 @@ describe('kitchen-sink fidelity under a patch', () => {
 
         const attendees = masterOf(resource).getAllProperties('attendee');
         expect(attendees).toHaveLength(1);
-        expect(JSON.stringify(attendees[0].toJSON())).toBe(
-            JSON.stringify(before.getAllProperties('attendee')[0].toJSON()),
-        );
+        expect(attendees[0].toJSON()).toEqual(before.getAllProperties('attendee')[0].toJSON());
     });
 
     test('an address the client listed twice has every one of its properties updated', () => {
-        const resource = parse(
+        const resource = parseResource(
             vcal(VTZ_AMS, [
                 ...KITCHEN_MASTER.slice(0, -1),
                 'ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;CN=Bob:mailto:BOB@x.com',
@@ -275,15 +272,15 @@ describe('kitchen-sink fidelity under a patch', () => {
     });
 
     test('a null rrule in the patch does not remove the sub-daily RRULE', () => {
-        const resource = parse(KITCHEN_SINK);
+        const resource = parseResource(KITCHEN_SINK);
         patchEvent(resource, null, { title: 'Renamed sink', rrule: null }, CTX);
 
         expect(String(masterOf(resource).getFirstPropertyValue('rrule'))).toBe('FREQ=HOURLY;COUNT=10');
     });
 
     test('an unchanged reminder list does not touch the AUDIO alarm', () => {
-        const before = masterOf(parse(KITCHEN_SINK));
-        const resource = parse(KITCHEN_SINK);
+        const before = masterOf(parseResource(KITCHEN_SINK));
+        const resource = parseResource(KITCHEN_SINK);
         patchEvent(
             resource,
             null,
@@ -302,7 +299,7 @@ describe('kitchen-sink fidelity under a patch', () => {
     });
 
     test('a changed reminder list replaces the whole VALARM set', () => {
-        const resource = parse(KITCHEN_SINK);
+        const resource = parseResource(KITCHEN_SINK);
         patchEvent(resource, null, { data: { reminders: [{ type: 'notification', minutes: 5 }] } }, CTX);
 
         const alarms = masterOf(resource).getAllSubcomponents('valarm');
@@ -312,8 +309,8 @@ describe('kitchen-sink fidelity under a patch', () => {
     });
 
     test('patching the override addresses it by recurrence key', () => {
-        const before = masterOf(parse(KITCHEN_SINK));
-        const resource = parse(KITCHEN_SINK);
+        const before = masterOf(parseResource(KITCHEN_SINK));
+        const resource = parseResource(KITCHEN_SINK);
         patchEvent(resource, '2026-04-22', { title: 'Override renamed' }, CTX);
 
         expect(overridesOf(resource)[0].getFirstPropertyValue('summary')).toBe('Override renamed');
@@ -321,8 +318,8 @@ describe('kitchen-sink fidelity under a patch', () => {
     });
 
     test('an unchanged title writes nothing at all', () => {
-        const before = masterOf(parse(KITCHEN_SINK));
-        const resource = parse(KITCHEN_SINK);
+        const before = masterOf(parseResource(KITCHEN_SINK));
+        const resource = parseResource(KITCHEN_SINK);
         expect(patchEvent(resource, null, { title: before.getFirstPropertyValue('summary') as string }, CTX)).toBe(
             false,
         );
@@ -334,32 +331,32 @@ describe('SEQUENCE', () => {
     const timesPatch = { startTime: new Date('2026-04-15T14:00:00Z'), endTime: new Date('2026-04-15T15:00:00Z') };
 
     test('bumps on a scheduling change by the organizer of an event with attendees', () => {
-        const resource = parse(KITCHEN_SINK);
+        const resource = parseResource(KITCHEN_SINK);
         patchEvent(resource, null, timesPatch, CTX);
         expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(3);
     });
 
     test('does not bump when the actor is not the organizer', () => {
-        const resource = parse(KITCHEN_SINK);
+        const resource = parseResource(KITCHEN_SINK);
         patchEvent(resource, null, timesPatch, { ...CTX, actorIsOrganizer: false });
         expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(2);
     });
 
     test('does not bump when the event has no attendees', () => {
-        const resource = parse(vcal(VTZ_AMS, KITCHEN_MASTER));
+        const resource = parseResource(vcal(VTZ_AMS, KITCHEN_MASTER));
         masterOf(resource).removeAllProperties('attendee');
         patchEvent(resource, null, timesPatch, CTX);
         expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(2);
     });
 
     test('does not bump for a change that is not scheduling-significant', () => {
-        const resource = parse(KITCHEN_SINK);
+        const resource = parseResource(KITCHEN_SINK);
         patchEvent(resource, null, { title: 'Renamed sink', location: 'Room 9' }, CTX);
         expect(Number(masterOf(resource).getFirstPropertyValue('sequence'))).toBe(2);
     });
 
     test('bumps on an attendee-set change and never moves CREATED', () => {
-        const resource = parse(KITCHEN_SINK);
+        const resource = parseResource(KITCHEN_SINK);
         patchEvent(
             resource,
             null,
@@ -372,7 +369,7 @@ describe('SEQUENCE', () => {
 });
 
 describe('stamp trust', () => {
-    const stored = () => parse(serializeResource(buildResource([MASTER, OVERRIDE, EXCLUSION])));
+    const stored = () => parseResource(serializeResource(buildResource([MASTER, OVERRIDE, EXCLUSION])));
 
     // A client that rewrote every EXDATE into the UTC-Z comma-joined form and forged Eigen's own lines.
     const forged = clientSeries(
@@ -435,7 +432,7 @@ describe('stamp trust', () => {
     });
 
     test('every forged stamp is discarded and the stored one comes back', () => {
-        const incoming = parse(vcal(VTZ_AMS, forged));
+        const incoming = parseResource(vcal(VTZ_AMS, forged));
         restampResource(incoming, stored());
 
         const master = masterOf(incoming);
@@ -451,7 +448,7 @@ describe('stamp trust', () => {
     });
 
     test('a forged X-EIGEN parameter on a standard property is discarded', () => {
-        const incoming = parse(vcal(VTZ_AMS, forged));
+        const incoming = parseResource(vcal(VTZ_AMS, forged));
         restampResource(incoming, stored());
         expect(serializeResource(incoming)).not.toContain('forged-param');
     });
@@ -459,7 +456,7 @@ describe('stamp trust', () => {
     // vCard-style property groups: `A.X-EIGEN-EVENT-ID` is the same property under a label, and ical.js
     // keeps the group in the name.
     test('a grouped X-EIGEN property and parameter are discarded too', () => {
-        const incoming = parse(
+        const incoming = parseResource(
             vcal(
                 VTZ_AMS,
                 clientSeries('A.X-EIGEN-EVENT-ID:pwned', 'DTEND;B.X-EIGEN-ORGANIZER-USER=pwned:20260415T130000Z'),
@@ -468,14 +465,14 @@ describe('stamp trust', () => {
         restampResource(incoming, stored());
         expect(serializeResource(incoming)).not.toContain('pwned');
 
-        const bare = parse(vcal(VTZ_AMS, clientSeries('A.X-EIGEN-EVENT-ID:pwned')));
+        const bare = parseResource(vcal(VTZ_AMS, clientSeries('A.X-EIGEN-EVENT-ID:pwned')));
         stripEigenStamps(bare);
         expect(serializeResource(bare)).not.toContain('pwned');
     });
 
     test('the imported organizer rides across a PUT like every other server-owned line', () => {
-        const storedImport = parse(vcal(VTZ_AMS, clientSeries('X-EIGEN-IMPORTED-ORGANIZER:ada@external.com')));
-        const incoming = parse(vcal(VTZ_AMS, clientSeries()));
+        const storedImport = parseResource(vcal(VTZ_AMS, clientSeries('X-EIGEN-IMPORTED-ORGANIZER:ada@external.com')));
+        const incoming = parseResource(vcal(VTZ_AMS, clientSeries()));
         restampResource(incoming, storedImport);
 
         expect(masterOf(incoming).getFirstPropertyValue('x-eigen-imported-organizer')).toBe('ada@external.com');
@@ -483,7 +480,7 @@ describe('stamp trust', () => {
     });
 
     test('two VEVENTs that key alike never share one stored id', () => {
-        const twins = parse(
+        const twins = parseResource(
             vcal(VTZ_AMS, clientSeries('EXDATE:20260429T100000Z'), clientSeries('EXDATE:20260429T100000Z')),
         );
         restampResource(twins, stored());
@@ -508,7 +505,7 @@ describe('stamp trust', () => {
             'DTEND;TZID=Europe/Amsterdam:20260422T150000',
             'END:VEVENT',
         ];
-        const incoming = parse(
+        const incoming = parseResource(
             vcal(
                 VTZ_AMS,
                 clientSeries(),
@@ -531,7 +528,7 @@ describe('stamp trust', () => {
             exdates.push(`EXDATE:${when.toISOString().replace(/[-:]|\.\d{3}/g, '')}`);
             exdates.push(`X-EIGEN-EXDATE;X-EIGEN-EVENT-ID=exc-${day};X-EIGEN-SEQ=1:${when.toISOString().slice(0, 10)}`);
         }
-        const incoming = parse(vcal(VTZ_AMS, clientSeries(...exdates)));
+        const incoming = parseResource(vcal(VTZ_AMS, clientSeries(...exdates)));
 
         const started = performance.now();
         restampResource(incoming, stored());
@@ -540,7 +537,7 @@ describe('stamp trust', () => {
     });
 
     test('a body that stripped every X- line gets its ids and links back', () => {
-        const bare = parse(serializeResource(buildResource([MASTER, OVERRIDE, EXCLUSION])));
+        const bare = parseResource(serializeResource(buildResource([MASTER, OVERRIDE, EXCLUSION])));
         stripEigenStamps(bare);
         expect(serializeResource(bare)).not.toContain('X-EIGEN');
 
@@ -558,8 +555,8 @@ describe('stamp trust', () => {
             EXCLUSION,
             { ...EXCLUSION, id: 'evt-exclusion-2', recurrenceDate: '2026-05-06', sequence: 7 },
         ]);
-        const incoming = parse(vcal(VTZ_AMS, clientSeries('EXDATE:20260429T100000Z,20260506T100000Z')));
-        restampResource(incoming, parse(serializeResource(twoExclusions)));
+        const incoming = parseResource(vcal(VTZ_AMS, clientSeries('EXDATE:20260429T100000Z,20260506T100000Z')));
+        restampResource(incoming, parseResource(serializeResource(twoExclusions)));
 
         const stamps = masterOf(incoming).getAllProperties('x-eigen-exdate');
         expect(stamps.map((s) => [s.getFirstValue(), s.getFirstParameter('x-eigen-event-id')])).toEqual([
@@ -569,7 +566,7 @@ describe('stamp trust', () => {
     });
 
     test('an EXDATE the client added gets a fresh id and the master sequence', () => {
-        const incoming = parse(
+        const incoming = parseResource(
             vcal(
                 VTZ_AMS,
                 clientSeries(
@@ -592,7 +589,7 @@ describe('stamp trust', () => {
     });
 
     test('an EXDATE the client removed loses its stamp', () => {
-        const incoming = parse(vcal(VTZ_AMS, clientSeries()));
+        const incoming = parseResource(vcal(VTZ_AMS, clientSeries()));
         restampResource(incoming, stored());
         expect(masterOf(incoming).getAllProperties('x-eigen-exdate')).toHaveLength(0);
     });
@@ -606,10 +603,13 @@ describe('stamp trust', () => {
             endTime: new Date('2026-04-16T00:00:00Z'),
         };
         const allDayExclusion: CalendarEvent = { ...EXCLUSION, allDay: true, timezone: null };
-        const storedAllDay = parse(serializeResource(buildResource([allDayMaster, allDayExclusion])));
-        expect(serializeResource(buildResource([allDayMaster, allDayExclusion]))).toContain(
-            'EXDATE;VALUE=DATE:20260429',
-        );
+        const storedAllDay = parseResource(serializeResource(buildResource([allDayMaster, allDayExclusion])));
+        expect(masterOf(storedAllDay).getFirstProperty('exdate')!.toJSON()).toEqual([
+            'exdate',
+            {},
+            'date',
+            '2026-04-29',
+        ]);
 
         const client = [
             'BEGIN:VEVENT',
@@ -623,7 +623,7 @@ describe('stamp trust', () => {
             'EXDATE;VALUE=DATE:20260429',
             'END:VEVENT',
         ];
-        const incoming = parse(vcal(client));
+        const incoming = parseResource(vcal(client));
         restampResource(incoming, storedAllDay);
         expect(masterOf(incoming).getAllProperties('x-eigen-exdate')[0].getFirstParameter('x-eigen-event-id')).toBe(
             'evt-exclusion',
@@ -643,8 +643,8 @@ describe('stamp trust', () => {
             'X-EIGEN-EXDATE;X-EIGEN-SEQ=not-a-number:not-a-date',
             'END:VEVENT',
         ];
-        const storedJunk = parse(vcal(VTZ_AMS, junk));
-        const incoming = parse(vcal(VTZ_AMS, junk));
+        const storedJunk = parseResource(vcal(VTZ_AMS, junk));
+        const incoming = parseResource(vcal(VTZ_AMS, junk));
         restampResource(incoming, storedJunk);
 
         const stamp = masterOf(incoming).getAllProperties('x-eigen-exdate')[0];
@@ -656,7 +656,7 @@ describe('stamp trust', () => {
     });
 
     test('with no stored resource everything is minted and only trusted organizer stamps are set', () => {
-        const incoming = parse(vcal(VTZ_AMS, forged));
+        const incoming = parseResource(vcal(VTZ_AMS, forged));
         restampResource(incoming, null, {
             createByUserId: 'carol-id',
             organizerEventId: 'evt-x',
@@ -672,7 +672,7 @@ describe('stamp trust', () => {
     });
 
     test('with no stored resource and no trusted fields no organizer stamp is written', () => {
-        const incoming = parse(vcal(VTZ_AMS, forged));
+        const incoming = parseResource(vcal(VTZ_AMS, forged));
         restampResource(incoming, null);
         expect(serializeResource(incoming)).not.toContain('X-EIGEN-ORGANIZER');
         expect(serializeResource(incoming)).not.toContain('X-EIGEN-CREATED-BY');
@@ -726,8 +726,8 @@ describe('round trip build → serialize → project', () => {
             const override = { ...OVERRIDE, allDay: master.allDay, timezone: master.timezone };
             const exclusion = { ...EXCLUSION, allDay: master.allDay, timezone: master.timezone };
             const once = serializeResource(buildResource([master, override, exclusion]));
-            const twice = parse(once);
-            restampResource(twice, parse(once));
+            const twice = parseResource(once);
+            restampResource(twice, parseResource(once));
             expect(serializeResource(twice)).toBe(once);
         });
     }
@@ -742,9 +742,14 @@ describe('round trip build → serialize → project', () => {
             'DTEND:20260415T130000',
             'END:VEVENT',
         ];
-        const incoming = parse(vcal(floating));
+        const incoming = parseResource(vcal(floating));
         restampResource(incoming, null);
-        expect(serializeResource(incoming)).toContain('DTSTART:20260415T120000');
+        expect(masterOf(incoming).getFirstProperty('dtstart')!.toJSON()).toEqual([
+            'dtstart',
+            {},
+            'date-time',
+            '2026-04-15T12:00:00',
+        ]);
     });
 });
 
@@ -828,7 +833,7 @@ describe('timezone fidelity', () => {
     });
 
     test('a VTIMEZONE another property still names stays, definition untouched', () => {
-        const resource = parse(KITCHEN_SINK);
+        const resource = parseResource(KITCHEN_SINK);
         const before = resource.getAllSubcomponents('vtimezone')[0].toJSON();
 
         patchEvent(resource, '2026-04-22', { timezone: 'America/New_York' }, CTX);
@@ -925,19 +930,49 @@ describe('structural edits', () => {
     });
 });
 
+// A structural edit names a VEVENT the resource has to hold. A caller handing over a row the file
+// cannot place — an occurrence nothing overrides, a legacy key that names no date, an override-only
+// body — is a bug in the store, not a resource to rewrite.
+describe('refusals', () => {
+    const overrideOnly = () => parseResource(serializeResource(buildResource([OVERRIDE])));
+    const unkeyable = { ...OVERRIDE, recurrenceDate: 'not a date' };
+
+    test('patchEvent refuses an occurrence the resource does not hold', () => {
+        expect(() => patchEvent(buildResource([MASTER]), '2026-05-20', { title: 'x' }, CTX)).toThrow(
+            'the resource holds no VEVENT for 2026-05-20',
+        );
+    });
+
+    test('putOverride refuses an override that names no occurrence', () => {
+        expect(() => putOverride(buildResource([MASTER]), MASTER, unkeyable)).toThrow('names no occurrence');
+    });
+
+    test('addExclusion refuses an exclusion that names no occurrence', () => {
+        expect(() => addExclusion(buildResource([MASTER]), MASTER, unkeyable, CTX)).toThrow('names no occurrence');
+    });
+
+    test('addExclusion refuses a resource with no master VEVENT', () => {
+        expect(() => addExclusion(overrideOnly(), MASTER, EXCLUSION, CTX)).toThrow('holds no master VEVENT');
+    });
+
+    test('removeExclusion refuses a resource with no master VEVENT', () => {
+        expect(() => removeExclusion(overrideOnly(), '2026-04-29', CTX)).toThrow('holds no master VEVENT');
+    });
+});
+
 describe('stripping', () => {
     test('strip leaves no X-EIGEN substring and changes nothing else', () => {
         const withStamps = buildResource([MASTER, OVERRIDE, EXCLUSION]);
-        const stripped = parse(serializeResource(withStamps));
+        const stripped = parseResource(serializeResource(withStamps));
         stripEigenStamps(stripped);
         const ics = serializeResource(stripped);
         expect(ics).not.toContain('X-EIGEN');
 
         // Everything but Eigen's own lines is jCal-equal to the stamped resource.
-        const bare = snapshot(masterOf(parse(serializeResource(withStamps))));
+        const bare = snapshot(masterOf(parseResource(serializeResource(withStamps))));
         for (const name of Object.keys(bare)) {
             if (name.startsWith('x-eigen-')) continue;
-            expect(JSON.stringify(snapshot(masterOf(stripped))[name])).toBe(JSON.stringify(bare[name]));
+            expect(snapshot(masterOf(stripped))[name]).toEqual(bare[name]);
         }
         expect(masterOf(stripped).getAllProperties('exdate')).toHaveLength(1);
     });
@@ -949,7 +984,8 @@ describe('stripping', () => {
     });
 
     test('CalDAV GET keeps the stamps that only the owner clients see', () => {
-        expect(eventsToIcs([MASTER, OVERRIDE, EXCLUSION])).toContain('X-EIGEN-EVENT-ID:evt-master');
+        const served = parseResource(eventsToIcs([MASTER, OVERRIDE, EXCLUSION]));
+        expect(masterOf(served).getFirstPropertyValue('x-eigen-event-id')).toBe('evt-master');
     });
 });
 

@@ -303,6 +303,7 @@ iMIP enables calendar invitations between Eigen users and external parties via e
 - **Create event with external attendees**: `invite-propagation.ts` detects attendees with no Eigen account and calls `composeInviteEmail()` → `sendMail()`. Sends `METHOD:REQUEST`.
 - **Update event**: same path calls `composeUpdateEmail()` → updated `METHOD:REQUEST`.
 - **Cancel event**: `composeCancelEmail()` → `METHOD:CANCEL`.
+- **No `VALARM` travels with a message**: every iMIP body is built from the stored VEVENT with its alarms removed. The organizer's reminders are their own, and an `email` one would ship as `ACTION:EMAIL` naming the organizer as its `ATTENDEE`, so every guest's client would mail the organizer at the trigger. The `URL` stays — guests seeing the link is the point.
 - **Attendee RSVP**: when an Eigen user RSVPs to an externally-organized event, `calendar.ts` calls `composeRsvpReply()` → `METHOD:REPLY`. Triggered both from `rsvp()` and from `deleteEvent()` (delete = decline). A `scope:'this'` RSVP passes the occurrence's `recurrenceDate`, so the REPLY carries a `RECURRENCE-ID` for the original instant (from `computeOccurrenceTimes`) and the organizer applies the PARTSTAT to that occurrence, not the whole series; a master-scoped RSVP replies without one (RFC 5546).
 
 ### Inbound flow (external → Eigen)
@@ -351,10 +352,12 @@ stored exception — exception rows are internal and never appear as their own r
   component in place, so folding, escaping and parameter quoting are ical.js's problem and an Eigen edit
   leaves every property it did not touch as the client wrote it
 - Per-event state Eigen owns rides as `X-EIGEN-*` properties inside the VEVENT (the event id, the
-  creator, the invitation link, the color, one stamp per `EXDATE` carrying that exclusion's id and
-  SEQUENCE). `restampResource` discards every incoming one and copies the server-owned lines back from
-  the stored resource, matched on UID plus recurrence key; `stripEigenStamps` removes them from anything
-  that leaves the Home
+  creator, the invitation link, the color, the imported organizer, one stamp per `EXDATE` carrying that
+  exclusion's id and SEQUENCE). `restampResource` discards every incoming one — a group prefix and a
+  parameter included — and copies the server-owned lines back from the stored resource, matched on UID
+  plus recurrence key, handing one stored id to one VEVENT and minting a fresh one for a second claimant.
+  `stripEigenStamps` takes them off the iMIP body, which is the one place a `.ics` leaves the Home; a
+  CalDAV GET serves them to the owner's own clients on purpose
 - Every referenced TZID gets a generated VTIMEZONE block (RFC 5545 §3.6.5). `vtimezone.ts` builds it
   from Intl offset data: transitions compressed to two open-ended RRULE observances when the zone's
   DST rule is regular, one observance per transition otherwise
@@ -362,14 +365,22 @@ stored exception — exception rows are internal and never appear as their own r
   `computeOccurrenceTimes(master, recurrenceDate)` — in the master's TZID form, never the exception's
   moved startTime (which would orphan the override)
 - The same builder produces outbound iMIP bodies (`serializeEventForImip`), so Eigen↔Eigen federation
-  keeps instants intact for non-server timezones, and the body is stripped of every `X-EIGEN-` line
+  keeps instants intact for non-server timezones; the body is stripped of every `X-EIGEN-` line and of
+  every `VALARM`, and a REQUEST asks each guest to reply and rides the organizer along as an accepted
+  attendee (RFC 5546)
+- An end instant the stored zone's wall clock cannot name — the second pass through a repeated hour —
+  is written as a UTC `DTEND` beside the TZID `DTSTART` (RFC 5545 allows it), so the duration survives
+- A timezone edit brings the VTIMEZONE the new TZID needs and drops one nothing references any more; a
+  definition a property still names is the client's own and is never rewritten
 
 **Parsing** (`ical-parse.ts`):
 
-- Datetimes with a resolvable zone (VTIMEZONE present, or UTC `Z`) resolve through ical.js. A valid
-  IANA TZID without a VTIMEZONE is interpreted in that zone (RFC 7809) — consistent with the stored
-  `timezone` column that recurrence expansion trusts. Genuinely floating datetimes map their wall
-  components via `Date.UTC`, never through the server's local timezone
+- There are two read entry points and one trust rule. `parseIcs(text)` reads bytes a stranger wrote — a CalDAV PUT body, a previewed or imported file, an inbound iMIP part — and its result type names no `X-EIGEN-*` fact at all, so a forged event id, creator, color or organizer link has nowhere to land and `data.organizer.userId` comes back empty. `projectResource(component)` reads a resource the store itself wrote and adds the stamps, `CREATED`/`LAST-MODIFIED` and `hasUnindexedRecurrence` on top of the same projection. Both share one parser body; `parseResource(ics)` is the only place a stored `.ics` becomes a component tree
+- A valid IANA TZID resolves through Intl whether or not the file defines a VTIMEZONE — the path the
+  builder computes its wall times with, and the zone the stored `timezone` column expands the series in
+  — so identical bytes name one instant and a repeated hour resolves to its first pass (RFC 5545). A
+  UTC `Z` value is exact; only a TZID Intl rejects resolves through the file's own VTIMEZONE; and a
+  genuinely floating datetime maps its wall components via `Date.UTC`, never through the server's zone
 - RECURRENCE-ID / EXDATE → `recurrenceDate` keys are wall-clock dates: TZID-form values key on their
   own wall components (RFC 5545 canonical), UTC-`Z` values convert the instant to the SERIES timezone,
   floating/DATE values keep their raw components
@@ -383,12 +394,13 @@ stored exception — exception rows are internal and never appear as their own r
 - The end of an event is its `DTEND`, or its `DURATION` when it names one (RFC 5545 §3.6.1, which Apple
   and Outlook both emit), through `ICAL.Event.endDate`. A VEVENT with neither keeps the hour a timed row
   is drawn as and the day an all-day row is
-- `X-EIGEN-*` lines project back onto the row they came from: the event id, the creator, the color, the
-  imported organizer, `data.organizer.userId` and `data.organizerEventId` from the two organizer stamps,
-  `CREATED`/`LAST-MODIFIED` into `createdAt`/`updatedAt`, and an `EXDATE`'s stamp into the cancelled
-  row's id and SEQUENCE (an unstamped `EXDATE` the client added takes the master's SEQUENCE). A stamp
-  with a malformed id, sequence or key is absent, never fatal: the body is untrusted
-- `IcsParseResult.hasUnindexedRecurrence` marks a file whose recurrence the index cannot expand — a
+- The trusted projection reads the `X-EIGEN-*` lines back onto the row they came from: the event id, the
+  creator, the color, the imported organizer, `data.organizer.userId` and `data.organizerEventId` from
+  the two organizer stamps, `CREATED`/`LAST-MODIFIED` into `createdAt`/`updatedAt`, and an `EXDATE`'s
+  stamp into the cancelled row's id and SEQUENCE (an unstamped `EXDATE` takes the master's SEQUENCE). A
+  stamp with a malformed id, sequence or key is absent, never fatal. One occurrence is one cancelled
+  row however many `EXDATE` values, in however many forms, name it
+- `ProjectedResource.hasUnindexedRecurrence` marks a file whose recurrence the index cannot expand — a
   stripped sub-daily or out-of-range rule, or an `RDATE` — so a time-range REPORT can answer with that
   resource for every window rather than lose an occurrence
 - A VEVENT the parser cannot read — no DTSTART, a value it cannot make a date of — is skipped and
