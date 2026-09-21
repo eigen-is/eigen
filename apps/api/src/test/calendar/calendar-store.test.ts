@@ -461,6 +461,25 @@ describe('calendar file store', () => {
         }
     });
 
+    test('a PUT that puts back what an out-of-band edit changed is written, not answered as a no-op', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        await put(harness.instance, calendarId, 'restored.ics', vcal(event('restored@eigen', 'Original')));
+        const original = readFileSync(fileOf(harness, calendarId, 'restored.ics'), 'utf8');
+        const ctag = (await harness.instance.getCollection(calendarId))!.ctag;
+
+        // An edit the index never saw: the row still describes the bytes that were there before it.
+        writeFileSync(
+            fileOf(harness, calendarId, 'restored.ics'),
+            original.replace('SUMMARY:Original', 'SUMMARY:Tampered'),
+        );
+
+        const result = await put(harness.instance, calendarId, 'restored.ics', original);
+        expect(result.ok).toBe(true);
+        expect(readFileSync(fileOf(harness, calendarId, 'restored.ics'), 'utf8')).toContain('SUMMARY:Original');
+        expect((await harness.instance.getCollection(calendarId))!.ctag).toBeGreaterThan(ctag);
+    });
+
     test('a name a file system cannot hold is refused, never rewritten', async () => {
         const harness = await makeCalendar();
         const calendarId = await defaultCalendarId(harness);

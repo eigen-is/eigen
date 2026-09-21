@@ -365,9 +365,10 @@ export async function putResource(
         if (Buffer.byteLength(text) > EVENT_MAX_BYTES) return { ok: false, error: 'too-large' };
 
         // Re-PUTting what is already stored changes nothing: writing it would bump the ctag and send every
-        // other client back for a resource that never moved.
+        // other client back for a resource that never moved. Judged against the bytes, never the row: a
+        // stale row would answer a PUT that does change the file with a no-op nobody ever learns about.
         const stamped = computeResourceEtag(new TextEncoder().encode(text));
-        if (existing && stamped === existing.etag) {
+        if (storedBytes && stamped === computeResourceEtag(storedBytes)) {
             return { ok: true, etag: text === body ? stamped : null, created: false };
         }
 
