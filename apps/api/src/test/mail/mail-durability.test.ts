@@ -5,6 +5,7 @@ import { type FileHandle, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MAILBOX_DRAFTS, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import { getHome } from '../../lib/home';
+import { boxDir, maildirOf, makeEml } from '../mail-test-helpers';
 import { createTestUser, ensureServer, TEST_DATA_DIR } from '../setup';
 
 // Durability can only be proven by killing the machine, so what these tests pin is the protocol that buys
@@ -24,30 +25,9 @@ beforeAll(async () => {
     await home.mail.mailboxGet('');
 });
 
-function maildir(): string {
-    return join(TEST_DATA_DIR, 'home', userId, 'eigen.mail', 'Maildir');
-}
+const box = (mailbox: string) => boxDir(userId, mailbox);
 
-function boxDir(mailbox: string): string {
-    return mailbox === '' ? maildir() : join(maildir(), `.${mailbox}`);
-}
-
-function makeEml(subject: string): Buffer {
-    return Buffer.from(
-        [
-            'From: sender@example.com',
-            'To: durability@test.eigen.is',
-            `Subject: ${subject}`,
-            `Date: ${new Date().toUTCString()}`,
-            `Message-ID: <${Date.now()}.${Math.random()}@test>`,
-            'MIME-Version: 1.0',
-            'Content-Type: text/plain; charset=utf-8',
-            '',
-            'body',
-        ].join('\r\n'),
-        'utf-8',
-    );
-}
+const eml = (subject: string) => Buffer.from(makeEml(subject, { to: 'durability@test.eigen.is' }), 'utf-8');
 
 async function syncProto(): Promise<{ sync: () => Promise<void> }> {
     const probe = await open(TEST_DATA_DIR, 'r');
@@ -96,10 +76,10 @@ async function record(dirs: Record<string, string>, fn: () => Promise<void>): Pr
 describe('Maildir write durability', () => {
     test('a delivery fsyncs the message, then new/, then cur/ once the sync moves it', async () => {
         const home = await getHome(userId);
-        const dirs = { tmp: join(boxDir(''), 'tmp'), new: join(boxDir(''), 'new'), cur: join(boxDir(''), 'cur') };
+        const dirs = { tmp: join(box(''), 'tmp'), new: join(box(''), 'new'), cur: join(box(''), 'cur') };
 
         const events = await record(dirs, async () => {
-            await home.mail.mailboxDeliver(makeEml('Durable delivery'));
+            await home.mail.mailboxDeliver(eml('Durable delivery'));
         });
 
         expect(events).toEqual(['file', 'rename', 'new', 'rename', 'cur']);
@@ -108,7 +88,7 @@ describe('Maildir write durability', () => {
 
     test('a draft save fsyncs the EML before the rename into Drafts cur/', async () => {
         const home = await getHome(userId);
-        const dirs = { tmp: join(boxDir(MAILBOX_DRAFTS), 'tmp'), cur: join(boxDir(MAILBOX_DRAFTS), 'cur') };
+        const dirs = { tmp: join(box(MAILBOX_DRAFTS), 'tmp'), cur: join(box(MAILBOX_DRAFTS), 'cur') };
 
         const events = await record(dirs, async () => {
             await home.mail.messageHandleDraft({
@@ -126,8 +106,8 @@ describe('Maildir write durability', () => {
 
     test('a flag change fsyncs the one directory its rename lands in', async () => {
         const home = await getHome(userId);
-        const messageId = await home.mail.mailboxDeliver(makeEml('Durable flag'));
-        const dirs = { cur: join(boxDir(''), 'cur') };
+        const messageId = await home.mail.mailboxDeliver(eml('Durable flag'));
+        const dirs = { cur: join(box(''), 'cur') };
 
         const events = await record(dirs, async () => {
             await home.mail.messageSetRead(messageId, true);
@@ -138,8 +118,8 @@ describe('Maildir write durability', () => {
 
     test('a move fsyncs the target directory and then the one it left', async () => {
         const home = await getHome(userId);
-        const messageId = await home.mail.mailboxDeliver(makeEml('Durable move'));
-        const dirs = { inbox: join(boxDir(''), 'cur'), trash: join(boxDir(MAILBOX_TRASH), 'cur') };
+        const messageId = await home.mail.mailboxDeliver(eml('Durable move'));
+        const dirs = { inbox: join(box(''), 'cur'), trash: join(box(MAILBOX_TRASH), 'cur') };
 
         const events = await record(dirs, async () => {
             await home.mail.messageMove(messageId, MAILBOX_TRASH);
@@ -150,8 +130,8 @@ describe('Maildir write durability', () => {
 
     test('a delete fsyncs the directory after the unlink it made durable', async () => {
         const home = await getHome(userId);
-        const messageId = await home.mail.mailboxDeliver(makeEml('Durable delete'));
-        const dirs = { cur: join(boxDir(''), 'cur') };
+        const messageId = await home.mail.mailboxDeliver(eml('Durable delete'));
+        const dirs = { cur: join(box(''), 'cur') };
 
         const events = await record(dirs, async () => {
             await home.mail.messageDelete(messageId);
@@ -165,9 +145,9 @@ describe('Maildir write durability', () => {
         // directory every rename lands in.
         const home = await getHome(userId);
         await home.mail.mailboxCreate('Batched');
-        const dirs = { new: join(boxDir('Batched'), 'new'), cur: join(boxDir('Batched'), 'cur') };
+        const dirs = { new: join(box('Batched'), 'new'), cur: join(box('Batched'), 'cur') };
         for (const subject of ['One', 'Two', 'Three']) {
-            const body = makeEml(subject);
+            const body = eml(subject);
             writeFileSync(join(dirs.new, `${Date.now()}.M${counter++}P1Q1.host,S=${body.byteLength}`), body);
         }
 
@@ -182,7 +162,7 @@ describe('Maildir write durability', () => {
 
     test('creating a mailbox fsyncs the folder and the Maildir root that gained it', async () => {
         const home = await getHome(userId);
-        const dirs = { root: maildir(), box: boxDir('Created') };
+        const dirs = { root: maildirOf(userId), box: box('Created') };
 
         const events = await record(dirs, async () => {
             await home.mail.mailboxCreate('Created');
@@ -204,7 +184,7 @@ describe('Maildir write durability', () => {
 
         let messageId: string;
         try {
-            messageId = await home.mail.mailboxDeliver(makeEml('Refused directory fsync'));
+            messageId = await home.mail.mailboxDeliver(eml('Refused directory fsync'));
         } finally {
             spy.mockRestore();
         }
@@ -222,19 +202,19 @@ describe('Maildir write durability', () => {
         });
 
         try {
-            await expect(home.mail.mailboxDeliver(makeEml('Doomed delivery'))).rejects.toThrow('EIO');
+            await expect(home.mail.mailboxDeliver(eml('Doomed delivery'))).rejects.toThrow('EIO');
         } finally {
             spy.mockRestore();
         }
 
-        expect(readdirSync(join(boxDir(''), 'tmp'))).toEqual([]);
-        expect(readdirSync(join(boxDir(''), 'new'))).toEqual([]);
+        expect(readdirSync(join(box(''), 'tmp'))).toEqual([]);
+        expect(readdirSync(join(box(''), 'new'))).toEqual([]);
     });
 
     test('a tmp/ file a crash left behind is swept after 36 hours', async () => {
         const home = await getHome(userId);
         const store = (home.mail as unknown as { store: { cleanupStaleDraftTemps: () => Promise<void> } }).store;
-        const tmpDir = join(boxDir(''), 'tmp');
+        const tmpDir = join(box(''), 'tmp');
         const stale = join(tmpDir, 'stale.M1P1Q1.host,S=4');
         const fresh = join(tmpDir, 'fresh.M1P1Q1.host,S=4');
         writeFileSync(stale, 'body');

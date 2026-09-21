@@ -6,12 +6,10 @@ import type { Email, EmailDraft, EmailSummary, MaildirMailbox } from '@workspace
 import { MaildirStore } from '../../lib/mail/maildir-store';
 // Static import of '../lib/core/mailer' would trigger server-config module evaluation
 // before './setup' sets EIGEN_DATA_ROOT. Dynamic-import it inside the test instead.
-import { app, assertJson, authedRequest, findOrFail, getTestContext, TEST_DATA_DIR } from '../setup';
+import { maildirOf, mailRootOf } from '../mail-test-helpers';
+import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 const isWindows = process.platform === 'win32';
-
-const mailRootOf = (userId: string) => join(TEST_DATA_DIR, 'home', userId, 'eigen.mail');
-const maildirOf = (userId: string) => join(mailRootOf(userId), 'Maildir');
 
 describe.skipIf(isWindows)('Mail', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;

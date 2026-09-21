@@ -2,8 +2,10 @@ import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { MAILBOX_DRAFTS } from '@workspace/lib/constants/mailboxes';
 import type { Email, EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { mailRootOf, makeEml, seedMaildirFile } from '../mail-test-helpers';
 import {
     assertJson,
     authedRequest,
@@ -11,7 +13,6 @@ import {
     createTestUser,
     ensureServer,
     putDraft,
-    TEST_DATA_DIR,
     type TestUser,
     uploadDraftAttachment,
 } from '../setup';
@@ -23,18 +24,14 @@ beforeAll(async () => {
     await ensureServer();
 });
 
-function mailDir(userId: string): string {
-    return join(TEST_DATA_DIR, 'home', userId, 'eigen.mail');
-}
-
 function draftMetaDir(userId: string): string {
-    return join(mailDir(userId), 'draft-meta');
+    return join(mailRootOf(userId), 'draft-meta');
 }
 
 // Empties the index the way deleting mail.db does: the next list of a mailbox finds no rows and
 // blocks on a full re-index from the files on disk.
 function clearIndex(userId: string): void {
-    const db = new Database(join(mailDir(userId), 'mail.db'));
+    const db = new Database(join(mailRootOf(userId), 'mail.db'));
     try {
         db.run('DELETE FROM emails');
     } finally {
@@ -135,20 +132,8 @@ describe.skipIf(isWindows)('Mail — draft sidecar', () => {
 
         // Another MDA's unique part. `+` is legal in a Maildir filename and refused as a draft id.
         const uniqueId = `${Date.now()}.M1P2Q3+alien`;
-        const eml = [
-            'From: alien@example.com',
-            `To: ${user.email}`,
-            'Subject: Written by another MDA',
-            `Date: ${new Date().toUTCString()}`,
-            'MIME-Version: 1.0',
-            'Content-Type: text/plain; charset=utf-8',
-            '',
-            'body',
-        ].join('\r\n');
-        writeFileSync(
-            join(mailDir(user.id), 'Maildir', '.Drafts', 'cur', `${uniqueId},S=${Buffer.byteLength(eml)}:2,DS`),
-            eml,
-        );
+        const eml = makeEml('Written by another MDA', { from: 'alien@example.com', to: user.email });
+        seedMaildirFile(user.id, MAILBOX_DRAFTS, uniqueId, eml, { flags: 'DS' });
 
         expect((await listDrafts(user)).map((row) => row.id)).toContain(uniqueId);
     });
@@ -162,20 +147,8 @@ describe.skipIf(isWindows)('Mail — draft sidecar', () => {
         expect((await authedRequest(user.sessionToken, `/home/${user.id}/size`)).status).toBe(200);
 
         const uniqueId = `${Date.now()}.M1P2Q3+alien=delete`;
-        const eml = [
-            'From: alien@example.com',
-            `To: ${user.email}`,
-            'Subject: Deleted by hand',
-            `Date: ${new Date().toUTCString()}`,
-            'MIME-Version: 1.0',
-            'Content-Type: text/plain; charset=utf-8',
-            '',
-            'body',
-        ].join('\r\n');
-        writeFileSync(
-            join(mailDir(user.id), 'Maildir', '.Drafts', 'cur', `${uniqueId},S=${Buffer.byteLength(eml)}:2,DS`),
-            eml,
-        );
+        const eml = makeEml('Deleted by hand', { from: 'alien@example.com', to: user.email });
+        seedMaildirFile(user.id, MAILBOX_DRAFTS, uniqueId, eml, { flags: 'DS' });
         expect((await listDrafts(user)).map((row) => row.id)).toContain(uniqueId);
 
         const sse = collectSSE(user.id);

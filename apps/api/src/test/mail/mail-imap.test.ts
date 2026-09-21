@@ -10,37 +10,14 @@ import {
     parseFlagsFromFilename,
     rebuildFlagsSuffix,
 } from '../../lib/mail/mailutils';
-import { assertJson, authedRequest, findOrFail, getTestContext, TEST_DATA_DIR } from '../setup';
+import { boxDir, maildirOf, makeEml } from '../mail-test-helpers';
+import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 const isWindows = process.platform === 'win32';
 
-function userMaildir(userId: string) {
-    return join(TEST_DATA_DIR, 'home', userId, 'eigen.mail', 'Maildir');
-}
-
-function curDir(userId: string, mailbox: string) {
-    const base = userMaildir(userId);
-    return mailbox === '' ? join(base, 'cur') : join(base, `.${mailbox}`, 'cur');
-}
-
-function newDir(userId: string, mailbox: string) {
-    const base = userMaildir(userId);
-    return mailbox === '' ? join(base, 'new') : join(base, `.${mailbox}`, 'new');
-}
-
-function makeEml(subject: string, from = 'test@example.com') {
-    return [
-        `From: ${from}`,
-        `To: alice@test.eigen.is`,
-        `Subject: ${subject}`,
-        `Date: ${new Date().toUTCString()}`,
-        `Message-ID: <${Date.now()}@test>`,
-        `MIME-Version: 1.0`,
-        `Content-Type: text/plain; charset=utf-8`,
-        '',
-        `Body of ${subject}`,
-    ].join('\r\n');
-}
+const curDir = (userId: string, mailbox: string) => join(boxDir(userId, mailbox), 'cur');
+const newDir = (userId: string, mailbox: string) => join(boxDir(userId, mailbox), 'new');
+const testEml = (subject: string, from?: string) => makeEml(subject, { from, to: 'alice@test.eigen.is' });
 
 // EML with a raw ISO-8859-1 'é' (0xE9) body byte — invalid UTF-8, so a TextDecoder/`.text()`
 // round-trip would replace it with U+FFFD (0xEF 0xBF 0xBD) and inflate the byte count.
@@ -174,7 +151,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
     });
 
     test('mailbox directories use dot-prefix with canonical case', () => {
-        const maildir = userMaildir(charlieId);
+        const maildir = maildirOf(charlieId);
         const entries = readdirSync(maildir);
         expect(entries).toContain('.Sent');
         expect(entries).toContain('.Drafts');
@@ -186,7 +163,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
     });
 
     test('maildirfolder marker exists in subfolders', () => {
-        const maildir = userMaildir(charlieId);
+        const maildir = maildirOf(charlieId);
         for (const folder of ['Sent', 'Drafts', 'Trash', 'Junk', 'Archive']) {
             const marker = join(maildir, `.${folder}`, 'maildirfolder');
             expect(() => readFileSync(marker)).not.toThrow();
@@ -194,7 +171,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
     });
 
     test('subscriptions file lists all standard folders', () => {
-        const subscriptions = readFileSync(join(userMaildir(charlieId), 'subscriptions'), 'utf-8');
+        const subscriptions = readFileSync(join(maildirOf(charlieId), 'subscriptions'), 'utf-8');
         expect(subscriptions).toContain('Sent');
         expect(subscriptions).toContain('Drafts');
         expect(subscriptions).toContain('Trash');
@@ -205,7 +182,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
     // -- Filename format --
 
     test('delivered messages use Maildir filename format', async () => {
-        const eml = makeEml('Filename Format Test');
+        const eml = testEml('Filename Format Test');
         await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/mailbox`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -316,7 +293,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
     // -- Simulated Dovecot: external file changes --
 
     test('sync detects new message placed in cur/ by Dovecot', async () => {
-        const eml = makeEml('Dovecot Delivered', 'dovecot@example.com');
+        const eml = testEml('Dovecot Delivered', 'dovecot@example.com');
         const uniqueId = `9999999.M0P1Q0.dovecot-test`;
         const size = Buffer.byteLength(eml, 'utf-8');
         const filename = `${uniqueId},S=${size}:2,S`;
@@ -334,7 +311,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
     });
 
     test('sync detects new message placed in new/ (standalone mode)', async () => {
-        const eml = makeEml('Standalone New');
+        const eml = testEml('Standalone New');
         const uniqueId = `9999998.M0P1Q1.standalone-test`;
         const size = Buffer.byteLength(eml, 'utf-8');
         const filename = `${uniqueId},S=${size}`;
@@ -411,7 +388,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
 
     test('sync detects message moved between mailboxes by Dovecot', async () => {
         // Deliver a message to inbox
-        const eml = makeEml('Dovecot Move Test');
+        const eml = testEml('Dovecot Move Test');
         const uniqueId = `9999997.M0P1Q2.move-test`;
         const size = Buffer.byteLength(eml, 'utf-8');
         const filename = `${uniqueId},S=${size}:2,S`;
@@ -439,7 +416,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
     });
 
     test('sync preserves Dovecot custom keyword flags (lowercase)', async () => {
-        const eml = makeEml('Keyword Flags Test');
+        const eml = testEml('Keyword Flags Test');
         const uniqueId = `9999996.M0P1Q3.keyword-test`;
         const size = Buffer.byteLength(eml, 'utf-8');
         // Dovecot adds lowercase keyword flags 'ab' alongside standard flags
@@ -545,7 +522,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
     // -- Atomic delivery --
 
     test('deliverAtomic goes through tmp then new', async () => {
-        const eml = makeEml('Atomic Delivery');
+        const eml = testEml('Atomic Delivery');
         const res = await ctx.app.handle(
             new Request(`http://localhost/mail/deliver/${ctx.charlie.user.email}`, {
                 method: 'POST',
@@ -558,7 +535,7 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
         // After delivery + sync, file should be in cur/, not new/ or tmp/
         const newFiles = readdirSync(newDir(charlieId, ''));
         const curFiles = readdirSync(curDir(charlieId, ''));
-        const tmpDir = join(userMaildir(charlieId), 'tmp');
+        const tmpDir = join(maildirOf(charlieId), 'tmp');
         const tmpFiles = readdirSync(tmpDir);
 
         // tmp should be empty (file moved to new then to cur)
