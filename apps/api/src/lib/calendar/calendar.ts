@@ -171,17 +171,23 @@ export class Calendar {
 
     // --- Calendars ---
 
-    public getCalendars(): CalendarItem[] {
+    public async getCalendars(): Promise<CalendarItem[]> {
         const rows = this.db.select().from(schema.calendars).all();
         return rows.map(dbCalendarToCalendarItem);
     }
 
-    public getCalendarById(id: string): CalendarItem | null {
+    public async getCalendarById(id: string): Promise<CalendarItem | null> {
+        return this.calendarById(id);
+    }
+
+    // The sync row read behind getCalendarById, for the paths that may not await: the private sync
+    // helpers and the bodies of `db.transaction()` callbacks, which commit at the first await.
+    private calendarById(id: string): CalendarItem | null {
         const row = this.db.select().from(schema.calendars).where(eq(schema.calendars.id, id)).get();
         return row ? dbCalendarToCalendarItem(row) : null;
     }
 
-    public createCalendar(input: { name: string; color: string; id?: string }): CalendarItem {
+    public async createCalendar(input: { name: string; color: string; id?: string }): Promise<CalendarItem> {
         const id = input.id ?? randomUUID();
         this.db
             .insert(schema.calendars)
@@ -196,7 +202,7 @@ export class Calendar {
             .run();
 
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_CREATED, this.home.user.id));
-        return this.getCalendarById(id)!;
+        return (await this.getCalendarById(id))!;
     }
 
     public async updateCalendar(
@@ -208,7 +214,7 @@ export class Calendar {
             shares?: CalendarShare[] | null;
         },
     ): Promise<CalendarItem> {
-        const existing = this.getCalendarById(id);
+        const existing = await this.getCalendarById(id);
         if (!existing) throw new ApiError(404, 'Calendar not found');
 
         const oldShares = existing.shares;
@@ -227,16 +233,16 @@ export class Calendar {
             .run();
 
         if (input.shares !== undefined) {
-            const updated = this.getCalendarById(id)!;
+            const updated = (await this.getCalendarById(id))!;
             await propagateCalendarShare(this.home, updated, oldShares);
         }
 
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_UPDATED, this.home.user.id));
-        return this.getCalendarById(id)!;
+        return (await this.getCalendarById(id))!;
     }
 
     public async deleteCalendar(id: string): Promise<void> {
-        const existing = this.getCalendarById(id);
+        const existing = await this.getCalendarById(id);
         if (!existing) throw new ApiError(404, 'Calendar not found');
         if (existing.isDefault) throw new ApiError(400, 'Cannot delete default calendar');
 
@@ -250,14 +256,14 @@ export class Calendar {
 
     // --- Events ---
 
-    public createEvent(calendarId: string, input: CreateEventArgs, user?: User): CalendarEvent {
-        const cal = this.getCalendarById(calendarId);
+    public async createEvent(calendarId: string, input: CreateEventArgs, user?: User): Promise<CalendarEvent> {
+        const cal = await this.getCalendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
         validateEventInput(input);
 
         this.incrementCtag(calendarId);
-        const newCtag = this.getCalendarById(calendarId)!.ctag;
+        const newCtag = (await this.getCalendarById(calendarId))!.ctag;
         const event = this.insertEvent(calendarId, input, newCtag);
 
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_CREATED, this.home.user.id);
@@ -348,8 +354,8 @@ export class Calendar {
 
     // A whole `.ics` into one calendar of this Home, bytes in, every event landing as this user's own
     // (docs/CALENDAR.md § Importing an .ics).
-    public importEvents(calendarId: string, bytes: Uint8Array): ImportCountsResult {
-        const cal = this.getCalendarById(calendarId);
+    public async importEvents(calendarId: string, bytes: Uint8Array): Promise<ImportCountsResult> {
+        const cal = await this.getCalendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
         // iCalendar is UTF-8, so another encoding is its own answer rather than "not a calendar" — the
@@ -407,7 +413,7 @@ export class Calendar {
             // One ctag bump, one broadcast and one shared-calendar notification for the file: a thousand
             // events through createEvent were a thousand of each.
             this.incrementCtag(calendarId);
-            const newCtag = this.getCalendarById(calendarId)!.ctag;
+            const newCtag = this.calendarById(calendarId)!.ctag;
 
             for (const parsedMaster of masters) {
                 const master = importable(parsedMaster);
@@ -417,7 +423,7 @@ export class Calendar {
                 }
                 // Queried per event, so the loop's own writes count: a UID repeated in the file skips like a
                 // re-import, and a UID an invitation already linked never gets a twin.
-                if (this.getEventsByUid(master.uid).length) {
+                if (this.eventsByUid(master.uid).length) {
                     result.skipped++;
                     continue;
                 }
@@ -464,7 +470,12 @@ export class Calendar {
         return result;
     }
 
-    public getEventsByUid(uid: string): CalendarEvent[] {
+    public async getEventsByUid(uid: string): Promise<CalendarEvent[]> {
+        return this.eventsByUid(uid);
+    }
+
+    // The sync twin of getEventsByUid, for importEvents' transaction callback (see calendarById).
+    private eventsByUid(uid: string): CalendarEvent[] {
         const rows = this.db.select().from(schema.events).where(eq(schema.events.uid, uid)).all();
         return rows.map(dbEventToCalendarEvent);
     }
@@ -487,13 +498,13 @@ export class Calendar {
             .set({
                 updatedAt: sql`unixepoch()`,
                 etag,
-                eventCtag: this.getCalendarById(event.calendarId)?.ctag ?? 0,
+                eventCtag: this.calendarById(event.calendarId)?.ctag ?? 0,
             })
             .where(eq(schema.events.id, id))
             .run();
     }
 
-    public getEventByUri(calendarId: string, uri: string): CalendarEventRow | null {
+    public async getEventByUri(calendarId: string, uri: string): Promise<CalendarEventRow | null> {
         const row = this.db
             .select()
             .from(schema.events)
@@ -502,7 +513,7 @@ export class Calendar {
         return row ? dbEventToCalendarEventRow(row) : null;
     }
 
-    public getRawEvents(calendarId: string): CalendarEventRow[] {
+    public async getRawEvents(calendarId: string): Promise<CalendarEventRow[]> {
         return this.db
             .select()
             .from(schema.events)
@@ -513,7 +524,7 @@ export class Calendar {
 
     // All rows (master + exceptions) of one UID in a calendar. Calendar-scoped, uses idx_events_uid_calendar
     // — avoids loading the whole collection to serve a single .ics.
-    public getRawEventsByUid(calendarId: string, uid: string): CalendarEventRow[] {
+    public async getRawEventsByUid(calendarId: string, uid: string): Promise<CalendarEventRow[]> {
         return this.db
             .select()
             .from(schema.events)
@@ -523,7 +534,7 @@ export class Calendar {
     }
 
     // All rows of the given UIDs in a calendar (multiget grouping). Calendar-scoped via idx_events_uid_calendar.
-    public getRawEventsByUids(calendarId: string, uids: string[]): CalendarEventRow[] {
+    public async getRawEventsByUids(calendarId: string, uids: string[]): Promise<CalendarEventRow[]> {
         if (!uids.length) return [];
         return this.db
             .select()
@@ -534,7 +545,7 @@ export class Calendar {
     }
 
     // A recurring master's exception rows. Uses idx_events_parent.
-    public getExceptionsForParent(parentEventId: string): CalendarEventRow[] {
+    public async getExceptionsForParent(parentEventId: string): Promise<CalendarEventRow[]> {
         return this.db
             .select()
             .from(schema.events)
@@ -546,7 +557,7 @@ export class Calendar {
     // Drop exception rows a CalDAV full-resource replace no longer carries. Deliberately
     // quiet: no tombstone (the client-visible resource is the master, whose etag changes via touch)
     // and no cancellation fan-out (removing an override RESTORES the base occurrence).
-    public deleteExceptions(calendarId: string, parentEventId: string, ids: string[]): void {
+    public async deleteExceptions(calendarId: string, parentEventId: string, ids: string[]): Promise<void> {
         if (!ids.length) return;
         this.db
             .delete(schema.events)
@@ -556,7 +567,7 @@ export class Calendar {
         this.touchEvent(parentEventId);
     }
 
-    public getRawEventsInRange(calendarId: string, from: Date, to: Date): CalendarEventRow[] {
+    public async getRawEventsInRange(calendarId: string, from: Date, to: Date): Promise<CalendarEventRow[]> {
         // Clamp the window span (see recurrence-limits) so an over-wide CalDAV time-range can't make
         // rrule materialise a giant occurrence set and block the event loop.
         const clampedTo = clampRangeEnd(from, to);
@@ -622,7 +633,7 @@ export class Calendar {
         return [...nonRecurring, ...matchingRecurring, ...exceptions];
     }
 
-    public getEventsByUris(calendarId: string, uris: string[]): CalendarEventRow[] {
+    public async getEventsByUris(calendarId: string, uris: string[]): Promise<CalendarEventRow[]> {
         if (!uris.length) return [];
         return this.db
             .select()
@@ -632,7 +643,7 @@ export class Calendar {
             .map(dbEventToCalendarEventRow);
     }
 
-    public getChangedEventsSince(calendarId: string, sinceCtag: number): CalendarEventRow[] {
+    public async getChangedEventsSince(calendarId: string, sinceCtag: number): Promise<CalendarEventRow[]> {
         return this.db
             .select()
             .from(schema.events)
@@ -641,7 +652,7 @@ export class Calendar {
             .map(dbEventToCalendarEventRow);
     }
 
-    public getDeletedEventsSince(calendarId: string, sinceCtag: number): { uri: string }[] {
+    public async getDeletedEventsSince(calendarId: string, sinceCtag: number): Promise<{ uri: string }[]> {
         return this.db
             .select({ uri: schema.eventTombstones.uri })
             .from(schema.eventTombstones)
@@ -654,13 +665,18 @@ export class Calendar {
             .all();
     }
 
-    public deleteByUri(calendarId: string, uri: string): void {
-        const event = this.getEventByUri(calendarId, uri);
+    public async deleteByUri(calendarId: string, uri: string): Promise<void> {
+        const event = await this.getEventByUri(calendarId, uri);
         if (!event) return;
-        this.deleteEvent(calendarId, event.id);
+        await this.deleteEvent(calendarId, event.id);
     }
 
-    public updateEvent(calendarId: string, id: string, input: UpdateEventArgs, user?: User): CalendarEvent {
+    public async updateEvent(
+        calendarId: string,
+        id: string,
+        input: UpdateEventArgs,
+        user?: User,
+    ): Promise<CalendarEvent> {
         const existing = this.getEventById(id);
         // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
         if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
@@ -738,7 +754,7 @@ export class Calendar {
         });
 
         this.incrementCtag(existing.calendarId);
-        const newCtag = this.getCalendarById(existing.calendarId)!.ctag;
+        const newCtag = (await this.getCalendarById(existing.calendarId))!.ctag;
 
         this.db
             .update(schema.events)
@@ -770,7 +786,7 @@ export class Calendar {
 
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_UPDATED, this.home.user.id);
         this.home.broadcast(sseEvent);
-        const cal = this.getCalendarById(existing.calendarId);
+        const cal = await this.getCalendarById(existing.calendarId);
         if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
 
         // Only the organizer fans out invitations. An attendee editing their linked copy (guarded to
@@ -791,7 +807,7 @@ export class Calendar {
         return updatedEvent;
     }
 
-    public deleteEvent(calendarId: string, id: string, user?: User): void {
+    public async deleteEvent(calendarId: string, id: string, user?: User): Promise<void> {
         const existing = this.getEventById(id);
         // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
         if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
@@ -819,7 +835,7 @@ export class Calendar {
         }
 
         this.incrementCtag(existing.calendarId);
-        const newCtag = this.getCalendarById(existing.calendarId)!.ctag;
+        const newCtag = (await this.getCalendarById(existing.calendarId))!.ctag;
 
         this.db
             .insert(schema.eventTombstones)
@@ -838,7 +854,7 @@ export class Calendar {
         }
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_DELETED, this.home.user.id);
         this.home.broadcast(sseEvent);
-        const cal = this.getCalendarById(existing.calendarId);
+        const cal = await this.getCalendarById(existing.calendarId);
         if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
     }
 
@@ -848,7 +864,7 @@ export class Calendar {
     // linked invite doesn't decline it for the organizer. Source-side CalDAV clients drop the resource
     // via a tombstone; the target surfaces it as a changed event. Cross-owner moves are impossible: both
     // calendars are resolved inside one Home.
-    public moveEvent(calendarId: string, id: string, targetCalendarId: string): CalendarEvent {
+    public async moveEvent(calendarId: string, id: string, targetCalendarId: string): Promise<CalendarEvent> {
         const existing = this.getEventById(id);
         // 404 (not 403) on calendar mismatch — mirrors updateEvent/deleteEvent so a share on one calendar
         // can't oracle event ids in another.
@@ -859,7 +875,7 @@ export class Calendar {
             const { eventCtag: _same, ...unchanged } = existing;
             return unchanged;
         }
-        const target = this.getCalendarById(targetCalendarId);
+        const target = await this.getCalendarById(targetCalendarId);
         if (!target) throw new ApiError(404, 'Calendar not found');
 
         this.db.transaction((tx) => {
@@ -903,7 +919,7 @@ export class Calendar {
                 .run();
         });
 
-        const source = this.getCalendarById(calendarId);
+        const source = await this.getCalendarById(calendarId);
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_UPDATED, this.home.user.id);
         this.home.broadcast(sseEvent);
         if (source) notifySharedCalendarUsers(this.home, source, sseEvent).catch(() => {});
@@ -914,7 +930,7 @@ export class Calendar {
         return movedEvent;
     }
 
-    public getEventsInRange(from: Date, to: Date, calendarId?: string): CalendarEventOccurrence[] {
+    public async getEventsInRange(from: Date, to: Date, calendarId?: string): Promise<CalendarEventOccurrence[]> {
         // Clamp the window span (see recurrence-limits) so an over-wide range like
         // event-range/0/253402300799 can't make rrule materialise a giant occurrence set.
         const clampedTo = clampRangeEnd(from, to);
@@ -1023,11 +1039,14 @@ export class Calendar {
 
     // --- Shared calendars ---
 
-    public getSharedCalendars(): SharedCalendar[] {
+    public async getSharedCalendars(): Promise<SharedCalendar[]> {
         return this.db.select().from(schema.sharedCalendars).all().map(dbRowToSharedCalendar);
     }
 
-    public updateSharedCalendar(id: string, input: { color?: string | null; visible?: boolean }): SharedCalendar {
+    public async updateSharedCalendar(
+        id: string,
+        input: { color?: string | null; visible?: boolean },
+    ): Promise<SharedCalendar> {
         const existing = this.db.select().from(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, id)).get();
         if (!existing) throw new ApiError(404, 'Shared calendar not found');
 
@@ -1045,7 +1064,7 @@ export class Calendar {
         return dbRowToSharedCalendar(updated);
     }
 
-    public deleteSharedCalendar(id: string): void {
+    public async deleteSharedCalendar(id: string): Promise<void> {
         this.db.delete(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, id)).run();
     }
 
@@ -1073,7 +1092,7 @@ export class Calendar {
             .run();
     }
 
-    public receiveShare(
+    public async receiveShare(
         ownerUserId: string,
         calendarId: string,
         calendarName: string,
@@ -1081,7 +1100,7 @@ export class Calendar {
         permission: CalendarShare['permission'],
         actorEmail?: string,
         actorName?: string,
-    ): void {
+    ): Promise<void> {
         const existing = this.db
             .select()
             .from(schema.sharedCalendars)
@@ -1117,7 +1136,12 @@ export class Calendar {
         });
     }
 
-    public removeShare(ownerUserId: string, calendarId: string, actorEmail?: string, actorName?: string): void {
+    public async removeShare(
+        ownerUserId: string,
+        calendarId: string,
+        actorEmail?: string,
+        actorName?: string,
+    ): Promise<void> {
         const existing = this.db
             .select()
             .from(schema.sharedCalendars)
@@ -1141,13 +1165,13 @@ export class Calendar {
         }
     }
 
-    public ensureSharedEntry(
+    public async ensureSharedEntry(
         ownerUserId: string,
         calendarId: string,
         calendarName: string,
         _calendarColor: string,
         permission: CalendarShare['permission'],
-    ): void {
+    ): Promise<void> {
         const existing = this.db
             .select()
             .from(schema.sharedCalendars)
@@ -1176,20 +1200,22 @@ export class Calendar {
         }
     }
 
-    public removeSharedEntriesForOwner(ownerUserId: string): void {
+    public async removeSharedEntriesForOwner(ownerUserId: string): Promise<void> {
         this.db.delete(schema.sharedCalendars).where(eq(schema.sharedCalendars.ownerUserId, ownerUserId)).run();
     }
 
-    public getSharedWith(
+    public async getSharedWith(
         userEmail: string,
         teamIds: string[],
-    ): {
-        calendarId: string;
-        name: string;
-        color: string;
-        permission: CalendarShare['permission'];
-    }[] {
-        const calendars = this.getCalendars();
+    ): Promise<
+        {
+            calendarId: string;
+            name: string;
+            color: string;
+            permission: CalendarShare['permission'];
+        }[]
+    > {
+        const calendars = await this.getCalendars();
         const results: {
             calendarId: string;
             name: string;
@@ -1199,7 +1225,7 @@ export class Calendar {
 
         for (const cal of calendars) {
             if (!cal.shares) continue;
-            const permission = this.checkPermission(cal.id, userEmail, teamIds);
+            const permission = await this.checkPermission(cal.id, userEmail, teamIds);
             if (permission) {
                 results.push({
                     calendarId: cal.id,
@@ -1213,12 +1239,12 @@ export class Calendar {
         return results;
     }
 
-    public checkPermission(
+    public async checkPermission(
         calendarId: string,
         userEmail: string,
         teamIds: string[],
-    ): CalendarShare['permission'] | null {
-        const cal = this.getCalendarById(calendarId);
+    ): Promise<CalendarShare['permission'] | null> {
+        const cal = await this.getCalendarById(calendarId);
         if (!cal?.shares) return null;
 
         let bestPermission: CalendarShare['permission'] | null = null;
@@ -1254,11 +1280,11 @@ export class Calendar {
         return row ? dbEventToCalendarEvent(row) : null;
     }
 
-    public receiveInvitation(payload: ReceiveInvitationPayload): string {
+    public async receiveInvitation(payload: ReceiveInvitationPayload): Promise<string> {
         const existing = this.findLinkedEvent(payload.organizerEventId, payload.organizerUserId);
         if (existing) return existing.id;
 
-        const defaultCal = this.getCalendars().find((c) => c.isDefault);
+        const defaultCal = (await this.getCalendars()).find((c) => c.isDefault);
         if (!defaultCal) throw new ApiError(500, 'No default calendar');
 
         const id = randomUUID();
@@ -1333,7 +1359,11 @@ export class Calendar {
         return id;
     }
 
-    public receiveInvitationUpdate(orgEventId: string, orgUserId: string, payload: InvitationUpdatePayload): void {
+    public async receiveInvitationUpdate(
+        orgEventId: string,
+        orgUserId: string,
+        payload: InvitationUpdatePayload,
+    ): Promise<void> {
         const linked = this.findLinkedEvent(orgEventId, orgUserId);
         if (!linked) return;
 
@@ -1401,11 +1431,11 @@ export class Calendar {
     // Inbound iMIP: an external organizer moved ONE occurrence of a recurring invite (a lone VEVENT
     // with a RECURRENCE-ID). Land it as an exception on the linked series — feeding it to
     // receiveInvitationUpdate would rewrite the master and collapse the whole series.
-    public receiveInvitationException(
+    public async receiveInvitationException(
         orgEventId: string,
         orgUserId: string,
         payload: InvitationExceptionPayload,
-    ): void {
+    ): Promise<void> {
         const linked = this.findLinkedEvent(orgEventId, orgUserId);
         if (!linked) return;
 
@@ -1464,7 +1494,7 @@ export class Calendar {
             this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, orgUserId));
         } else {
             // createEvent touches the master, bumps the ctag and broadcasts on its own.
-            this.createEvent(linked.calendarId, {
+            await this.createEvent(linked.calendarId, {
                 title: payload.title,
                 description: payload.description,
                 location: payload.location,
@@ -1500,13 +1530,13 @@ export class Calendar {
 
     // Inbound iMIP: an external organizer canceled ONE occurrence of a recurring invite. Cancel just
     // that instance — removeInvitation would delete the attendee's entire linked series.
-    public cancelInvitationOccurrence(
+    public async cancelInvitationOccurrence(
         orgEventId: string,
         orgUserId: string,
         recurrenceDate: string,
         recurrenceInstant: Date | null | undefined,
         sequence: number,
-    ): void {
+    ): Promise<void> {
         const linked = this.findLinkedEvent(orgEventId, orgUserId);
         if (!linked) return;
         const key = this.recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, linked.timezone);
@@ -1515,11 +1545,11 @@ export class Calendar {
         // may cancel without bumping SEQUENCE, and re-canceling a canceled row is idempotent.
         const existing = this.getException(linked.id, key);
         if (existing && sequence < existing.sequence) return;
-        this.removeOccurrence(linked.id, key, sequence);
+        await this.removeOccurrence(linked.id, key, sequence);
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, orgUserId));
     }
 
-    public removeInvitation(orgEventId: string, orgUserId: string): void {
+    public async removeInvitation(orgEventId: string, orgUserId: string): Promise<void> {
         const linked = this.findLinkedEvent(orgEventId, orgUserId);
         if (!linked) return;
 
@@ -1536,7 +1566,7 @@ export class Calendar {
         });
     }
 
-    public updateAttendeeStatus(eventId: string, email: string, status: Attendee['status']): void {
+    public async updateAttendeeStatus(eventId: string, email: string, status: Attendee['status']): Promise<void> {
         this.db.transaction((tx) => {
             const row = tx.select().from(schema.events).where(eq(schema.events.id, eventId)).get();
             if (!row) return;
@@ -1571,7 +1601,7 @@ export class Calendar {
             .run();
     }
 
-    public getEventsWithAttendee(email: string): CalendarEvent[] {
+    public async getEventsWithAttendee(email: string): Promise<CalendarEvent[]> {
         const rows = this.db.select().from(schema.events).where(isNull(schema.events.organizerEventId)).all();
 
         return rows
@@ -1583,14 +1613,14 @@ export class Calendar {
     // their own removed occurrence un-cancels their linked copy (default), while organizer-side
     // receivers (iMIP REPLY, relay RSVP) may only move PARTSTAT — never resurrect an occurrence the
     // organizer deleted (RFC 5546).
-    public rsvpForOccurrence(
+    public async rsvpForOccurrence(
         eventId: string,
         email: string,
         status: Attendee['status'],
         recurrenceDate: string,
         recurrenceInstant?: Date | null,
         restoreCancelled = true,
-    ): void {
+    ): Promise<void> {
         const parent = this.getEventById(eventId);
         if (!parent) throw new ApiError(404, 'Event not found');
 
@@ -1642,7 +1672,7 @@ export class Calendar {
             );
             const { startTime, endTime } = computeOccurrenceTimes(parent, key);
 
-            this.createEvent(parent.calendarId, {
+            await this.createEvent(parent.calendarId, {
                 title: parent.title,
                 description: parent.description,
                 location: parent.location,
@@ -1661,7 +1691,7 @@ export class Calendar {
 
     // `sequence` is set on the iMIP CANCEL path so the exception records the CANCEL's SEQUENCE and
     // the replay guards can reject stale REQUEST/CANCEL redeliveries against it.
-    private removeOccurrence(eventId: string, recurrenceDate: string, sequence?: number): void {
+    private async removeOccurrence(eventId: string, recurrenceDate: string, sequence?: number): Promise<void> {
         const parent = this.getEventById(eventId);
         if (!parent) throw new ApiError(404, 'Event not found');
 
@@ -1681,7 +1711,7 @@ export class Calendar {
             this.touchEvent(eventId); // Update master etag so CalDAV clients detect the change
         } else {
             const { startTime, endTime } = computeOccurrenceTimes(parent, recurrenceDate);
-            this.createEvent(parent.calendarId, {
+            await this.createEvent(parent.calendarId, {
                 title: parent.title,
                 startTime,
                 endTime,
@@ -1696,7 +1726,7 @@ export class Calendar {
         }
     }
 
-    public rsvp(
+    public async rsvp(
         eventId: string,
         user: User,
         input: {
@@ -1705,7 +1735,7 @@ export class Calendar {
             recurrenceDate?: string;
             remove?: boolean;
         },
-    ): void {
+    ): Promise<void> {
         const event = this.getEventById(eventId);
         if (!event) throw new ApiError(404, 'Event not found');
         if (!event.data?.organizer || !isInvitationFromOthers(event, this.home.user.email)) {
@@ -1727,7 +1757,7 @@ export class Calendar {
 
         if (scope === 'this' && input.recurrenceDate) {
             if (input.remove) {
-                this.removeOccurrence(eventId, input.recurrenceDate);
+                await this.removeOccurrence(eventId, input.recurrenceDate);
                 if (isExternalOrganizer) {
                     sendRsvpReply('declined', input.recurrenceDate);
                 } else {
@@ -1740,7 +1770,7 @@ export class Calendar {
                     ).catch(console.error);
                 }
             } else {
-                this.rsvpForOccurrence(eventId, user.email, input.status, input.recurrenceDate);
+                await this.rsvpForOccurrence(eventId, user.email, input.status, input.recurrenceDate);
                 if (isExternalOrganizer) {
                     sendRsvpReply(input.status, input.recurrenceDate);
                 } else {
@@ -1761,9 +1791,9 @@ export class Calendar {
                 propagateRsvp(organizerUserId, organizerEventId, user.email, 'declined').catch(console.error);
             }
         } else if (input.remove) {
-            this.deleteEvent(event.calendarId, eventId, user);
+            await this.deleteEvent(event.calendarId, eventId, user);
         } else {
-            this.updateAttendeeStatus(eventId, user.email, input.status);
+            await this.updateAttendeeStatus(eventId, user.email, input.status);
             if (isExternalOrganizer) {
                 sendRsvpReply(input.status);
             } else {
