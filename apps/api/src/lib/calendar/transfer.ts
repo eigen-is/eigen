@@ -108,9 +108,8 @@ export async function importEvents(
             const uid = uidOf(vevent);
             const group = series.get(uid) ?? { master: null, overrides: [] };
             series.set(uid, group);
-            if (vevent.getFirstProperty('recurrence-id')) group.overrides.push(vevent);
-            else if (group.master)
-                group.overrides.push(vevent); // two masters: the seam refuses the series
+            // A second master of one UID is a malformed series, which the put seam refuses as one.
+            if (group.master || vevent.getFirstProperty('recurrence-id')) group.overrides.push(vevent);
             else group.master = vevent;
         }
     }

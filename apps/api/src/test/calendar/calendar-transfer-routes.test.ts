@@ -562,6 +562,35 @@ describe('Calendar transfer routes', () => {
         expect(findOrFail(series, (e) => e.occurrenceDate === '2026-04-17').title).toBe('Split series moved');
     });
 
+    // One resource is one series, so a zone two series share has to be copied into both files — a
+    // reference the second write moved would leave the first one's wall times floating.
+    test('two series naming one VTIMEZONE each carry their own copy of it', async () => {
+        const stamp = randomUUID();
+        const uids = [`zone-a-${stamp}@other`, `zone-b-${stamp}@other`];
+        const timed = (uid: string, summary: string, day: string) => [
+            'BEGIN:VEVENT',
+            `UID:${uid}`,
+            `SUMMARY:${summary}`,
+            `DTSTART;TZID=America/New_York:2026041${day}T090000`,
+            `DTEND;TZID=America/New_York:2026041${day}T100000`,
+            'END:VEVENT',
+        ];
+        const file = vcal(VTZ_NY, timed(uids[0], 'Zone A', '9'), timed(uids[1], 'Zone B', '9'));
+
+        expect(await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file))).toEqual({
+            imported: 2,
+            skipped: 0,
+            failed: 0,
+        });
+
+        for (const uid of uids) {
+            const stored = findOrFail(await april(), (e) => e.uid === uid);
+            const served = await davGet(`/dav/calendars/${alice.id}/${calendarId}/${stored.uri}`);
+            expect(served).toContain('TZID:America/New_York');
+            expect(new Date(stored.startTime).toISOString()).toBe('2026-04-19T13:00:00.000Z');
+        }
+    });
+
     test('a VEVENT naming no UID is imported under a minted one', async () => {
         const stamp = randomUUID();
         const file = vcal([
