@@ -174,9 +174,7 @@ export function composeRsvpReply(
     };
 }
 
-export function extractCalendarAttachment(mail: {
-    attachments: Attachment[];
-}): { ics: string; method?: ImipMethod } | null {
+function extractCalendarAttachment(mail: { attachments: Attachment[] }): { ics: string; method?: ImipMethod } | null {
     const attachment = mail.attachments.find(isCalendarPart);
     if (!attachment) return null;
 

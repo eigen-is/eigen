@@ -24,7 +24,7 @@ export const EIGEN = {
     importedOrganizer: 'x-eigen-imported-organizer',
 } as const;
 
-export type EigenName = (typeof EIGEN)[keyof typeof EIGEN];
+type EigenName = (typeof EIGEN)[keyof typeof EIGEN];
 
 export type ExclusionStamp = { id: string; sequence: number; dtstamp: Date | null };
 
@@ -120,7 +120,7 @@ export function sequenceOf(vevent: ICAL.Component): number {
     return Number.isFinite(raw) ? raw : 0;
 }
 
-export function projectAttendees(vevent: ICAL.Component): Attendee[] {
+function projectAttendees(vevent: ICAL.Component): Attendee[] {
     const statusMap: Record<string, Attendee['status']> = {
         'NEEDS-ACTION': 'pending',
         ACCEPTED: 'accepted',
@@ -173,7 +173,7 @@ export function utcStampString(instant: Date): string {
     return `${instant.toISOString().replace(/[-:]/g, '').slice(0, 15)}Z`;
 }
 
-export function parseUtcStamp(raw: unknown): Date | null {
+function parseUtcStamp(raw: unknown): Date | null {
     const match = typeof raw === 'string' ? UTC_STAMP.exec(raw) : null;
     if (!match) return null;
     const [, year, month, day, hour, minute, second] = match;
@@ -218,7 +218,7 @@ export type ParsedEvent = {
 };
 
 // A row of a STORED resource: what any reader gets, plus the facts only a file Eigen wrote can state.
-export type StoredEvent = ParsedEvent & {
+type StoredEvent = ParsedEvent & {
     eventId: string | null;
     createByUserId: string | null;
     importedOrganizer: string | null;

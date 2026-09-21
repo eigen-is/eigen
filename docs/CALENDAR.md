@@ -255,7 +255,6 @@ External organizers have no Eigen user id, so `organizerUserId` is `external_{or
 | `composeUpdateEmail()` | `OutboundMail` for `METHOD:REQUEST` (update) |
 | `composeCancelEmail()` | `OutboundMail` for `METHOD:CANCEL` |
 | `composeRsvpReply()` | `OutboundMail` for `METHOD:REPLY` |
-| `extractCalendarAttachment()` | find the `text/calendar` part of a parsed mail |
 | `summarizeCalendarInvite()` | read-time `CalendarInvite` summary for the message payload |
 | `processInboundImip()` | dispatch inbound iMIP methods to calendar operations |
 

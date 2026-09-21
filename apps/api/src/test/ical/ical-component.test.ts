@@ -9,7 +9,6 @@ import type ICAL from 'ical.js';
 import {
     addExclusion,
     buildResource,
-    eventsToIcs,
     parseIcs,
     parseResource,
     patchEvent,
@@ -803,7 +802,9 @@ describe('timezone fidelity', () => {
 
     test('a row ending in the second pass through the repeated hour round-trips exactly', () => {
         const [back] = parseIcs(
-            eventsToIcs([single(new Date('2026-10-25T00:30:00Z'), new Date('2026-10-25T01:30:00Z'))]),
+            serializeResource(
+                buildResource([single(new Date('2026-10-25T00:30:00Z'), new Date('2026-10-25T01:30:00Z'))]),
+            ),
         ).events;
 
         expect(back.startTime.toISOString()).toBe('2026-10-25T00:30:00.000Z');
@@ -814,7 +815,9 @@ describe('timezone fidelity', () => {
         const [first] = parseIcs(vcal(VTZ_AMS, zoned('20260329T023000', '20260329T033000'))).events;
         expect(Number.isNaN(first.startTime.getTime())).toBe(false);
 
-        const rebuilt = eventsToIcs([single(first.startTime, new Date(first.startTime.getTime() + 3600_000))]);
+        const rebuilt = serializeResource(
+            buildResource([single(first.startTime, new Date(first.startTime.getTime() + 3600_000))]),
+        );
         expect(startOf(rebuilt)).toBe(first.startTime.toISOString());
     });
 
@@ -1051,7 +1054,7 @@ describe('stripping', () => {
     });
 
     test('CalDAV GET keeps the stamps that only the owner clients see', () => {
-        const served = parseResource(eventsToIcs([MASTER, OVERRIDE, EXCLUSION]));
+        const served = parseResource(serializeResource(buildResource([MASTER, OVERRIDE, EXCLUSION])));
         expect(masterOf(served).getFirstPropertyValue('x-eigen-event-id')).toBe('evt-master');
     });
 });

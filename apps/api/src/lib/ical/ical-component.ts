@@ -37,7 +37,7 @@ export type WriteContext = { now: Date; actorIsOrganizer: boolean; dtstamp?: Dat
 // `sequence` is the one field no HTTP save submits: the invitation receivers carry the organizer's
 // revision number, and it wins over the bump rule.
 export type EventPatch = Omit<UpdateEventInput, 'calendarId' | 'id'> & { sequence?: number };
-export type TrustedStamps = {
+type TrustedStamps = {
     createByUserId?: string | null;
     organizerEventId?: string | null;
     organizerUserId?: string | null;
@@ -465,10 +465,6 @@ export function buildResource(events: CalendarEvent[]): ICAL.Component {
 
 export function serializeResource(resource: ICAL.Component): string {
     return `${resource.toString()}\r\n`;
-}
-
-export function eventsToIcs(events: CalendarEvent[]): string {
-    return serializeResource(buildResource(events));
 }
 
 // What a scheduling message asks of the VEVENT the calendar stores: the organizer rides along as an
