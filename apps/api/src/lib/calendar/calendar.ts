@@ -112,6 +112,28 @@ function importable(event: ParsedEvent): ParsedEvent {
     return { ...event, data: reminders?.length ? { reminders } : null };
 }
 
+// The row an imported VEVENT lands as, master and override alike: what the file said, written by this
+// user. Never the file's UID as the resource name — it is the author's string, and two files that share
+// one collide on the (calendarId, uri) unique index.
+function importArgs(event: ParsedEvent, userId: string): CreateEventArgs {
+    return {
+        title: event.title,
+        description: event.description,
+        location: event.location,
+        startTime: event.startTime,
+        endTime: event.endTime,
+        allDay: event.allDay,
+        rrule: event.rrule,
+        timezone: event.timezone,
+        status: event.status,
+        sequence: event.sequence,
+        data: event.data,
+        uid: event.uid,
+        createByUserId: userId,
+        uri: `${randomUUID()}.ics`,
+    };
+}
+
 export class Calendar {
     private managedDb!: ManagedDatabase<typeof schema>;
     private db!: BunSQLiteDatabase<typeof schema>;
@@ -394,24 +416,7 @@ export class Calendar {
                     continue;
                 }
 
-                const args: CreateEventArgs = {
-                    title: master.title,
-                    description: master.description,
-                    location: master.location,
-                    startTime: master.startTime,
-                    endTime: master.endTime,
-                    allDay: master.allDay,
-                    rrule: master.rrule,
-                    timezone: master.timezone,
-                    status: master.status,
-                    sequence: master.sequence,
-                    data: master.data,
-                    uid: master.uid,
-                    createByUserId: this.home.user.id,
-                    // Never the file's UID: it is the author's string, and two files that share one collide
-                    // on the (calendarId, uri) unique index.
-                    uri: `${randomUUID()}.ics`,
-                };
+                const args = importArgs(master, this.home.user.id);
 
                 try {
                     // A savepoint per series, so an override the calendar refuses takes its master's row
@@ -424,23 +429,15 @@ export class Calendar {
                         for (const parsedOverride of overridesByUid.get(master.uid)?.values() ?? []) {
                             const override = importable(parsedOverride);
                             const overrideArgs: CreateEventArgs = {
-                                title: override.title,
-                                description: override.description,
-                                location: override.location,
-                                startTime: override.startTime,
-                                endTime: override.endTime,
-                                allDay: override.allDay,
+                                ...importArgs(override, this.home.user.id),
+                                // One occurrence of its master's series, never a series of its own.
+                                rrule: null,
                                 // The master's zone when the override names none, or it serializes in Z
                                 // form and its etag stops hashing like the create/update paths (audit #24).
                                 timezone: override.timezone ?? event.timezone,
-                                status: override.status,
-                                sequence: override.sequence,
-                                data: override.data,
                                 parentEventId: event.id,
                                 recurrenceDate: override.recurrenceDate,
                                 uid: event.uid,
-                                createByUserId: this.home.user.id,
-                                uri: `${randomUUID()}.ics`,
                             };
                             validateEventInput(overrideArgs);
                             this.insertEvent(calendarId, overrideArgs, newCtag);
