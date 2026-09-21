@@ -193,10 +193,10 @@ describe('CalDAV round-trip fidelity', () => {
         });
     });
 
-    // The edit dialog carries no zone control, yet it posts the whole form back: the title plus the
-    // start, the end, the all-day flag it rendered and the zone it labelled them with. A save that
-    // states the same instants is the title-only change it looks like, whatever form the client chose
-    // to write the time in — so no time property, no VTIMEZONE and no SEQUENCE moves.
+    // An edit form posts the whole event back: the title plus the start, the end, the all-day flag it
+    // rendered and the zone it labelled them with — the browser's, for an event the file wrote in UTC,
+    // floating or a zone of its own. A save that names the same instants is the title-only change it
+    // looks like, so no time property, no VTIMEZONE and no SEQUENCE moves.
     describe('a web save that states the same WHEN', () => {
         const VTZ_CUSTOM = [
             'BEGIN:VTIMEZONE',
@@ -234,8 +234,7 @@ describe('CalDAV round-trip fidelity', () => {
             return findOrFail(await home.calendar.getRawEvents(calendarId), (e) => e.uid === uid);
         }
 
-        // Exactly the payload the dialog posts: the title beside the times it rendered and the
-        // browser's zone as their label.
+        // A form save: the title beside the times it rendered, labelled with the browser's zone.
         async function dialogSave(row: CalendarEvent, title: string, shiftMs = 0): Promise<CalendarEvent> {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
