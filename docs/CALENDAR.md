@@ -277,7 +277,7 @@ External organizers have no Eigen user id, so `organizerUserId` is `external_{or
 - **Sub-daily rules are rejected**: `HOURLY`/`MINUTELY`/`SECONDLY` are refused at the API write boundary with a 400 and silently stripped at the untrusted-ICS boundary, where a hard error would be the wrong answer. A `SECONDLY` rule starting a year before its window measured ~74 s. No mainstream client emits sub-daily recurrence.
 - **A recurring dtstart must fall in 1900–2200.** Same two seams, same reasoning; the worst case inside the range is ~110k steps.
 - **Materialized occurrences cap** at `MAX_OCCURRENCES` (10 000) per expansion.
-- **Query windows are clamped**, not rejected, to a 5-year span.
+- **Query windows are clamped**, not rejected, to a 5-year span — the range reads' own bound, in `calendar/occurrences.ts`.
 
 A rule the index stripped stays in the file, and the resource is flagged `hasUnindexedRecurrence` so a time-range REPORT answers with it for every window.
 

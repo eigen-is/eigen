@@ -1,7 +1,6 @@
 import { occurrenceDateToString } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import { and, eq, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
-import { clampRangeEnd } from '../ical/recurrence-limits';
 import { storedRecurrenceKey } from '../ical/wall-clock';
 import type { Calendar } from './calendar';
 import { toEvent } from './mappers';
@@ -12,13 +11,23 @@ import * as schema from './schema';
 // projected from. An override answers from its own times (RFC 4791 § 9.9), so moving one carries it out of
 // the window it was expanded in and into the one it now sits in.
 
+// Widest window the range reads honor. The calendar FE only ever asks for a month/week and CalDAV
+// initial-sync windows are far narrower, so 5 years is generous headroom while bounding rrule's
+// iteration and stopping the `event-range/0/253402300799` (year-9999) span from the audit. Clamp (not
+// reject) so a legit-but-wide CalDAV sync still gets bounded data instead of an error.
+const MAX_RANGE_SPAN_MS = 5 * 366 * 24 * 60 * 60 * 1000;
+
+function clampRangeEnd(from: Date, to: Date): Date {
+    const maxEnd = from.getTime() + MAX_RANGE_SPAN_MS;
+    return to.getTime() > maxEnd ? new Date(maxEnd) : to;
+}
+
 export async function getEventsInRange(
     calendar: Calendar,
     from: Date,
     to: Date,
     calendarId?: string,
 ): Promise<CalendarEventOccurrence[]> {
-    // Clamp the span (see recurrence-limits) so an over-wide range cannot materialise a giant occurrence set.
     const clampedTo = clampRangeEnd(from, to);
     await calendar.gate.ensureDrained();
 
