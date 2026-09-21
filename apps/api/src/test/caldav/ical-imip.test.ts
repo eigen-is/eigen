@@ -1474,8 +1474,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
         expect(exception!.recurrenceDate).toBe('2026-04-08'); // pre-fix: '2026-04-09' (UTC date)
     });
 
-    // receiveInvitationException mirrors receiveInvitationUpdate's RFC 5546 replay guard —
-    // a stale/replayed occurrence REQUEST must not overwrite a newer exception.
+    // An occurrence REQUEST is ordered by the same rule the series takes: a stale one never wins.
     test('a replayed single-occurrence REQUEST with a stale SEQUENCE does not overwrite a newer exception', async () => {
         const UID = 'audit-imip-replay@ext';
         const home = await getHome(ctx.alice.user.id);

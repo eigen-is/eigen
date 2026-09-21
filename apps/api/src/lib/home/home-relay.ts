@@ -46,7 +46,6 @@ export type HomeMessage =
           ownerId: string;
           calendarId: string;
           name: string;
-          color: string;
           permission: CalendarShare['permission'] | null;
           actorEmail?: string;
           actorName?: string;
@@ -82,7 +81,6 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
                     message.ownerId,
                     message.calendarId,
                     message.name,
-                    message.color,
                     message.permission,
                     message.actorEmail,
                     message.actorName,

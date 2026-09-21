@@ -58,9 +58,6 @@ export function parseGateKey(key: string): { calendarId: string; uri: string } {
 // ctag advances on each change, syncGen rotates on an index rebuild so stale sync tokens are refused.
 export type CalendarCollection = CalendarItem & { syncGen: number };
 
-// The columns a (re)index computes for a resource; resourceCtag is stamped inside the write transaction.
-export type ResourceRowInput = Omit<typeof schema.resources.$inferInsert, 'resourceCtag'>;
-
 // The columns a (re)index computes for one projected VEVENT or exclusion.
 export type EventRowInput = Omit<typeof schema.events.$inferInsert, 'createdAt' | 'updatedAt'> & {
     createdAt: Date;

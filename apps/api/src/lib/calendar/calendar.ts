@@ -1,6 +1,3 @@
-// Import from the calendar-utils module directly (NOT the @workspace/lib/calendar barrel,
-// which re-exports React-query hooks) so the API stays free of React in its module graph.
-
 import { randomUUID } from 'node:crypto';
 import { isInvitationFromOthers, occurrenceDateToString, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
@@ -94,8 +91,7 @@ type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>
 // An event row and the file it was projected from — what every read of a stored event answers with.
 type JoinedEvent = { events: typeof schema.events.$inferSelect; resources: typeof schema.resources.$inferSelect };
 
-// What the transport vouches for about an inbound REQUEST — the relay envelope, or `external_<address>`
-// for a DKIM-aligned iMIP sender. Never anything the body spells.
+// What the transport vouches for about an inbound REQUEST — never anything the body spells.
 type InvitationLink = {
     organizerEmail: string;
     organizerEventId: string;
@@ -109,8 +105,7 @@ type InboundRequestOutcome =
     | { kind: 'updated'; event: CalendarEvent; title: string; startTime: Date }
     | { kind: 'created'; event: CalendarEvent; payload: ReceiveInvitationPayload };
 
-// iMIP and the relay are fire-and-forget: a receiver has nobody to answer a 413 to, so a message the store
-// refuses for its size is dropped where an interactive write raises.
+// A fire-and-forget receiver has nobody to answer a 413 to, so an oversized message is dropped, not raised.
 async function unlessTooLarge<T>(uid: string, apply: () => Promise<T>, dropped: T): Promise<T> {
     try {
         return await apply();
@@ -206,21 +201,20 @@ function inboundInvitationPayload(parsed: ParsedEvent, link: InvitationLink): Re
 
 export class Calendar {
     private managedDb!: ManagedDatabase<typeof schema>;
-    db!: BunSQLiteDatabase<typeof schema>; // internal — used by calendar/*.ts
-    home: Home; // internal — used by calendar/*.ts
-    storage: LocalFilesystem; // internal — used by calendar/*.ts
+    db!: BunSQLiteDatabase<typeof schema>;
+    home: Home;
+    storage: LocalFilesystem;
 
     // Process death takes the gate's dirty set with it, which is what `pending_writes` is for.
-    gate = new WriteGate((keys, settled) => this.drainDirty(keys, settled)); // internal — used by calendar/*.ts
+    gate = new WriteGate((keys, settled) => this.drainDirty(keys, settled));
 
     // Bytes on disk under `calendars/`, unindexable files included; size() answers from here and never drains.
-    eventsBytes = 0; // internal — used by calendar/*.ts
+    eventsBytes = 0;
 
     // Bulk writes in flight; while any runs, per-resource events are held and the last one out closes them.
     private readonly batch = new BroadcastBatch(() => this.flushHeldAnnouncements());
 
-    // Which calendars the held announcements were for, so the one event the batch sends reaches everybody
-    // a per-resource one would have.
+    // Which calendars the held announcements were for, so the batched event reaches everybody they would.
     private readonly heldCalendars = new Set<string>();
 
     // Only the reconcile/drain machinery bumps this; the mutation paths parse for their own merges.
@@ -237,8 +231,7 @@ export class Calendar {
 
         await this.storage.mkdir(PATHS.CALENDAR.CALENDARS);
 
-        // Bring the index in line with the files first — it guarantees the calendar rows the ctag bumps
-        // need — then finish what a crash left half-applied, and only then seed.
+        // The index first: the ctag bumps need its calendar rows. Then finish what a crash left half-applied.
         await reconcileIndex(this);
         await this.gate.recoverPending(
             this.db
@@ -257,8 +250,7 @@ export class Calendar {
         }
     }
 
-    // Answered purely from the in-memory counter, and it must NEVER drain or lock: a quota check reaches
-    // it from inside the write gate, where a drain is a no-op anyway.
+    // Never drains and never locks: a quota check reaches it from inside the write gate.
     public async size(): Promise<number> {
         return this.eventsBytes;
     }
@@ -271,12 +263,10 @@ export class Calendar {
 
     // --- Index seams used by calendar/*.ts ---
 
-    // internal — used by calendar/*.ts
     calendarRow(id: string): typeof schema.calendars.$inferSelect | null {
         return this.db.select().from(schema.calendars).where(eq(schema.calendars.id, id)).get() ?? null;
     }
 
-    // internal — used by calendar/*.ts
     bumpCtag(tx: Tx, calendarId: string): number {
         tx.update(schema.calendars)
             .set({ ctag: sql`${schema.calendars.ctag} + 1`, updatedAt: sql`unixepoch()` })
@@ -290,7 +280,6 @@ export class Calendar {
     }
 
     // Keyed by uri but carrying the folded uriKey, so a re-created case-variant resource still clears it.
-    // internal — used by calendar/*.ts
     tombstone(tx: Tx, calendarId: string, uri: string, uriKey: string, ctag: number): void {
         tx.insert(schema.resourceTombstones)
             .values({ calendarId, uri, uriKey, deletedAtCtag: ctag })
@@ -302,7 +291,6 @@ export class Calendar {
     }
 
     // Durable write intent: while the row exists, the index owes that file a commit.
-    // internal — used by calendar/*.ts
     recordPendingWrite(calendarId: string, uri: string): void {
         this.db.insert(schema.pendingWrites).values({ calendarId, uri }).onConflictDoNothing().run();
     }
@@ -314,21 +302,17 @@ export class Calendar {
             .run();
     }
 
-    // internal — used by calendar/*.ts
     parseResourceFile(bytes: Uint8Array): ICAL.Component {
         this.parses++;
         return parseResource(new TextDecoder().decode(bytes));
     }
 
-    // A clean stat-only reconcile must re-parse nothing: the tests assert this stays flat across a second
-    // init over unchanged files.
+    // A clean stat-only reconcile must re-parse nothing, which the restart suite asserts.
     public get resourceParseCount(): number {
         return this.parses;
     }
 
-    // The single index-write seam: ctag bump, resource upsert, every event row of the file replaced,
-    // tombstone clear and pending-write clear, all in one transaction.
-    // internal — used by calendar/*.ts
+    // The single index-write seam: the ctag, the resource row, its event rows, the tombstone, all in one transaction.
     commitResource(commit: ResourceCommit): void {
         const uriKey = uriKeyOf(commit.uri);
         this.db.transaction((tx) => {
@@ -358,8 +342,7 @@ export class Calendar {
                     ),
                 )
                 .run();
-            // The write intent recorded before the file rename is settled in the very transaction that
-            // settles the pair — a crash anywhere earlier leaves the row for init to drain.
+            // The write intent settles in the very transaction that settles the pair; a crash earlier leaves it for init.
             tx.delete(schema.pendingWrites)
                 .where(
                     and(
@@ -371,9 +354,7 @@ export class Calendar {
         });
     }
 
-    // Callers hold the gate and have already run their own guards. No pending row: a delete makes the
-    // name vanish, which the stat diff always sees.
-    // internal — used by calendar/*.ts
+    // Caller holds the gate. No pending row: a delete makes the name vanish, which the stat diff always sees.
     async purgeResource(row: typeof schema.resources.$inferSelect): Promise<void> {
         await this.storage.unlinkDurable(resourcePath(row.calendarId, row.uri));
         try {
@@ -401,11 +382,11 @@ export class Calendar {
             const bytes = this.calendarRow(calendarId)
                 ? await readResourceFile(this.storage, resourcePath(calendarId, existing?.uri ?? uri))
                 : null;
-            // A file the row already describes settles without a commit: a lock-free read that raced a
-            // write marks a pair that is whole, and a commit would bump a ctag for nothing.
-            if (bytes && (await this.indexIfChanged(calendarId, existing?.uri ?? uri, bytes, existing))) {
-                // committed
-            } else if (!bytes && existing) {
+            // A file the row already describes settles without a commit: a lock-free read that raced a write
+            // marks a pair that is whole, and a commit would bump a ctag for nothing.
+            if (bytes) {
+                await this.indexIfChanged(calendarId, existing?.uri ?? uri, bytes, existing);
+            } else if (existing) {
                 this.db.transaction((tx) => {
                     const ctag = this.bumpCtag(tx, calendarId);
                     tx.delete(schema.resources).where(eq(schema.resources.id, existing.id)).run();
@@ -457,15 +438,13 @@ export class Calendar {
         return this.calendarById(id);
     }
 
-    // The sync row read behind getCalendarById, for the paths that may not await: the private sync
-    // helpers and the bodies of `db.transaction()` callbacks, which commit at the first await.
+    // The sync read behind getCalendarById, for the paths that may not await — a transaction commits at the first one.
     private calendarById(id: string): CalendarItem | null {
         const row = this.calendarRow(id);
         return row ? dbCalendarToCalendarItem(row) : null;
     }
 
-    // The DAV view of a collection: its ctag plus the generation a rebuild rotates, which together make
-    // the sync token. Drained, because a torn pair would answer with a ctag its files do not carry.
+    // The ctag and the generation a rebuild rotates make the sync token; a torn pair would name one no file carries.
     public async getCollections(): Promise<CalendarCollection[]> {
         await this.gate.ensureDrained();
         return this.db
@@ -481,8 +460,7 @@ export class Calendar {
         return row ? { ...dbCalendarToCalendarItem(row), syncGen: row.syncGen } : null;
     }
 
-    // A calendar id is a directory name, so it is unique case-insensitively: two rows over one directory
-    // would both reconcile the same files and the second pass would rewrite every one of them.
+    // A calendar id is a directory name, so it is unique case-insensitively: two rows would reconcile one directory.
     public async createCalendar(input: {
         name: string;
         color: string;
@@ -492,13 +470,11 @@ export class Calendar {
         const id = input.id ?? randomUUID();
         if (sanitizeCalendarId(id) !== id) throw new ApiError(400, 'Invalid calendar name');
 
-        // Inside the gate, so a create and a delete of the same id serialize: the staging this create
-        // removes is the staging that delete made.
+        // Inside the gate, so a create and a delete of the same id serialize over its staging directory.
         const created = await this.gate.run(async () => {
             if (this.calendarIdTaken(id)) throw new ApiError(409, 'Calendar already exists');
 
-            // An id is free only because the delete that held it committed, so its leftover staging is
-            // deleted data: dropping it here is what stops a later sweep rolling it into this calendar.
+            // A free id means the delete that held it committed, so its leftover staging is deleted data.
             for (const staged of await stagedDeletesOf(this, id)) await this.storage.removeDir(staged);
 
             // The directory first: an empty calendar survives a lost database only if it is on disk.
@@ -521,7 +497,6 @@ export class Calendar {
         return created;
     }
 
-    // internal — used by calendar/*.ts
     calendarIdTaken(id: string): boolean {
         const folded = id.toLowerCase();
         return this.db
@@ -571,8 +546,7 @@ export class Calendar {
         if (!existing) throw new ApiError(404, 'Calendar not found');
         if (existing.isDefault) throw new ApiError(400, 'Cannot delete default calendar');
 
-        // Outside the gate: propagateCalendarShare relays into other Homes, and two Homes each deleting a
-        // calendar shared with the other would be a two-lock cycle.
+        // Outside the gate: two Homes each deleting a calendar shared with the other would be a two-lock cycle.
         if (existing.shares?.length) {
             await propagateCalendarShare(this.home, { ...existing, shares: [] }, existing.shares);
         }
@@ -582,14 +556,12 @@ export class Calendar {
             // What the directory holds, not what the index indexed: the counter carries every file on disk.
             const scan = await statCalendarDir(this.storage, id);
             const bytes = [...scan.files.values()].reduce((sum, file) => sum + file.size, 0);
-            // Staged first, committed second: the init sweep decides by the row, so a crash in between
-            // rolls the directory back rather than losing every event of a delete nobody acknowledged.
+            // Staged first, committed second: the init sweep decides by the row, so a crash in between rolls back.
             await this.storage.moveDurable(calendarDir(id), staged);
             try {
                 this.db.delete(schema.calendars).where(eq(schema.calendars.id, id)).run();
             } catch (e) {
-                // A live process rolls its own rename back: leaving it for the sweep would let any write in
-                // between recreate the directory, and the delete would then read as one that committed.
+                // A live process rolls its own rename back, or a write in between would recreate the directory.
                 await this.storage.moveDurable(staged, calendarDir(id));
                 throw e;
             }
@@ -654,8 +626,7 @@ export class Calendar {
         return result;
     }
 
-    // The collection's resources whose series touches the window, plus every resource the index cannot
-    // expand: a stripped sub-daily rule or an RDATE still has occurrences a client must be told about.
+    // Plus every resource the index cannot expand: a stripped rule or an RDATE still has occurrences to sync.
     public async getResourcesInRange(calendarId: string, from: Date, to: Date): Promise<ResourceRow[]> {
         const rows = await this.getRawEventsInRange(calendarId, from, to);
         await this.gate.ensureDrained();
@@ -702,15 +673,8 @@ export class Calendar {
         return this.joinedEvents().where(eq(schema.events.calendarId, calendarId)).all().map(Calendar.toEvent);
     }
 
-    // A recurring master's exception rows. Uses idx_events_parent.
-    public async getExceptionsForParent(parentEventId: string): Promise<CalendarEvent[]> {
-        await this.gate.ensureDrained();
-        return this.joinedEvents().where(eq(schema.events.parentEventId, parentEventId)).all().map(Calendar.toEvent);
-    }
-
     public async getRawEventsInRange(calendarId: string, from: Date, to: Date): Promise<CalendarEvent[]> {
-        // Clamp the window span (see recurrence-limits) so an over-wide CalDAV time-range can't make
-        // rrule materialise a giant occurrence set and block the event loop.
+        // Clamp the span (see recurrence-limits) so an over-wide CalDAV time-range cannot block the event loop.
         const clampedTo = clampRangeEnd(from, to);
         await this.gate.ensureDrained();
 
@@ -759,8 +723,7 @@ export class Calendar {
     }
 
     public async getEventsInRange(from: Date, to: Date, calendarId?: string): Promise<CalendarEventOccurrence[]> {
-        // Clamp the window span (see recurrence-limits) so an over-wide range like
-        // event-range/0/253402300799 can't make rrule materialise a giant occurrence set.
+        // Clamp the span (see recurrence-limits) so an over-wide range cannot materialise a giant occurrence set.
         const clampedTo = clampRangeEnd(from, to);
         await this.gate.ensureDrained();
 
@@ -812,9 +775,7 @@ export class Calendar {
             for (const occurrence of expandRecurrence(event, from, clampedTo)) {
                 if (cancelledDates.has(occurrence.occurrenceDate)) continue;
                 const modified = modifiedDates.get(occurrence.occurrenceDate);
-                // Keep the stored exception key, not the UTC date of the (possibly moved) startTime —
-                // the FE round-trips occurrenceDate into scope='this' RSVPs, and a drifted key would
-                // miss getException and duplicate the exception row.
+                // The stored key, not the moved startTime: the FE round-trips occurrenceDate into scope='this' RSVPs.
                 results.push(modified ? { ...modified, occurrenceDate: occurrence.occurrenceDate } : occurrence);
             }
         }
@@ -859,14 +820,11 @@ export class Calendar {
     }
 
     // A bulk write (a whole-file import) tells the tabs once instead of per resource.
-    // internal — used by calendar/*.ts
     withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
         return this.batch.run(fn);
     }
 
-    // The UID rule is Home-wide here, where the index only keeps it unique per calendar: a re-import of a
-    // series already filed under another calendar is a re-import, not a second copy.
-    // internal — used by calendar/*.ts
+    // Home-wide, where the index keeps the UID unique per calendar: a series filed elsewhere is a re-import.
     async holdsUid(uid: string): Promise<boolean> {
         await this.gate.ensureDrained();
         return !!this.db
@@ -896,8 +854,7 @@ export class Calendar {
         return row ? row.resources : null;
     }
 
-    // Load a stored resource, hand its component to `mutate`, and write the pair back. The caller holds
-    // the gate; a throw after the rename leaves the key dirty for the next drain.
+    // Caller holds the gate; a throw after the rename leaves the key dirty for the next drain.
     private async editResource(
         resource: typeof schema.resources.$inferSelect,
         mutate: (component: ICAL.Component) => void,
@@ -922,12 +879,9 @@ export class Calendar {
         return created;
     }
 
-    // The locked core every writer of a NEW event shares: the caller holds the gate, and the checks that
-    // decide WHICH file is written — the name, the UID, and an override's parent — run inside it.
-    // internal — used by calendar/*.ts
+    // The locked core every writer of a NEW event shares: the checks that decide WHICH file is written run in it.
     async writeEvent(calendarId: string, input: CreateEventArgs): Promise<CalendarEvent> {
-        // Inside the gate, where a delete of the calendar serializes against it: a write into a directory
-        // nobody owns any more would mkdir it back.
+        // A write into a directory nobody owns any more would mkdir it back.
         if (!this.calendarRow(calendarId)) throw new ApiError(404, 'Calendar not found');
         validateEventInput(input);
         if (input.parentEventId) return this.writeOverride(calendarId, input);
@@ -941,8 +895,7 @@ export class Calendar {
         return this.eventById(event.id)!;
     }
 
-    // An exception is one VEVENT inside its master's file: an override replaces the occurrence, a
-    // cancellation rides as an EXDATE plus the stamp carrying its row id.
+    // An exception is one VEVENT inside its master's file; a cancellation rides as an EXDATE plus its stamp.
     private async writeOverride(calendarId: string, input: CreateEventArgs): Promise<CalendarEvent> {
         const parent = this.eventById(input.parentEventId!);
         if (!parent || parent.calendarId !== calendarId || parent.parentEventId) {
@@ -950,8 +903,7 @@ export class Calendar {
         }
         const resource = this.resourceOf(parent.id);
         if (!resource) throw new ApiError(404, 'Event not found');
-        // An occurrence the file cannot name is an occurrence the series cannot hold: a RECURRENCE-ID
-        // and an EXDATE are both written from this key.
+        // A RECURRENCE-ID and an EXDATE are both written from this key.
         if (!input.recurrenceDate || !storedRecurrenceKey(input.recurrenceDate)) {
             throw new ApiError(400, 'Invalid occurrence date');
         }
@@ -1003,10 +955,7 @@ export class Calendar {
         );
         this.announce(calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
 
-        // Only the organizer fans out invitations. An attendee editing their linked copy (guarded to
-        // reminders/color below) must NOT bump SEQUENCE or send iMIP — doing so spoofs the attendee as
-        // organizer AND outruns the organizer's SEQUENCE, so the ordering rule later drops the
-        // organizer's real updates.
+        // Only the organizer fans out: an attendee's own edit bumping SEQUENCE would outrun the organizer's updates.
         if (user && !linked && updated.data?.attendees?.length) {
             propagateInvitation(this.home, updated, user, oldAttendees, updated.data.attendees).catch(console.error);
         }
@@ -1050,8 +999,7 @@ export class Calendar {
             }
             if (isSubDailyRrule(rruleStr)) throw new ApiError(400, 'Sub-daily recurrence is not supported');
         }
-        // Both directions poison a stored row: adding an rrule to a far-out-of-range event and moving
-        // a recurring event's start out of range (see recurrence-limits).
+        // Both directions poison a stored row: a new rrule, or a recurring start moved out of range.
         if (
             rruleStr &&
             (input.rrule !== undefined || input.startTime !== undefined) &&
@@ -1091,15 +1039,12 @@ export class Calendar {
         const existing = await this.gate.run(() => this.eraseStoredEvent(calendarId, id));
 
         const invitation = isInvitationFromOthers(existing, this.home.user.email) ? existing.data : null;
-        // Attendee deleting a linked copy = decline, and only an attendee has an RSVP to give: a file or a
-        // CalDAV client can hang any ORGANIZER on an event, so a user who is not on the list just deletes
-        // their row rather than telling a stranger they declined a meeting they were never invited to.
+        // Only an attendee has an RSVP to give: any client can hang an ORGANIZER on an event.
         const declining =
             user && invitation?.attendees?.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
         if (user && declining && invitation?.organizer) {
             const orgUserId = invitation.organizer.userId;
-            // A CalDAV- or iMIP-parsed organizer is known by address only; with no Eigen id to relay to,
-            // the decline takes the same REPLY path an external organizer takes.
+            // An organizer known by address only has no Eigen id to relay to, so the decline goes as a REPLY.
             if (!orgUserId || isExternalOwnerId(orgUserId)) {
                 const mail = composeRsvpReply(existing, user.email, user.name ?? user.email, 'declined');
                 sendMail(mail).catch(console.error);
@@ -1107,16 +1052,14 @@ export class Calendar {
                 propagateDecline(orgUserId, invitation.organizerEventId!, user.email).catch(console.error);
             }
         } else if (!invitation && existing.data?.attendees?.length) {
-            // Organizer deleting = cancel for all attendees, which is what an event with no foreign
-            // organizer makes this user.
+            // An event with no foreign organizer makes this user its organizer, and an organizer's delete cancels.
             propagateCancellation(this.home, existing).catch(console.error);
         }
 
         this.announce(calendarId, SSEventType.CALENDAR_EVENT_DELETED);
     }
 
-    // Caller holds the gate. Answers with the row it removed, which is what the decline or cancellation
-    // mail is composed from.
+    // Caller holds the gate; the row it answers with is what the decline or cancellation mail is composed from.
     private async eraseStoredEvent(calendarId: string, id: string): Promise<CalendarEvent> {
         const existing = this.eventById(id);
         // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
@@ -1136,8 +1079,7 @@ export class Calendar {
         return existing;
     }
 
-    // Re-home a resource to another calendar of this same Home: one rename plus one transaction, so the
-    // rows keep their identity and a linked invite is never declined on the organizer's behalf.
+    // Re-home a resource inside this Home: one rename plus one transaction, so the rows keep their identity.
     public async moveEvent(calendarId: string, id: string, targetCalendarId: string): Promise<CalendarEvent> {
         const moved = await this.gate.run(async () => {
             const existing = this.eventById(id);
@@ -1151,8 +1093,7 @@ export class Calendar {
             if (this.uidHolder(targetCalendarId, resource.uid)) {
                 throw new ApiError(409, 'The target calendar already holds this event');
             }
-            // A name the target already uses becomes a fresh one: a CalDAV client sees a delete plus a
-            // create either way.
+            // A name the target already uses becomes a fresh one; a client sees a delete plus a create either way.
             const targetUri = store.resourceRowOf(this, targetCalendarId, resource.uri)
                 ? `${randomUUID()}.ics`
                 : resource.uri;
@@ -1223,7 +1164,6 @@ export class Calendar {
         ownerUserId: string,
         calendarId: string,
         calendarName: string,
-        _calendarColor: string,
         permission: CalendarShare['permission'],
         actorEmail?: string,
         actorName?: string,
@@ -1244,7 +1184,6 @@ export class Calendar {
         ownerUserId: string,
         calendarId: string,
         calendarName: string,
-        _calendarColor: string,
         permission: CalendarShare['permission'],
     ): Promise<void> {
         shares.ensureSharedEntry(this, ownerUserId, calendarId, calendarName, permission);
@@ -1278,8 +1217,7 @@ export class Calendar {
         return row ? Calendar.toEvent(row) : null;
     }
 
-    // The row shape of an invitation payload: the link rides in `data`, and only the fields a trusted
-    // message stated ever reach it.
+    // The row shape of an invitation payload: only the fields a trusted message stated ever reach it.
     private invitationInput(payload: ReceiveInvitationPayload): CreateEventArgs {
         return {
             title: payload.title,
@@ -1305,8 +1243,7 @@ export class Calendar {
         };
     }
 
-    // A REQUEST relayed from the organizer's Home. Null when it was dropped — the sender's side must not
-    // believe this Home holds a copy.
+    // A REQUEST relayed from the organizer's Home. Null when it was dropped, so the sender can say so.
     public async receiveInvitation(payload: ReceiveInvitationPayload): Promise<string | null> {
         const link: InvitationLink = {
             organizerEmail: payload.data.organizer?.email.toLowerCase() ?? '',
@@ -1364,8 +1301,7 @@ export class Calendar {
         if (!component) return false;
         if (!isNewerRevision(payload, storedRevision(component, null))) return false;
 
-        // Don't extend rrule beyond what the attendee has locally — they may have truncated it via
-        // "delete this and following" and that intent should stick.
+        // Never extend the rrule past what the attendee has: they may have truncated it deliberately.
         const rrule = constrainRRule(payload.rrule, linked.rrule);
         // A redelivery patches to nothing, so it costs no ctag bump and tells the user nothing twice.
         const changed = patchEvent(
@@ -1392,8 +1328,7 @@ export class Calendar {
             timezone: payload.timezone !== undefined ? payload.timezone : undefined,
             status: payload.status,
             data: payload.attendees ? { ...linked.data, attendees: payload.attendees } : undefined,
-            // The attendee's copy carries the organizer's revision, so the replay guard has a number to
-            // compare the next message against.
+            // The attendee's copy carries the organizer's revision, so the next message has a number to beat.
             sequence: payload.sequence,
         };
     }
@@ -1415,20 +1350,6 @@ export class Calendar {
             tag: `calendar-invite:${orgEventId}:${startTime.getTime()}`,
             details: { startTime: startTime.getTime() },
         });
-    }
-
-    // Inbound iMIP: an external organizer moved ONE occurrence of a recurring invite (a lone VEVENT
-    // with a RECURRENCE-ID). Land it as an exception on the linked series — feeding it to
-    // receiveInvitationUpdate would rewrite the master and collapse the whole series.
-    public async receiveInvitationException(
-        orgEventId: string,
-        orgUserId: string,
-        payload: InvitationExceptionPayload,
-    ): Promise<void> {
-        const linked = this.findLinkedEvent(orgEventId, orgUserId);
-        if (!linked) return;
-        const applied = await this.gate.run(() => this.applyInvitationException(linked, payload));
-        if (applied) this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, orgUserId));
     }
 
     // Caller holds the gate.
@@ -1472,10 +1393,7 @@ export class Calendar {
         return true;
     }
 
-    // Re-key an inbound iMIP RECURRENCE-ID against the stored series' timezone. The payload is a single
-    // VEVENT with no master, so the parser can't know the series tz; a UTC-Z RECURRENCE-ID (Exchange
-    // clients, Eigen's own tz-null exceptions) would otherwise key on the UTC date and attach the
-    // exception to the wrong occurrence. `recurrenceInstant` is set only for that Z-form case.
+    // Re-key a UTC-Z RECURRENCE-ID against the stored series' tz: a lone VEVENT cannot tell the parser its own.
     private recurrenceKeyForSeries(
         recurrenceDate: string,
         recurrenceInstant: Date | null | undefined,
@@ -1487,8 +1405,7 @@ export class Calendar {
         return `${year}-${pad(month)}-${pad(day)}`;
     }
 
-    // An inbound iMIP REQUEST. `sender` is the DKIM-aligned From address the caller verified (R13 2c, R19),
-    // and an external organizer is known by address only, so the link is `external_<address>`.
+    // `sender` is the DKIM-aligned From address the caller verified (R13 2c, R19); the link is by address alone.
     public async receiveImipRequest(parsed: ParsedEvent, sender: string): Promise<void> {
         const organizerUserId = externalOwnerId(sender);
         const link: InvitationLink = {
@@ -1528,10 +1445,8 @@ export class Calendar {
         return outcome.event.id;
     }
 
-    // The ONE decision an inbound REQUEST takes, whichever transport carried it, made inside the gate
-    // against the state it would overwrite: deliveries are concurrent, so a lookup outside it lets two of
-    // them file two masters for one UID. The UID is looked up Home-wide, where the index only keeps it
-    // unique per calendar. Caller holds the gate.
+    // The ONE decision an inbound REQUEST takes: Home-wide, and inside the gate, so two concurrent
+    // deliveries never file two masters for one UID. Caller holds the gate.
     private async decideInboundRequest(parsed: ParsedEvent, link: InvitationLink): Promise<InboundRequestOutcome> {
         const sender = link.organizerEmail;
         const applied = (event: CalendarEvent): InboundRequestOutcome => ({
@@ -1544,13 +1459,11 @@ export class Calendar {
         const linked = stored.find((e) => e.data?.organizer && e.data?.organizerEventId);
 
         if (linked) {
-            // An update binds to the STORED organizer, not the one the body spells, so a co-attendee
-            // cannot hijack the invitation.
+            // An update binds to the STORED organizer, so a co-attendee cannot hijack the invitation.
             if (linked.data?.organizer?.email.toLowerCase() !== sender) {
                 return { kind: 'dropped', reason: 'the sender is not the organizer this copy is linked to' };
             }
-            // A single-occurrence move (Google/Outlook "this event" edit) attaches as an exception: a
-            // full-event update would null the master's rrule and collapse the whole series (audit #A).
+            // A "this event" edit attaches as an exception: a full update would collapse the series (audit #A).
             const moved = parsed.recurrenceDate
                 ? await this.applyInvitationException(linked, inboundExceptionPayload(parsed))
                 : await this.applyInvitationUpdate(linked, inboundUpdatePayload(parsed));
@@ -1559,8 +1472,7 @@ export class Calendar {
 
         const master = stored.find((e) => !e.parentEventId);
         if (master) {
-            // An event this Home already holds under nobody's link: the organizer may claim it, but only
-            // when the address it names is the verified sender (R19).
+            // The organizer may claim an event nobody linked, but only when it names the verified sender (R19).
             const resource = this.resourceOf(master.id);
             const component = resource ? await this.loadResource(resource.calendarId, resource.uri) : null;
             if (!resource || !component || storedOrganizerAddress(component) !== sender) {
@@ -1591,8 +1503,7 @@ export class Calendar {
         return { kind: 'created', event, payload };
     }
 
-    // Caller holds the gate. The stored resource becomes the attendee-side copy of the organizer's event:
-    // same file, same row ids, the link and the guest list from the message.
+    // Caller holds the gate. Same file, same row ids; the link and the guest list come from the message.
     private async adoptAsInvitation(
         master: CalendarEvent,
         resource: typeof schema.resources.$inferSelect,
@@ -1618,8 +1529,7 @@ export class Calendar {
         await store.writeResource(this, resource.calendarId, resource.uri, component, resource);
     }
 
-    // Inbound iMIP: an external organizer canceled ONE occurrence of a recurring invite. Cancel just
-    // that instance — removeInvitation would delete the attendee's entire linked series.
+    // Just that instance — removeInvitation would delete the attendee's entire linked series.
     public async cancelInvitationOccurrence(
         orgEventId: string,
         orgUserId: string,
@@ -1669,8 +1579,7 @@ export class Calendar {
     }
 
     public async updateAttendeeStatus(eventId: string, email: string, status: Attendee['status']): Promise<void> {
-        // The guest list is read inside the gate: two RSVPs for one event serialize, so neither merges its
-        // answer into a list the other already replaced.
+        // The guest list is read inside the gate, so two RSVPs never merge into a list the other replaced.
         await this.gate.run(async () => {
             const event = this.eventById(eventId);
             if (!event?.data?.attendees) return;
@@ -1687,10 +1596,8 @@ export class Calendar {
         });
     }
 
-    // `restoreCancelled` distinguishes the two sides of an occurrence RSVP: an attendee re-accepting
-    // their own removed occurrence un-cancels their linked copy (default), while organizer-side
-    // receivers (iMIP REPLY, relay RSVP) may only move PARTSTAT — never resurrect an occurrence the
-    // organizer deleted (RFC 5546).
+    // `restoreCancelled`: an attendee may un-cancel their own occurrence, an organizer-side receiver only
+    // moves PARTSTAT — it never resurrects an occurrence the organizer deleted (RFC 5546).
     public async rsvpForOccurrence(
         eventId: string,
         email: string,
@@ -1705,12 +1612,10 @@ export class Calendar {
 
             const key = this.recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, parent.timezone);
             const existing = this.exceptionOf(eventId, key);
-            // An occurrence the organizer deleted is an EXDATE, which carries no attendee list: there is
-            // nowhere to record a PARTSTAT for an instance that no longer exists.
+            // A deleted occurrence is an EXDATE, which carries no attendee list to record a PARTSTAT in.
             if (existing?.status === 'cancelled' && !restoreCancelled) return null;
             const data = existing?.data ?? parent.data ?? {};
-            // Only recorded invitees may leave a PARTSTAT — inbound iMIP routes occurrence REPLYs here, and
-            // an uninvited sender must not mutate rows. Someone can be invited to a single occurrence only.
+            // Only recorded invitees may leave a PARTSTAT; someone can be invited to a single occurrence only.
             const invitees = data.attendees ?? parent.data?.attendees ?? [];
             if (!invitees.some((a) => a.email.toLowerCase() === email.toLowerCase())) return null;
             const attendees = invitees.map((a) =>
@@ -1747,8 +1652,7 @@ export class Calendar {
         if (calendarId) this.announce(calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
     }
 
-    // Caller holds the gate. `revision` is set on the iMIP CANCEL path so the exclusion records what the
-    // CANCEL stated and the ordering rule can reject stale REQUEST/CANCEL redeliveries against it.
+    // Caller holds the gate. `revision` is the CANCEL's, so a stale redelivery can be ordered against it.
     private async removeOccurrence(eventId: string, recurrenceDate: string, revision?: Revision): Promise<void> {
         const parent = this.eventById(eventId);
         if (!parent) throw new ApiError(404, 'Event not found');

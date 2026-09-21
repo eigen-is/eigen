@@ -20,7 +20,7 @@ import { calendarDir, type EventRowInput, resourcePath, sanitizeCalendarId, stat
 import * as schema from './schema';
 
 // The index pass over `calendars/`: files are the truth, so it runs before anything is served and re-reads
-// only what drifted. See docs/CALENDAR.md § Reconcile vs. rebuild.
+// only what drifted.
 
 // `.<calendarId>.deleting-<uuid>`: the id parses from the left of a fixed-width tail, so a dot inside a
 // calendar id is not a problem.

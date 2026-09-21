@@ -5,8 +5,7 @@ import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence
 import { normalizeTimezone } from '../ical/timezone';
 import type { CreateEventArgs } from './types';
 
-// What every writer of an event row agrees on before it builds a component: the invariants a stored event
-// has to satisfy, and the row shape `buildResource` reads.
+// The invariants a stored event has to satisfy, and the row shape `buildResource` reads.
 
 // What a create refuses before it writes anything, so a refused event leaves the collection untouched.
 export function validateEventInput(input: { rrule?: string | null; startTime: Date; endTime: Date }): void {
@@ -17,24 +16,19 @@ export function validateEventInput(input: { rrule?: string | null; startTime: Da
         } catch {
             throw new ApiError(400, 'Invalid RRULE');
         }
-        // Reject sub-daily recurrence at the write boundary (see recurrence-limits): it is never a
-        // real calendar event and lets a single range query block the event loop for everyone.
+        // Sub-daily recurrence is never a real event and lets one range query block the event loop.
         if (isSubDailyRrule(rruleStr)) throw new ApiError(400, 'Sub-daily recurrence is not supported');
-        // Same DoS class: a recurring dtstart outside the sane range makes rrule iterate
-        // dtstart→window at any frequency (see recurrence-limits).
+        // Same DoS class: an out-of-range recurring dtstart makes rrule iterate dtstart→window.
         if (isOutOfRangeRecurrenceStart(input.startTime)) {
             throw new ApiError(400, 'Recurring event start time is out of range');
         }
     }
-    // Reject reversed intervals. REST and CalDAV PUT funnel through here, so both are covered; both are
-    // interactive protocols where a 400 is actionable. Inbound iMIP bypasses createEvent/updateEvent and
-    // clamps instead (imip.ts) — dropping an emailed invite is worse than a zero-length event. Zero
-    // duration stays legal — RFC 5545 §3.6.1 permits DTEND == DTSTART, and the importers rely on it.
+    // Inbound iMIP clamps instead (imip.ts): dropping an emailed invite is worse than a zero-length event.
+    // Zero duration stays legal — RFC 5545 §3.6.1 permits DTEND == DTSTART, and the importers rely on it.
     if (input.endTime < input.startTime) throw new ApiError(400, 'Event end time cannot be before start time');
 }
 
-// The component-level shape of a row that is about to be written: buildResource reads these fields, and
-// the file it produces is what the index re-derives its rows from.
+// The shape of a row about to be written; the file buildResource makes of it is what the index re-derives.
 export function eventForFile(args: {
     id: string;
     calendarId: string;
@@ -64,8 +58,7 @@ export function eventForFile(args: {
         data: input.data ?? null,
         createByUserId: input.createByUserId ?? null,
         createdAt: now,
-        // A receiver states the organizer's own stamp here, so the stored DTSTAMP is the revision the next
-        // message is ordered against rather than the moment this Home happened to write the file.
+        // A receiver states the organizer's stamp, so the stored DTSTAMP is the revision the next message beats.
         updatedAt: input.dtstamp ?? now,
     };
 }

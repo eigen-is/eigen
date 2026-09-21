@@ -61,7 +61,7 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
             for (const tc of teamCalendars) {
                 const permission =
                     (await pullCalendarPermission(teamOwner, tc.id, user.email, memberships.teamIds)) || 'read';
-                await cal.ensureSharedEntry(teamOwner, tc.id, tc.name, tc.color, permission);
+                await cal.ensureSharedEntry(teamOwner, tc.id, tc.name, permission);
             }
         } catch {
             await cal.removeSharedEntriesForOwner(teamOwner);
@@ -86,7 +86,7 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
                 memberships.teamIds,
             );
             if (resolved && resolved !== sc.permission) {
-                await cal.ensureSharedEntry(sc.ownerUserId, sc.calendarId, sc.calendarName, sc.calendarColor, resolved);
+                await cal.ensureSharedEntry(sc.ownerUserId, sc.calendarId, sc.calendarName, resolved);
             }
         } catch {
             // Owner home not available, skip

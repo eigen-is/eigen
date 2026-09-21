@@ -20,7 +20,7 @@ import { EVENT_MAX_BYTES, gateKey, resourcePath, sanitizeCalendarId, sanitizeEve
 import * as schema from './schema';
 
 // The store seam over the Calendar facade: one file per UID, the index behind it. Every mutation runs inside
-// the write gate against the state it overwrites; every read drains a torn pair first (docs/CALENDAR.md).
+// the write gate against the state it overwrites; every read drains a torn pair first.
 
 // The index projection the DAV layer reads for a resource; the etag is the hash the handler quotes.
 export type ResourceRow = {

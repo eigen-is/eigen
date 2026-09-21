@@ -16,12 +16,10 @@ import type { Calendar } from './calendar';
 import { eventForFile, validateEventInput } from './event-input';
 import type { CreateEventArgs } from './types';
 
-// Whole-file iCalendar transfer over the Calendar facade: one resource per series through the same PUT seam
-// a CalDAV device sync takes, so import inherits the ceiling, the quota, the journal and the UID rule
-// instead of being a second write ingress. See docs/CALENDAR.md § Importing an .ics.
+// Whole-file iCalendar transfer, one resource per series through the same PUT seam a CalDAV device sync
+// takes (docs/CALENDAR.md § Importing an .ics).
 
-// A UID the home can key an event by. The file's own UID is kept so a re-import recognizes it, and it
-// travels into etags and sync deltas — so an unprintable or endless one is refused rather than stored.
+// A UID travels into etags and sync deltas, so an unprintable or endless one is refused rather than stored.
 const MAX_UID_LENGTH = 255;
 function isImportableUid(uid: string): boolean {
     if (!uid || uid.length > MAX_UID_LENGTH) return false;
@@ -56,8 +54,7 @@ function importArgs(event: ParsedEvent, createByUserId: string): CreateEventArgs
     };
 }
 
-// A whole `.ics` into one calendar of this Home, bytes in, every event landing as this user's own. One
-// resource per series, so a crash mid-import is retryable: the series already written are skipped by UID.
+// One resource per series, so a crash mid-import is retryable: the series already written are skipped by UID.
 export async function importEvents(
     calendar: Calendar,
     calendarId: string,
@@ -65,15 +62,12 @@ export async function importEvents(
 ): Promise<ImportCountsResult> {
     if (!calendar.calendarRow(calendarId)) throw new ApiError(404, 'Calendar not found');
 
-    // iCalendar is UTF-8, so another encoding is its own answer rather than "not a calendar" — the same
-    // pair a vCard import gives (contacts/transfer.ts).
+    // iCalendar is UTF-8, so another encoding is its own answer rather than "not a calendar".
     const text = decodeUtf8Strict(bytes);
     if (text === null) throw new ApiError(400, NOT_UTF8_FILE);
 
-    // Counted on the text before ical.js builds a component tree per VEVENT: the route runs with the idle
-    // timeout off on the thread that serves every app, and a file far past the ceiling answers this 413
-    // either way. A folded line starts with a space, so a line that starts with the property name is a
-    // VEVENT of its own.
+    // Counted on the text before ical.js builds a tree per VEVENT. A folded line starts with a space, so a
+    // line that starts with the property name is a VEVENT of its own.
     if ((text.match(/^BEGIN:VEVENT\r?$/gim)?.length ?? 0) > ICS_IMPORT_MAX_EVENTS) {
         throw new ApiError(413, 'Too many events');
     }
@@ -86,8 +80,7 @@ export async function importEvents(
         throw e;
     }
 
-    // Every VEVENT is a row, overrides included: one master with 37 000 RECURRENCE-IDs is the same write
-    // volume as 37 000 masters.
+    // Every VEVENT is a row: one master with 37 000 RECURRENCE-IDs is the write volume of 37 000 masters.
     if (parsed.events.length > ICS_IMPORT_MAX_EVENTS) throw new ApiError(413, 'Too many events');
 
     // One occurrence is one exception row: a file naming the same RECURRENCE-ID twice keeps the last.
@@ -103,9 +96,7 @@ export async function importEvents(
         else overridesByUid.set(event.uid, new Map([[event.recurrenceDate, event]]));
     }
 
-    // A VEVENT the parser could not read, and an override whose master the file does not hold — it has no
-    // series to attach to — are members the import cannot write, counted as the failures they are rather
-    // than dropped in silence.
+    // A VEVENT the parser could not read, and an override with no master to attach to, are counted as failures.
     const masterUids = new Set(masters.map((event) => event.uid));
     let unwritable = parsed.skipped;
     for (const [uid, overrides] of overridesByUid) {
@@ -114,8 +105,7 @@ export async function importEvents(
 
     const createByUserId = calendar.home.user.id;
     const result: ImportCountsResult = { imported: 0, skipped: 0, failed: unwritable };
-    // One list-level event for the whole file instead of one per series (a thousand series were a thousand
-    // broadcasts).
+    // One list-level event for the whole file instead of one per series.
     await calendar.withBatchedEvents(async () => {
         for (const parsedMaster of masters) {
             const master = importable(parsedMaster);
@@ -123,8 +113,7 @@ export async function importEvents(
                 result.failed++;
                 continue;
             }
-            // A UID the Home already holds skips like a re-import, which is what makes a partial import
-            // retryable. Looked up Home-wide, where the index only keeps it unique per calendar.
+            // A UID the Home already holds skips like a re-import, which is what makes a partial import retryable.
             if (await calendar.holdsUid(master.uid)) {
                 result.skipped++;
                 continue;
@@ -143,8 +132,7 @@ export async function importEvents(
                             id: randomUUID(),
                             calendarId,
                             uid: master.uid,
-                            // The master's zone when the override names none, or it serializes in Z form
-                            // and keys against a different wall-clock day (audit #24).
+                            // The master's zone when the override names none, or it keys a different day (audit #24).
                             input: {
                                 ...overrideArgs,
                                 rrule: null,
@@ -156,8 +144,7 @@ export async function importEvents(
                         }),
                     );
                 }
-                // The series is one resource, so a member the domain refuses takes the series with it
-                // rather than storing half of it.
+                // The series is one resource: a member the domain refuses takes the series with it.
                 for (const event of events) validateEventInput(event);
                 body = serializeResource(buildResource(events));
             } catch {
@@ -165,8 +152,7 @@ export async function importEvents(
                 continue;
             }
 
-            // A fresh resource name every time: a UID is not a safe filename, and If-None-Match: * keeps
-            // the write a create.
+            // A fresh name every time: a UID is not a safe filename, and If-None-Match: * keeps the write a create.
             let put: PutResourceResult;
             try {
                 put = await calendar.putResource(calendarId, `${randomUUID()}.ics`, body, {
@@ -175,8 +161,7 @@ export async function importEvents(
                     actor: createByUserId,
                 });
             } catch {
-                // One series' write failing is that series' failure: the file goes on, and a retry
-                // finishes it because everything that landed skips by UID.
+                // One series' write failing is that series' failure; a retry finishes the file.
                 result.failed++;
                 continue;
             }
