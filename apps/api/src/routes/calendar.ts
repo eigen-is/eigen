@@ -27,7 +27,7 @@ import {
 } from '../lib/home/home-relay';
 import { parseResource } from '../lib/ical';
 import { storedRecurrenceKey } from '../lib/ical/wall-clock';
-import { getMemberships } from '../lib/user';
+import { getMemberships, type User } from '../lib/user';
 import { betterAuth } from './auth';
 import { importFromDriveSchema } from './shared-schemas';
 
@@ -121,6 +121,14 @@ const ImportFromDriveIcsSchema = t.Object({
 });
 
 const ImportQuerySchema = t.Object({ calendarId: t.String({ minLength: 1 }) });
+
+// The Home an import writes into, once the caller is allowed to write the calendar they named. Both
+// import routes take it, so the rule is one rule.
+async function requireWritableCalendar(user: User, ownerId: string, calendarId: string) {
+    const { permission } = await checkCalendarAccess(user, ownerId, calendarId);
+    if (permission !== 'write') throw new ApiError(403, 'Write permission required');
+    return resolveCalendar(user, ownerId);
+}
 
 // Calendar routes allow cross-owner access (shared calendars, team calendars).
 // Access control is enforced by resolveCalendar() (own/team calendars) or
@@ -403,19 +411,19 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     )
 
     // --- Import ---
-    // A whole `.ics` into one calendar the caller's own Home holds. A calendar shared with the caller is
-    // not a target: that write crosses homes, which only the relay may do.
+    // A whole `.ics` into one calendar of the caller's own Home, or of a team home they may write in —
+    // the same access `createEvent` takes. A calendar another user shared with the caller is not a
+    // target: that write crosses homes, which only the relay may do, so it resolves to nothing here.
     .post(
         '/calendar/:ownerId/import',
         async ({ params, query, request, user, server }): Promise<ImportCountsResult> => {
             requireNonGuest(user);
-            requireSelf(params.ownerId, user.id);
+            const cal = await requireWritableCalendar(user, params.ownerId, query.calendarId);
             // A file of a thousand events writes a row apiece before this answers — longer than any
             // server-wide idleTimeout, so exempt this request.
             server?.timeout(request, 0);
             const bytes = await readBoundedBodyBytes(request, ICS_MAX_BYTES);
             if (bytes === null) throw new ApiError(413, 'Upload too large');
-            const cal = await resolveCalendar(user, user.id);
             return cal.importEvents(query.calendarId, bytes);
         },
         { query: ImportQuerySchema, auth: true, parse: 'none' },
@@ -425,7 +433,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         '/calendar/:ownerId/import-from-drive',
         async ({ params, body, request, user, server }): Promise<ImportCountsResult> => {
             requireNonGuest(user);
-            requireSelf(params.ownerId, user.id);
+            const cal = await requireWritableCalendar(user, params.ownerId, body.calendarId);
             // Same idle-timeout exemption as the raw import route: silent until the last event lands.
             server?.timeout(request, 0);
             const bytes = await readImportSourceBytes(user, body, {
@@ -433,7 +441,6 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
                 rejection: NOT_A_CALENDAR_FILE,
                 maxBytes: ICS_MAX_BYTES,
             });
-            const cal = await resolveCalendar(user, user.id);
             return cal.importEvents(body.calendarId, bytes);
         },
         {
