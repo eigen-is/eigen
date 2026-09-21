@@ -1,6 +1,5 @@
 import type { IcsPreview, IcsPreviewEvent } from '@workspace/lib/types/preview';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import { type IcsParseResult, type ParsedEvent, parseIcs } from '../caldav/ical-parse';
 import { ApiError } from '../core/errors';
 import {
     decodeUtf8Strict,
@@ -8,6 +7,8 @@ import {
     ICS_PREVIEW_MAX_DESCRIPTION_CHARS,
     ICS_PREVIEW_MAX_EVENTS,
 } from '../core/transfer';
+import { parseIcs } from '../ical';
+import type { IcsParseResult, ParsedEvent } from '../ical/ical-parse';
 
 export const parseIcsPreview = (body: string): IcsPreview => JSON.parse(body);
 

@@ -1,19 +1,13 @@
-import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
 import { escapeXml } from '@workspace/lib/html';
 import { CARD_MAX_BYTES } from '../contacts/card-store';
 import type { CardBook } from '../contacts/dav-store';
-import { addressbookHomeHref } from '../dav/href';
+import { addressbookHomeHref, principalHref } from '../dav/href';
 import type { PropMap } from '../dav/propfind';
 import { formatSyncToken } from '../dav/sync-token';
-// The multistatus/response/propstat helpers and the shared NS string (which already declares the CARD
-// namespace) live in the shared DAV envelope (lib/dav/xml.ts) — one principal and one XML envelope serve both
-// protocols, so these are imported, never duplicated. This file only adds the addressbook-specific property blocks.
 import { ownershipEntries } from '../dav/xml';
 
-export { DAV_BODY_MAX_BYTES, parsePropfind, selectProps, wantsBrief } from '../dav/propfind';
-// The sync-token grammar and the refusal both collections share (lib/dav/sync-token.ts).
-export { formatSyncToken, invalidSyncToken, parseSyncToken } from '../dav/sync-token';
-export { davError, multistatusResponse, propstatNotFound, propstatOk, response } from '../dav/xml';
+// The addressbook-specific property blocks, and nothing else: the XML envelope, the member props, the
+// sync-token grammar and the PROPFIND core are the shared DAV layer's, imported from lib/dav/ where they live.
 
 // Addressbook home collection — the parent of the single book. Mirrors the CalDAV homeCollectionProps.
 export function addressbookHomeProps(userId: string): PropMap {
@@ -22,7 +16,7 @@ export function addressbookHomeProps(userId: string): PropMap {
         ['displayname', `<D:displayname>Addressbooks</D:displayname>`],
         [
             'current-user-principal',
-            `<D:current-user-principal><D:href>/dav/principals/${userId}/</D:href></D:current-user-principal>`,
+            `<D:current-user-principal><D:href>${principalHref(userId)}</D:href></D:current-user-principal>`,
         ],
         [
             'addressbook-home-set',
@@ -51,25 +45,6 @@ export function addressbookCollectionProps(book: CardBook, ownerId: string): Pro
             'supported-report-set',
             `<D:supported-report-set><D:supported-report><D:report><CARD:addressbook-multiget/></D:report></D:supported-report><D:supported-report><D:report><CARD:addressbook-query/></D:report></D:supported-report><D:supported-report><D:report><D:sync-collection/></D:report></D:supported-report></D:supported-report-set>`,
         ],
-    ]);
-}
-
-// The two card member fragments, single-sourced so the REPORT view (cardEtagProp) and the PROPFIND row map
-// (cardRowProps) can't drift.
-const cardGetetag = (etag: string) => `<D:getetag>"${escapeXml(etag)}"</D:getetag>`;
-const CARD_CONTENT_TYPE = `<D:getcontenttype>${VCARD_CONTENT_TYPE}</D:getcontenttype>`;
-
-// Card resource properties for REPORT rows (etag + content-type).
-export function cardEtagProp(etag: string): string[] {
-    return [cardGetetag(etag), CARD_CONTENT_TYPE];
-}
-
-// Card member row for PROPFIND: the REPORT pair plus the empty resourcetype marking it a non-collection member.
-export function cardRowProps(etag: string): PropMap {
-    return new Map([
-        ['getetag', cardGetetag(etag)],
-        ['getcontenttype', CARD_CONTENT_TYPE],
-        ['resourcetype', `<D:resourcetype/>`],
     ]);
 }
 

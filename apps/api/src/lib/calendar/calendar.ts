@@ -20,7 +20,6 @@ import { and, count, eq, gt, gte, inArray, isNull, lte, or, sql } from 'drizzle-
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import ICAL from 'ical.js';
 import { RRule } from 'rrule';
-import { type IcsParseResult, type ParsedEvent, parseIcs } from '../caldav/ical-parse';
 import {
     ApiError,
     decodeUtf8Strict,
@@ -33,6 +32,8 @@ import {
 import type { ManagedDatabase } from '../core/';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
+import { parseIcs } from '../ical';
+import type { IcsParseResult, ParsedEvent } from '../ical/ical-parse';
 import { actorDisplayName, type User } from '../user';
 import { CALENDAR_DB_CONFIG } from './db-config';
 import { composeRsvpReply } from './imip';
@@ -93,6 +94,11 @@ function validateEventInput(input: CreateEventArgs): void {
     // duration stays legal — RFC 5545 §3.6.1 permits DTEND == DTSTART, and the importers rely on it.
     if (input.endTime < input.startTime) throw new ApiError(400, 'Event end time cannot be before start time');
 }
+
+// How large one calendar resource may be, the domain's own ceiling as CARD_MAX_BYTES is contacts'. A series
+// carries an overridden VEVENT per exception, so it is ~4x a vCard's. CalDAV bounds a PUT body against it
+// before buffering and advertises it as C:max-resource-size.
+export const EVENT_MAX_BYTES = 20_971_520;
 
 // A UID the home can key an event by. The file's own UID is kept so a re-import recognizes it, and it
 // travels into etags and sync deltas — so an unprintable or endless one is refused rather than stored.

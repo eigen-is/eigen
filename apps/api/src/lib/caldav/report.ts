@@ -1,24 +1,14 @@
 import type { CalendarItem } from '@workspace/lib/types/calendar';
+import { ICS_CONTENT_TYPE } from '@workspace/lib/types/drive';
 import type { Calendar } from '../calendar/calendar';
 import type { CalendarEventRow } from '../calendar/types';
+import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
+import { invalidSyncToken } from '../dav/sync-token';
+import { memberProps, multistatusResponse, notFoundRow, propstatOk, removedRow, response } from '../dav/xml';
+import { eventsToIcs } from '../ical';
 import { calendarHref, eventHref } from './discovery';
-import { eventsToIcs } from './ical-component';
-import {
-    calendarDataProp,
-    eventEtagProp,
-    formatSyncToken,
-    invalidSyncToken,
-    multistatusResponse,
-    parseSyncToken,
-    propstatNotFound,
-    propstatOk,
-    response,
-} from './xml-builder';
+import { calendarDataProp, formatSyncToken, parseSyncToken } from './xml-builder';
 import { parseReport, type ReportRequest } from './xml-parser';
-
-// Multiget refuses a client that asks for more than this many resources in one round-trip. The XML body
-// ceiling every route shares is DAV_BODY_MAX_BYTES, enforced in the router before the body reaches the parser.
-const MULTIGET_HREF_LIMIT = 500;
 
 // REPORT on /dav/calendars/:ownerId/:calendarId/
 export function handleReport(
@@ -61,8 +51,7 @@ function handleCalendarQuery(
         events = calendar.getRawEvents(calendarId);
     }
 
-    const wantsData = report.propNames.some((p) => p.includes('calendar-data'));
-    return multistatusResponse(buildEventResponses(events, ownerId, calendarId, wantsData));
+    return multistatusResponse(buildEventResponses(events, ownerId, calendarId, report.wantsData));
 }
 
 function handleCalendarMultiget(
@@ -73,35 +62,11 @@ function handleCalendarMultiget(
 ): Response {
     if (report.hrefs.length > MULTIGET_HREF_LIMIT) return new Response('Too many hrefs', { status: 400 });
 
-    const prefix = calendarHref(ownerId, calendarId);
-    // Resolve each href to its stored uri (percent-decoded, in-collection). A malformed escape or an
-    // out-of-collection href stays null → a 404 row echoing the original href (the CardDAV twin's move). Dedupe
-    // so a client listing one resource N ways yields one row: by uri when resolvable, by `raw:`+href otherwise
-    // so repeated bad hrefs collapse too. First occurrence wins, preserving request order.
-    const seen = new Set<string>();
-    const resolved: { uri: string | null; href: string }[] = [];
-    for (const href of report.hrefs) {
-        const normalized = href.replace(/^\/+/, '/');
-        const encoded = normalized.startsWith(prefix) ? normalized.slice(prefix.length) : '';
-        let uri: string | null = null;
-        if (encoded) {
-            try {
-                uri = decodeURIComponent(encoded);
-            } catch {
-                uri = null;
-            }
-        }
-        // Both key forms are prefixed: event uris (unlike card uris) have no charset restriction, so a stored
-        // uri literally starting with `raw:` must not collide with a bad-href key.
-        const key = uri === null ? `raw:${href}` : `uri:${uri}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        resolved.push({ uri, href });
-    }
+    // Event uris are matched exactly: unlike cards they have no charset restriction and no folded key.
+    const resolved = resolveMultigetHrefs(report.hrefs, calendarHref(ownerId, calendarId), (uri) => uri);
 
     const uris = resolved.map((r) => r.uri).filter((u): u is string => u !== null);
     const events = calendar.getEventsByUris(calendarId, uris);
-    const wantsData = report.propNames.some((p) => p.includes('calendar-data'));
 
     // uid→all-events map for grouping exceptions with their master — only the UIDs the client asked for.
     const requestedUids = [...new Set(events.map((e) => e.uid))];
@@ -121,8 +86,8 @@ function handleCalendarMultiget(
         if (uri && foundUris.has(uri)) {
             const master = masterByUri.get(uri);
             if (!master) continue; // uri exists only as an exception (part of a master .ics) — no own row
-            const props = [...eventEtagProp(master.etag)];
-            if (wantsData) {
+            const props = memberProps(master.etag, ICS_CONTENT_TYPE);
+            if (report.wantsData) {
                 const group = eventsByUid.get(master.uid) ?? [master];
                 props.push(calendarDataProp(eventsToIcs(group)));
             }
@@ -130,7 +95,7 @@ function handleCalendarMultiget(
         } else {
             // Missing but in-collection → 404 on the event href; unresolvable → 404 echoing the original href.
             const row = uri ? eventHref(ownerId, calendarId, uri) : href;
-            responses.push(response(row, [propstatNotFound(['<D:getetag/>'])]));
+            responses.push(notFoundRow(row));
         }
     }
 
@@ -150,8 +115,7 @@ function handleSyncCollection(
     if (!report.syncToken) {
         // Initial sync — return all events
         const events = calendar.getRawEvents(calendarId);
-        const wantsData = report.propNames.some((p) => p.includes('calendar-data'));
-        responses.push(...buildEventResponses(events, ownerId, calendarId, wantsData));
+        responses.push(...buildEventResponses(events, ownerId, calendarId, report.wantsData));
     } else {
         // Incremental sync — read the since-ctag from the token.
         const token = parseSyncToken(report.syncToken);
@@ -165,16 +129,16 @@ function handleSyncCollection(
         for (const event of changed) {
             if (event.parentEventId) continue;
             responses.push(
-                response(eventHref(ownerId, calendarId, event.uri), [propstatOk(eventEtagProp(event.etag))]),
+                response(eventHref(ownerId, calendarId, event.uri), [
+                    propstatOk(memberProps(event.etag, ICS_CONTENT_TYPE)),
+                ]),
             );
         }
 
         // Deleted events
         const deleted = calendar.getDeletedEventsSince(calendarId, token.since);
         for (const d of deleted) {
-            responses.push(
-                response(eventHref(ownerId, calendarId, d.uri), [`<D:status>HTTP/1.1 404 Not Found</D:status>`]),
-            );
+            responses.push(removedRow(eventHref(ownerId, calendarId, d.uri)));
         }
     }
 
@@ -200,7 +164,7 @@ function buildEventResponses(
 
     for (const event of events) {
         if (event.parentEventId) continue; // Skip exceptions
-        const props = [...eventEtagProp(event.etag)];
+        const props = memberProps(event.etag, ICS_CONTENT_TYPE);
         if (includeData) {
             const group = eventsByUid.get(event.uid) ?? [event];
             props.push(calendarDataProp(eventsToIcs(group)));

@@ -1,9 +1,9 @@
 import { XMLParser } from 'fast-xml-parser';
 import type { Calendar } from '../calendar/calendar';
 import { ApiError } from '../core';
+import { multistatusResponse, propstatOk, response } from '../dav/xml';
 import { isXmlNode, type XmlNode } from '../dav/xml-node';
 import { calendarHref, sanitizeCalendarId } from './discovery';
-import { multistatusResponse, propstatOk, response } from './xml-builder';
 
 // removeNSPrefix strips the D:/C:/ICAL: prefixes, so property lookups below stay unprefixed — no fallback needed.
 const parser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });

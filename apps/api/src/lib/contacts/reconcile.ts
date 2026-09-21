@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
-import { mergeVCard } from '../carddav/vcard-serialize';
 import {
     computeResourceEtag,
     dedupeByUid,
@@ -11,6 +10,7 @@ import {
     uriKeyOf,
     writeResourceFile,
 } from '../core';
+import { mergeVCard } from '../vcard';
 import type { ParsedCard } from '../vcard/types';
 import type { CardRowInput } from './card-store';
 import { avatarNameOf, cardPath, cardUpdateSet, statCardDir } from './card-store';

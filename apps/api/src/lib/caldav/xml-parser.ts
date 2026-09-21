@@ -34,9 +34,9 @@ export type ReportType = 'calendar-query' | 'calendar-multiget' | 'sync-collecti
 // Discriminated union, the CardDAV twin's shape (carddav xml-parser.ts): each report type carries only the
 // fields it uses, so a handler taking Extract<ReportRequest, {type}> can't read a field meant for another.
 export type ReportRequest =
-    | { type: 'calendar-query'; timeRange?: { start: Date; end: Date }; propNames: string[] }
-    | { type: 'calendar-multiget'; hrefs: string[]; propNames: string[] }
-    | { type: 'sync-collection'; syncToken?: string; propNames: string[] };
+    | { type: 'calendar-query'; timeRange?: { start: Date; end: Date }; wantsData: boolean }
+    | { type: 'calendar-multiget'; hrefs: string[]; wantsData: boolean }
+    | { type: 'sync-collection'; syncToken?: string; wantsData: boolean };
 
 export function parseReport(xml: string): ReportRequest {
     const parsed = parser.parse(xml);
@@ -51,17 +51,19 @@ export function parseReport(xml: string): ReportRequest {
     else throw new Error('Unsupported REPORT type');
 
     const root = parsed[type];
-    const propNames = Object.keys(root['prop'] || {});
+    // Whether the client asked for the resource body, decided once here (the carddav twin's readProps) so the
+    // three handlers can't read one request differently.
+    const wantsData = Object.keys(root['prop'] || {}).some((p) => p.includes('calendar-data'));
 
     if (type === 'calendar-multiget') {
         const hrefData = root['href'] || [];
         const hrefs = Array.isArray(hrefData) ? hrefData.map(String) : [String(hrefData)].filter(Boolean);
-        return { type, hrefs, propNames };
+        return { type, hrefs, wantsData };
     }
 
     if (type === 'sync-collection') {
         const syncToken = root['sync-token'] || undefined;
-        return { type, syncToken: syncToken ? String(syncToken) : undefined, propNames };
+        return { type, syncToken: syncToken ? String(syncToken) : undefined, wantsData };
     }
 
     // calendar-query: only the VEVENT time-range filter is read.
@@ -75,5 +77,5 @@ export function parseReport(xml: string): ReportRequest {
         // than feeding Invalid Date into rrule.between.
         if (start && end) parsedTimeRange = { start, end };
     }
-    return { type, timeRange: parsedTimeRange, propNames };
+    return { type, timeRange: parsedTimeRange, wantsData };
 }

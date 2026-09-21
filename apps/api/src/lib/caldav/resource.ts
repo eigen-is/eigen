@@ -4,13 +4,10 @@ import type { Calendar } from '../calendar/calendar';
 import { storedRecurrenceKey } from '../calendar/recurrence';
 import type { CalendarEventRow } from '../calendar/types';
 import { matchesIfMatch, matchesIfNoneMatch } from '../core/http';
+import { eventsToIcs, parseIcs } from '../ical';
+import type { IcsParseResult, ParsedEvent } from '../ical/ical-parse';
 import { eventHref } from './discovery';
-import { eventsToIcs } from './ical-component';
-import { type IcsParseResult, type ParsedEvent, parseIcs } from './ical-parse';
 
-// A calendar resource runs larger than a vCard (a recurring series carries an overridden VEVENT per exception),
-// so the raw-body ceiling is ~4× CardDAV's CARD_MAX_BYTES; the router bounds the PUT body against it before buffering.
-export const EVENT_MAX_BYTES = 20_971_520;
 // The client-chosen path segment, percent-decoded at the router, becomes the stored uri; cap its decoded length
 // as CardDAV's sanitizeCardUri does (an event uri is a DB column here, never a filename).
 const MAX_URI_LENGTH = 200;

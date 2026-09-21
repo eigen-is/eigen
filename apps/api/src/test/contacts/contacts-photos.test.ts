@@ -3,12 +3,11 @@ import { randomFillSync, randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { createVCard } from '../../lib/carddav/vcard-serialize';
 import { cacheCardPhoto } from '../../lib/contacts/avatars';
 import type { Contacts } from '../../lib/contacts/contacts';
 import * as contactsSchema from '../../lib/contacts/schema';
 import { computeResourceEtag } from '../../lib/core';
-import { parseVCard } from '../../lib/vcard';
+import { createVCard, parseVCard } from '../../lib/vcard';
 import type { ParsedCardPhoto } from '../../lib/vcard/types';
 import {
     avatarsDirOf,

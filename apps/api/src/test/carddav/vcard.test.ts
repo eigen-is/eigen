@@ -1,6 +1,7 @@
-// The CardDAV-only vCard seams: merging Eigen-owned edits back into a stored card, the addressbook-query
-// matcher, and the address-data partial projection. The AST, projection parse and 4.0 -> 3.0 transcode are
-// tested in packages/lib/src/test/vcard/vcard.test.ts.
+// The vCard seams a CardDAV client meets: merging Eigen-owned edits back into a stored card, the
+// addressbook-query matcher, and the address-data partial projection — the last two protocol-only, and all
+// three reading the one Apple-shaped fixture below. The AST, projection parse and 4.0 -> 3.0 transcode are
+// tested in src/test/vcard/vcard.test.ts.
 import { describe, expect, test } from 'bun:test';
 import { projectAddressData } from '../../lib/carddav/address-data';
 import {
@@ -10,8 +11,7 @@ import {
     type QueryFilter,
     type TextMatch,
 } from '../../lib/carddav/query-filter';
-import { createVCard, mergeVCard } from '../../lib/carddav/vcard-serialize';
-import { parseVCard, parseVCardLines } from '../../lib/vcard';
+import { createVCard, mergeVCard, parseVCard, parseVCardLines } from '../../lib/vcard';
 
 // A vCard is CRLF-joined and CRLF-terminated; fixtures are written as physical lines so folding is literal.
 const vcard = (lines: string[]) => `${lines.join('\r\n')}\r\n`;

@@ -1,5 +1,6 @@
 import { escapeXml } from '@workspace/lib/html';
-import { addressbookHomeHref, calendarHomeHref } from './href';
+import { addressbookHomeHref, calendarHomeHref, principalHref } from './href';
+import type { PropMap } from './propfind';
 
 export const XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
 
@@ -38,13 +39,37 @@ export function propstatNotFound(props: string[]): string {
     return `<D:propstat><D:prop>${props.join('')}</D:prop><D:status>HTTP/1.1 404 Not Found</D:status></D:propstat>`;
 }
 
+// The two 404 rows, which are not interchangeable: a multiget names the prop it could not serve, while a
+// sync-collection removal carries a bare status (RFC 6578 § 3.2) because there is no resource left to describe.
+export const notFoundRow = (href: string) => response(href, [propstatNotFound(['<D:getetag/>'])]);
+export const removedRow = (href: string) => response(href, ['<D:status>HTTP/1.1 404 Not Found</D:status>']);
+
+const getetag = (etag: string) => `<D:getetag>"${escapeXml(etag)}"</D:getetag>`;
+const getcontenttype = (contentType: string) => `<D:getcontenttype>${contentType}</D:getcontenttype>`;
+
+// A collection member as a REPORT row: etag and content type, single-sourced with the PROPFIND map below so
+// the two views can't spell one resource differently. The content type is all the two protocols differ in.
+export function memberProps(etag: string, contentType: string): string[] {
+    return [getetag(etag), getcontenttype(contentType)];
+}
+
+// The same member as a PROPFIND row map, plus the empty resourcetype that marks it a non-collection (the
+// RFC 4918 discriminator).
+export function memberRowProps(etag: string, contentType: string): PropMap {
+    return new Map([
+        ['getetag', getetag(etag)],
+        ['getcontenttype', getcontenttype(contentType)],
+        ['resourcetype', `<D:resourcetype/>`],
+    ]);
+}
+
 export function principalProps(userId: string): string[] {
     return [
         `<D:resourcetype><D:collection/><D:principal/></D:resourcetype>`,
         `<C:calendar-home-set><D:href>${calendarHomeHref(userId)}</D:href></C:calendar-home-set>`,
         // One principal serves both protocols; clients read only the props they know.
         `<CARD:addressbook-home-set><D:href>${addressbookHomeHref(userId)}</D:href></CARD:addressbook-home-set>`,
-        `<D:principal-URL><D:href>/dav/principals/${userId}/</D:href></D:principal-URL>`,
+        `<D:principal-URL><D:href>${principalHref(userId)}</D:href></D:principal-URL>`,
     ];
 }
 
@@ -59,6 +84,6 @@ export function ownershipEntries(ownerId: string): [string, string][] {
             'current-user-privilege-set',
             `<D:current-user-privilege-set><D:privilege><D:all/></D:privilege><D:privilege><D:read/></D:privilege><D:privilege><D:write/></D:privilege><D:privilege><D:write-content/></D:privilege><D:privilege><D:bind/></D:privilege><D:privilege><D:unbind/></D:privilege></D:current-user-privilege-set>`,
         ],
-        ['owner', `<D:owner><D:href>/dav/principals/${ownerId}/</D:href></D:owner>`],
+        ['owner', `<D:owner><D:href>${principalHref(ownerId)}</D:href></D:owner>`],
     ];
 }

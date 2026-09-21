@@ -1,17 +1,9 @@
 import type { CalendarItem } from '@workspace/lib/types/calendar';
 import { isSafePathSegment } from '../core';
-import { calendarHomeHref, encodePathSegment } from '../dav/href';
-import type { PropfindRequest } from '../dav/propfind';
-import {
-    calendarCollectionProps,
-    currentUserPrincipalProp,
-    homeCollectionProps,
-    multistatusResponse,
-    principalProps,
-    propstatOk,
-    response,
-    selectProps,
-} from './xml-builder';
+import { calendarHomeHref, encodePathSegment, principalHref } from '../dav/href';
+import { type PropfindRequest, selectProps } from '../dav/propfind';
+import { multistatusResponse, principalProps, propstatOk, response } from '../dav/xml';
+import { calendarCollectionProps, currentUserPrincipalProp, homeCollectionProps } from './xml-builder';
 
 // The two href shapes every CalDAV surface emits (discovery, PROPFIND rows, REPORT rows, the PUT/MKCALENDAR
 // Location header), so the path shape and the escaping rule live in one place. The resource name is client-chosen,
@@ -35,7 +27,7 @@ export function handleRootPropfind(userId: string): Response {
 
 // PROPFIND /dav/principals/{userId}/ — returns calendar-home-set + principal props
 export function handlePrincipalPropfind(userId: string): Response {
-    return multistatusResponse([response(`/dav/principals/${userId}/`, [propstatOk(principalProps(userId))])]);
+    return multistatusResponse([response(principalHref(userId), [propstatOk(principalProps(userId))])]);
 }
 
 // PROPFIND /dav/calendars/{ownerId}/ — list calendars (Depth: 0 or 1)

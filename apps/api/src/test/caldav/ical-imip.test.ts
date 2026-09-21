@@ -1,8 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, ImipMethod } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment } from '@workspace/lib/types/mail';
-import { eventsToIcs, serializeEventForImip } from '../../lib/caldav/ical-component';
-import { parseIcs } from '../../lib/caldav/ical-parse';
 import {
     composeCancelEmail,
     composeInviteEmail,
@@ -12,6 +10,8 @@ import {
 } from '../../lib/calendar/imip';
 import { getMailDomain } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
+import { eventsToIcs, parseIcs, serializeEventForImip } from '../../lib/ical';
+import { basicAuth } from '../dav-test-helpers';
 import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 // Inbound iMIP acts only on a message our verifying MTA authenticated. These helpers stand in for
@@ -928,7 +928,7 @@ describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
             new Request(`http://localhost/dav/calendars/${ctx.charlie.user.id}/${calendarId}/`, {
                 method: 'REPORT',
                 headers: {
-                    Authorization: `Basic ${btoa(`${ctx.charlie.user.email}:testpassword123`)}`,
+                    Authorization: basicAuth(ctx.charlie.user.email),
                     'Content-Type': 'application/xml',
                 },
                 body: report,

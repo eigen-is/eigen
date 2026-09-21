@@ -1,29 +1,21 @@
+import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
 import type { Contacts } from '../contacts/contacts';
 import type { CardRow } from '../contacts/dav-store';
 import { uriKeyOf } from '../core';
+import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
+import { formatSyncToken, invalidSyncToken, parseSyncToken } from '../dav/sync-token';
+import { davError, memberProps, multistatusResponse, notFoundRow, propstatOk, removedRow, response } from '../dav/xml';
 import { parseVCardLines } from '../vcard';
 import type { VCardLine } from '../vcard/types';
 import { projectAddressData } from './address-data';
 import { bookHref, cardHref } from './discovery';
 import { matchCard, UnsupportedCollationError, UnsupportedFilterError } from './query-filter';
-import {
-    addressDataProp,
-    cardEtagProp,
-    davError,
-    formatSyncToken,
-    invalidSyncToken,
-    multistatusResponse,
-    parseSyncToken,
-    propstatNotFound,
-    propstatOk,
-    response,
-} from './xml-builder';
+import { addressDataProp } from './xml-builder';
 import { type CardReportRequest, parseCardReport } from './xml-parser';
 
-// Request bounds: multiget refuses a client that asks for more than this many resources in one round-trip, and
-// a query result set is truncated to the cap rather than assembling an unbounded response. The body ceiling is
-// the shared DAV_BODY_MAX_BYTES, enforced in the router before the body reaches the XML unfolder.
-const MULTIGET_HREF_LIMIT = 500;
+// A query result set is truncated to this cap rather than assembling an unbounded response. The multiget
+// round-trip bound is the shared MULTIGET_HREF_LIMIT, and the body ceiling the shared DAV_BODY_MAX_BYTES,
+// enforced in the router before the body reaches the XML unfolder.
 const QUERY_RESULT_CAP = 1000;
 
 // REPORT on /dav/addressbooks/:ownerId/contacts/ — addressbook-multiget, addressbook-query, or sync-collection.
@@ -72,41 +64,20 @@ async function handleMultiget(
 ): Promise<Response> {
     if (report.hrefs.length > MULTIGET_HREF_LIMIT) return new Response('Too many hrefs', { status: 400 });
 
-    const prefix = bookHref(ownerId);
+    // Cards fold by uri key, so two spellings of one name yield one row (the shared resolver's `keyOf`).
     const responses: string[] = [];
-    // One response per resource: a client listing one href N ways must not make us retain N copies of the
-    // card's bytes — the 500-count cap bounds the request, this dedupe re-anchors the response to the book.
-    // Keyed by folded uri when resolvable, by `raw:`+href otherwise so repeated 404s collapse too; stored
-    // uris can't contain ':' (sanitizeCardUri), so a raw: key never shadows a real card. First occurrence
-    // wins, preserving request order.
-    const seen = new Set<string>();
-    for (const href of report.hrefs) {
-        // Normalize an absolute-path href down to the book prefix (the caldav report.ts move), then percent-decode
-        // the single resource segment. A malformed escape or a href outside this book is a 404 row, not a throw.
-        const normalized = href.replace(/^\/+/, '/');
-        const encodedUri = normalized.startsWith(prefix) ? normalized.slice(prefix.length) : '';
-        let uri = '';
-        if (encodedUri) {
-            try {
-                uri = decodeURIComponent(encodedUri);
-            } catch {
-                uri = '';
-            }
-        }
-        const dedupeKey = uri ? uriKeyOf(uri) : `raw:${href}`;
-        if (seen.has(dedupeKey)) continue;
-        seen.add(dedupeKey);
-        if (!uri) {
-            responses.push(response(href, [propstatNotFound(['<D:getetag/>'])]));
+    for (const { uri, href } of resolveMultigetHrefs(report.hrefs, bookHref(ownerId), uriKeyOf)) {
+        if (uri === null) {
+            responses.push(notFoundRow(href));
             continue;
         }
 
         const card = await contacts.getCard(uri);
         if (!card) {
-            responses.push(response(cardHref(ownerId, uri), [propstatNotFound(['<D:getetag/>'])]));
+            responses.push(notFoundRow(cardHref(ownerId, uri)));
             continue;
         }
-        const props = [...cardEtagProp(card.etag)];
+        const props = memberProps(card.etag, VCARD_CONTENT_TYPE);
         if (report.wantsData) {
             props.push(addressDataProp(resolveAddressData(new TextDecoder().decode(card.bytes), report.partialProps)));
         }
@@ -151,7 +122,7 @@ async function handleQuery(
     }
 
     const responses = matched.map((r) => {
-        const props = [...cardEtagProp(r.etag)];
+        const props = memberProps(r.etag, VCARD_CONTENT_TYPE);
         if (report.wantsData) props.push(addressDataProp(resolveAddressData(r.text, report.partialProps)));
         return response(cardHref(ownerId, r.uri), [propstatOk(props)]);
     });
@@ -186,7 +157,7 @@ async function handleSyncCollection(
         // href appears as both a 200 and a 404 in one response — the dup-href CalDAV bug this branch fixed at
         // the calendar's three tombstone sites).
         for (const d of await contacts.getDeletedCardsSince(token.since)) {
-            responses.push(response(cardHref(ownerId, d.uri), ['<D:status>HTTP/1.1 404 Not Found</D:status>']));
+            responses.push(removedRow(cardHref(ownerId, d.uri)));
         }
     }
 
@@ -198,7 +169,7 @@ async function handleSyncCollection(
 // must describe one revision. Without address-data nothing is read, so the row's etag is what there is.
 async function cardRow(contacts: Contacts, ownerId: string, card: CardRow, wantsData: boolean): Promise<string> {
     const got = wantsData ? await contacts.getCard(card.uri) : null;
-    const props = [...cardEtagProp(got?.etag ?? card.etag)];
+    const props = memberProps(got?.etag ?? card.etag, VCARD_CONTENT_TYPE);
     if (got) props.push(addressDataProp(new TextDecoder().decode(got.bytes)));
     return response(cardHref(ownerId, card.uri), [propstatOk(props)]);
 }

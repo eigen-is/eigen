@@ -9,6 +9,22 @@ export type VCardLine = {
     raw: string | null; // exact source slice incl. original folding/CRLFs; null for built lines
 };
 
+// The Eigen-owned edits a write merges back into a stored card. An absent key keeps the stored property.
+export type CardEdits = Partial<{
+    firstName: string;
+    lastName: string;
+    email: string[];
+    phone: string[];
+    address: Address[];
+    company: string;
+    jobTitle: string;
+    birthday: string;
+    notes: string;
+    categories: string[];
+    eigenId: string | null; // null = remove X-EIGEN-ID
+    photo: { bytes: Uint8Array; mediaType: string } | null; // null = remove PHOTO; absent key = keep
+}>;
+
 export type ParsedCardPhoto =
     | { kind: 'inline'; bytes: Uint8Array; mediaType: string | null }
     | { kind: 'uri'; uri: string };

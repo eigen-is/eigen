@@ -7,11 +7,10 @@ import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
-import { createVCard, mergeVCard } from '../../lib/carddav/vcard-serialize';
 import { CARD_MAX_BYTES, cardPath, labelColorFor, normalizeLabelName } from '../../lib/contacts/card-store';
 import * as contactsSchema from '../../lib/contacts/schema';
 import { computeResourceEtag, LocalFilesystem, PATHS, uriKeyOf } from '../../lib/core';
-import { parseVCard } from '../../lib/vcard';
+import { createVCard, mergeVCard, parseVCard } from '../../lib/vcard';
 import { CONTACTS_TEST_ROOT, cardsDirOf, makeContacts, validContact } from '../contacts-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-card-store-${Date.now()}`);

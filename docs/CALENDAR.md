@@ -343,9 +343,9 @@ REPORT calendar-query/multiget/sync-collection, MKCALENDAR, DELETE on the collec
 `verifyProtocolAuth()`. One `.ics` resource per UID: the master VEVENT plus one override VEVENT per
 stored exception — exception rows are internal and never appear as their own resources.
 
-**MKCALENDAR creates the calendar at the client-chosen URL segment** (sanitized by `sanitizeCalendarId`, which is `isSafePathSegment` in `lib/core/path-utils.ts` over the NFC form — the one rule CardDAV resource names and mail draft ids take too; 405 when the id already exists, 201 with a `Location` header), so a client's follow-up PROPFIND of the URL it chose resolves. **DELETE on that same URL removes the calendar** (204; 404 for an unknown id, 403 for the default one), through the very `deleteCalendar()` the web route calls, so the guard and the `calendar:calendar-deleted` SSE event are shared by both surfaces. **PROPFIND honors the requested prop list** via the shared core in `lib/dav/propfind.ts` (both DAV surfaces use it): requested props we have come back in the 200 propstat, unknown ones in a 404 propstat echoing their namespace (omitted under `Brief: t` / `Prefer: return=minimal`), a bodyless PROPFIND stays allprop, and member rows carry an empty `resourcetype`. Every multiget href gets a response row — malformed or out-of-collection hrefs come back as 404 rows echoing the original href.
+**MKCALENDAR creates the calendar at the client-chosen URL segment** (sanitized by `sanitizeCalendarId`, which is `isSafePathSegment` in `lib/core/path-utils.ts` over the NFC form — the one rule CardDAV resource names and mail draft ids take too; 405 when the id already exists, 201 with a `Location` header), so a client's follow-up PROPFIND of the URL it chose resolves. **DELETE on that same URL removes the calendar** (204; 404 for an unknown id, 403 for the default one), through the very `deleteCalendar()` the web route calls, so the guard and the `calendar:calendar-deleted` SSE event are shared by both surfaces. **PROPFIND honors the requested prop list** via the shared core in `lib/dav/propfind.ts` (both DAV surfaces use it): requested props we have come back in the 200 propstat, unknown ones in a 404 propstat echoing their namespace (omitted under `Brief: t` / `Prefer: return=minimal`), a bodyless PROPFIND stays allprop, and member rows carry an empty `resourcetype`. Every multiget href gets a response row — malformed or out-of-collection hrefs come back as 404 rows echoing the original href. The calendar collection advertises `C:max-resource-size` (RFC 4791 §5.2.5) carrying `EVENT_MAX_BYTES` (20 MiB), the same ceiling the router bounds a PUT body against before buffering and answers as a 413 `C:max-resource-size` precondition.
 
-**Serialization** (`ical-component.ts`):
+**Serialization** (`lib/ical/ical-component.ts`):
 
 - `ICAL.Component.toString()` is the one serializer. `buildResource(events)` assembles a VCALENDAR from
   projected rows and `patchEvent` / `putOverride` / `addExclusion` / `removeExclusion` edit a stored
@@ -358,7 +358,7 @@ stored exception — exception rows are internal and never appear as their own r
   plus recurrence key, handing one stored id to one VEVENT and minting a fresh one for a second claimant.
   `stripEigenStamps` takes them off the iMIP body, which is the one place a `.ics` leaves the Home; a
   CalDAV GET serves them to the owner's own clients on purpose
-- Every referenced TZID gets a generated VTIMEZONE block (RFC 5545 §3.6.5). `vtimezone.ts` builds it
+- Every referenced TZID gets a generated VTIMEZONE block (RFC 5545 §3.6.5). `lib/ical/vtimezone.ts` builds it
   from Intl offset data: transitions compressed to two open-ended RRULE observances when the zone's
   DST rule is regular, one observance per transition otherwise
 - RECURRENCE-ID names the ORIGINAL occurrence — computed from the master via
@@ -374,7 +374,7 @@ stored exception — exception rows are internal and never appear as their own r
   the new TZID needs, ahead of the VEVENTs that reference it, and drops one nothing references any
   more; a definition a property still names is the client's own and is never rewritten
 
-**Parsing** (`ical-parse.ts`):
+**Parsing** (`lib/ical/ical-parse.ts`):
 
 - There are two read entry points and one trust rule. `parseIcs(text)` reads bytes a stranger wrote — a CalDAV PUT body, a previewed or imported file, an inbound iMIP part — and its result type names no `X-EIGEN-*` fact at all, so a forged event id, creator, color or organizer link has nowhere to land and `data.organizer.userId` comes back empty. `projectResource(component)` reads a resource the store itself wrote and adds the stamps, `CREATED`/`LAST-MODIFIED` and `hasUnindexedRecurrence` on top of the same projection. Both share one parser body; `parseResource(ics)` is the only place a stored `.ics` becomes a component tree
 - A valid IANA TZID resolves through Intl whether or not the file defines a VTIMEZONE — the path the
@@ -457,8 +457,10 @@ Both follow from storing columns and re-synthesizing the resource on GET, and bo
   `mappers.ts` for row→domain + `computeEtag`), the storage layer (`schema.ts`, `db-config.ts`, `types.ts`), access
   resolution (`get-calendar.ts`, the Drive `get-drive.ts` analogue), the two propagators
   (`share-propagation.ts`, `invite-propagation.ts`), `imip.ts`, and `sse-events.ts`.
-- **`apps/api/src/lib/caldav/`** — the protocol layer: router, REPORT handlers, `ical-component.ts`,
-  `ical-parse.ts`, `vtimezone.ts`, `resource.ts`.
+- **`apps/api/src/lib/ical/`** — the iCalendar format, read and written by every surface that meets an `.ics`
+  (the store, iMIP, import, quick look, CalDAV): `ical-parse.ts`, `ical-component.ts`, `vtimezone.ts`, behind
+  an `index.ts` barrel.
+- **`apps/api/src/lib/caldav/`** — the protocol layer only: router, REPORT handlers, `resource.ts`.
 - **`apps/api/src/routes/calendar.ts`** — thin route bindings.
 - **`packages/lib/src/core/calendar/`** — FE hooks + SSE handlers, `calendar-utils.ts` (`formatEventWhen`,
   `rruleToText`, `viewerTimeZone`) and `preview-lines.ts` (the method labels an `.ics`
