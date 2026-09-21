@@ -176,6 +176,22 @@ describe('rruleToText', () => {
     test('a rule rrule cannot read comes back as itself', () => {
         expect(rruleToText('FREQ=NEVER')).toBe('FREQ=NEVER');
     });
+
+    // rrule's own ordinals stop at a month day, so anything past the 31st reads "131th" without this.
+    test('a day of the year past the 31st still gets the right ordinal', () => {
+        const text = rruleToText('FREQ=YEARLY;BYYEARDAY=32,101,111,112,113,121,131');
+        expect(text).toBe('every year on the 32nd, 101st, 111th, 112th, 113th, 121st and 131st day');
+    });
+
+    test('the teens and the month days rrule already spells keep their suffix', () => {
+        expect(rruleToText('FREQ=MONTHLY;BYMONTHDAY=1,2,3,11,12,13,21,22,23,31')).toBe(
+            'every month on the 1st, 2nd, 3rd, 11th, 12th, 13th, 21st, 22nd, 23rd and 31st',
+        );
+    });
+
+    test('a count and an interval are numbers, not ordinals', () => {
+        expect(rruleToText('FREQ=WEEKLY;INTERVAL=2;COUNT=13')).toBe('every 2 weeks for 13 times');
+    });
 });
 
 // The edit dialog opens on the occurrence the user clicked, and "all events in series" saves on the master:

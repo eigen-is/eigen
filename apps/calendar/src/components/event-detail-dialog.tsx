@@ -244,7 +244,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                         {calendarName && (
                             <div className="pt-3 mt-3 border-t flex items-start gap-3">
                                 <Calendar className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                                <div className="text-sm text-muted-foreground">
+                                <div className="text-sm text-muted-foreground min-w-0 break-words">
                                     {calendarName}
                                     {isShared && sharedCalendar && !isLinkedEvent && (
                                         <div className="text-xs">

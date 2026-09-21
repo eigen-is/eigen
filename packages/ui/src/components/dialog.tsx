@@ -71,7 +71,9 @@ function DialogContent({
                     // max-h + overflow mirror the width cap so a form taller than the viewport
                     // scrolls inside the dialog instead of pushing its footer off-screen. Callers
                     // that manage their own height (flex-col + max-h-[85vh]) override both.
-                    'fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
+                    // grid-cols-1 is minmax(0,1fr): an implicit auto track would take the min-content
+                    // width of a 700-character title and carry the footer's buttons off with it.
+                    'fixed top-[50%] left-[50%] z-50 grid grid-cols-1 w-full max-w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
                     abovePreview ? ABOVE_PREVIEW_Z : undefined,
                     size ? dialogSizeMap[size] : 'sm:max-w-xl',
                     className,
@@ -157,7 +159,7 @@ function DialogTitle({ className, ...props }: React.ComponentProps<typeof Dialog
             data-slot="dialog-title"
             // pr-8 reserves space for the absolute-positioned close button so long titles
             // wrap above it instead of running underneath.
-            className={cn('text-lg leading-none font-medium pr-8', className)}
+            className={cn('text-lg leading-none font-medium pr-8 break-words', className)}
             {...props}
         />
     );

@@ -211,11 +211,24 @@ export function occurrenceDateToString(value: unknown): string {
     return String(value).substring(0, 10);
 }
 
+// rrule spells ordinals by a lookup that stops at the 31st, so a day of the year comes out as "131th".
+const ORDINAL_IN_TEXT = /(\d+)(?:st|nd|rd|th)/g;
+
+function ordinalSuffix(n: number): string {
+    if (n % 100 >= 11 && n % 100 <= 13) return 'th';
+    if (n % 10 === 1) return 'st';
+    if (n % 10 === 2) return 'nd';
+    if (n % 10 === 3) return 'rd';
+    return 'th';
+}
+
 // A file's RRULE is untrusted input, so a rule rrule cannot read is printed verbatim rather than swallowed.
 export function rruleToText(rrule: string | null): string | null {
     if (!rrule) return null;
     try {
-        return RRule.fromString(rrule).toText();
+        return RRule.fromString(rrule)
+            .toText()
+            .replace(ORDINAL_IN_TEXT, (_, digits: string) => `${digits}${ordinalSuffix(Number(digits))}`);
     } catch {
         return rrule;
     }
