@@ -37,14 +37,16 @@ import type { Home } from '../home';
 import {
     addExclusion,
     buildResource,
+    isNewerRevision,
     parseResource,
     patchEvent,
     putOverride,
     removeExclusion,
     stampInvitationLink,
     storedOrganizerAddress,
+    storedRevision,
 } from '../ical';
-import type { EventPatch } from '../ical/ical-component';
+import type { EventPatch, Revision, WriteContext } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
 import { clampRangeEnd, isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
 import { computeOccurrenceTimes, storedRecurrenceKey, utcToLocal } from '../ical/wall-clock';
@@ -110,6 +112,7 @@ function inboundUpdatePayload(parsed: ParsedEvent): InvitationUpdatePayload {
         timezone: parsed.timezone,
         status: parsed.status,
         sequence: parsed.sequence,
+        dtstamp: parsed.dtstamp,
         attendees: parsed.data?.attendees,
     };
 }
@@ -127,6 +130,7 @@ function inboundExceptionPayload(parsed: ParsedEvent): InvitationExceptionPayloa
         timezone: parsed.timezone,
         status: parsed.status,
         sequence: parsed.sequence,
+        dtstamp: parsed.dtstamp,
         attendees: parsed.data?.attendees,
     };
 }
@@ -146,6 +150,7 @@ function inboundInvitationPayload(parsed: ParsedEvent, sender: string): ReceiveI
         timezone: parsed.timezone,
         status: parsed.status,
         sequence: parsed.sequence,
+        dtstamp: parsed.dtstamp,
         data: {
             ...parsed.data,
             organizer: parsed.data?.organizer ? { ...parsed.data.organizer, userId: organizerUserId } : undefined,
@@ -835,8 +840,8 @@ export class Calendar {
         await store.writeResource(this, resource.calendarId, resource.uri, component, resource);
     }
 
-    private writeContext(actorIsOrganizer: boolean) {
-        return { now: new Date(), actorIsOrganizer };
+    private writeContext(actorIsOrganizer: boolean, dtstamp?: Date | null): WriteContext {
+        return { now: new Date(), actorIsOrganizer, dtstamp };
     }
 
     public async createEvent(calendarId: string, input: CreateEventArgs, user?: User): Promise<CalendarEvent> {
@@ -891,8 +896,11 @@ export class Calendar {
             now: new Date(),
         });
         await this.editResource(resource, (component) => {
-            if (override.status === 'cancelled') addExclusion(component, parent, override, this.writeContext(true));
-            else putOverride(component, parent, override);
+            if (override.status === 'cancelled') {
+                addExclusion(component, parent, override, this.writeContext(true, input.dtstamp));
+            } else {
+                putOverride(component, parent, override);
+            }
         });
         const stored = this.exceptionOf(parent.id, override.recurrenceDate);
         return stored ?? this.eventById(parent.id)!;
@@ -1205,6 +1213,7 @@ export class Calendar {
             timezone: payload.timezone,
             status: payload.status,
             sequence: payload.sequence,
+            dtstamp: payload.dtstamp,
             data: {
                 ...payload.data,
                 organizer: payload.data.organizer
@@ -1258,29 +1267,33 @@ export class Calendar {
         orgUserId: string,
         payload: InvitationUpdatePayload,
     ): Promise<void> {
-        const linked = this.findLinkedEvent(orgEventId, orgUserId);
-        if (!linked) return;
-        const applied = await this.gate.run(() => this.applyInvitationUpdate(linked, payload));
-        if (applied) this.notifyInvitationUpdated(linked, payload.title, payload.startTime, orgEventId, orgUserId);
+        const linked = await this.gate.run(async () => {
+            const linked = this.findLinkedEvent(orgEventId, orgUserId);
+            return linked && (await this.applyInvitationUpdate(linked, payload)) ? linked : null;
+        });
+        if (linked) this.notifyInvitationUpdated(linked, payload.title, payload.startTime, orgEventId, orgUserId);
     }
 
     // Caller holds the gate. False when the message is a replay the stored copy already outranks.
     private async applyInvitationUpdate(linked: CalendarEvent, payload: InvitationUpdatePayload): Promise<boolean> {
-        // RFC 5546 §3.2.2.1: ignore a REQUEST older than the stored revision — a stale or replayed
-        // invite must not overwrite the attendee's live copy. An equal SEQUENCE still applies: a title,
-        // description or location edit is not a significant change and never bumps it (RFC 5545 §3.8.7.4),
-        // so the attendee would otherwise never see one.
-        if (payload.sequence < linked.sequence) return false;
-
         const resource = this.resourceOf(linked.id);
         if (!resource) return false;
+        const component = await this.loadResource(resource.calendarId, resource.uri);
+        if (!component) return false;
+        if (!isNewerRevision(payload, storedRevision(component, null))) return false;
+
         // Don't extend rrule beyond what the attendee has locally — they may have truncated it via
         // "delete this and following" and that intent should stick.
         const rrule = constrainRRule(payload.rrule, linked.rrule);
-
-        await this.editResource(resource, (component) => {
-            patchEvent(component, null, this.invitationPatch(linked, payload, rrule), this.writeContext(false));
-        });
+        // A redelivery patches to nothing, so it costs no ctag bump and tells the user nothing twice.
+        const changed = patchEvent(
+            component,
+            null,
+            this.invitationPatch(linked, payload, rrule),
+            this.writeContext(false, payload.dtstamp),
+        );
+        if (!changed) return false;
+        await store.writeResource(this, resource.calendarId, resource.uri, component, resource);
         return true;
     }
 
@@ -1346,10 +1359,13 @@ export class Calendar {
             payload.recurrenceInstant,
             linked.timezone,
         );
-        const existing = this.exceptionOf(linked.id, recurrenceDate);
-        // RFC 5546 §3.2.2.1: ignore a REQUEST whose SEQUENCE isn't newer than the stored exception.
-        if (existing && payload.sequence <= existing.sequence) return false;
+        const resource = this.resourceOf(linked.id);
+        if (!resource) return false;
+        const component = await this.loadResource(resource.calendarId, resource.uri);
+        if (!component) return false;
+        if (!isNewerRevision(payload, storedRevision(component, recurrenceDate))) return false;
 
+        const existing = this.exceptionOf(linked.id, recurrenceDate);
         const data: EventData = {
             ...linked.data,
             attendees: payload.attendees ?? existing?.data?.attendees ?? linked.data?.attendees,
@@ -1366,6 +1382,7 @@ export class Calendar {
             recurrenceDate,
             status: payload.status,
             sequence: payload.sequence,
+            dtstamp: payload.dtstamp,
             data,
             createByUserId: linked.createByUserId,
             uid: linked.uid,
@@ -1428,7 +1445,7 @@ export class Calendar {
             const applied = parsed.recurrenceDate
                 ? await this.applyInvitationException(linked, inboundExceptionPayload(parsed))
                 : await this.applyInvitationUpdate(linked, inboundUpdatePayload(parsed));
-            return applied ? { kind: 'updated', linked } : { kind: 'dropped', reason: 'a stale revision' };
+            return applied ? { kind: 'updated', linked } : { kind: 'dropped', reason: 'nothing newer to apply' };
         }
 
         const master = stored.find((e) => !e.parentEventId);
@@ -1483,7 +1500,7 @@ export class Calendar {
                 ...this.invitationPatch(master, inboundUpdatePayload(parsed), parsed.rrule),
                 data: { ...master.data, organizer, attendees: parsed.data?.attendees },
             },
-            this.writeContext(false),
+            this.writeContext(false, parsed.dtstamp),
         );
         await store.writeResource(this, resource.calendarId, resource.uri, component, resource);
     }
@@ -1495,17 +1512,21 @@ export class Calendar {
         orgUserId: string,
         recurrenceDate: string,
         recurrenceInstant: Date | null | undefined,
-        sequence: number,
+        revision: Revision,
     ): Promise<void> {
-        const linked = this.findLinkedEvent(orgEventId, orgUserId);
-        if (!linked) return;
-        const key = this.recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, linked.timezone);
-        // RFC 5546 replay guard: a stale redelivered CANCEL must not re-cancel an occurrence a newer
-        // REQUEST re-instated. Strictly `<` — clients may cancel without bumping SEQUENCE.
-        const existing = this.exceptionOf(linked.id, key);
-        if (existing && sequence < existing.sequence) return;
-        await this.removeOccurrence(linked.id, key, sequence);
-        this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, orgUserId));
+        const cancelled = await this.gate.run(async () => {
+            const linked = this.findLinkedEvent(orgEventId, orgUserId);
+            if (!linked) return false;
+            const resource = this.resourceOf(linked.id);
+            if (!resource) return false;
+            const component = await this.loadResource(resource.calendarId, resource.uri);
+            if (!component) return false;
+            const key = this.recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, linked.timezone);
+            if (!isNewerRevision(revision, storedRevision(component, key))) return false;
+            await this.removeOccurrence(linked.id, key, revision);
+            return true;
+        });
+        if (cancelled) this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, orgUserId));
     }
 
     public async removeInvitation(orgEventId: string, orgUserId: string): Promise<void> {
@@ -1599,13 +1620,13 @@ export class Calendar {
         });
     }
 
-    // `sequence` is set on the iMIP CANCEL path so the exclusion records the CANCEL's SEQUENCE and the
-    // replay guards can reject stale REQUEST/CANCEL redeliveries against it.
-    private async removeOccurrence(eventId: string, recurrenceDate: string, sequence?: number): Promise<void> {
+    // Caller holds the gate. `revision` is set on the iMIP CANCEL path so the exclusion records what the
+    // CANCEL stated and the ordering rule can reject stale REQUEST/CANCEL redeliveries against it.
+    private async removeOccurrence(eventId: string, recurrenceDate: string, revision?: Revision): Promise<void> {
         const parent = this.eventById(eventId);
         if (!parent) throw new ApiError(404, 'Event not found');
         const { startTime, endTime } = computeOccurrenceTimes(parent, recurrenceDate);
-        await this.createEvent(parent.calendarId, {
+        await this.writeEvent(parent.calendarId, {
             title: parent.title,
             startTime,
             endTime,
@@ -1614,7 +1635,8 @@ export class Calendar {
             parentEventId: eventId,
             recurrenceDate,
             status: 'cancelled',
-            sequence,
+            sequence: revision?.sequence,
+            dtstamp: revision?.dtstamp,
             uid: parent.uid,
         });
     }
@@ -1649,13 +1671,18 @@ export class Calendar {
         };
 
         if (scope === 'this' && input.recurrenceDate) {
+            const recurrenceDate = input.recurrenceDate;
             const status = input.remove ? 'declined' : input.status;
-            if (input.remove) await this.removeOccurrence(eventId, input.recurrenceDate);
-            else await this.rsvpForOccurrence(eventId, user.email, input.status, input.recurrenceDate);
-            if (isExternalOrganizer) {
-                sendRsvpReply(status, input.recurrenceDate);
+            if (input.remove) {
+                await this.gate.run(() => this.removeOccurrence(eventId, recurrenceDate));
+                this.announce(event.calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
             } else {
-                propagateRsvp(organizerUserId, organizerEventId, user.email, status, input.recurrenceDate).catch(
+                await this.rsvpForOccurrence(eventId, user.email, input.status, recurrenceDate);
+            }
+            if (isExternalOrganizer) {
+                sendRsvpReply(status, recurrenceDate);
+            } else {
+                propagateRsvp(organizerUserId, organizerEventId, user.email, status, recurrenceDate).catch(
                     console.error,
                 );
             }

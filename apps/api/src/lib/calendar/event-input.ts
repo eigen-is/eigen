@@ -64,6 +64,8 @@ export function eventForFile(args: {
         data: input.data ?? null,
         createByUserId: input.createByUserId ?? null,
         createdAt: now,
-        updatedAt: now,
+        // A receiver states the organizer's own stamp here, so the stored DTSTAMP is the revision the next
+        // message is ordered against rather than the moment this Home happened to write the file.
+        updatedAt: input.dtstamp ?? now,
     };
 }

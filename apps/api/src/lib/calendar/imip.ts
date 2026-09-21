@@ -239,7 +239,7 @@ export async function processInboundImip(
                     externalOwnerId(organizerEmail),
                     parsed.recurrenceDate,
                     parsed.recurrenceInstant,
-                    parsed.sequence,
+                    parsed,
                 );
             } else {
                 await calendar.removeInvitation(parsed.uid, externalOwnerId(organizerEmail));

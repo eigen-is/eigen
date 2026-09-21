@@ -2,6 +2,7 @@ export {
     addExclusion,
     buildResource,
     eventsToIcs,
+    isNewerRevision,
     patchEvent,
     putOverride,
     remintEventIds,
@@ -11,6 +12,7 @@ export {
     serializeResource,
     stampInvitationLink,
     storedOrganizerAddress,
+    storedRevision,
     stripEigenStamps,
 } from './ical-component';
 export { parseIcs, parseResource, projectResource } from './ical-parse';

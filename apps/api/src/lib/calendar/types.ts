@@ -1,6 +1,13 @@
 import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
 
-export type ReceiveInvitationPayload = {
+// Every scheduling message states the revision it carries: the sender's SEQUENCE and the instant it
+// stamped, which together order two messages the way RFC 5546 § 2.1.5 does.
+type MessageRevision = {
+    sequence: number;
+    dtstamp?: Date | null;
+};
+
+export type ReceiveInvitationPayload = MessageRevision & {
     uid: string;
     title: string;
     description: string | null;
@@ -11,14 +18,13 @@ export type ReceiveInvitationPayload = {
     rrule: string | null;
     timezone: string | null;
     status: CalendarEvent['status'];
-    sequence: number;
     data: EventData;
     createByUserId: string;
     organizerEventId: string;
     organizerUserId: string;
 };
 
-export type InvitationUpdatePayload = {
+export type InvitationUpdatePayload = MessageRevision & {
     title: string;
     description: string | null;
     location: string | null;
@@ -28,13 +34,12 @@ export type InvitationUpdatePayload = {
     rrule: string | null;
     timezone?: string | null;
     status: CalendarEvent['status'];
-    sequence: number;
     attendees?: Attendee[];
 };
 
 // A single moved/canceled occurrence of an externally-organized recurring invite (inbound iMIP
 // REQUEST/CANCEL carrying a RECURRENCE-ID). Attaches as an exception on the linked series.
-export type InvitationExceptionPayload = {
+export type InvitationExceptionPayload = MessageRevision & {
     recurrenceDate: string;
     // Absolute instant of a UTC-Z RECURRENCE-ID (else undefined). Lets the receiver re-key against the
     // linked series' timezone when the ICS carried no usable tz (audit #8).
@@ -47,7 +52,6 @@ export type InvitationExceptionPayload = {
     allDay: boolean;
     timezone: string | null;
     status: CalendarEvent['status'];
-    sequence: number;
     attendees?: Attendee[];
 };
 
@@ -68,6 +72,9 @@ export type CreateEventArgs = {
     recurrenceDate?: string | null;
     status?: CalendarEvent['status'];
     sequence?: number;
+    // Set only by an invitation receiver: the instant the organizer's message stamped, stored in place of
+    // the local clock so the next message can be ordered against it.
+    dtstamp?: Date | null;
     data?: EventData | null;
     createByUserId?: string | null;
     uid?: string | null;
