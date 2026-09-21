@@ -140,6 +140,9 @@ export function EditEventDialog({
     const isOverride = !!event.parentEventId;
     const isPartOfSeries = isSeriesOccurrence(event);
     const isLinkedEvent = isInvitationFromOthers(event, eventOwnerId === user?.id ? user.email : undefined);
+    // Every detail of an invitation from someone else is read-only; only which calendar holds the copy is
+    // the viewer's, so that move is the one thing there is to save.
+    const canSave = !isLinkedEvent || calendarChanged;
 
     // A cross-Home move recreates the event in the other Home and deletes the source — which fires
     // deleteEvent's iMIP side effects and can't carry exception children. Warn honestly before that
@@ -307,11 +310,13 @@ export function EditEventDialog({
 
                     <DialogFooter>
                         <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-                            Cancel
+                            {canSave ? 'Cancel' : 'Close'}
                         </Button>
-                        <Button onClick={handleSaveClick} disabled={saving || !title.trim()}>
-                            {saving ? 'Saving...' : 'Save'}
-                        </Button>
+                        {canSave && (
+                            <Button onClick={handleSaveClick} disabled={saving || !title.trim()}>
+                                {saving ? 'Saving...' : 'Save'}
+                            </Button>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

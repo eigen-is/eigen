@@ -45,8 +45,6 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const eventOwnerId = sharedCalendar?.ownerUserId || user?.id || '';
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
-    const [showRecurringDeleteConfirm, setShowRecurringDeleteConfirm] = useState(false);
-    const [pendingDeleteAction, setPendingDeleteAction] = useState<RecurringAction | null>(null);
     const [showRsvpScopeDialog, setShowRsvpScopeDialog] = useState(false);
     const [pendingRsvpStatus, setPendingRsvpStatus] = useState<'accepted' | 'declined' | 'tentative' | null>(null);
     const [editOpen, setEditOpen] = useState(false);
@@ -153,18 +151,6 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
         }
     };
 
-    const handleRecurringDeleteAction = (action: RecurringAction) => {
-        setPendingDeleteAction(action);
-        setShowRecurringDeleteDialog(false);
-        setShowRecurringDeleteConfirm(true);
-    };
-
-    const handleRecurringDeleteConfirm = async () => {
-        if (pendingDeleteAction) {
-            await handleDelete(pendingDeleteAction);
-        }
-    };
-
     const handleRsvpScopeConfirm = (action: RecurringAction) => {
         if (!pendingRsvpStatus) return;
         const eventId = event.parentEventId || event.id;
@@ -186,14 +172,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     return (
         <>
             <Dialog
-                open={
-                    open &&
-                    !showDeleteDialog &&
-                    !showRecurringDeleteDialog &&
-                    !showRecurringDeleteConfirm &&
-                    !editOpen &&
-                    !showRsvpScopeDialog
-                }
+                open={open && !showDeleteDialog && !showRecurringDeleteDialog && !editOpen && !showRsvpScopeDialog}
                 onOpenChange={onOpenChange}
             >
                 <DialogContent size="md" onOpenAutoFocus={(e) => e.preventDefault()}>
@@ -331,19 +310,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 open={showRecurringDeleteDialog}
                 onOpenChange={setShowRecurringDeleteDialog}
                 title="Delete recurring event"
-                onConfirm={handleRecurringDeleteAction}
-            />
-
-            <DeleteDialog
-                open={showRecurringDeleteConfirm}
-                onOpenChange={(o) => {
-                    setShowRecurringDeleteConfirm(o);
-                    if (!o) setPendingDeleteAction(null);
-                }}
-                title="Delete Event"
-                description="Are you sure you want to delete this event?"
-                itemName={event.title}
-                onDelete={handleRecurringDeleteConfirm}
+                onConfirm={handleDelete}
             />
 
             <RecurringActionDialog
