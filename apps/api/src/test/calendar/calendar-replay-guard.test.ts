@@ -34,6 +34,22 @@ const request = (summary: string, sequence: number, dtstamp: string, extra: stri
         'END:VEVENT',
     ]);
 
+// A sender that states no DTSTAMP: legal enough that parsers accept it, and nothing an ordering rule can
+// compare — the stored copy always carries one, because the receiver's own write stamps it.
+const stampless = (summary: string, sequence: number): string =>
+    vcal([
+        'BEGIN:VEVENT',
+        `UID:${UID}`,
+        `SUMMARY:${summary}`,
+        'DTSTART:20260501T090000Z',
+        'DTEND:20260501T100000Z',
+        'RRULE:FREQ=DAILY;COUNT=5',
+        `SEQUENCE:${sequence}`,
+        `ORGANIZER;CN=Ext Org:mailto:${ORG}`,
+        `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${GUEST}`,
+        'END:VEVENT',
+    ]);
+
 // One occurrence of the series above, the shape Google and Outlook send for a "this event" edit.
 const occurrence = (summary: string, sequence: number, dtstamp: string): string =>
     vcal([
@@ -171,6 +187,38 @@ describe('inbound message ordering', () => {
         await calendar.receiveImipRequest(parsedOf(occurrence('Moved once', 2, '20260401T110000Z')), ORG);
 
         expect((await exceptionOf(calendar))?.title).toBe('Moved twice');
+    });
+
+    // Nothing orders two messages that state no stamp, so the later arrival is the later revision.
+    test('a second REQUEST at one SEQUENCE with no DTSTAMP still applies', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+
+        await calendar.receiveImipRequest(parsedOf(stampless('Title A', 2)), ORG);
+        await calendar.receiveImipRequest(parsedOf(stampless('Title B', 2)), ORG);
+
+        expect((await masterOf(calendar)).title).toBe('Title B');
+    });
+
+    // An occurrence the attendee dropped keeps a stamp with the sequence a fresh exclusion carries and no
+    // DTSTAMP at all, so the organizer's own message for it has nothing to lose an ordering to.
+    test("an organizer's occurrence message reaches an occurrence the attendee removed locally", async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const me = makeSyntheticUser(harness.user.id, harness.user.name, harness.user.email);
+        await calendar.receiveImipRequest(parsedOf(request('Title A', 2, '20260401T100000Z', [], me.email)), ORG);
+        await calendar.rsvp((await masterOf(calendar)).id, me, {
+            status: 'declined',
+            scope: 'this',
+            recurrenceDate: '2026-05-02',
+            remove: true,
+        });
+        expect((await exceptionOf(calendar))?.status).toBe('cancelled');
+
+        await calendar.receiveImipRequest(parsedOf(occurrence('Back on', 0, '20260401T120000Z')), ORG);
+
+        expect((await exceptionOf(calendar))?.status).toBe('confirmed');
+        expect((await exceptionOf(calendar))?.title).toBe('Back on');
     });
 
     // A buggy or compromised organizer client can stamp a message years ahead. Stored as it came, that

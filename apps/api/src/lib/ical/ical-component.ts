@@ -720,12 +720,13 @@ export type Revision = { sequence: number; dtstamp?: Date | null };
 // RFC 5546 § 2.1.5: a receiver orders messages on SEQUENCE first and DTSTAMP second, and one that arrived
 // behind a newer message — a greylisted mail, an unordered fan-out — is not applied. DTSTAMP has a
 // second's resolution, so two revisions inside one second are indistinguishable and an equal stamp is
-// applied as the redelivery it is: the patch then finds nothing to change. A message that states no
-// DTSTAMP can only be ordered by its number, so an equal SEQUENCE loses.
+// applied as the redelivery it is: the patch then finds nothing to change. With no stamp on either side
+// an equal SEQUENCE has nothing to order it by and the message is applied for the same reason; only a
+// strictly lower SEQUENCE loses.
 export function isNewerRevision(incoming: Revision, stored: Revision | null): boolean {
     if (!stored) return true;
     if (incoming.sequence !== stored.sequence) return incoming.sequence > stored.sequence;
-    if (!incoming.dtstamp || !stored.dtstamp) return false;
+    if (!incoming.dtstamp || !stored.dtstamp) return true;
     return incoming.dtstamp.getTime() >= stored.dtstamp.getTime();
 }
 
