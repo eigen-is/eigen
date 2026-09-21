@@ -266,6 +266,39 @@ describe('iMIP Outbound Email Composition', () => {
         const mail = composeRsvpReply(RECURRING_EVENT, 'bob@external.com', 'Bob', 'accepted');
         expect(mail.icalEvent?.content).not.toContain('RECURRENCE-ID');
     });
+
+    // An organizer moving ONE occurrence mails a message about that instance: RECURRENCE-ID names the
+    // ORIGINAL slot, which only the series knows once the override has moved — echo back the moved start
+    // and the guest's client matches no occurrence and renders a second event beside the original.
+    const MOVED_OCCURRENCE: CalendarEvent = {
+        ...RECURRING_EVENT,
+        id: 'evt-override',
+        title: 'Moved Standup',
+        rrule: null,
+        parentEventId: RECURRING_EVENT.id,
+        recurrenceDate: '2026-04-08',
+        startTime: new Date('2026-04-08T15:00:00Z'),
+        endTime: new Date('2026-04-08T16:00:00Z'),
+    };
+
+    const ORIGINAL_SLOT = 'RECURRENCE-ID;TZID=America/New_York:20260408T100000';
+    const unfold = (mail: { icalEvent?: { content: string } }) => mail.icalEvent!.content.replace(/\r\n[ \t]/g, '');
+
+    test('an occurrence invite names the original instant, not the moved start', () => {
+        const ics = unfold(composeInviteEmail(MOVED_OCCURRENCE, organizer, [attendee], RECURRING_EVENT));
+        expect(ics).toContain(ORIGINAL_SLOT);
+        expect(ics).toContain('DTSTART;TZID=America/New_York:20260408T110000');
+        expect(ics).not.toContain('RRULE:FREQ=WEEKLY');
+    });
+
+    test('an occurrence update and an occurrence cancel carry the same RECURRENCE-ID', () => {
+        expect(unfold(composeUpdateEmail(MOVED_OCCURRENCE, organizer, [attendee], RECURRING_EVENT))).toContain(
+            ORIGINAL_SLOT,
+        );
+        expect(unfold(composeCancelEmail(MOVED_OCCURRENCE, organizer, [attendee], RECURRING_EVENT))).toContain(
+            ORIGINAL_SLOT,
+        );
+    });
 });
 
 describe('iMIP Inbound Processing (integration)', () => {
