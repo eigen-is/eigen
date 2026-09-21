@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { isInvitationFromOthers, occurrenceDateToString, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
+import { isInvitationFromOthers, truncateRRule } from '@workspace/lib/calendar/calendar-utils';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type {
     Attendee,
@@ -13,7 +13,7 @@ import type {
 import { externalOwnerId, isExternalOwnerId } from '@workspace/lib/types/owner';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
-import { and, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type ICAL from 'ical.js';
 import { RRule } from 'rrule';
@@ -45,7 +45,7 @@ import {
 } from '../ical';
 import type { EventPatch, Revision, WriteContext } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
-import { clampRangeEnd, isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
+import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
 import { computeOccurrenceTimes, storedRecurrenceKey, utcToLocal } from '../ical/wall-clock';
 import { actorDisplayName, type User } from '../user';
 import type { ResourceCommit, ResourceRow } from './calendar-store';
@@ -54,9 +54,10 @@ import { CALENDAR_DB_CONFIG } from './db-config';
 import { eventForFile, validateEventInput } from './event-input';
 import { composeRsvpReply } from './imip';
 import { propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp } from './invite-propagation';
-import { dbCalendarToCalendarItem, dbEventToCalendarEvent } from './mappers';
+import { dbCalendarToCalendarItem, toEvent } from './mappers';
+import * as occurrences from './occurrences';
 import { reconcileIndex, stagedDeletesOf } from './reconcile';
-import { constrainRRule, expandRecurrence } from './recurrence';
+import { constrainRRule } from './recurrence';
 import type { CalendarCollection } from './resource-store';
 import {
     calendarDir,
@@ -87,9 +88,6 @@ function getCalendarDatabase(home: Home): Promise<ManagedDatabase<typeof schema>
 
 // The transaction handle drizzle hands a `db.transaction(cb)` callback.
 type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>[0]>[0];
-
-// An event row and the file it was projected from — what every read of a stored event answers with.
-type JoinedEvent = { events: typeof schema.events.$inferSelect; resources: typeof schema.resources.$inferSelect };
 
 // What the transport vouches for about an inbound REQUEST — never anything the body spells.
 type InvitationLink = {
@@ -638,25 +636,21 @@ export class Calendar {
 
     // --- Events (reads) ---
 
-    private joinedEvents() {
+    joinedEvents() {
         return this.db
             .select()
             .from(schema.events)
             .innerJoin(schema.resources, eq(schema.events.resourceId, schema.resources.id));
     }
 
-    private static toEvent(row: JoinedEvent): CalendarEvent {
-        return dbEventToCalendarEvent(row.events, row.resources);
-    }
-
     private eventById(id: string): CalendarEvent | null {
         const row = this.joinedEvents().where(eq(schema.events.id, id)).get();
-        return row ? Calendar.toEvent(row) : null;
+        return row ? toEvent(row) : null;
     }
 
     public async getEventsByUid(uid: string): Promise<CalendarEvent[]> {
         await this.gate.ensureDrained();
-        return this.joinedEvents().where(eq(schema.events.uid, uid)).all().map(Calendar.toEvent);
+        return this.joinedEvents().where(eq(schema.events.uid, uid)).all().map(toEvent);
     }
 
     public async getEventByUri(calendarId: string, uri: string): Promise<CalendarEvent | null> {
@@ -665,123 +659,20 @@ export class Calendar {
             .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uriKey, uriKeyOf(uri))))
             .all()
             .find((joined) => joined.events.parentEventId === null);
-        return row ? Calendar.toEvent(row) : null;
+        return row ? toEvent(row) : null;
     }
 
     public async getRawEvents(calendarId: string): Promise<CalendarEvent[]> {
         await this.gate.ensureDrained();
-        return this.joinedEvents().where(eq(schema.events.calendarId, calendarId)).all().map(Calendar.toEvent);
+        return this.joinedEvents().where(eq(schema.events.calendarId, calendarId)).all().map(toEvent);
     }
 
     public async getRawEventsInRange(calendarId: string, from: Date, to: Date): Promise<CalendarEvent[]> {
-        // Clamp the span (see recurrence-limits) so an over-wide CalDAV time-range cannot block the event loop.
-        const clampedTo = clampRangeEnd(from, to);
-        await this.gate.ensureDrained();
-
-        const nonRecurring = this.joinedEvents()
-            .where(
-                and(
-                    eq(schema.events.calendarId, calendarId),
-                    isNull(schema.events.rrule),
-                    isNull(schema.events.parentEventId),
-                    lte(schema.events.startTime, clampedTo),
-                    gte(schema.events.endTime, from),
-                ),
-            )
-            .all()
-            .map(Calendar.toEvent);
-
-        const matching: CalendarEvent[] = [];
-        const matchingIds = new Set<string>();
-        for (const row of this.joinedEvents()
-            .where(
-                and(
-                    eq(schema.events.calendarId, calendarId),
-                    sql`${schema.events.rrule} IS NOT NULL`,
-                    isNull(schema.events.parentEventId),
-                ),
-            )
-            .all()) {
-            const event = Calendar.toEvent(row);
-            if (expandRecurrence(event, from, clampedTo).length > 0) {
-                matching.push(event);
-                matchingIds.add(event.id);
-            }
-        }
-
-        const exceptions: CalendarEvent[] = [];
-        if (matchingIds.size > 0) {
-            for (const row of this.joinedEvents()
-                .where(and(eq(schema.events.calendarId, calendarId), sql`${schema.events.parentEventId} IS NOT NULL`))
-                .all()) {
-                const event = Calendar.toEvent(row);
-                if (event.parentEventId && matchingIds.has(event.parentEventId)) exceptions.push(event);
-            }
-        }
-
-        return [...nonRecurring, ...matching, ...exceptions];
+        return occurrences.getRawEventsInRange(this, calendarId, from, to);
     }
 
     public async getEventsInRange(from: Date, to: Date, calendarId?: string): Promise<CalendarEventOccurrence[]> {
-        // Clamp the span (see recurrence-limits) so an over-wide range cannot materialise a giant occurrence set.
-        const clampedTo = clampRangeEnd(from, to);
-        await this.gate.ensureDrained();
-
-        const scoped = calendarId ? [eq(schema.events.calendarId, calendarId)] : [];
-
-        const nonRecurring = this.joinedEvents()
-            .where(
-                and(
-                    ...scoped,
-                    isNull(schema.events.rrule),
-                    isNull(schema.events.parentEventId),
-                    lte(schema.events.startTime, clampedTo),
-                    gte(schema.events.endTime, from),
-                ),
-            )
-            .all()
-            .map(Calendar.toEvent);
-
-        const recurring = this.joinedEvents()
-            .where(and(...scoped, sql`${schema.events.rrule} IS NOT NULL`, isNull(schema.events.parentEventId)))
-            .all()
-            .map(Calendar.toEvent);
-
-        const exceptionsByParent = new Map<string, CalendarEvent[]>();
-        for (const row of this.joinedEvents()
-            .where(and(...scoped, sql`${schema.events.parentEventId} IS NOT NULL`))
-            .all()) {
-            const event = Calendar.toEvent(row);
-            const group = exceptionsByParent.get(event.parentEventId!) ?? [];
-            exceptionsByParent.set(event.parentEventId!, group);
-            group.push(event);
-        }
-
-        const results: CalendarEventOccurrence[] = [];
-        for (const event of nonRecurring) {
-            results.push({ ...event, occurrenceDate: occurrenceDateToString(event.startTime) });
-        }
-
-        for (const event of recurring) {
-            const cancelledDates = new Set<string>();
-            const modifiedDates = new Map<string, CalendarEvent>();
-            for (const exception of exceptionsByParent.get(event.id) ?? []) {
-                const dateKey = exception.recurrenceDate ? storedRecurrenceKey(exception.recurrenceDate) : null;
-                if (!dateKey) continue;
-                if (exception.status === 'cancelled') cancelledDates.add(dateKey);
-                else modifiedDates.set(dateKey, exception);
-            }
-
-            for (const occurrence of expandRecurrence(event, from, clampedTo)) {
-                if (cancelledDates.has(occurrence.occurrenceDate)) continue;
-                const modified = modifiedDates.get(occurrence.occurrenceDate);
-                // The stored key, not the moved startTime: the FE round-trips occurrenceDate into scope='this' RSVPs.
-                results.push(modified ? { ...modified, occurrenceDate: occurrence.occurrenceDate } : occurrence);
-            }
-        }
-
-        results.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
-        return results;
+        return occurrences.getEventsInRange(this, from, to, calendarId);
     }
 
     public async getEventsWithAttendee(email: string): Promise<CalendarEvent[]> {
@@ -789,7 +680,7 @@ export class Calendar {
         return this.joinedEvents()
             .where(isNull(schema.events.organizerEventId))
             .all()
-            .map(Calendar.toEvent)
+            .map(toEvent)
             .filter((e) => e.data?.attendees?.some((a) => a.email.toLowerCase() === email.toLowerCase()));
     }
 
@@ -933,7 +824,7 @@ export class Calendar {
         const row = this.joinedEvents()
             .where(and(eq(schema.events.parentEventId, parentEventId), eq(schema.events.recurrenceDate, key)))
             .get();
-        return row ? Calendar.toEvent(row) : null;
+        return row ? toEvent(row) : null;
     }
 
     private uidHolder(calendarId: string, uid: string): { uri: string } | undefined {
@@ -1214,7 +1105,7 @@ export class Calendar {
         const row = this.joinedEvents()
             .where(and(eq(schema.events.organizerEventId, orgEventId), eq(schema.events.organizerUserId, orgUserId)))
             .get();
-        return row ? Calendar.toEvent(row) : null;
+        return row ? toEvent(row) : null;
     }
 
     // The row shape of an invitation payload: only the fields a trusted message stated ever reach it.
@@ -1455,7 +1346,7 @@ export class Calendar {
             title: parsed.title,
             startTime: parsed.startTime,
         });
-        const stored = this.joinedEvents().where(eq(schema.events.uid, parsed.uid)).all().map(Calendar.toEvent);
+        const stored = this.joinedEvents().where(eq(schema.events.uid, parsed.uid)).all().map(toEvent);
         const linked = stored.find((e) => e.data?.organizer && e.data?.organizerEventId);
 
         if (linked) {
