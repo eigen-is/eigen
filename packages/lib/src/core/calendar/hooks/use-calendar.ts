@@ -1,6 +1,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { calendarApi } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
+import { parseOwnerId } from '@workspace/lib/types';
 import type {
     CalendarEvent,
     CalendarEventOccurrence,
@@ -11,7 +12,9 @@ import type {
     UpdateEventInput,
     UpdateSharedCalendarInput,
 } from '@workspace/lib/types/calendar';
+import { useCallback, useMemo } from 'react';
 import { AppError, onMutationError } from '../../api-error';
+import { usePublicUsers } from '../../public';
 import { formatFreeBusyTitle, occurrenceDateToString } from '../calendar-utils';
 import {
     calendarKeys,
@@ -232,7 +235,7 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
 
 // --- Shared calendars ---
 
-export function useSharedCalendars(ownerId: string) {
+export function useSharedCalendars(ownerId: string, enabled = true) {
     return useQuery({
         queryKey: calendarKeys.sharedCalendars(ownerId),
         queryFn: async () => {
@@ -241,8 +244,34 @@ export function useSharedCalendars(ownerId: string) {
             return response.data;
         },
         staleTime: STALE_TIME.FIVE_MINUTES,
-        enabled: !!ownerId,
+        enabled: enabled && !!ownerId,
     });
+}
+
+// The one place that decides what a shared calendar is called. Batched, so a team the viewer isn't
+// a member of still gets a name; an unresolved one keeps the calendar's own name, never `team_<id>`.
+export function useSharedCalendarLabel(sharedCalendars: SharedCalendar[]): (sc: SharedCalendar) => string {
+    const teamOwnerIds = useMemo(
+        () => [
+            ...new Set(
+                sharedCalendars
+                    .filter((sc) => parseOwnerId(sc.ownerUserId).type === 'team')
+                    .map((sc) => sc.ownerUserId),
+            ),
+        ],
+        [sharedCalendars],
+    );
+    const teams = usePublicUsers(teamOwnerIds);
+
+    return useCallback(
+        (sc: SharedCalendar) => {
+            if (parseOwnerId(sc.ownerUserId).type === 'team') {
+                return teams[sc.ownerUserId]?.name?.trim() || sc.calendarName;
+            }
+            return sc.calendarName;
+        },
+        [teams],
+    );
 }
 
 export function useUpdateSharedCalendar(ownerId: string) {

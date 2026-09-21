@@ -191,6 +191,7 @@ export const getMailDraftAttachmentUploadUrl = (ownerId: string) =>
 export const getMailImportUrl = (ownerId: string) => `${API_HOST}/mail/${ownerId}/import`;
 export const getCalendarImportUrl = (ownerId: string, calendarId: string) =>
     `${API_HOST}/calendar/${ownerId}/import?calendarId=${encodeURIComponent(calendarId)}`;
+export const getCalendarExportUrl = (ownerId: string) => `${API_HOST}/calendar/${ownerId}/export`;
 export const getDriveDownloadUrl = (ownerId: string, mountId: string, pathId: string, updatedAt?: Date) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/download${updatedAt ? `?v=${updatedAt.getTime()}` : ''}`;
 export const getDriveExportUrl = (ownerId: string, mountId: string, pathId: string, format: string) =>

@@ -10,7 +10,7 @@ import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
 
-type ImportCall = { calendarId: string; url?: string };
+type ImportCall = { ownerId: string; calendarId: string; url?: string };
 type ImportCounts = { imported: number; skipped: number; failed: number };
 
 const calls: { imported: ImportCall[] } = { imported: [] };
@@ -20,6 +20,7 @@ const realCalendarModule = await import('@workspace/lib/calendar');
 mock.module('@workspace/lib/calendar', () => ({
     ...realCalendarModule,
     useCalendars: () => ({ data: calendars, isError: false, refetch: () => {} }),
+    useSharedCalendars: () => ({ data: [] }),
     useCreateCalendar: () => ({ mutateAsync: async () => ({ id: 'cal-new' }) }),
     useDeleteCalendar: () => ({ mutateAsync: async () => {} }),
     useImportCalendar: () => ({
@@ -116,6 +117,7 @@ test('the calendar picker imports the subject its row was run for, not the hostâ
     await click('Import');
     expect(calls.imported).toEqual([
         {
+            ownerId: 'owner-1',
             calendarId: 'cal-home',
             url: 'http://localhost/mail/owner-1/message/message-1/attachment/0/Autumn%20market.ics',
         },
