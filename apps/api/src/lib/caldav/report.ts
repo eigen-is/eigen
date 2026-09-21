@@ -1,6 +1,7 @@
 import type { CalendarItem } from '@workspace/lib/types/calendar';
 import type { Calendar } from '../calendar/calendar';
 import type { CalendarEventRow } from '../calendar/types';
+import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
 import { calendarHref, eventHref } from './discovery';
 import { eventsToIcs } from './ical-component';
 import {
@@ -15,10 +16,6 @@ import {
     response,
 } from './xml-builder';
 import { parseReport, type ReportRequest } from './xml-parser';
-
-// Multiget refuses a client that asks for more than this many resources in one round-trip. The XML body
-// ceiling every route shares is DAV_BODY_MAX_BYTES, enforced in the router before the body reaches the parser.
-const MULTIGET_HREF_LIMIT = 500;
 
 // REPORT on /dav/calendars/:ownerId/:calendarId/
 export function handleReport(
@@ -73,31 +70,8 @@ function handleCalendarMultiget(
 ): Response {
     if (report.hrefs.length > MULTIGET_HREF_LIMIT) return new Response('Too many hrefs', { status: 400 });
 
-    const prefix = calendarHref(ownerId, calendarId);
-    // Resolve each href to its stored uri (percent-decoded, in-collection). A malformed escape or an
-    // out-of-collection href stays null → a 404 row echoing the original href (the CardDAV twin's move). Dedupe
-    // so a client listing one resource N ways yields one row: by uri when resolvable, by `raw:`+href otherwise
-    // so repeated bad hrefs collapse too. First occurrence wins, preserving request order.
-    const seen = new Set<string>();
-    const resolved: { uri: string | null; href: string }[] = [];
-    for (const href of report.hrefs) {
-        const normalized = href.replace(/^\/+/, '/');
-        const encoded = normalized.startsWith(prefix) ? normalized.slice(prefix.length) : '';
-        let uri: string | null = null;
-        if (encoded) {
-            try {
-                uri = decodeURIComponent(encoded);
-            } catch {
-                uri = null;
-            }
-        }
-        // Both key forms are prefixed: event uris (unlike card uris) have no charset restriction, so a stored
-        // uri literally starting with `raw:` must not collide with a bad-href key.
-        const key = uri === null ? `raw:${href}` : `uri:${uri}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        resolved.push({ uri, href });
-    }
+    // Event uris are matched exactly: unlike cards they have no charset restriction and no folded key.
+    const resolved = resolveMultigetHrefs(report.hrefs, calendarHref(ownerId, calendarId), (uri) => uri);
 
     const uris = resolved.map((r) => r.uri).filter((u): u is string => u !== null);
     const events = calendar.getEventsByUris(calendarId, uris);

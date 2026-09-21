@@ -1,6 +1,7 @@
 import type { Contacts } from '../contacts/contacts';
 import type { CardRow } from '../contacts/dav-store';
 import { uriKeyOf } from '../core';
+import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
 import { parseVCardLines } from '../vcard';
 import type { VCardLine } from '../vcard/types';
 import { projectAddressData } from './address-data';
@@ -20,10 +21,9 @@ import {
 } from './xml-builder';
 import { type CardReportRequest, parseCardReport } from './xml-parser';
 
-// Request bounds: multiget refuses a client that asks for more than this many resources in one round-trip, and
-// a query result set is truncated to the cap rather than assembling an unbounded response. The body ceiling is
-// the shared DAV_BODY_MAX_BYTES, enforced in the router before the body reaches the XML unfolder.
-const MULTIGET_HREF_LIMIT = 500;
+// A query result set is truncated to this cap rather than assembling an unbounded response. The multiget
+// round-trip bound is the shared MULTIGET_HREF_LIMIT, and the body ceiling the shared DAV_BODY_MAX_BYTES,
+// enforced in the router before the body reaches the XML unfolder.
 const QUERY_RESULT_CAP = 1000;
 
 // REPORT on /dav/addressbooks/:ownerId/contacts/ — addressbook-multiget, addressbook-query, or sync-collection.
@@ -72,31 +72,10 @@ async function handleMultiget(
 ): Promise<Response> {
     if (report.hrefs.length > MULTIGET_HREF_LIMIT) return new Response('Too many hrefs', { status: 400 });
 
-    const prefix = bookHref(ownerId);
+    // Cards fold by uri key, so two spellings of one name yield one row (the shared resolver's `keyOf`).
     const responses: string[] = [];
-    // One response per resource: a client listing one href N ways must not make us retain N copies of the
-    // card's bytes — the 500-count cap bounds the request, this dedupe re-anchors the response to the book.
-    // Keyed by folded uri when resolvable, by `raw:`+href otherwise so repeated 404s collapse too; stored
-    // uris can't contain ':' (sanitizeCardUri), so a raw: key never shadows a real card. First occurrence
-    // wins, preserving request order.
-    const seen = new Set<string>();
-    for (const href of report.hrefs) {
-        // Normalize an absolute-path href down to the book prefix (the caldav report.ts move), then percent-decode
-        // the single resource segment. A malformed escape or a href outside this book is a 404 row, not a throw.
-        const normalized = href.replace(/^\/+/, '/');
-        const encodedUri = normalized.startsWith(prefix) ? normalized.slice(prefix.length) : '';
-        let uri = '';
-        if (encodedUri) {
-            try {
-                uri = decodeURIComponent(encodedUri);
-            } catch {
-                uri = '';
-            }
-        }
-        const dedupeKey = uri ? uriKeyOf(uri) : `raw:${href}`;
-        if (seen.has(dedupeKey)) continue;
-        seen.add(dedupeKey);
-        if (!uri) {
+    for (const { uri, href } of resolveMultigetHrefs(report.hrefs, bookHref(ownerId), uriKeyOf)) {
+        if (uri === null) {
             responses.push(response(href, [propstatNotFound(['<D:getetag/>'])]));
             continue;
         }
