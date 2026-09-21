@@ -12,9 +12,10 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { Calendar } from '../../lib/calendar/calendar';
 import { calendarStorage, EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
+import * as schema from '../../lib/calendar/schema';
 import { LocalFilesystem, PATHS } from '../../lib/core';
 import { CALENDAR_TEST_ROOT, calendarsDirOf, DyingFilesystem, makeCalendar } from '../calendar-test-helpers';
 import { makeTestHome, type TestHome } from '../home-test-helpers';
@@ -974,6 +975,37 @@ describe('calendar file store', () => {
             expect(exceptions.map((e) => e.title)).toEqual(['Second take']);
             expect(await harness.instance.listResources(calendarId)).toHaveLength(1);
         });
+    });
+
+    // An import asks "does this Home already hold the UID?" once per series, up to ICS_IMPORT_MAX_EVENTS
+    // times in one file, so both Home-wide UID lookups have to seek rather than read every row.
+    test('the Home-wide UID lookups seek an index', async () => {
+        const harness = await makeCalendar();
+        const planOf = (query: { toSQL: () => { sql: string } }): string[] =>
+            harness.instance.db
+                .all<{ detail: string }>(sql.raw(`EXPLAIN QUERY PLAN ${query.toSQL().sql}`))
+                .map((row) => row.detail);
+
+        // The gate's, on the resource the write would collide with.
+        expect(
+            planOf(
+                harness.instance.db
+                    .select({ id: schema.resources.id, uri: schema.resources.uri })
+                    .from(schema.resources)
+                    .where(eq(schema.resources.uid, 'plan@eigen')),
+            ),
+        ).toEqual(['SEARCH resources USING INDEX idx_resources_uid (uid=?)']);
+
+        // The inbound invitation's, on the event rows the same UID projects to.
+        expect(
+            planOf(
+                harness.instance.db
+                    .select({ id: schema.events.id })
+                    .from(schema.events)
+                    .innerJoin(schema.resources, eq(schema.events.resourceId, schema.resources.id))
+                    .where(eq(schema.events.uid, 'plan@eigen')),
+            )[0],
+        ).toBe('SEARCH events USING INDEX idx_events_uid (uid=?)');
     });
 
     test('two calendars cannot share one directory, whatever the case', async () => {

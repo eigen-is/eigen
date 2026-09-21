@@ -40,6 +40,8 @@ export const resources = sqliteTable(
     (table) => ({
         calendarKey: uniqueIndex('idx_resources_calendar_key').on(table.calendarId, table.uriKey),
         calendarUid: uniqueIndex('idx_resources_calendar_uid').on(table.calendarId, table.uid),
+        // Home-wide, not per calendar: an import asks who holds a UID once per series of the file.
+        resourceUid: index('idx_resources_uid').on(table.uid),
         calendarCtag: index('idx_resources_calendar_ctag').on(table.calendarId, table.resourceCtag),
     }),
 );

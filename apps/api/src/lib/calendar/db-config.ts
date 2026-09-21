@@ -146,6 +146,7 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
 
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_resources_calendar_key ON resources(calendarId, uriKey);
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_resources_calendar_uid ON resources(calendarId, uid);
+                CREATE INDEX IF NOT EXISTS idx_resources_uid ON resources(uid);
                 CREATE INDEX IF NOT EXISTS idx_resources_calendar_ctag ON resources(calendarId, resourceCtag);
                 CREATE INDEX IF NOT EXISTS idx_events_calendar_start ON events(calendarId, startTime);
                 CREATE INDEX IF NOT EXISTS idx_events_calendar_end ON events(calendarId, endTime);
