@@ -1,5 +1,5 @@
 // Deep import (not the @workspace/lib/calendar barrel) to keep React out of the API module graph.
-import { normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
+import { normalizeTimezone, occurrenceDateToString } from '@workspace/lib/calendar/calendar-utils';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule, MAX_OCCURRENCES } from './recurrence-limits';
@@ -93,6 +93,39 @@ export function storedRecurrenceKey(recurrenceDate: string): string | null {
     return Number.isNaN(Date.parse(`${key}T00:00:00Z`)) ? null : key;
 }
 
+// Expand a rule and name each occurrence it produces. A zoned rule iterates in wall-clock space, because
+// rrule's own tzid handling is broken, and every hit converts back to the instant it stands for. The window
+// belongs to the caller, in whatever space it asked in. The count is capped (see recurrence-limits).
+export function expandWallClock(
+    rrule: string,
+    dtstart: Date,
+    tz: string | null,
+    from: Date,
+    to: Date,
+): { startTime: Date; occurrenceDate: string }[] {
+    const rule = new RRule({
+        ...RRule.parseString(rrule),
+        dtstart: tz ? wallClockDate(dtstart, tz) : dtstart,
+    });
+
+    return rule
+        .between(from, to, true, (_d, len) => len < MAX_OCCURRENCES)
+        .map((date) => ({
+            startTime: tz
+                ? localToUtc(
+                      tz,
+                      date.getUTCFullYear(),
+                      date.getUTCMonth() + 1,
+                      date.getUTCDate(),
+                      date.getUTCHours(),
+                      date.getUTCMinutes(),
+                      date.getUTCSeconds(),
+                  )
+                : date,
+            occurrenceDate: occurrenceDateToString(date),
+        }));
+}
+
 export function computeOccurrenceTimes(
     parent: CalendarEvent,
     recurrenceDate: string,
@@ -104,28 +137,11 @@ export function computeOccurrenceTimes(
     // Skip a sub-daily rrule or out-of-range dtstart (only an untrusted file can carry one) — it would
     // iterate to the day window and hang; fall through to the time-of-day fallback below.
     if (parent.rrule && !isSubDailyRrule(parent.rrule) && !isOutOfRangeRecurrenceStart(parent.startTime)) {
-        const dayStart = new Date(occDate);
         const dayEnd = new Date(occDate);
         dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
-        const rule = new RRule({
-            ...RRule.parseString(parent.rrule),
-            // Timezone-aware: expand in wall-clock space, convert back to UTC.
-            dtstart: tz ? wallClockDate(parent.startTime, tz) : parent.startTime,
-        });
-        const matches = rule.between(dayStart, dayEnd, true, (_d, len) => len < MAX_OCCURRENCES);
+        const matches = expandWallClock(parent.rrule, parent.startTime, tz, occDate, dayEnd);
         if (matches.length > 0) {
-            const match = matches[0];
-            const startTime = tz
-                ? localToUtc(
-                      tz,
-                      match.getUTCFullYear(),
-                      match.getUTCMonth() + 1,
-                      match.getUTCDate(),
-                      match.getUTCHours(),
-                      match.getUTCMinutes(),
-                      match.getUTCSeconds(),
-                  )
-                : match;
+            const startTime = matches[0].startTime;
             return { startTime, endTime: new Date(startTime.getTime() + durationMs) };
         }
     }
