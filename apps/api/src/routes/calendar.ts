@@ -13,7 +13,7 @@ import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { checkCalendarAccess, resolveCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { ApiError, ICS_IMPORT_MAX_EVENTS, NOT_A_CALENDAR_FILE } from '../lib/core';
-import { requireNonGuest, requireSelf } from '../lib/core/access';
+import { requireNonGuest, requireSelf, requireTeamAdmin } from '../lib/core/access';
 import { contentDisposition, readBoundedBodyBytes } from '../lib/core/http';
 import { readImportSourceBytes } from '../lib/drive';
 import { getHome } from '../lib/home';
@@ -136,6 +136,16 @@ async function resolveTransferCalendar(user: User, ownerId: string, calendarId: 
     return resolveCalendar(user, ownerId);
 }
 
+// The Home whose calendar collection the caller may change, as opposed to its events. A team home's
+// calendars are administered from the Admin app, by the org admin who enables the calendar in the first
+// place; a member's write share on a team calendar is event-level.
+async function resolveAdministeredCalendar(user: User, ownerId: string) {
+    const parsed = parseOwnerId(ownerId);
+    if (parsed.type !== 'team') return resolveCalendar(user, ownerId);
+    await requireTeamAdmin(user.id, parsed.id);
+    return (await getHome(ownerId)).calendar;
+}
+
 // Calendar routes allow cross-owner access (shared calendars, team calendars).
 // Access control is enforced by resolveCalendar() (own/team calendars) or
 // checkCalendarAccess() (event-scoped, may include cross-user shared calendars).
@@ -159,7 +169,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         '/calendar/:ownerId/calendars',
         async ({ params, body, user }) => {
             requireNonGuest(user);
-            const cal = await resolveCalendar(user, params.ownerId);
+            const cal = await resolveAdministeredCalendar(user, params.ownerId);
             return cal.createCalendar(body);
         },
         { body: CreateCalendarSchema, auth: true },
@@ -169,7 +179,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         '/calendar/:ownerId/calendars/:calId',
         async ({ params, body, user }) => {
             requireNonGuest(user);
-            const cal = await resolveCalendar(user, params.ownerId);
+            const cal = await resolveAdministeredCalendar(user, params.ownerId);
             return await cal.updateCalendar(params.calId, body);
         },
         { body: UpdateCalendarSchema, auth: true },
@@ -179,7 +189,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         '/calendar/:ownerId/calendars/:calId',
         async ({ params, user }) => {
             requireNonGuest(user);
-            const cal = await resolveCalendar(user, params.ownerId);
+            const cal = await resolveAdministeredCalendar(user, params.ownerId);
             await cal.deleteCalendar(params.calId);
             return { success: true };
         },
