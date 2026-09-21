@@ -130,7 +130,7 @@ function recoverCalendarRows(calendar: Calendar, orphans: string[]): void {
             hasDefault = true;
             console.warn(`calendar: recovered calendar ${id} from its directory`);
         } catch (e) {
-            console.error(`calendar: could not recover calendar ${id} from its directory: ${e}`);
+            console.error(`calendar: could not recover calendar ${id} from its directory:`, e);
         }
     }
 }
@@ -373,7 +373,7 @@ export async function reconcileIndex(calendar: Calendar): Promise<void> {
                 ].sort((a, b) => (a.file.uri < b.file.uri ? -1 : a.file.uri > b.file.uri ? 1 : 0));
                 passes.push({ calendarId, entries, vanished: diff.vanished });
             } catch (e) {
-                console.error(`calendar: could not scan calendar ${calendarId}: ${e}`);
+                console.error(`calendar: could not scan calendar ${calendarId}:`, e);
             }
         }
 
@@ -393,7 +393,7 @@ export async function reconcileIndex(calendar: Calendar): Promise<void> {
                 });
             }
         } catch (e) {
-            console.error(`calendar: could not drop the vanished resources — the index stays as it was: ${e}`);
+            console.error('calendar: could not drop the vanished resources — the index stays as it was:', e);
             calendar.eventsBytes = bytes;
             return;
         }
@@ -422,7 +422,7 @@ export async function reconcileIndex(calendar: Calendar): Promise<void> {
                 bytes += await rewriteCopies(calendar, prepared);
                 writeIndexed(calendar, pass.calendarId, prepared);
             } catch (e) {
-                console.error(`calendar: could not index calendar ${pass.calendarId}: ${e}`);
+                console.error(`calendar: could not index calendar ${pass.calendarId}:`, e);
             }
         }
 
