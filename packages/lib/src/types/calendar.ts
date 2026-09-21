@@ -19,7 +19,6 @@ export type EventData = {
     organizer?: { userId: string; email: string; name?: string };
     organizerEventId?: string;
     url?: string;
-    notes?: string;
     color?: string;
 };
 

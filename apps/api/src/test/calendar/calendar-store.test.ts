@@ -642,6 +642,138 @@ describe('calendar file store', () => {
         }
     });
 
+    // Moving a resource is one rename plus one transaction: the rows keep their ids and no window ever
+    // shows the event in both calendars.
+    describe('moveEvent', () => {
+        const seriesOf = async (harness: TestHome<Calendar>, calendarId: string, uid: string, uri: string) => {
+            await put(harness.instance, calendarId, uri, vcal(event(uid, 'Movable')));
+            return (await harness.instance.getRawEvents(calendarId)).find((e) => e.uid === uid)!;
+        };
+
+        test('the file and its rows re-home together, under the same ids', async () => {
+            const harness = await makeCalendar();
+            const source = await defaultCalendarId(harness);
+            const target = (await harness.instance.createCalendar({ name: 'Target', color: '#2563eb' })).id;
+            const moved = await seriesOf(harness, source, 'move-1@eigen', 'movable.ics');
+
+            const after = await harness.instance.moveEvent(source, moved.id, target);
+
+            expect(after.id).toBe(moved.id);
+            expect(after.calendarId).toBe(target);
+            expect(readdirSync(join(calendarsDirOf(harness.dir), source))).toEqual([]);
+            expect(readdirSync(join(calendarsDirOf(harness.dir), target))).toEqual(['movable.ics']);
+            expect(await harness.instance.listResources(source)).toHaveLength(0);
+            // The source lists the uri as gone exactly once, and the target never as both.
+            expect((await harness.instance.getDeletedResourcesSince(source, 0)).map((d) => d.uri)).toEqual([
+                'movable.ics',
+            ]);
+            expect(await harness.instance.getDeletedResourcesSince(target, 0)).toEqual([]);
+        });
+
+        test('a target that already holds the UID refuses the move', async () => {
+            const harness = await makeCalendar();
+            const source = await defaultCalendarId(harness);
+            const target = (await harness.instance.createCalendar({ name: 'Target', color: '#2563eb' })).id;
+            const moved = await seriesOf(harness, source, 'move-2@eigen', 'a.ics');
+            await put(harness.instance, target, 'b.ics', vcal(event('move-2@eigen', 'Twin')));
+
+            await expect(harness.instance.moveEvent(source, moved.id, target)).rejects.toThrow(
+                'The target calendar already holds this event',
+            );
+            expect(readdirSync(join(calendarsDirOf(harness.dir), source))).toEqual(['a.ics']);
+        });
+
+        test('a name the target already uses becomes a fresh one', async () => {
+            const harness = await makeCalendar();
+            const source = await defaultCalendarId(harness);
+            const target = (await harness.instance.createCalendar({ name: 'Target', color: '#2563eb' })).id;
+            const moved = await seriesOf(harness, source, 'move-3@eigen', 'taken.ics');
+            await put(harness.instance, target, 'taken.ics', vcal(event('other@eigen', 'Already there')));
+
+            await harness.instance.moveEvent(source, moved.id, target);
+
+            const names = readdirSync(join(calendarsDirOf(harness.dir), target)).sort();
+            expect(names).toHaveLength(2);
+            expect(names).toContain('taken.ics');
+            expect(await harness.instance.listResources(source)).toHaveLength(0);
+        });
+    });
+
+    // The window between the staged rename and the row delete: the sweep decides by the row, so a crash
+    // there rolls the whole calendar back rather than losing every event of a delete nobody acknowledged.
+    test('a calendar delete that died before its commit is rolled back at the next open', async () => {
+        let storage!: DyingFilesystem;
+        const harness = await makeCalendar((homeDir) => {
+            storage = new DyingFilesystem(`${homeDir}/${PATHS.CALENDAR.ROOT}`);
+            return storage;
+        });
+        const doomed = await harness.instance.createCalendar({ name: 'Doomed', color: '#2563eb' });
+        await put(harness.instance, doomed.id, 'kept.ics', vcal(event('rollback@eigen', 'Still here')));
+
+        storage.dieAfterMove = true;
+        await expect(harness.instance.deleteCalendar(doomed.id)).rejects.toThrow('the process died after the rename');
+        storage.dieAfterMove = false;
+        expect(readdirSync(calendarsDirOf(harness.dir)).some((name) => name.includes('.deleting-'))).toBe(true);
+
+        const restarted = await harness.reopen();
+        try {
+            expect((await restarted.instance.getCalendars()).some((c) => c.id === doomed.id)).toBe(true);
+            expect((await restarted.instance.getRawEvents(doomed.id)).map((e) => e.title)).toEqual(['Still here']);
+            expect(readdirSync(calendarsDirOf(harness.dir)).some((name) => name.includes('.deleting-'))).toBe(false);
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    // L37: parentEventId selects WHICH file is written, so it is checked inside the gate against the
+    // calendar the caller named.
+    describe('an override names its parent', () => {
+        const recurring = (uid: string) => vcal(event(uid, 'Weekly', ['RRULE:FREQ=WEEKLY;COUNT=5']));
+
+        test("a parent in another calendar of the home is not this calendar's to override", async () => {
+            const harness = await makeCalendar();
+            const source = await defaultCalendarId(harness);
+            const other = (await harness.instance.createCalendar({ name: 'Other', color: '#2563eb' })).id;
+            await put(harness.instance, source, 'series.ics', recurring('parented@eigen'));
+            const parent = (await harness.instance.getRawEvents(source))[0];
+
+            await expect(
+                harness.instance.createEvent(other, {
+                    title: 'Moved occurrence',
+                    startTime: new Date('2026-04-08T12:00:00Z'),
+                    endTime: new Date('2026-04-08T13:00:00Z'),
+                    allDay: false,
+                    parentEventId: parent.id,
+                    recurrenceDate: '2026-04-08',
+                }),
+            ).rejects.toThrow('Event not found');
+            expect(readdirSync(join(calendarsDirOf(harness.dir), other))).toEqual([]);
+        });
+
+        test('a second override of one occurrence replaces the first', async () => {
+            const harness = await makeCalendar();
+            const calendarId = await defaultCalendarId(harness);
+            await put(harness.instance, calendarId, 'series.ics', recurring('override-twice@eigen'));
+            const parent = (await harness.instance.getRawEvents(calendarId))[0];
+            const override = (title: string) =>
+                harness.instance.createEvent(calendarId, {
+                    title,
+                    startTime: new Date('2026-04-08T12:00:00Z'),
+                    endTime: new Date('2026-04-08T13:00:00Z'),
+                    allDay: false,
+                    parentEventId: parent.id,
+                    recurrenceDate: '2026-04-08',
+                });
+
+            await override('First take');
+            await override('Second take');
+
+            const exceptions = (await harness.instance.getRawEvents(calendarId)).filter((e) => e.parentEventId);
+            expect(exceptions.map((e) => e.title)).toEqual(['Second take']);
+            expect(await harness.instance.listResources(calendarId)).toHaveLength(1);
+        });
+    });
+
     test('two calendars cannot share one directory, whatever the case', async () => {
         const harness = await makeCalendar();
         await harness.instance.createCalendar({ name: 'Work', color: '#2563eb', id: 'Work' });

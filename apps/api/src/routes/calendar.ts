@@ -63,7 +63,6 @@ const EventDataSchema = t.Object({
     reminders: t.Optional(t.Array(ReminderSchema)),
     attendees: t.Optional(t.Array(AttendeeSchema)),
     url: t.Optional(t.String()),
-    notes: t.Optional(t.String()),
     color: t.Optional(t.String()),
 });
 

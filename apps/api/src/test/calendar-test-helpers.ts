@@ -10,8 +10,14 @@ import { makeTestHome, type TestHome } from './home-test-helpers';
 export class DyingFilesystem extends LocalFilesystem {
     dieAfterWrite = false;
     dieAfterUnlink = false;
+    dieAfterMove = false;
     refuseWriteNumber = 0;
     writes = 0;
+
+    override async moveDurable(from: string, to: string): Promise<void> {
+        await super.moveDurable(from, to);
+        if (this.dieAfterMove) throw new Error('the process died after the rename');
+    }
 
     override async writeAtomic(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
         this.writes++;
