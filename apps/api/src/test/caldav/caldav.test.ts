@@ -4,7 +4,7 @@ import { Calendar } from '../../lib/calendar/calendar';
 import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import { ApiError } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
-import { basicAuth } from '../dav-test-helpers';
+import { basicAuth, davRequest } from '../dav-test-helpers';
 import { app, getTestContext } from '../setup';
 
 describe('CalDAV', () => {
@@ -1699,5 +1699,113 @@ describe('CalDAV', () => {
             );
             expect([400, 404]).toContain(res.status);
         }
+    });
+
+    // Whether a PUT may replace a resource is decided by the organizer stamp the server itself wrote, which
+    // a client cannot forge — never by the ORGANIZER address, which a client picks freely.
+    describe('the linked-copy restriction follows the server stamp', () => {
+        const putIcs = (uri: string, body: string, headers: Record<string, string> = {}) =>
+            davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'text/calendar', ...headers },
+                body,
+            });
+
+        const getIcs = async (uri: string): Promise<string> => {
+            const res = await davRequest('GET', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                email: ctx.alice.user.email,
+            });
+            expect(res.status).toBe(200);
+            return res.text();
+        };
+
+        const withOrganizer = (uid: string, summary: string, organizer: string, extra: string[] = []) =>
+            [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'BEGIN:VEVENT',
+                `UID:${uid}`,
+                `SUMMARY:${summary}`,
+                'DTSTART:20261110T090000Z',
+                'DTEND:20261110T100000Z',
+                `ORGANIZER:mailto:${organizer}`,
+                ...extra,
+                'END:VEVENT',
+                'END:VCALENDAR',
+            ].join('\r\n');
+
+        test("an event the client organized in somebody else's name stays the client's to edit", async () => {
+            const uri = 'caldav-foreign-organizer.ics';
+            const uid = 'caldav-foreign-organizer@eigen';
+            expect((await putIcs(uri, withOrganizer(uid, 'Booked by an assistant', 'boss@example.com'))).status).toBe(
+                201,
+            );
+
+            // The address is the client's to change, and the change has to stick.
+            expect((await putIcs(uri, withOrganizer(uid, 'Mine now', ctx.alice.user.email))).status).toBe(204);
+            expect(await getIcs(uri)).toContain(`ORGANIZER:mailto:${ctx.alice.user.email}`);
+            expect(await getIcs(uri)).toContain('SUMMARY:Mine now');
+
+            expect((await putIcs(uri, withOrganizer(uid, 'Edited again', ctx.alice.user.email))).status).toBe(204);
+            expect(await getIcs(uri)).toContain('SUMMARY:Edited again');
+        });
+
+        test('a forged organizer stamp does not survive the PUT that carried it', async () => {
+            const uri = 'caldav-forged-stamp.ics';
+            const uid = 'caldav-forged-stamp@eigen';
+            const forged = ['X-EIGEN-ORGANIZER-EVENT:forged-event', 'X-EIGEN-ORGANIZER-USER:forged-user'];
+            expect((await putIcs(uri, withOrganizer(uid, 'Forged', 'boss@example.com', forged))).status).toBe(201);
+            expect(await getIcs(uri)).not.toContain('forged-event');
+
+            expect((await putIcs(uri, withOrganizer(uid, 'Still mine', 'boss@example.com', forged))).status).toBe(204);
+            expect(await getIcs(uri)).toContain('SUMMARY:Still mine');
+        });
+
+        test("a copy of somebody else's event keeps its fields and takes only the body's alarms", async () => {
+            const uid = 'caldav-linked-copy@external.com';
+            const home = await getHome(userId);
+            await home.calendar.receiveInvitation({
+                uid,
+                title: 'Quarterly review',
+                description: null,
+                location: null,
+                startTime: new Date('2026-11-12T09:00:00Z'),
+                endTime: new Date('2026-11-12T10:00:00Z'),
+                allDay: false,
+                rrule: null,
+                timezone: null,
+                status: 'confirmed',
+                sequence: 0,
+                data: {
+                    organizer: { userId: 'external_boss@example.com', email: 'boss@example.com', name: 'Boss' },
+                    organizerEventId: uid,
+                },
+                createByUserId: 'external_boss@example.com',
+                organizerEventId: uid,
+                organizerUserId: 'external_boss@example.com',
+            });
+            const stored = (await home.calendar.listResources(defaultCalendarId)).find((r) => r.uid === uid)!;
+            expect(stored).toBeDefined();
+
+            const res = await putIcs(
+                stored.uri,
+                withOrganizer(uid, 'Renamed by the attendee', ctx.alice.user.email, [
+                    'BEGIN:VALARM',
+                    'ACTION:DISPLAY',
+                    'DESCRIPTION:Reminder',
+                    'TRIGGER:-PT15M',
+                    'END:VALARM',
+                ]),
+            );
+            expect(res.status).toBe(204);
+            // A body the server did not store has no validator to hand back (RFC 4791 § 5.3.4).
+            expect(res.headers.get('ETag')).toBeNull();
+
+            const served = await getIcs(stored.uri);
+            expect(served).toContain('SUMMARY:Quarterly review');
+            expect(served).toContain('ORGANIZER;CN=Boss:mailto:boss@example.com');
+            expect(served).toContain(`X-EIGEN-ORGANIZER-EVENT:${uid}`);
+            expect(served).toContain('TRIGGER:-PT15M');
+        });
     });
 });

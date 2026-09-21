@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
 import { and, eq, gt, inArray } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import {
@@ -13,7 +12,7 @@ import {
     writeResourceFile,
 } from '../core';
 import { parseResource, projectResource, restampResource, serializeResource } from '../ical';
-import { recurrenceKeyOf, seriesTimezones, uidOf } from '../ical/ical-parse';
+import { EIGEN, readStamp, recurrenceKeyOf, seriesTimezones, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import type { EventRowInput } from './resource-store';
 import {
@@ -262,11 +261,12 @@ export function uidOfResource(resource: ICAL.Component): string {
     return vevents.length ? uidOf(vevents[0]) : '';
 }
 
-// A stored resource organized by somebody else: the owner may change its reminders and nothing more, so a
-// full-replace PUT keeps the stored component and takes only the body's VALARM set.
-function isInvitationCopy(calendar: Calendar, stored: ICAL.Component): boolean {
-    const master = projectResource(stored).events.find((e) => e.recurrenceDate === null);
-    return !!master && isInvitationFromOthers(master, calendar.home.user.email);
+// A copy of somebody else's event, which the owner may re-alarm and nothing more. The organizer stamp the
+// server wrote is what says so: a client cannot forge it (an incoming one is stripped), where the ORGANIZER
+// address is the client's to spell — and taking that address for an answer locks a client out of its own
+// event forever the moment it writes a foreign one.
+function isLinkedCopy(stored: ICAL.Component): boolean {
+    return stored.getAllSubcomponents('vevent').some((vevent) => readStamp(vevent, EIGEN.organizerEvent) !== null);
 }
 
 function adoptAlarms(stored: ICAL.Component, incoming: ICAL.Component): void {
@@ -352,7 +352,7 @@ export async function putResource(
         const stored = storedBytes ? parseResource(new TextDecoder().decode(storedBytes)) : null;
 
         let resource: ICAL.Component;
-        if (stored && isInvitationCopy(calendar, stored)) {
+        if (stored && isLinkedCopy(stored)) {
             adoptAlarms(stored, incoming);
             resource = stored;
         } else {
