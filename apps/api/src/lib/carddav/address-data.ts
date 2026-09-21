@@ -16,7 +16,7 @@ export function projectAddressData(text: string, propNames: string[]): string {
     const keep = (l: VCardLine): boolean => wanted.has(l.name) || SKELETON.has(l.name);
 
     // A kept grouped property keeps its same-group X- label (item1.EMAIL keeps item1.X-ABLabel). This is the
-    // inverse of vcard-serialize.ts dropping an orphaned label when its anchor property is removed: a group's
+    // inverse of vcard/serialize.ts dropping an orphaned label when its anchor property is removed: a group's
     // X- lines ride along only while a non-X line in that group survives the projection, so a label whose
     // anchor wasn't requested is dropped rather than left dangling.
     const anchoredGroups = new Set<string>();

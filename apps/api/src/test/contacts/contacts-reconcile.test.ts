@@ -6,13 +6,12 @@ import type { Contact } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { handleCardReport } from '../../lib/carddav/report';
-import { mergeVCard } from '../../lib/carddav/vcard-serialize';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { labelColorFor, normalizeLabelName } from '../../lib/contacts/card-store';
 import { Contacts } from '../../lib/contacts/contacts';
 import * as contactsSchema from '../../lib/contacts/schema';
 import { PATHS, uriKeyOf } from '../../lib/core';
-import { parseVCard } from '../../lib/vcard';
+import { mergeVCard, parseVCard } from '../../lib/vcard';
 import {
     avatarsDirOf,
     CONTACTS_TEST_ROOT,

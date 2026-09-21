@@ -10,15 +10,17 @@ import {
     addExclusion,
     buildResource,
     eventsToIcs,
+    parseIcs,
+    parseResource,
     patchEvent,
+    projectResource,
     putOverride,
     removeExclusion,
     restampResource,
     serializeEventForImip,
     serializeResource,
     stripEigenStamps,
-} from '../../lib/caldav/ical-component';
-import { parseIcs, parseResource, projectResource } from '../../lib/caldav/ical-parse';
+} from '../../lib/ical';
 import { vcal } from '../ics-test-helpers';
 
 const CTX = { now: new Date('2026-06-01T10:00:00Z'), actorIsOrganizer: true };

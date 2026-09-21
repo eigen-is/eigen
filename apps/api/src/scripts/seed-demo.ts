@@ -233,7 +233,7 @@ async function main(): Promise<void> {
     const { pushTeamAvatar, sendToHome } = await import('../lib/home/home-relay');
     const { generateImagePreview } = await import('../lib/shared/thumbnails');
     const { renderAttachmentPills } = await import('../lib/core/mail-template');
-    const { createVCard } = await import('../lib/carddav/vcard-serialize');
+    const { createVCard } = await import('../lib/vcard');
     const { default: htmlToDocx } = await import('@turbodocx/html-to-docx');
 
     // Tiny quotas + no signups; local-id storage came from the setup call. Apply before any home

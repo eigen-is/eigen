@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, gt } from 'drizzle-orm';
-import { mergeVCard } from '../carddav/vcard-serialize';
 import {
     ApiError,
     computeResourceEtag,
@@ -14,7 +13,7 @@ import {
     writeResourceFile,
 } from '../core';
 import { pushUserProfile } from '../home/home-relay';
-import { parseVCard, transcodeTo30 } from '../vcard';
+import { mergeVCard, parseVCard, transcodeTo30 } from '../vcard';
 import type { ParsedCard } from '../vcard/types';
 import { deriveCardPhotoCache, downloadAvatar } from './avatars';
 import { avatarNameOf, CARD_MAX_BYTES, cardPath, parsedToData, sanitizeCardUri } from './card-store';

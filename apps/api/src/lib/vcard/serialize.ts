@@ -8,23 +8,9 @@
 // untouched. `createVCard` emits the minimal clean 3.0 card a brand-new contact starts from.
 import { escapeContentText, stripLineBreaks } from '@workspace/lib/content-line';
 import type { Address } from '@workspace/lib/types/contact';
-import { ISO_DATE, makeLine, photoParams, serializeVCardLines, splitValue, unescapeText } from '../vcard';
-import type { ParsedCard, VCardLine } from '../vcard/types';
-
-export type CardEdits = Partial<{
-    firstName: string;
-    lastName: string;
-    email: string[];
-    phone: string[];
-    address: Address[];
-    company: string;
-    jobTitle: string;
-    birthday: string;
-    notes: string;
-    categories: string[];
-    eigenId: string | null; // null = remove X-EIGEN-ID
-    photo: { bytes: Uint8Array; mediaType: string } | null; // null = remove PHOTO; absent key = keep
-}>;
+import { makeLine, photoParams, serializeVCardLines, splitValue, unescapeText } from './ast';
+import { ISO_DATE } from './parse';
+import type { CardEdits, ParsedCard, VCardLine } from './types';
 
 function addressEquals(a: Address, b: Address): boolean {
     return (

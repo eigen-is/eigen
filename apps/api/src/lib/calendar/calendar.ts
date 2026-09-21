@@ -20,7 +20,6 @@ import { and, count, eq, gt, gte, inArray, isNull, lte, or, sql } from 'drizzle-
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import ICAL from 'ical.js';
 import { RRule } from 'rrule';
-import { type IcsParseResult, type ParsedEvent, parseIcs } from '../caldav/ical-parse';
 import {
     ApiError,
     decodeUtf8Strict,
@@ -33,6 +32,8 @@ import {
 import type { ManagedDatabase } from '../core/';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
+import { parseIcs } from '../ical';
+import type { IcsParseResult, ParsedEvent } from '../ical/ical-parse';
 import { actorDisplayName, type User } from '../user';
 import { CALENDAR_DB_CONFIG } from './db-config';
 import { composeRsvpReply } from './imip';

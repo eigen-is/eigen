@@ -5,7 +5,7 @@
 > calendars, etc.). Treat a subscription as a flavor of `Calendar`, not a separate entity: a row in
 > the `calendars` table is either *owned* (writable, current behavior) or *subscribed* (read-only,
 > refreshed from a URL) based on a nullable `subscription` JSON column. Reuse `parseIcs()`
-> (`../../apps/api/src/lib/caldav/ical-parse.ts`, already running for iMIP and CalDAV PUT) and the
+> (`../../apps/api/src/lib/ical/ical-parse.ts`, already running for iMIP and CalDAV PUT) and the
 > calendar DB's existing etag/ctag/tombstone conventions — but apply feed snapshots through one new
 > bulk transaction, **not** by looping the public `createEvent`/`deleteEvent` (which would fire
 > per-event SSE, per-event ctag bumps, and — dangerously — iMIP cancellation propagation for feed

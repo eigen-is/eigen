@@ -9,6 +9,7 @@ export {
     VCardError,
 } from './ast';
 export { ISO_DATE, normalizeBirthday, parseVCard } from './parse';
+export { createVCard, mergeVCard } from './serialize';
 export { splitVCards } from './split';
 export { parsedCardToContact } from './to-contact';
 export { transcodeTo30 } from './transcode';

@@ -4,9 +4,9 @@ import type { Calendar } from '../calendar/calendar';
 import { storedRecurrenceKey } from '../calendar/recurrence';
 import type { CalendarEventRow } from '../calendar/types';
 import { matchesIfMatch, matchesIfNoneMatch } from '../core/http';
+import { eventsToIcs, parseIcs } from '../ical';
+import type { IcsParseResult, ParsedEvent } from '../ical/ical-parse';
 import { eventHref } from './discovery';
-import { eventsToIcs } from './ical-component';
-import { type IcsParseResult, type ParsedEvent, parseIcs } from './ical-parse';
 
 // The client-chosen path segment, percent-decoded at the router, becomes the stored uri; cap its decoded length
 // as CardDAV's sanitizeCardUri does (an event uri is a DB column here, never a filename).

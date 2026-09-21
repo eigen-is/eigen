@@ -5,8 +5,8 @@ import type { CalendarEventRow } from '../calendar/types';
 import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
 import { invalidSyncToken } from '../dav/sync-token';
 import { memberProps, multistatusResponse, notFoundRow, propstatOk, removedRow, response } from '../dav/xml';
+import { eventsToIcs } from '../ical';
 import { calendarHref, eventHref } from './discovery';
-import { eventsToIcs } from './ical-component';
 import { calendarDataProp, formatSyncToken, parseSyncToken } from './xml-builder';
 import { parseReport, type ReportRequest } from './xml-parser';
 
