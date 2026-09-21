@@ -30,8 +30,8 @@ export type ExclusionStamp = { id: string; sequence: number; dtstamp: Date | nul
 
 const EIGEN_PREFIX = 'x-eigen-';
 
-// ical.js keeps a vCard-style group in the name (RFC 5545 §3.1), so `A.ATTENDEE` is an ATTENDEE and
-// `A.X-EIGEN-EVENT-ID` is that property under a label: every name test goes through here first.
+// ical.js keeps a vCard-style group in the name (RFC 5545 §3.1), so `A.ATTENDEE` is an ATTENDEE: the rules
+// that must see past a group ask here, where ical.js's own `getFirstProperty('attendee')` does not.
 export function bareName(name: string): string {
     return name.slice(name.lastIndexOf('.') + 1).toLowerCase();
 }

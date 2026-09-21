@@ -123,11 +123,12 @@ const ImportFromDriveIcsSchema = t.Object({
 const ImportQuerySchema = t.Object({ calendarId: t.String({ minLength: 1 }) });
 
 // The Home a transfer runs against, once the caller may read (an export) or write (an import) the calendar
-// they named. A calendar another user's Home holds is out of scope for both: the file would be read out of
-// that Home, or written into it, and only the relay crosses homes. Free-busy may learn when a calendar is
-// busy, never what it says, so it is no read here either.
+// they named. A team home is the only Home here that is not the caller's own: any other owner is refused
+// rather than resolved, because the file would be read out of that Home, or written into it, and only the
+// relay crosses homes. Free-busy may learn when a calendar is busy, never what it says, so it is no read
+// here either.
 async function resolveTransferCalendar(user: User, ownerId: string, calendarId: string, need: 'read' | 'write') {
-    if (parseOwnerId(ownerId).type === 'user') requireSelf(ownerId, user.id);
+    if (parseOwnerId(ownerId).type !== 'team') requireSelf(ownerId, user.id);
     const { permission } = await checkCalendarAccess(user, ownerId, calendarId);
     if (permission === 'free-busy' || (need === 'write' && permission !== 'write')) {
         throw new ApiError(403, need === 'write' ? 'Write permission required' : 'Read permission required');
@@ -392,8 +393,8 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             // A one-event export is named after the event itself, a whole calendar after the calendar.
             // contentDisposition takes the path and the control characters out of it; the clamp keeps one
             // absurd title from filling the header.
-            const only = body.ids?.length === 1 ? await cal.getEventById(body.ids[0]) : null;
-            const name = only ? only.title : (cal.calendarRow(body.calendarId)?.name ?? '');
+            const only = body.ids?.length === 1 ? await cal.getEventById(body.calendarId, body.ids[0]) : null;
+            const name = only?.title || (cal.calendarRow(body.calendarId)?.name ?? '');
             set.headers['Content-Type'] = ICS_CONTENT_TYPE;
             set.headers['Content-Disposition'] = contentDisposition(
                 'attachment',

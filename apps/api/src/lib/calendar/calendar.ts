@@ -508,9 +508,12 @@ export class Calendar {
             .innerJoin(schema.resources, eq(schema.events.resourceId, schema.resources.id));
     }
 
-    public async getEventById(id: string): Promise<CalendarEvent | null> {
+    public async getEventById(calendarId: string, id: string): Promise<CalendarEvent | null> {
         await this.gate.ensureDrained();
-        return events.eventById(this, id);
+        const row = this.joinedEvents()
+            .where(and(eq(schema.events.calendarId, calendarId), eq(schema.events.id, id)))
+            .get();
+        return row ? toEvent(row) : null;
     }
 
     public async getEventsByUid(uid: string): Promise<CalendarEvent[]> {

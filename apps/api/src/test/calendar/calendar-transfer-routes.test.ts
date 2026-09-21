@@ -1153,6 +1153,33 @@ describe('Calendar transfer routes', () => {
         }
     });
 
+    // A team home is the one Home a transfer may run against that is not the caller's own, so every other
+    // owner shape is refused rather than resolved — an org or external id otherwise lands in the caller's
+    // own Home by way of resolveCalendar.
+    test('an org or external ownerId is neither an import nor an export target', async () => {
+        for (const ownerId of [`org_${'a'.repeat(32)}`, `external_${bob.email}`]) {
+            const imported = await authedRequest(
+                alice.sessionToken,
+                `/calendar/${encodeURIComponent(ownerId)}/import?calendarId=${encodeURIComponent(calendarId)}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': ICS_MIME },
+                    body: vcal(
+                        vevent(`odd-owner-${randomUUID()}@other`, 'Not mine', '20260424T090000Z', '20260424T100000Z'),
+                    ),
+                },
+            );
+            expect(imported.status).toBe(403);
+
+            const sent = await authedRequest(alice.sessionToken, `/calendar/${encodeURIComponent(ownerId)}/export`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ calendarId }),
+            });
+            expect(sent.status).toBe(403);
+        }
+    });
+
     test('an unknown calendar is 404', async () => {
         const res = await importRequest(
             alice,
@@ -1549,6 +1576,26 @@ describe('Calendar transfer routes', () => {
             const res = await exportRequest(alice, alice.id, exportCalendarId, [row.id]);
             expect(res.status).toBe(200);
             expect(res.headers.get('Content-Disposition')).toBe('attachment; filename="_.._.._etc_passwd.ics"');
+        });
+
+        // A VEVENT need not carry a SUMMARY, and an event with no title falls back to the calendar's name
+        // the way a whole-calendar export does.
+        test('an event with no title exports under the calendar name', async () => {
+            const uid = 'export-untitled@client';
+            const file = vcal([
+                'BEGIN:VEVENT',
+                `UID:${uid}`,
+                'DTSTART:20270901T090000Z',
+                'DTEND:20270901T093000Z',
+                'END:VEVENT',
+            ]);
+            expect((await putIcs(exportCalendarId, 'export-untitled.ics', file)).status).toBe(201);
+
+            const home = await getHome(alice.id);
+            const row = findOrFail(await home.calendar.getEventsByUid(uid), (e) => e.recurrenceDate === null);
+            const res = await exportRequest(alice, alice.id, exportCalendarId, [row.id]);
+            expect(res.status).toBe(200);
+            expect(res.headers.get('Content-Disposition')).toBe('attachment; filename="Exportable.ics"');
         });
 
         test("bob cannot export alice's calendar, and a guest cannot export at all", async () => {
