@@ -7,11 +7,11 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { mergeVCard } from '../../lib/carddav/vcard-serialize';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
-import { labelColorFor, normalizeLabelName, uriKeyOf } from '../../lib/contacts/card-store';
+import { labelColorFor, normalizeLabelName } from '../../lib/contacts/card-store';
 import { Contacts } from '../../lib/contacts/contacts';
 import { CONTACTS_DB_CONFIG } from '../../lib/contacts/db-config';
 import * as contactsSchema from '../../lib/contacts/schema';
-import { ManagedDatabase } from '../../lib/core';
+import { ManagedDatabase, uriKeyOf } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import { parseVCard } from '../../lib/vcard';
 import {
@@ -931,11 +931,14 @@ describe('fail-closed drain guard', () => {
         const { contacts } = await makeContacts();
 
         let drainCalls = 0;
-        const proto = Object.getPrototypeOf(contacts) as { drainDirty: () => Promise<void> };
+        const proto = Object.getPrototypeOf(contacts) as { drainDirty: (uris: string[]) => Promise<void> };
         const origDrain = proto.drainDirty;
-        (contacts as unknown as { drainDirty: () => Promise<void> }).drainDirty = function (this: Contacts) {
+        (contacts as unknown as { drainDirty: (uris: string[]) => Promise<void> }).drainDirty = function (
+            this: Contacts,
+            uris: string[],
+        ) {
             drainCalls++;
-            return origDrain.apply(this);
+            return origDrain.call(this, uris);
         };
 
         // Clean book: the guard short-circuits on the empty set — no drain, no lock, no file touch.
@@ -1015,11 +1018,14 @@ describe('fail-closed drain guard', () => {
 
         // Spy AFTER the failure so we can prove which read drains.
         let drainCalls = 0;
-        const proto = Object.getPrototypeOf(contacts) as { drainDirty: () => Promise<void> };
+        const proto = Object.getPrototypeOf(contacts) as { drainDirty: (uris: string[]) => Promise<void> };
         const origDrain = proto.drainDirty;
-        (contacts as unknown as { drainDirty: () => Promise<void> }).drainDirty = function (this: Contacts) {
+        (contacts as unknown as { drainDirty: (uris: string[]) => Promise<void> }).drainDirty = function (
+            this: Contacts,
+            uris: string[],
+        ) {
             drainCalls++;
-            return origDrain.apply(this);
+            return origDrain.call(this, uris);
         };
 
         // size() must NEVER drain: it is reachable from the in-lock quota gate, so draining here would re-enter
@@ -1365,18 +1371,18 @@ describe('size() must never re-enter the non-reentrant write lock', () => {
     test('size() called from inside the write lock still completes when a lock-free read marked a card dirty', async () => {
         const { contacts } = await makeContacts();
         const priv = contacts as unknown as {
-            writeLock: { run<T>(fn: () => Promise<T>): Promise<T> };
-            markCardDirty(uri: string): void;
+            gate: { run<T>(fn: () => Promise<T>): Promise<T>; markDirty(uri: string): void };
         };
 
-        // getCard's ENOENT branch marks a uri dirty WITHOUT holding the lock — reproduce that state. If it
-        // lands between a mutation's drainDirty() and its quota gate, size() sees a non-empty dirty set.
-        priv.markCardDirty('ghost.vcf');
-
-        // enforceCardBudget reaches Contacts.size() from INSIDE the write lock on every metered mutation.
-        // Reproduce that position: hold the lock, then call size(). If size() drains — taking the same
-        // non-reentrant Semaphore(1) it is already inside — it self-deadlocks the whole home forever.
-        const sizeFromInsideLock = priv.writeLock.run(() => contacts.size());
+        // enforceCardBudget reaches Contacts.size() from INSIDE the write gate on every metered mutation.
+        // Reproduce that position, with getCard's ENOENT branch marking a uri dirty in the window between
+        // the gate's drain and the quota check — the one way size() can see a non-empty dirty set. If size()
+        // drains — taking the same non-reentrant Semaphore(1) it is already inside — it self-deadlocks the
+        // whole home forever.
+        const sizeFromInsideLock = priv.gate.run(() => {
+            priv.gate.markDirty('ghost.vcf');
+            return contacts.size();
+        });
         const bytes = await completesWithin(
             sizeFromInsideLock,
             2000,

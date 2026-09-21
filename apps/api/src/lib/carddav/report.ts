@@ -1,6 +1,6 @@
-import { uriKeyOf } from '../contacts/card-store';
 import type { Contacts } from '../contacts/contacts';
 import type { CardRow } from '../contacts/dav-store';
+import { uriKeyOf } from '../core';
 import { parseVCardLines } from '../vcard';
 import type { VCardLine } from '../vcard/types';
 import { projectAddressData } from './address-data';

@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { CARD_MAX_BYTES, computeCardEtag } from '../../lib/contacts/card-store';
+import { CARD_MAX_BYTES } from '../../lib/contacts/card-store';
+import { computeResourceEtag } from '../../lib/core';
 import { encodePathSegment } from '../../lib/dav/href';
 import { getHome } from '../../lib/home';
 import { app, getTestContext } from '../setup';
@@ -499,7 +500,7 @@ describe('CardDAV', () => {
         expect(stored).toContain('PHOTO;ENCODING=b');
         // The etag hashes the stored 3.0 bytes, so an honest client re-converges on the next fetch.
         expect(getRes.headers.get('ETag')).toBe(etag);
-        expect(etag).toBe(`"${computeCardEtag(new TextEncoder().encode(stored))}"`);
+        expect(etag).toBe(`"${computeResourceEtag(new TextEncoder().encode(stored))}"`);
     });
 
     test('DELETE removes a card and a subsequent GET is 404', async () => {

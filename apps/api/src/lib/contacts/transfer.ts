@@ -16,7 +16,7 @@ import * as schema from './schema';
 // concatenation is one well-formed directory whatever the writers left behind; the bytes are otherwise the
 // ones on disk, PHOTO and unknown properties included.
 export async function exportCards(contacts: Contacts, ids?: string[]): Promise<string> {
-    await contacts.ensureDrained();
+    await contacts.gate.ensureDrained();
     const rows = contacts.db
         .select({ id: schema.contacts.id, uri: schema.contacts.uri, isGroup: schema.contacts.isGroup })
         .from(schema.contacts)

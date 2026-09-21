@@ -69,9 +69,9 @@ export async function uploadAvatar(contacts: Contacts, file: File): Promise<stri
 
     const webpName = `${randomUUID()}.webp`;
     const embedName = stagedEmbedName(webpName, format);
-    // The encodes stay outside the lock (the slow part, no accounting); the writes and their byte delta take
+    // The encodes stay outside the gate (the slow part, no accounting); the writes and their byte delta take
     // it, so the sweep's recount can never land between them and lose the increment.
-    await contacts.writeLock.run(async () => {
+    await contacts.gate.run(async () => {
         await contacts.storage.write(`${PATHS.CONTACTS.AVATARS}/${webpName}`, webp.data);
         await contacts.storage.write(`${PATHS.CONTACTS.AVATARS}/${embedName}`, embed.data);
         contacts.avatarsBytes += webp.data.byteLength + embed.data.byteLength;
@@ -185,10 +185,10 @@ export async function cacheCardPhoto(
 }
 
 // Reclaim avatar files no indexed row references any more, then re-seed the running total from disk.
-// Runs under the write lock — every other avatarsBytes mutation holds it too, so the closing recount can
+// Runs under the write gate — every other avatarsBytes mutation holds it too, so the closing recount can
 // no longer clobber a delta an interleaved write applied mid-sweep.
 export function cleanupAvatarImages(contacts: Contacts): Promise<void> {
-    return contacts.writeLock.run(async () => {
+    return contacts.gate.run(async () => {
         await contacts.storage.mkdir(PATHS.CONTACTS.AVATARS);
         const files = await contacts.storage.list(PATHS.CONTACTS.AVATARS);
 

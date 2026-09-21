@@ -5,9 +5,9 @@ import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { createVCard } from '../../lib/carddav/vcard-serialize';
 import { cacheCardPhoto } from '../../lib/contacts/avatars';
-import { computeCardEtag } from '../../lib/contacts/card-store';
 import type { Contacts } from '../../lib/contacts/contacts';
 import * as contactsSchema from '../../lib/contacts/schema';
+import { computeResourceEtag } from '../../lib/core';
 import { parseVCard } from '../../lib/vcard';
 import type { ParsedCardPhoto } from '../../lib/vcard/types';
 import {
@@ -53,7 +53,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         expect(bytes[1]).toBe(0xd8);
 
         // The derived cache is <id>-<hash8>.webp, hash8 = first 8 hex of the sha256 of the embedded JPEG bytes.
-        const cacheName = `${id}-${computeCardEtag(bytes).slice(0, 8)}.webp`;
+        const cacheName = `${id}-${computeResourceEtag(bytes).slice(0, 8)}.webp`;
         expect(existsSync(join(avatarsDirOf(dir), cacheName))).toBe(true);
 
         // The projection avatar URL points at that hashed cache file.
@@ -214,13 +214,13 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         const id = await contacts.addContact(validContact({ firstName: 'Promo', lastName: 'Ted', avatar: staged }));
 
         const cachePath = join(avatarsDirOf(dir), (await contacts.getContactById(id))!.avatar!.split('/').pop()!);
-        const before = computeCardEtag(new Uint8Array(readFileSync(cachePath)));
+        const before = computeResourceEtag(new Uint8Array(readFileSync(cachePath)));
         const parsesBefore = (contacts as unknown as { cardParseCount: number }).cardParseCount;
 
         await contacts.reconcileIndex();
 
         // The promoted webp is kept, not re-derived over (identical bytes), and the clean stat pass parsed nothing.
-        expect(computeCardEtag(new Uint8Array(readFileSync(cachePath)))).toBe(before);
+        expect(computeResourceEtag(new Uint8Array(readFileSync(cachePath)))).toBe(before);
         expect((contacts as unknown as { cardParseCount: number }).cardParseCount).toBe(parsesBefore);
     });
 
@@ -231,7 +231,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
 
         const cacheName = (await contacts.getContactById(id))!.avatar!.split('/').pop()!;
         const cachePath = join(avatarsDirOf(dir), cacheName);
-        const before = computeCardEtag(new Uint8Array(readFileSync(cachePath)));
+        const before = computeResourceEtag(new Uint8Array(readFileSync(cachePath)));
 
         // A phone-side name edit re-PUTs the whole card with an unchanged PHOTO. The stored bytes ARE the
         // resource body a client sends back.
@@ -246,7 +246,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         // The promoted generation-one webp is kept, not overwritten with a generation-two encode re-derived
         // from the embed: same cache name, identical bytes.
         expect((await contacts.getContactById(id))!.avatar!.split('/').pop()!).toBe(cacheName);
-        expect(computeCardEtag(new Uint8Array(readFileSync(cachePath)))).toBe(before);
+        expect(computeResourceEtag(new Uint8Array(readFileSync(cachePath)))).toBe(before);
     });
 
     test('updating without changing the avatar leaves the PHOTO bytes byte-identical', async () => {
