@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, import, eml]
 related: [mail/download-an-email, mail/get-started, drive/preview-a-file]
 order: 81
-updated: 2026-09-20
+updated: 2026-09-21
 ---
 
 An `.eml` file holds one email, and Mail can read it back. That works whether the file came out of Eigen or out of another mail program, so you can bring an archived message across or keep a copy someone sent you.
@@ -23,7 +23,7 @@ To read the file before you import it, select it and press **Space**, or choose 
 
 ## Limits
 
-A file can be up to 25 MB. A bigger one is refused, and nothing is added to your mailbox. Mail shares a storage allowance with Contacts, so an import also stops if you have run out of room.
+A file can be up to 25 MB. A bigger one is refused, and nothing is added to your mailbox. Mail shares one storage allowance with Contacts and Calendar, so an import also stops if you have run out of room.
 
 An invitation inside an imported message does not reach your calendar. Eigen can't tell who really sent a file, so an imported message never changes an event. To import the invitation itself, save its `.ics` attachment and see [Import events from a calendar file](/support/calendar/import-events).
 

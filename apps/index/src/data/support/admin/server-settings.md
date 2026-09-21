@@ -5,7 +5,7 @@ type: reference
 tags: [admin, settings, quotas, storage, notifications]
 related: [admin/get-started, admin/storage-quotas]
 order: 80
-updated: 2026-09-13
+updated: 2026-09-21
 ---
 
 The **Settings** page in Admin lets the server owner control storage limits, how new users' files are stored, and which events trigger email notifications. Only the server owner sees this page in the sidebar.
@@ -18,7 +18,7 @@ These four limits apply by default to every user. You can also set quota overrid
 
 | Field | What it controls | Default |
 |---|---|---|
-| **Mail & Contacts (MB)** | Combined storage for all a user's email and contacts | 100 MB |
+| **Mail, Contacts & Calendar (MB)** | Combined storage for all a user's email, contacts, and calendars | 100 MB |
 | **Default Mount (MB)** | Storage for a user's primary Drive | 500 MB |
 | **Max Upload (MB)** | Largest single file a user can upload | 35 MB |
 | **Trash Retention (days)** | How long deleted files stay in the Trash before being permanently removed | 30 days |
