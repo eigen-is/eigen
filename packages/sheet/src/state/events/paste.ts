@@ -304,7 +304,9 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
                 }
                 if (originCell) {
                     originCell.v = value;
-                    if (originCell.ct != null && originCell.ct.fa != null) {
+                    if (typeof value === 'number') {
+                        originCell.m = numberDisplay(value, originCell.ct?.fa);
+                    } else if (originCell.ct != null && originCell.ct.fa != null) {
                         originCell.m = update(originCell.ct.fa, value);
                     } else {
                         originCell.m = value;
@@ -877,11 +879,8 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
 
                         [, value.v, value.f] = funcV;
 
-                        if (!isNil(value.ct) && !isNil(value.ct.fa)) {
-                            value.m = update(value.ct.fa, funcV[1]);
-                        } else {
-                            value.m = update('General', funcV[1]);
-                        }
+                        const fa = value.ct?.fa ?? 'General';
+                        value.m = typeof funcV[1] === 'number' ? numberDisplay(funcV[1], fa) : update(fa, funcV[1]);
                     }
 
                     x[c] = cloneDeep(value);
@@ -1005,8 +1004,11 @@ function handleFormulaStringPaste(ctx: Context, formulaStr: string) {
     if (!d) return;
 
     if (!d[r][c]) d[r][c] = {};
-    const m = val == null ? '' : val.toString();
-    d[r][c]!.m = typeof val === 'number' ? numberDisplay(val, d[r][c]!.ct?.fa) : m;
+    if (typeof val === 'number') {
+        d[r][c]!.m = numberDisplay(val, d[r][c]!.ct?.fa);
+    } else {
+        d[r][c]!.m = val == null ? '' : val.toString();
+    }
     d[r][c]!.v = val;
     d[r][c]!.f = formulaStr;
 }

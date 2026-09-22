@@ -10,7 +10,13 @@ import { unescapeHtml } from '@workspace/lib/html';
 import { Window } from 'happy-dom';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import type { Context } from '../../../state/context';
-import { getCellValue, getFormulaHtml, getInlineStringHTML, updateCell } from '../../../state/modules/cell';
+import {
+    getCellValue,
+    getFormulaHtml,
+    getInlineStringHTML,
+    setCellValue,
+    updateCell,
+} from '../../../state/modules/cell';
 import { clearMeasureTextCache } from '../../../state/modules/text';
 import type { CellMatrix, SheetConfig } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
@@ -147,5 +153,19 @@ describe('state/modules/cell — updateCell auto-height', () => {
 
         const synced = applyPatches(base, filterPatch(patches));
         expect(synced.sheets[0].config?.rowlen?.[0]).toBe(grown.sheets[0].config?.rowlen?.[0]);
+    });
+});
+
+describe('state/modules/cell — setCellValue typed numbers', () => {
+    function typed(text: string) {
+        const ctx = contextFactory({}) as Context;
+        const data: CellMatrix = [[null]];
+        setCellValue(ctx, 0, 0, data, text);
+        return data[0][0];
+    }
+
+    test("a typed number shows Excel's default-width General", () => {
+        expect(typed('123456789012')).toMatchObject({ m: '1.23457E+11', ct: { fa: 'General', t: 'n' } });
+        expect(typed('1234567.891234')?.m).toBe('1234567.891');
     });
 });
