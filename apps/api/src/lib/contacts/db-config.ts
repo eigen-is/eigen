@@ -5,6 +5,8 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'contacts',
     currentVersion: 4,
     schema,
+    // The book's bytes live here now, so an acknowledged PUT must survive a power loss.
+    synchronous: 'FULL',
     migrations: [
         {
             version: 1,
