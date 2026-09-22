@@ -147,3 +147,19 @@ describe('createFilterOptions hidden columns', () => {
         expect(getFilterButtonAtPosition(ctx, 148 - FILTER_BUTTON_WIDTH, HEADER_TOP)?.col).toBe(1);
     });
 });
+
+describe('createFilterOptions without edit rights', () => {
+    test('clears the buttons it would otherwise have drawn', () => {
+        const ctx = ctxWithFilter(RANGE);
+        ctx.allowEdit = false;
+        createFilterOptions(ctx, RANGE, undefined);
+        expect(ctx.filterOptions).toBeUndefined();
+    });
+
+    test("leaves the current sheet's buttons alone for another sheet's filter", () => {
+        const ctx = ctxWithFilter(RANGE);
+        ctx.allowEdit = false;
+        createFilterOptions(ctx, undefined, 'id_2');
+        expect(ctx.filterOptions).toBeDefined();
+    });
+});
