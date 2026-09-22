@@ -123,15 +123,19 @@ export function composeOtpEmail(
         kind === '2fa'
             ? 'Use the code below to finish signing in:'
             : 'Use the code below to access your shared documents:';
+    const expiry =
+        kind === '2fa'
+            ? 'This code expires in 5 minutes.'
+            : 'This code expires in 5 minutes. If you asked for more than one, only the newest works.';
     const html = renderEigenEmail({
         title: subject,
         bodyHtml:
             `<p style="font-size:14px;line-height:1.5">${intro}</p>` +
             `<p style="font-family:ui-monospace,Menlo,monospace;font-size:28px;font-weight:600;letter-spacing:4px;margin:16px 0">${escapeHtml(code)}</p>` +
-            `<p style="font-size:13px;color:${EMAIL_MUTED}">This code expires in 5 minutes.</p>`,
+            `<p style="font-size:13px;color:${EMAIL_MUTED}">${expiry}</p>`,
         footerLine: orgName,
     });
-    const lines = [`${intro.replace(/:$/, '')}: ${code}`, '', 'This code expires in 5 minutes.'];
+    const lines = [`${intro.replace(/:$/, '')}: ${code}`, '', expiry];
     if (domain !== 'localhost') {
         lines.push('', `@${domain} #${code}`);
     }

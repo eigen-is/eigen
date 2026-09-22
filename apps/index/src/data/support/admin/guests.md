@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, guests, sharing, access]
 related: [admin/get-started, drive/share-a-file]
 order: 50
-updated: 2026-06-08
+updated: 2026-09-21
 ---
 
 Guest access lets people outside your organization view files you have shared with them. Guests sign in
@@ -18,6 +18,9 @@ When you share a file or folder with an email address that does not belong to a 
 email to the share. The next time that person visits your Eigen server and enters their email address,
 Eigen sends a six-digit code to their inbox. They enter the code to sign in and see only the content
 shared with them.
+
+A code works for 5 minutes. If a guest asks for another code, only the newest one works. A mistyped code
+can be entered again.
 
 Guest accounts are separate from member accounts. They cannot access any app, setting, or file that has
 not been explicitly shared with them.
