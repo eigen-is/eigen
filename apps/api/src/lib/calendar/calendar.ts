@@ -14,6 +14,7 @@ import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { and, eq, getTableColumns, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
+import { enforceHomeDataQuota } from '../config/enforcement';
 import {
     ApiError,
     BroadcastBatch,
@@ -30,15 +31,23 @@ import { parseResource } from '../ical';
 import type { EventPatch, Revision } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
 import type { User } from '../user';
-import type { PutResourceOptions, ResourceCommit, ResourceRow } from './dav-store';
-import * as store from './dav-store';
+import type { PutResourceOptions, ResourceRow } from './dav-store';
+import * as davStore from './dav-store';
 import { CALENDAR_DB_CONFIG } from './db-config';
 import * as events from './events';
 import * as invitations from './invitations';
 import { dbCalendarToCalendarItem, toEvent } from './mappers';
 import * as occurrences from './occurrences';
-import type { CalendarCollection, Tx } from './resource-store';
-import { indexResource, reindexEvents, resourceBytes, sanitizeCalendarId } from './resource-store';
+import type { CalendarCollection, PreparedResource, PurgedResource, ResourceCommit, Tx } from './resource-store';
+import {
+    EVENT_MAX_BYTES,
+    indexResource,
+    projectRows,
+    reindexEvents,
+    resourceBytes,
+    sanitizeCalendarId,
+    uidOfResource,
+} from './resource-store';
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
 import * as shares from './shares';
@@ -75,7 +84,7 @@ export class Calendar {
     eventsBytes = 0;
 
     // Whether resource writes are quota-metered — see the assignment in init() for what turns it on.
-    meteredIngest = false;
+    private meteredIngest = false;
 
     // Bulk writes in flight; while any runs, per-resource events are held and the last one out closes them.
     private readonly batch = new BroadcastBatch(() => this.flushHeldAnnouncements());
@@ -148,8 +157,35 @@ export class Calendar {
             .run();
     }
 
+    // The one write every resource path takes, and it owns the order: both ceilings judge the bytes right
+    // before the transaction that stores them, so a refusal leaves the calendar as it was. `creditBytes` is
+    // the stored resource this one replaces, or a rewrite that shrinks a resource would be refused on a
+    // quota its own bytes already hold.
+    async writeResource(opts: {
+        calendarId: string;
+        uri: string;
+        prepared: PreparedResource;
+        creditBytes: number;
+    }): Promise<void> {
+        const { bytes } = opts.prepared;
+        if (bytes.byteLength > EVENT_MAX_BYTES) throw new ApiError(413, 'Event is too large');
+        if (this.meteredIngest) {
+            await enforceHomeDataQuota(this.home.user.id, bytes.byteLength, opts.creditBytes);
+        }
+        this.commitResource({
+            id: opts.prepared.id,
+            calendarId: opts.calendarId,
+            uri: opts.uri,
+            uid: opts.prepared.uid,
+            ics: bytes,
+            etag: opts.prepared.etag,
+            rows: opts.prepared.rows,
+            hasUnindexedRecurrence: opts.prepared.hasUnindexedRecurrence,
+        });
+    }
+
     // One transaction, so the ctag bump, the blob, the event rows and the tombstone clear settle together.
-    commitResource(commit: ResourceCommit): void {
+    private commitResource(commit: ResourceCommit): void {
         const { rows, ...resource } = commit;
         const delta = this.db.transaction((tx) => {
             const previous = tx
@@ -164,7 +200,7 @@ export class Calendar {
     }
 
     // Callers hold the write lock and have already run their own guards (preconditions, the linked-copy rule).
-    async purgeResource(row: { id: string; calendarId: string; uri: string }): Promise<void> {
+    async purgeResource(row: Pick<PurgedResource, 'id' | 'calendarId' | 'uri'>): Promise<void> {
         const removed = this.db.transaction((tx) => {
             const size = tx
                 .select({ size: resourceBytes })
@@ -327,27 +363,27 @@ export class Calendar {
     // --- Resources (the DAV store facade — implementation in calendar/dav-store.ts) ---
 
     public async listResources(calendarId: string): Promise<ResourceRow[]> {
-        return store.listResources(this, calendarId);
+        return davStore.listResources(this, calendarId);
     }
 
     public async getResourceMeta(calendarId: string, uri: string): Promise<ResourceRow | null> {
-        return store.resourceRowOf(this, calendarId, uri);
+        return davStore.getResourceMeta(this, calendarId, uri);
     }
 
     public async getResourcesByUris(calendarId: string, uris: string[]): Promise<ResourceRow[]> {
-        return store.getResourcesByUris(this, calendarId, uris);
+        return davStore.getResourcesByUris(this, calendarId, uris);
     }
 
     public async getChangedResourcesSince(calendarId: string, sinceCtag: number): Promise<ResourceRow[]> {
-        return store.getChangedResourcesSince(this, calendarId, sinceCtag);
+        return davStore.getChangedResourcesSince(this, calendarId, sinceCtag);
     }
 
     public async getDeletedResourcesSince(calendarId: string, sinceCtag: number): Promise<{ uri: string }[]> {
-        return store.getDeletedResourcesSince(this, calendarId, sinceCtag);
+        return davStore.getDeletedResourcesSince(this, calendarId, sinceCtag);
     }
 
     public async getResource(calendarId: string, uri: string): Promise<{ bytes: Uint8Array; etag: string } | null> {
-        return store.getResource(this, calendarId, uri);
+        return davStore.getResource(this, calendarId, uri);
     }
 
     public async putResource(
@@ -357,12 +393,12 @@ export class Calendar {
         options: PutResourceOptions,
     ): Promise<PutResourceResult> {
         const ctagBefore = this.calendarCtag(calendarId);
-        const result = await store.putResource(this, calendarId, uri, body, options);
+        const result = await davStore.putResource(this, calendarId, uri, body, options);
         // A PUT of what is already stored commits nothing, so there is nothing to tell the clients about.
         if (result.ok && this.calendarCtag(calendarId) !== ctagBefore) {
             this.announce(
-                calendarId,
                 result.created ? SSEventType.CALENDAR_EVENT_CREATED : SSEventType.CALENDAR_EVENT_UPDATED,
+                calendarId,
             );
         }
         return result;
@@ -373,15 +409,15 @@ export class Calendar {
         uri: string,
         pre: Pick<ResourcePreconditions, 'ifMatch'>,
     ): Promise<DeleteResourceResult> {
-        const result = await store.deleteResource(this, calendarId, uri, pre);
-        if (result.ok) this.announce(calendarId, SSEventType.CALENDAR_EVENT_DELETED);
+        const result = await davStore.deleteResource(this, calendarId, uri, pre);
+        if (result.ok) this.announce(SSEventType.CALENDAR_EVENT_DELETED, calendarId);
         return result;
     }
 
     // Plus every resource the index cannot expand: a stripped rule or an RDATE still has occurrences to sync.
     public async getResourcesInRange(calendarId: string, from: Date, to: Date): Promise<ResourceRow[]> {
         const matched = await occurrences.getResourceUrisInRange(this, calendarId, from, to);
-        return store.getResourcesInRange(this, calendarId, [...matched]);
+        return davStore.getResourcesInRange(this, calendarId, [...matched]);
     }
 
     // --- Events (reads) ---
@@ -447,10 +483,10 @@ export class Calendar {
         this.db.transaction((tx) => {
             for (const row of rows) {
                 const resource = parseResource(new TextDecoder().decode(row.ics));
-                const projection = store.projectRows(row.calendarId, row.id, resource);
+                const projection = projectRows(row.calendarId, row.id, resource);
                 tx.update(schema.resources)
                     .set({
-                        uid: store.uidOfResource(resource),
+                        uid: uidOfResource(resource),
                         etag: computeResourceEtag(row.ics),
                         hasUnindexedRecurrence: projection.hasUnindexedRecurrence,
                     })
@@ -463,7 +499,7 @@ export class Calendar {
 
     // --- Announcements ---
 
-    announce(calendarId: string, type: Parameters<typeof buildCalendarEvent>[0]): void {
+    announce(type: Parameters<typeof buildCalendarEvent>[0], calendarId: string): void {
         if (this.batch.hold()) {
             this.heldCalendars.add(calendarId);
             return;

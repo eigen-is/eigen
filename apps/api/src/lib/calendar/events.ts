@@ -14,12 +14,12 @@ import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence
 import { storedRecurrenceKey } from '../ical/wall-clock';
 import type { User } from '../user';
 import type { Calendar } from './calendar';
-import * as store from './dav-store';
+import * as davStore from './dav-store';
 import { eventForResource, validateEventInput } from './event-input';
 import { composeRsvpReply } from './imip';
 import { answeredOccurrence, propagateCancellation, propagateDecline, propagateInvitation } from './invite-propagation';
 import { toEvent } from './mappers';
-import { resourceBytes } from './resource-store';
+import { prepareResource, resourceBytes } from './resource-store';
 import * as schema from './schema';
 import type { CreateEventArgs } from './types';
 
@@ -63,6 +63,16 @@ export function resourceOf(calendar: Calendar, eventId: string): StoredResource 
     );
 }
 
+// The component path onto the facade's one write: every caller holds the resource it re-serializes.
+export function writeComponent(calendar: Calendar, resource: StoredResource, component: ICAL.Component): Promise<void> {
+    return calendar.writeResource({
+        calendarId: resource.calendarId,
+        uri: resource.uri,
+        prepared: prepareResource(resource.calendarId, component, resource.id),
+        creditBytes: resource.size,
+    });
+}
+
 // Caller holds the write lock: the bytes it mutates are the bytes the commit overwrites.
 async function editResource(
     calendar: Calendar,
@@ -71,7 +81,7 @@ async function editResource(
 ): Promise<void> {
     const component = storedComponent(calendar, resource);
     mutate(component);
-    await store.writeResource(calendar, resource.calendarId, resource.uri, component, resource);
+    await writeComponent(calendar, resource, component);
 }
 
 // Caller holds the write lock and has already resolved the resource this patch means.
@@ -110,7 +120,7 @@ export async function createEvent(
         return { created: await writeEvent(calendar, calendarId, input), replaced };
     });
 
-    calendar.announce(calendarId, SSEventType.CALENDAR_EVENT_CREATED);
+    calendar.announce(SSEventType.CALENDAR_EVENT_CREATED, calendarId);
     if (user) propagateWrite(calendar, created, user, replaced?.data?.attendees ?? []).catch(console.error);
     return created;
 }
@@ -156,7 +166,12 @@ export async function writeEvent(
     const uid = input.uid || randomUUID();
     if (uidHolder(calendar, calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
     const event = eventForResource({ id: randomUUID(), calendarId, uid, input, now: new Date() });
-    await store.writeResource(calendar, calendarId, uri, buildResource([event]), null);
+    await calendar.writeResource({
+        calendarId,
+        uri,
+        prepared: prepareResource(calendarId, buildResource([event]), null),
+        creditBytes: 0,
+    });
     return eventById(calendar, event.id)!;
 }
 
@@ -229,7 +244,7 @@ export async function updateEvent(
     const { updated, oldAttendees } = await calendar.writeLock.run(() =>
         patchStoredEvent(calendar, calendarId, id, input, user),
     );
-    calendar.announce(calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
+    calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
 
     if (user) propagateWrite(calendar, updated, user, oldAttendees).catch(console.error);
     return updated;
@@ -336,7 +351,7 @@ export async function deleteEvent(calendar: Calendar, calendarId: string, id: st
         propagateCancellation(calendar.home, existing, existing.data.attendees).catch(console.error);
     }
 
-    calendar.announce(calendarId, SSEventType.CALENDAR_EVENT_DELETED);
+    calendar.announce(SSEventType.CALENDAR_EVENT_DELETED, calendarId);
 }
 
 // Caller holds the write lock; the row it answers with is what the decline or cancellation mail is composed from.
@@ -387,7 +402,7 @@ export async function moveEvent(
             throw new ApiError(409, 'The target calendar already holds this event');
         }
         // A name the target already holds becomes a fresh one, or the move would collide on (calendarId, uri).
-        const taken = !!store.resourceRowOf(calendar, targetCalendarId, resource.uri);
+        const taken = !!davStore.getResourceMeta(calendar, targetCalendarId, resource.uri);
         const targetUri = taken ? `${randomUUID()}.ics` : resource.uri;
 
         calendar.db.transaction((tx) => {
@@ -416,8 +431,8 @@ export async function moveEvent(
     });
 
     if (moved) {
-        calendar.announce(calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
-        calendar.announce(targetCalendarId, SSEventType.CALENDAR_EVENT_UPDATED);
+        calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
+        calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, targetCalendarId);
     }
     return eventById(calendar, id)!;
 }

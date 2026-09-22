@@ -26,7 +26,7 @@ import { createVCard, mergeVCard, normalizeBirthday, parseVCard } from '../vcard
 import type { CardEdits } from '../vcard/types';
 import type { StagedAvatarPair } from './avatars';
 import * as avatars from './avatars';
-import type { CardData, CardProjection, CardRowInput, ContactRow, PurgedCard, Tx } from './card-store';
+import type { CardProjection, CardRowInput, PurgedCard, Tx } from './card-store';
 import {
     avatarNameOf,
     CARD_MAX_BYTES,
@@ -43,26 +43,10 @@ import type { CardBook, CardRow, DeleteCardResult } from './dav-store';
 import * as davStore from './dav-store';
 import { CONTACTS_DB_CONFIG } from './db-config';
 import * as labels from './labels';
+import { dbRowToContact, toData } from './mappers';
 import * as schema from './schema';
 import { buildContactEvent, buildContactsChangedEvent, buildLabelEvent } from './sse-events';
 import * as transfer from './transfer';
-
-// Optionals collapse to '' / [] so the shape matches prepareCard's and `avatarChanged` can't misfire on `undefined !== ''`.
-function toData(contact: CreateContactInput): CardData {
-    return {
-        email: contact.email,
-        phone: contact.phone,
-        company: contact.company ?? '',
-        jobTitle: contact.jobTitle ?? '',
-        address: contact.address ?? [],
-        birthday: contact.birthday ?? '',
-        notes: contact.notes ?? '',
-        avatar: contact.avatar ?? '',
-    };
-}
-
-// Derived from toData so a NULL `data` column reads back as the shape every write stores.
-const EMPTY_CARD_DATA: CardData = toData({ firstName: '', lastName: '', email: [], phone: [] });
 
 function isBlankAddress(a: Address): boolean {
     return (
@@ -517,20 +501,6 @@ export class Contacts {
         return labels.deleteLabel(this, id);
     }
 
-    private dbRowToContact(row: ContactRow, labelIds: string[]): Contact {
-        const data = row.data ?? EMPTY_CARD_DATA;
-
-        return {
-            id: row.id,
-            firstName: row.firstName.trim(),
-            lastName: row.lastName.trim(),
-            eigenId: row.eigenId,
-            etag: row.etag,
-            ...data,
-            labels: labelIds,
-        };
-    }
-
     public async getContactById(id: string): Promise<Contact | null> {
         const row = this.db
             .select({ ...CONTACT_ROW, isGroup: schema.contacts.isGroup })
@@ -544,7 +514,7 @@ export class Contacts {
             .where(eq(schema.contactsToLabels.contactId, row.id))
             .all()
             .map((rel) => rel.labelId);
-        return this.dbRowToContact(row, labelIds);
+        return dbRowToContact(row, labelIds);
     }
 
     public async getContacts(): Promise<Contact[]> {
@@ -562,7 +532,7 @@ export class Contacts {
             else labelsByContact.set(rel.contactId, [rel.labelId]);
         }
 
-        return rows.map((row) => this.dbRowToContact(row, labelsByContact.get(row.id) ?? []));
+        return rows.map((row) => dbRowToContact(row, labelsByContact.get(row.id) ?? []));
     }
 
     // --- Avatar facade — implementation in contacts/avatars.ts ---

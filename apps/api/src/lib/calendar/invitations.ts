@@ -12,7 +12,6 @@ import type { ParsedEvent } from '../ical/ical-parse';
 import { computeOccurrenceTimes, storedRecurrenceKey, utcToLocal } from '../ical/wall-clock';
 import { actorDisplayName, type User } from '../user';
 import type { Calendar } from './calendar';
-import * as store from './dav-store';
 import * as events from './events';
 import { composeRsvpReply } from './imip';
 import { answeredOccurrence, propagateRsvp } from './invite-propagation';
@@ -284,7 +283,7 @@ async function applyInvitationUpdate(
         events.writeContext(false, payload.dtstamp),
     );
     if (!changed) return false;
-    await store.writeResource(calendar, resource.calendarId, resource.uri, component, resource);
+    await events.writeComponent(calendar, resource, component);
     return true;
 }
 
@@ -405,11 +404,11 @@ function settleInboundRequest(
     link: InvitationLink,
 ): string {
     if (outcome.kind === 'created') {
-        calendar.announce(outcome.event.calendarId, SSEventType.CALENDAR_EVENT_CREATED);
+        calendar.announce(SSEventType.CALENDAR_EVENT_CREATED, outcome.event.calendarId);
         notifyInvitationReceived(calendar, outcome.payload);
         return outcome.event.id;
     }
-    calendar.announce(outcome.event.calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
+    calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, outcome.event.calendarId);
     notifyInvitationUpdated(
         calendar,
         outcome.event,
@@ -535,7 +534,7 @@ async function adoptAsInvitation(
         },
         events.writeContext(false, parsed.dtstamp),
     );
-    await store.writeResource(calendar, resource.calendarId, resource.uri, component, resource);
+    await events.writeComponent(calendar, resource, component);
 }
 
 // Just that instance — removeInvitation would delete the attendee's entire linked series.
@@ -572,7 +571,7 @@ export async function cancelInvitationOccurrence(
     );
     if (!cancelled) return;
     calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, orgUserId));
-    calendar.announce(cancelled.linked.calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
+    calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, cancelled.linked.calendarId);
     notifyInvitationCancelled(calendar, cancelled.linked, cancelled.startTime, orgEventId);
 }
 
@@ -713,7 +712,7 @@ async function rsvpForOccurrence(
         });
         return parent.calendarId;
     });
-    if (calendarId) calendar.announce(calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
+    if (calendarId) calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
 }
 
 // Caller holds the write lock. `revision` is the CANCEL's, so a stale redelivery can be ordered against it.
@@ -780,7 +779,7 @@ export async function rsvp(
         const status = input.remove ? 'declined' : input.status;
         if (input.remove) {
             await calendar.writeLock.run(() => removeOccurrence(calendar, eventId, recurrenceDate));
-            calendar.announce(event.calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
+            calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, event.calendarId);
         } else {
             await rsvpForOccurrence(calendar, eventId, user.email, input.status, recurrenceDate, null, true);
         }

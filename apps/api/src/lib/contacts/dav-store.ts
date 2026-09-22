@@ -71,7 +71,7 @@ export async function getCard(contacts: Contacts, uri: string): Promise<{ bytes:
 }
 
 // A single-row lookup that leaves the blob alone: a PROPFIND never returns the bytes.
-export async function getCardMeta(contacts: Contacts, uri: string): Promise<CardRow | null> {
+export function getCardMeta(contacts: Contacts, uri: string): CardRow | null {
     return contacts.db.select(CARD_ROW).from(schema.contacts).where(atUri(uri)).get() ?? null;
 }
 
