@@ -35,7 +35,10 @@ export async function htmlToPdf(html: string | Uint8Array): Promise<Buffer> {
     });
 
     const timeout = 60_000;
+    // The killed process exits 143 (128 + SIGTERM), not null, so the exit code can't tell a timeout.
+    let timedOut = false;
     const timer = setTimeout(() => {
+        timedOut = true;
         proc.kill();
     }, timeout);
 
@@ -55,7 +58,7 @@ export async function htmlToPdf(html: string | Uint8Array): Promise<Buffer> {
             new Response(proc.stderr).text(),
         ]);
 
-        if (exitCode === null) {
+        if (timedOut) {
             throw new ApiError(504, 'PDF export timed out');
         }
 

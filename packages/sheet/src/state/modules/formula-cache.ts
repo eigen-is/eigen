@@ -17,7 +17,7 @@ import { getFlowdata } from '../context';
 import type { FormulaCell, History, Selection } from '../types';
 import { getSheetIdByName } from '../utils';
 import { getcellFormula } from './cell';
-import { execfunction, getcellrange, isFunctionRange } from './formula-exec';
+import { execfunction, getcellrange, isFunctionRange, warmFormulaCellInfoMap } from './formula-exec';
 
 // Shared mutable state accessed by formula-editor.ts and formula-range.ts.
 // Wrapped in an object so mutations are visible across module boundaries.
@@ -214,11 +214,14 @@ export class FormulaCache {
 // getcellFormula would read the wrong sheet's cell, dropping or mis-parsing
 // the formula (stale cross-sheet recalc).
 export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?: CellMatrix, dataSheetId?: string) {
+    const dataSheet = dataSheetId ?? ctx.currentSheetId;
+    // An entry written into an unbuilt map would pass for the whole map, and the build would never run.
+    const formulaCellInfoMap = warmFormulaCellInfoMap(ctx, dataSheet === ctx.currentSheetId ? data : undefined);
     const key = `r${formulaCell.r}c${formulaCell.c}i${formulaCell.id}`;
-    const cellData = formulaCell.id === (dataSheetId ?? ctx.currentSheetId) ? data : undefined;
+    const cellData = formulaCell.id === dataSheet ? data : undefined;
     const calc_funcStr = getcellFormula(ctx, formulaCell.r, formulaCell.c, formulaCell.id, cellData);
     if (isNil(calc_funcStr)) {
-        delete ctx.formulaCache.formulaCellInfoMap?.[key];
+        delete formulaCellInfoMap[key];
         ctx.formulaCache.dependencyIndex.delete(key);
         return;
     }
@@ -336,8 +339,7 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
         color: 'w',
     };
 
-    if (!ctx.formulaCache.formulaCellInfoMap) ctx.formulaCache.formulaCellInfoMap = {};
-    ctx.formulaCache.formulaCellInfoMap[key] = item;
+    formulaCellInfoMap[key] = item;
     ctx.formulaCache.dependencyIndex.set(key, formulaDependency);
 }
 
