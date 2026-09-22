@@ -27,8 +27,7 @@ function resolveCardUri(parsed: CollectionPath): { uri: string } | Response {
 }
 
 // One fixed book per user — MKCOL and MKADDRESSBOOK both create another collection, so both are forbidden.
-// The one handler that carries its own owner check: it answers without ever resolving a book, and every
-// other handler here gets that check from resolveContacts.
+// It answers without ever resolving a book, so it carries the owner check resolveContacts gives the rest.
 async function forbidCollectionCreate({
     request,
     params,
@@ -93,6 +92,8 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         const parsed = parseCollectionPath(params['*']);
         // The stub answers any well-formed collection URL before the book check — the CalDAV twin's order.
         if (parsed.ok && !parsed.resource) {
+            // It answers before any book resolves, so this path carries the owner check resolveContacts would.
+            requireSelf(params.ownerId, user.id);
             return new Response('This is a CardDAV endpoint. Use a CardDAV client.', {
                 status: 200,
                 headers: { 'Content-Type': 'text/plain' },
