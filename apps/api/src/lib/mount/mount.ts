@@ -956,6 +956,9 @@ export class Mount {
         const start = Bun.nanoseconds();
         const tempPath = this.getTempPath(tempId);
         await this.cleanupTemp(tempId);
+        // A -wal that survived cleanup would be replayed into the fresh main file.
+        if (fs.existsSync(`${tempPath}-wal`))
+            throw new Error(`[Mount] download ${storageKey}: stale ${tempPath}-wal could not be removed`);
         try {
             await Bun.write(tempPath, this.storage.read(storageKey));
         } catch (err) {

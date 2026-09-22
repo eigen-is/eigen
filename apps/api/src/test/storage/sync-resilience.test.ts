@@ -769,6 +769,15 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         ).toEqual(['a', 'b', 'c']);
     });
 
+    test('a download refuses to write when an orphan -wal beside the temp path cannot be removed', async () => {
+        const { mount } = createS3Mount('stuck-wal-download');
+        await mount.init();
+        const dataDbId = await provisionStoredAbc(mount);
+        mkdirSync(`${mount.getTempPath(dataDbId)}-wal`, { recursive: true });
+
+        await expect(mount.downloadToTemp(dataDbId, dataDbId)).rejects.toThrow('-wal');
+    });
+
     test('a staged-copy recovery over an orphan -wal beside the temp path yields the staged bytes', async () => {
         const { mount, fault } = createS3Mount('orphan-wal-staged');
         await mount.init();

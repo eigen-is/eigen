@@ -314,7 +314,7 @@ not a redesign.
 
 ### Shutdown and boot
 
-- **Graceful shutdown** — `gracefulShutdown` in `../../apps/api/src/index.ts` currently calls
+- **Graceful shutdown** — `gracefulShutdown` in `../../apps/api/src/server.ts` currently calls
   `drainACLFanOuts()` before `shutdownAllHomes()` because deliveries reopen recipient homes. The
   outbox slots into the same position: `outbox.drain({ flushNow, deadline })` (UploadQueue's
   flush signature) bounded by the existing `SHUTDOWN_DRAIN_BUDGET_MS` discipline; whatever misses
