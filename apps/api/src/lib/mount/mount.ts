@@ -954,13 +954,12 @@ export class Mount {
     async downloadKeyToTemp(storageKey: string, tempId: string): Promise<string> {
         const start = Bun.nanoseconds();
         const tempPath = this.getTempPath(tempId);
-        const file = this.storage.read(storageKey);
         try {
-            await Bun.write(tempPath, file);
+            await Bun.write(tempPath, this.storage.read(storageKey));
         } catch (err) {
             // A failed/partial GET can leave a truncated or 0-byte temp behind. Remove it so a later
             // crash-recovery open can't adopt those bytes as a fresh empty doc.
-            fs.rmSync(tempPath, { force: true });
+            await this.cleanupTemp(tempId);
             throw err;
         }
         const ms = (Bun.nanoseconds() - start) / 1_000_000;
@@ -988,12 +987,11 @@ export class Mount {
     async cleanupTemp(tempId: string): Promise<void> {
         try {
             const tempPath = this.getTempPath(tempId);
-            const file = Bun.file(tempPath);
-            if (await file.exists()) await file.delete();
-            // A lazily-closed (zombie) connection keeps its journals on disk; a stale WAL next
-            // to a later re-download of the same path would be replayed into foreign bytes.
+            // A stale WAL next to a later re-download of the same path would be replayed into foreign
+            // bytes, so the journals go first: a crash mid-cleanup never leaves one without its main file.
             fs.rmSync(`${tempPath}-wal`, { force: true });
             fs.rmSync(`${tempPath}-shm`, { force: true });
+            fs.rmSync(tempPath, { force: true });
         } catch {}
     }
 

@@ -131,7 +131,7 @@ async function buildDocumentDb<S extends SchemaType>(
                               `[Mount] Discarding unusable crash temp for ${pathId} ` +
                                   `(temp=${tempSize}B, stored=${known?.size ?? 0}B); re-fetching from storage`,
                           );
-                          fs.rmSync(tempPath, { force: true });
+                          await mount.cleanupTemp(pathId);
                       }
                       // Clean close during an outage: the live temp was cleaned but a staged
                       // copy holds bytes newer than storage (upload not yet acked). Recover
