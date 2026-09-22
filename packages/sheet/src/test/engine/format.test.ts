@@ -169,6 +169,11 @@ describe('engine/format — numberDisplay', () => {
         expect(numberDisplay(1e21)).toBe('1e+21');
         expect(numberDisplay(1.23456789e-7)).toBe('1.23457e-7');
     });
+
+    test('a mask renders exponent-form values through the mask', () => {
+        expect(numberDisplay(1.5e-10, '0.00E+00')).toBe(update('0.00E+00', 1.5e-10));
+        expect(numberDisplay(2e-7, '0.00%')).toBe('0.00%');
+    });
 });
 
 describe('engine/format — is_date', () => {

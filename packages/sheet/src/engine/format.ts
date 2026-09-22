@@ -255,10 +255,11 @@ export function update(fmt: string, v: string | number | boolean | null | undefi
 }
 
 // Display for a computed number, shared by the editor, autofill, server recalc and
-// the xlsx importer. The 9-decimal round clears float noise (0.1+0.2) that a
-// verbatim `String(v)` would show.
+// the xlsx importer. A mask renders the exact value; General rounds to 9 decimals to
+// clear float noise (0.1+0.2) that a verbatim `String(v)` would show.
 export function numberDisplay(value: number, fa = 'General'): string {
     if (!Number.isFinite(value)) return value.toString();
+    if (fa !== 'General') return update(fa, value);
     const text = value.toString();
     if (text.includes('e')) {
         const decimals = text.split('e')[0].split('.')[1]?.length ?? 0;
