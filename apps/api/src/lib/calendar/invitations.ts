@@ -12,7 +12,7 @@ import type { ParsedEvent } from '../ical/ical-parse';
 import { computeOccurrenceTimes, storedRecurrenceKey, utcToLocal } from '../ical/wall-clock';
 import { actorDisplayName, type User } from '../user';
 import type { Calendar } from './calendar';
-import * as store from './calendar-store';
+import * as store from './dav-store';
 import * as events from './events';
 import { composeRsvpReply } from './imip';
 import { answeredOccurrence, propagateRsvp } from './invite-propagation';

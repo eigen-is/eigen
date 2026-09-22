@@ -32,8 +32,8 @@ import { parseResource } from '../ical';
 import type { EventPatch, Revision } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
 import type { User } from '../user';
-import type { PutResourceOptions, ResourceCommit, ResourceRow } from './calendar-store';
-import * as store from './calendar-store';
+import type { PutResourceOptions, ResourceCommit, ResourceRow } from './dav-store';
+import * as store from './dav-store';
 import { CALENDAR_DB_CONFIG } from './db-config';
 import * as events from './events';
 import * as invitations from './invitations';
@@ -426,7 +426,7 @@ export class Calendar {
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_DELETED, this.home.user.id));
     }
 
-    // --- Resources (the DAV store facade — implementation in calendar/calendar-store.ts) ---
+    // --- Resources (the DAV store facade — implementation in calendar/dav-store.ts) ---
 
     public async listResources(calendarId: string): Promise<ResourceRow[]> {
         return store.listResources(this, calendarId);

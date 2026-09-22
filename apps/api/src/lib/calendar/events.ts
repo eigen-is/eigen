@@ -14,7 +14,7 @@ import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence
 import { storedRecurrenceKey } from '../ical/wall-clock';
 import type { User } from '../user';
 import type { Calendar } from './calendar';
-import * as store from './calendar-store';
+import * as store from './dav-store';
 import { eventForFile, validateEventInput } from './event-input';
 import { composeRsvpReply } from './imip';
 import { answeredOccurrence, propagateCancellation, propagateDecline, propagateInvitation } from './invite-propagation';

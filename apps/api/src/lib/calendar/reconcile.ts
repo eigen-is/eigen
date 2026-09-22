@@ -14,7 +14,7 @@ import {
 } from '../core';
 import { remintEventIds, serializeResource } from '../ical';
 import type { Calendar } from './calendar';
-import { projectRows } from './calendar-store';
+import { projectRows } from './dav-store';
 import {
     calendarDir,
     clearPendingWrite,
