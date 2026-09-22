@@ -1,7 +1,7 @@
 // Context-coupled formula execution. These functions read/write Context
 // (formula caches, sheet data, calc chains) so they stay in the state layer.
 // The engine directory has zero state-runtime dependencies.
-import { forEach, isEmpty } from 'es-toolkit/compat';
+import { forEach } from 'es-toolkit/compat';
 import { getCalculationOrder } from '../../engine/dependency-graph';
 import {
     calPostfixExpression,
@@ -10,7 +10,14 @@ import {
     operatorjson,
     operatorPriority,
 } from '../../engine/formula-utils';
-import type { Cell, CellMatrix, CellResolver, FormulaCellInfo, FormulaDependency } from '../../engine/types';
+import type {
+    Cell,
+    CellMatrix,
+    CellResolver,
+    FormulaCellInfo,
+    FormulaCellInfoMap,
+    FormulaDependency,
+} from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { FormulaCell } from '../types';
 import { columnCharToIndex, getSheetIndex } from '../utils';
@@ -633,12 +640,15 @@ export function setFormulaCellInfoMap(ctx: Context, calcChains?: FormulaCell[], 
 // load) so the first edit doesn't pay the full O(all formulas) rebuild inline.
 // On large workbooks this rebuild is multi-second; running it off the
 // interaction path keeps the first edit responsive. No-op if already built.
-export function warmFormulaCellInfoMap(ctx: Context): void {
-    if (ctx.formulaCache.formulaCellInfoMap && !isEmpty(ctx.formulaCache.formulaCellInfoMap)) {
-        return;
-    }
-    ctx.formulaCache.formulaCellInfoMap = {};
-    setFormulaCellInfoMap(ctx, getAllFunctionGroup(ctx), getFlowdata(ctx));
+// `data` stands in for the current sheet's matrix, as in setFormulaCellInfo.
+export function warmFormulaCellInfoMap(ctx: Context, data?: CellMatrix | null): FormulaCellInfoMap {
+    if (ctx.formulaCache.formulaCellInfoMap != null) return ctx.formulaCache.formulaCellInfoMap;
+    // Inside an edit ctx is an immer draft, and reading every formula through it is ~8x slower.
+    const snap = snapshotContext(ctx);
+    const map: FormulaCellInfoMap = {};
+    ctx.formulaCache.formulaCellInfoMap = map;
+    setFormulaCellInfoMap(snap, getAllFunctionGroup(snap), data ?? getFlowdata(snap));
+    return map;
 }
 
 export function execFunctionGroup(
@@ -650,10 +660,6 @@ export function execFunctionGroup(
     data?: CellMatrix | null,
 ): void {
     // 0. null checks
-    if (data == null) {
-        data = getFlowdata(ctx);
-    }
-
     if (ctx.formulaCache.execFunctionGlobalData == null) {
         ctx.formulaCache.execFunctionGlobalData = {};
     }
@@ -681,11 +687,8 @@ export function execFunctionGroup(
         (origin_r != null && origin_c != null ? [{ r: origin_r, c: origin_c, id }] : []);
 
     // 3. formulaCellInfoMap: a cache of ALL formulas vs their ranges
-    if (!ctx.formulaCache.formulaCellInfoMap || isEmpty(ctx.formulaCache.formulaCellInfoMap)) {
-        ctx.formulaCache.formulaCellInfoMap = {};
-        setFormulaCellInfoMap(ctx, getChains(), data);
-    }
-    const { formulaCellInfoMap, dependencyIndex } = ctx.formulaCache;
+    const formulaCellInfoMap = warmFormulaCellInfoMap(ctx, data);
+    const { dependencyIndex } = ctx.formulaCache;
 
     // 4. Collect the affected sub-graph from the reverse index: direct
     // dependents of the changed cells, then everything downstream of those.
