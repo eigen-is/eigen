@@ -3,7 +3,7 @@ import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/li
 import { setSelection } from '../../../state/api/range';
 import { hideSheet } from '../../../state/api/sheet';
 import { type Context, firstVisibleSheetId, initSheetIndex } from '../../../state/context';
-import { changeSheet, deleteSheet } from '../../../state/modules/sheet';
+import { changeSheet, deleteSheet, settleCurrentSheet } from '../../../state/modules/sheet';
 import { contextFactory } from '../factories/context';
 
 function twoSheetContext() {
@@ -74,6 +74,17 @@ describe('changeSheet', () => {
         changeSheet(ctx, 'id_2', true);
         expect(ctx.currentSheetId).toBe('id_2');
     });
+
+    test('closes the cell editor and any formula range selection', () => {
+        const ctx = twoSheetContext();
+        ctx.editingCellPosition = [1, 1];
+        ctx.formulaCache.rangestart = true;
+        ctx.formulaRangeSelect = { rangeIndex: 0, left: 0, top: 0, width: 10, height: 10 };
+        changeSheet(ctx, 'id_2', true);
+        expect(ctx.editingCellPosition).toEqual([]);
+        expect(ctx.formulaCache.rangestart).toBe(false);
+        expect(ctx.formulaRangeSelect).toBeUndefined();
+    });
 });
 
 // Tab order is `order`, not array position; C is hidden.
@@ -138,6 +149,26 @@ describe('leaving a sheet that goes away', () => {
         deleteSheet(ctx, 'd');
         expect(ctx.currentSheetId).toBe('b');
         expect(ctx.defaultrowlen).toBe(SHEET_DEFAULT_ROW_HEIGHT);
+    });
+
+    test('a redone hide of the current sheet leaves it for the first visible sheet', () => {
+        const ctx = tabOrderContext();
+        ctx.sheets[0].hide = 1;
+        settleCurrentSheet(ctx);
+        expect(ctx.currentSheetId).toBe('b');
+    });
+
+    test('an undone add of the current sheet leaves it for the first visible sheet', () => {
+        const ctx = tabOrderContext();
+        ctx.sheets.splice(0, 1);
+        settleCurrentSheet(ctx);
+        expect(ctx.currentSheetId).toBe('b');
+    });
+
+    test('a visible current sheet stays current', () => {
+        const ctx = tabOrderContext();
+        settleCurrentSheet(ctx);
+        expect(ctx.currentSheetId).toBe('a');
     });
 
     test('a peer deleting a sheet applies for a viewer', () => {

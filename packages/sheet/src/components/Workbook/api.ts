@@ -7,17 +7,16 @@ import {
     addSheet,
     api,
     type Context,
-    changeSheet,
     collectMatches,
     createFilterOptions,
     deleteRowCol,
     deleteSheet,
-    firstVisibleSheetId,
     getFlowdata,
     getSheetIndex,
     type Image,
     insertImage,
     insertRowCol,
+    leaveCurrentSheet,
     type Op,
     opToPatch,
     type Presence,
@@ -66,13 +65,12 @@ export function generateAPIs(
                                 console.warn('[sheet] deleteRowCol op skipped:', e.code);
                             }
                         } else if (specialOp.op === 'addSheet') {
-                            // opToPatch prefixes every immer-patch path with 'sheets', so the
-                            // pre-existing `patches.filter(path[0] === 'name')` lookup was always empty.
-                            // addSheet pulls the name from `specialOp.value.name` (sheetData) directly.
+                            // The name comes from sheetData: opToPatch prefixes every patch path with 'sheets'.
                             if (specialOp.value?.id) {
                                 addSheet(ctx_, settings, specialOp.value.id, false, undefined, specialOp.value, true);
                             }
-                            const fileIndex = getSheetIndex(ctx_, specialOp.value.id) as number;
+                            const fileIndex = getSheetIndex(ctx_, specialOp.value.id);
+                            if (fileIndex == null) continue;
                             api.initSheetData(ctx_, fileIndex, specialOp.value);
                         } else if (specialOp.op === 'deleteSheet') {
                             deleteSheet(ctx_, specialOp.value.id, true);
@@ -81,8 +79,7 @@ export function generateAPIs(
                     }
                     if (ops[0]?.path?.[0] === 'filterRange') ctx_.filterRange = ops[0].value;
                     else if (ops[0]?.path?.[0] === 'hide' && ops[0].id === ctx_.currentSheetId) {
-                        const next = firstVisibleSheetId(ctx_, ops[0].id);
-                        if (next != null) changeSheet(ctx_, next, true);
+                        leaveCurrentSheet(ctx_, ops[0].id);
                     }
                     createFilterOptions(ctx_, ctx_.filterRange, ops[0]?.id);
                     if (patches.length === 0) return;
