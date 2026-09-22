@@ -3,7 +3,7 @@
 // Drives client-faithful payloads (Apple/Thunderbird emission shapes) through the real CalDAV
 // PUT/GET handlers and diffs what round-trips — against the app-facing occurrence expansion
 // (event-range) and against a re-parse of the served .ics. Sibling nets: occurrence keying (#8)
-// in calendar-timezone.test.ts, iMIP instance scoping (#A/#B/#H) in ical-imip.test.ts.
+// in calendar/calendar-timezone.test.ts, iMIP instance scoping (#A/#B/#H) in calendar/imip.test.ts.
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import type ICAL from 'ical.js';

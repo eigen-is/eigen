@@ -1,6 +1,6 @@
 // vCard content-line AST (RFC 2426 / RFC 6350 §3) — parsing, the projection map, and the 4.0 -> 3.0
-// transcode. The CardDAV-only seams (merge/create, addressbook-query, address-data) are tested beside
-// them in apps/api/src/test/carddav/vcard.test.ts.
+// transcode. Merge and create are tested beside them in serialize.test.ts; the CardDAV-only seams
+// (addressbook-query, address-data) in apps/api/src/test/carddav/.
 import { describe, expect, test } from 'bun:test';
 import { escapeContentText } from '@workspace/lib/content-line';
 import {
