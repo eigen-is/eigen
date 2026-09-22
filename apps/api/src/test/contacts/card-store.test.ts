@@ -391,6 +391,39 @@ describe('Contacts label membership (CATEGORIES)', () => {
         expect(broadcasts.some((e) => e.type === SSEventType.CONTACT_UPDATED)).toBe(true);
     });
 
+    test('a card whose bytes do not parse is skipped by a rename, and every other member is rewritten', async () => {
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
+        const labelId = await contacts.addLabel({ name: 'Fan Out', color: '#abcdef' });
+        const broken = await contacts.addContact(validContact({ firstName: 'Broken', labels: [labelId] }));
+        const intact = await contacts.addContact(
+            validContact({ firstName: 'Intact', email: ['intact@example.com'], labels: [labelId] }),
+        );
+        const rowOf = (id: string) =>
+            db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+        // Bytes no parser can read, under a row the fan-out will walk.
+        db.update(contactsSchema.contacts)
+            .set({ vcard: Buffer.from('not a vCard at all') })
+            .where(eq(contactsSchema.contacts.id, broken))
+            .run();
+        const brokenBefore = rowOf(broken);
+        const warn = spyOn(console, 'warn').mockImplementation(() => {});
+
+        try {
+            await contacts.updateLabel(labelId, { name: 'Fanned Out', color: '#abcdef' });
+        } finally {
+            warn.mockRestore();
+        }
+
+        // One unreadable card must not cost the rename every other member it owns.
+        expect(await cardTextOf(contacts, rowOf(intact).uri)).toContain('CATEGORIES:Fanned Out');
+        expect(await cardTextOf(contacts, brokenBefore.uri)).toBe('not a vCard at all');
+        expect(rowOf(broken).etag).toBe(brokenBefore.etag);
+        expect(db.select().from(contactsSchema.labels).where(eq(contactsSchema.labels.id, labelId)).get()!.name).toBe(
+            'Fanned Out',
+        );
+    });
+
     test('a failed rename leaves the label row and every member card exactly as they were', async () => {
         const { instance: contacts } = await makeContacts();
         const db = contacts.db;

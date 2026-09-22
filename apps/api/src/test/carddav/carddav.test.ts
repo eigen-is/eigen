@@ -694,6 +694,16 @@ describe('CardDAV', () => {
         expect((xml.match(/<D:response>/g) ?? []).length).toBe(1);
     });
 
+    test('addressbook-multiget collapses an NFD href and its NFC twin into one row', async () => {
+        // macOS clients spell the same name decomposed in a URL, so the dedupe key folds the Unicode form:
+        // one resource must never take two rows of one response (a stored name is ASCII, so both 404).
+        const base = `cafe\u0301-${randomUUID()}.vcf`;
+        const res = await report(multigetBody([cardHref(base), cardHref(base.normalize('NFC'))]));
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect((xml.match(/<D:response>/g) ?? []).length).toBe(1);
+    });
+
     test('addressbook-multiget collapses a repeated missing href to a single 404 row', async () => {
         const missing = `${randomUUID()}.vcf`;
         const res = await report(multigetBody([cardHref(missing), cardHref(missing)]));

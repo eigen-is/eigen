@@ -81,6 +81,27 @@ describe('a write that does not commit', () => {
     });
 });
 
+describe('the book row at init', () => {
+    const syncGenOf = (contacts: Contacts) =>
+        contacts.db.select().from(contactsSchema.book).where(eq(contactsSchema.book.id, 1)).get()!.syncGen;
+
+    test('is minted under a clock-seeded syncGen, and a later book gets its own', async () => {
+        const seconds = Math.floor(Date.now() / 1000);
+        const { instance: contacts } = await makeContacts();
+        expect(syncGenOf(contacts)).toBeGreaterThanOrEqual(seconds);
+
+        // A book recreated after a loss must never reissue a generation a client has already seen, so the
+        // clock — not a constant — decides it: a later book is minted above every token the first one signed.
+        const ticked = spyOn(Date, 'now').mockReturnValue((seconds + 5) * 1000);
+        try {
+            const { instance: later } = await makeContacts();
+            expect(syncGenOf(later)).toBe(seconds + 5);
+        } finally {
+            ticked.mockRestore();
+        }
+    });
+});
+
 describe('rebuildProjection', () => {
     test('every projected column and the junction come back from the blobs', async () => {
         const { instance: contacts } = await makeContacts();
