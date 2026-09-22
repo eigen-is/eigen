@@ -42,7 +42,7 @@ It walks one home (`data/home/{userId}`, `data/team/{teamId}`, or `data/org/{org
 
 ### Live homes vs cold homes
 
-Opening a second connection on a database a live Home holds open is **not safe** — the close path checkpoints and deletes WAL files, and a second connection can silently break that (the full argument is in PROPOSAL_DATA_INTEGRITY § 2). So `snapshotHome` goes through the front door: it opens the home via `getHome(ownerId)` and snapshots each database through the home's own cached handles. For a cold home this warms it up briefly; for a live home it means the backup sees exactly what users see. Open collab documents are captured through `stageCopy` on their live handle.
+Opening a second connection on a database a live Home holds open is **not safe** — a container temp's close path checkpoints it and then unlinks the temp and its `-wal` and `-shm` by hand (`Mount.cleanupTemp`), and a second connection can silently break that (the full argument is in PROPOSAL_DATA_INTEGRITY § 2). So `snapshotHome` goes through the front door: it opens the home via `getHome(ownerId)` and snapshots each database through the home's own cached handles. For a cold home this warms it up briefly; for a live home it means the backup sees exactly what users see. Open collab documents are captured through `stageCopy` on their live handle.
 
 This is a deliberate difference from the integrity sweep, which reads cold homes from disk to avoid warming hundreds of homes six times a day. A backup runs rarely, and correctness beats warm-cost here. It is also sharding-safe: a backup job runs on the server that owns the home, so `getHome` is always local.
 
