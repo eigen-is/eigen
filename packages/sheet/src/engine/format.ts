@@ -259,10 +259,7 @@ export function update(fmt: string, v: string | number | boolean | null | undefi
     return format(fmt, v);
 }
 
-// The one rule for a number's display string `m`, shared by every writer (typed entry,
-// paste, sort, autofill, recalc, the xlsx importer). A mask renders the exact value;
-// General is Excel's default-width General: 11 characters, float noise (0.1+0.2) hidden,
-// large and tiny values in scientific form (1.23457E+11, 1.5E-10).
+// Every writer's display string for a number; General is Excel's default-width General (1.23457E+11).
 export function numberDisplay(value: number, fa = 'General'): string {
     if (!Number.isFinite(value)) return value.toString();
     return update(fa, value);
