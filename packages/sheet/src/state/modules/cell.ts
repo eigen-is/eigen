@@ -2,7 +2,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
 import { cloneDeep, every, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
-import { booleanDisplay, cellWrapsText, numberDisplay, parseCellInput, update } from '../../engine/format';
+import { booleanDisplay, cellWrapsText, numberDisplay, parseCellInput } from '../../engine/format';
 import { isFormula } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
@@ -232,14 +232,14 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
                 [cell.m, cell.ct, cell.v] = mask;
             } else {
                 [, , cell.v] = mask;
-                cell.m = update(cell.ct.fa!, cell.v);
+                cell.m = numberDisplay(cell.v, cell.ct.fa);
             }
         } else if (!isNil(cell.ct) && !isNil(cell.ct.fa) && cell.ct.fa !== 'General') {
             if (isPlainNumber(vupdate)) {
                 vupdate = Number(vupdate);
             }
 
-            const mask = update(cell.ct.fa, vupdate);
+            const mask = numberDisplay(vupdate, cell.ct.fa);
 
             if (mask === vupdate) {
                 // If the original cell format cannot be applied to the updated value, get the format of the updated value

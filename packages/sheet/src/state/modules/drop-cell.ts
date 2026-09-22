@@ -599,7 +599,7 @@ function fillDays(data: (Cell | null | undefined)[], len: number, step: number) 
 
             d.v = parseCellInput(date)[2];
             if (d.ct != null && d.ct.fa != null) {
-                d.m = update(d.ct.fa, d.v);
+                d.m = numberDisplay(d.v, d.ct.fa);
             }
 
             applyData.push(d);
@@ -622,7 +622,7 @@ function fillMonths(data: (Cell | null | undefined)[], len: number, step: number
 
             d.v = parseCellInput(date)[2];
             if (d.ct != null && d.ct.fa != null) {
-                d.m = update(d.ct.fa, d.v);
+                d.m = numberDisplay(d.v, d.ct.fa);
             }
 
             applyData.push(d);
@@ -645,7 +645,7 @@ function fillYears(data: (Cell | null | undefined)[], len: number, step: number)
 
             d.v = parseCellInput(date)[2];
             if (d.ct != null && d.ct.fa != null) {
-                d.m = update(d.ct.fa, d.v);
+                d.m = numberDisplay(d.v, d.ct.fa);
             }
         }
 

@@ -9,7 +9,7 @@ import {
 import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange } from '../../engine/conditional-format';
-import { update } from '../../engine/format';
+import { numberDisplay } from '../../engine/format';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { getSheetIndex, isAllowEdit, replaceHtml, styleObjectToCss } from '../utils';
@@ -424,7 +424,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
 
                         if (cell.v != null && value.ct?.fa != null) {
                             // Update the value modified by the format painter
-                            cell.m = update(value.ct.fa, cell.v);
+                            cell.m = numberDisplay(cell.v, value.ct.fa);
                         }
                     }
                 }

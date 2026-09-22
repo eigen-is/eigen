@@ -253,10 +253,15 @@ export function update(fmt: string, v: string | number | boolean | null | undefi
     return format(fmt, v);
 }
 
-// Every writer's display string for a number; General is Excel's default-width General (1.23457E+11).
-export function numberDisplay(value: number, fa = 'General'): string {
-    if (!Number.isFinite(value)) return value.toString();
-    return update(fa, value);
+// Every writer's display string for a cell value; General is Excel's default-width General (1.23457E+11).
+export function numberDisplay(value: Cell['v'] | null, fa = 'General'): string {
+    if (typeof value === 'number' && !Number.isFinite(value)) return value.toString();
+    try {
+        return update(fa, value);
+    } catch {
+        // numfmt throws on a malformed format, which an xlsx numFmt can carry into ct.fa.
+        return update('General', value);
+    }
 }
 
 export function is_date(fmt: number | string): boolean {

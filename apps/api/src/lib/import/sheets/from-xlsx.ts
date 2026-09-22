@@ -953,7 +953,7 @@ function resolveFormulaResult(
 ): { value?: string | number | boolean; display?: string } {
     if (result === null || result === undefined) return {};
     if (typeof result === 'number') {
-        return { value: result, display: maskedNumberDisplay(result, numFmt) };
+        return { value: result, display: numberDisplay(result, numFmt) };
     }
     if (typeof result === 'boolean') {
         return { value: result, display: booleanDisplay(result) };
@@ -985,16 +985,6 @@ function dateToSerialAndDisplay(date: Date, numFmt?: string): { value: number; d
         display = update('yyyy-mm-dd', serial);
     }
     return { value: serial, display };
-}
-
-function maskedNumberDisplay(value: number, numFmt?: string): string {
-    // Same boundary guard as dateToSerialAndDisplay: a malformed format string from a
-    // hostile workbook makes numfmt throw.
-    try {
-        return numberDisplay(value, numFmt);
-    } catch {
-        return numberDisplay(value);
-    }
 }
 
 // Excel/ECMA-376 uses one format code (`m`/`M`, case-insensitively) for BOTH month and

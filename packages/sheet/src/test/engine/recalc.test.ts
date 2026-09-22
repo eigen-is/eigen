@@ -171,7 +171,14 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![0][2]?.m).toBe('4');
     });
 
-    test('General number result is rounded like the editor rounds it', () => {
+    test('a malformed number format shows the result as General', () => {
+        const sheets = [sheet('s1', 'Sheet1', [[formula('=2+2', { ct: { fa: '#,##0;;;;;', t: 'n' } })]])];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][0]?.v).toBe(4);
+        expect(out[0].data![0][0]?.m).toBe('4');
+    });
+
+    test('General number result shows Excel General', () => {
         const sheets = [
             sheet('s1', 'Sheet1', [[formula('=0.1+0.2', { ct: { fa: 'General', t: 'n' } }), formula('=0.1+0.2')]]),
         ];

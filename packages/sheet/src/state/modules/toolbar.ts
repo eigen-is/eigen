@@ -1,6 +1,6 @@
 import { type BorderType, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import { forEach, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
-import { is_date, parseCellInput, update } from '../../engine/format';
+import { is_date, numberDisplay, parseCellInput } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { GlobalCache } from '../types';
@@ -69,7 +69,7 @@ export function updateFormatCell(
                     value = Number(value!);
                 }
 
-                const mask = update(String(foucsStatus), value);
+                const mask = numberDisplay(value, String(foucsStatus));
                 let type = 'n';
 
                 if (

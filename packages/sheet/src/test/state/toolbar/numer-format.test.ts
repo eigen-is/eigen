@@ -48,6 +48,10 @@ describe('Format → Number menu presets', () => {
         ]);
     });
 
+    test('an infinite value shows Infinity under any mask', () => {
+        expect(applyFormat(Infinity, presetValue('Number')).m).toBe('Infinity');
+    });
+
     test('Automatic keeps a numeric cell numeric', () => {
         const cell = applyFormat(1000.12, presetValue('Automatic'));
         expect(cell.ct).toEqual({ fa: 'General', t: 'n' });

@@ -669,6 +669,15 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('0:3')?.m).toBe('€180');
     });
 
+    test('a malformed numFmt shows the number as General', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const cell = workbook.addWorksheet('Numbers').getCell('A1');
+        cell.value = 1234.5;
+        cell.numFmt = '#,##0;;;;;';
+        const sheets = await parseWorkbook(workbook);
+        expect(sheets[0].celldata?.[0]?.v).toMatchObject({ v: 1234.5, m: '1234.5' });
+    });
+
     test("convert shows General numbers as Excel's default-width General", async () => {
         const workbook = new ExcelJS.Workbook();
         const ws = workbook.addWorksheet('General');

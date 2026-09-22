@@ -178,6 +178,18 @@ describe('engine/format — numberDisplay', () => {
 
     test('infinite values', () => {
         expect(numberDisplay(Infinity)).toBe('Infinity');
+        expect(numberDisplay(-Infinity, '0.00')).toBe('-Infinity');
+    });
+
+    test('a malformed format renders General instead of throwing', () => {
+        expect(numberDisplay(1234.5, '#,##0;;;;;')).toBe('1234.5');
+        expect(numberDisplay('abc', '[')).toBe('abc');
+    });
+
+    test('text and booleans render through the mask', () => {
+        expect(numberDisplay('abc', '0.00')).toBe('abc');
+        expect(numberDisplay(true)).toBe('TRUE');
+        expect(numberDisplay(undefined)).toBe('');
     });
 
     test('a mask renders exponent-form values through the mask', () => {
