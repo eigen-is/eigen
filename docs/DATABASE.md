@@ -101,6 +101,12 @@ Each domain defines its schema and migrations in `db-config.ts`:
 | `CALENDAR_DB_CONFIG`            | `apps/api/src/lib/calendar/db-config.ts`             |
 | `NOTIFICATION_CENTER_DB_CONFIG` | `apps/api/src/lib/notification-center/db-config.ts`  |
 
+### Instance lock
+
+One API process owns a data dir. `index.ts` imports `src/instance-lock.ts` before `./app`, whose modules open server databases as they load; it runs `holdInstanceLock(getDataRoot())` (`apps/api/src/lib/core/instance-lock.ts`), which opens `{server}/instance.lock` as a SQLite database, runs `PRAGMA locking_mode = EXCLUSIVE; BEGIN EXCLUSIVE;` and keeps that connection for the life of the process. A second API on the same data dir gets `SQLITE_BUSY` and exits with code 1, naming the data dir. The lock is a POSIX file lock, so the OS drops it however the holder ends, SIGKILL included, and a `bun --watch` reload takes it again. Tests boot `app` in-process and never take it; scripts (seeding, migrations) don't either.
+
+The lock only reaches as far as the file system carries POSIX locks. A Docker Desktop bind mount does not pass them between a container and the host, so an API in the container and one on the host over the same folder both start.
+
 ## Access Patterns
 
 ### Server-level databases (Auth, Share Registry)

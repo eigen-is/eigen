@@ -1,3 +1,5 @@
+// First: a second API process on this data dir exits here, before any module below opens a database.
+import './instance-lock';
 import { BACKUP_UPLOAD_MAX_BYTES } from '@workspace/lib/constants/backup';
 import { app } from './app';
 import { drainBackupJobs } from './lib/backup/jobs';
