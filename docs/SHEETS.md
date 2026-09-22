@@ -149,16 +149,7 @@ On first mount, the Workbook (`packages/sheet/src/components/Workbook/index.tsx`
 incoming `Sheet[]` before rendering:
 
 1. **Materialize `data`** — expand sparse `celldata` into a 2D `data` matrix (`api.initSheetData`).
-2. **Seed the calc chain, don't recompute** — `api.seedCalcChain(draftCtx)` records each sheet's formula
-   cells in `sheet.calcChain` without evaluating them. Displayed values come straight from the incoming
-   `Sheet[]`: xlsx-imported sheets carry Excel's last computed values (and the importer now recomputes them
-   through our own engine at import — see § Server-side recalc), persisted sheets were saved post-recompute,
-   and a later edit lazily kicks the engine for just the affected sub-graph (`execFunctionGroup`) — recalc
-   is proportional to the edit, not the workbook. `ctx.formulaCache.formulaCellInfoMap` (and its reverse
-   `dependencyIndex`) is built after mount from an idle callback (`warmFormulaCellInfoMap`), not in the mount
-   itself. The map is all-or-nothing: whichever comes first, the idle build, an edit's `execFunctionGroup` or a
-   paste's `setFormulaCellInfo`, builds the whole of it, and it reads a plain `current()` snapshot rather than
-   the edit's immer draft (a 125k-formula workbook: ~0.8 s from the snapshot, ~6 s through the draft).
+2. **Seed the calc chain, don't recompute** — `api.seedCalcChain(draftCtx)` records each sheet's formula cells in `sheet.calcChain` without evaluating them. Displayed values come straight from the incoming `Sheet[]`: xlsx-imported sheets carry Excel's last computed values (and the importer now recomputes them through our own engine at import — see § Server-side recalc), persisted sheets were saved post-recompute, and a later edit lazily kicks the engine for just the affected sub-graph (`execFunctionGroup`) — recalc is proportional to the edit, not the workbook. `ctx.formulaCache.formulaCellInfoMap` (and its reverse `dependencyIndex`) is built after mount from an idle callback (`warmFormulaCellInfoMap`), not in the mount itself. The map is all-or-nothing: whichever comes first, the idle build, an edit's `execFunctionGroup` or a paste's `setFormulaCellInfo`, builds the whole of it, and it reads a plain `current()` snapshot rather than the edit's immer draft (a 125k-formula workbook: ~0.8 s from the snapshot, ~6 s through the draft).
 
 This lets importers (xlsx, seed data, migrations) emit `Sheet[]` with as little as `celldata + f` — the
 Workbook handles the rest. The xlsx importer goes well beyond that minimum: it also emits `config`
