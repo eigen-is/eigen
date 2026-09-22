@@ -15,7 +15,7 @@ afterAll(() => {
     } catch {}
 });
 
-const rowOf = (db: Awaited<ReturnType<typeof makeContacts>>['db'], id: string) =>
+const rowOf = (db: Contacts['db'], id: string) =>
     db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
 
 // The one failure a blob write has left: the transaction carrying it does not commit. Returns the undo.
@@ -32,7 +32,8 @@ function breakTransaction(contacts: Contacts): () => void {
 
 describe('a write that does not commit', () => {
     test('an update whose transaction throws leaves the previous bytes, etag and byte count', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const id = await contacts.addContact(validContact({ firstName: 'Before', email: ['before@example.com'] }));
         const before = rowOf(db, id);
         const bytesBefore = await contacts.size();
@@ -60,7 +61,8 @@ describe('a write that does not commit', () => {
     });
 
     test('a create whose transaction throws stores no row and no blob', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const before = db.select().from(contactsSchema.contacts).all().length;
         const bytesBefore = await contacts.size();
 
@@ -81,7 +83,8 @@ describe('a write that does not commit', () => {
 
 describe('rebuildProjection', () => {
     test('every projected column and the junction come back from the blobs', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const labelId = await contacts.addLabel({ name: 'Rebuilt', color: '#abcdef' });
         const withPhoto = await contacts.addContact(
             validContact({ firstName: 'Photo', avatar: await stageAvatar(contacts), labels: [labelId] }),
@@ -120,7 +123,8 @@ describe('rebuildProjection', () => {
 
 describe('deleting a contact', () => {
     test('a delete removes the row and its blob, and tombstones the uri, in one transaction', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const id = await contacts.addContact(validContact({ firstName: 'Doomed', email: ['doomed@example.com'] }));
         const row = rowOf(db, id);
         const bytesBefore = await contacts.size();
@@ -142,7 +146,8 @@ describe('deleting a contact', () => {
     });
 
     test('a delete whose transaction throws leaves the row, ctag, tombstones and bytes untouched', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const id = await contacts.addContact(validContact({ firstName: 'Keep', email: ['keep@example.com'] }));
         const row = rowOf(db, id);
         const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
@@ -164,7 +169,8 @@ describe('deleting a contact', () => {
     });
 
     test('a second delete of the same contact is a no-op, not a second tombstone', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const id = await contacts.addContact(validContact({ firstName: 'Gone', email: ['gone@example.com'] }));
         const row = rowOf(db, id);
 
@@ -194,7 +200,7 @@ describe('deleting a contact', () => {
 // bytes stay the source of truth and echoing a phone's BDAY remains a no-op.
 describe('birthday normalization at the seam', () => {
     test('addContact stores a date-only birthday as a date BDAY and round-trips it', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const id = await contacts.addContact(
             validContact({ firstName: 'Born', email: ['born@example.com'], birthday: '1990-01-01' }),
         );
@@ -204,7 +210,7 @@ describe('birthday normalization at the seam', () => {
     });
 
     test('external ISO input keeps its date prefix verbatim instead of shifting by timezone', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const id = await contacts.addContact(
             validContact({ firstName: 'Eve', email: ['eve@example.com'], birthday: '1989-12-31T22:00:00.000Z' }),
         );
@@ -214,7 +220,8 @@ describe('birthday normalization at the seam', () => {
     });
 
     test('updateContact echoing a phone-synced BDAY leaves the BDAY line untouched', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const cardId = randomUUID();
         const uri = 'phone.vcf';
         const put = await contacts.putCard(
@@ -244,7 +251,8 @@ describe('birthday normalization at the seam', () => {
 // it may never turn a saved edit into a reported failure.
 describe('self-profile propagation', () => {
     test('a failed profile push still reports the committed self-card edit as saved', async () => {
-        const { contacts, broadcasts, db, user } = await makeContacts();
+        const { instance: contacts, broadcasts, user } = await makeContacts();
+        const db = contacts.db;
         const me = (await contacts.getMe())!;
         const before = rowOf(db, me.id);
 
@@ -292,7 +300,7 @@ describe('owner-contact seeding (one-shot latch)', () => {
     beforeAll(async () => {
         await ensureServer();
     });
-    const ownerSeededFlag = (db: Awaited<ReturnType<typeof makeContacts>>['db']) =>
+    const ownerSeededFlag = (db: Contacts['db']) =>
         db.select().from(contactsSchema.book).where(eq(contactsSchema.book.id, 1)).get()!.ownerSeeded;
 
     test('a deleted owner contact stays deleted across a re-init', async () => {
@@ -302,7 +310,8 @@ describe('owner-contact seeding (one-shot latch)', () => {
         await updateServerSettings({ onboarding: { autoAddOwnerContact: true } });
 
         try {
-            const { contacts, db } = await makeContacts();
+            const { instance: contacts } = await makeContacts();
+            const db = contacts.db;
             const seeded = (await contacts.getContacts()).find((c) => c.email.includes(owner.email))!;
             expect(seeded).toBeTruthy();
             expect(ownerSeededFlag(db)).toBe(1);
@@ -327,7 +336,8 @@ describe('owner-contact seeding (one-shot latch)', () => {
 
         try {
             // No owner to consider yet — nothing is seeded and the latch must stay open.
-            const { contacts, db } = await makeContacts();
+            const { instance: contacts } = await makeContacts();
+            const db = contacts.db;
             expect((await contacts.getContacts()).some((c) => c.email.includes(owner.email))).toBe(false);
             expect(ownerSeededFlag(db)).toBe(0);
 

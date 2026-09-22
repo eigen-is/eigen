@@ -155,7 +155,8 @@ describe('CARD_MAX_BYTES', () => {
     test(
         'a card exactly at the ceiling is stored',
         async () => {
-            const { contacts, db } = await makeContacts();
+            const { instance: contacts } = await makeContacts();
+            const db = contacts.db;
             const id = await contacts.addContact(contactOfExactly(CARD_MAX_BYTES, randomUUID()));
 
             const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
@@ -167,7 +168,8 @@ describe('CARD_MAX_BYTES', () => {
     test(
         'one byte over the ceiling is refused with 413, and stores nothing',
         async () => {
-            const { contacts, db } = await makeContacts();
+            const { instance: contacts } = await makeContacts();
+            const db = contacts.db;
             const exact = contactOfExactly(CARD_MAX_BYTES, randomUUID());
             const before = db.select().from(contactsSchema.contacts).all().length;
 
@@ -180,7 +182,8 @@ describe('CARD_MAX_BYTES', () => {
     );
 
     test('an update that would push a card over the ceiling is refused and leaves the stored card intact', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const id = await contacts.addContact(validContact({ firstName: 'Grower' }));
         const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
 
@@ -196,7 +199,7 @@ describe('CARD_MAX_BYTES', () => {
 
 describe('Contacts (blob store)', () => {
     test('addContact stores a vcard blob whose parsed projection matches', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const id = await contacts.addContact(
             validContact({
                 firstName: 'Grace',
@@ -218,7 +221,7 @@ describe('Contacts (blob store)', () => {
     });
 
     test('addContact drops the form-seeded blank email/phone/address so no bare line reaches the blob', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         // emptyContact shape: one blank email, one blank phone, one all-empty address.
         const id = await contacts.addContact({
             firstName: 'Blank',
@@ -239,7 +242,8 @@ describe('Contacts (blob store)', () => {
     });
 
     test('updateContact with a stale etag throws 412', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const id = await contacts.addContact(validContact({ firstName: 'Stale', email: ['stale@example.com'] }));
         const staleEtag = db
             .select()
@@ -257,7 +261,8 @@ describe('Contacts (blob store)', () => {
     });
 
     test('deleteContact writes a tombstone row and bumps book.ctag', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const id = await contacts.addContact(validContact({ firstName: 'Doomed' }));
         const uri = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.uri;
         const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
@@ -278,7 +283,8 @@ describe('Contacts (blob store)', () => {
     });
 
     test('a second init() seeds nothing new', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const contactsBefore = db.select().from(contactsSchema.contacts).all().length;
         const labelsBefore = db.select().from(contactsSchema.labels).all().length;
 
@@ -289,7 +295,8 @@ describe('Contacts (blob store)', () => {
     });
 
     test('getContacts excludes an isGroup row planted directly', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const id = randomUUID();
         const uri = `${id}.vcf`;
         db.insert(contactsSchema.contacts)
@@ -314,7 +321,8 @@ describe('Contacts (blob store)', () => {
     });
 
     test('the contacts list JSON never leaks an inline photo base64', async () => {
-        const { contacts, db, user } = await makeContacts();
+        const { instance: contacts, user } = await makeContacts();
+        const db = contacts.db;
         const id = randomUUID();
         const uri = `${id}.vcf`;
         const photoBase64 = Buffer.from('pretend-jpeg-bytes-long-enough-to-detect-0123456789abcdef').toString('base64');
@@ -347,7 +355,8 @@ describe('Contacts (blob store)', () => {
 
 describe('Contacts label membership (CATEGORIES)', () => {
     test('renaming a label rewrites every member card in one transaction and keeps membership', async () => {
-        const { contacts, broadcasts, db } = await makeContacts();
+        const { instance: contacts, broadcasts } = await makeContacts();
+        const db = contacts.db;
         const labelId = await contacts.addLabel({ name: 'Rename Me', color: '#abcdef' });
         const first = await contacts.addContact(validContact({ firstName: 'Member', labels: [labelId] }));
         const second = await contacts.addContact(
@@ -383,7 +392,8 @@ describe('Contacts label membership (CATEGORIES)', () => {
     });
 
     test('a failed rename leaves the label row and every member card exactly as they were', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const labelId = await contacts.addLabel({ name: 'Before', color: '#111111' });
         const contactId = await contacts.addContact(validContact({ firstName: 'Member', labels: [labelId] }));
         const rowBefore = db
@@ -414,7 +424,8 @@ describe('Contacts label membership (CATEGORIES)', () => {
     });
 
     test('a rename matches a case-variant CATEGORIES value in a member card', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const work = db.select().from(contactsSchema.labels).where(eq(contactsSchema.labels.nameKey, 'work')).get()!;
 
         // Plant a card whose CATEGORIES case differs from the label's stored name, with its row and membership
@@ -447,7 +458,7 @@ describe('Contacts label membership (CATEGORIES)', () => {
     });
 
     test('updating a label that does not exist is refused before anything is emitted', async () => {
-        const { contacts, broadcasts } = await makeContacts();
+        const { instance: contacts, broadcasts } = await makeContacts();
         broadcasts.length = 0;
 
         await expect(contacts.updateLabel(randomUUID(), { name: 'Ghost', color: '#000000' })).rejects.toThrow(
@@ -458,7 +469,8 @@ describe('Contacts label membership (CATEGORIES)', () => {
     });
 
     test('a color-only label update leaves member cards untouched', async () => {
-        const { contacts, broadcasts, db } = await makeContacts();
+        const { instance: contacts, broadcasts } = await makeContacts();
+        const db = contacts.db;
         const labelId = await contacts.addLabel({ name: 'Keepers', color: '#111111' });
         const contactId = await contacts.addContact(validContact({ firstName: 'Kept', labels: [labelId] }));
         const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, contactId)).get()!;
@@ -476,7 +488,8 @@ describe('Contacts label membership (CATEGORIES)', () => {
     });
 
     test('deleting a label removes it from member cards and keeps co-labels', async () => {
-        const { contacts, broadcasts, db } = await makeContacts();
+        const { instance: contacts, broadcasts } = await makeContacts();
+        const db = contacts.db;
         const familyId = db
             .select()
             .from(contactsSchema.labels)

@@ -1,25 +1,14 @@
 import { join } from 'node:path';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
 import { Contacts } from '../lib/contacts/contacts';
-import type * as contactsSchema from '../lib/contacts/schema';
-import { PATHS } from '../lib/core';
-import { makeTestHome } from './home-test-helpers';
+import { makeTestHome, type TestHome } from './home-test-helpers';
 
 // One scratch root per test run, wiped by each test file's beforeAll.
 export const CONTACTS_TEST_ROOT = join(import.meta.dir, `../../../../data-test/test-contacts-${Date.now()}`);
 
 // Isolated Contacts instance over a temp home dir — see home-test-helpers.ts for the stub Home under it.
-export async function makeContacts() {
-    const harness = await makeTestHome((home) => new Contacts(home), CONTACTS_TEST_ROOT);
-    const managed = await harness.database<typeof contactsSchema>(PATHS.CONTACTS.DB);
-    return {
-        contacts: harness.instance,
-        broadcasts: harness.broadcasts,
-        user: harness.user,
-        dir: harness.dir,
-        db: managed.db,
-        close: harness.close,
-    };
+export function makeContacts(): Promise<TestHome<Contacts>> {
+    return makeTestHome((home) => new Contacts(home), CONTACTS_TEST_ROOT);
 }
 
 // The avatar cache is the one thing contacts still keeps as files, so tests still reach for its directory.

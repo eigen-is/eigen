@@ -4,6 +4,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, wr
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { cacheCardPhoto } from '../../lib/contacts/avatars';
+import type { Contacts } from '../../lib/contacts/contacts';
 import * as contactsSchema from '../../lib/contacts/schema';
 import { computeResourceEtag } from '../../lib/core';
 import { createVCard, parseVCard } from '../../lib/vcard';
@@ -29,7 +30,7 @@ const avatarBytesOf = (dir: string) =>
         .map((name) => statSync(join(avatarsDirOf(dir), name)).size)
         .reduce((sum, size) => sum + size, 0);
 // The stored bytes of every card, the other half.
-const cardBytesOf = (db: Awaited<ReturnType<typeof makeContacts>>['db']) =>
+const cardBytesOf = (db: Contacts['db']) =>
     db
         .select()
         .from(contactsSchema.contacts)
@@ -40,7 +41,7 @@ const photoBlock = (raw: string) => raw.match(/PHOTO[^\r\n]*(?:\r\n[ \t][^\r\n]*
 
 describe('Contacts inline PHOTO / derived avatar cache', () => {
     test('addContact embeds a JPEG PHOTO and derives a hash-named webp cache', async () => {
-        const { contacts, user, dir } = await makeContacts();
+        const { instance: contacts, user, dir } = await makeContacts();
         const staged = await stageAvatar(contacts);
 
         const id = await contacts.addContact(validContact({ firstName: 'Pic', lastName: 'Haver', avatar: staged }));
@@ -65,7 +66,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     });
 
     test('a PNG-with-alpha upload embeds a PNG PHOTO and serves a webp cache that keeps its alpha', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const sharp = (await import('sharp')).default;
         const pngAlpha = await sharp({
             create: { width: 40, height: 40, channels: 4, background: { r: 200, g: 30, b: 30, alpha: 0.5 } },
@@ -96,7 +97,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     });
 
     test('an animated GIF upload embeds an animated GIF PHOTO', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const sharp = (await import('sharp')).default;
         const frames = await Promise.all(
             [
@@ -131,7 +132,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     });
 
     test('an animated GIF whose embed would exceed the size cap falls back to a first-frame JPEG', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const sharp = (await import('sharp')).default;
         // Seven full-resolution high-entropy frames: the 512px GIF re-encode clears the ~2 MiB embed cap, so
         // the save must fall back to a single-frame JPEG rather than embedding a multi-MiB GIF in every sync
@@ -168,7 +169,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     }, 15_000);
 
     test('an external PUT with a different inline photo re-keys the cache and the old file is swept', async () => {
-        const { contacts, dir } = await makeContacts();
+        const { instance: contacts, dir } = await makeContacts();
         const staged = await stageAvatar(contacts);
         const id = await contacts.addContact(validContact({ firstName: 'Ext', lastName: 'Put', avatar: staged }));
 
@@ -212,7 +213,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     });
 
     test('an unchanged-photo re-PUT keeps the promoted first-generation cache byte-for-byte', async () => {
-        const { contacts, dir } = await makeContacts();
+        const { instance: contacts, dir } = await makeContacts();
         const staged = await stageAvatar(contacts);
         const id = await contacts.addContact(validContact({ firstName: 'RePut', lastName: 'Same', avatar: staged }));
 
@@ -237,7 +238,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     });
 
     test('updating without changing the avatar leaves the PHOTO bytes byte-identical', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const staged = await stageAvatar(contacts);
         const id = await contacts.addContact(validContact({ firstName: 'Keep', lastName: 'Same', avatar: staged }));
 
@@ -255,7 +256,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     });
 
     test('a changed avatar whose staged file is gone fails the save and keeps the existing photo', async () => {
-        const { contacts, user } = await makeContacts();
+        const { instance: contacts, user } = await makeContacts();
         const staged = await stageAvatar(contacts);
         const id = await contacts.addContact(validContact({ firstName: 'Hold', lastName: 'Photo', avatar: staged }));
 
@@ -280,7 +281,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     });
 
     test('clearing the avatar removes the PHOTO line and empties the projection URL', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const staged = await stageAvatar(contacts);
         const id = await contacts.addContact(validContact({ firstName: 'Drop', lastName: 'Pic', avatar: staged }));
         expect(await cardTextOf(contacts, `${id}.vcf`)).toContain('PHOTO');
@@ -292,7 +293,8 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     });
 
     test('a create whose staged avatar is gone stores no card', async () => {
-        const { contacts, db, user } = await makeContacts();
+        const { instance: contacts, user } = await makeContacts();
+        const db = contacts.db;
         const before = db.select().from(contactsSchema.contacts).all().length;
 
         await expect(
@@ -305,7 +307,8 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     });
 
     test('deleting a contact removes only its derived avatar and keeps size accounting exact', async () => {
-        const { contacts, db, dir, user } = await makeContacts();
+        const { instance: contacts, dir, user } = await makeContacts();
+        const db = contacts.db;
         const labelId = await contacts.addLabel({ name: 'Delete Photo', color: '#123456' });
         const deletedId = await contacts.addContact(
             validContact({ firstName: 'Delete', avatar: await stageAvatar(contacts), labels: [labelId] }),
@@ -359,7 +362,8 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     });
 
     test('deleting one of two legacy rows sharing a staged avatar leaves the file and survivor', async () => {
-        const { contacts, db, dir } = await makeContacts();
+        const { instance: contacts, dir } = await makeContacts();
+        const db = contacts.db;
         const sharedAvatar = await stageAvatar(contacts);
         const deletedId = await contacts.addContact(validContact({ firstName: 'Delete Shared' }));
         const keptId = await contacts.addContact(validContact({ firstName: 'Keep Shared' }));
@@ -384,7 +388,8 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     });
 
     test('a derived-avatar cleanup failure does not fail a committed contact deletion', async () => {
-        const { contacts, db, dir } = await makeContacts();
+        const { instance: contacts, dir } = await makeContacts();
+        const db = contacts.db;
         const id = await contacts.addContact(
             validContact({ firstName: 'Cache Failure', avatar: await stageAvatar(contacts) }),
         );
@@ -420,7 +425,8 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     });
 
     test('re-deriving the same photo replaces its cache file instead of double-counting it', async () => {
-        const { contacts, db, dir } = await makeContacts();
+        const { instance: contacts, dir } = await makeContacts();
+        const db = contacts.db;
         const priv = contacts as unknown as { cleanupAvatarImages(): Promise<void> };
         // Settle init's detached sweep so the running total starts out equal to what is on disk.
         await priv.cleanupAvatarImages();
@@ -441,7 +447,8 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     });
 
     test('the avatar sweep holds the write lock, so a card write cannot interleave its recount', async () => {
-        const { contacts, db, dir } = await makeContacts();
+        const { instance: contacts, dir } = await makeContacts();
+        const db = contacts.db;
         const id = await contacts.addContact(validContact({ firstName: 'Swept', avatar: await stageAvatar(contacts) }));
         const priv = contacts as unknown as {
             cleanupAvatarImages(): Promise<void>;
@@ -491,7 +498,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     });
 
     test('downloadAvatar serves only the staged and derived cache-name shapes', async () => {
-        const { contacts, dir } = await makeContacts();
+        const { instance: contacts, dir } = await makeContacts();
         const staged = (await stageAvatar(contacts)).split('/').pop()!;
         const derived = `${randomUUID()}-0123abcd.webp`;
         // Names outside those two shapes are refused even when the file is really there — a control
@@ -506,7 +513,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     });
 
     test('cacheCardPhoto with a uri-kind photo returns empty and writes nothing', async () => {
-        const { contacts, dir } = await makeContacts();
+        const { instance: contacts, dir } = await makeContacts();
         const before = readdirSync(avatarsDirOf(dir)).length;
 
         const url = await cacheCardPhoto(contacts, randomUUID(), {

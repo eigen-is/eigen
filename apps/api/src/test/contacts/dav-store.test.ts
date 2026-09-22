@@ -30,7 +30,7 @@ function card(
     return `${lines.join('\r\n')}\r\n`;
 }
 
-const rowByUri = (db: Awaited<ReturnType<typeof makeContacts>>['db'], uri: string) =>
+const rowByUri = (db: Contacts['db'], uri: string) =>
     db
         .select()
         .from(contactsSchema.contacts)
@@ -46,7 +46,7 @@ const put = (
 
 describe('putCard — create and read', () => {
     test('a create returns created:true and an etag hashing the stored bytes', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         const body = card({ uid, email: ['stranger@example.org'] });
@@ -57,7 +57,7 @@ describe('putCard — create and read', () => {
     });
 
     test('getCard returns a 3.0 body byte-identically, folded X-props and all', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         const body =
@@ -76,14 +76,14 @@ describe('putCard — create and read', () => {
     });
 
     test('getCard is null for an unknown uri', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         expect(await contacts.getCard(`${randomUUID()}.vcf`)).toBeNull();
     });
 });
 
 describe('putCard — path safety', () => {
     test('a traversal uri is refused as invalid by the resource-name rule', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const res = await put(contacts, '../contacts.db', card({ uid: randomUUID() }));
 
         expect(res).toEqual({ ok: false, error: 'invalid' });
@@ -93,7 +93,7 @@ describe('putCard — path safety', () => {
     });
 
     test('a dot-prefixed uri is refused as invalid', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         expect(await put(contacts, '.hidden.vcf', card({ uid: randomUUID() }))).toEqual({
             ok: false,
             error: 'invalid',
@@ -103,7 +103,7 @@ describe('putCard — path safety', () => {
 
 describe('putCard — 4.0 transcode', () => {
     test('a 4.0 PUT is stored as 3.0 with the photo in ENCODING=b form', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const sharp = (await import('sharp')).default;
         const jpeg = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 9, g: 40, b: 90 } } })
             .jpeg()
@@ -125,7 +125,7 @@ describe('putCard — 4.0 transcode', () => {
     });
 
     test('a 3.0 PUT stored verbatim still answers with the etag of its own bytes', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         const body = card({ uid, email: ['verbatim@example.org'] });
@@ -138,7 +138,7 @@ describe('putCard — 4.0 transcode', () => {
 
 describe('putCard — preconditions', () => {
     test('If-None-Match:* against an existing card is a precondition failure', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid }));
@@ -150,7 +150,7 @@ describe('putCard — preconditions', () => {
     });
 
     test('a stale If-Match is a precondition failure', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid }));
@@ -162,7 +162,7 @@ describe('putCard — preconditions', () => {
     });
 
     test('two racing PUTs with the same stale If-Match yield exactly one precondition failure', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         const created = await put(contacts, uri, card({ uid, fn: 'V1' }));
@@ -188,7 +188,7 @@ describe('putCard — precondition shapes (RFC 7232)', () => {
     };
 
     test('If-Match:* succeeds against an existing card (means "exists", not a literal etag)', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const { uid, uri } = await seed(contacts);
         const res = await put(contacts, uri, card({ uid, fn: 'Updated' }), { ifMatch: '*' });
         expect(res.ok).toBe(true);
@@ -196,7 +196,7 @@ describe('putCard — precondition shapes (RFC 7232)', () => {
     });
 
     test('If-Match:* against a missing card is a precondition failure', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         expect(await put(contacts, `${uid}.vcf`, card({ uid }), { ifMatch: '*' })).toEqual({
             ok: false,
@@ -205,14 +205,14 @@ describe('putCard — precondition shapes (RFC 7232)', () => {
     });
 
     test('If-Match with a multi-etag list matches any member', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const { uid, uri, etag } = await seed(contacts);
         const res = await put(contacts, uri, card({ uid, fn: 'Updated' }), { ifMatch: `"deadbeef", "${etag}"` });
         expect(res.ok).toBe(true);
     });
 
     test('a specific If-None-Match matching the current etag is a precondition failure', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const { uid, uri, etag } = await seed(contacts);
         expect(await put(contacts, uri, card({ uid, fn: 'Updated' }), { ifNoneMatch: `"${etag}"` })).toEqual({
             ok: false,
@@ -221,13 +221,13 @@ describe('putCard — precondition shapes (RFC 7232)', () => {
     });
 
     test('a specific If-None-Match not matching the current etag succeeds', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const { uid, uri } = await seed(contacts);
         expect((await put(contacts, uri, card({ uid, fn: 'Updated' }), { ifNoneMatch: '"deadbeef"' })).ok).toBe(true);
     });
 
     test('deleteCard honors If-Match:* as an existence check', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const { uri } = await seed(contacts);
         expect(await contacts.deleteCard(uri, { ifMatch: '*' })).toEqual({ ok: true });
     });
@@ -235,13 +235,13 @@ describe('putCard — precondition shapes (RFC 7232)', () => {
 
 describe('putCard — UID rules', () => {
     test('a body with no UID is invalid', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const res = await put(contacts, `${randomUUID()}.vcf`, card({}));
         expect(res).toEqual({ ok: false, error: 'invalid', message: 'UID is required' });
     });
 
     test('changing the UID of an existing card is a uid-conflict', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid }));
@@ -250,7 +250,7 @@ describe('putCard — UID rules', () => {
     });
 
     test('a second uri claiming an owned UID is a uid-conflict naming the holder', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const holder = `${uid}.vcf`;
         await put(contacts, holder, card({ uid }));
@@ -265,7 +265,7 @@ describe('putCard — UID rules', () => {
 
 describe('putCard — size ceiling', () => {
     test('a 5 MiB card is accepted and one byte more is too-large', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const prefix = `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nFN:Big\r\nNOTE:`;
         const suffix = `\r\nEND:VCARD\r\n`;
@@ -282,7 +282,8 @@ describe('putCard — size ceiling', () => {
 
 describe('putCard — index projection', () => {
     test('a group card is indexed and served to DAV but hidden from the app list', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         await put(
@@ -300,7 +301,8 @@ describe('putCard — index projection', () => {
     });
 
     test('an inline photo never leaks base64 into the row data JSON', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const sharp = (await import('sharp')).default;
         const jpeg = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 5, g: 5, b: 5 } } })
             .jpeg()
@@ -316,7 +318,7 @@ describe('putCard — index projection', () => {
     });
 
     test('a changed card is exactly what getChangedCardsSince reports past the prior ctag', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const before = (await contacts.getBook()).ctag;
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
@@ -329,7 +331,7 @@ describe('putCard — index projection', () => {
 
 describe('deleteCard', () => {
     test('a delete tombstones the uri and a later create at that uri clears it (single href)', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid }));
@@ -345,7 +347,7 @@ describe('deleteCard', () => {
     });
 
     test('deleting an unknown uri is not-found (DAV DELETE is not idempotent)', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         expect(await contacts.deleteCard(`${randomUUID()}.vcf`, { ifMatch: null })).toEqual({
             ok: false,
             error: 'not-found',
@@ -353,7 +355,8 @@ describe('deleteCard', () => {
     });
 
     test('deleting your own card is refused as self-delete', async () => {
-        const { contacts, db, user } = await makeContacts();
+        const { instance: contacts, user } = await makeContacts();
+        const db = contacts.db;
         const self = db
             .select()
             .from(contactsSchema.contacts)
@@ -363,7 +366,8 @@ describe('deleteCard', () => {
     });
 
     test('a refused self-delete touches the self card so an ignoring client re-converges', async () => {
-        const { contacts, db, user } = await makeContacts();
+        const { instance: contacts, user } = await makeContacts();
+        const db = contacts.db;
         const self = db
             .select()
             .from(contactsSchema.contacts)
@@ -384,7 +388,8 @@ describe('deleteCard', () => {
 
 describe('putCard — self-link', () => {
     test('a self-card PUT that strips X-EIGEN-ID keeps the indexed link and restores the property', async () => {
-        const { contacts, db, user } = await makeContacts();
+        const { instance: contacts, user } = await makeContacts();
+        const db = contacts.db;
         const self = db
             .select()
             .from(contactsSchema.contacts)
@@ -426,7 +431,8 @@ describe('putCard — self-link', () => {
     });
 
     test('a create forging X-EIGEN-ID indexes as a plain contact and leaves getMe pinned', async () => {
-        const { contacts, db, user } = await makeContacts();
+        const { instance: contacts, user } = await makeContacts();
+        const db = contacts.db;
         const self = db
             .select()
             .from(contactsSchema.contacts)
