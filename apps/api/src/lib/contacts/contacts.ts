@@ -239,8 +239,7 @@ export class Contacts {
         return avatar;
     }
 
-    // Callers hold the write lock and have already run their own guards (self-delete, preconditions); the
-    // deletion is theirs to announce once they let go of it.
+    // Callers hold the write lock, have run their own guards, and announce the deletion once they let go of it.
     async purgeCard(row: PurgedCard): Promise<void> {
         const removed = this.db.transaction((tx) => {
             const size = tx
@@ -639,8 +638,7 @@ export class Contacts {
 
     public async putCard(uri: string, body: string, options: ResourcePreconditions): Promise<PutResourceResult> {
         const result = await davStore.putCard(this, uri, body, options);
-        // Told once the write lock is released, naming the row the write landed on: re-reading it here would
-        // lose the event to a delete that took the lock next.
+        // Told once the write lock is released, from the id the write read inside it: a re-read could lose a racing delete.
         if (result.ok) {
             this.announce(result.created ? SSEventType.CONTACT_CREATED : SSEventType.CONTACT_UPDATED, result.id);
         }
