@@ -58,7 +58,8 @@ export async function htmlToPdf(html: string | Uint8Array): Promise<Buffer> {
             new Response(proc.stderr).text(),
         ]);
 
-        if (timedOut) {
+        // A deadline that fires after a clean exit did not cut the render short.
+        if (timedOut && exitCode !== 0) {
             throw new ApiError(504, 'PDF export timed out');
         }
 
