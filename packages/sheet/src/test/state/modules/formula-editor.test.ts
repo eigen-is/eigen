@@ -51,3 +51,15 @@ describe('state/formula-editor — generated HTML measures like its rendered tex
         });
     }
 });
+
+// Past the palette's end the colour came back undefined: the 30th+ reference rendered
+// black and got no range highlight.
+describe('state/formula-editor — reference colours', () => {
+    test('every reference in a long formula gets a colour', () => {
+        const refs = Array.from({ length: 50 }, (_, i) => `A${i + 1}`);
+        const html = functionHTMLGenerate(`=SUM(${refs.join(',')})`);
+        const colours = [...html.matchAll(/rangeindex="\d+" dir="auto" style="color:([^;]*);"/g)].map((m) => m[1]);
+        expect(colours).toHaveLength(50);
+        expect(colours.every((c) => c?.startsWith('#'))).toBe(true);
+    });
+});

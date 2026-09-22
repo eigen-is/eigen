@@ -4,7 +4,7 @@ import { iscelldata, operatorjson } from '../../engine/formula-utils';
 import type { Context } from '../context';
 
 import { cancelFunctionrangeSelected } from '.';
-import { colors } from './color';
+import { rangeColor } from './color';
 import {
     formulaUIState,
     resetFunctionHTMLIndex,
@@ -150,7 +150,7 @@ function functionHTML(txt: string) {
                     formulaUIState.rangeIndexes.length > formulaUIState.functionHTMLIndex
                         ? formulaUIState.rangeIndexes[formulaUIState.functionHTMLIndex]
                         : formulaUIState.functionHTMLIndex;
-                function_str += `<span class="sheet-formula-functionrange-cell" rangeindex="${rangeIndex}" dir="auto" style="color:${colors[rangeIndex]};">${escapeHtml(str)}</span>`;
+                function_str += `<span class="sheet-formula-functionrange-cell" rangeindex="${rangeIndex}" dir="auto" style="color:${rangeColor(rangeIndex)};">${escapeHtml(str)}</span>`;
                 setFunctionHTMLIndex(formulaUIState.functionHTMLIndex + 1);
             } else if (matchConfig.dquote > 0) {
                 function_str += `${escapeHtml(str)}</span>`;

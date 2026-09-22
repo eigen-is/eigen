@@ -3,7 +3,7 @@ import { type Context, getSheetConfig } from '../context';
 import type { RangeOrWholeAxis, Rect } from '../types';
 import { seletedHighlistByindex } from '.';
 import { getRangetxt, mergeMoveMain } from './cell';
-import { colors } from './color';
+import { rangeColor } from './color';
 import { moveToEnd } from './cursor';
 import { formulaUIState, setFunctionHTMLIndex } from './formula-cache';
 import { israngeseleciton } from './formula-editor';
@@ -48,7 +48,7 @@ export function createRangeHightlight(ctx: Context, inputInnerHtmlStr: string, i
                 formulaRanges.push({
                     rangeIndex,
                     ...rect,
-                    backgroundColor: colors[rangeIndex],
+                    backgroundColor: rangeColor(rangeIndex),
                 });
             }
         }
@@ -118,7 +118,7 @@ export function rangeSetValue(
             setCaretPosition(ctx, span, 0, range.length);
         }
     } else {
-        const function_str = `<span class="sheet-formula-functionrange-cell" rangeindex="${formulaUIState.functionHTMLIndex}" dir="auto" style="color:${colors[formulaUIState.functionHTMLIndex]};">${escapeHtml(range)}</span>`;
+        const function_str = `<span class="sheet-formula-functionrange-cell" rangeindex="${formulaUIState.functionHTMLIndex}" dir="auto" style="color:${rangeColor(formulaUIState.functionHTMLIndex)};">${escapeHtml(range)}</span>`;
         const newEle = parseElement(function_str);
         const refEle = ctx.formulaCache.rangeSetValueTo;
         if (refEle?.parentNode) {

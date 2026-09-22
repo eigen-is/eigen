@@ -7,7 +7,7 @@ import type { GlobalCache } from '../types';
 import { clipToUsedExtent, getSheetIndex, isAllowEdit } from '../utils';
 import { applyBorder, clearSides } from './border';
 import { getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue } from './cell';
-import { colors } from './color';
+import { rangeColor } from './color';
 import { setFormulaCellInfo } from './formula-cache';
 import { israngeseleciton } from './formula-editor';
 import { execFunctionGroup, execfunction } from './formula-exec';
@@ -327,9 +327,9 @@ function activeFormulaInput(
     const col_pre = colLocationByIndex(columnh[0], ctx.visibledatacolumn)[0];
     const col = colLocationByIndex(columnh[1], ctx.visibledatacolumn)[1];
 
-    const formulaTxt = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span class="sheet-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${
-        colors[0]
-    };">${getRangetxt(
+    const formulaTxt = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span class="sheet-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${rangeColor(
+        0,
+    )};">${getRangetxt(
         ctx,
         ctx.currentSheetId,
         { row: rowh, column: columnh },
