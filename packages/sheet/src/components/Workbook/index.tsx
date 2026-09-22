@@ -24,10 +24,12 @@ import {
     type CellWithRowAndCol,
     COPY_ACTION_TABLE_MARKER,
     type Context,
+    changeSheet,
     defaultContext,
     defaultSettings,
     ensureSheetIndex,
     filterPatch,
+    firstVisibleSheetId,
     type GlobalCache,
     getFlowdata,
     getSheetIndex,
@@ -108,41 +110,6 @@ function dataToCelldata(data: CellMatrix) {
         }
     }
     return cellData;
-}
-
-function reduceUndoList(ctx: Context, ctxBefore: Context, globalCache: React.MutableRefObject<GlobalCache>) {
-    const sheetsId = ctx.sheets.map((sheet) => sheet.id);
-    const sheetDeletedByMe = globalCache.current.undoList
-        .filter((undo) => undo.options?.deleteSheetOp)
-        .map((item) => item.options?.deleteSheetOp?.id);
-    globalCache.current.undoList = globalCache.current.undoList.filter(
-        (undo) =>
-            undo.options?.deleteSheetOp ||
-            undo.options?.id === undefined ||
-            sheetsId.indexOf(undo.options?.id) !== -1 ||
-            sheetDeletedByMe.indexOf(undo.options?.id) !== -1,
-    );
-    if (ctxBefore.sheets.length > ctx.sheets.length) {
-        const sheetDeleted = ctxBefore.sheets
-            .filter((oneSheet) => sheetsId.indexOf(oneSheet.id) === -1)
-            .map((item) => getSheetIndex(ctxBefore, item.id as string));
-        const deletedIndex = sheetDeleted[0];
-        globalCache.current.undoList = globalCache.current.undoList.map((oneStep) => {
-            oneStep.patches = oneStep.patches.map((onePatch) => {
-                if (typeof onePatch.path[1] === 'number' && onePatch.path[1] > (deletedIndex as number)) {
-                    onePatch.path[1] -= 1;
-                }
-                return onePatch;
-            });
-            oneStep.inversePatches = oneStep.inversePatches.map((onePatch) => {
-                if (typeof onePatch.path[1] === 'number' && onePatch.path[1] > (deletedIndex as number)) {
-                    onePatch.path[1] -= 1;
-                }
-                return onePatch;
-            });
-            return oneStep;
-        });
-    }
 }
 
 export const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
@@ -282,10 +249,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             }
                             emitOp(result, filteredPatches, options);
                         }
-                    } else {
-                        if (patches?.[0]?.value?.length < ctx_?.sheets?.length) {
-                            reduceUndoList(result, ctx_, globalCache);
-                        }
                     }
                     return result;
                 });
@@ -417,7 +380,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     draftCtx.defaultcolumnNum = mergedSettings.column;
                     draftCtx.defaultrowNum = mergedSettings.row;
                     draftCtx.defaultFontSize = mergedSettings.defaultFontSize;
+                    // Only a load or newly created sheet data needs the view here; a switch derives its own.
+                    let viewStale = false;
                     if (draftCtx.sheets.length === 0) {
+                        viewStale = true;
                         // Shallow-clone the sheet wrappers — NOT the heavy celldata/data,
                         // which stay shared by reference (avoids the ~900ms deep clone on a
                         // 48MB xlsx import). The init below only sets top-level props
@@ -456,21 +422,18 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     draftCtx.fontList = mergedSettings.fontList;
                     if (!draftCtx.currentSheetId) {
                         initSheetIndex(draftCtx);
+                    } else if (getSheetIndex(draftCtx, draftCtx.currentSheetId) == null) {
+                        // An undone add removed the current sheet.
+                        const next = firstVisibleSheetId(draftCtx);
+                        if (next != null) changeSheet(draftCtx, next, true);
                     }
-                    let sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
-                    if (sheetIdx == null) {
-                        if ((draftCtx.sheets?.length ?? 0) > 0) {
-                            sheetIdx = 0;
-                            draftCtx.currentSheetId = draftCtx.sheets[0].id!;
-                        }
-                    }
+                    const sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
                     if (sheetIdx == null) return;
-
-                    const sheet = draftCtx.sheets?.[sheetIdx];
-                    if (!sheet) return;
+                    const sheet = draftCtx.sheets[sheetIdx];
 
                     if (!sheet.data || sheet.data.length === 0) {
                         api.initSheetData(draftCtx, sheetIdx, sheet);
+                        viewStale = true;
                     } else {
                         normalizeSheetConfig(sheet);
                     }
@@ -496,8 +459,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         draftCtx.addDefaultRows = mergedSettings.addRows;
                     }
 
-                    // A switch already applied this; the load and add paths reach here first.
-                    applySheetView(draftCtx);
+                    if (viewStale) applySheetView(draftCtx);
                 },
                 { noHistory: true },
             );

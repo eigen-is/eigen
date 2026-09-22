@@ -204,12 +204,17 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         };
     }, [resize]);
 
+    // A switch derives the new sheet's geometry in its own recipe, so a changed sheet id skips the pass.
+    const geometrySheetId = useRef<string | undefined>(undefined);
     // Recalculate row/col info when data or config dimensions change
     // biome-ignore lint/correctness/useExhaustiveDependencies: keys rowlen/columnlen/rowhidden/colhidden are JSON-stable derived from sheet.config; the source object refs would re-fire on identity churn
     useEffect(() => {
         if (!data) return;
+        const switched = geometrySheetId.current != null && geometrySheetId.current !== sheet.id;
+        geometrySheetId.current = sheet.id;
+        if (switched) return;
         setContext((draftCtx) => updateContextWithSheetData(draftCtx, data));
-    }, [rowlenKey, columnlenKey, rowhiddenKey, colhiddenKey, data, setContext]);
+    }, [rowlenKey, columnlenKey, rowhiddenKey, colhiddenKey, data, setContext, sheet.id]);
 
     // Init sizing, before the observer's first delivery. Same 0×0 skip: a remount while hidden would pin blank.
     useEffect(() => {
