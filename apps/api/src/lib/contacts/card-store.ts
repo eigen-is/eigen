@@ -2,12 +2,15 @@ import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import { sql } from 'drizzle-orm';
-import { computeResourceEtag, PATHS, sanitizeResourceUri } from '../core';
+import { computeResourceEtag, type Tx as DatabaseTx, PATHS, sanitizeResourceUri } from '../core';
 import type { LocalFilesystem } from '../core/local-filesystem';
 import type { ParsedCard } from '../vcard/types';
 import * as schema from './schema';
 
 // The card-shaped half of the store over `core/blob-store.ts`. See docs/CONTACTS.md § Storage model.
+
+// One book's transaction handle; every seam that writes inside the caller's transaction takes it.
+export type Tx = DatabaseTx<typeof schema>;
 
 const CARD_SUFFIX = '.vcf';
 export const CARD_MAX_BYTES = 5_242_880;

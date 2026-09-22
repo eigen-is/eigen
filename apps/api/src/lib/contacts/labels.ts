@@ -5,9 +5,9 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import { ApiError, computeResourceEtag } from '../core';
 import { mergeVCard, parseVCard } from '../vcard';
 import type { ParsedCard } from '../vcard/types';
-import type { CardRowInput } from './card-store';
+import type { CardRowInput, Tx } from './card-store';
 import { normalizeLabelName } from './card-store';
-import type { Contacts, Tx } from './contacts';
+import type { Contacts } from './contacts';
 import * as schema from './schema';
 
 // Membership truth lives in each card's CATEGORIES, so a rename or delete rewrites every member card. See docs/CONTACTS.md § Labels ↔ CATEGORIES.

@@ -30,6 +30,9 @@ export type DatabaseConfig<S extends SchemaType> = {
     synchronous?: 'FULL';
 };
 
+// The transaction handle drizzle hands a `db.transaction(cb)` callback, for the schema of one database.
+export type Tx<S extends SchemaType> = Parameters<Parameters<BunSQLiteDatabase<S>['transaction']>[0]>[0];
+
 export type SyncCallbacks = {
     onOpen?: () => Promise<void>;
     onSync?: () => Promise<void>;

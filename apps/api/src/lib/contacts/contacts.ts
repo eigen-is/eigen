@@ -27,7 +27,7 @@ import { createVCard, mergeVCard, normalizeBirthday, parseVCard } from '../vcard
 import type { CardEdits } from '../vcard/types';
 import type { StagedAvatarPair } from './avatars';
 import * as avatars from './avatars';
-import type { CardData, CardRowInput } from './card-store';
+import type { CardData, CardRowInput, Tx } from './card-store';
 import {
     avatarNameOf,
     CARD_MAX_BYTES,
@@ -54,9 +54,6 @@ export async function getContacts(user: User): Promise<Contacts> {
 async function getContactsDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
     return home.getLocalDatabase(CONTACTS_DB_CONFIG, PATHS.CONTACTS.DB);
 }
-
-// The transaction handle drizzle hands a `db.transaction(cb)` callback.
-export type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>[0]>[0];
 
 // Never the blob: a contact list that read every card's bytes would carry the whole book into memory.
 const CONTACT_ROW = {
