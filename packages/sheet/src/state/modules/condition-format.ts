@@ -7,8 +7,7 @@ import type {
 } from '@workspace/lib/sheets';
 import { isNil } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
-import { evaluateConditionalFormat } from '../../engine/conditional-format';
-import { functionCopy } from '../../engine/formula-shift';
+import { createCfFormulaEvaluator, evaluateConditionalFormat } from '../../engine/conditional-format';
 import type { CellMatrix, ConditionalFormatRule } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { ConditionRulesProps } from '../types';
@@ -245,24 +244,16 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
         }
     }
 
-    // Evaluate CF formulas through the engine directly (same shape as the HTML export's
-    // buildCfFormulaEvaluator). execfunction would assign ctx.calculateSheetId — painting
-    // runs against an immer-frozen context, so that throws — and would register every CF
-    // formula into the sheet's calc chain via insertUpdateFunctionGroup.
-    const resolver = createContextResolver(ctx);
+    // Evaluate CF formulas through the engine directly, like the HTML export.
+    // execfunction would assign ctx.calculateSheetId — painting runs against an
+    // immer-frozen context, so that throws — and would register every CF formula into
+    // the sheet's calc chain via insertUpdateFunctionGroup.
     const computeMap = evaluateConditionalFormat(ruleArr, data, {
-        evaluateFormula: (formula, anchorRow, anchorCol, targetRow, targetCol) => {
-            const offsetRow = targetRow - anchorRow;
-            const offsetCol = targetCol - anchorCol;
-            let shifted = formula;
-            if (offsetRow > 0) {
-                shifted = `=${functionCopy(shifted, 'down', offsetRow)}`;
-            }
-            if (offsetCol > 0) {
-                shifted = `=${functionCopy(shifted, 'right', offsetCol)}`;
-            }
-            return ctx.formulaCache.engine.evaluate(shifted, ctx.currentSheetId, resolver).value;
-        },
+        evaluateFormula: createCfFormulaEvaluator(
+            ctx.formulaCache.engine,
+            createContextResolver(ctx),
+            ctx.currentSheetId,
+        ),
     });
     _cfCache.set(ctx.currentSheetId, { rules: ruleArr, data, result: computeMap });
     return computeMap;

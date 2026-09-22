@@ -167,3 +167,31 @@ describe('engine/formula-engine — range bounds', () => {
         expect(engine.evaluate('=SUM(A9:B12)', 'sheet1', resolver).value).toBe(0);
     });
 });
+
+describe('engine/formula-engine — compiled formula at an offset', () => {
+    const engine = new FormulaEngine();
+    const at = (formula: string, rowOffset: number, colOffset: number) =>
+        engine.evaluateCompiled(engine.compile(formula), 'sheet1', resolver, rowOffset, colOffset).value;
+
+    test('relative legs move, $ legs stay', () => {
+        expect(at('=A1', 1, 2)).toBe(100);
+        expect(at('=$A1', 1, 2)).toBe(5);
+        expect(at('=A$1', 1, 2)).toBe(30);
+        expect(at('=$A$1', 1, 2)).toBe(10);
+        expect(at('=SUM($A$1:A1)', 0, 2)).toBe(60);
+    });
+
+    test('a reversed range stays where it is, as the text shifter leaves it', () => {
+        expect(at('=SUM(B1:A1)', 1, 0)).toBe(30);
+    });
+
+    test('a leg moved off the sheet is #REF!', () => {
+        expect(at('=A1', -1, 0)).toBe('#REF!');
+    });
+
+    test('one compiled formula serves many offsets', () => {
+        const compiled = engine.compile('=A1*2');
+        const values = [0, 1, 2].map((c) => engine.evaluateCompiled(compiled, 'sheet1', resolver, 0, c).value);
+        expect(values).toEqual([20, 40, 60]);
+    });
+});

@@ -21,6 +21,13 @@ const RELATIVE_CELL = new RegExp(
 );
 const NUMONLY = /^(?:[0-9]+$)/;
 
+// The actions compile rather than evaluate: every expression reduces to a thunk, so one parse
+// serves any number of evaluations (Parser.compile). A thunk runs its operands left to right,
+// the order the reductions used to evaluate them in. Terminals and literal pieces stay plain values.
+const run = (value: any): any => (typeof value === "function" ? value() : value);
+const operator = (yy: any, op: string, left: any, right: any) => () =>
+    yy.evaluateByOperator(op, [run(left), run(right)]);
+
 let stackCache: any[];
 
 const o = (k: number[], v: any, obj?: any, l?: number) => {
@@ -860,99 +867,108 @@ export class Parser {
                 // here; if we returned that, Jison would fall through to the
                 // accept-state below and surface its `return true` sentinel as the
                 // formula's value. Excel treats empty cells as 0 in value context.
-                const v = $$[$0 - 1];
-                return v === undefined ? 0 : v;
+                const expression = $$[$0 - 1];
+                return () => {
+                    const v = run(expression);
+                    return v === undefined ? 0 : v;
+                };
             }
-            case 2:
-                this.$ = yy.callVariable($$[$0][0]);
+            case 2: {
+                const name = $$[$0][0];
+                this.$ = () => yy.callVariable(name);
                 break;
-            case 3:
-                this.$ = yy.toNumber($$[$0]);
+            }
+            case 3: {
+                const number = $$[$0];
+                this.$ = () => yy.toNumber(number);
                 break;
-            case 4:
-                this.$ = yy.trimEdges($$[$0]);
+            }
+            case 4: {
+                const text = $$[$0];
+                this.$ = () => yy.trimEdges(text);
                 break;
+            }
             case 5:
-                this.$ = yy.evaluateByOperator("&", [$$[$0 - 2], $$[$0]]);
+                this.$ = operator(yy, "&", $$[$0 - 2], $$[$0]);
                 break;
             case 6:
-                this.$ = yy.evaluateByOperator("=", [$$[$0 - 2], $$[$0]]);
+                this.$ = operator(yy, "=", $$[$0 - 2], $$[$0]);
                 break;
             case 7:
-                this.$ = yy.evaluateByOperator("+", [$$[$0 - 2], $$[$0]]);
+                this.$ = operator(yy, "+", $$[$0 - 2], $$[$0]);
                 break;
             case 8:
                 this.$ = $$[$0 - 1];
                 break;
             case 9:
-                this.$ = yy.evaluateByOperator("<=", [$$[$0 - 3], $$[$0]]);
+                this.$ = operator(yy, "<=", $$[$0 - 3], $$[$0]);
                 break;
             case 10:
-                this.$ = yy.evaluateByOperator(">=", [$$[$0 - 3], $$[$0]]);
+                this.$ = operator(yy, ">=", $$[$0 - 3], $$[$0]);
                 break;
             case 11:
-                this.$ = yy.evaluateByOperator("<>", [$$[$0 - 3], $$[$0]]);
+                this.$ = operator(yy, "<>", $$[$0 - 3], $$[$0]);
                 break;
             case 12:
-                this.$ = yy.evaluateByOperator("NOT", [$$[$0 - 2], $$[$0]]);
+                this.$ = operator(yy, "NOT", $$[$0 - 2], $$[$0]);
                 break;
             case 13:
-                this.$ = yy.evaluateByOperator(">", [$$[$0 - 2], $$[$0]]);
+                this.$ = operator(yy, ">", $$[$0 - 2], $$[$0]);
                 break;
             case 14:
-                this.$ = yy.evaluateByOperator("<", [$$[$0 - 2], $$[$0]]);
+                this.$ = operator(yy, "<", $$[$0 - 2], $$[$0]);
                 break;
             case 15:
-                this.$ = yy.evaluateByOperator("-", [$$[$0 - 2], $$[$0]]);
+                this.$ = operator(yy, "-", $$[$0 - 2], $$[$0]);
                 break;
             case 16:
-                this.$ = yy.evaluateByOperator("*", [$$[$0 - 2], $$[$0]]);
+                this.$ = operator(yy, "*", $$[$0 - 2], $$[$0]);
                 break;
             case 17:
-                this.$ = yy.evaluateByOperator("/", [$$[$0 - 2], $$[$0]]);
+                this.$ = operator(yy, "/", $$[$0 - 2], $$[$0]);
                 break;
             case 18:
-                this.$ = yy.evaluateByOperator("^", [$$[$0 - 2], $$[$0]]);
+                this.$ = operator(yy, "^", $$[$0 - 2], $$[$0]);
                 break;
-            case 19: {
+            case 19:
+            case 20: {
                 // A blank operand coerces to 0 (undefined from the helper), but an Error
                 // operand must propagate and an unparseable string must surface as #VALUE!,
                 // the way the binary operators do — `-NA()` or `-"a"` returning 0 is a
                 // silent wrong answer.
-                if ($$[$0] instanceof Error) {
-                    this.$ = $$[$0];
-                    break;
-                }
-                const n1 = yy.invertNumber($$[$0]);
-                if (n1 !== undefined && isNaN(n1)) {
-                    throw Error(ERROR_VALUE);
-                }
-                this.$ = n1 ?? 0;
+                const operand = $$[$0];
+                const sign = yystate === 19 ? yy.invertNumber : yy.toNumber;
+                this.$ = () => {
+                    const value = run(operand);
+                    if (value instanceof Error) {
+                        return value;
+                    }
+                    const n1 = sign(value);
+                    if (n1 !== undefined && isNaN(n1)) {
+                        throw Error(ERROR_VALUE);
+                    }
+                    return n1 ?? 0;
+                };
                 break;
             }
-            case 20: {
-                if ($$[$0] instanceof Error) {
-                    this.$ = $$[$0];
-                    break;
-                }
-                const n1 = yy.toNumber($$[$0]);
-                if (n1 !== undefined && isNaN(n1)) {
-                    throw Error(ERROR_VALUE);
-                }
-                this.$ = n1 ?? 0;
+            case 21: {
+                const name = $$[$0 - 2];
+                this.$ = () => yy.callFunction(name);
                 break;
             }
-            case 21:
-                this.$ = yy.callFunction($$[$0 - 2]);
+            case 22: {
+                const name = $$[$0 - 3];
+                const args = $$[$0 - 1];
+                this.$ = () => yy.callFunction(name, args.map(run));
                 break;
-            case 22:
-                this.$ = yy.callFunction($$[$0 - 3], $$[$0 - 1]);
-                break;
+            }
             case 26:
             case 27:
-            case 28:
-                this.$ = yy.cellValue($$[$0]);
+            case 28: {
+                const label = $$[$0];
+                this.$ = () => yy.cellValue(label);
                 break;
+            }
             case 29:
             case 30:
             case 31:
@@ -961,9 +977,12 @@ export class Parser {
             case 34:
             case 35:
             case 36:
-            case 37:
-                this.$ = yy.rangeValue($$[$0 - 2], $$[$0]);
+            case 37: {
+                const start = $$[$0 - 2];
+                const end = $$[$0];
+                this.$ = () => yy.rangeValue(start, end);
                 break;
+            }
             case 38:
             case 42:
                 this.$ = [$$[$0]];
@@ -989,9 +1008,11 @@ export class Parser {
             case 46:
                 this.$ = $$[$0 - 1] * 0.01;
                 break;
-            case 47:
-                this.$ = yy.throwError($$[$0]);
+            case 47: {
+                const text = $$[$0];
+                this.$ = () => yy.throwError(text);
                 break;
+            }
         }
     }
 

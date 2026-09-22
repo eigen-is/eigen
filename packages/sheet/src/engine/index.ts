@@ -21,7 +21,7 @@ export type {
     DataBar,
     EvaluateConditionalFormatOptions,
 } from './conditional-format';
-export { evaluateConditionalFormat } from './conditional-format';
+export { createCfFormulaEvaluator, evaluateConditionalFormat } from './conditional-format';
 // CF rule shapes (`ConditionalFormatRule` etc.) live in `@workspace/lib/sheets` and
 // are surfaced through `./types` re-exports below.
 export { createDefaultSheets } from './defaults';
