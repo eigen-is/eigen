@@ -1,15 +1,15 @@
 import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
-import { cloneDeep, isNil, sortBy, times } from 'es-toolkit/compat';
+import { isNil, times } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import { initSheetData } from '../api/sheet';
-import { type Context, updateContextWithSheetData } from '../context';
+import { type Context, firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Settings } from '../settings';
 import type { Sheet } from '../types';
 import { generateRandomSheetName, getSheetIndex } from '../utils';
-import { createFilterOptions } from './filter';
+import { applySheetFilter } from './filter';
 import { setFormulaCellInfo } from './formula-cache';
 
 export function storeSheetSelections(ctx: Context) {
@@ -19,7 +19,12 @@ export function storeSheetSelections(ctx: Context) {
     file.selections = ctx.selections;
 }
 
-export function changeSheet(ctx: Context, id: string) {
+export function changeSheet(
+    ctx: Context,
+    id: string,
+    // The current sheet is going away (deleted, hidden, undone): no veto.
+    force: boolean = false,
+) {
     if (id === ctx.currentSheetId) {
         return;
     }
@@ -27,8 +32,9 @@ export function changeSheet(ctx: Context, id: string) {
     const idx = getSheetIndex(ctx, id);
     if (idx == null) return;
     const file = ctx.sheets[idx];
+    if (file.hide === 1) return;
 
-    if (ctx.hooks.beforeActivateSheet?.(id) === false) {
+    if (!force && ctx.hooks.beforeActivateSheet?.(id) === false) {
         return;
     }
 
@@ -37,8 +43,6 @@ export function changeSheet(ctx: Context, id: string) {
         scrollLeft: ctx.scrollLeft,
         scrollTop: ctx.scrollTop,
         selectionActive: ctx.selectionActive,
-        selections: ctx.selections,
-        formulaRangeSelections: ctx.formulaRangeSelections,
     };
 
     ctx.dataVerificationDropDownList = false;
@@ -47,7 +51,7 @@ export function changeSheet(ctx: Context, id: string) {
     const record = ctx.sheetScrollRecord[id];
     ctx.scrollRequest = { left: record?.scrollLeft ?? 0, top: record?.scrollTop ?? 0 };
     ctx.selectionActive = record?.selectionActive ?? false;
-    ctx.selections = record?.selections;
+    ctx.selections = file.selections;
     ctx.formulaRangeSelections = [];
     applySheetView(ctx);
 
@@ -64,15 +68,13 @@ export function applySheetView(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
     const sheet = ctx.sheets[index];
-    ctx.defaultrowlen = sheet.defaultRowHeight != null ? Number(sheet.defaultRowHeight) : SHEET_DEFAULT_ROW_HEIGHT;
-    ctx.defaultcollen = sheet.defaultColWidth != null ? Number(sheet.defaultColWidth) : SHEET_DEFAULT_COL_WIDTH;
+    ctx.defaultrowlen = sheet.defaultRowHeight ?? SHEET_DEFAULT_ROW_HEIGHT;
+    ctx.defaultcollen = sheet.defaultColWidth ?? SHEET_DEFAULT_COL_WIDTH;
     ctx.showGridLines = sheet.showGridLines !== 0 && sheet.showGridLines !== false;
     ctx.insertedImgs = sheet.images;
     // A sheet added this recipe has no data until the Workbook effect initializes it.
     if (sheet.data) updateContextWithSheetData(ctx, sheet.data);
-    ctx.filterRange = sheet.filterRange;
-    ctx.filter = sheet.filter || {};
-    createFilterOptions(ctx, ctx.filterRange, undefined);
+    applySheetFilter(ctx);
 }
 
 export function addSheet(
@@ -82,8 +84,10 @@ export function addSheet(
     isPivotTable = false,
     sheetName: string | undefined = undefined,
     sheetData: Sheet | undefined = undefined,
+    // Remote mirror (applyOp): a peer's sheet lands for a read-only viewer too.
+    force: boolean = false,
 ) {
-    if (ctx.allowEdit === false) {
+    if (!force && ctx.allowEdit === false) {
         return;
     }
     const order = ctx.sheets.length;
@@ -128,8 +132,13 @@ export function addSheet(
     }
 }
 
-export function deleteSheet(ctx: Context, id: string) {
-    if (ctx.allowEdit === false) {
+export function deleteSheet(
+    ctx: Context,
+    id: string,
+    // Remote mirror (applyOp): a peer's deletion lands for a read-only viewer too.
+    force: boolean = false,
+) {
+    if (!force && ctx.allowEdit === false) {
         return;
     }
 
@@ -153,12 +162,8 @@ export function deleteSheet(ctx: Context, id: string) {
 
     ctx.sheets.splice(arrIndex, 1);
     if (id === ctx.currentSheetId) {
-        const shownSheets = cloneDeep(ctx.sheets).filter(
-            (singleSheet) => singleSheet.hide === undefined || singleSheet.hide !== 1,
-        );
-        const orderSheets = sortBy(shownSheets, (sheet) => sheet.order);
-        ctx.currentSheetId = orderSheets?.[0]?.id as string;
-        applySheetView(ctx);
+        const next = firstVisibleSheetId(ctx);
+        if (next != null) changeSheet(ctx, next, true);
     }
 
     if (ctx.hooks.afterDeleteSheet) {

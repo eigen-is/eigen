@@ -6,12 +6,13 @@ import type { Cell } from '../../engine/types';
 import {
     addSheet,
     api,
-    applySheetView,
     type Context,
+    changeSheet,
     collectMatches,
     createFilterOptions,
     deleteRowCol,
     deleteSheet,
+    firstVisibleSheetId,
     getFlowdata,
     getSheetIndex,
     type Image,
@@ -69,28 +70,19 @@ export function generateAPIs(
                             // pre-existing `patches.filter(path[0] === 'name')` lookup was always empty.
                             // addSheet pulls the name from `specialOp.value.name` (sheetData) directly.
                             if (specialOp.value?.id) {
-                                addSheet(ctx_, settings, specialOp.value.id, false, undefined, specialOp.value);
+                                addSheet(ctx_, settings, specialOp.value.id, false, undefined, specialOp.value, true);
                             }
                             const fileIndex = getSheetIndex(ctx_, specialOp.value.id) as number;
                             api.initSheetData(ctx_, fileIndex, specialOp.value);
                         } else if (specialOp.op === 'deleteSheet') {
-                            deleteSheet(ctx_, specialOp.value.id);
+                            deleteSheet(ctx_, specialOp.value.id, true);
                             patches.length = 0;
                         }
                     }
                     if (ops[0]?.path?.[0] === 'filterRange') ctx_.filterRange = ops[0].value;
-                    else if (ops[0]?.path?.[0] === 'hide') {
-                        // Hide sheet
-                        if (ctx_.currentSheetId === ops[0].id) {
-                            const shownSheets = ctx_.sheets.filter(
-                                (sheet) => (sheet.hide === undefined || sheet.hide !== 1) && sheet.id !== ops[0].id,
-                            );
-                            const sorted = [...shownSheets].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-                            if (sorted.length > 0) {
-                                ctx_.currentSheetId = sorted[0].id as string;
-                                applySheetView(ctx_);
-                            }
-                        }
+                    else if (ops[0]?.path?.[0] === 'hide' && ops[0].id === ctx_.currentSheetId) {
+                        const next = firstVisibleSheetId(ctx_, ops[0].id);
+                        if (next != null) changeSheet(ctx_, next, true);
                     }
                     createFilterOptions(ctx_, ctx_.filterRange, ops[0]?.id);
                     if (patches.length === 0) return;

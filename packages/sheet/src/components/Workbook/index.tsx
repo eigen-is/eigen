@@ -24,10 +24,12 @@ import {
     type CellWithRowAndCol,
     COPY_ACTION_TABLE_MARKER,
     type Context,
+    changeSheet,
     defaultContext,
     defaultSettings,
     ensureSheetIndex,
     filterPatch,
+    firstVisibleSheetId,
     type GlobalCache,
     getFlowdata,
     getSheetIndex,
@@ -456,18 +458,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     draftCtx.fontList = mergedSettings.fontList;
                     if (!draftCtx.currentSheetId) {
                         initSheetIndex(draftCtx);
+                    } else if (getSheetIndex(draftCtx, draftCtx.currentSheetId) == null) {
+                        // An undone add removed the current sheet.
+                        const next = firstVisibleSheetId(draftCtx);
+                        if (next != null) changeSheet(draftCtx, next, true);
                     }
-                    let sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
-                    if (sheetIdx == null) {
-                        if ((draftCtx.sheets?.length ?? 0) > 0) {
-                            sheetIdx = 0;
-                            draftCtx.currentSheetId = draftCtx.sheets[0].id!;
-                        }
-                    }
+                    const sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
                     if (sheetIdx == null) return;
-
-                    const sheet = draftCtx.sheets?.[sheetIdx];
-                    if (!sheet) return;
+                    const sheet = draftCtx.sheets[sheetIdx];
 
                     if (!sheet.data || sheet.data.length === 0) {
                         api.initSheetData(draftCtx, sheetIdx, sheet);

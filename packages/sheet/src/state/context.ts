@@ -118,8 +118,6 @@ export type Context = {
             scrollLeft: number;
             scrollTop: number;
             selectionActive: boolean;
-            selections: Sheet['selections'];
-            formulaRangeSelections: SingleRange[];
         }
     >;
 
@@ -480,16 +478,14 @@ export function ensureSheetIndex(data: Sheet[], generateSheetId: () => string) {
     }
 }
 
+export function firstVisibleSheetId(ctx: Context, excludeId?: string) {
+    const shown = ctx.sheets.filter((sheet) => sheet.hide !== 1 && sheet.id !== excludeId);
+    return sortBy(shown, (sheet) => sheet.order)[0]?.id;
+}
+
 export function initSheetIndex(ctx: Context) {
-    // get current sheet
-    const shownSheets = ctx.sheets.filter((singleSheet) => singleSheet.hide === undefined || singleSheet.hide !== 1);
-    ctx.currentSheetId = sortBy(shownSheets, (sheet) => sheet.order)[0].id as string;
-    for (let i = 0; i < ctx.sheets.length; i += 1) {
-        if (ctx.sheets[i].status === 1 && ctx.sheets[i].hide !== 1) {
-            ctx.currentSheetId = ctx.sheets[i].id!;
-            break;
-        }
-    }
+    const id = ctx.sheets.find((sheet) => sheet.status === 1 && sheet.hide !== 1)?.id ?? firstVisibleSheetId(ctx);
+    if (id != null) ctx.currentSheetId = id;
 }
 
 export function updateContextWithSheetData(ctx: Context, data: CellMatrix) {
