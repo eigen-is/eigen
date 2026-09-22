@@ -31,7 +31,7 @@ function dbEventToCalendarEvent(
     };
 }
 
-// An event row and the file it was projected from — what every read of a stored event answers with.
+// An event row and the resource it was projected from — what every read of a stored event answers with.
 type JoinedEvent = {
     events: typeof schema.events.$inferSelect;
     resources: { uri: string; etag: string };

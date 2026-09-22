@@ -1,6 +1,4 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
 import { handleDeleteCalendar } from '../../lib/caldav/proppatch';
 import { Calendar } from '../../lib/calendar/calendar';
 import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
@@ -980,7 +978,7 @@ describe('CalDAV', () => {
                 body: ics,
             }),
         );
-        // Untrusted ICS must not 500 the sync; the file keeps what the client wrote and the index
+        // Untrusted ICS must not 500 the sync; the stored bytes keep what the client wrote and the index
         // degrades the explosive rule to a single event instead of expanding it.
         expect([201, 204]).toContain(putRes.status);
 
@@ -2025,41 +2023,54 @@ describe('CalDAV', () => {
             expect(xml.length).toBeLessThan(REPORT_DATA_BUDGET_BYTES);
         }, 120_000);
 
-        test('a row whose file vanished is a 404 row, never a 200 without its data', async () => {
-            const uri = 'caldav-vanished.ics';
-            expect((await putIcs(uri, ics('caldav-vanished@eigen', 'Vanished Row'))).status).toBe(201);
-            const home = await getHome(userId);
-            rmSync(join(home.homeDir, 'eigen.calendar', 'calendars', defaultCalendarId, uri));
-
-            const xml = await (await multiget([uri])).text();
-            expect(xml).toContain('404 Not Found');
-            expect(xml).not.toContain('Vanished Row');
-        });
-
         // RFC 6578 § 3.2: inside a sync-collection a member that is gone is a bare 404 status on the
         // response, never the multiget's 404 propstat — a client keying on propstat keeps a ghost resource.
-        test('a row whose file vanished is a removed row inside a sync-collection', async () => {
-            const uri = 'caldav-vanished-sync.ics';
-            expect((await putIcs(uri, ics('caldav-vanished-sync@eigen', 'Vanished Sync'))).status).toBe(201);
-            const home = await getHome(userId);
-            rmSync(join(home.homeDir, 'eigen.calendar', 'calendars', defaultCalendarId, uri));
-
-            const res = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                email: ctx.alice.user.email,
-                headers: { 'Content-Type': 'application/xml' },
-                body: `<?xml version="1.0" encoding="utf-8"?>
+        test('a deleted resource is a removed row inside a sync-collection', async () => {
+            const uri = 'caldav-deleted-sync.ics';
+            expect((await putIcs(uri, ics('caldav-deleted-sync@eigen', 'Deleted Sync'))).status).toBe(201);
+            const syncReport = (token?: string) =>
+                davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                    email: ctx.alice.user.email,
+                    headers: { 'Content-Type': 'application/xml' },
+                    body: `<?xml version="1.0" encoding="utf-8"?>
 <D:sync-collection xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
-  <D:sync-token/>
+  <D:sync-token>${token ?? ''}</D:sync-token>
   <D:prop><D:getetag/><C:calendar-data/></D:prop>
 </D:sync-collection>`,
-            });
+                });
+            const before = (await (await syncReport()).text()).match(/<D:sync-token>([^<]+)<\/D:sync-token>/)![1];
+            expect(
+                (
+                    await davRequest('DELETE', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                        email: ctx.alice.user.email,
+                    })
+                ).status,
+            ).toBe(204);
+
+            const res = await syncReport(before);
             expect(res.status).toBe(207);
             const xml = await res.text();
             const tail = xml.slice(xml.indexOf(uri));
             const row = tail.slice(0, tail.indexOf('</D:response>'));
             expect(row).toContain('<D:status>HTTP/1.1 404 Not Found</D:status>');
             expect(row).not.toContain('<D:propstat>');
-            expect(xml).not.toContain('Vanished Sync');
+            expect(xml).not.toContain('Deleted Sync');
+        });
+
+        // A uri is unique as written: nothing folds the case of a name the client chose, so a variant is a
+        // resource of its own and a multiget href that misspells it is a 404.
+        test('a case-variant href names no stored resource, and a case-variant PUT creates a second one', async () => {
+            const stored = 'caldav-Case-Fold.ics';
+            expect((await putIcs(stored, ics('caldav-case-fold@eigen', 'Case Fold'))).status).toBe(201);
+
+            const xml = await (await multiget(['caldav-case-fold.ics'])).text();
+            expect(xml).toContain('404 Not Found');
+            expect(xml).not.toContain('Case Fold');
+
+            expect((await putIcs('caldav-case-put.ics', ics('caldav-case-put@eigen', 'Second'))).status).toBe(201);
+            expect((await putIcs('CALDAV-CASE-PUT.ics', ics('caldav-case-put-2@eigen', 'Third'))).status).toBe(201);
+            expect(await getIcs('caldav-case-put.ics')).toContain('SUMMARY:Second');
+            expect(await getIcs('CALDAV-CASE-PUT.ics')).toContain('SUMMARY:Third');
         });
 
         test('a PUT into a calendar that does not exist is 409 and creates nothing', async () => {
@@ -2067,7 +2078,8 @@ describe('CalDAV', () => {
             const res = await putIcs('anywhere.ics', ics('caldav-no-collection@eigen', 'Nowhere'), {}, missing);
             expect(res.status).toBe(409);
             const home = await getHome(userId);
-            expect(existsSync(join(home.homeDir, 'eigen.calendar', 'calendars', missing))).toBe(false);
+            expect(await home.calendar.getCalendarById(missing)).toBeNull();
+            expect(await home.calendar.listResources(missing)).toHaveLength(0);
         });
 
         test('a comp-filter for a component Eigen does not store matches nothing', async () => {
@@ -2099,34 +2111,6 @@ describe('CalDAV', () => {
             );
             expect(res.status).toBe(207);
             expect(await res.text()).toContain('By UID');
-        });
-
-        test('a multiget href folds to the stored resource the way a GET does', async () => {
-            const stored = 'caldav-Case-Fold.ics';
-            expect((await putIcs(stored, ics('caldav-case-fold@eigen', 'Case Fold'))).status).toBe(201);
-
-            const xml = await (await multiget(['caldav-case-fold.ics'])).text();
-            expect(xml).toContain('Case Fold');
-            expect(xml).toContain(stored);
-            expect(xml).not.toContain('404 Not Found');
-        });
-
-        test('a case-variant PUT rewrites the stored resource under its stored name', async () => {
-            const stored = 'caldav-Case-Put.ics';
-            expect((await putIcs(stored, ics('caldav-case-put@eigen', 'First'))).status).toBe(201);
-
-            const res = await putIcs('CALDAV-CASE-PUT.ics', ics('caldav-case-put@eigen', 'Second'));
-            expect(res.status).toBe(204);
-            expect(res.headers.get('Location')).toBeNull();
-            expect(await getIcs(stored)).toContain('SUMMARY:Second');
-
-            const propfind = await davRequest('PROPFIND', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                email: ctx.alice.user.email,
-                headers: { Depth: '1' },
-            });
-            const xml = await propfind.text();
-            expect(xml).toContain(stored);
-            expect(xml).not.toContain('CALDAV-CASE-PUT.ics');
         });
 
         test('an identical re-PUT changes nothing: no ctag bump, no sync row, an ETag back', async () => {

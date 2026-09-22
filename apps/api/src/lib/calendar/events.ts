@@ -6,9 +6,9 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { and, eq } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import { RRule } from 'rrule';
-import { ApiError, readResourceFile, uriKeyOf } from '../core';
+import { ApiError } from '../core';
 import { sendMail } from '../core/mailer';
-import { addExclusion, buildResource, patchEvent, putOverride, removeExclusion } from '../ical';
+import { addExclusion, buildResource, parseResource, patchEvent, putOverride, removeExclusion } from '../ical';
 import type { EventPatch, WriteContext } from '../ical/ical-component';
 import { isOutOfRangeRecurrenceStart, isSubDailyRrule } from '../ical/recurrence-limits';
 import { storedRecurrenceKey } from '../ical/wall-clock';
@@ -19,57 +19,61 @@ import { eventForFile, validateEventInput } from './event-input';
 import { composeRsvpReply } from './imip';
 import { answeredOccurrence, propagateCancellation, propagateDecline, propagateInvitation } from './invite-propagation';
 import { toEvent } from './mappers';
-import { gateKey, resourcePath } from './resource-store';
+import { resourceBytes } from './resource-store';
 import * as schema from './schema';
 import type { CreateEventArgs } from './types';
 
-// Event mutation over the Calendar facade; a function documented as locked expects its caller to hold the gate.
+// Event mutation over the Calendar facade. See docs/CALENDAR.md § Event writes.
+
+// What an edit needs of the resource it rewrites: its bytes to mutate, its size to credit against the quota.
+const STORED_RESOURCE = {
+    id: schema.resources.id,
+    calendarId: schema.resources.calendarId,
+    uri: schema.resources.uri,
+    uid: schema.resources.uid,
+    ics: schema.resources.ics,
+    size: resourceBytes,
+};
+export type StoredResource = Pick<typeof schema.resources.$inferSelect, 'id' | 'calendarId' | 'uri' | 'uid' | 'ics'> & {
+    size: number;
+};
+
+// The stored component of a resource: the bytes are the truth, so every edit starts by parsing them.
+export function storedComponent(resource: Pick<StoredResource, 'ics'>): ICAL.Component {
+    return parseResource(new TextDecoder().decode(resource.ics));
+}
 
 export function eventById(calendar: Calendar, id: string): CalendarEvent | null {
     const row = calendar.joinedEvents().where(eq(schema.events.id, id)).get();
     return row ? toEvent(row) : null;
 }
 
-// The stored component of a resource, or null when the file is gone under a row that still names it.
-export async function loadResource(
-    calendar: Calendar,
-    calendarId: string,
-    uri: string,
-): Promise<ICAL.Component | null> {
-    const bytes = await readResourceFile(calendar.storage, resourcePath(calendarId, uri));
-    if (!bytes) {
-        calendar.gate.markDirty(gateKey(calendarId, uri));
-        return null;
-    }
-    return calendar.parseResourceFile(bytes);
+export function resourceOf(calendar: Calendar, eventId: string): StoredResource | null {
+    return (
+        calendar.db
+            .select(STORED_RESOURCE)
+            .from(schema.resources)
+            .innerJoin(schema.events, eq(schema.events.resourceId, schema.resources.id))
+            .where(eq(schema.events.id, eventId))
+            .get() ?? null
+    );
 }
 
-export function resourceOf(calendar: Calendar, eventId: string): typeof schema.resources.$inferSelect | null {
-    const row = calendar.db
-        .select()
-        .from(schema.resources)
-        .innerJoin(schema.events, eq(schema.events.resourceId, schema.resources.id))
-        .where(eq(schema.events.id, eventId))
-        .get();
-    return row ? row.resources : null;
-}
-
-// Caller holds the gate; a throw after the rename leaves the key dirty for the next drain.
+// Caller holds the write lock: the bytes it mutates are the bytes the commit overwrites.
 async function editResource(
     calendar: Calendar,
-    resource: typeof schema.resources.$inferSelect,
+    resource: StoredResource,
     mutate: (component: ICAL.Component) => void,
 ): Promise<void> {
-    const component = await loadResource(calendar, resource.calendarId, resource.uri);
-    if (!component) throw new ApiError(404, 'Event not found');
+    const component = storedComponent(resource);
     mutate(component);
     await store.writeResource(calendar, resource.calendarId, resource.uri, component, resource);
 }
 
-// Caller holds the gate and has already resolved the resource this patch means.
+// Caller holds the write lock and has already resolved the resource this patch means.
 export async function patchResource(
     calendar: Calendar,
-    resource: typeof schema.resources.$inferSelect,
+    resource: StoredResource,
     recurrenceKey: string | null,
     patch: EventPatch,
     context: WriteContext,
@@ -95,7 +99,7 @@ export async function createEvent(
     user?: User,
 ): Promise<CalendarEvent> {
     // Who holds the occurrence this write replaces: a cancelled override keeps no guest list of its own.
-    const { created, replaced } = await calendar.gate.run(async () => {
+    const { created, replaced } = await calendar.writeLock.run(async () => {
         const replaced = input.parentEventId
             ? exceptionOf(calendar, input.parentEventId, input.recurrenceDate ?? null)
             : null;
@@ -132,13 +136,13 @@ async function propagateWrite(
     await propagateInvitation(calendar.home, event, user, held, attendees, series ?? undefined, exceptions);
 }
 
-// The locked core every writer of a NEW event shares: the checks that decide WHICH file is written run in it.
+// The locked core every writer of a NEW event shares: the checks that decide WHICH resource is written run in it.
 export async function writeEvent(
     calendar: Calendar,
     calendarId: string,
     input: CreateEventArgs,
 ): Promise<CalendarEvent> {
-    // A write into a directory nobody owns any more would mkdir it back.
+    // A resource under a calendar nobody owns any more would dangle on its foreign key.
     if (!calendar.calendarRow(calendarId)) throw new ApiError(404, 'Calendar not found');
     validateEventInput(input);
     if (input.parentEventId) return writeOverride(calendar, calendarId, input);
@@ -218,7 +222,7 @@ export async function updateEvent(
     input: EventPatch,
     user?: User,
 ): Promise<CalendarEvent> {
-    const { updated, oldAttendees } = await calendar.gate.run(() =>
+    const { updated, oldAttendees } = await calendar.writeLock.run(() =>
         patchStoredEvent(calendar, calendarId, id, input, user),
     );
     calendar.announce(calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
@@ -227,7 +231,7 @@ export async function updateEvent(
     return updated;
 }
 
-// Caller holds the gate, so the row the patch is computed against is the row the write overwrites.
+// Caller holds the write lock, so the row the patch is computed against is the row the write overwrites.
 async function patchStoredEvent(
     calendar: Calendar,
     calendarId: string,
@@ -306,7 +310,8 @@ async function patchStoredEvent(
 }
 
 export async function deleteEvent(calendar: Calendar, calendarId: string, id: string, user?: User): Promise<void> {
-    const existing = await calendar.gate.run(() => eraseStoredEvent(calendar, calendarId, id));
+    const existing = await calendar.writeLock.run(() => eraseStoredEvent(calendar, calendarId, id));
+    if (!existing) return;
 
     const invitation = isInvitationFromOthers(existing, calendar.home.user.email) ? existing.data : null;
     // Only an attendee has an RSVP to give: any client can hang an ORGANIZER on an event.
@@ -330,11 +335,13 @@ export async function deleteEvent(calendar: Calendar, calendarId: string, id: st
     calendar.announce(calendarId, SSEventType.CALENDAR_EVENT_DELETED);
 }
 
-// Caller holds the gate; the row it answers with is what the decline or cancellation mail is composed from.
-async function eraseStoredEvent(calendar: Calendar, calendarId: string, id: string): Promise<CalendarEvent> {
+// Caller holds the write lock; the row it answers with is what the decline or cancellation mail is composed from.
+async function eraseStoredEvent(calendar: Calendar, calendarId: string, id: string): Promise<CalendarEvent | null> {
     const existing = eventById(calendar, id);
+    // Idempotent, and the event is not evaluated further for a resource that no longer exists.
+    if (!existing) return null;
     // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
-    if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
+    if (existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
     const resource = resourceOf(calendar, id);
     if (!resource) throw new ApiError(404, 'Event not found');
 
@@ -355,14 +362,15 @@ async function eraseStoredEvent(calendar: Calendar, calendarId: string, id: stri
     return existing;
 }
 
-// Re-home a resource inside this Home: one rename plus one transaction, so the rows keep their identity.
+// Re-home a resource inside this Home: one transaction, so the rows keep their identity and no window shows
+// the event in both calendars.
 export async function moveEvent(
     calendar: Calendar,
     calendarId: string,
     id: string,
     targetCalendarId: string,
 ): Promise<CalendarEvent> {
-    const moved = await calendar.gate.run(async () => {
+    const moved = await calendar.writeLock.run(async () => {
         const existing = eventById(calendar, id);
         if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
         if (existing.parentEventId) throw new ApiError(400, 'Cannot move a single recurrence occurrence');
@@ -370,60 +378,36 @@ export async function moveEvent(
         if (!calendar.calendarRow(targetCalendarId)) throw new ApiError(404, 'Calendar not found');
         const resource = resourceOf(calendar, id);
         if (!resource) throw new ApiError(404, 'Event not found');
-        // The target holding this UID would throw on its UNIQUE index after the rename.
+        // The target holding this UID would throw on its UNIQUE index.
         if (uidHolder(calendar, targetCalendarId, resource.uid)) {
             throw new ApiError(409, 'The target calendar already holds this event');
         }
-        // A name the target already uses becomes a fresh one; a file no row holds counts as used too, or the rename destroys it.
-        const taken =
-            !!store.resourceRowOf(calendar, targetCalendarId, resource.uri) ||
-            (await calendar.storage.exists(resourcePath(targetCalendarId, resource.uri)));
+        // A name the target already holds becomes a fresh one, or the move would collide on (calendarId, uri).
+        const taken = !!store.resourceRowOf(calendar, targetCalendarId, resource.uri);
         const targetUri = taken ? `${randomUUID()}.ics` : resource.uri;
-        await calendar.storage.moveDurable(
-            resourcePath(calendarId, resource.uri),
-            resourcePath(targetCalendarId, targetUri),
-        );
-        try {
-            calendar.db.transaction((tx) => {
-                const sourceCtag = calendar.bumpCtag(tx, calendarId);
-                calendar.tombstone(tx, calendarId, resource.uri, resource.uriKey, sourceCtag);
-                const targetCtag = calendar.bumpCtag(tx, targetCalendarId);
-                // Moving A→B then B→A must not leave A listing the uri as both a 200 and a 404.
-                tx.delete(schema.resourceTombstones)
-                    .where(
-                        and(
-                            eq(schema.resourceTombstones.calendarId, targetCalendarId),
-                            eq(schema.resourceTombstones.uriKey, uriKeyOf(targetUri)),
-                        ),
-                    )
-                    .run();
-                tx.update(schema.resources)
-                    .set({
-                        calendarId: targetCalendarId,
-                        uri: targetUri,
-                        uriKey: uriKeyOf(targetUri),
-                        resourceCtag: targetCtag,
-                    })
-                    .where(eq(schema.resources.id, resource.id))
-                    .run();
-                tx.update(schema.events)
-                    .set({ calendarId: targetCalendarId })
-                    .where(eq(schema.events.resourceId, resource.id))
-                    .run();
-            });
-        } catch (e) {
-            // A live process rolls its own rename back; if even that fails, both keys settle the pair on the next drain.
-            try {
-                await calendar.storage.moveDurable(
-                    resourcePath(targetCalendarId, targetUri),
-                    resourcePath(calendarId, resource.uri),
-                );
-            } catch {
-                calendar.gate.markDirty(gateKey(calendarId, resource.uri));
-                calendar.gate.markDirty(gateKey(targetCalendarId, targetUri));
-            }
-            throw e;
-        }
+
+        calendar.db.transaction((tx) => {
+            const sourceCtag = calendar.bumpCtag(tx, calendarId);
+            calendar.tombstone(tx, calendarId, resource.uri, sourceCtag);
+            const targetCtag = calendar.bumpCtag(tx, targetCalendarId);
+            // Moving A→B then B→A must not leave A listing the uri as both a 200 and a 404.
+            tx.delete(schema.resourceTombstones)
+                .where(
+                    and(
+                        eq(schema.resourceTombstones.calendarId, targetCalendarId),
+                        eq(schema.resourceTombstones.uri, targetUri),
+                    ),
+                )
+                .run();
+            tx.update(schema.resources)
+                .set({ calendarId: targetCalendarId, uri: targetUri, resourceCtag: targetCtag })
+                .where(eq(schema.resources.id, resource.id))
+                .run();
+            tx.update(schema.events)
+                .set({ calendarId: targetCalendarId })
+                .where(eq(schema.events.resourceId, resource.id))
+                .run();
+        });
         return true;
     });
 

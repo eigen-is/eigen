@@ -283,7 +283,7 @@ describe('inbound message ordering', () => {
         expect((await exceptionOf(calendar))?.status).toBe('cancelled');
     });
 
-    // A cancelled occurrence keeps its revision beside its EXDATE, in the file, so a rewrite of the
+    // A cancelled occurrence keeps its revision beside its EXDATE, in the stored bytes, so a rewrite of the
     // resource for an unrelated reason leaves nothing for an older message to slip through.
     test('a REQUEST redelivered behind the CANCEL that dropped the occurrence survives a rewrite', async () => {
         const { calendar } = await seeded();

@@ -10,12 +10,10 @@ import {
     NOT_A_CALENDAR_FILE,
     NOT_UTF8_FILE,
     type PutResourceResult,
-    readResourceFile,
 } from '../core';
 import { newVCalendar, PRODID, serializeResource, spliceBlocks } from '../ical';
 import { bareName, calAddress, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
-import { resourcePath } from './resource-store';
 import * as schema from './schema';
 
 // Export joins the stored files into one VCALENDAR; import replays one into the PUT seam a device sync takes (docs/CALENDAR.md § iCalendar import / export).
@@ -192,15 +190,18 @@ function exportedUris(calendar: Calendar, calendarId: string, ids?: string[]): s
 // One VCALENDAR, never a concatenation of objects: many readers take only the first object of a stream.
 export async function exportEvents(calendar: Calendar, calendarId: string, ids?: string[]): Promise<string> {
     if (!calendar.calendarRow(calendarId)) throw new ApiError(404, 'Calendar not found');
-    await calendar.gate.ensureDrained();
 
     const uris = exportedUris(calendar, calendarId, ids);
     const zones = new Map<string, string[]>();
     const events: string[][] = [];
     for (const uri of uris) {
-        const bytes = await readResourceFile(calendar.storage, resourcePath(calendarId, uri));
-        // A row whose file is gone is a torn pair the next drain repairs; it is nothing to export.
-        if (bytes) spliceBlocks(new TextDecoder().decode(bytes), zones, events);
+        // Read one resource at a time: the whole calendar's bytes at once is the one query that would not scale.
+        const row = calendar.db
+            .select({ ics: schema.resources.ics })
+            .from(schema.resources)
+            .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uri, uri)))
+            .get();
+        if (row) spliceBlocks(new TextDecoder().decode(row.ics), zones, events);
     }
 
     return [

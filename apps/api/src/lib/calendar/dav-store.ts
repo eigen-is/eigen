@@ -6,31 +6,21 @@ import {
     ApiError,
     computeResourceEtag,
     type DeleteResourceResult,
-    displaceUnindexedFile,
     matchesIfMatch,
     matchesIfNoneMatch,
+    normalizeResourceUri,
     type PutResourceResult,
-    readResourceFile,
-    uriKeyOf,
-    writeResourceFile,
 } from '../core';
 import { parseResource, projectResource, restampResource, serializeResource, stripEigenStamps } from '../ical';
 import { EIGEN, readStamp, recurrenceKeyOf, seriesTimezones, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import type { EventRowInput } from './resource-store';
-import {
-    calendarDir,
-    EVENT_MAX_BYTES,
-    gateKey,
-    resourcePath,
-    sanitizeCalendarId,
-    sanitizeEventUri,
-} from './resource-store';
+import { EVENT_MAX_BYTES, resourceBytes, sanitizeCalendarId, sanitizeEventUri } from './resource-store';
 import * as schema from './schema';
 
-// The store seam over the Calendar facade: every mutation runs inside the write gate, every read drains first.
+// The CalDAV store seam over the Calendar facade. See docs/CALENDAR.md § CalDAV surface.
 
-// The index projection the DAV layer reads for a resource; the etag is the hash the handler quotes.
+// The size lets a REPORT weigh a row against its byte budget before reading the bytes at all.
 export type ResourceRow = {
     id: string;
     uri: string;
@@ -45,22 +35,25 @@ const RESOURCE_ROW = {
     uri: schema.resources.uri,
     uid: schema.resources.uid,
     etag: schema.resources.etag,
-    size: schema.resources.size,
+    size: resourceBytes,
     hasUnindexedRecurrence: schema.resources.hasUnindexedRecurrence,
 };
 
-// What one commit writes: the resource's own columns plus every event row the file projects to.
+// What one commit writes: the resource's own columns plus every event row its bytes project to.
 export type ResourceCommit = {
     id: string;
     calendarId: string;
     uri: string;
     uid: string;
+    ics: Buffer;
     etag: string;
-    mtime: number;
-    size: number;
     rows: EventRowInput[];
     hasUnindexedRecurrence: boolean;
 };
+
+// A uri is unique as written within its calendar; only the Unicode form is folded, so an NFD href still finds its row.
+const atUri = (calendarId: string, uri: string) =>
+    and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uri, normalizeResourceUri(uri)));
 
 // The rows a file projects to, ids from its `X-EIGEN-EVENT-ID` lines: one stored id belongs to one row.
 export function projectRows(
@@ -121,14 +114,10 @@ export function projectRows(
 
 // ---- Index reads: what the protocol handlers sit on ----
 
+// The reads stay async where the shape looks synchronous, so the DAV layer above them is untouched.
+
 export function resourceRowOf(calendar: Calendar, calendarId: string, uri: string): ResourceRow | null {
-    return (
-        calendar.db
-            .select(RESOURCE_ROW)
-            .from(schema.resources)
-            .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uriKey, uriKeyOf(uri))))
-            .get() ?? null
-    );
+    return calendar.db.select(RESOURCE_ROW).from(schema.resources).where(atUri(calendarId, uri)).get() ?? null;
 }
 
 export async function getResourceMeta(
@@ -136,12 +125,10 @@ export async function getResourceMeta(
     calendarId: string,
     uri: string,
 ): Promise<ResourceRow | null> {
-    await calendar.gate.ensureDrained();
     return resourceRowOf(calendar, calendarId, uri);
 }
 
 export async function listResources(calendar: Calendar, calendarId: string): Promise<ResourceRow[]> {
-    await calendar.gate.ensureDrained();
     return calendar.db
         .select(RESOURCE_ROW)
         .from(schema.resources)
@@ -155,11 +142,15 @@ export async function getResourcesByUris(
     uris: string[],
 ): Promise<ResourceRow[]> {
     if (!uris.length) return [];
-    await calendar.gate.ensureDrained();
     return calendar.db
         .select(RESOURCE_ROW)
         .from(schema.resources)
-        .where(and(eq(schema.resources.calendarId, calendarId), inArray(schema.resources.uriKey, uris.map(uriKeyOf))))
+        .where(
+            and(
+                eq(schema.resources.calendarId, calendarId),
+                inArray(schema.resources.uri, uris.map(normalizeResourceUri)),
+            ),
+        )
         .all();
 }
 
@@ -169,7 +160,6 @@ export async function getResourcesInRange(
     calendarId: string,
     matched: string[],
 ): Promise<ResourceRow[]> {
-    await calendar.gate.ensureDrained();
     const unindexed = eq(schema.resources.hasUnindexedRecurrence, true);
     return calendar.db
         .select(RESOURCE_ROW)
@@ -177,7 +167,9 @@ export async function getResourcesInRange(
         .where(
             and(
                 eq(schema.resources.calendarId, calendarId),
-                matched.length ? or(inArray(schema.resources.uriKey, matched.map(uriKeyOf)), unindexed) : unindexed,
+                matched.length
+                    ? or(inArray(schema.resources.uri, matched.map(normalizeResourceUri)), unindexed)
+                    : unindexed,
             ),
         )
         .all();
@@ -189,7 +181,6 @@ export async function getChangedResourcesSince(
     calendarId: string,
     sinceCtag: number,
 ): Promise<ResourceRow[]> {
-    await calendar.gate.ensureDrained();
     return calendar.db
         .select(RESOURCE_ROW)
         .from(schema.resources)
@@ -202,7 +193,6 @@ export async function getDeletedResourcesSince(
     calendarId: string,
     sinceCtag: number,
 ): Promise<{ uri: string }[]> {
-    await calendar.gate.ensureDrained();
     return calendar.db
         .select({ uri: schema.resourceTombstones.uri })
         .from(schema.resourceTombstones)
@@ -217,30 +207,18 @@ export async function getDeletedResourcesSince(
 
 // ---- Bytes ----
 
-// Hashes the bytes just read rather than trusting the row: a durably stale etag would 412 every conditional write forever.
-export async function readResource(
-    calendar: Calendar,
-    calendarId: string,
-    row: { uri: string; etag: string },
-): Promise<{ bytes: Uint8Array; etag: string } | null> {
-    const bytes = await readResourceFile(calendar.storage, resourcePath(calendarId, row.uri));
-    if (!bytes) {
-        calendar.gate.markDirty(gateKey(calendarId, row.uri));
-        return null;
-    }
-    const etag = computeResourceEtag(bytes);
-    if (etag !== row.etag) calendar.gate.markDirty(gateKey(calendarId, row.uri));
-    return { bytes, etag };
-}
-
+// Body and validator are one row by construction: the etag was hashed from these very bytes at the write.
 export async function getResource(
     calendar: Calendar,
     calendarId: string,
     uri: string,
 ): Promise<{ bytes: Uint8Array; etag: string } | null> {
-    await calendar.gate.ensureDrained();
-    const row = resourceRowOf(calendar, calendarId, uri);
-    return row ? readResource(calendar, calendarId, row) : null;
+    const row = calendar.db
+        .select({ ics: schema.resources.ics, etag: schema.resources.etag })
+        .from(schema.resources)
+        .where(atUri(calendarId, uri))
+        .get();
+    return row ? { bytes: row.ics, etag: row.etag } : null;
 }
 
 // ---- Writes ----
@@ -249,7 +227,7 @@ export type PreparedResource = {
     id: string;
     uid: string;
     text: string;
-    bytes: Uint8Array;
+    bytes: Buffer;
     etag: string;
     rows: EventRowInput[];
     hasUnindexedRecurrence: boolean;
@@ -264,7 +242,7 @@ export function prepareResource(
 ): PreparedResource {
     const id = existingId ?? randomUUID();
     const text = serializeResource(resource);
-    const bytes = new TextEncoder().encode(text);
+    const bytes = Buffer.from(new TextEncoder().encode(text));
     return {
         id,
         uid: uidOfResource(resource),
@@ -291,7 +269,9 @@ export function writeResource(
     );
 }
 
-// The caller holds the gate: a throw anywhere after the rename leaves the key dirty for the next drain.
+// The one write every resource path takes: both ceilings judge the bytes right before the transaction that
+// stores them, so a refusal leaves the calendar as it was. `existing` is the resource this one replaces, or a
+// rewrite that shrinks a resource would be refused on a quota its own bytes already hold.
 export async function writePrepared(
     calendar: Calendar,
     calendarId: string,
@@ -299,38 +279,20 @@ export async function writePrepared(
     prepared: PreparedResource,
     existing: { id: string; size: number } | null,
 ): Promise<void> {
-    // Both ceilings judge the bytes before any write intent is recorded, so a refusal leaves nothing for a drain to chase.
     if (prepared.bytes.byteLength > EVENT_MAX_BYTES) throw new ApiError(413, 'Event is too large');
     if (calendar.meteredIngest) {
         await enforceHomeDataQuota(calendar.home.user.id, prepared.bytes.byteLength, existing?.size ?? 0);
     }
-    // A name no row holds can still be a file (dedupe loser, unparseable resource): its bytes move aside rather than be destroyed.
-    if (!existing) await displaceUnindexedFile(calendar.storage, calendarDir(calendarId), uri);
-
-    try {
-        // Only a replacement can land bytes a later stat diff cannot see; a new name is always visible.
-        if (existing) calendar.recordPendingWrite(calendarId, uri);
-        const { mtime, size } = await writeResourceFile(
-            calendar.storage,
-            resourcePath(calendarId, uri),
-            prepared.bytes,
-        );
-        calendar.commitResource({
-            id: prepared.id,
-            calendarId,
-            uri,
-            uid: prepared.uid,
-            etag: prepared.etag,
-            mtime,
-            size,
-            rows: prepared.rows,
-            hasUnindexedRecurrence: prepared.hasUnindexedRecurrence,
-        });
-        calendar.eventsBytes += size - (existing?.size ?? 0);
-    } catch (e) {
-        calendar.gate.markDirty(gateKey(calendarId, uri));
-        throw e;
-    }
+    calendar.commitResource({
+        id: prepared.id,
+        calendarId,
+        uri,
+        uid: prepared.uid,
+        ics: prepared.bytes,
+        etag: prepared.etag,
+        rows: prepared.rows,
+        hasUnindexedRecurrence: prepared.hasUnindexedRecurrence,
+    });
 }
 
 // A UID travels into etags and sync deltas, so an unprintable or endless one is refused rather than stored.
@@ -344,7 +306,7 @@ function isStorableUid(uid: string): boolean {
     return true;
 }
 
-function uidOfResource(resource: ICAL.Component): string {
+export function uidOfResource(resource: ICAL.Component): string {
     return uidOf(resource.getAllSubcomponents('vevent')[0]);
 }
 
@@ -382,7 +344,7 @@ export type PutResourceOptions = {
     import?: { organizer: string | null };
 };
 
-// Preconditions, UID rules, re-stamping and the linked-copy restriction are decided inside the gate, against the state overwritten.
+// Preconditions, UID rules, re-stamping and the linked-copy restriction are decided inside the lock, against the state overwritten.
 export async function putResource(
     calendar: Calendar,
     calendarId: string,
@@ -413,15 +375,21 @@ export async function putResource(
     if (!uid) return { ok: false, error: 'invalid', reason: 'data', message: 'UID is required' };
     if (!isStorableUid(uid)) return { ok: false, error: 'invalid', reason: 'data', message: 'UID is not storable' };
 
-    return calendar.gate.run(async (): Promise<PutResourceResult> => {
-        // Sanitizing an id is not knowing it exists, and a write would otherwise mkdir a calendar nobody owns.
+    return calendar.writeLock.run(async (): Promise<PutResourceResult> => {
+        // Sanitizing an id is not knowing it exists, and a write would otherwise file a resource under nobody's calendar.
         if (!calendar.calendarRow(calendarId)) return { ok: false, error: 'no-collection' };
 
-        // Two racing If-Match PUTs serialize through the gate, so the loser sees the winner's new etag here.
+        // Two racing If-Match PUTs serialize through the lock, so the loser sees the winner's new etag here.
         const existing = calendar.db
-            .select()
+            .select({
+                id: schema.resources.id,
+                uid: schema.resources.uid,
+                ics: schema.resources.ics,
+                etag: schema.resources.etag,
+                size: resourceBytes,
+            })
             .from(schema.resources)
-            .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uriKey, uriKeyOf(uri))))
+            .where(atUri(calendarId, uri))
             .get();
         const currentEtag = existing ? `"${existing.etag}"` : null;
         if (options.ifNoneMatch !== null && matchesIfNoneMatch(options.ifNoneMatch, currentEtag)) {
@@ -431,7 +399,7 @@ export async function putResource(
             return { ok: false, error: 'precondition' };
         }
 
-        // Inside the gate, or two writers of one UID both read "nobody holds it" and the UNIQUE index 500s.
+        // Inside the lock, or two writers of one UID both read "nobody holds it" and the UNIQUE index 500s.
         const holder = calendar.db
             .select({ id: schema.resources.id, uri: schema.resources.uri })
             .from(schema.resources)
@@ -444,11 +412,8 @@ export async function putResource(
         if (holder && holder.id !== existing?.id) return { ok: false, error: 'uid-conflict', conflictUri: holder.uri };
         if (existing && uid !== existing.uid) return { ok: false, error: 'uid-conflict' };
 
-        // A case-variant PUT rewrites the existing file in place, or the old one strands on a case-sensitive fs and reconcile reverts the write.
-        const storedUri = existing?.uri ?? uri;
-        const storedBytes = existing
-            ? await readResourceFile(calendar.storage, resourcePath(calendarId, storedUri))
-            : null;
+        // The stored bytes decide the linked-copy rule, the stamps to carry over and the no-op below.
+        const storedBytes = existing?.ics ?? null;
         const stored = storedBytes ? parseResource(new TextDecoder().decode(storedBytes)) : null;
 
         let resource: ICAL.Component;
@@ -485,7 +450,7 @@ export async function putResource(
 
         // Size and quota are only known once the stamps and stored alarms decided the bytes, so both map to protocol errors here, not a 500.
         try {
-            await writePrepared(calendar, calendarId, storedUri, prepared, existing ?? null);
+            await writePrepared(calendar, calendarId, normalizeResourceUri(uri), prepared, existing ?? null);
         } catch (e) {
             if (e instanceof ApiError && e.status === 413) return { ok: false, error: 'too-large' };
             if (e instanceof ApiError && e.status === 507) return { ok: false, error: 'quota' };
@@ -498,17 +463,23 @@ export async function putResource(
     });
 }
 
+// An unknown uri is a 404, deliberately unlike REST's idempotent no-op.
 export async function deleteResource(
     calendar: Calendar,
     calendarId: string,
     uri: string,
     pre: { ifMatch: string | null },
 ): Promise<DeleteResourceResult> {
-    return calendar.gate.run(async (): Promise<DeleteResourceResult> => {
+    return calendar.writeLock.run(async (): Promise<DeleteResourceResult> => {
         const row = calendar.db
-            .select()
+            .select({
+                id: schema.resources.id,
+                calendarId: schema.resources.calendarId,
+                uri: schema.resources.uri,
+                etag: schema.resources.etag,
+            })
             .from(schema.resources)
-            .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uriKey, uriKeyOf(uri))))
+            .where(atUri(calendarId, uri))
             .get();
         if (!row) return { ok: false, error: 'not-found' };
         if (pre.ifMatch !== null && !matchesIfMatch(pre.ifMatch, `"${row.etag}"`)) {

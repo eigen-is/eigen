@@ -323,7 +323,7 @@ describe('Calendar transfer routes', () => {
     });
 
     // The Home holds a UID once. Two imports of one file into two calendars both read "nobody holds it"
-    // before either writes, so the rule has to be decided where the write is, inside the gate.
+    // before either writes, so the rule has to be decided where the write is, inside the write lock.
     test('two concurrent imports of one UID into two calendars leave one series', async () => {
         const uid = `race-${randomUUID()}@other`;
         const file = vcal(vevent(uid, 'Raced', '20260430T090000Z', '20260430T100000Z'));
@@ -409,7 +409,7 @@ describe('Calendar transfer routes', () => {
         spy.mockRestore();
     });
 
-    // R19: the file is the truth, so an import keeps every line the client wrote and drops scheduling only.
+    // R19: the stored bytes are the truth, so an import keeps every line the client wrote and drops scheduling only.
     // Everything here is something Eigen does not model — ATTACH, CATEGORIES, GEO, RDATE, a rich VALARM.
     test('a kitchen-sink event imports with every line the file wrote, scheduling aside', async () => {
         const uid = `kitchen-${randomUUID()}@client`;
@@ -1498,7 +1498,7 @@ describe('Calendar transfer routes', () => {
 
             const res = await exportRequest(alice, alice.id, exportCalendarId, [override.id]);
             expect(res.status).toBe(200);
-            // The name comes from the row the id named, not from a re-parse of the file being served.
+            // The name comes from the row the id named, not from a re-parse of the resource being served.
             expect(res.headers.get('Content-Disposition')).toBe('attachment; filename="Series moved.ics"');
             const text = await res.text();
             expect(text).toContain('SUMMARY:Series moved');

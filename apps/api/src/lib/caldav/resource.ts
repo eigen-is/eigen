@@ -3,16 +3,16 @@ import type { Calendar } from '../calendar/calendar';
 import { davDeleteResponse, davPutResponse, davResourceResponse } from '../dav/write-result';
 import { calendarHref } from './discovery';
 
-// A thin adapter: the calendar file store owns the preconditions, the UID rules and the ceiling (docs/CALENDAR.md § CalDAV surface).
+// A thin adapter: the calendar store owns the preconditions, the UID rules and the ceiling (docs/CALENDAR.md § CalDAV surface).
 
-// GET /dav/calendars/:ownerId/:calendarId/:uri — the file IS the resource. A uri the index doesn't know is a 404.
+// GET /dav/calendars/:ownerId/:calendarId/:uri — the stored bytes ARE the resource. A uri no row holds is a 404.
 export async function handleGet(calendar: Calendar, calendarId: string, uri: string): Promise<Response> {
     const resource = await calendar.getResource(calendarId, uri);
     if (!resource) return new Response('Not Found', { status: 404 });
     return davResourceResponse(resource.bytes, resource.etag, ICS_CONTENT_TYPE);
 }
 
-// PUT /dav/calendars/:ownerId/:calendarId/:uri — everything happens inside putResource's gate.
+// PUT /dav/calendars/:ownerId/:calendarId/:uri — everything happens inside putResource's write lock.
 export async function handlePut(
     calendar: Calendar,
     ownerId: string,

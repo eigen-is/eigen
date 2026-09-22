@@ -120,7 +120,7 @@ describe('Calendar transfer into a team calendar', () => {
     });
 
     // Free-busy is the level that may learn when a calendar is busy and nothing else, so it exports nothing:
-    // the file carries every SUMMARY and DESCRIPTION the range view redacts for it.
+    // the stored bytes carry every SUMMARY and DESCRIPTION the range view redacts for it.
     test('a member whose share is free-busy exports nothing', async () => {
         const uid = `team-freebusy-${randomUUID()}@other`;
         const secret = await createCalendar('Team board', 'write');

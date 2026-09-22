@@ -1,13 +1,13 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { rmSync } from 'node:fs';
-import { CALENDAR_TEST_ROOT, makeCalendar } from '../calendar-test-helpers';
+import { CALENDAR_TEST_ROOT, makeCalendar, resourceTextOf } from '../calendar-test-helpers';
 
 describe('calendar restart', () => {
     beforeAll(() => {
         rmSync(CALENDAR_TEST_ROOT, { recursive: true, force: true });
     });
 
-    test('a calendar and its event come back over the same directory, ctag included', async () => {
+    test('a calendar and its event come back over the same database, ctag included', async () => {
         const harness = await makeCalendar();
         const cal = await harness.instance.createCalendar({ name: 'Work', color: '#2563eb' });
         const event = await harness.instance.createEvent(cal.id, {
@@ -17,6 +17,8 @@ describe('calendar restart', () => {
             allDay: false,
         });
         const ctag = (await harness.instance.getCalendarById(cal.id))!.ctag;
+        const uri = (await harness.instance.getRawEvents(cal.id))[0].uri;
+        const stored = await resourceTextOf(harness.instance, cal.id, uri);
 
         const restarted = await harness.reopen();
         try {
@@ -27,6 +29,8 @@ describe('calendar restart', () => {
             const rows = await restarted.instance.getRawEvents(cal.id);
             expect(rows.map((r) => r.title)).toEqual(['Standup']);
             expect(rows[0].uid).toBe(event.uid);
+            // The bytes are the resource, so a restart serves back exactly what the write stored.
+            expect(await resourceTextOf(restarted.instance, cal.id, uri)).toBe(stored);
         } finally {
             await restarted.close();
         }

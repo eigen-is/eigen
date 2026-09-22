@@ -203,7 +203,7 @@ export async function receiveInvitation(calendar: Calendar, payload: ReceiveInvi
     };
     const outcome = await unlessRefused(
         payload.uid,
-        () => calendar.gate.run(() => decideInboundRequest(calendar, relayedRequest(payload), link)),
+        () => calendar.writeLock.run(() => decideInboundRequest(calendar, relayedRequest(payload), link)),
         REFUSED,
     );
     if (outcome.kind === 'dropped') {
@@ -235,7 +235,7 @@ export async function receiveInvitationUpdate(
     const linked = await unlessRefused(
         orgEventId,
         () =>
-            calendar.gate.run(async () => {
+            calendar.writeLock.run(async () => {
                 const linked = findLinkedEvent(calendar, orgEventId, orgUserId);
                 if (!linked) return null;
                 // One occurrence attaches as an exception, as a REQUEST with a RECURRENCE-ID does; a full update would collapse the series.
@@ -261,7 +261,7 @@ function exceptionKeyOf(linked: CalendarEvent, recurrenceDate: string | null | u
     return recurrenceDate;
 }
 
-// Caller holds the gate. False when the message is a replay the stored copy already outranks.
+// Caller holds the write lock. False when the message is a replay the stored copy already outranks.
 async function applyInvitationUpdate(
     calendar: Calendar,
     linked: CalendarEvent,
@@ -269,8 +269,7 @@ async function applyInvitationUpdate(
 ): Promise<boolean> {
     const resource = events.resourceOf(calendar, linked.id);
     if (!resource) return false;
-    const component = await events.loadResource(calendar, resource.calendarId, resource.uri);
-    if (!component) return false;
+    const component = events.storedComponent(resource);
     // A copy that is one occurrence of a series this Home does not hold is keyed by its RECURRENCE-ID.
     const key = linked.recurrenceDate;
     if (!isNewerRevision(payload, storedRevision(component, key))) return false;
@@ -329,7 +328,7 @@ function notifyInvitationUpdated(
     });
 }
 
-// Caller holds the gate.
+// Caller holds the write lock.
 async function applyInvitationException(
     calendar: Calendar,
     linked: CalendarEvent,
@@ -338,8 +337,7 @@ async function applyInvitationException(
     const recurrenceDate = recurrenceKeyForSeries(payload.recurrenceDate, payload.recurrenceInstant, linked.timezone);
     const resource = events.resourceOf(calendar, linked.id);
     if (!resource) return false;
-    const component = await events.loadResource(calendar, resource.calendarId, resource.uri);
-    if (!component) return false;
+    const component = events.storedComponent(resource);
     if (!isNewerRevision(payload, storedRevision(component, recurrenceDate))) return false;
 
     const existing = events.exceptionOf(calendar, linked.id, recurrenceDate);
@@ -390,7 +388,7 @@ export async function receiveImipRequest(calendar: Calendar, parsed: ParsedEvent
     };
     const outcome = await unlessRefused(
         parsed.uid,
-        () => calendar.gate.run(() => decideInboundRequest(calendar, parsed, link)),
+        () => calendar.writeLock.run(() => decideInboundRequest(calendar, parsed, link)),
         REFUSED,
     );
     if (outcome.kind === 'dropped') {
@@ -400,7 +398,7 @@ export async function receiveImipRequest(calendar: Calendar, parsed: ParsedEvent
     settleInboundRequest(calendar, outcome, link);
 }
 
-// The broadcast and the notification an applied REQUEST owes, run after the gate is released.
+// The broadcast and the notification an applied REQUEST owes, run after the write lock is released.
 function settleInboundRequest(calendar: Calendar, outcome: InboundRequestOutcome, link: InvitationLink): string | null {
     if (outcome.kind === 'dropped') return null;
     if (outcome.kind === 'created') {
@@ -420,7 +418,7 @@ function settleInboundRequest(calendar: Calendar, outcome: InboundRequestOutcome
     return outcome.event.id;
 }
 
-// Home-wide and inside the gate, so two concurrent deliveries never file two masters for one UID. Caller holds the gate.
+// Home-wide and inside the write lock, so two concurrent deliveries never file two masters for one UID. Caller holds the write lock.
 async function decideInboundRequest(
     calendar: Calendar,
     parsed: ParsedEvent,
@@ -445,7 +443,7 @@ async function decideInboundRequest(
         // A copy that is one occurrence of an unheld series gives way to the series once the organizer invites this Home to all of it.
         if (linked.recurrenceDate && !parsed.recurrenceDate) {
             const resource = events.resourceOf(calendar, linked.id);
-            const component = resource ? await events.loadResource(calendar, resource.calendarId, resource.uri) : null;
+            const component = resource ? events.storedComponent(resource) : null;
             if (component && !isNewerRevision(parsed, storedRevision(component, linked.recurrenceDate))) {
                 return { kind: 'dropped', reason: 'nothing newer to apply' };
             }
@@ -462,7 +460,7 @@ async function decideInboundRequest(
     if (master) {
         // The organizer may claim an event nobody linked, but only when it names the verified sender.
         const resource = events.resourceOf(calendar, master.id);
-        const component = resource ? await events.loadResource(calendar, resource.calendarId, resource.uri) : null;
+        const component = resource ? events.storedComponent(resource) : null;
         if (!resource || !component || storedOrganizerAddress(component) !== sender) {
             return { kind: 'dropped', reason: 'the stored event names another organizer' };
         }
@@ -476,7 +474,7 @@ async function decideInboundRequest(
     return fileNewInvitation(calendar, parsed, link);
 }
 
-// One naming an occurrence files as a standalone event: the guest was invited to that instance, not the series. Caller holds the gate.
+// One naming an occurrence files as a standalone event: the guest was invited to that instance, not the series. Caller holds the write lock.
 async function fileNewInvitation(
     calendar: Calendar,
     parsed: ParsedEvent,
@@ -510,11 +508,11 @@ async function fileNewInvitation(
     return { kind: 'created', event, payload };
 }
 
-// Caller holds the gate. Same file, same row ids; the link and the guest list come from the message.
+// Caller holds the write lock. Same file, same row ids; the link and the guest list come from the message.
 async function adoptAsInvitation(
     calendar: Calendar,
     master: CalendarEvent,
-    resource: typeof schema.resources.$inferSelect,
+    resource: events.StoredResource,
     component: ICAL.Component,
     parsed: ParsedEvent,
     link: InvitationLink,
@@ -546,17 +544,16 @@ export async function cancelInvitationOccurrence(
     recurrenceInstant: Date | null | undefined,
     revision: Revision,
 ): Promise<void> {
-    // The event the write landed on, so the announcement and the notice after the gate name the instance.
+    // The event the write landed on, so the announcement and the notice after the lock name the instance.
     const cancelled = await unlessRefused(
         orgEventId,
         () =>
-            calendar.gate.run(async () => {
+            calendar.writeLock.run(async () => {
                 const linked = findLinkedEvent(calendar, orgEventId, orgUserId);
                 if (!linked) return null;
                 const resource = events.resourceOf(calendar, linked.id);
                 if (!resource) return null;
-                const component = await events.loadResource(calendar, resource.calendarId, resource.uri);
-                if (!component) return null;
+                const component = events.storedComponent(resource);
                 const key = recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, linked.timezone);
                 // A copy that IS the cancelled occurrence has no series to exclude it from: it goes.
                 if (!exceptionKeyOf(linked, key)) {
@@ -594,7 +591,7 @@ function notifyInvitationCancelled(
 }
 
 export async function removeInvitation(calendar: Calendar, orgEventId: string, orgUserId: string): Promise<void> {
-    const linked = await calendar.gate.run(async () => {
+    const linked = await calendar.writeLock.run(async () => {
         const linked = findLinkedEvent(calendar, orgEventId, orgUserId);
         const resource = linked && events.resourceOf(calendar, linked.id);
         if (!linked || !resource) return null;
@@ -639,8 +636,8 @@ async function updateAttendeeStatus(
     email: string,
     status: Attendee['status'],
 ): Promise<void> {
-    // The guest list is read inside the gate, so two RSVPs never merge into a list the other replaced.
-    await calendar.gate.run(async () => {
+    // The guest list is read inside the write lock, so two RSVPs never merge into a list the other replaced.
+    await calendar.writeLock.run(async () => {
         const event = events.eventById(calendar, eventId);
         if (!event?.data?.attendees) return;
         const resource = events.resourceOf(calendar, eventId);
@@ -668,7 +665,7 @@ async function rsvpForOccurrence(
     recurrenceInstant: Date | null | undefined,
     restoreCancelled: boolean,
 ): Promise<void> {
-    const calendarId = await calendar.gate.run(async () => {
+    const calendarId = await calendar.writeLock.run(async () => {
         const parent = events.eventById(calendar, eventId);
         if (!parent) throw new ApiError(404, 'Event not found');
 
@@ -716,7 +713,7 @@ async function rsvpForOccurrence(
     if (calendarId) calendar.announce(calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
 }
 
-// Caller holds the gate. `revision` is the CANCEL's, so a stale redelivery can be ordered against it.
+// Caller holds the write lock. `revision` is the CANCEL's, so a stale redelivery can be ordered against it.
 async function removeOccurrence(
     calendar: Calendar,
     eventId: string,
@@ -779,7 +776,7 @@ export async function rsvp(
         if (!recurrenceDate) throw new ApiError(400, 'Invalid recurrenceDate');
         const status = input.remove ? 'declined' : input.status;
         if (input.remove) {
-            await calendar.gate.run(() => removeOccurrence(calendar, eventId, recurrenceDate));
+            await calendar.writeLock.run(() => removeOccurrence(calendar, eventId, recurrenceDate));
             calendar.announce(event.calendarId, SSEventType.CALENDAR_EVENT_UPDATED);
         } else {
             await rsvpForOccurrence(calendar, eventId, user.email, input.status, recurrenceDate, null, true);
@@ -809,7 +806,7 @@ export async function rsvp(
 }
 
 async function removeThisAndFuture(calendar: Calendar, eventId: string, recurrenceDate: string): Promise<void> {
-    await calendar.gate.run(async () => {
+    await calendar.writeLock.run(async () => {
         const event = events.eventById(calendar, eventId);
         if (!event) throw new ApiError(404, 'Event not found');
         if (!event.rrule) throw new ApiError(400, 'Not a recurring event');
