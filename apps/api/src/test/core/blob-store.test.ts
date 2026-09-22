@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { computeResourceEtag, nextSyncGen, normalizeResourceUri, sanitizeResourceUri } from '../../lib/core/blob-store';
+import { computeResourceEtag, newSyncGen, normalizeResourceUri, sanitizeResourceUri } from '../../lib/core/blob-store';
 
 const SUFFIX = '.vcf';
 
@@ -20,6 +20,12 @@ describe('sanitizeResourceUri', () => {
         expect(sanitizeResourceUri('a.b@c.vcf', SUFFIX)).toBe('a.b@c.vcf');
     });
 
+    test('accepts an accented name and hands back the one composed spelling', () => {
+        expect(sanitizeResourceUri('café.vcf', SUFFIX)).toBe('café.vcf');
+        expect(sanitizeResourceUri('café.vcf'.normalize('NFD'), SUFFIX)).toBe('café.vcf');
+        expect(sanitizeResourceUri('会議.vcf', SUFFIX)).toBe('会議.vcf');
+    });
+
     test('rejects traversal, hidden, slash, trailing-space and control chars', () => {
         expect(sanitizeResourceUri('../x.vcf', SUFFIX)).toBeNull();
         expect(sanitizeResourceUri('.hidden.vcf', SUFFIX)).toBeNull();
@@ -37,8 +43,8 @@ describe('sanitizeResourceUri', () => {
     test('rejects empty and over-long names', () => {
         expect(sanitizeResourceUri('', SUFFIX)).toBeNull();
         expect(sanitizeResourceUri(`${'a'.repeat(256)}.vcf`, SUFFIX)).toBeNull();
-        // The cap is 200 (spec § 4) so writeAtomic's `.`-prefixed temp name stays under NAME_MAX. The bound
-        // lives in the length check alone (the regex owns only the charset): 200 chars pass, 201 fail.
+        // The cap is 200 bytes (spec § 4) so writeAtomic's `.`-prefixed temp name stays under NAME_MAX. The
+        // bound lives in the length check alone (the regex owns only the charset): 200 bytes pass, 201 fail.
         expect(sanitizeResourceUri(`${'a'.repeat(210)}.vcf`, SUFFIX)).toBeNull();
         expect(sanitizeResourceUri(`${'a'.repeat(196)}.vcf`, SUFFIX)).toBe(`${'a'.repeat(196)}.vcf`);
         expect(sanitizeResourceUri(`${'a'.repeat(197)}.vcf`, SUFFIX)).toBeNull();
@@ -53,26 +59,11 @@ describe('computeResourceEtag', () => {
     });
 });
 
-describe('nextSyncGen', () => {
-    test('a rebuild that lost the stored generation starts from the wall clock, not from 1', () => {
-        expect(nextSyncGen(undefined, 1_700_000_000_000)).toBe(1_700_000_000);
-    });
-
-    test('a stored generation ahead of the clock still advances by one', () => {
-        expect(nextSyncGen(1_700_000_005, 1_700_000_000_000)).toBe(1_700_000_006);
-    });
-
-    test('a generation the clock has overtaken jumps to the clock', () => {
-        expect(nextSyncGen(2, 1_700_000_000_000)).toBe(1_700_000_000);
-    });
-
-    test('two rebuilds inside one second never repeat while the stored generation survives', () => {
-        const first = nextSyncGen(undefined, 1_700_000_000_000);
-        expect(nextSyncGen(first, 1_700_000_000_500)).toBe(first + 1);
-    });
-
-    test('the one repeat left takes two lost generations inside the same second', () => {
-        expect(nextSyncGen(undefined, 1_700_000_000_999)).toBe(nextSyncGen(undefined, 1_700_000_000_000));
-        expect(nextSyncGen(undefined, 1_700_000_001_000)).toBe(nextSyncGen(undefined, 1_700_000_000_000) + 1);
+describe('newSyncGen', () => {
+    test('is the wall clock in seconds, so a recreated database cannot reissue a low generation', () => {
+        const before = Math.floor(Date.now() / 1000);
+        const gen = newSyncGen();
+        expect(gen).toBeGreaterThanOrEqual(before);
+        expect(gen).toBeLessThanOrEqual(Math.floor(Date.now() / 1000));
     });
 });

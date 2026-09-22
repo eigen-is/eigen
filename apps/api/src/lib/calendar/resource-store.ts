@@ -1,14 +1,12 @@
-import { Database } from 'bun:sqlite';
-import * as fs from 'node:fs';
 import type { CalendarItem } from '@workspace/lib/types/calendar';
 import { and, eq, sql } from 'drizzle-orm';
-import { type Tx as DatabaseTx, PATHS, sanitizeResourceUri } from '../core';
+import { type Tx as DatabaseTx, PATHS, readBlobTableSize, sanitizeResourceUri } from '../core';
 import type { LocalFilesystem } from '../core/local-filesystem';
+import { CALENDAR_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 
 // The calendar-shaped half of the store over `core/blob-store.ts`. See docs/CALENDAR.md § Storage model.
 
-// One home's transaction handle; every seam that writes inside the caller's transaction takes it.
 export type Tx = DatabaseTx<typeof schema>;
 
 const ICS_SUFFIX = '.ics';
@@ -28,22 +26,14 @@ export function sanitizeEventUri(raw: string): string | null {
     return sanitizeResourceUri(raw, ICS_SUFFIX);
 }
 
-// Sizes Calendar for a Home nobody booted; `homeFs` is rooted at the home folder, not at the calendar root.
-// Read-write on purpose, following mount/helpers.ts readMountTotalSize: a read-only open of a WAL database
-// whose owner is not holding it open fails outright.
+// `homeFs` is rooted at the home folder, not at the calendar root.
 export async function readCalendarTotalSize(homeFs: LocalFilesystem): Promise<number> {
-    const dbPath = homeFs.absolutePath(PATHS.CALENDAR.DB);
-    if (!fs.existsSync(dbPath)) return 0;
-    const db = new Database(dbPath, { readwrite: true, create: false });
-    try {
-        db.run('PRAGMA busy_timeout = 5000;');
-        const row = db
-            .query<{ events: number }, []>('SELECT COALESCE(SUM(length(ics)), 0) AS events FROM resources')
-            .get();
-        return row?.events ?? 0;
-    } finally {
-        db.close();
-    }
+    return readBlobTableSize(
+        homeFs.absolutePath(PATHS.CALENDAR.DB),
+        'resources',
+        'ics',
+        CALENDAR_DB_CONFIG.currentVersion,
+    );
 }
 
 // ctag advances on each change, syncGen rotates on a recreated calendar so stale sync tokens are refused.
@@ -69,8 +59,7 @@ export function indexResource(tx: Tx, resource: typeof schema.resources.$inferIn
         .values({ id: resource.id, calendarId: resource.calendarId, ...row })
         .onConflictDoUpdate({ target: schema.resources.id, set: row })
         .run();
-    tx.delete(schema.events).where(eq(schema.events.resourceId, resource.id)).run();
-    for (const event of rows) tx.insert(schema.events).values(event).run();
+    reindexEvents(tx, resource.id, rows);
     // A resource at this uri is alive, so one written over a deleted name drops its stale removal.
     tx.delete(schema.resourceTombstones)
         .where(
@@ -80,4 +69,10 @@ export function indexResource(tx: Tx, resource: typeof schema.resources.$inferIn
             ),
         )
         .run();
+}
+
+// The projected rows are replaced wholesale, so an event a rewrite no longer carries leaves no row behind.
+export function reindexEvents(tx: Tx, resourceId: string, rows: EventRowInput[]): void {
+    tx.delete(schema.events).where(eq(schema.events.resourceId, resourceId)).run();
+    for (const event of rows) tx.insert(schema.events).values(event).run();
 }

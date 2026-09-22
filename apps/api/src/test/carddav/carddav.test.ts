@@ -484,9 +484,29 @@ describe('CardDAV', () => {
         expect(await getRes.text()).toBe(vcard(uid));
     });
 
-    // sanitizeCardUri forbids every non-pchar char (a valid card name is `[A-Za-z0-9._@-]*.vcf`), so no storable
-    // card ever needs encoding — the emitted-href encoder is proven directly: pchar-legal chars stay raw, the
-    // rest still percent-encode. This pins that the @ flip narrowed the escaped set, it did not disable it.
+    test('an accented card name round-trips, and its decomposed spelling finds the same row', async () => {
+        // The stored name is the composed one, so the emitted href is its percent-encoded form and the NFD
+        // spelling a macOS client sends folds onto the same row rather than creating a second resource.
+        const uid = randomUUID();
+        const nfc = encodeURIComponent('café.vcf');
+        const nfd = encodeURIComponent('café.vcf'.normalize('NFD'));
+
+        const putRes = await putCard(nfc, vcard(uid), { 'If-None-Match': '*' });
+        expect(putRes.status).toBe(201);
+        expect(putRes.headers.get('Location')).toBe(`/dav/addressbooks/${userId}/contacts/${nfc}`);
+
+        const composed = await getCard(nfc);
+        expect(composed.status).toBe(200);
+        expect(await composed.text()).toBe(vcard(uid));
+
+        const decomposed = await getCard(nfd);
+        expect(decomposed.status).toBe(200);
+        expect(await decomposed.text()).toBe(vcard(uid));
+    });
+
+    // A card name may carry accents but never a separator or a space, so the emitted-href encoder is proven
+    // directly: pchar-legal chars stay raw, the rest still percent-encode. This pins that the @ flip narrowed
+    // the escaped set, it did not disable it.
     test('the shared href encoder leaves pchar-legal chars raw but still encodes the rest', () => {
         expect(encodePathSegment('A@B.vcf')).toBe('A@B.vcf');
         expect(encodePathSegment("a:b+c,d;e=f&g$h!i'j(k)l*m")).toBe("a:b+c,d;e=f&g$h!i'j(k)l*m");

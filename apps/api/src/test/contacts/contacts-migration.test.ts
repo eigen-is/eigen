@@ -4,9 +4,10 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { is, sql } from 'drizzle-orm';
 import { getTableConfig, SQLiteTable } from 'drizzle-orm/sqlite-core';
+import { readContactsTotalSize } from '../../lib/contacts/card-store';
 import { CONTACTS_DB_CONFIG } from '../../lib/contacts/db-config';
 import * as schema from '../../lib/contacts/schema';
-import { ManagedDatabase } from '../../lib/core';
+import { LocalFilesystem, ManagedDatabase, PATHS } from '../../lib/core';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-contacts-mig-${Date.now()}`);
 let counter = 0;
@@ -289,5 +290,16 @@ describe('Contacts index-schema migrations', () => {
         expect(mdb.db.all(sql`PRAGMA foreign_key_check`)).toEqual([]);
 
         await mdb.close();
+    });
+});
+
+describe('cold sizing', () => {
+    // The admin Users page sizes a home nobody booted, so it reads a book that may still be at the old shape.
+    test('a book still at v4 sizes as 0 instead of selecting a column it does not have yet', async () => {
+        const homeDir = join(TEST_DIR, `home-${counter++}`);
+        mkdirSync(join(homeDir, PATHS.CONTACTS.ROOT), { recursive: true });
+        seedV4Database(join(homeDir, PATHS.CONTACTS.DB));
+
+        expect(await readContactsTotalSize(new LocalFilesystem(homeDir))).toBe(0);
     });
 });

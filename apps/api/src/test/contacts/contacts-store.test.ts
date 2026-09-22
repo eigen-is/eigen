@@ -7,6 +7,7 @@ import { getServerSettings, updateServerSettings } from '../../lib/config/server
 import type { Contacts } from '../../lib/contacts/contacts';
 import * as contactsSchema from '../../lib/contacts/schema';
 import { CONTACTS_TEST_ROOT, cardTextOf, makeContacts, stageAvatar, validContact } from '../contacts-test-helpers';
+import { breakTransaction } from '../db-test-helpers';
 import { ensureServer } from '../setup';
 
 afterAll(() => {
@@ -17,21 +18,6 @@ afterAll(() => {
 
 const rowOf = (db: Contacts['db'], id: string) =>
     db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
-
-// The one failure a blob write has left: the transaction carrying it rolls back. The throw goes inside the
-// callback, so SQLite really does undo the statements — a throw before it would prove nothing. Returns the undo.
-function breakTransaction(contacts: Contacts): () => void {
-    const db = contacts.db as unknown as { transaction: (cb: (tx: unknown) => unknown) => unknown };
-    const original = db.transaction;
-    db.transaction = (cb) =>
-        original.call(db, (tx: unknown) => {
-            cb(tx);
-            throw new Error('transaction boom');
-        });
-    return () => {
-        db.transaction = original;
-    };
-}
 
 describe('a write that does not commit', () => {
     test('an update whose transaction throws leaves the previous bytes, etag and byte count', async () => {

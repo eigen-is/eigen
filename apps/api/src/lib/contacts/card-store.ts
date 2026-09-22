@@ -1,16 +1,14 @@
-import { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
-import * as fs from 'node:fs';
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import { eq, sql } from 'drizzle-orm';
-import { computeResourceEtag, type Tx as DatabaseTx, PATHS, sanitizeResourceUri } from '../core';
+import { computeResourceEtag, type Tx as DatabaseTx, PATHS, readBlobTableSize, sanitizeResourceUri } from '../core';
 import type { LocalFilesystem } from '../core/local-filesystem';
 import type { ParsedCard } from '../vcard/types';
+import { CONTACTS_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 
 // The card-shaped half of the store over `core/blob-store.ts`. See docs/CONTACTS.md § Storage model.
 
-// One book's transaction handle; every seam that writes inside the caller's transaction takes it.
 export type Tx = DatabaseTx<typeof schema>;
 
 const CARD_SUFFIX = '.vcf';
@@ -19,28 +17,42 @@ export const CARD_MAX_BYTES = 5_242_880;
 // A card's stored size is the length of its bytes; no column beside them can drift from them.
 export const cardBytes = sql<number>`length(${schema.contacts.vcard})`;
 
+// Never the blob: a contact list that read every card's bytes would carry the whole book into memory.
+export const CONTACT_ROW = {
+    id: schema.contacts.id,
+    firstName: schema.contacts.firstName,
+    lastName: schema.contacts.lastName,
+    eigenId: schema.contacts.eigenId,
+    data: schema.contacts.data,
+    etag: schema.contacts.etag,
+};
+export type ContactRow = { [K in keyof typeof CONTACT_ROW]: (typeof schema.contacts.$inferSelect)[K] };
+
+// What purgeCard needs of the row it removes: its name for the tombstone, its photo for the cache sweep.
+export const PURGED_CARD = {
+    id: schema.contacts.id,
+    uri: schema.contacts.uri,
+    eigenId: schema.contacts.eigenId,
+    etag: schema.contacts.etag,
+    data: schema.contacts.data,
+};
+export type PurgedCard = { [K in keyof typeof PURGED_CARD]: (typeof schema.contacts.$inferSelect)[K] };
+
 export function sanitizeCardUri(raw: string): string | null {
     return sanitizeResourceUri(raw, CARD_SUFFIX);
 }
 
-// Sizes Contacts for a Home nobody booted; `homeFs` is rooted at the home folder, not at the contacts root.
-// Read-write on purpose, following mount/helpers.ts readMountTotalSize: a read-only open of a WAL database
-// whose owner is not holding it open fails outright.
+// `homeFs` is rooted at the home folder, not at the contacts root.
 export async function readContactsTotalSize(homeFs: LocalFilesystem): Promise<number> {
     // The avatars are counted whether or not any card is: a photo outlives the card it was cropped for.
-    const total = await homeFs.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.AVATARS}`);
-    const dbPath = homeFs.absolutePath(PATHS.CONTACTS.DB);
-    if (!fs.existsSync(dbPath)) return total;
-    const db = new Database(dbPath, { readwrite: true, create: false });
-    try {
-        db.run('PRAGMA busy_timeout = 5000;');
-        const row = db
-            .query<{ cards: number }, []>('SELECT COALESCE(SUM(length(vcard)), 0) AS cards FROM contacts')
-            .get();
-        return total + (row?.cards ?? 0);
-    } finally {
-        db.close();
-    }
+    const avatars = await homeFs.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.AVATARS}`);
+    const cards = readBlobTableSize(
+        homeFs.absolutePath(PATHS.CONTACTS.DB),
+        'contacts',
+        'vcard',
+        CONTACTS_DB_CONFIG.currentVersion,
+    );
+    return avatars + cards;
 }
 
 // Hashed by the photo bytes, so a superseded photo's cache falls out of reference and the sweep reclaims it.
@@ -108,11 +120,9 @@ export function labelColorFor(nameKey: string): string {
 // The columns a card write carries; the ctag + timestamps are stamped inside the write transaction.
 export type CardRowInput = Omit<typeof schema.contacts.$inferInsert, 'cardCtag' | 'createdAt' | 'updatedAt'>;
 
-// The row writeCard stores: its projection is always there, because writeCard fills the avatar URL into it.
-export type CardWriteRow = CardRowInput & { data: CardData };
-
-// Everything a card's own bytes decide. The caller owns the id, the uri and the server-owned eigenId.
-export type CardProjection = Omit<CardWriteRow, 'id' | 'uri' | 'eigenId'>;
+// Everything a card's own bytes decide; `data` is always there, because writeCard fills the avatar URL into
+// it. The caller owns the id, the uri and the server-owned eigenId.
+export type CardProjection = Omit<CardRowInput, 'id' | 'uri' | 'eigenId' | 'data'> & { data: CardData };
 
 // `avatar` is the cache URL only — inline photo bytes never enter the index.
 export type CardData = NonNullable<(typeof schema.contacts.$inferSelect)['data']>;
@@ -148,7 +158,8 @@ export function cardUpdateSet(row: CardRowInput, ctag: number) {
 }
 
 // A missing label is minted with its deterministic color, and its id rides back out so the caller emits LABEL_CREATED after the transaction.
-export function syncCardLabels(tx: Tx, contactId: string, categories: string[], createdLabelIds: string[]): void {
+export function syncCardLabels(tx: Tx, contactId: string, categories: string[]): string[] {
+    const createdLabelIds: string[] = [];
     const labelIds = new Set<string>();
     for (const name of categories) {
         const nameKey = normalizeLabelName(name);
@@ -174,25 +185,21 @@ export function syncCardLabels(tx: Tx, contactId: string, categories: string[], 
     for (const labelId of labelIds) {
         tx.insert(schema.contactsToLabels).values({ contactId, labelId }).run();
     }
+    return createdLabelIds;
 }
 
 // Runs inside the transaction that bumped the ctag, so a card write and a label fan-out leave one shape behind.
-export function indexCard(
-    tx: Tx,
-    row: CardRowInput,
-    categories: string[],
-    ctag: number,
-    createdLabelIds: string[],
-): void {
+export function indexCard(tx: Tx, row: CardRowInput, categories: string[], ctag: number): string[] {
     tx.insert(schema.contacts)
         .values({ ...row, cardCtag: ctag })
         .onConflictDoUpdate({ target: schema.contacts.id, set: cardUpdateSet(row, ctag) })
         .run();
 
-    syncCardLabels(tx, row.id, categories, createdLabelIds);
+    const createdLabelIds = syncCardLabels(tx, row.id, categories);
 
     // A card at this uri is alive, so one written over a deleted name drops its stale removal.
     tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uri, row.uri)).run();
+    return createdLabelIds;
 }
 
 // The pure half of a card write: bytes in, the projection they decide out. `avatar` is the cache URL the
@@ -202,17 +209,14 @@ export function prepareCard(
     parsed: ParsedCard,
     avatar: string,
     fallbackUid: string,
-): { projection: CardProjection; categories: string[] } {
+): CardProjection {
     return {
-        projection: {
-            uid: parsed.uid ?? fallbackUid,
-            vcard: Buffer.from(bytes),
-            firstName: parsed.firstName.trim(),
-            lastName: parsed.lastName.trim(),
-            isGroup: parsed.isGroup,
-            data: parsedToData(parsed, avatar),
-            etag: computeResourceEtag(bytes),
-        },
-        categories: parsed.categories,
+        uid: parsed.uid ?? fallbackUid,
+        vcard: Buffer.from(bytes),
+        firstName: parsed.firstName.trim(),
+        lastName: parsed.lastName.trim(),
+        isGroup: parsed.isGroup,
+        data: parsedToData(parsed, avatar),
+        etag: computeResourceEtag(bytes),
     };
 }

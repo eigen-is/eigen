@@ -4,6 +4,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { Calendar } from '../../lib/calendar/calendar';
 import * as schema from '../../lib/calendar/schema';
 import { CALENDAR_TEST_ROOT, makeCalendar, resourceTextOf } from '../calendar-test-helpers';
+import { breakTransaction } from '../db-test-helpers';
 import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
@@ -39,21 +40,6 @@ const storedBytes = (calendar: Calendar): number =>
 
 async function defaultCalendarId(harness: TestHome<Calendar>): Promise<string> {
     return (await harness.instance.getCalendars())[0].id;
-}
-
-// The one failure a blob write has left: the transaction carrying it rolls back. The throw goes inside the
-// callback, so SQLite really does undo the statements — a throw before it would prove nothing. Returns the undo.
-function breakTransaction(calendar: Calendar): () => void {
-    const db = calendar.db as unknown as { transaction: (cb: (tx: unknown) => unknown) => unknown };
-    const original = db.transaction;
-    db.transaction = (cb) =>
-        original.call(db, (tx: unknown) => {
-            cb(tx);
-            throw new Error('transaction boom');
-        });
-    return () => {
-        db.transaction = original;
-    };
 }
 
 describe('calendar blob store', () => {

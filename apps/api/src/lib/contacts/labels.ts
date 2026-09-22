@@ -33,7 +33,7 @@ export function labelNamesFor(contacts: Contacts, labelIds: string[]): string[] 
 }
 
 // Projected to the DTO: nameKey and the timestamps are index bookkeeping, not part of the wire contract.
-export async function getLabels(contacts: Contacts): Promise<Label[]> {
+export function getLabels(contacts: Contacts): Label[] {
     return contacts.db
         .select({ id: schema.labels.id, name: schema.labels.name, color: schema.labels.color })
         .from(schema.labels)
@@ -110,7 +110,7 @@ function rewriteCardCategories(
     let bytes = 0;
     for (const { row, was, categories } of rewrites) {
         bytes += row.vcard.byteLength - was;
-        indexCard(tx, row, categories, ctag, createdLabelIds);
+        createdLabelIds.push(...indexCard(tx, row, categories, ctag));
     }
     return { bytes, contactIds: rewrites.map((r) => r.row.id), createdLabelIds };
 }
@@ -168,7 +168,7 @@ export async function updateLabel(contacts: Contacts, id: string, label: Omit<La
 
         let fanout = NO_FAN_OUT;
         try {
-            contacts.db.transaction((tx) => {
+            fanout = contacts.db.transaction((tx) => {
                 tx.update(schema.labels)
                     .set({ name: newName, nameKey, color: label.color, updatedAt: sql`unixepoch()` })
                     .where(eq(schema.labels.id, id))
@@ -176,11 +176,10 @@ export async function updateLabel(contacts: Contacts, id: string, label: Omit<La
 
                 // The label row and every member card move together, so no card is ever left on the old name.
                 // Matched case-insensitively: CATEGORIES may carry a different case than the label's stored name.
-                if (renamed) {
-                    fanout = rewriteCardCategories(contacts, tx, members, (names) =>
-                        names.map((n) => (normalizeLabelName(n) === before.nameKey ? newName : n)),
-                    );
-                }
+                if (!renamed) return NO_FAN_OUT;
+                return rewriteCardCategories(contacts, tx, members, (names) =>
+                    names.map((n) => (normalizeLabelName(n) === before.nameKey ? newName : n)),
+                );
             });
         } catch (e) {
             rethrowDuplicateLabelName(e);
@@ -202,13 +201,13 @@ export async function deleteLabel(contacts: Contacts, id: string): Promise<void>
         if (!label) return;
         const members = labelMemberIds(contacts, [id]);
 
-        let fanout = NO_FAN_OUT;
-        contacts.db.transaction((tx) => {
-            fanout = rewriteCardCategories(contacts, tx, members, (names) =>
+        const fanout = contacts.db.transaction((tx) => {
+            const rewritten = rewriteCardCategories(contacts, tx, members, (names) =>
                 names.filter((n) => normalizeLabelName(n) !== label.nameKey),
             );
             // The junction rows cascade with the label row (FK ON DELETE CASCADE).
             tx.delete(schema.labels).where(eq(schema.labels.id, id)).run();
+            return rewritten;
         });
         settleFanOut(contacts, fanout);
         contacts.emitLabel(SSEventType.LABEL_DELETED, id);

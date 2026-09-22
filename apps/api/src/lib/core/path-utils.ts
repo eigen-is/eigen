@@ -2,12 +2,16 @@ import * as path from 'node:path';
 import { ApiError } from './errors';
 
 // The one rule for a client-chosen name that becomes a path segment: no `/`, no `..`, no leading dot, no
-// control character, ASCII-only so it is byte-identical in every Unicode normal form, and short enough that
-// `writeAtomic`'s `.`-prefixed temp name stays under NAME_MAX.
-const SAFE_PATH_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._@-]*$/;
+// space, no control character. Unicode letters, marks and digits are in — the callers fold to NFC first,
+// so one spelling reaches the filesystem.
+const SAFE_PATH_SEGMENT = /^[\p{L}\p{N}][\p{L}\p{M}\p{N}._@-]*$/u;
+
+// Budgeted in bytes, not characters, so `writeAtomic`'s `.`-prefixed temp name stays under NAME_MAX (255)
+// for an accented name too.
+const SEGMENT_MAX_BYTES = 200;
 
 export function isSafePathSegment(value: string): boolean {
-    return value.length <= 200 && SAFE_PATH_SEGMENT.test(value);
+    return Buffer.byteLength(value) <= SEGMENT_MAX_BYTES && SAFE_PATH_SEGMENT.test(value);
 }
 
 export function resolveWithinBase(baseDir: string, key: string): string {

@@ -3,6 +3,8 @@ import type { Contacts } from '../contacts/contacts';
 import { davDeleteResponse, davPutResponse, davResourceResponse } from '../dav/write-result';
 import { bookHref } from './discovery';
 
+// A thin adapter: the contacts store owns the preconditions, the UID rules and the ceiling (docs/CONTACTS.md § CardDAV surface).
+
 // GET /dav/addressbooks/:ownerId/contacts/:uri — the stored bytes ARE the resource. An unknown uri is a 404.
 export async function handleGetCard(contacts: Contacts, uri: string): Promise<Response> {
     const card = await contacts.getCard(uri);

@@ -5,8 +5,9 @@ import { join } from 'node:path';
 import { is, sql } from 'drizzle-orm';
 import { getTableConfig, SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { CALENDAR_DB_CONFIG } from '../../lib/calendar/db-config';
+import { readCalendarTotalSize } from '../../lib/calendar/resource-store';
 import * as schema from '../../lib/calendar/schema';
-import { ManagedDatabase } from '../../lib/core';
+import { LocalFilesystem, ManagedDatabase, PATHS } from '../../lib/core';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-calendar-mig-${Date.now()}`);
 let counter = 0;
@@ -148,23 +149,50 @@ describe('calendar database migrations', () => {
     });
 
     // The DDL creates the indexes and the drizzle schema is what a query plan is read against, so a query
-    // can only be proven to seek if the two name the same set.
-    test('the migration and the schema name the same indexes', async () => {
+    // can only be proven to seek if the two declare the same set — uniqueness included, because a uri or a
+    // uid the DDL left non-unique lets a duplicate in that the schema says cannot exist.
+    test('the migration and the schema declare the same indexes, unique flags included', async () => {
         const mdb = new ManagedDatabase(CALENDAR_DB_CONFIG, nextDbPath());
         await mdb.open(0);
 
+        const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
         const declared = Object.values(schema)
             .filter((table) => is(table, SQLiteTable))
-            .flatMap((table) => getTableConfig(table).indexes.map((index) => index.config.name))
-            .sort();
+            .flatMap((table) =>
+                getTableConfig(table).indexes.map((index) => ({
+                    name: index.config.name,
+                    unique: !!index.config.unique,
+                })),
+            )
+            .sort(byName);
+        // Every table in the file, not only the declared ones, so an index on a table the schema forgot shows up.
         const created = mdb.db
             .all<{
                 name: string;
-            }>(sql.raw("SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'"))
-            .map((row) => row.name)
-            .sort();
+            }>(sql.raw("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"))
+            .flatMap((table) =>
+                mdb.db.all<{ name: string; unique: number; origin: string }>(
+                    sql.raw(`PRAGMA index_list("${table.name}")`),
+                ),
+            )
+            // 'c' is an index the DDL created; 'pk' and 'u' are the implicit ones a PRIMARY KEY or a UNIQUE
+            // column constraint mints, which no drizzle index() declares.
+            .filter((row) => row.origin === 'c')
+            .map((row) => ({ name: row.name, unique: row.unique === 1 }))
+            .sort(byName);
 
         expect(created).toEqual(declared);
         await mdb.close();
+    });
+});
+
+describe('cold sizing', () => {
+    // The admin Users page sizes a home nobody booted, so it reads a calendar that may still be at the old shape.
+    test('a calendar still at v1 sizes as 0 instead of selecting a table it does not have yet', async () => {
+        const homeDir = join(TEST_DIR, `home-${counter++}`);
+        mkdirSync(join(homeDir, PATHS.CALENDAR.ROOT), { recursive: true });
+        seedV1Database(join(homeDir, PATHS.CALENDAR.DB));
+
+        expect(await readCalendarTotalSize(new LocalFilesystem(homeDir))).toBe(0);
     });
 });

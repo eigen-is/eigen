@@ -29,11 +29,14 @@ const isEigenName = (name: string) => name.startsWith('X-EIGEN-');
 
 // Groups are excluded, as import skips them; every line but Eigen's own re-emits from its own source bytes.
 export async function exportCards(contacts: Contacts, ids?: string[]): Promise<string> {
-    const rows = contacts.db
-        .select({ id: schema.contacts.id, isGroup: schema.contacts.isGroup })
-        .from(schema.contacts)
-        .all();
-    const targets = ids ?? rows.filter((row) => !row.isGroup).map((row) => row.id);
+    const targets =
+        ids ??
+        contacts.db
+            .select({ id: schema.contacts.id })
+            .from(schema.contacts)
+            .where(eq(schema.contacts.isGroup, false))
+            .all()
+            .map((row) => row.id);
 
     const cards: string[] = [];
     for (const id of targets) {

@@ -1,3 +1,5 @@
+import { Database } from 'bun:sqlite';
+import * as fs from 'node:fs';
 import { isSafePathSegment } from './path-utils';
 
 // The blob is the truth; every other column is a projection and is rebuildable from it. The shape both DAV domains share.
@@ -13,10 +15,33 @@ export function sanitizeResourceUri(raw: string, suffix: string): string | null 
     return uri.endsWith(suffix) && isSafePathSegment(uri) ? uri : null;
 }
 
-// A rebuild that lost the stored value would reissue its generation, so the wall clock in seconds floors it.
-export function nextSyncGen(stored: number | undefined, now: number): number {
-    return Math.max((stored ?? 0) + 1, Math.floor(now / 1000));
+// A recreated database must never reissue a generation a client has seen, so the wall clock in seconds seeds it.
+export function newSyncGen(): number {
+    return Math.floor(Date.now() / 1000);
 }
+
+// Sizes one domain's blobs for a Home nobody booted; the admin usage view sizes every home at once, and
+// booting a Home apiece is seconds each. Read-write on purpose, following mount/helpers.ts readMountTotalSize:
+// a read-only open of a WAL database whose owner is not holding it open fails outright.
+export function readBlobTableSize(dbPath: string, table: string, column: string, currentVersion: number): number {
+    if (!fs.existsSync(dbPath)) return 0;
+    const db = new Database(dbPath, { readwrite: true, create: false });
+    try {
+        db.run('PRAGMA busy_timeout = 5000;');
+        const stamp = db.query<{ version: number }, []>('SELECT version FROM __schema_version WHERE id = 1').get();
+        // The pending migration drops these bytes, and the column it would read may not exist yet either.
+        if (!stamp || stamp.version < currentVersion) return 0;
+        const row = db
+            .query<{ total: number }, []>(`SELECT COALESCE(SUM(length(${column})), 0) AS total FROM ${table}`)
+            .get();
+        return row?.total ?? 0;
+    } finally {
+        db.close();
+    }
+}
+
+// The two conditional headers both DAV write paths evaluate inside their write lock.
+export type ResourcePreconditions = { ifMatch: string | null; ifNoneMatch: string | null };
 
 export function computeResourceEtag(bytes: Uint8Array): string {
     return new Bun.CryptoHasher('sha256').update(bytes).digest('hex');

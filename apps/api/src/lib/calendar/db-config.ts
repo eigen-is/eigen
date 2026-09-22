@@ -41,16 +41,14 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
             `),
         },
         {
-            // Only `calendars` and `shared_calendars` carry rows no blob holds — a calendar's name, colors and
-            // share grants, the last of which other Homes point at. Everything else is dropped and rewritten.
+            // Migrates a v1 database, the only shape ever deployed: only `calendars` and `shared_calendars`
+            // carry rows no blob holds — a calendar's name, colors and share grants, the last of which other
+            // Homes point at. v1's event tables are dropped and the blob shape is written fresh.
             version: 2,
             up: (db) =>
                 db.exec(`
-                DROP TABLE IF EXISTS pending_writes;
-                DROP TABLE IF EXISTS resource_tombstones;
                 DROP TABLE IF EXISTS events;
                 DROP TABLE IF EXISTS event_tombstones;
-                DROP TABLE IF EXISTS resources;
 
                 CREATE TABLE calendars_v2 (
                     id TEXT PRIMARY KEY,

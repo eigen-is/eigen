@@ -114,8 +114,8 @@ async function replaceHomeFolder(
 // is renamed aside as `{id}.pre-restore-{ts}`, and a failure after that point leaves the incomplete
 // folder as `{id}.failed-restore-{ts}` and puts the original back. The home is refused on every
 // surface for the duration (markHomeRestoring, which is also the lock against a second restore) and
-// its collab sockets are told to reload; the first load after the mark clears runs migrations,
-// reconciles contacts and refreshes shared-with-me.
+// its collab sockets are told to reload; the first load after the mark clears runs migrations, reseeds
+// each domain's byte counters from the restored rows and refreshes shared-with-me.
 export async function restoreHome(
     artifactName: string,
     ownerId: string,
