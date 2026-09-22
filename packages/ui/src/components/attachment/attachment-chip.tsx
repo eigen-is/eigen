@@ -30,6 +30,7 @@ export function AttachmentChip({
     return (
         <SimpleAttachmentChip
             filename={subject?.drive?.details?.originalName || info?.name || fileName}
+            mimeType={info?.mimeType}
             attachmentKey={fileName}
             downloadUrl={info?.downloadUrl ?? '#'}
             thumbnailUrl={info?.thumbnailUrl}

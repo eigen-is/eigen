@@ -1,6 +1,5 @@
 import { EML_MAX_BYTES } from '@workspace/lib/constants/mail';
 import { useEmlPreview } from '@workspace/lib/drive';
-import { formatFileSize } from '@workspace/lib/format';
 import { useMailEmlPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { MailPartRef } from '@workspace/lib/types/file-subject';
@@ -61,7 +60,8 @@ function PreviewAttachments({ data }: { data: EmlPreview }) {
                 {data.attachments.map((att, index) => (
                     <SimpleAttachmentChip
                         key={`${index}-${att.filename ?? ''}`}
-                        filename={`${mailAttachmentName(att, index)} · ${formatFileSize(att.size)}`}
+                        filename={mailAttachmentName(att, index)}
+                        mimeType={att.contentType}
                     />
                 ))}
             </div>

@@ -14,7 +14,12 @@ export function DraftAttachments({ attachments, driveReferences, onRemove, onRem
     return (
         <div className="flex flex-wrap gap-2 app-gutter-x pb-2">
             {attachments.map((att, i) => (
-                <SimpleAttachmentChip key={att.key} filename={att.filename} onRemove={() => onRemove(i)} />
+                <SimpleAttachmentChip
+                    key={att.key}
+                    filename={att.filename}
+                    mimeType={att.contentType}
+                    onRemove={() => onRemove(i)}
+                />
             ))}
             {driveReferences.map((ref) => (
                 <ReferenceAttachmentChip key={ref.id} reference={ref} onRemove={() => onRemoveReference(ref.id)} />

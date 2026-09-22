@@ -1,10 +1,14 @@
-import { Download, Paperclip } from 'lucide-react';
+import { DRIVE_TYPE_FILE } from '@workspace/lib/types/drive';
+import { Download } from 'lucide-react';
 import type { MouseEvent, ReactNode } from 'react';
 import { cn } from '../../lib/utils';
+import { getFileIcon } from '../drive/file-presentation';
 import { AttachmentChipRemoveButton, CHIP_BASE_CLASS } from './attachment-chip-shared';
 
 type SimpleAttachmentChipProps = {
     filename: string;
+    // Drives the file icon together with the name; without it only the name-based formats (.ics, .vcf, .eml) resolve.
+    mimeType?: string;
     // What a host's context menu resolves back to the file it names — the stored file name for a
     // chat or card attachment, where the label is the original name instead. Defaults to the label.
     attachmentKey?: string;
@@ -31,6 +35,7 @@ export function attachmentKeyAt(target: EventTarget | null): string | null {
 // One visual style, varying actions: remove (X), download (icon), or open-preview (onClick).
 export function SimpleAttachmentChip({
     filename,
+    mimeType = '',
     attachmentKey,
     downloadUrl,
     onClick,
@@ -55,7 +60,10 @@ export function SimpleAttachmentChip({
                 <img src={thumbnailUrl} alt={filename} className="h-10 w-10 object-cover rounded-l-md shrink-0" />
             ) : null}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5">
-                {!thumbnailUrl && <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />}
+                {!thumbnailUrl &&
+                    getFileIcon(mimeType, DRIVE_TYPE_FILE, filename, {
+                        className: 'h-3 w-3 text-muted-foreground shrink-0',
+                    })}
                 <span className="truncate max-w-[200px]">{filename}</span>
                 {showDownloadIcon && <Download className="h-3 w-3 text-muted-foreground shrink-0" />}
             </div>

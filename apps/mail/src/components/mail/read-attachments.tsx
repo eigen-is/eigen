@@ -48,6 +48,7 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
                         key={info.key}
                         attachmentKey={info.key}
                         filename={info.name}
+                        mimeType={info.mimeType}
                         downloadUrl={info.downloadUrl}
                         onClick={(e) => {
                             e.preventDefault();

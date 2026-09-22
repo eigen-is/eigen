@@ -18,7 +18,14 @@ export function AttachmentDraftChips({ items, onRemove, className }: AttachmentD
             {items.map((item, i) => {
                 const remove = onRemove ? () => onRemove(i) : undefined;
                 if (item instanceof File) {
-                    return <SimpleAttachmentChip key={`file-${i}`} filename={item.name} onRemove={remove} />;
+                    return (
+                        <SimpleAttachmentChip
+                            key={`file-${i}`}
+                            filename={item.name}
+                            mimeType={item.type}
+                            onRemove={remove}
+                        />
+                    );
                 }
                 if (typeof item === 'string') {
                     return <SimpleAttachmentChip key={`name-${item}`} filename={item} onRemove={remove} />;
@@ -26,7 +33,14 @@ export function AttachmentDraftChips({ items, onRemove, className }: AttachmentD
                 if ('driveType' in item) {
                     return <ReferenceAttachmentChip key={`ref-${item.id}`} reference={item} onRemove={remove} />;
                 }
-                return <SimpleAttachmentChip key={`path-${item.id}`} filename={item.name} onRemove={remove} />;
+                return (
+                    <SimpleAttachmentChip
+                        key={`path-${item.id}`}
+                        filename={item.name}
+                        mimeType={item.mimeType}
+                        onRemove={remove}
+                    />
+                );
             })}
         </div>
     );
