@@ -572,6 +572,22 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(rowlen['3']).toBeGreaterThan(100);
     });
 
+    test('wrapped text sizes its row the same whether plain, rich, hyperlinked or a formula result', async () => {
+        const text = 'wrapped text long enough to need lines';
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Wrap');
+        ws.getColumn(1).width = 4;
+        ws.getCell('A1').value = text;
+        ws.getCell('A2').value = { richText: [{ text: 'wrapped text ' }, { text: 'long enough to need lines' }] };
+        ws.getCell('A3').value = { text, hyperlink: 'https://example.com' };
+        ws.getCell('A4').value = { formula: 'LOWER(B4)', result: text };
+        ws.getCell('A5').value = 'one\ntwo\nthree';
+        ws.getCell('A6').value = true;
+        for (let row = 1; row <= 6; row++) ws.getCell(row, 1).alignment = { wrapText: true };
+        const rowlen = (await parseWorkbook(workbook))[0].config?.rowlen ?? {};
+        expect(rowlen).toEqual({ '0': 164, '1': 164, '2': 164, '3': 164, '4': 85, '5': 26 });
+    });
+
     test('convert preserves formulas in celldata', async () => {
         const buffer = await buildXlsxBuffer([
             { a1: 'A1', value: 1 },
