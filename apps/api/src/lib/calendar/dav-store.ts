@@ -450,7 +450,8 @@ export async function putResource(
 
         // Size and quota are only known once the stamps and stored alarms decided the bytes, so both map to protocol errors here, not a 500.
         try {
-            await writePrepared(calendar, calendarId, normalizeResourceUri(uri), prepared, existing ?? null);
+            // sanitizeEventUri already accepted this spelling, so the stored uri is the NFC one.
+            await writePrepared(calendar, calendarId, uri, prepared, existing ?? null);
         } catch (e) {
             if (e instanceof ApiError && e.status === 413) return { ok: false, error: 'too-large' };
             if (e instanceof ApiError && e.status === 507) return { ok: false, error: 'quota' };
