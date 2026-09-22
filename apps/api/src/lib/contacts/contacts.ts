@@ -291,8 +291,7 @@ export class Contacts {
     }
 
     // One transaction, so the ctag bump, the blob, the label junction and the tombstone clear settle together.
-    // internal — used by contacts/*.ts
-    commitCard(opts: { row: CardRowInput; categories: string[] }): void {
+    private commitCard(opts: { row: CardRowInput; categories: string[] }): void {
         const createdLabelIds: string[] = [];
         let delta = 0;
         this.db.transaction((tx) => {
@@ -357,14 +356,18 @@ export class Contacts {
         return claimed ? '' : eigenId;
     }
 
+    // The one write every card path takes: both ceilings judge the bytes right before the transaction that
+    // stores them, so a refusal leaves the book as it was. `creditBytes` is the stored card this one replaces,
+    // or a rewrite that shrinks a card would be refused on a quota its own bytes already hold.
     // internal — used by contacts/*.ts
-    async enforceCardBudget(bytes: Uint8Array, creditBytes: number): Promise<void> {
-        if (bytes.byteLength > CARD_MAX_BYTES) {
+    async writeCard(opts: { row: CardRowInput; categories: string[]; creditBytes: number }): Promise<void> {
+        if (opts.row.vcard.byteLength > CARD_MAX_BYTES) {
             throw new ApiError(413, 'Contact card is too large');
         }
         if (this.meteredIngest) {
-            await enforceHomeDataQuota(this.home.user.id, bytes.byteLength, creditBytes);
+            await enforceHomeDataQuota(this.home.user.id, opts.row.vcard.byteLength, opts.creditBytes);
         }
+        this.commitCard(opts);
     }
 
     private labelNamesFor(labelIds: string[]): string[] {
@@ -401,11 +404,10 @@ export class Contacts {
                 ),
             );
 
-            await this.enforceCardBudget(bytes, 0);
-
             // The projection stores the promoted webp's hashed URL, or '' when there is no photo.
             const avatar = staged ? await this.promoteAvatarCache(id, staged) : '';
-            this.commitCard({
+            await this.writeCard({
+                creditBytes: 0,
                 row: {
                     id,
                     uri,
@@ -490,14 +492,12 @@ export class Contacts {
 
             const bytes = new TextEncoder().encode(mergeVCard(card, edits));
 
-            // The stored card's bytes are credited: a rewrite that shrinks a card is never refused on quota.
-            await this.enforceCardBudget(bytes, row.vcard.byteLength);
-
             let avatar = contact.avatar ?? '';
             if (avatarChanged) {
                 avatar = staged ? await this.promoteAvatarCache(id, staged) : '';
             }
-            this.commitCard({
+            await this.writeCard({
+                creditBytes: row.vcard.byteLength,
                 row: {
                     id,
                     uri: row.uri,

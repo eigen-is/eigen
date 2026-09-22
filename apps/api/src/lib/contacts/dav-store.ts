@@ -175,23 +175,25 @@ export async function putCard(
         // A body the server rewrote is not the client's revision, so no validator goes back and the client re-reads (RFC 4918 § 9.7.2).
         const verbatim = stored === body && !merged;
 
-        // The stored bytes credit the card this one replaces; a raised 413/507 maps to a typed result.
-        try {
-            await contacts.enforceCardBudget(bytes, existing?.size ?? 0);
-        } catch (e) {
-            if (e instanceof ApiError && e.status === 413) return { ok: false, error: 'too-large' };
-            if (e instanceof ApiError && e.status === 507) return { ok: false, error: 'quota' };
-            throw e;
-        }
-
         const id = existing?.id ?? randomUUID();
         const isSelf = eigenId === contacts.home.user.id;
 
         // Regenerated only when the hash-named file is missing, so an unchanged-photo re-PUT keeps its cache.
         const projectionAvatar = await deriveCardPhotoCache(contacts, id, parsed.photo);
         const { projection, categories } = prepareCard(bytes, parsed, projectionAvatar, parsed.uid);
-        // sanitizeCardUri already accepted this spelling, so the stored uri is the NFC one.
-        contacts.commitCard({ row: { id, uri, eigenId, ...projection }, categories });
+        // The stored bytes credit the card this one replaces; a raised 413/507 maps to a typed result.
+        try {
+            // sanitizeCardUri already accepted this spelling, so the stored uri is the NFC one.
+            await contacts.writeCard({
+                row: { id, uri, eigenId, ...projection },
+                categories,
+                creditBytes: existing?.size ?? 0,
+            });
+        } catch (e) {
+            if (e instanceof ApiError && e.status === 413) return { ok: false, error: 'too-large' };
+            if (e instanceof ApiError && e.status === 507) return { ok: false, error: 'quota' };
+            throw e;
+        }
 
         // A self-card PUT renames the user org-wide; a DAV PUT stages no avatar, so the pushed bytes are the derived webp cache.
         if (isSelf) {
