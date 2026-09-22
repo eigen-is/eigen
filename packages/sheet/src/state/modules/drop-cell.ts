@@ -13,7 +13,7 @@ import { execFunctionGroup, execfunction } from './formula-exec';
 import { colLocation, rowLocation } from './location';
 import { jfrefreshgrid } from './refresh';
 import { normalizeSelection } from './selection';
-import { ID_CARD_NUMBER, isRealNum } from './validation';
+import { ID_CARD_NUMBER, isPlainNumber } from './validation';
 
 function toPx(v: number) {
     return `${v}px`;
@@ -1959,8 +1959,14 @@ export function updateDropCell(ctx: Context) {
             const col = axisIsRow ? outer : pos;
             const cell = applyData[step];
 
+            // The source cell this one repeats (modulo the copy-block length): its formula
+            // shifts by the distance to it, its border and validation carry over.
+            const srcAxis = reverse ? copyEndAxis - (step % csLen) : copyStartAxis + (step % csLen);
+            const bd_r = axisIsRow ? srcAxis : outer;
+            const bd_c = axisIsRow ? outer : srcAxis;
+
             if (cell?.f != null) {
-                const offset = reverse ? -(step + 1) : step + 1;
+                const offset = pos - srcAxis;
                 const f = `=${functionCopy(cell.f, axisIsRow ? offset : 0, axisIsRow ? 0 : offset)}`;
                 const v = execfunction(ctx, f, row, col, undefined, undefined, undefined, undefined, resolver);
 
@@ -1969,25 +1975,17 @@ export function updateDropCell(ctx: Context) {
                 [, cell.v, cell.f] = v;
 
                 if (cell.v != null) {
-                    if (isRealNum(cell.v) && !ID_CARD_NUMBER.test(`${cell.v}`)) {
+                    if (isPlainNumber(cell.v) && !ID_CARD_NUMBER.test(`${cell.v}`)) {
                         cell.m = numberDisplay(Number(cell.v), cell.ct?.fa);
 
                         cell.ct = cell.ct || { fa: 'General', t: 'n' };
                     } else {
-                        const mask = parseCellInput(cell.v);
-                        cell.m = mask[0].toString();
-                        [, cell.ct] = mask;
+                        [cell.m, cell.ct] = parseCellInput(cell.v);
                     }
                 }
             }
 
             d[row][col] = cell || null;
-
-            // border: map the applied cell back to the source cell it was cloned
-            // from (modulo the copy-block length) to carry its border over.
-            const bd_axis = reverse ? copyEndAxis - (step % csLen) : copyStartAxis + (step % csLen);
-            const bd_r = axisIsRow ? bd_axis : outer;
-            const bd_c = axisIsRow ? outer : bd_axis;
 
             carrySides(cfg.borderInfo, row, col, borderInfoCompute[`${bd_r}_${bd_c}`]);
 
@@ -2025,6 +2023,23 @@ export function updateDropCell(ctx: Context) {
 
     // refresh the grid
     jfrefreshgrid(ctx, d, ctx.selections);
+}
+
+// Ctrl+D / Ctrl+R: copy the top row (or left column) of the range over the rest of it.
+export function fillFromEdge(ctx: Context, range: SingleRange, direction: 'down' | 'right') {
+    const { row, column } = range;
+    if (direction === 'down') {
+        if (row[0] === row[1]) return;
+        dropCellCache.copyRange = { row: [row[0], row[0]], column };
+        dropCellCache.applyRange = { row: [row[0] + 1, row[1]], column };
+    } else {
+        if (column[0] === column[1]) return;
+        dropCellCache.copyRange = { row, column: [column[0], column[0]] };
+        dropCellCache.applyRange = { row, column: [column[0] + 1, column[1]] };
+    }
+    dropCellCache.direction = direction;
+    dropCellCache.applyType = '0';
+    updateDropCell(ctx);
 }
 
 export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTMLDivElement) {

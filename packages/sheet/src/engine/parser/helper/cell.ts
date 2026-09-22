@@ -77,49 +77,49 @@ export function toLabel(row: CellCoordinate, column: CellCoordinate): string {
     return columnLabel + rowLabel;
 }
 
-// `$` and a missing axis (`A:A`, `1:1`) stay put; null means the copy left the sheet (#REF!).
+// Excel's grid (A1:XFD1048576): imported workbooks carry refs this far out, past the sheet's own insert limits.
+const REFERENCE_ROW_COUNT = 1048576;
+const REFERENCE_COLUMN_COUNT = 16384;
+
+// `$` and a missing axis (`A:A`, `1:1`) stay put; null means the copy left the grid (#REF!).
 export function offsetCoordinate(
     coordinate: CellCoordinate,
     offset: number,
-    indexToLabel: (index: number) => string,
+    axis: 'row' | 'column',
 ): CellCoordinate | null {
     if (offset === 0 || coordinate.isAbsolute || coordinate.index === -1) {
         return coordinate;
     }
     const index = coordinate.index + offset;
-    if (index < 0) {
+    if (index < 0 || index >= (axis === 'row' ? REFERENCE_ROW_COUNT : REFERENCE_COLUMN_COUNT)) {
         return null;
     }
-    return { index, label: indexToLabel(index), isAbsolute: false };
+    const label = axis === 'row' ? rowIndexToLabel(index) : columnIndexToLabel(index);
+    return { index, label, isAbsolute: false };
 }
 
-export type CellLeg = [row: CellCoordinate, column: CellCoordinate];
+type CellLeg = [row: CellCoordinate, column: CellCoordinate];
 
-function isReversed(start: CellCoordinate, end: CellCoordinate): boolean {
-    return start.index !== -1 && end.index !== -1 && start.index > end.index;
+// Orders one axis of a range's two legs; a missing axis (`A:A` rows, `1:1` columns) stays as is.
+export function sortLegs(start: CellCoordinate, end: CellCoordinate): [CellCoordinate, CellCoordinate] {
+    return start.index !== -1 && end.index !== -1 && start.index > end.index ? [end, start] : [start, end];
 }
 
-function sortLegs(start: CellCoordinate, end: CellCoordinate): [CellCoordinate, CellCoordinate] {
-    return isReversed(start, end) ? [end, start] : [start, end];
-}
-
-// Both axes move at once and crossed legs re-sort, as in Excel (`A1:$B$2` by (2,3) is `$B$2:D3`); a reversed range stays put.
+// Both axes move at once and legs sort before and after, as in Excel (`A$3:A1` down 1 is `A2:A$3`, `A1:$B$2` by (2,3) is `$B$2:D3`).
 export function offsetRange(
     start: CellLeg,
     end: CellLeg,
     rowOffset: number,
     colOffset: number,
 ): [CellLeg, CellLeg] | null {
-    let [startRow, startColumn]: (CellCoordinate | null)[] = start;
-    let [endRow, endColumn]: (CellCoordinate | null)[] = end;
-    if (!isReversed(startRow, endRow) && !isReversed(startColumn, endColumn)) {
-        startRow = offsetCoordinate(startRow, rowOffset, rowIndexToLabel);
-        endRow = offsetCoordinate(endRow, rowOffset, rowIndexToLabel);
-        startColumn = offsetCoordinate(startColumn, colOffset, columnIndexToLabel);
-        endColumn = offsetCoordinate(endColumn, colOffset, columnIndexToLabel);
-        if (startRow == null || endRow == null || startColumn == null || endColumn == null) {
-            return null;
-        }
+    const [row0, row1] = sortLegs(start[0], end[0]);
+    const [column0, column1] = sortLegs(start[1], end[1]);
+    const startRow = offsetCoordinate(row0, rowOffset, 'row');
+    const endRow = offsetCoordinate(row1, rowOffset, 'row');
+    const startColumn = offsetCoordinate(column0, colOffset, 'column');
+    const endColumn = offsetCoordinate(column1, colOffset, 'column');
+    if (startRow == null || endRow == null || startColumn == null || endColumn == null) {
+        return null;
     }
     const [rowStart, rowEnd] = sortLegs(startRow, endRow);
     const [colStart, colEnd] = sortLegs(startColumn, endColumn);

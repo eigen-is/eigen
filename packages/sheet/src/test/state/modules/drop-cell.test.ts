@@ -205,3 +205,61 @@ describe('drag-fill carries the source cell data validation', () => {
         expect(synced.sheets[0].dataVerification?.['1_0']).toEqual(rule);
     });
 });
+
+// Excel: A1 =B1 and A2 =B2 dragged down to A3:A6 give =B3..=B6, each cell shifted by its
+// distance from the source cell it repeats.
+describe('drag-fill shifts a formula block by the distance to its source cell', () => {
+    const formula = (f: string): Cell => ({ f, v: 0, m: '0', ct: { fa: 'General', t: 'n' } });
+
+    function fill(
+        seed: Record<string, Cell>,
+        src: SingleRange,
+        apply: SingleRange,
+        direction: 'down' | 'up' | 'right' | 'left',
+    ) {
+        const ctx = makeCtx((d) => {
+            for (const [key, cell] of Object.entries(seed)) {
+                const [r, c] = key.split('_').map(Number);
+                d[r][c] = cell;
+            }
+        }, src);
+        autoFillCell(ctx, src, apply, direction);
+        return ctx.sheets[0].data!;
+    }
+
+    it('fills DOWN', () => {
+        const src: SingleRange = { row: [0, 1], column: [0, 0] };
+        const d = fill({ '0_0': formula('=B1'), '1_0': formula('=B2') }, src, { row: [2, 5], column: [0, 0] }, 'down');
+        expect([2, 3, 4, 5].map((r) => d[r][0]?.f)).toEqual(['=B3', '=B4', '=B5', '=B6']);
+    });
+
+    it('fills UP', () => {
+        const src: SingleRange = { row: [6, 7], column: [0, 0] };
+        const d = fill({ '6_0': formula('=B7'), '7_0': formula('=B8') }, src, { row: [2, 5], column: [0, 0] }, 'up');
+        expect([2, 3, 4, 5].map((r) => d[r][0]?.f)).toEqual(['=B3', '=B4', '=B5', '=B6']);
+    });
+
+    it('fills RIGHT', () => {
+        const src: SingleRange = { row: [0, 0], column: [0, 1] };
+        const d = fill({ '0_0': formula('=A3'), '0_1': formula('=B3') }, src, { row: [0, 0], column: [2, 5] }, 'right');
+        expect([2, 3, 4, 5].map((c) => d[0][c]?.f)).toEqual(['=C3', '=D3', '=E3', '=F3']);
+    });
+
+    it('fills LEFT', () => {
+        const src: SingleRange = { row: [0, 0], column: [6, 7] };
+        const d = fill({ '0_6': formula('=G3'), '0_7': formula('=H3') }, src, { row: [0, 0], column: [2, 5] }, 'left');
+        expect([2, 3, 4, 5].map((c) => d[0][c]?.f)).toEqual(['=C3', '=D3', '=E3', '=F3']);
+    });
+
+    it('fills a block mixing formula and number cells', () => {
+        const src: SingleRange = { row: [0, 2], column: [0, 0] };
+        const seed = {
+            '0_0': formula('=B1'),
+            '1_0': { v: 5, m: '5', ct: { fa: 'General', t: 'n' } },
+            '2_0': formula('=B3'),
+        };
+        const d = fill(seed, src, { row: [3, 7], column: [0, 0] }, 'down');
+        expect([3, 5, 6].map((r) => d[r][0]?.f)).toEqual(['=B4', '=B6', '=B7']);
+        expect([4, 7].map((r) => d[r][0]?.v)).toEqual([5, 5]);
+    });
+});
