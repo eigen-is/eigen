@@ -106,6 +106,23 @@ describe('sheet/core/api/cell', () => {
         expect(cell?.v).toBe('x');
     });
 
+    test('setCellValue with a formula object over a formula registers the new formula', () => {
+        const ctx = getContext();
+        ctx.sheets[0].data![0][0] = { v: 5, m: '5' };
+        ctx.sheets[0].data![0][2] = { v: 3, m: '3' };
+        ctx.sheets[0].calcChain = [{ r: 1, c: 0, id: 'id_1' }];
+        warmFormulaCellInfoMap(ctx);
+        setCellValue(ctx, 1, 0, { f: '=C1*2', v: 6 }, null, { id: 'id_1' });
+
+        updateCell(ctx, 0, 0, null, '7');
+        groupValuesRefresh(ctx);
+        expect(ctx.sheets[0].data![1][0]?.v).toBe(6);
+
+        updateCell(ctx, 0, 2, null, '4');
+        groupValuesRefresh(ctx);
+        expect(ctx.sheets[0].data![1][0]?.v).toBe(8);
+    });
+
     test('setCellValue with null over a formula drops it from the map', () => {
         const cell = overFormula((ctx) => setCellValue(ctx, 1, 0, null, null, { id: 'id_1' }));
         expect(cell?.f).toBeUndefined();

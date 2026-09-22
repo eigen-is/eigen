@@ -123,6 +123,7 @@ export function setCellValue(
             if (value.f == null) dropFormula(ctx, sheet.id!, data, row, column);
             else delFunctionGroup(ctx, row, column, sheet.id);
             setCellValueInternal(ctx, row, column, data, curv); // update text value
+            if (value.f != null) setFormulaCellInfo(ctx, { r: row, c: column, id: sheet.id! }, data, sheet.id);
         }
         forEach(value, (v, attr) => {
             if (FORMAT_KEYS.has(attr)) {
