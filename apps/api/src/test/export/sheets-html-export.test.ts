@@ -243,6 +243,23 @@ describe('Sheets HTML export — preview stays inline', () => {
     });
 });
 
+describe('Sheets HTML export — wrap text', () => {
+    test('a wrapped number renders on one line and clips like an unwrapped one', () => {
+        const sheet = makeSheet([
+            { r: 0, c: 0, v: { v: 28254.75, m: '28254.75', ct: { fa: 'General', t: 'g' }, f: '=A2*3', tb: '2' } },
+            { r: 0, c: 1, v: { v: 45000, m: '2023-03-15', ct: { fa: 'yyyy-MM-dd', t: 'd' }, tb: '2' } },
+        ]);
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
+        expect(html).not.toContain('pre-wrap');
+    });
+
+    test('wrapped text still wraps', () => {
+        const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'abc defgh ij', ct: { fa: 'General', t: 'g' }, tb: '2' } }]);
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
+        expect(html).toContain('white-space:pre-wrap');
+    });
+});
+
 describe('Sheets HTML export — conditional formatting', () => {
     test('sheet with no CF rules renders no position overlays', () => {
         const out = renderSheetsHtml(

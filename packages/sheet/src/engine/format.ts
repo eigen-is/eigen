@@ -1,7 +1,7 @@
 import numeral from 'numeral';
 import { format, isDateFormat } from 'numfmt';
 import { dateToSerial } from './parser/helper/number';
-import type { CellMatrix, CellType } from './types';
+import type { Cell, CellMatrix, CellType } from './types';
 import { isdatetime, isRealNum, valueIsError } from './validation';
 
 // Canonical display for a boolean cell — Excel's uppercase TRUE/FALSE. The xlsx
@@ -9,6 +9,12 @@ import { isdatetime, isRealNum, valueIsError } from './validation';
 // ones recalc pushes back through `update()`.
 export function booleanDisplay(value: boolean): string {
     return value ? 'TRUE' : 'FALSE';
+}
+
+// Wrap text breaks text only: Excel and Google keep a number or date on one line and clip it.
+// Keyed on the value, not ct.t — a formula typed into a text cell keeps the cell's 'g'/'s'.
+export function cellWrapsText(cell: Cell): boolean {
+    return cell.tb === '2' && typeof cell.v !== 'number' && cell.ct?.t !== 'd';
 }
 
 export function parseCellInput(value: string | number | boolean): [string, CellType, string | number | boolean] {

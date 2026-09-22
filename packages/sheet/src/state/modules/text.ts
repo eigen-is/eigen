@@ -1,5 +1,6 @@
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { isEmpty, isNil, isPlainObject } from 'es-toolkit/compat';
+import { cellWrapsText } from '../../engine/format';
 import type { Cell, CellStyle } from '../../engine/types';
 import type { Context } from '../context';
 import { isdatatypemulti } from '.';
@@ -369,8 +370,7 @@ export function getCellTextInfo(
     // Vertical alignment
     const verticalAlign = normalizedCellAttr(cell, 'vt');
 
-    // Wrap applies to text only: a number keeps to one line and clips, as in Excel and Google.
-    const wrap = normalizedCellAttr(cell, 'tb') === '2' && cell.ct?.t !== 'n';
+    const wrap = cellWrapsText(cell);
     // rt: signed degrees in [-90, 90] (positive = CCW / "up", negative = CW / "down"),
     // or 'vertical' for stacked text. The two branches that follow (vertical-stack vs.
     // diagonal/horizontal) stay separate; only the diagonal branch needs the magnitude

@@ -17,6 +17,7 @@ import type {
 import { BORDER_STYLES, SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import {
     booleanDisplay,
+    cellWrapsText,
     functionCopy,
     iscelldata,
     numberDisplay,
@@ -213,7 +214,7 @@ function worksheetToSheet(
             if (!mergeAnchor && isEmptyCell(converted)) return;
             celldata.push({ r, c, v: converted });
 
-            maxCellHeight = Math.max(maxCellHeight, estimateCellHeight(cell, c, r, merge, colWidthPx));
+            maxCellHeight = Math.max(maxCellHeight, estimateCellHeight(cell, converted, c, r, merge, colWidthPx));
         });
 
         const isDefaultHeight = row.height === DEFAULT_ROW_HEIGHT_PT;
@@ -764,6 +765,7 @@ const LINE_HEIGHT_FACTOR = 1.35;
 
 function estimateCellHeight(
     cell: XlsxCell,
+    converted: FortuneCell,
     c: number,
     r: number,
     merge: NonNullable<SheetConfig['merge']>,
@@ -771,9 +773,7 @@ function estimateCellHeight(
 ): number {
     const fontSize = cell.style?.font?.size ?? DEFAULT_FONT_SIZE;
     const lineHeightPx = fontSize * PT_TO_PX * LINE_HEIGHT_FACTOR;
-    const wrapText = cell.style?.alignment?.wrapText === true;
-
-    if (!wrapText) {
+    if (!cellWrapsText(converted)) {
         return fontSize > DEFAULT_FONT_SIZE ? lineHeightPx + 6 : 0;
     }
 

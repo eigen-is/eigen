@@ -554,6 +554,24 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('1:1')?.mc).toEqual({ r: 0, c: 0 });
     });
 
+    test('wrapped numbers and dates in a narrow column count as one line for the row height', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Wrap');
+        ws.getColumn(1).width = 4;
+        ws.getCell('A1').value = 282547512345.75;
+        ws.getCell('A2').value = { formula: '1/3', result: 0.333333333333333 };
+        ws.getCell('A3').value = new Date(Date.UTC(2023, 2, 15));
+        ws.getCell('A3').numFmt = 'yyyy-mm-dd';
+        ws.getCell('A4').value = 'wrapped text long enough to need lines';
+        for (const a1 of ['A1', 'A2', 'A3', 'A4']) ws.getCell(a1).alignment = { wrapText: true };
+        const sheets = await parseWorkbook(workbook);
+        const rowlen = sheets[0].config?.rowlen ?? {};
+        expect(rowlen['0']).toBeUndefined();
+        expect(rowlen['1']).toBeUndefined();
+        expect(rowlen['2']).toBeUndefined();
+        expect(rowlen['3']).toBeGreaterThan(100);
+    });
+
     test('convert preserves formulas in celldata', async () => {
         const buffer = await buildXlsxBuffer([
             { a1: 'A1', value: 1 },

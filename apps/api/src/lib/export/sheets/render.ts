@@ -20,6 +20,7 @@ import {
     type CellFormatStyle,
     type CellResolver,
     type ComputeMap,
+    cellWrapsText,
     createArrayResolver,
     createCfFormulaEvaluator,
     type DataBar,
@@ -573,7 +574,7 @@ function buildCellStyle(
             const valign = v.vt != null && v.vt in VERTICAL_ALIGN ? VERTICAL_ALIGN[v.vt] : 'middle';
             parts.push(`vertical-align:${valign}`);
         }
-        if (v.tb === '2') parts.push('white-space:pre-wrap;word-wrap:break-word');
+        if (cellWrapsText(v)) parts.push('white-space:pre-wrap;word-wrap:break-word');
         if (v.un === 1 && v.cl === 1) {
             parts.push('text-decoration:underline line-through');
         } else if (v.un === 1) {
