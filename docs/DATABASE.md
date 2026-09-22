@@ -15,7 +15,7 @@
 | Shared paths    | `{home}/mounts/shared.db`                       | Files shared with this user                              |
 | Contacts        | `{home}/eigen.contacts/contacts.db`             | The address book itself: a row's `vcard` BLOB holds the card's bytes and is the truth — the projected columns (`firstName`, `lastName`, `isGroup`, `data`, `uid`, `etag`) and the label junction all rebuild from it. **Plus** the metadata that lives only here: label ids + colors, the server-owned `eigenId`, the one-row `book` (`ctag`, `syncGen`, `ownerSeeded`) and `contact_tombstones` (`apps/api/src/lib/contacts/schema.ts`). `CONTACTS_DB_CONFIG` is at `currentVersion: 5`, whose migration **drops** every v4 table rather than converting it. See [CONTACTS.md](CONTACTS.md) |
 | Mail            | `{home}/eigen.mail/mail.db`                     | Email metadata + FTS5 full-text index (`emails_fts`). `MAIL_DB_CONFIG` is at `currentVersion: 5`. See [SEARCH.md](SEARCH.md) |
-| Calendar        | `{home}/eigen.calendar/calendar.db`             | Index over the canonical `.ics` files in `eigen.calendar/calendars/<calendarId>/` — **plus** the metadata that lives only here: a calendar's name, color, visibility and default flag, its `shares`, `ctag` and `syncGen`, the `resource_tombstones`, the `pending_writes` journal and the recipient-side `shared_calendars` (`apps/api/src/lib/calendar/schema.ts`). The `resources` and `events` rows, the etags and the recurrence flag re-derive from the files; the rest does not. `CALENDAR_DB_CONFIG` is at `currentVersion: 2`, whose migration **drops** the v1 `events` and `event_tombstones` tables rather than converting them — init re-derives every row from the files. See [CALENDAR.md](CALENDAR.md) |
+| Calendar        | `{home}/eigen.calendar/calendar.db`             | The calendar itself: a `resources` row's `ics` BLOB holds one VCALENDAR's bytes and is the truth — the projected columns (`uid`, `etag`, `hasUnindexedRecurrence`) and every `events` row rebuild from it. **Plus** the metadata that lives only here: a calendar's name, color, visibility and default flag, its `shares`, `ctag` and `syncGen`, the `resource_tombstones` and the recipient-side `shared_calendars` (`apps/api/src/lib/calendar/schema.ts`). `CALENDAR_DB_CONFIG` is at `currentVersion: 2`, whose migration carries `calendars` and `shared_calendars` over and **drops** everything else rather than converting it. See [CALENDAR.md](CALENDAR.md) |
 | Collab docs     | Via storage backend (`{dataDbPathId}`)           | Yjs snapshots + updates                                  |
 | Chat rooms      | Via storage backend (`{dataDbPathId}`)           | Messages + read state                                    |
 | Comment index   | Via storage backend (inside eigendoc containers) | Comment status, mentions per eigendoc                    |
@@ -43,6 +43,7 @@ type DatabaseConfig<S extends SchemaType> = {
         policy: RetentionPolicy;
         writesPerSnapshot: number; // snapshot once this many writes have accumulated
     };
+    synchronous?: 'FULL'; // for a database that holds the truth rather than an index of it
 };
 ```
 
@@ -81,7 +82,7 @@ inside `open()` closes the raw handle before rethrowing, so the same file reopen
 
 `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5000`
 
-A database whose rows are the truth rather than an index of something else asks for one more: `DatabaseConfig.synchronous?: 'FULL'` makes `openCold` run `PRAGMA synchronous = FULL` right after the WAL pragma. It is set per open, never stored in the file, so it holds for every connection that config opens. `CONTACTS_DB_CONFIG` sets it — the vCard bytes live in the row, so an acknowledged CardDAV PUT must survive a power loss — and `CALENDAR_DB_CONFIG` joins it once the `.ics` bytes move the same way. Every other database keeps WAL's default NORMAL: a crash there costs the last commits of an index that can be rebuilt.
+A database whose rows are the truth rather than an index of something else asks for one more: `DatabaseConfig.synchronous?: 'FULL'` makes `openCold` run `PRAGMA synchronous = FULL` right after the WAL pragma. It is set per open, never stored in the file, so it holds for every connection that config opens. `CONTACTS_DB_CONFIG` and `CALENDAR_DB_CONFIG` set it — the vCard and VCALENDAR bytes live in their rows, so an acknowledged CardDAV or CalDAV PUT must survive a power loss, and both write at address-book volume. Every other database keeps WAL's default NORMAL: a crash there costs the last commits of an index that can be rebuilt.
 
 ## Domain Config Files
 
