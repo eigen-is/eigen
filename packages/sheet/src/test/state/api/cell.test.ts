@@ -88,4 +88,14 @@ describe('sheet/core/api/cell', () => {
             ct: { fa: 'General', t: 'n' },
         });
     });
+
+    test('setCellFormat renders the display the way every cell writer does', () => {
+        const ctx = getContext();
+        ctx.sheets[0].data![0][0] = { v: 1234.5 };
+        ctx.sheets[0].data![0][1] = { v: Infinity };
+        setCellFormat(ctx, 0, 0, 'ct', { fa: '#,##0;;;;;', t: 'n' }, { id: 'id_1' });
+        setCellFormat(ctx, 0, 1, 'ct', { fa: '0.00', t: 'n' }, { id: 'id_1' });
+        expect(ctx.sheets[0].data![0][0]?.m).toBe('1234.5');
+        expect(ctx.sheets[0].data![0][1]?.m).toBe('Infinity');
+    });
 });

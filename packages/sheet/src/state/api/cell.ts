@@ -1,5 +1,5 @@
 import { forEach, isNil, isNumber, isPlainObject } from 'es-toolkit/compat';
-import { format } from 'numfmt';
+import { numberDisplay } from '../../engine/format';
 import type { Cell, CellStyle } from '../../engine/types';
 import type { Context } from '../context';
 import {
@@ -188,7 +188,7 @@ export function setCellFormat(
     if (attr === 'ct' && (!ctValue || ctValue.fa == null || ctValue.t == null)) {
         throw new Error("'fa' and 't' should be present in value when attr is 'ct'");
     } else if (attr === 'ct' && !isNil(cellData.v)) {
-        cellData.m = format(ctValue!.fa!, cellData.v); // auto generate mask
+        cellData.m = numberDisplay(cellData.v, ctValue!.fa);
     }
 
     (cellData as Record<string, unknown>)[attr] = value;
