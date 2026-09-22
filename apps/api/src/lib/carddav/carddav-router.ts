@@ -91,7 +91,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         const user = await authenticateBasic(request);
         const contacts = await resolveContacts(user, params.ownerId);
         const parsed = parseCollectionPath(params['*']);
-        // The stub answers any well-formed collection URL before the book check — the CalDAV twin's order.
+        // The book resolves first, so the stub carries the owner check, and answers any well-formed collection URL.
         if (parsed.ok && !parsed.resource) {
             return new Response('This is a CardDAV endpoint. Use a CardDAV client.', {
                 status: 200,

@@ -63,7 +63,7 @@ export function resourceOf(calendar: Calendar, eventId: string): StoredResource 
     );
 }
 
-// The component path onto the facade's one write: every caller holds the resource it re-serializes.
+// Caller holds the write lock: the component path onto the facade's one write, re-serializing the resource the caller resolved.
 export function writeComponent(calendar: Calendar, resource: StoredResource, component: ICAL.Component): Promise<void> {
     return calendar.writeResource({
         calendarId: resource.calendarId,

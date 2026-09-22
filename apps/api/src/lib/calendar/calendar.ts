@@ -157,10 +157,10 @@ export class Calendar {
             .run();
     }
 
-    // The one write every resource path takes, and it owns the order: both ceilings judge the bytes right
-    // before the transaction that stores them, so a refusal leaves the calendar as it was. `creditBytes` is
-    // the stored resource this one replaces, or a rewrite that shrinks a resource would be refused on a
-    // quota its own bytes already hold.
+    // Caller holds the write lock. The one write every resource path takes, and it owns the order: both
+    // ceilings judge the bytes right before the transaction that stores them, so a refusal leaves the
+    // calendar as it was. `creditBytes` is the stored resource this one replaces, or a rewrite that shrinks
+    // a resource would be refused on a quota its own bytes already hold.
     async writeResource(opts: {
         calendarId: string;
         uri: string;
