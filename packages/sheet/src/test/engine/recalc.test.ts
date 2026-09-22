@@ -83,6 +83,17 @@ describe('engine/recalc — recalcSheets', () => {
         expect(() => recalcSheets(sheets)).not.toThrow();
     });
 
+    test('a reversed range orders its formula after the cells it reads', () => {
+        // B1 is scanned before A2, so only a recorded dependency makes it read A2's fresh 10.
+        const sheets = [
+            sheet('s1', 'Sheet1', [[num(1), formula('=SUM(A3:A1)')], [formula('=5*2')], [num(3)]]),
+            sheet('s2', 'Sheet2', [[formula('=SUM(Sheet1!B$3:Sheet1!A1)')]]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][1]?.v).toBe(14);
+        expect(out[1].data![0][0]?.v).toBe(28);
+    });
+
     test('volatile NOW() is frozen — cached value untouched', () => {
         const cachedNow = formula('=NOW()', { v: 44000, m: '2020-06-18', ct: { fa: 'yyyy-MM-dd', t: 'd' } });
         const sheets = [sheet('s1', 'Sheet1', [[cachedNow, formula('=TODAY()', { v: 43999, m: '2020-06-17' })]])];

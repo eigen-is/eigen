@@ -1,7 +1,6 @@
 // Context-coupled formula execution. These functions read/write Context
 // (formula caches, sheet data, calc chains) so they stay in the state layer.
 // The engine directory has zero state-runtime dependencies.
-import { forEach } from 'es-toolkit/compat';
 import { getCalculationOrder } from '../../engine/dependency-graph';
 import {
     calPostfixExpression,
@@ -9,6 +8,7 @@ import {
     iscelldata,
     operatorjson,
     operatorPriority,
+    resolveCellRange,
 } from '../../engine/formula-utils';
 import type {
     Cell,
@@ -20,34 +20,10 @@ import type {
 } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { FormulaCell } from '../types';
-import { columnCharToIndex, getSheetIndex } from '../utils';
+import { getSheetIndex } from '../utils';
 import { setCellValue } from './cell';
 import { createContextResolver, executeAffectedFormulas, setFormulaCellInfo, snapshotContext } from './formula-cache';
 import { error } from './validation';
-
-// Regex for cell label extraction
-const simpleSheetName = '[A-Za-z0-9_\u00C0-\u02AF]+';
-const quotedSheetName = "'(?:(?!').|'')*'";
-const sheetNameRegexp = `(${simpleSheetName}|${quotedSheetName})!`;
-const rowColumnRegexp = `[$]?[A-Za-z]+[$]?[0-9]+`;
-const rowColumnWithSheetName = `(?:${sheetNameRegexp})?(${rowColumnRegexp})`;
-const LABEL_EXTRACT_REGEXP = new RegExp(`^${rowColumnWithSheetName}(?:[:]${rowColumnWithSheetName})?$`);
-
-function addToCellIndexList(ctx: Context, txt: string, infoObj: FormulaDependency | null): void {
-    if (txt == null || txt.length === 0 || infoObj == null) {
-        return;
-    }
-    if (ctx.formulaCache.cellTextToIndexList == null) {
-        ctx.formulaCache.cellTextToIndexList = {};
-    }
-
-    if (txt.indexOf('!') > -1) {
-        txt = txt.replace(/\\'/g, "'").replace(/''/g, "'");
-        ctx.formulaCache.cellTextToIndexList[txt] = infoObj;
-    } else {
-        ctx.formulaCache.cellTextToIndexList[`${txt}_${infoObj.sheetId}`] = infoObj;
-    }
-}
 
 function checkSpecialFunctionRange(
     ctx: Context,
@@ -91,112 +67,13 @@ export function getcellrange(
     formulaId?: string,
     data?: CellMatrix,
 ): FormulaDependency | null {
-    if (txt == null || txt.length === 0) {
-        return null;
-    }
-    const flowdata = data || getFlowdata(ctx, formulaId);
-
-    let sheettxt = '';
-    let rangetxt = '';
-    let sheetId: string | undefined;
-    let sheetdata: CellMatrix | null | undefined = null;
-
-    const { sheets } = ctx;
-
-    if (txt.indexOf('!') > -1) {
-        if (txt in ctx.formulaCache.cellTextToIndexList) {
-            return ctx.formulaCache.cellTextToIndexList[txt];
-        }
-
-        const matchRes = txt.match(LABEL_EXTRACT_REGEXP);
-        if (matchRes == null) {
-            return null;
-        }
-        const [, sheettxt1, starttxt1, sheettxt2, starttxt2] = matchRes;
-        if (sheettxt2 != null && sheettxt1 !== sheettxt2) {
-            return null;
-        }
-        rangetxt = starttxt2 ? `${starttxt1}:${starttxt2}` : starttxt1;
-        sheettxt = sheettxt1.replace(/^'|'$/g, '').replace(/\\'/g, "'").replace(/''/g, "'");
-
-        forEach(sheets, (f) => {
-            if (sheettxt === f.name) {
-                sheetId = f.id;
-                sheetdata = f.data;
-                return false;
-            }
-            return true;
-        });
-    } else {
-        let i = formulaId;
-        if (i == null) {
-            i = ctx.currentSheetId;
-        }
-        if (`${txt}_${i}` in ctx.formulaCache.cellTextToIndexList) {
-            return ctx.formulaCache.cellTextToIndexList[`${txt}_${i}`];
-        }
-        const index = getSheetIndex(ctx, i);
-        if (index == null) {
-            return null;
-        }
-        sheettxt = sheets[index].name;
-        sheetId = sheets[index].id;
-        sheetdata = flowdata;
-        rangetxt = txt;
-    }
-
-    if (sheetdata == null) {
-        return null;
-    }
-
-    if (rangetxt.indexOf(':') === -1) {
-        const row = parseInt(rangetxt.replace(/[^0-9]/g, ''), 10) - 1;
-        const col = columnCharToIndex(rangetxt.replace(/[^A-Za-z]/g, ''));
-
-        if (!Number.isNaN(row) && !Number.isNaN(col)) {
-            const item: FormulaDependency = {
-                row: [row, row],
-                column: [col, col],
-                sheetId,
-            };
-            addToCellIndexList(ctx, txt, item);
-            return item;
-        }
-        return null;
-    }
-    const rangetxtArr = rangetxt.split(':');
-    const row: [number, number] = [-1, -1];
-    const col: [number, number] = [-1, -1];
-    row[0] = parseInt(rangetxtArr[0].replace(/[^0-9]/g, ''), 10) - 1;
-    row[1] = parseInt(rangetxtArr[1].replace(/[^0-9]/g, ''), 10) - 1;
-    if (Number.isNaN(row[0])) {
-        row[0] = 0;
-    }
-    if (Number.isNaN(row[1])) {
-        row[1] = sheetdata.length - 1;
-    }
-    if (row[0] > row[1]) {
-        return null;
-    }
-    col[0] = columnCharToIndex(rangetxtArr[0].replace(/[^A-Za-z]/g, ''));
-    col[1] = columnCharToIndex(rangetxtArr[1].replace(/[^A-Za-z]/g, ''));
-    if (Number.isNaN(col[0])) {
-        col[0] = 0;
-    }
-    if (Number.isNaN(col[1])) {
-        col[1] = sheetdata[0].length - 1;
-    }
-    if (col[0] > col[1]) {
-        return null;
-    }
-
-    const item: FormulaDependency = {
-        row,
-        column: col,
-        sheetId,
-    };
-    addToCellIndexList(ctx, txt, item);
-    return item;
+    return resolveCellRange(
+        ctx.sheets,
+        ctx.formulaCache.cellTextToIndexList,
+        txt,
+        formulaId ?? ctx.currentSheetId,
+        data || getFlowdata(ctx, formulaId),
+    );
 }
 
 export function isFunctionRange(
