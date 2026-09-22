@@ -1,7 +1,7 @@
 import { isNil } from 'es-toolkit/compat';
 import { current, isDraft } from 'immer';
 import type { DependencyIndex } from '../../engine/dependency-index';
-import { FormulaEngine, isFormula } from '../../engine/formula-engine';
+import { FormulaEngine } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type {
     CalcChainEntry,
@@ -175,6 +175,9 @@ export class FormulaCache {
     }
 
     updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo', data?: CellMatrix) {
+        // An unbuilt map reads the patched cells when it builds.
+        if (this.formulaCellInfoMap == null) return;
+
         function requestUpdate(value: unknown) {
             if (value instanceof Object) {
                 const v = value as { r?: number; c?: number; id?: string };
@@ -194,8 +197,9 @@ export class FormulaCache {
 
         const changesHistory = type === 'undo' ? history.inversePatches : history.patches;
         for (const patch of changesHistory) {
-            if (isFormula(patch.value?.f) || patch.value === null || patch.path[5] === 'f') {
-                requestUpdate({ r: patch.path[3], c: patch.path[4] });
+            const [, sheetIndex, field, r, c, cellField] = patch.path;
+            if (field === 'data' && c != null && (cellField == null || cellField === 'f')) {
+                requestUpdate({ r, c, id: ctx.sheets[sheetIndex as number]?.id });
             } else if (Array.isArray(patch.value)) {
                 for (const value of patch.value) {
                     requestUpdate(value);
