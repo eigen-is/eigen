@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
@@ -304,6 +304,10 @@ describe('Backup snapshotHome', () => {
         folder = join(target, buildHomeFolderName(alice.id));
         files = await listArchiveFiles(folder);
     });
+
+    // The planted avatar is the one byte this file writes outside its own temp dirs — the server-wide
+    // avatars folder is shared, and a later file asking for alice's public avatar would be served it.
+    afterAll(() => rmSync(join(getAvatarsDir(), `${ctx.alice.user.id}.webp`), { force: true }));
 
     test('writes the folder layout from the spec', () => {
         expect(existsSync(folder)).toBe(true);
