@@ -9,7 +9,14 @@ import { Check, ChevronsLeft, ChevronsRight, LayoutGrid, Plus } from 'lucide-rea
 import type React from 'react';
 import { Fragment, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { addSheet, calcSelectionInfo, cancelActiveImgItem, cancelNormalSelected, updateCell } from '../../state';
+import {
+    addSheet,
+    calcSelectionInfo,
+    cancelActiveImgItem,
+    cancelNormalSelected,
+    changeSheet,
+    updateCell,
+} from '../../state';
 import { SheetItem } from './SheetItem';
 
 const iconButtonClass =
@@ -127,14 +134,7 @@ export const SheetTab: React.FC = () => {
                                 key={singleSheet.id}
                                 onClick={() => {
                                     setContext((draftCtx) => {
-                                        draftCtx.sheetScrollRecord[draftCtx.currentSheetId] = {
-                                            scrollLeft: draftCtx.scrollLeft,
-                                            scrollTop: draftCtx.scrollTop,
-                                            selectionActive: draftCtx.selectionActive,
-                                            selections: draftCtx.selections,
-                                            formulaRangeSelections: draftCtx.formulaRangeSelections,
-                                        };
-                                        draftCtx.currentSheetId = singleSheet.id!;
+                                        changeSheet(draftCtx, singleSheet.id!);
                                         cancelActiveImgItem(draftCtx, refs.globalCache);
                                         cancelNormalSelected(draftCtx);
                                     });

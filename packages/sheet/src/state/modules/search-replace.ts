@@ -2,9 +2,9 @@ import { applyPreserveCase, buildSearchRegex } from '@workspace/lib/doc-search';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import { sortBy } from 'es-toolkit/compat';
 import { valueShowEs } from '../../engine/format';
-import { type Context, getFlowdata, updateContextWithSheetData } from '../context';
+import { type Context, getFlowdata } from '../context';
 import type { SearchHighlight, SearchResult } from '../types';
-import { getSheetIndex, indexToColumnChar } from '../utils';
+import { indexToColumnChar } from '../utils';
 import { setCellValue as setCellValueInternal } from './cell';
 import { delFunctionGroup, execFunctionGroup, groupValuesRefresh } from './formula-exec';
 import { checkCellIsLocked } from './protection';
@@ -79,18 +79,13 @@ function centerCellInView(ctx: Context, r: number, c: number) {
     };
 }
 
-// Cross-tab reveal: switch sheets, refresh geometry, select + scroll — one recipe. SheetOverlay's
-// effects flush BEFORE the Workbook/Sheet geometry effects, so a post-render scroll would read the
-// OLD sheet's visibledatarow/config; refreshing here makes centerCellInView see the target sheet's
-// geometry, and the overlay's scrollRequest apply effect performs the DOM scroll.
+// Cross-tab reveal: switch sheets, select + scroll — one recipe. changeSheet derives the target
+// sheet's geometry, so centerCellInView reads it, and the overlay's scrollRequest apply effect
+// performs the DOM scroll.
 export function revealSearchMatch(ctx: Context, cell: SearchHighlight) {
     if (cell.sheetId !== ctx.currentSheetId) {
         changeSheet(ctx, cell.sheetId);
         if (ctx.currentSheetId !== cell.sheetId) return; // switch vetoed/invalid
-        const idx = getSheetIndex(ctx, cell.sheetId);
-        const flowdata = getFlowdata(ctx, cell.sheetId);
-        if (idx == null || flowdata == null) return;
-        updateContextWithSheetData(ctx, flowdata);
     }
     ctx.selections = normalizeSelection(ctx, [{ row: [cell.r, cell.r], column: [cell.c, cell.c] }]);
     ctx.searchActive = cell;

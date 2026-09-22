@@ -37,25 +37,23 @@ function webpageContext(linkAddress: string): Context {
     return ctx;
 }
 
-const scrollEl = {} as HTMLDivElement; // unused by the webpage branch
-
 describe('goToLink scheme allowlist', () => {
     test('opens http/https links verbatim', () => {
         const calls = openedUrls();
-        goToLink(webpageContext('https://example.com/a?b=1'), 0, 0, 'webpage', 'https://example.com/a?b=1', scrollEl);
-        goToLink(webpageContext('http://example.com'), 0, 0, 'webpage', 'http://example.com', scrollEl);
+        goToLink(webpageContext('https://example.com/a?b=1'), 0, 0, 'webpage', 'https://example.com/a?b=1');
+        goToLink(webpageContext('http://example.com'), 0, 0, 'webpage', 'http://example.com');
         expect(calls).toEqual(['https://example.com/a?b=1', 'http://example.com']);
     });
 
     test('opens mailto links verbatim, not mangled with an https:// prefix', () => {
         const calls = openedUrls();
-        goToLink(webpageContext('mailto:foo@bar.com'), 0, 0, 'webpage', 'mailto:foo@bar.com', scrollEl);
+        goToLink(webpageContext('mailto:foo@bar.com'), 0, 0, 'webpage', 'mailto:foo@bar.com');
         expect(calls).toEqual(['mailto:foo@bar.com']);
     });
 
     test('prepends https:// to scheme-less addresses', () => {
         const calls = openedUrls();
-        goToLink(webpageContext('example.com'), 0, 0, 'webpage', 'example.com', scrollEl);
+        goToLink(webpageContext('example.com'), 0, 0, 'webpage', 'example.com');
         expect(calls).toEqual(['https://example.com']);
     });
 
@@ -64,27 +62,27 @@ describe('goToLink scheme allowlist', () => {
         const calls: (string | undefined)[][] = [];
         previousWindow = g.window;
         g.window = { open: (...args: (string | undefined)[]) => void calls.push(args) };
-        goToLink(webpageContext('https://example.com'), 0, 0, 'webpage', 'https://example.com', scrollEl);
+        goToLink(webpageContext('https://example.com'), 0, 0, 'webpage', 'https://example.com');
         expect(calls).toEqual([['https://example.com', '_blank', 'noopener,noreferrer']]);
     });
 
     test('treats host:port as scheme-less — digits only after the colon is a port, not a scheme', () => {
         const calls = openedUrls();
-        goToLink(webpageContext('example.com:8080/x'), 0, 0, 'webpage', 'example.com:8080/x', scrollEl);
-        goToLink(webpageContext('localhost:3000'), 0, 0, 'webpage', 'localhost:3000', scrollEl);
+        goToLink(webpageContext('example.com:8080/x'), 0, 0, 'webpage', 'example.com:8080/x');
+        goToLink(webpageContext('localhost:3000'), 0, 0, 'webpage', 'localhost:3000');
         expect(calls).toEqual(['https://example.com:8080/x', 'https://localhost:3000']);
     });
 
     test('javascript:8080 resolves as host:port — a harmless https hostname, not a scheme', () => {
         const calls = openedUrls();
-        goToLink(webpageContext('javascript:8080'), 0, 0, 'webpage', 'javascript:8080', scrollEl);
+        goToLink(webpageContext('javascript:8080'), 0, 0, 'webpage', 'javascript:8080');
         expect(calls).toEqual(['https://javascript:8080']);
     });
 
     test('whitespace/control-char scheme variants get the https:// prepend, never a raw scripting scheme', () => {
         const calls = openedUrls();
-        goToLink(webpageContext(' javascript:alert(1)'), 0, 0, 'webpage', ' javascript:alert(1)', scrollEl);
-        goToLink(webpageContext('java\nscript:alert(1)'), 0, 0, 'webpage', 'java\nscript:alert(1)', scrollEl);
+        goToLink(webpageContext(' javascript:alert(1)'), 0, 0, 'webpage', ' javascript:alert(1)');
+        goToLink(webpageContext('java\nscript:alert(1)'), 0, 0, 'webpage', 'java\nscript:alert(1)');
         expect(calls).toEqual(['https:// javascript:alert(1)', 'https://java\nscript:alert(1)']);
     });
 
@@ -97,7 +95,7 @@ describe('goToLink scheme allowlist', () => {
             'file:///etc/passwd',
             'vbscript:msgbox(1)',
         ]) {
-            goToLink(webpageContext(address), 0, 0, 'webpage', address, scrollEl);
+            goToLink(webpageContext(address), 0, 0, 'webpage', address);
         }
         expect(calls).toEqual([]);
     });

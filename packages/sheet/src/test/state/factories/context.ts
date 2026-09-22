@@ -58,6 +58,7 @@ export function contextFactory({
         visibledatacolumn: [74, 148, 222, 296, 370],
         scrollLeft: 0,
         scrollTop: 0,
+        sheetScrollRecord: {},
         shiftKeyDown: false,
         groupValuesRefreshData: [],
         defaultrowNum: DEFAULT_SHEET_ROW_COUNT,

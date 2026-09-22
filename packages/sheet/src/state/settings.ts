@@ -1,5 +1,4 @@
 import type { useCommentLifecycle } from '@workspace/lib/comments';
-import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CommentCard } from '@workspace/lib/types/comments';
@@ -155,8 +154,6 @@ export type Settings = {
     forceCalculation?: boolean;
     rowHeaderWidth?: number;
     columnHeaderHeight?: number;
-    defaultColWidth?: number;
-    defaultRowHeight?: number;
     defaultFontSize?: number;
     sheetTabContextMenu?: string[];
     filterContextMenu?: string[];
@@ -184,8 +181,6 @@ export const defaultSettings: Required<Settings> = {
     forceCalculation: false, // force formula recalculation; may cause performance issues with many formulas, use with caution
     rowHeaderWidth: 46,
     columnHeaderHeight: 20,
-    defaultColWidth: SHEET_DEFAULT_COL_WIDTH,
-    defaultRowHeight: SHEET_DEFAULT_ROW_HEIGHT,
     defaultFontSize: 10,
     sheetTabContextMenu: [
         'delete',
