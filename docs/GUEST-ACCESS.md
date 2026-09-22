@@ -58,13 +58,13 @@ Two-step OTP flow via custom endpoints (not better-auth's emailOTP plugin). Logi
 
 ### Request OTP
 
-`POST /guest-auth/request-otp { email }` — rate-limited per-email (3/hour) and per-IP (10/hour) by an
-in-memory sliding window. Behavior depends on the `guests.openSignup` setting:
+`POST /guest-auth/request-otp { email }` — rate-limited per-email (10/hour) and per-IP (100/hour) by an
+in-memory sliding window. The per-IP cap leaves room for an office of guests behind one address, and a successful sign-in hands its slots back (the email's bucket, and that email's entries in the IP bucket), so only requests that never prove the mailbox count. Behavior depends on the `guests.openSignup` setting:
 
 - `openSignup = true` (default): accept any email that isn't already a non-guest user.
 - `openSignup = false`: require a pending share registry entry for the email.
 
-Sends a 6-digit OTP via email (5-minute expiry). Returns 429 when the rate limit is hit.
+Sends a 6-digit OTP via email (5-minute expiry). A new request replaces the email's previous code, so only the newest one works. Returns 429 when the rate limit is hit.
 
 ### Verify OTP
 
@@ -73,6 +73,8 @@ Sends a 6-digit OTP via email (5-minute expiry). Returns 429 when the rate limit
 in via `auth.api.signInEmail()`, and calls `reconcileSharesForNewUser()` to seed `shared.db` from the
 registry. Registry entries are NOT consumed — they persist across guest deletion so re-OTP after deletion
 rehydrates the same shared resources.
+
+A wrong guess leaves the code usable: a code gets 10 guesses (`MAX_OTP_GUESSES`, counted in memory before the async hash check so parallel guesses can't outrun the cap), and the next one burns it with a 429. The code is consumed only on success, by a delete that reports whether it removed the row, so two concurrent requests with the right code mint one session. Worst case per email is 10 codes × 10 guesses an hour against a million codes.
 
 Guest user creation bypasses `databaseHooks` — no org join, no default reconciliation. The reconciliation
 runs explicitly after OTP verification instead.
@@ -191,7 +193,7 @@ Two pages in `apps/admin/src/routes/`:
   move data directory). Planned but not yet implemented
 - **Request state**: "Access requested" state is client-side only (lost on refresh). Idempotent via tag
   dedup — re-requesting just updates the notification timestamp
-- **Open-signup OTP exposure**: with `openSignup=true` an attacker can trigger up to 3 OTP emails per
+- **Open-signup OTP exposure**: with `openSignup=true` an attacker can trigger up to 10 OTP emails per
   hour to any address (rate-limited per-email and per-IP). Set `guests.openSignup=false` to require a
   pending share before issuing OTPs.
 - **Rate-limit state is per-process**: lost on server restart and not shared across replicas. Fine while
