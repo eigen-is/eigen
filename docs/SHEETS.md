@@ -80,14 +80,14 @@ mouseup measure from different elements (the header vs the overlay container), s
 fudge factor to bridge them — there used to be a hand-tuned `3` doing exactly that. No movement is a click, any
 movement is a resize.
 
-**Flow**: Local edit → `onOp` callback → push to Y.Array → Yjs WebSocket → remote `applyOp()` (no React re-render).
+**Flow**: Local edit → `onOp` callback → push to Y.Array → Yjs WebSocket → remote `applyOp()` (no React re-render). `applyOp` is not atomic: when a patch fails it keeps what it already applied, where `replaySheetsOps` rolls the whole batch back and skips it, so a live client and a joiner can disagree until the next reload (filed in [SHEETS-TODO.md](SHEETS-TODO.md)).
 
 **Snapshot**: Saved on unmount, and on `beforeunload` only while the socket is connected (`use-sheet.ts` `flushSnapshot`), so a tab closed during a blip writes none and the ops array grows until a connected tab flushes. New joiners
 load from the snapshot, then replay any pending ops that arrived during initial sync via the shared
 `replaySheetsOps(sheets, opBatches)` from `@workspace/sheet/engine` — the same function the BE document
 reader uses, so every consumer agrees on what "snapshot + ops → `Sheet[]`" means.
 
-**Undo** is the engine's own stack (`GlobalCache.undoList`/`redoList`, inverse immer patches per recipe, no depth limit, per tab). `handleUndo`/`handleRedo` (`Workbook/index.tsx`) apply the inverse and broadcast it as an ordinary op batch, so peers see an undo as an edit; a peer's batch applies with `noHistory` and is never undoable locally. The stack's paths are absolute row/column numbers and `reduceUndoList` corrects them only for sheet deletions, so an undo after a peer's row insert lands one row off (filed in [SHEETS-TODO.md](SHEETS-TODO.md)). Whether sheets should move to Yjs structures and `Y.UndoManager` is answered in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md): possible only with stable row/column ids, and not the first thing to do.
+**Undo** is the engine's own stack (`GlobalCache.undoList`/`redoList`, inverse immer patches per recipe, no depth limit, per tab). `handleUndo`/`handleRedo` (`Workbook/index.tsx`) apply the inverse and broadcast it as an ordinary op batch, so peers see an undo as an edit; a peer's batch applies with `noHistory` and is never undoable locally. The stack's paths are absolute row/column numbers and nothing corrects them for a peer's changes, so an undo after a peer's row insert lands one row off. `reduceUndoList` looks like the sheet-deletion correction, but it only runs when a recipe produced no patches, so it never fires. Undoing your own row or column insert applies the whole-sheet inverse locally but ships a `deleteRowCol` marker, so a peer's edits on that sheet since the insert vanish on your side only. All three are filed in [SHEETS-TODO.md](SHEETS-TODO.md). Whether sheets should move to Yjs structures and `Y.UndoManager` is answered in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md): possible only with stable row/column ids, and not the first thing to do.
 
 **`selections` never persists**: it's a per-client cursor — the ops path drops it (`filterPatch`) and the
 snapshot encoder strips it (`snapshot-codec.ts`; a persisted cursor once resurfaced on open as phantom
