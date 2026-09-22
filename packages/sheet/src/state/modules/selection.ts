@@ -1195,6 +1195,12 @@ export function moveHighlightRange(
 // matched by every paste reader.
 export const COPY_ACTION_TABLE_MARKER = 'sheet-copy-action-table';
 
+// General cuts a number to 11 characters; the clipboard carries Excel's 15 significant digits instead.
+export function copiedNumberText(cell: Cell): string | undefined {
+    if (typeof cell.v !== 'number' || (cell.ct?.fa ?? 'General') !== 'General') return undefined;
+    return String(Number(cell.v.toPrecision(15)));
+}
+
 export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) {
     const idx = getSheetIndex(ctx, sheetId);
     if (idx == null) return '';
@@ -1293,7 +1299,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                 if (!isNil(cell.ct) && !isNil(cell.ct.fa) && cell.ct.fa.match(reg)) {
                     c_value = getCellValue(r, c, d);
                 } else {
-                    c_value = getCellValue(r, c, d, 'm');
+                    c_value = copiedNumberText(cell) ?? getCellValue(r, c, d, 'm');
                 }
 
                 // Same escaping as the rich-text runs in modules/cell.ts: the values come

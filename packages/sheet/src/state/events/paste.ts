@@ -29,7 +29,7 @@ import { FONT_INDEX_BY_NAME } from '../modules/fonts';
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
-import { COPY_ACTION_TABLE_MARKER, selectionCache } from '../modules/selection';
+import { COPY_ACTION_TABLE_MARKER, copiedNumberText, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetSelections } from '../modules/sheet';
 import { hasPartMC, isRealNum } from '../modules/validation';
 import type { SheetConfig } from '../types';
@@ -1078,9 +1078,9 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                     let v: Cell['v'] | undefined;
                     if (!isNil(cell)) {
                         if ((cell.ct?.fa?.indexOf('w') ?? -1) > -1) {
-                            v = d[r]?.[c]?.v;
+                            v = cell.v;
                         } else {
-                            v = d[r]?.[c]?.m;
+                            v = copiedNumberText(cell) ?? cell.m;
                         }
                     } else {
                         v = '';
