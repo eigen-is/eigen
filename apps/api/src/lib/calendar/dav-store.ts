@@ -294,7 +294,7 @@ export async function putResource(
 
         // Judged on the bytes, never the row: rewriting an unchanged resource bumps the ctag and resyncs every client for nothing.
         if (storedBytes && prepared.etag === computeResourceEtag(storedBytes)) {
-            return { ok: true, etag: validator, created: false };
+            return { ok: true, id: prepared.id, etag: validator, created: false };
         }
 
         // Size and quota are only known once the stamps and stored alarms decided the bytes, so both map to protocol errors here, not a 500.
@@ -309,7 +309,7 @@ export async function putResource(
             throw e;
         }
 
-        return { ok: true, etag: validator, created: !existing };
+        return { ok: true, id: prepared.id, etag: validator, created: !existing };
     });
 }
 

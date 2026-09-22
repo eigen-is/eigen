@@ -222,7 +222,7 @@ export async function putCard(
             }
         }
 
-        return { ok: true, etag: verbatim ? projection.etag : null, created: !existing };
+        return { ok: true, id, etag: verbatim ? projection.etag : null, created: !existing };
     });
 }
 

@@ -124,6 +124,18 @@ describe('putResource', () => {
         expect((await harness.instance.getCollection(calendarId))!.ctag).toBe(ctag);
     });
 
+    test('a put answers with the id of the row it landed on, a rewrite included', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+
+        const created = await put(harness.instance, calendarId, 'landed.ics', vcal(event('landed@eigen', 'Landed')));
+        const stored = (await harness.instance.getResourceMeta(calendarId, 'landed.ics'))!;
+        const rewritten = await put(harness.instance, calendarId, 'landed.ics', vcal(event('landed@eigen', 'Again')));
+
+        expect(created).toMatchObject({ ok: true, id: stored.id, created: true });
+        expect(rewritten).toMatchObject({ ok: true, id: stored.id, created: false });
+    });
+
     test('a linked copy takes the alarms a client sends, never the Eigen lines inside them', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;

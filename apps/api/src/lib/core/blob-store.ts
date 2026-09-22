@@ -59,8 +59,9 @@ export function computeResourceEtag(bytes: Uint8Array): string {
 export type InvalidReason = 'data' | 'object' | 'component';
 
 // A client-caused failure is a value, not a throw; a null etag is a write not stored verbatim, which has no validator to hand back (RFC 4791 § 5.3.4).
+// The id is the row the write landed on, read inside the lock: a facade announcing from it cannot lose the event to a racing delete.
 export type PutResourceResult =
-    | { ok: true; etag: string | null; created: boolean }
+    | { ok: true; id: string; etag: string | null; created: boolean }
     | {
           ok: false;
           error: 'precondition' | 'uid-conflict' | 'invalid' | 'no-collection' | 'too-large' | 'quota';

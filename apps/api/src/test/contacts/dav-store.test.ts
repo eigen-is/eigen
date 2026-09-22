@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { CARD_MAX_BYTES } from '../../lib/contacts/card-store';
 import type { Contacts } from '../../lib/contacts/contacts';
@@ -51,7 +52,12 @@ describe('putCard — create and read', () => {
 
         const res = await put(contacts, uri, body);
 
-        expect(res).toEqual({ ok: true, etag: computeResourceEtag(new TextEncoder().encode(body)), created: true });
+        expect(res).toEqual({
+            ok: true,
+            id: rowByUri(contacts.db, uri)!.id,
+            etag: computeResourceEtag(new TextEncoder().encode(body)),
+            created: true,
+        });
     });
 
     test('getCard returns a 3.0 body byte-identically, folded X-props and all', async () => {
@@ -325,6 +331,41 @@ describe('putCard — index projection', () => {
 
         const changed = await contacts.getChangedCardsSince(before);
         expect(changed.map((c) => c.uri)).toEqual([uri]);
+    });
+});
+
+describe('putCard — announcements', () => {
+    test('the event names the row the write landed on', async () => {
+        const { instance: contacts, broadcasts } = await makeContacts();
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        broadcasts.length = 0;
+
+        await put(contacts, uri, card({ uid }));
+
+        expect(broadcasts).toEqual([{ type: SSEventType.CONTACT_CREATED, contactId: rowByUri(contacts.db, uri)!.id }]);
+    });
+
+    test('a create whose delete is already queued behind it still announces both', async () => {
+        const { instance: contacts, broadcasts } = await makeContacts();
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        broadcasts.length = 0;
+
+        // The delete takes the write lock the moment the create lets go of it, so an announcement that read
+        // the row back after the lock would find nothing to name.
+        const [created, deleted] = await Promise.all([
+            put(contacts, uri, card({ uid })),
+            contacts.deleteCard(uri, { ifMatch: null }),
+        ]);
+
+        expect(created.ok).toBe(true);
+        expect(deleted.ok).toBe(true);
+        // Sorted: what matters is that neither event is lost, not which lock got to announce first.
+        expect(broadcasts.map((e) => e.type).sort()).toEqual([
+            SSEventType.CONTACT_CREATED,
+            SSEventType.CONTACT_DELETED,
+        ]);
     });
 });
 

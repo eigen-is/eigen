@@ -636,12 +636,10 @@ export class Contacts {
 
     public async putCard(uri: string, body: string, options: ResourcePreconditions): Promise<PutResourceResult> {
         const result = await davStore.putCard(this, uri, body, options);
+        // Told once the write lock is released, naming the row the write landed on: re-reading it here would
+        // lose the event to a delete that took the lock next.
         if (result.ok) {
-            // Told once the write lock is released, naming the row the write landed on.
-            const written = davStore.getCardMeta(this, uri);
-            if (written) {
-                this.announce(result.created ? SSEventType.CONTACT_CREATED : SSEventType.CONTACT_UPDATED, written.id);
-            }
+            this.announce(result.created ? SSEventType.CONTACT_CREATED : SSEventType.CONTACT_UPDATED, result.id);
         }
         return result;
     }
