@@ -120,7 +120,8 @@ export function setCellValue(
             if (value.m != null) {
                 curv.m = value.m;
             }
-            delFunctionGroup(ctx, row, column, sheet.id);
+            if (value.f == null) dropFormula(ctx, sheet.id!, data, row, column);
+            else delFunctionGroup(ctx, row, column, sheet.id);
             setCellValueInternal(ctx, row, column, data, curv); // update text value
         }
         forEach(value, (v, attr) => {
@@ -165,10 +166,7 @@ export function clearCell(ctx: Context, row: number, column: number, options: Co
         delete cell.m;
         delete cell.v;
 
-        if (cell.f != null) {
-            delete cell.f;
-            delFunctionGroup(ctx, row, column, sheet.id);
-        }
+        if (cell.f != null) dropFormula(ctx, sheet.id!, sheet.data, row, column);
     }
 }
 
