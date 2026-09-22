@@ -1,13 +1,15 @@
+import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import { cloneDeep, isNil, sortBy, times } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import { initSheetData } from '../api/sheet';
-import type { Context } from '../context';
+import { type Context, updateContextWithSheetData } from '../context';
 import type { Settings } from '../settings';
 import type { Sheet } from '../types';
 import { generateRandomSheetName, getSheetIndex } from '../utils';
+import { createFilterOptions } from './filter';
 import { setFormulaCellInfo } from './formula-cache';
 
 export function storeSheetSelections(ctx: Context) {
@@ -31,15 +33,46 @@ export function changeSheet(ctx: Context, id: string) {
     }
 
     storeSheetSelections(ctx);
+    ctx.sheetScrollRecord[ctx.currentSheetId] = {
+        scrollLeft: ctx.scrollLeft,
+        scrollTop: ctx.scrollTop,
+        selectionActive: ctx.selectionActive,
+        selections: ctx.selections,
+        formulaRangeSelections: ctx.formulaRangeSelections,
+    };
 
+    ctx.dataVerificationDropDownList = false;
     ctx.currentSheetId = id;
     ctx.currentSheetIsPivot = !!file.isPivotTable;
+    const record = ctx.sheetScrollRecord[id];
+    ctx.scrollRequest = { left: record?.scrollLeft ?? 0, top: record?.scrollTop ?? 0 };
+    ctx.selectionActive = record?.selectionActive ?? false;
+    ctx.selections = record?.selections;
+    ctx.formulaRangeSelections = [];
+    applySheetView(ctx);
 
     if (ctx.hooks.afterActivateSheet) {
         setTimeout(() => {
             ctx.hooks.afterActivateSheet?.(id);
         });
     }
+}
+
+// Everything the grid paints per sheet, derived in the recipe that makes the sheet current: the
+// first frame after a switch must not draw the new cells on the previous sheet's geometry.
+export function applySheetView(ctx: Context) {
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null) return;
+    const sheet = ctx.sheets[index];
+    ctx.defaultrowlen = sheet.defaultRowHeight != null ? Number(sheet.defaultRowHeight) : SHEET_DEFAULT_ROW_HEIGHT;
+    ctx.defaultcollen = sheet.defaultColWidth != null ? Number(sheet.defaultColWidth) : SHEET_DEFAULT_COL_WIDTH;
+    ctx.showGridLines = sheet.showGridLines !== 0 && sheet.showGridLines !== false;
+    ctx.insertedImgs = sheet.images;
+    // A sheet added this recipe has no data until the Workbook effect initializes it.
+    if (sheet.data) updateContextWithSheetData(ctx, sheet.data);
+    ctx.filterRange = sheet.filterRange;
+    ctx.filter = sheet.filter || {};
+    createFilterOptions(ctx, ctx.filterRange, undefined);
 }
 
 export function addSheet(
@@ -125,6 +158,7 @@ export function deleteSheet(ctx: Context, id: string) {
         );
         const orderSheets = sortBy(shownSheets, (sheet) => sheet.order);
         ctx.currentSheetId = orderSheets?.[0]?.id as string;
+        applySheetView(ctx);
     }
 
     if (ctx.hooks.afterDeleteSheet) {

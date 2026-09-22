@@ -118,14 +118,7 @@ export function showLinkCard(ctx: Context, r: number, c: number, isEditing = fal
     }
 }
 
-export function goToLink(
-    ctx: Context,
-    r: number,
-    c: number,
-    linkType: string,
-    linkAddress: string,
-    scrollEl: HTMLDivElement,
-) {
+export function goToLink(ctx: Context, r: number, c: number, linkType: string, linkAddress: string) {
     const currSheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (currSheetIndex == null) return;
     if (ctx.sheets[currSheetIndex].hyperlink?.[`${r}_${c}`] == null) {
@@ -140,12 +133,11 @@ export function goToLink(
     } else {
         const range = cloneDeep(getcellrange(ctx, linkAddress));
         if (range == null) return;
+        changeSheet(ctx, range.sheetId || ctx.currentSheetId);
         const row_pre = range.row[0] - 1 === -1 ? 0 : ctx.visibledatarow[range.row[0] - 1];
         const col_pre = range.column[0] - 1 === -1 ? 0 : ctx.visibledatacolumn[range.column[0] - 1];
-        scrollEl.scrollLeft = col_pre;
-        scrollEl.scrollTop = row_pre;
+        ctx.scrollRequest = { left: col_pre, top: row_pre };
         ctx.selections = normalizeSelection(ctx, [range]);
-        changeSheet(ctx, range.sheetId || ctx.currentSheetId);
     }
     ctx.linkCard = undefined;
 }

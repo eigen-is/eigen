@@ -6,6 +6,7 @@ import type { Cell } from '../../engine/types';
 import {
     addSheet,
     api,
+    applySheetView,
     type Context,
     collectMatches,
     createFilterOptions,
@@ -87,6 +88,7 @@ export function generateAPIs(
                             const sorted = [...shownSheets].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
                             if (sorted.length > 0) {
                                 ctx_.currentSheetId = sorted[0].id as string;
+                                applySheetView(ctx_);
                             }
                         }
                     }

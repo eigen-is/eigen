@@ -42,6 +42,8 @@ Container-resize contract (app code may rely on it): `Sheet` keeps a `ResizeObse
 placeholder and skips 0×0 boxes, so a hidden workbook re-measures its canvas when it is shown
 again — `apps/sheets` hides the workbook rather than unmounting it for the mobile comments pane.
 
+Sheet switches go through `changeSheet` (`state/modules/sheet.ts`): tab clicks, the sheet list, search, hyperlinks and the API. It derives what the grid paints in the switch's own recipe (`applySheetView`: the sheet's default row height and column width first, then row/column geometry, images, grid lines, filter), plus the scroll and selection restore. The first frame after the commit paints before any effect runs, so anything a switch leaves for an effect to derive paints the new sheet on the old sheet's layout for one frame. The `Workbook` and `Sheet` effects re-derive the same values as a backstop for data load and peer ops.
+
 ## Yjs Sync
 
 | Key     | Type    | Purpose                                   |

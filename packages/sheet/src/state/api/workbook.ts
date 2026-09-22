@@ -2,6 +2,7 @@ import { isNumber, sortBy } from 'es-toolkit/compat';
 import type { Context, Sheet } from '..';
 import {
     addSheet as addSheetInternal,
+    changeSheet,
     deleteSheet as deleteSheetInternal,
     updateSheet as updateSheetInternal,
 } from '../modules';
@@ -31,7 +32,7 @@ export function updateSheet(ctx: Context, data: Sheet[]) {
 
 export function activateSheet(ctx: Context, options: CommonOptions = {}) {
     const sheet = getSheet(ctx, options);
-    ctx.currentSheetId = sheet.id!;
+    changeSheet(ctx, sheet.id!);
 }
 
 export function setSheetName(ctx: Context, name: string, options: CommonOptions = {}) {

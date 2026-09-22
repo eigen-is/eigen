@@ -4,6 +4,7 @@ import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import { api, createContextResolver, execfunction, setCellValue as setCellValueInternal } from '..';
 import type { Context } from '../context';
+import { applySheetView } from '../modules/sheet';
 import type { FormulaCell, Sheet, SingleRange } from '../types';
 import { getSheetIndex } from '../utils';
 import { celldataToData, dataToCelldata, getSheet } from './common';
@@ -44,6 +45,7 @@ export function hideSheet(ctx: Context, sheetId: string) {
     ctx.sheets[index].status = 0;
     const shownSheets = ctx.sheets.filter((sheet) => isUndefined(sheet.hide) || sheet?.hide !== 1);
     ctx.currentSheetId = shownSheets[0].id as string;
+    applySheetView(ctx);
 }
 
 export function showSheet(ctx: Context, sheetId: string) {

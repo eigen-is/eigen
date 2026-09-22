@@ -20,6 +20,7 @@ import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import {
     api,
+    applySheetView,
     type CellWithRowAndCol,
     COPY_ACTION_TABLE_MARKER,
     type Context,
@@ -484,17 +485,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     // A fresh sheet with no persisted selection is seeded once by the
                     // SheetOverlay mount effect (api.setSelection) — the single canonical seed.
 
-                    draftCtx.insertedImgs = sheet.images;
                     draftCtx.currency = mergedSettings.currency || '€';
 
                     draftCtx.rowHeaderWidth = mergedSettings.rowHeaderWidth;
                     draftCtx.columnHeaderHeight = mergedSettings.columnHeaderHeight;
-
-                    if (sheet.defaultRowHeight != null) {
-                        draftCtx.defaultrowlen = Number(sheet.defaultRowHeight);
-                    } else {
-                        draftCtx.defaultrowlen = mergedSettings.defaultRowHeight;
-                    }
 
                     if (sheet.addRows != null) {
                         draftCtx.addDefaultRows = Number(sheet.addRows);
@@ -502,22 +496,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         draftCtx.addDefaultRows = mergedSettings.addRows;
                     }
 
-                    if (sheet.defaultColWidth != null) {
-                        draftCtx.defaultcollen = Number(sheet.defaultColWidth);
-                    } else {
-                        draftCtx.defaultcollen = mergedSettings.defaultColWidth;
-                    }
-
-                    if (sheet.showGridLines != null) {
-                        const { showGridLines } = sheet;
-                        if (showGridLines === 0 || showGridLines === false) {
-                            draftCtx.showGridLines = false;
-                        } else {
-                            draftCtx.showGridLines = true;
-                        }
-                    } else {
-                        draftCtx.showGridLines = true;
-                    }
+                    // A switch already applied this; the load and add paths reach here first.
+                    applySheetView(draftCtx);
                 },
                 { noHistory: true },
             );
@@ -525,8 +505,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             context.currentSheetId,
             context.sheets.length,
             originalData,
-            mergedSettings.defaultRowHeight,
-            mergedSettings.defaultColWidth,
             mergedSettings.column,
             mergedSettings.row,
             mergedSettings.defaultFontSize,
