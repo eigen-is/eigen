@@ -190,7 +190,8 @@ export async function putCard(
         // Regenerated only when the hash-named file is missing, so an unchanged-photo re-PUT keeps its cache.
         const projectionAvatar = await deriveCardPhotoCache(contacts, id, parsed.photo);
         const { projection, categories } = prepareCard(bytes, parsed, projectionAvatar, parsed.uid);
-        contacts.commitCard({ row: { id, uri: normalizeResourceUri(uri), eigenId, ...projection }, categories });
+        // sanitizeCardUri already accepted this spelling, so the stored uri is the NFC one.
+        contacts.commitCard({ row: { id, uri, eigenId, ...projection }, categories });
 
         // A self-card PUT renames the user org-wide; a DAV PUT stages no avatar, so the pushed bytes are the derived webp cache.
         if (isSelf) {
