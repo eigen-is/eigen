@@ -955,6 +955,7 @@ export class Mount {
     async downloadKeyToTemp(storageKey: string, tempId: string): Promise<string> {
         const start = Bun.nanoseconds();
         const tempPath = this.getTempPath(tempId);
+        await this.cleanupTemp(tempId);
         try {
             await Bun.write(tempPath, this.storage.read(storageKey));
         } catch (err) {
@@ -986,10 +987,9 @@ export class Mount {
     }
 
     async cleanupTemp(tempId: string): Promise<void> {
+        const tempPath = this.getTempPath(tempId);
+        // The journals too: SQLite replays a leftover -wal into whatever main file next lands at this path.
         try {
-            const tempPath = this.getTempPath(tempId);
-            // A stale WAL next to a later re-download of the same path would be replayed into foreign
-            // bytes, so the journals go first: a crash mid-cleanup never leaves one without its main file.
             fs.rmSync(`${tempPath}-wal`, { force: true });
             fs.rmSync(`${tempPath}-shm`, { force: true });
             fs.rmSync(tempPath, { force: true });

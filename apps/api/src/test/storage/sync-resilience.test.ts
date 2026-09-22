@@ -752,6 +752,45 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
                 .map((row) => row.data),
         ).toEqual(['a', 'b', 'c']);
     });
+
+    test('a download over an orphan -wal beside the temp path yields the stored object', async () => {
+        const { mount } = createS3Mount('orphan-wal-download');
+        await mount.init();
+        const dataDbId = await provisionStoredAbc(mount);
+        await plantStaleWal(mount.getTempPath(dataDbId));
+
+        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
+        expect(
+            reopened.db
+                .select()
+                .from(docSchema.items)
+                .all()
+                .map((row) => row.data),
+        ).toEqual(['a', 'b', 'c']);
+    });
+
+    test('a staged-copy recovery over an orphan -wal beside the temp path yields the staged bytes', async () => {
+        const { mount, fault } = createS3Mount('orphan-wal-staged');
+        await mount.init();
+        const dataDbId = await provisionStoredAbc(mount);
+        fault.failNextWrites = 9999;
+        const managed = await mount.openDatabase(docConfigNoSnap, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 4, data: 'd' }).run();
+        await mount.closeDatabase(dataDbId);
+        await mount.drainPendingUploads({ flushNow: true });
+        expect(mount.pendingUploadCount).toBeGreaterThan(0);
+        await plantStaleWal(mount.getTempPath(dataDbId));
+
+        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
+        expect(
+            reopened.db
+                .select()
+                .from(docSchema.items)
+                .all()
+                .map((row) => row.data),
+        ).toEqual(['a', 'b', 'c', 'd']);
+        fault.failNextWrites = 0;
+    });
 });
 
 describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-timer race, PUT timeout)', () => {

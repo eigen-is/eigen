@@ -140,6 +140,7 @@ async function buildDocumentDb<S extends SchemaType>(
                           const staged = mount.uploadQueue.getPendingStagingPath(storageKey);
                           if (staged && fs.existsSync(staged)) {
                               console.log(`[Mount] Recovering from staged upload for ${pathId}`);
+                              await mount.cleanupTemp(pathId);
                               await Bun.write(tempPath, Bun.file(staged));
                               return;
                           }
