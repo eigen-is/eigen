@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { API_HOST, DAV_HOST, SERVER_HOSTNAME } from '@workspace/lib/api';
 import { useAppPasswords, useAuth, useCreateAppPassword, useDeleteAppPassword } from '@workspace/lib/auth';
+import { useCalendars } from '@workspace/lib/calendar';
 import { formatDate } from '@workspace/lib/date';
 import { useMounts } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
@@ -127,6 +128,8 @@ function ServicesComponent() {
     const davBase = DAV_HOST;
     const webdavBase = `${API_HOST}/webdav`;
     const { data: personalMounts } = useMounts(user?.id ?? '');
+    // CalDAV serves the viewer's own calendars only, so the per-calendar addresses list no shared or team calendar.
+    const { data: calendars } = useCalendars(user?.id ?? '');
     const { data: teams } = useMyTeams();
 
     return (
@@ -147,7 +150,9 @@ function ServicesComponent() {
                                         CalDAV (Calendar sync)
                                     </CardTitle>
                                     <CardDescription>
-                                        Use these settings to sync your Eigen calendars with an external calendar app.
+                                        Use these settings to sync your Eigen calendars with an external calendar app. A
+                                        client that subscribes to one calendar at a time takes that calendar's own
+                                        address.
                                     </CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-3">
@@ -156,6 +161,13 @@ function ServicesComponent() {
                                         label="Server URL (Thunderbird)"
                                         value={`${davBase}/calendars/${user?.id}/`}
                                     />
+                                    {calendars?.map((cal) => (
+                                        <CopyInput
+                                            key={cal.id}
+                                            label={`Calendar — ${cal.name}`}
+                                            value={`${davBase}/calendars/${user?.id}/${cal.id}/`}
+                                        />
+                                    ))}
                                     <CopyInput label="Username" value={user?.email ?? ''} />
                                 </CardContent>
                             </Card>
