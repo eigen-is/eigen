@@ -2025,6 +2025,23 @@ export function updateDropCell(ctx: Context) {
     jfrefreshgrid(ctx, d, ctx.selections);
 }
 
+// Ctrl+D / Ctrl+R: copy the top row (or left column) of the range over the rest of it.
+export function fillFromEdge(ctx: Context, range: SingleRange, direction: 'down' | 'right') {
+    const { row, column } = range;
+    if (direction === 'down') {
+        if (row[0] === row[1]) return;
+        dropCellCache.copyRange = { row: [row[0], row[0]], column };
+        dropCellCache.applyRange = { row: [row[0] + 1, row[1]], column };
+    } else {
+        if (column[0] === column[1]) return;
+        dropCellCache.copyRange = { row, column: [column[0], column[0]] };
+        dropCellCache.applyRange = { row, column: [column[0] + 1, column[1]] };
+    }
+    dropCellCache.direction = direction;
+    dropCellCache.applyType = '0';
+    updateDropCell(ctx);
+}
+
 export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTMLDivElement) {
     ctx.cellSelectExtending = false;
     hideDropCellSelection(container);

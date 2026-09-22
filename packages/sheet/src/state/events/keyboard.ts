@@ -5,8 +5,8 @@ import { type Context, getFlowdata } from '../context';
 import { cancelNormalSelected, updateCell } from '../modules/cell';
 import { handleCut } from '../modules/clipboard';
 import { cellFocus, checkboxChange, getCellDataVerification } from '../modules/data-verification';
+import { fillFromEdge } from '../modules/drop-cell';
 import { handleFormulaInput } from '../modules/formula-editor';
-import { jfrefreshgrid } from '../modules/refresh';
 import { moveHighlightCell, moveHighlightRange, selectAll, selectionCache } from '../modules/selection';
 import { handleBold } from '../modules/toolbar';
 import type { GlobalCache, Selection } from '../types';
@@ -219,88 +219,14 @@ export function handleWithCtrlOrMetaKey(
     } else if (e.code === 'KeyA') {
         // Ctrl + A: select all
         selectAll(ctx);
-    } else if (e.code === 'KeyD') {
-        if (!ctx.selections || ctx.selections.length === 0) {
-            return;
-        }
+    } else if (e.code === 'KeyD' || e.code === 'KeyR') {
+        // Ctrl + D / Ctrl + R: fill down / right
+        const range = ctx.selections?.[0];
+        if (!range) return;
 
         e.preventDefault();
         e.stopPropagation();
-
-        const selectedRange = ctx.selections[0];
-        const { row, column } = selectedRange;
-
-        if (!row || !column) return;
-        if (!isAllowEdit(ctx)) return;
-
-        for (let col = column[0]; col <= column[1]; col += 1) {
-            const sourceCell = flowdata?.[row[0]]?.[col];
-
-            if (!sourceCell) continue;
-
-            const sourceValue = sourceCell.v;
-            const sourceFormula = sourceCell.f;
-
-            for (let r = row[0] + 1; r <= row[1]; r += 1) {
-                if (sourceFormula) {
-                    // Shift relative row refs down by the row offset; keep $-anchored absolutes
-                    const newFormula = sourceFormula.replace(
-                        /(\$?[A-Z]+)(\$?)(\d+)/g,
-                        (match, colRef, dollar, rowNum) => {
-                            return dollar ? match : `${colRef}${parseInt(rowNum, 10) + (r - row[0])}`;
-                        },
-                    );
-
-                    updateCell(ctx, r, col, null, newFormula);
-                } else {
-                    updateCell(ctx, r, col, null, sourceValue);
-                }
-            }
-        }
-
-        jfrefreshgrid(ctx, null, undefined);
-    } else if (e.code === 'KeyR') {
-        if (!ctx.selections || ctx.selections.length === 0) {
-            return;
-        }
-
-        e.preventDefault();
-        e.stopPropagation();
-
-        const selectedRange = ctx.selections[0];
-        const { row, column } = selectedRange;
-
-        if (!row || !column) return;
-        if (!isAllowEdit(ctx)) return;
-
-        for (let r = row[0]; r <= row[1]; r += 1) {
-            const sourceCell = flowdata?.[r]?.[column[0]];
-
-            if (!sourceCell) continue;
-
-            const sourceValue = sourceCell.v;
-            const sourceFormula = sourceCell.f;
-
-            for (let c = column[0] + 1; c <= column[1]; c += 1) {
-                if (sourceFormula) {
-                    // Shift relative col refs right by the col offset; keep $-anchored absolutes
-                    const newFormula = sourceFormula.replace(
-                        /(\$?[A-Z]+)(\$?)(\d+)/g,
-                        (match, colRef, dollar, rowNum) => {
-                            if (dollar) return match;
-                            const colIndex = colRef.charCodeAt(0) - 65 + (c - column[0]);
-                            return `${String.fromCharCode(65 + colIndex)}${rowNum}`;
-                        },
-                    );
-
-                    updateCell(ctx, r, c, null, newFormula);
-                } else {
-                    updateCell(ctx, r, c, null, sourceValue);
-                }
-            }
-        }
-
-        jfrefreshgrid(ctx, null, undefined);
+        fillFromEdge(ctx, range, e.code === 'KeyD' ? 'down' : 'right');
     }
 
     e.preventDefault();
