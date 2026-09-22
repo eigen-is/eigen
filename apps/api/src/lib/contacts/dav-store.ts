@@ -180,16 +180,18 @@ export async function putCard(
         const id = existing?.id ?? randomUUID();
         const isSelf = eigenId === contacts.home.user.id;
 
-        // Regenerated only when the hash-named file is missing, so an unchanged-photo re-PUT keeps its cache.
-        const projectionAvatar = await deriveCardPhotoCache(contacts, id, parsed.photo);
-        const { projection, categories } = prepareCard(bytes, parsed, projectionAvatar, parsed.uid);
+        // The avatar URL writeCard derived and stored, after both ceilings passed.
+        let projectionAvatar: string;
+        const { projection, categories } = prepareCard(bytes, parsed, '', parsed.uid);
         // The stored bytes credit the card this one replaces; a raised 413/507 maps to a typed result.
         try {
             // sanitizeCardUri already accepted this spelling, so the stored uri is the NFC one.
-            await contacts.writeCard({
+            projectionAvatar = await contacts.writeCard({
                 row: { id, uri, eigenId, ...projection },
                 categories,
                 creditBytes: existing?.size ?? 0,
+                // Regenerated only when the hash-named file is missing, so an unchanged-photo re-PUT keeps its cache.
+                cache: () => deriveCardPhotoCache(contacts, id, parsed.photo),
             });
         } catch (e) {
             if (e instanceof ApiError && e.status === 413) return { ok: false, error: 'too-large' };

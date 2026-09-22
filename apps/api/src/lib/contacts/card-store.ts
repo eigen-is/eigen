@@ -108,8 +108,11 @@ export function labelColorFor(nameKey: string): string {
 // The columns a card write carries; the ctag + timestamps are stamped inside the write transaction.
 export type CardRowInput = Omit<typeof schema.contacts.$inferInsert, 'cardCtag' | 'createdAt' | 'updatedAt'>;
 
+// The row writeCard stores: its projection is always there, because writeCard fills the avatar URL into it.
+export type CardWriteRow = CardRowInput & { data: CardData };
+
 // Everything a card's own bytes decide. The caller owns the id, the uri and the server-owned eigenId.
-export type CardProjection = Omit<CardRowInput, 'id' | 'uri' | 'eigenId'>;
+export type CardProjection = Omit<CardWriteRow, 'id' | 'uri' | 'eigenId'>;
 
 // `avatar` is the cache URL only — inline photo bytes never enter the index.
 export type CardData = NonNullable<(typeof schema.contacts.$inferSelect)['data']>;

@@ -26,7 +26,7 @@ import { createVCard, mergeVCard, normalizeBirthday, parseVCard } from '../vcard
 import type { CardEdits } from '../vcard/types';
 import type { StagedAvatarPair } from './avatars';
 import * as avatars from './avatars';
-import type { CardData, CardRowInput, Tx } from './card-store';
+import type { CardData, CardRowInput, CardWriteRow, Tx } from './card-store';
 import {
     avatarNameOf,
     CARD_MAX_BYTES,
@@ -256,17 +256,25 @@ export class Contacts {
         for (const id of createdLabelIds) this.emitLabel(SSEventType.LABEL_CREATED, id);
     }
 
-    // The one write every card path takes: both ceilings judge the bytes right before the transaction that
-    // stores them, so a refusal leaves the book as it was. `creditBytes` is the stored card this one replaces,
-    // or a rewrite that shrinks a card would be refused on a quota its own bytes already hold.
-    async writeCard(opts: { row: CardRowInput; categories: string[]; creditBytes: number }): Promise<void> {
+    // The one write every card path takes, and it owns the order: both ceilings judge the bytes before `cache`
+    // derives the avatar and before the transaction that stores them, so a refusal leaves neither a row nor a
+    // webp behind. `creditBytes` is the stored card this one replaces, or a rewrite that shrinks a card would
+    // be refused on a quota its own bytes already hold. Returns the avatar URL the projection stored.
+    async writeCard(opts: {
+        row: CardWriteRow;
+        categories: string[];
+        creditBytes: number;
+        cache: () => Promise<string>;
+    }): Promise<string> {
         if (opts.row.vcard.byteLength > CARD_MAX_BYTES) {
             throw new ApiError(413, 'Contact card is too large');
         }
         if (this.meteredIngest) {
             await enforceHomeDataQuota(this.home.user.id, opts.row.vcard.byteLength, opts.creditBytes);
         }
-        this.commitCard(opts);
+        const avatar = await opts.cache();
+        this.commitCard({ row: { ...opts.row, data: { ...opts.row.data, avatar } }, categories: opts.categories });
+        return avatar;
     }
 
     // Callers hold the write lock and have already run their own guards (self-delete, preconditions).
@@ -385,8 +393,6 @@ export class Contacts {
                 ),
             );
 
-            // The projection stores the promoted webp's hashed URL, or '' when there is no photo.
-            const avatar = staged ? await this.promoteAvatarCache(id, staged) : '';
             await this.writeCard({
                 creditBytes: 0,
                 row: {
@@ -398,10 +404,12 @@ export class Contacts {
                     lastName: contact.lastName.trim(),
                     eigenId: this.resolveSelfLink(contact.eigenId),
                     isGroup: false,
-                    data: toData({ ...contact, avatar }),
+                    data: toData(contact),
                     etag: computeResourceEtag(bytes),
                 },
                 categories,
+                // The projection stores the promoted webp's hashed URL, or '' when there is no photo.
+                cache: async () => (staged ? this.promoteAvatarCache(id, staged) : ''),
             });
 
             this.announce(SSEventType.CONTACT_CREATED, id);
@@ -473,10 +481,6 @@ export class Contacts {
 
             const bytes = new TextEncoder().encode(mergeVCard(card, edits));
 
-            let avatar = contact.avatar ?? '';
-            if (avatarChanged) {
-                avatar = staged ? await this.promoteAvatarCache(id, staged) : '';
-            }
             await this.writeCard({
                 creditBytes: row.vcard.byteLength,
                 row: {
@@ -488,10 +492,15 @@ export class Contacts {
                     lastName: contact.lastName.trim(),
                     eigenId: row.eigenId,
                     isGroup: row.isGroup,
-                    data: toData({ ...contact, avatar }),
+                    data: toData(contact),
                     etag: computeResourceEtag(bytes),
                 },
                 categories,
+                // An unchanged photo keeps the stored URL; a changed one promotes the staged webp, or clears it.
+                cache: async () => {
+                    if (!avatarChanged) return contact.avatar ?? '';
+                    return staged ? this.promoteAvatarCache(id, staged) : '';
+                },
             });
 
             // Propagation is downstream of a settled mutation: reporting its failure hands back a stale etag, so the client's retry 412s on an edit that succeeded.

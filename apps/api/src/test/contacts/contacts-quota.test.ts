@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
-import { getTestContext } from '../setup';
+import { avatarsDirOf } from '../contacts-test-helpers';
+import { getTestContext, TEST_DATA_DIR, TEST_PNG_BYTES } from '../setup';
 
 // A card's vCard bytes are metered against the Home's one data budget, the same budget mail and calendar
 // share. makeContacts homes are deliberately unmetered (never registered, so atHome is false), so every
@@ -62,6 +65,84 @@ describe('CardDAV quota gate', () => {
             await updateServerSettings({ quotas: { mailAndContactsMaxMB: originalMaxMB } });
             if (deliveredId) await home.mail.messageDelete(deliveredId);
             for (const uri of created) await contacts.deleteCard(uri, { ifMatch: null });
+        }
+    });
+});
+
+// A refusal must leave nothing behind, and the avatar cache is the one byte-costing side effect a card
+// write still has: the ceilings run before the derivation, so a 507 writes no webp either.
+describe('a refused write derives no avatar cache', () => {
+    const MB = 1024 * 1024;
+
+    // Below what the home already holds, so the very next card write is refused whatever its size.
+    async function fillBudget(home: Awaited<ReturnType<typeof getHome>>): Promise<void> {
+        await updateServerSettings({ quotas: { mailAndContactsMaxMB: Math.floor((await home.dataSize()) / MB) } });
+    }
+
+    test('a metered addContact over budget refuses before the staged photo is promoted', async () => {
+        const ctx = await getTestContext();
+        const home = await getHome(ctx.bob.user.id);
+        const contacts = home.contacts;
+        const avatarsDir = avatarsDirOf(join(TEST_DATA_DIR, 'home', ctx.bob.user.id));
+        const originalMaxMB = getServerSettings().quotas.mailAndContactsMaxMB;
+
+        try {
+            const staged = await contacts.uploadAvatar(new File([TEST_PNG_BYTES], 'avatar.png', { type: 'image/png' }));
+            await fillBudget(home);
+            const filesBefore = readdirSync(avatarsDir).sort();
+            const avatarsBytesBefore = contacts.avatarsBytes;
+
+            await expect(
+                contacts.addContact({
+                    firstName: 'Overflow',
+                    lastName: 'Photo',
+                    email: [`overflow-${randomUUID()}@example.org`],
+                    phone: [],
+                    avatar: staged,
+                }),
+            ).rejects.toThrow('Insufficient Storage');
+
+            // Only the staged pair from the upload above: the promoted hash-named webp was never written.
+            expect(readdirSync(avatarsDir).sort()).toEqual(filesBefore);
+            expect(contacts.avatarsBytes).toBe(avatarsBytesBefore);
+        } finally {
+            await updateServerSettings({ quotas: { mailAndContactsMaxMB: originalMaxMB } });
+        }
+    });
+
+    test('a metered PUT of a card with an inline photo refuses before the cache is derived', async () => {
+        const ctx = await getTestContext();
+        const home = await getHome(ctx.bob.user.id);
+        const contacts = home.contacts;
+        const avatarsDir = avatarsDirOf(join(TEST_DATA_DIR, 'home', ctx.bob.user.id));
+        const originalMaxMB = getServerSettings().quotas.mailAndContactsMaxMB;
+
+        try {
+            await fillBudget(home);
+            const filesBefore = readdirSync(avatarsDir).sort();
+            const avatarsBytesBefore = contacts.avatarsBytes;
+
+            const uid = randomUUID();
+            const body = [
+                'BEGIN:VCARD',
+                'VERSION:3.0',
+                `UID:${uid}`,
+                'N:Photo;Refused;;;',
+                'FN:Refused Photo',
+                `PHOTO;ENCODING=b;TYPE=PNG:${Buffer.from(TEST_PNG_BYTES).toString('base64')}`,
+                'END:VCARD',
+                '',
+            ].join('\r\n');
+            expect(await contacts.putCard(`${uid}.vcf`, body, { ifMatch: null, ifNoneMatch: null })).toEqual({
+                ok: false,
+                error: 'quota',
+            });
+
+            expect(await contacts.getCard(`${uid}.vcf`)).toBeNull();
+            expect(readdirSync(avatarsDir).sort()).toEqual(filesBefore);
+            expect(contacts.avatarsBytes).toBe(avatarsBytesBefore);
+        } finally {
+            await updateServerSettings({ quotas: { mailAndContactsMaxMB: originalMaxMB } });
         }
     });
 });
