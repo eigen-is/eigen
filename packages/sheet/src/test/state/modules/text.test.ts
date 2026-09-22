@@ -46,4 +46,15 @@ describe('state/modules/text — getCellTextInfo wrap', () => {
         const info = layout({ v: 'abc defgh ij', m: 'abc defgh ij', ct: { fa: 'General', t: 'g' }, tb: '2' });
         expect(info?.values.length).toBeGreaterThan(1);
     });
+
+    test('a formula typed into a text cell produces a number that stays on one line', () => {
+        // ct.t keeps the text cell's 'g'; the value is what decides.
+        const info = layout({ v: 28254.75, m: '28254.75', f: '=A2*3', ct: { fa: 'General', t: 'g' }, tb: '2' });
+        expect(info?.values.map((word) => word.content)).toEqual(['28254.75']);
+    });
+
+    test('a wrapped date stays on one line', () => {
+        const info = layout({ v: 45000, m: '2023-03-15', ct: { fa: 'yyyy-MM-dd', t: 'd' }, tb: '2' });
+        expect(info?.values.map((word) => word.content)).toEqual(['2023-03-15']);
+    });
 });
