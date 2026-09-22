@@ -615,7 +615,8 @@ describe('Sheets xlsx conversion fidelity', () => {
             cell.value = value;
             cell.numFmt = numFmt;
         }
-        ws.getCell('B1').value = 100.5; // General/missing format stays the raw string
+        ws.getCell('B1').value = 100.5; // General/missing format
+        ws.getCell('B2').value = 0.1 + 0.2; // float noise General hides, as in Excel
         const text = ws.getCell('C1');
         text.value = 'hello';
         text.numFmt = '"€"#,##0.00'; // a string cell with a currency numFmt stays the string
@@ -638,6 +639,8 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('5:0')?.m).toBe(' € 145.20 ');
 
         expect(byCoord.get('0:1')?.m).toBe('100.5');
+        expect(byCoord.get('1:1')?.v).toBe(0.30000000000000004);
+        expect(byCoord.get('1:1')?.m).toBe('0.3');
         expect(byCoord.get('0:2')?.m).toBe('hello');
 
         // Import-time recalc recomputes formula cells through our engine, so the

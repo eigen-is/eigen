@@ -20,7 +20,7 @@ import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
 import { DependencyIndex } from './dependency-index';
-import { booleanDisplay, update } from './format';
+import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { calPostfixExpression, iscelldata, operatorjson, operatorPriority } from './formula-utils';
 import { SHEET_NAME_PREFIX } from './parser/helper/cell';
@@ -572,10 +572,9 @@ function extractDependencies(
 
 // Derive `m` (display) + `v` from an evaluation result, mirroring the client's
 // setCellValue where it is cheap to: error sentinels become `v = m = '#…'` with
-// `ct.t = 'e'`; booleans render TRUE/FALSE; a cell carrying a usable format mask
-// gets `m = update(ct.fa, v)`; everything else falls back to `String(v)`. The
-// mask-less numeric/date inference the client does via `parseCellInput` is accepted
-// as small drift rather than re-coupling the format decision tree.
+// `ct.t = 'e'`; booleans render TRUE/FALSE; numbers render through the shared
+// `numberDisplay` under the cell's mask (General when it has none); everything
+// else falls back to `String(v)`.
 function writeCellValue(cell: Cell, result: EvaluationResult): void {
     if (result.type === 'error') {
         const sentinel = String(result.value);
@@ -592,11 +591,8 @@ function writeCellValue(cell: Cell, result: EvaluationResult): void {
         return;
     }
 
-    // A numeric result whose cell carries a real format mask renders through it
-    // (currency/percent/date/custom). numfmt always yields a display string.
-    const fa = cell.ct?.fa;
-    if (fa != null && fa !== 'General' && typeof result.value === 'number') {
-        cell.m = update(fa, result.value);
+    if (typeof result.value === 'number') {
+        cell.m = numberDisplay(result.value, cell.ct?.fa);
         return;
     }
 

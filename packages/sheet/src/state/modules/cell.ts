@@ -2,7 +2,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
 import { cloneDeep, every, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
-import { booleanDisplay, parseCellInput, update } from '../../engine/format';
+import { booleanDisplay, numberDisplay, parseCellInput, update } from '../../engine/format';
 import { isFormula } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
@@ -228,31 +228,7 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
                 cell.ct = { fa: 'General', t: 'n' };
             }
 
-            if (cell.v === Infinity || cell.v === -Infinity) {
-                cell.m = cell.v.toString();
-            } else {
-                if (cell.v.toString().indexOf('e') > -1) {
-                    let len: number;
-                    if (cell.v.toString().split('.').length === 1) {
-                        len = 0;
-                    } else {
-                        len = cell.v.toString().split('.')[1].split('e')[0].length;
-                    }
-                    if (len > 5) {
-                        len = 5;
-                    }
-
-                    cell.m = cell.v.toExponential(len).toString();
-                } else {
-                    const v_p = Math.round(cell.v * 1000000000) / 1000000000;
-                    if (isNil(cell.ct) || isNil(cell.ct.fa)) {
-                        [cell.m] = parseCellInput(v_p);
-                    } else {
-                        const mask = update(cell.ct.fa, v_p);
-                        cell.m = mask.toString();
-                    }
-                }
-            }
+            cell.m = numberDisplay(cell.v, cell.ct.fa);
         } else if (!isNil(cell.ct) && cell.ct.fa === '@') {
             cell.m = vupdateStr;
             cell.v = vupdate;

@@ -18,7 +18,7 @@ import {
     zip,
 } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine/conditional-format';
-import { parseCellInput, update } from '../../engine/format';
+import { numberDisplay, parseCellInput, update } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, InlineStringSegment, SingleRange } from '../../engine/types';
 import { setRowHeight } from '../api';
@@ -1005,7 +1005,8 @@ function handleFormulaStringPaste(ctx: Context, formulaStr: string) {
     if (!d) return;
 
     if (!d[r][c]) d[r][c] = {};
-    d[r][c]!.m = val == null ? '' : val.toString();
+    const m = val == null ? '' : val.toString();
+    d[r][c]!.m = typeof val === 'number' ? numberDisplay(val, d[r][c]!.ct?.fa) : m;
     d[r][c]!.v = val;
     d[r][c]!.f = formulaStr;
 }

@@ -171,6 +171,16 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![0][2]?.m).toBe('4');
     });
 
+    test('General number result is rounded like the editor rounds it', () => {
+        const sheets = [
+            sheet('s1', 'Sheet1', [[formula('=0.1+0.2', { ct: { fa: 'General', t: 'n' } }), formula('=0.1+0.2')]]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][0]?.v).toBe(0.30000000000000004);
+        expect(out[0].data![0][0]?.m).toBe('0.3');
+        expect(out[0].data![0][1]?.m).toBe('0.3');
+    });
+
     test('boolean result renders TRUE/FALSE', () => {
         const sheets = [sheet('s1', 'Sheet1', [[formula('=2>1'), formula('=2<1')]])];
         const out = recalcSheets(sheets);
