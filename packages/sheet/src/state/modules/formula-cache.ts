@@ -341,6 +341,22 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
     ctx.formulaCache.dependencyIndex.set(key, formulaDependency);
 }
 
+// A sheet arriving whole carries no cell patches; an unbuilt map reads it when it builds.
+export function registerSheetFormulas(ctx: Context, id: string, data: CellMatrix) {
+    const map = ctx.formulaCache.formulaCellInfoMap;
+    if (map == null) return;
+    for (const key of Object.keys(map)) {
+        if (map[key].id !== id) continue;
+        delete map[key];
+        ctx.formulaCache.dependencyIndex.delete(key);
+    }
+    for (let r = 0; r < data.length; r += 1) {
+        for (let c = 0; c < data[r].length; c += 1) {
+            if (data[r][c]?.f != null) setFormulaCellInfo(ctx, { r, c, id }, data, id);
+        }
+    }
+}
+
 export function executeAffectedFormulas(
     ctx: Context,
     formulaRunList: FormulaCellInfo[],

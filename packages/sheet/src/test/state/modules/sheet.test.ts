@@ -3,7 +3,8 @@ import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/li
 import { setSelection } from '../../../state/api/range';
 import { hideSheet } from '../../../state/api/sheet';
 import { type Context, firstVisibleSheetId, initSheetIndex } from '../../../state/context';
-import { changeSheet, deleteSheet, settleCurrentSheet } from '../../../state/modules/sheet';
+import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { changeSheet, deleteSheet, settleCurrentSheet, updateSheet } from '../../../state/modules/sheet';
 import { contextFactory } from '../factories/context';
 
 function twoSheetContext() {
@@ -179,5 +180,23 @@ describe('leaving a sheet that goes away', () => {
         deleteSheet(ctx, 'a', true);
         expect(ctx.sheets.map((sheet) => sheet.id)).not.toContain('a');
         expect(ctx.currentSheetId).toBe('b');
+    });
+});
+
+describe('updateSheet', () => {
+    test("a built map swaps the replaced sheet's formulas for the new ones", () => {
+        const ctx = contextFactory({
+            sheets: [
+                { id: 'id_1', name: 'Sheet1', order: 0, data: [[{ v: 1 }, { f: '=A1*2', v: 2 }]] },
+                { id: 'id_2', name: 'Sheet2', order: 1, data: [[null]] },
+            ],
+        }) as Context;
+        ctx.sheets[0].calcChain = [{ r: 0, c: 1, id: 'id_1' }];
+        const map = warmFormulaCellInfoMap(ctx);
+
+        updateSheet(ctx, [{ id: 'id_1', name: 'Sheet1', order: 0, data: [[{ v: 1 }, null, { f: '=A1+1', v: 2 }]] }]);
+
+        expect(map.r0c1iid_1).toBeUndefined();
+        expect(map.r0c2iid_1?.calc_funcStr).toBe('=A1+1');
     });
 });

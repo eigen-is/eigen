@@ -21,6 +21,7 @@ import {
     opToPatch,
     type Presence,
     type Range,
+    registerSheetFormulas,
     removeActiveImage,
     removeImageByMediaName,
     replaceAllMatches,
@@ -30,7 +31,6 @@ import {
     type SearchHighlight,
     type SearchResult,
     type Settings,
-    setFormulaCellInfo,
     setSearchHighlights,
     updateImage,
 } from '../../state';
@@ -73,14 +73,7 @@ export function generateAPIs(
                             const { id } = specialOp.value;
                             const fileIndex = getSheetIndex(ctx_, id);
                             if (fileIndex == null) continue;
-                            const data = api.initSheetData(ctx_, fileIndex, specialOp.value);
-                            // No cell patch carries the new sheet's formulas, so a built map registers them here.
-                            if (ctx_.formulaCache.formulaCellInfoMap == null) continue;
-                            for (let r = 0; r < data.length; r += 1) {
-                                for (let c = 0; c < data[r].length; c += 1) {
-                                    if (data[r][c]?.f != null) setFormulaCellInfo(ctx_, { r, c, id }, data, id);
-                                }
-                            }
+                            registerSheetFormulas(ctx_, id, api.initSheetData(ctx_, fileIndex, specialOp.value));
                         } else if (specialOp.op === 'deleteSheet') {
                             deleteSheet(ctx_, specialOp.value.id, true);
                             patches.length = 0;
