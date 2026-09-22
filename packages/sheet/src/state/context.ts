@@ -391,60 +391,38 @@ export function getSheetConfig(ctx?: Context, id?: string | null) {
     return ctx.sheets?.[i]?.config;
 }
 
+// Accumulated in locals and assigned once: per-row writes through the immer draft cost ~3x on 100k rows.
 function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
     const cfg = getSheetConfig(ctx);
+    const rowlen = cfg?.rowlen;
+    const rowhidden = cfg?.rowhidden;
+    const columnlen = cfg?.columnlen;
+    const colhidden = cfg?.colhidden;
+    const { defaultrowlen, defaultcollen } = ctx;
 
-    ctx.visibledatarow = [];
-    ctx.rh_height = 0;
-
+    const visibledatarow: number[] = [];
+    let rh_height = 0;
     for (let r = 0; r < rowCount; r += 1) {
-        let rowlen: number | string = ctx.defaultrowlen;
-
-        if (cfg?.rowlen?.[r]) {
-            rowlen = cfg.rowlen[r];
-        }
-
-        if (cfg?.rowhidden?.[r] != null) {
-            ctx.visibledatarow.push(ctx.rh_height);
-            continue;
-        }
-
-        ctx.rh_height += (rowlen as number) + 1;
-
-        ctx.visibledatarow.push(ctx.rh_height); // temporary row height distribution
+        if (rowhidden?.[r] == null) rh_height += (rowlen?.[r] || defaultrowlen) + 1;
+        visibledatarow.push(rh_height);
     }
+    ctx.visibledatarow = visibledatarow;
+    ctx.rh_height = rh_height + 80; // add blank space at the very bottom
 
-    ctx.rh_height += 80; // add blank space at the very bottom
-
-    ctx.visibledatacolumn = [];
-    ctx.ch_width = 0;
-
-    const maxColumnlen = 120;
-
-    const flowdata = getFlowdata(ctx);
+    const firstRow = getFlowdata(ctx)?.[0];
+    const visibledatacolumn: number[] = [];
+    let ch_width = 0;
     for (let c = 0; c < colCount; c += 1) {
-        let firstcolumnlen: number | string = ctx.defaultcollen;
-
-        if (cfg?.columnlen?.[c]) {
-            firstcolumnlen = cfg.columnlen[c];
-        } else if (flowdata?.[0]?.[c] && firstcolumnlen > 300) {
-            // Clamp a very wide imported default column width for layout only. This is a
-            // geometry recompute — persisting the clamp would ship an op and take an undo
-            // entry from a render pass, on every client independently.
-            firstcolumnlen = 300;
-        }
-
-        if (cfg?.colhidden?.[c] != null) {
-            ctx.visibledatacolumn.push(ctx.ch_width);
-            continue;
-        }
-
-        ctx.ch_width += (firstcolumnlen as number) + 1;
-
-        ctx.visibledatacolumn.push(ctx.ch_width); // temporary column width distribution
+        let width = columnlen?.[c] || defaultcollen;
+        // Clamp a very wide imported default column width for layout only. This is a
+        // geometry recompute — persisting the clamp would ship an op and take an undo
+        // entry from a render pass, on every client independently.
+        if (!columnlen?.[c] && firstRow?.[c] && width > 300) width = 300;
+        if (colhidden?.[c] == null) ch_width += width + 1;
+        visibledatacolumn.push(ch_width);
     }
-
-    ctx.ch_width += maxColumnlen;
+    ctx.visibledatacolumn = visibledatacolumn;
+    ctx.ch_width = ch_width + 120;
 }
 
 export function ensureSheetIndex(data: Sheet[], generateSheetId: () => string) {

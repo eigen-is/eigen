@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
@@ -6,6 +6,7 @@ installHappyDom();
 const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { Workbook } = await import('../../../components/Workbook');
+const contextModule = await import('../../../state/context');
 type Sheet = import('../../../state').Sheet;
 type WorkbookInstance = import('../../../components/Workbook').WorkbookInstance;
 
@@ -20,6 +21,7 @@ function sheets(): Sheet[] {
 
 let cleanup: (() => Promise<void>) | undefined;
 afterEach(async () => {
+    mock.restore();
     await cleanup?.();
     cleanup = undefined;
 });
@@ -56,6 +58,29 @@ async function mountWorkbook(props: Record<string, unknown> = {}) {
     const current = () => container.querySelector('.bg-background.text-foreground span')?.textContent;
     return { container, render, workbook, current };
 }
+
+function tab(container: HTMLElement, name: string) {
+    const span = [...container.querySelectorAll('[role="button"] span')].find((s) => s.textContent === name);
+    if (!span?.parentElement) throw new Error(`tab ${name} did not render`);
+    return span.parentElement;
+}
+
+test('a tab switch derives the sheet geometry once', async () => {
+    const { container, current } = await mountWorkbook();
+    const geometry = spyOn(contextModule, 'updateContextWithSheetData');
+    await act(async () => {
+        tab(container, 'Two').click();
+    });
+    expect(current()).toBe('Two');
+    expect(geometry.mock.calls.length).toBe(1);
+});
+
+test('an app re-render with fresh hooks derives no geometry', async () => {
+    const { render } = await mountWorkbook();
+    const geometry = spyOn(contextModule, 'updateContextWithSheetData');
+    await render();
+    expect(geometry.mock.calls.length).toBe(0);
+});
 
 test('a peer hiding the current sheet lands on the first visible sheet in tab order', async () => {
     const { workbook, current } = await mountWorkbook();

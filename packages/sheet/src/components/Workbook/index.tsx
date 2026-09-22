@@ -419,7 +419,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     draftCtx.defaultcolumnNum = mergedSettings.column;
                     draftCtx.defaultrowNum = mergedSettings.row;
                     draftCtx.defaultFontSize = mergedSettings.defaultFontSize;
+                    // Only a load or newly created sheet data needs the view here; a switch derives its own.
+                    let viewStale = false;
                     if (draftCtx.sheets.length === 0) {
+                        viewStale = true;
                         // Shallow-clone the sheet wrappers — NOT the heavy celldata/data,
                         // which stay shared by reference (avoids the ~900ms deep clone on a
                         // 48MB xlsx import). The init below only sets top-level props
@@ -469,6 +472,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
                     if (!sheet.data || sheet.data.length === 0) {
                         api.initSheetData(draftCtx, sheetIdx, sheet);
+                        viewStale = true;
                     } else {
                         normalizeSheetConfig(sheet);
                     }
@@ -494,8 +498,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         draftCtx.addDefaultRows = mergedSettings.addRows;
                     }
 
-                    // A switch already applied this; the load and add paths reach here first.
-                    applySheetView(draftCtx);
+                    if (viewStale) applySheetView(draftCtx);
                 },
                 { noHistory: true },
             );
