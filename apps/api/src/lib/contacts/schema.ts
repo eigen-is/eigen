@@ -1,5 +1,5 @@
 import type { CreateContactInput } from '@workspace/lib/types/contact';
-import { relations, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { blob, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 // The vCard bytes are the truth; every other column of this table is a projection of them and is rebuildable from them.
@@ -19,8 +19,6 @@ export const contacts = sqliteTable(
         >(),
         etag: text('etag').notNull(),
         cardCtag: integer('cardCtag').notNull(),
-        createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
-        updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
     },
     (table) => ({
         // A uri is unique as written and a uid across the whole book: both are how a DAV client names a card.
@@ -84,22 +82,3 @@ export const contactsToLabels = sqliteTable(
         label: index('idx_contacts_to_labels_labelId').on(table.labelId),
     }),
 );
-
-export const contactsRelations = relations(contacts, ({ many }) => ({
-    labels: many(contactsToLabels),
-}));
-
-export const labelsRelations = relations(labels, ({ many }) => ({
-    contacts: many(contactsToLabels),
-}));
-
-export const contactsToLabelsRelations = relations(contactsToLabels, ({ one }) => ({
-    contact: one(contacts, {
-        fields: [contactsToLabels.contactId],
-        references: [contacts.id],
-    }),
-    label: one(labels, {
-        fields: [contactsToLabels.labelId],
-        references: [labels.id],
-    }),
-}));

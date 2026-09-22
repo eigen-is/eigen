@@ -164,7 +164,7 @@ export async function importEvents(
     return result;
 }
 
-// ---- Export ----
+// --- Export ---
 
 // Ordered by the earliest start among the rows asked for, so a reader meets the events in the order a calendar draws them.
 function exportedUris(calendar: Calendar, calendarId: string, ids?: string[]): string[] {

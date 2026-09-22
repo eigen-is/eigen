@@ -117,8 +117,8 @@ export function labelColorFor(nameKey: string): string {
     return EIGEN_ACCENT_COLORS[(hash >>> 0) % EIGEN_ACCENT_COLORS.length].value;
 }
 
-// The columns a card write carries; the ctag + timestamps are stamped inside the write transaction.
-export type CardRowInput = Omit<typeof schema.contacts.$inferInsert, 'cardCtag' | 'createdAt' | 'updatedAt'>;
+// The columns a card write carries; the ctag is stamped inside the write transaction.
+export type CardRowInput = Omit<typeof schema.contacts.$inferInsert, 'cardCtag'>;
 
 // Everything a card's own bytes decide; `data` is always there, because writeCard fills the avatar URL into
 // it. The caller owns the id, the uri and the server-owned eigenId.
@@ -153,7 +153,6 @@ export function cardUpdateSet(row: CardRowInput, ctag: number) {
         data: row.data,
         etag: row.etag,
         cardCtag: ctag,
-        updatedAt: sql`unixepoch()`,
     };
 }
 

@@ -163,6 +163,12 @@ export class Contacts {
         return this.cardsBytes + this.avatarsBytes;
     }
 
+    async destruct(): Promise<void> {
+        if (this.managedDb) {
+            await this.managedDb.close();
+        }
+    }
+
     // --- Seams used by contacts/*.ts ---
 
     announce(type: Parameters<typeof buildContactEvent>[0], contactId: string): void {
@@ -268,7 +274,7 @@ export class Contacts {
     // --- Contacts ---
 
     // The blob is the truth, so every projected column and the junction come back from it. Untouched, because no
-    // blob carries them: the self-link, the ctags, the tombstones, createdAt, and each label's id and color.
+    // blob carries them: the self-link, the ctags, the tombstones, and each label's id and color.
     public rebuildProjection(): void {
         const rows = this.db
             .select({
@@ -652,11 +658,5 @@ export class Contacts {
 
     public async importCards(bytes: Uint8Array): Promise<ImportCountsResult> {
         return transfer.importCards(this, bytes);
-    }
-
-    async destruct(): Promise<void> {
-        if (this.managedDb) {
-            await this.managedDb.close();
-        }
     }
 }

@@ -169,9 +169,7 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     isGroup INTEGER NOT NULL DEFAULT 0,
                     data TEXT,
                     etag TEXT NOT NULL,
-                    cardCtag INTEGER NOT NULL,
-                    createdAt INTEGER NOT NULL DEFAULT (unixepoch()),
-                    updatedAt INTEGER NOT NULL DEFAULT (unixepoch())
+                    cardCtag INTEGER NOT NULL
                 );
 
                 CREATE TABLE book (
