@@ -51,6 +51,13 @@ type CutPasteSide = {
 };
 
 function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, RowlChange: boolean) {
+    // The map reads the cells, so both sheets hold their post-cut data first.
+    if (ctx.currentSheetId === source.sheetId) {
+        ctx.sheets[getSheetIndex(ctx, target.sheetId)!].data = target.curData;
+    } else if (ctx.currentSheetId === target.sheetId) {
+        ctx.sheets[getSheetIndex(ctx, source.sheetId)!].data = source.curData;
+    }
+
     // trigger linked cell data updates
     const execF_rc: Record<string, number> = {};
     ctx.formulaCache.execFunctionExist = [];
@@ -68,7 +75,7 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
 
     for (let r = target.range.row[0]; r <= target.range.row[1]; r += 1) {
         for (let c = target.range.column[0]; c <= target.range.column[1]; c += 1) {
-            setFormulaCellInfo(ctx, { r, c, id: source.sheetId });
+            setFormulaCellInfo(ctx, { r, c, id: target.sheetId });
             if (`${r}_${c}_${target.sheetId}` in execF_rc) {
                 continue;
             }
@@ -106,12 +113,6 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
             ctx.visibledatarow.push(ctx.rh_height); // temporary row height distribution
         }
         ctx.rh_height += 80;
-    }
-
-    if (ctx.currentSheetId === source.sheetId) {
-        ctx.sheets[getSheetIndex(ctx, target.sheetId)!].data = target.curData;
-    } else if (ctx.currentSheetId === target.sheetId) {
-        ctx.sheets[getSheetIndex(ctx, source.sheetId)!].data = source.curData;
     }
 
     // selections
@@ -179,7 +180,6 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
         if (addr > 0 || addc > 0) {
             expandRowsAndColumns(d, addr, addc);
         }
-        if (!d) return;
 
         if (cfg.rowlen == null) {
             cfg.rowlen = {};
@@ -236,7 +236,6 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
 
                 carrySides(cfg.borderInfo, h, c, borderInfo?.[`${h - minh}_${c - minc}`]);
             }
-            d[h] = x;
 
             if (currentRowLen !== ctx.defaultrowlen) {
                 cfg.rowlen[h] = currentRowLen;
@@ -286,7 +285,6 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
         if (addr > 0 || addc > 0) {
             expandRowsAndColumns(d, addr, addc);
         }
-        if (!d) return;
 
         for (let r = 0; r < rlen; r += 1) {
             const x = d[r + curR];
@@ -298,7 +296,6 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
                 }
                 setCellValue(ctx, r + curR, c + curC, d, dataChe[r][c]);
             }
-            d[r + curR] = x;
         }
 
         last.row = [curR, curR + rlen - 1];
@@ -475,8 +472,6 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
                 }
             }
         }
-
-        d[h] = x;
     }
 
     last.row = [minh, maxh];
@@ -872,7 +867,6 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
                         }
                     }
                 }
-                d[h] = x;
             }
         }
     }
@@ -969,6 +963,9 @@ function handleFormulaStringPaste(ctx: Context, formulaStr: string) {
     cell.m = numberDisplay(val, cell.ct?.fa);
     cell.v = val;
     cell.f = formulaStr;
+
+    setFormulaCellInfo(ctx, { r, c, id: ctx.currentSheetId });
+    ctx.formulaCache.execFunctionGlobalData = null;
 }
 
 export function handlePaste(ctx: Context, e: ClipboardEvent) {

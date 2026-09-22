@@ -135,7 +135,7 @@ export function goToLink(ctx: Context, r: number, c: number, linkType: string, l
         if (range == null) return;
         const sheetId = range.sheetId || ctx.currentSheetId;
         changeSheet(ctx, sheetId);
-        if (ctx.currentSheetId !== sheetId) return; // switch vetoed/invalid
+        if (ctx.currentSheetId !== sheetId) return;
         const row_pre = range.row[0] - 1 === -1 ? 0 : ctx.visibledatarow[range.row[0] - 1];
         const col_pre = range.column[0] - 1 === -1 ? 0 : ctx.visibledatacolumn[range.column[0] - 1];
         ctx.scrollRequest = { left: col_pre, top: row_pre };

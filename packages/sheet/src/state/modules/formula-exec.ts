@@ -1,6 +1,7 @@
 // Context-coupled formula execution. These functions read/write Context
 // (formula caches, sheet data, calc chains) so they stay in the state layer.
 // The engine directory has zero state-runtime dependencies.
+import { current, isDraft } from 'immer';
 import { getCalculationOrder } from '../../engine/dependency-graph';
 import {
     calPostfixExpression,
@@ -520,11 +521,12 @@ export function setFormulaCellInfoMap(ctx: Context, calcChains?: FormulaCell[], 
 // `data` stands in for the current sheet's matrix, as in setFormulaCellInfo.
 export function warmFormulaCellInfoMap(ctx: Context, data?: CellMatrix | null): FormulaCellInfoMap {
     if (ctx.formulaCache.formulaCellInfoMap != null) return ctx.formulaCache.formulaCellInfoMap;
-    // Inside an edit ctx is an immer draft, and reading every formula through it is ~8x slower.
+    // Inside an edit ctx and data are immer drafts, and reading every formula through them is slow.
     const snap = snapshotContext(ctx);
     const map: FormulaCellInfoMap = {};
     ctx.formulaCache.formulaCellInfoMap = map;
-    setFormulaCellInfoMap(snap, getAllFunctionGroup(snap), data ?? getFlowdata(snap));
+    const matrix = data && isDraft(data) ? current(data) : data;
+    setFormulaCellInfoMap(snap, getAllFunctionGroup(snap), matrix ?? getFlowdata(snap));
     return map;
 }
 

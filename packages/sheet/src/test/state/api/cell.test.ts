@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { clearCell, getCellValue, setCellFormat, setCellValue } from '../../../state/api/cell';
 import type { Context } from '../../../state/context';
+import { updateCell } from '../../../state/modules/cell';
+import { groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import type { Cell } from '../../../state/types';
 import { contextFactory, selectionFactory } from '../factories/context';
 
@@ -69,6 +71,21 @@ describe('sheet/core/api/cell', () => {
             setCellValue(ctx, 1, 1, item.v, cellInput, { id: item.id });
             expect(getCellValue(ctx, 1, 1, { id: item.id, type: 'v' })).toBe(item.rs);
         });
+    });
+
+    test('setCellValue over a formula replaces it with the typed-entry value', () => {
+        const ctx = getContext();
+        ctx.sheets[0].data![0][0] = { v: 5, m: '5' };
+        ctx.sheets[0].calcChain = [{ r: 1, c: 0, id: 'id_1' }];
+        warmFormulaCellInfoMap(ctx);
+
+        setCellValue(ctx, 1, 0, '123', null, { id: 'id_1' });
+        expect(ctx.sheets[0].data![1][0]).toMatchObject({ v: 123, m: '123' });
+        expect(ctx.sheets[0].data![1][0]?.f).toBeUndefined();
+
+        updateCell(ctx, 0, 0, null, '7');
+        groupValuesRefresh(ctx);
+        expect(ctx.sheets[0].data![1][0]?.v).toBe(123);
     });
 
     test('clearCell', async () => {

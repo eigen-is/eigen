@@ -111,6 +111,20 @@ describe('execFunctionGroup — index-driven recalc', () => {
         expect(draftReads).toBe(0);
     });
 
+    it("builds the map from a plain matrix when handed the edit draft's", () => {
+        const base = makeCtx();
+        const reads = spyOn(cellModule, 'getcellFormula');
+        let draftReads = -1;
+
+        produceWithPatches(base, (draft) => {
+            warmFormulaCellInfoMap(draft as Context, draft.sheets[0].data);
+            draftReads = reads.mock.calls.filter(([, , , , data]) => data != null && isDraft(data)).length;
+        });
+        reads.mockRestore();
+
+        expect(draftReads).toBe(0);
+    });
+
     it('stops recomputing against a formula after it is rewritten to other deps', () => {
         const ctx = makeCtx();
         warmFormulaCellInfoMap(ctx);

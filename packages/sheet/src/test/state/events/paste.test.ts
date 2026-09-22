@@ -21,8 +21,10 @@ import { describe, expect, it } from 'bun:test';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { handlePasteByClick } from '../../../state/events/paste';
+import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { copy } from '../../../state/modules/selection';
 import { contextFactory } from '../factories/context';
+import { edit, typed } from '../factories/edit-cycle';
 
 // Explicit selection builders. selectionFactory takes (row, column, ...) as
 // [start, end] pairs; hand-writing those inline is error-prone, so name the two
@@ -433,5 +435,75 @@ describe('copy/paste round-trip (item 6)', () => {
         expect(pick(d[6][7])).toEqual(pick(d[1][2]));
         expect(pick(d[7][6])).toEqual(pick(d[2][1]));
         expect(pick(d[7][7])).toEqual(pick(d[2][2]));
+    });
+});
+
+describe('pasted formulas and the dependency map', () => {
+    const pasteText = (text: string, r: number, c: number) => (d: Context) => {
+        d.selections = single(r, c);
+        handlePasteByClick(d, text);
+    };
+
+    for (const warm of [false, true]) {
+        it(`a pasted formula string recalcs when its precedent changes (${warm ? 'warm' : 'cold'} map)`, () => {
+            let ctx = makeCtx(6, 6, (d) => {
+                d[0][0] = { v: 5, m: '5' };
+            });
+            if (warm) warmFormulaCellInfoMap(ctx);
+
+            [ctx] = edit(ctx, pasteText('=A1*3', 0, 2));
+            expect(ctx.sheets[0].data![0][2]?.v).toBe(15);
+            [ctx] = edit(ctx, typed(0, 0, '2'));
+
+            expect(ctx.sheets[0].data![0][2]?.v).toBe(6);
+        });
+    }
+
+    // One!A1 = 5, One!B1 = =A1*2, Two!A1 = 100; B1 is cut from One and pasted at Two!D1.
+    function cutAcrossSheets(): Context {
+        const one = grid(6, 6);
+        one[0][0] = { v: 5, m: '5' };
+        one[0][1] = { f: '=A1*2', v: 10, m: '10' };
+        const two = grid(6, 6);
+        two[0][0] = { v: 100, m: '100' };
+        const base = contextFactory({
+            currentSheetId: 'id_1',
+            selections: single(0, 0),
+            sheets: [
+                { name: 'One', id: 'id_1', order: 0, data: one, calcChain: [{ r: 0, c: 1, id: 'id_1' }] },
+                { name: 'Two', id: 'id_2', order: 1, data: two, calcChain: [] },
+            ],
+        }) as Context;
+        warmFormulaCellInfoMap(base);
+        const [ctx] = edit(base, (d) => {
+            d.selections = single(0, 1);
+            copy(d);
+            d.pasteIsCut = true;
+            d.currentSheetId = 'id_2';
+            d.selections = single(0, 3);
+            handlePasteByClick(d, 'internal');
+        });
+        return ctx;
+    }
+
+    it('a formula cut to another sheet is not resurrected by its old precedent', () => {
+        let ctx = cutAcrossSheets();
+        expect(ctx.sheets[0].data![0][1]).toBeNull();
+
+        [ctx] = edit(ctx, (d) => {
+            d.currentSheetId = 'id_1';
+            typed(0, 0, '7')(d);
+        });
+
+        expect(ctx.sheets[0].data![0][1]).toBeNull();
+    });
+
+    it('a formula cut to another sheet recalcs there', () => {
+        let ctx = cutAcrossSheets();
+        expect(ctx.sheets[1].data![0][3]?.f).toBe('=A1*2');
+
+        [ctx] = edit(ctx, typed(0, 0, '3'));
+
+        expect(ctx.sheets[1].data![0][3]?.v).toBe(6);
     });
 });
