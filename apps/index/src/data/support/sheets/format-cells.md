@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, formatting, cells, numbers, alignment, borders]
 related: [sheets/conditional-formatting]
 order: 60
-updated: 2026-06-08
+updated: 2026-09-22
 ---
 
 Sheets lets you change how cells look without changing the values inside them. You can apply text styles, number formats, colors, borders, and alignment from the **Format** menu in the toolbar.
@@ -40,19 +40,21 @@ Number formatting controls how a value is displayed. The stored value does not c
 
    | Format | What it shows |
    |--------|--------------|
-   | **Automatic** | Sheets decides the display based on the value |
+   | **Automatic** | Shows numbers the way Excel's General format does: up to 11 characters, with scientific notation for very large or very small numbers |
    | **Plain text** | Shows the raw value with no formatting |
-   | **Number** | Shows two decimal places (e.g. `1000.12`) |
-   | **Percent** | Multiplies by 100 and adds a % sign (e.g. `12.21%`) |
-   | **Scientific** | Scientific notation (e.g. `1.01E+5`) |
-   | **Accounting** | Currency symbol, two decimal places, negatives in brackets |
-   | **Currency** | Currency symbol followed by the value |
-   | **Date** | Formats as `yyyy-MM-dd` |
-   | **Time** | Formats as `hh:mm AM/PM` |
-   | **Time 24H** | Formats as `hh:mm` |
-   | **Date time** | Date and time combined |
+   | **Number** | Two decimal places with a thousands separator (e.g. `1,000.12`) |
+   | **Percent** | Multiplies by 100 and adds a % sign (e.g. `10.12%`) |
+   | **Scientific** | Scientific notation (e.g. `1.01E+03`) |
+   | **Accounting** | Currency symbol, two decimal places, negatives in brackets (e.g. `€ (1,000.12)`) |
+   | **Financial** | Two decimal places, negatives in brackets (e.g. `(1,000.12)`) |
+   | **Currency** | Currency symbol followed by the value (e.g. `€1,000.12`) |
+   | **Currency rounded** | Currency symbol and a whole number (e.g. `€1,000`) |
+   | **Date** | Day, month, and year (e.g. `26/09/2008`) |
+   | **Time** | Hours, minutes, and seconds on a 24-hour clock (e.g. `15:59:00`) |
+   | **Date time** | Date and time combined (e.g. `26/09/2008 15:59:00`) |
+   | **Duration** | Elapsed time in hours, minutes, and seconds, counting past 24 hours (e.g. `24:01:00`) |
 
-3. To choose from a wider list of currency, number, or date formats, point to **Custom formats** and then open **More currency formats**, **More number formats**, or **More date and time formats**.
+3. For a format that isn't in the list, open **Custom currency**, **Custom date and time**, or **Custom number format** at the bottom of the **Number** submenu.
 
 ## Cell color
 
@@ -91,7 +93,7 @@ By default, text that is wider than a cell overflows into the next empty cell. Y
 1. Select the cells.
 2. Open **Format → Wrapping** and choose an option:
    - **Overflow**: text spills into the next empty cell (the default behavior).
-   - **Wrap**: the row grows taller to show all the text inside the cell.
+   - **Wrap**: the row grows taller to show all the text inside the cell. Numbers and dates stay on one line and are cut off at the cell edge.
    - **Clip**: text is cut off at the cell edge.
 
 ## Text rotation

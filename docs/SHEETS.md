@@ -372,22 +372,7 @@ stale-but-valid `Sheet[]` — an export must never 500 because recalc hiccuped. 
 with `computed: true`, so the read gate never fires for imported docs (a recalc-failed import encodes
 `computed: false` and exports recompute).
 
-What the function does, in order: materialize each sheet's dense `data` from `celldata` (a resolver over
-null `data` would recompute everything to blanks); discover formula cells by scanning `data` for `f`
-(never trusting `calcChain`); build the dependency graph by porting the state layer's
-`setFormulaCellInfo`/`getcellrange`/`isFunctionRange` into the engine (the engine has zero state imports,
-so the logic is duplicated rather than shared — the INDIRECT/OFFSET/INDEX special-casing is preserved);
-order via `getCalculationOrder`; evaluate through the shared `FormulaEngine`, results flowing through
-`execFunctionGlobalData` so a downstream cell reads its upstream result; **freeze volatiles**
-(`NOW`/`TODAY`/`RAND`/`RANDBETWEEN` keep their cached value, matching Excel/Sheets "read a closed file"
-semantics — a passive export stays deterministic); and write back `v` plus a pragmatic `m`
-(numbers through `numberDisplay(v, ct.fa)` in `engine/format.ts`, the one number-display rule every writer of a numeric `m` shares: typed entry, paste, sort, autofill, recalc and the xlsx importer. A mask renders the exact value; General is Excel's default-width General (numfmt's `General`), so float noise hides (`0.1+0.2` shows `0.3`), long values cut to 11 characters (`1234567.891234` shows `1234567.891`) and large or tiny values go scientific (`1.23457E+11`, `1.5E-10`, `1E+21`);
-error sentinels as `v = m = '#…'` with `ct.t = 'e'`; `String(v)` otherwise). An engine error never overwrites a non-error cached value: a
-function this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER, …) evaluates to `#NAME?`, so rather than
-destroy Excel's correct cached result at import the cached `v`/`m` is kept and the
-`execFunctionGlobalData` seed is skipped, so downstream cells read the cached value through the resolver
-(same freeze-is-safe direction as volatiles); only a cell with no cached value gets the error sentinel.
-Every cell is guarded, so one poisoned formula never aborts the pass.
+What the function does, in order: materialize each sheet's dense `data` from `celldata` (a resolver over null `data` would recompute everything to blanks); discover formula cells by scanning `data` for `f` (never trusting `calcChain`); build the dependency graph by porting the state layer's `setFormulaCellInfo`/`getcellrange`/`isFunctionRange` into the engine (the engine has zero state imports, so the logic is duplicated rather than shared — the INDIRECT/OFFSET/INDEX special-casing is preserved); order via `getCalculationOrder`; evaluate through the shared `FormulaEngine`, results flowing through `execFunctionGlobalData` so a downstream cell reads its upstream result; **freeze volatiles** (`NOW`/`TODAY`/`RAND`/`RANDBETWEEN` keep their cached value, matching Excel/Sheets "read a closed file" semantics — a passive export stays deterministic); and write back `v` plus a pragmatic `m` (numbers through `numberDisplay(v, ct.fa)` in `engine/format.ts`, the one number-display rule every writer of a numeric `m` shares: typed entry, paste, sort, autofill, recalc and the xlsx importer. A mask renders the exact value; General is Excel's default-width General (numfmt's `General`), so float noise hides (`0.1+0.2` shows `0.3`), long values cut to 11 characters (`1234567.891234` shows `1234567.891`) and large or tiny values go scientific (`1.23457E+11`, `1.5E-10`, `1E+21`); error sentinels as `v = m = '#…'` with `ct.t = 'e'`; `String(v)` otherwise). An engine error never overwrites a non-error cached value: a function this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER, …) evaluates to `#NAME?`, so rather than destroy Excel's correct cached result at import the cached `v`/`m` is kept and the `execFunctionGlobalData` seed is skipped, so downstream cells read the cached value through the resolver (same freeze-is-safe direction as volatiles); only a cell with no cached value gets the error sentinel. Every cell is guarded, so one poisoned formula never aborts the pass.
 
 ## Headless Conditional Formatting
 
@@ -413,7 +398,7 @@ any context.
 
 Every rule scans only the materialized matrix (Excel writes a whole-column rule as `A1:A1048576`; holes
 inside the matrix are still visited). Overlapping rules layer per style property in rule order, so a later
-rule's fill never erases an earlier rule's text colour. `textContains` ignores case, and `duplicateValue`
+rule's fill never erases an earlier rule's text color. `textContains` ignores case, and `duplicateValue`
 never counts or styles a blank cell, both as in Excel.
 
 Both state (`state/modules/condition-format.ts::getComputeMap`) and the server-side HTML/PDF export pass the same callback, `createCfFormulaEvaluator` (in `engine/conditional-format.ts`). It parses each rule formula once (`FormulaEngine.compile`) and evaluates it per cell with `evaluateCompiled` at the offset `(targetRow - anchorRow, targetCol - anchorCol)`: the parser moves every relative reference leg by that offset at lookup time, following the same rules as the `functionCopy` text shifter (`$` legs, a missing axis in `A:A` or `1:1`, and a reversed range all stay put). The grammar actions compile to closures, so `Parser.parse` is `compile` followed by `evaluate`, and a formula that has both a syntax error and an earlier evaluation error reports the syntax error.

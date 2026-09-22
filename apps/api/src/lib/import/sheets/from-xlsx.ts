@@ -777,7 +777,7 @@ function estimateCellHeight(
         return fontSize > DEFAULT_FONT_SIZE ? lineHeightPx + 6 : 0;
     }
 
-    const text = getCellTextContent(cell);
+    const text = String(converted.m ?? '');
     if (!text) return lineHeightPx + 6;
 
     let cellWidth = colWidthPx[c] ?? SHEET_DEFAULT_COL_WIDTH;
@@ -796,21 +796,6 @@ function estimateCellHeight(
         totalLines += Math.max(1, Math.ceil(line.length / charsPerLine));
     }
     return totalLines * lineHeightPx + 6;
-}
-
-function getCellTextContent(cell: XlsxCell): string | null {
-    const raw = cell.value;
-    if (raw === null || raw === undefined) return null;
-    if (typeof raw === 'string') return raw;
-    if (typeof raw === 'number' || typeof raw === 'boolean') return String(raw);
-    if (isRichText(raw)) return raw.richText.map((r) => r.text).join('');
-    if (isHyperlink(raw)) return hyperlinkText(raw);
-    if (isFormulaValue(raw) || isSharedFormula(raw)) {
-        const result = raw.result;
-        if (typeof result === 'string') return result;
-        if (typeof result === 'number') return String(result);
-    }
-    return null;
 }
 
 function convertCell(cell: XlsxCell, theme: ThemePalette): FortuneCell {
