@@ -50,7 +50,7 @@ export async function handleMkcalendar(
         await calendar.createCalendar({ id, name: props.name ?? id, color: props.color });
     } catch (error) {
         if (!(error instanceof ApiError)) throw error;
-        // One directory is one calendar, so a case variant of an existing name hits the same collection: 405 (RFC 5689).
+        // The id is taken as written, so the collection MKCALENDAR asks for already exists: 405 (RFC 5689).
         if (error.status === 409) return new Response('Method Not Allowed', { status: 405 });
         // A property value the domain refuses is WebDAV's 403 on a property the server will not set.
         if (error.status === 400) return new Response('Forbidden', { status: 403 });

@@ -1451,6 +1451,30 @@ describe('CalDAV', () => {
         expect(xml).not.toContain('Usurper');
     });
 
+    test('MKCALENDAR of a case variant of an existing id creates a second calendar', async () => {
+        const mk = (calId: string) =>
+            app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                    method: 'MKCALENDAR',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                    body: '',
+                }),
+            );
+        expect((await mk('case-cal')).status).toBe(201);
+        // The id is taken as written, so the variant is a free name and not the same collection.
+        expect((await mk('Case-Cal')).status).toBe(201);
+
+        const homeRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
+            }),
+        );
+        const xml = await homeRes.text();
+        expect(xml).toContain(`/dav/calendars/${userId}/case-cal/`);
+        expect(xml).toContain(`/dav/calendars/${userId}/Case-Cal/`);
+    });
+
     test('MKCALENDAR without a displayname names the calendar after the URL segment', async () => {
         const calId = 'unnamed-cal';
         const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><C:supported-calendar-component-set><C:comp name="VEVENT"/></C:supported-calendar-component-set></D:prop></D:set></C:mkcalendar>`;
