@@ -84,7 +84,7 @@ describe('Calendar Invites', () => {
             expect(linked.data!.organizerEventId).toBe(inviteEvent.id);
         });
 
-        test('linked event is idempotent (no duplicate on re-invite)', async () => {
+        test('exactly one linked copy reaches the attendee', async () => {
             const bobEvents = await getBobEvents();
             const linked = bobEvents.filter((e: CalendarEventOccurrence) => e.title === 'Team Standup');
             expect(linked).toHaveLength(1);

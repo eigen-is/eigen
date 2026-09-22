@@ -77,7 +77,7 @@ describe('moveEvent', () => {
         expect(await resourceTextOf(harness.instance, target, 'taken.ics')).toContain('SUMMARY:Already there');
     });
 
-    test('a uri the target holds only as a tombstone still yields a fresh name', async () => {
+    test('a uri the target holds only as a tombstone is free, and the move drops that removal', async () => {
         const harness = await makeCalendar();
         const source = await defaultCalendarId(harness);
         const target = (await harness.instance.createCalendar({ name: 'Target', color: '#2563eb' })).id;

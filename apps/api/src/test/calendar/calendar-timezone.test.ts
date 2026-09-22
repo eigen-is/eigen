@@ -44,36 +44,33 @@ describe('Calendar Timezone', () => {
     }
 
     describe('Timezone storage', () => {
-        test('create event with timezone stores it', async () => {
-            const event = await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
+        test('the create seam stores a named zone, and leaves it null where there is none', async () => {
+            const zoned = await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
                 title: 'Amsterdam Meeting',
                 startTime: 1741773600,
                 endTime: 1741777200,
                 allDay: false,
                 timezone: 'Europe/Amsterdam',
             });
-            expect(event.timezone).toBe('Europe/Amsterdam');
-        });
+            expect(zoned.timezone).toBe('Europe/Amsterdam');
 
-        test('create event without timezone defaults to null', async () => {
-            const event = await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
+            const unzoned = await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
                 title: 'No TZ Meeting',
                 startTime: 1741773600,
                 endTime: 1741777200,
                 allDay: false,
             });
-            expect(event.timezone).toBeNull();
-        });
+            expect(unzoned.timezone).toBeNull();
 
-        test('all-day event has null timezone', async () => {
-            const event = await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
+            // An all-day event's bounds are midnight UTC, so it stores no zone by design.
+            const allDay = await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
                 title: 'Holiday',
                 startTime: 1741737600,
                 endTime: 1741824000,
                 allDay: true,
                 timezone: null,
             });
-            expect(event.timezone).toBeNull();
+            expect(allDay.timezone).toBeNull();
         });
 
         test('update event preserves timezone when not specified', async () => {

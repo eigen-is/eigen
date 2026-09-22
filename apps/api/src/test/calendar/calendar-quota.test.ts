@@ -186,6 +186,14 @@ async function expectEditsFit(user: TestUser, calendarId: string, fill: () => Pr
     expect(excluded.status).toBe(200);
     expect((await putJson(user, `${eventsUrl}/${exception.id}`, { status: 'cancelled' })).status).toBe(200);
 
+    const removed = await putJson(user, `${eventsUrl}/${linked.id}/rsvp`, {
+        status: 'declined',
+        scope: 'this',
+        recurrenceDate: '2026-05-11',
+        remove: true,
+    });
+    expect(removed.status).toBe(200);
+
     const truncated = await putJson(user, `${eventsUrl}/${linked.id}/rsvp`, {
         status: 'declined',
         scope: 'this-and-following',
@@ -240,52 +248,6 @@ describe('Calendar storage quota', () => {
                 body: JSON.stringify({ description: '' }),
             });
             expect(shrink.status).toBe(200);
-        });
-    });
-
-    test('a full budget refuses a create but never a write that takes an occurrence away', async () => {
-        const user = await makeUser();
-        const calendarId = await defaultCalendarOf(user);
-        const eventsUrl = `/calendar/${user.id}/calendars/${calendarId}/events`;
-
-        await restoringBudget(async () => {
-            const series = await assertJson<CalendarEvent>(
-                await postEvent(user, calendarId, { ...eventBody('Weekly', 1.5 * MB), rrule: 'FREQ=WEEKLY;COUNT=6' }),
-            );
-            const exception = await assertJson<CalendarEvent>(
-                await postEvent(user, calendarId, {
-                    ...eventBody('Moved', 0),
-                    startTime: new Date('2026-05-11T12:00:00Z'),
-                    endTime: new Date('2026-05-11T13:00:00Z'),
-                    parentEventId: series.id,
-                    recurrenceDate: '2026-05-11',
-                }),
-            );
-            const linked = await inviteFromAlice(user, 'remove-quota@test');
-
-            await fillBudget(user);
-            expect((await createEvent(user, calendarId, 'Refused')).status).toBe(507);
-
-            // Deleting one occurrence of an own series: an EXDATE plus its stamp, a few bytes MORE on disk.
-            const excluded = await postEvent(user, calendarId, {
-                ...eventBody('Weekly', 0),
-                startTime: new Date('2026-05-18T10:00:00Z'),
-                endTime: new Date('2026-05-18T11:00:00Z'),
-                parentEventId: series.id,
-                recurrenceDate: '2026-05-18',
-                status: 'cancelled',
-            });
-            expect(excluded.status).toBe(200);
-
-            expect((await putJson(user, `${eventsUrl}/${exception.id}`, { status: 'cancelled' })).status).toBe(200);
-
-            const removed = await putJson(user, `${eventsUrl}/${linked.id}/rsvp`, {
-                status: 'declined',
-                scope: 'this',
-                recurrenceDate: '2026-05-11',
-                remove: true,
-            });
-            expect(removed.status).toBe(200);
         });
     });
 
