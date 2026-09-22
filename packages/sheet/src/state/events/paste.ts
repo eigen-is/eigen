@@ -1140,9 +1140,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                         const heightAttr = tr.getAttribute('height');
                         if (!isNil(heightAttr)) {
                             const targetRowHeight = parseInt(heightAttr, 10);
-                            const current = has(currentRowlen, targetR)
-                                ? currentRowlen[targetR]
-                                : ctx.sheets[index].defaultRowHeight;
+                            const current = has(currentRowlen, targetR) ? currentRowlen[targetR] : ctx.defaultrowlen;
                             if (current !== targetRowHeight) {
                                 rowHeightList[targetR] = targetRowHeight;
                             }

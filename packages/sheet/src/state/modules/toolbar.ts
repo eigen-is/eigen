@@ -1,4 +1,4 @@
-import { type BorderType, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import type { BorderType } from '@workspace/lib/sheets';
 import { forEach, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
 import { is_date, numberDisplay, parseCellInput } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
@@ -157,8 +157,7 @@ export function updateFormatCell(
                         });
                         if (textInfo?.textHeightAll == null) continue;
                         const rowHeight = round(textInfo.textHeightAll);
-                        const currentRowHeight =
-                            cfg.rowlen?.[r] || ctx.sheets[sheetIndex].defaultRowHeight || SHEET_DEFAULT_ROW_HEIGHT;
+                        const currentRowHeight = cfg.rowlen?.[r] || ctx.defaultrowlen;
                         if (rowHeight > currentRowHeight && cfg.customHeight?.[r] !== 1) {
                             (cfg.rowlen ??= {})[r] = rowHeight;
                         }
