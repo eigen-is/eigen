@@ -993,7 +993,9 @@ export class Mount {
             fs.rmSync(`${tempPath}-wal`, { force: true });
             fs.rmSync(`${tempPath}-shm`, { force: true });
             fs.rmSync(tempPath, { force: true });
-        } catch {}
+        } catch (e) {
+            console.error(`[Mount] Failed to remove temp ${tempId}:`, e);
+        }
     }
 
     // internal — used by mount/*.ts + versioning/snapshot.ts

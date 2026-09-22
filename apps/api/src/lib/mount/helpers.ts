@@ -145,8 +145,8 @@ const RECOVERY_COLLAPSE_FLOOR_BYTES = 64 * 1024;
 const RECOVERY_COLLAPSE_RATIO = 0.5;
 export function isViableRecoveryTemp(tempPath: string, knownSize: number): boolean {
     if (!isSqliteFile(tempPath)) return false;
-    const walPath = `${tempPath}-wal`;
-    const tempSize = fs.statSync(tempPath).size + (fs.existsSync(walPath) ? fs.statSync(walPath).size : 0);
+    const tempSize =
+        fs.statSync(tempPath).size + (fs.statSync(`${tempPath}-wal`, { throwIfNoEntry: false })?.size ?? 0);
     return !(knownSize >= RECOVERY_COLLAPSE_FLOOR_BYTES && tempSize < knownSize * RECOVERY_COLLAPSE_RATIO);
 }
 

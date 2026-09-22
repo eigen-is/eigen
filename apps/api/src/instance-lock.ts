@@ -2,9 +2,7 @@ import { Database, SQLiteError } from 'bun:sqlite';
 import * as path from 'node:path';
 import { getDataRoot, getServerDataPath } from './lib/config/paths';
 
-// Two API processes on one data dir corrupt its databases (each thinks it is the only writer), so the second one
-// refuses to start. An open write transaction on a SQLite file is the lock: a POSIX file lock the OS drops when the
-// process dies. Its own module so index.ts can import it ahead of ./app, whose modules open server databases as they load.
+// Two API processes on one data dir corrupt its databases; an open write transaction is a lock the OS drops on exit.
 function holdInstanceLock(): Database {
     const db = new Database(getServerDataPath('instance.lock'), { create: true });
     try {
