@@ -318,6 +318,8 @@ Program history and measurements: gitignored `docs/superpowers/sheet-perf/PHASE0
       profile share*. **Low priority now**: 5.7 % of a switch that a real browser completes quickly is
       not something a user can perceive. Do it if you are in `canvas.ts` anyway; don't schedule it. **S**
 - [ ] **`measureTextCellInfoCache` has never worked.** Declared at `state/modules/text.ts:112`, cleared, read at `:362`, and **never written anywhere in the tree** since the fork — so `getCellTextInfo` (1.9%) recomputes on every call, even inside a single draw burst. Either delete the dead field so nobody assumes caching is handled, or make it work — which needs a sheet-id in the key (it's keyed `r_c` today, so persisting it across sheets returns sheet A's layout for sheet B) plus invalidation on every edit, paste, style change, resize and incoming Yjs op, none of which exists. `state/render/overflow.ts:16` has the same missing-sheet-id key. Deleting is recommended unless the cold-open work turns out to need it. **S** to delete, **M** to build
+- [ ] **xlsx import splits one conditional-format rule into one rule per range.** The engine anchors a rule formula at its own range's top-left, so the importer emits one rule per `sqref` range: a real workbook's 10 rules became 1,230. A rule-level anchor would keep them as authored. **M**
+- [ ] **The conditional-format cache misses cross-sheet edits and drops wholesale on every edit.** `state/modules/condition-format.ts` clears the computed map on any data edit in the sheet, yet a rule formula can read another sheet, whose edits never clear it. Needs dependency-aware invalidation. **M**
 - [ ] **Open one of our xlsx exports in real Excel or Google Sheets.** **See Q12.** **S**, human-only
 
 ## Code debt
