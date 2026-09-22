@@ -168,6 +168,7 @@ describe('Backup restoreHome', () => {
     let keptThumbPath: string;
     let avatarPath: string;
     let avatarName: string;
+    let avatarBytes: Uint8Array<ArrayBuffer>;
     let port: number;
 
     beforeAll(async () => {
@@ -240,8 +241,8 @@ describe('Backup restoreHome', () => {
         await authedRequest(target.sessionToken, `/mail/${target.id}/mailbox/`);
 
         const home = await getHome(target.id);
-        // A contact photo: the derived webp is written once, at the card write, so a restore has to
-        // bring it back the way it brings a thumbnail back.
+        // A contact photo: the derived webp is written once, at the card write, from the pristine upload,
+        // so a restore has to bring those very bytes back the way it brings a thumbnail back.
         const staged = await home.contacts.uploadAvatar(
             new File([TEST_PNG_BYTES], 'avatar.png', { type: 'image/png' }),
         );
@@ -256,6 +257,7 @@ describe('Backup restoreHome', () => {
         avatarName = avatarNameOf(photoContact?.avatar ?? '');
         expect(avatarName).toEndWith('.webp');
         avatarPath = join(TEST_DATA_DIR, 'home', target.id, 'eigen.contacts', 'avatars', avatarName);
+        avatarBytes = new Uint8Array(await Bun.file(avatarPath).arrayBuffer());
         const settings = await home.settings.set({
             mounts: {
                 [LOCAL_MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Restore Local' },
@@ -394,8 +396,11 @@ describe('Backup restoreHome', () => {
         expect(thumb.status).toBe(200);
         expect(thumb.headers.get('content-type')).toBe('image/webp');
 
-        // The contact photo cache is derived at the write alone, so the archive is the only copy left.
-        expect(await home.contacts.downloadAvatar(avatarName)).not.toBeNull();
+        // The contact photo cache is derived at the write alone, so the archive is the only copy left —
+        // and it comes back as the very bytes the upload was encoded to, not a re-derivation.
+        const restoredAvatar = await home.contacts.downloadAvatar(avatarName);
+        expect(restoredAvatar).not.toBeNull();
+        expect(new Uint8Array(restoredAvatar!)).toEqual(avatarBytes);
 
         const [preRestore] = safetyCopies(target.id, PRE_RESTORE_SUFFIX);
         expect(preRestore).toBeTruthy();

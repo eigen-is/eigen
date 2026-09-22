@@ -91,6 +91,7 @@ describe('Backup snapshotHome', () => {
     let userDbBytes: ArrayBuffer;
     let keptFileId: string;
     let avatarName: string;
+    let avatarPath: string;
 
     beforeAll(async () => {
         ctx = await getTestContext();
@@ -218,8 +219,15 @@ describe('Backup snapshotHome', () => {
             body: JSON.stringify({ firstName: 'Backup', lastName: 'Contact', email: ['backup@test.eigen.is'] }),
         });
         // A second card with a photo: its derived webp is the one thing contacts still keeps as a file.
+        // Transparent on purpose — the served webp keeps the alpha, which is what makes it more than a cache.
+        const sharp = (await import('sharp')).default;
+        const alphaPng = await sharp({
+            create: { width: 8, height: 8, channels: 4, background: { r: 10, g: 120, b: 200, alpha: 0.5 } },
+        })
+            .png()
+            .toBuffer();
         const staged = await home.contacts.uploadAvatar(
-            new File([TEST_PNG_BYTES], 'avatar.png', { type: 'image/png' }),
+            new File([new Uint8Array(alphaPng)], 'avatar.png', { type: 'image/png' }),
         );
         const photoContactId = await home.contacts.addContact({
             firstName: 'Photo',
@@ -231,6 +239,7 @@ describe('Backup snapshotHome', () => {
         const photoContact = await home.contacts.getContactById(photoContactId);
         avatarName = avatarNameOf(photoContact?.avatar ?? '');
         expect(avatarName).toEndWith('.webp');
+        avatarPath = join(home.homeDir, 'eigen.contacts', 'avatars', avatarName);
         const calendars = await assertJson<CalendarItem[]>(
             await authedRequest(alice.sessionToken, `/calendar/${alice.id}/calendars`),
         );
@@ -326,10 +335,17 @@ describe('Backup snapshotHome', () => {
         }
     });
 
-    test('the derived contact photo rides along', () => {
-        // The cache is derived at the write alone — nothing re-derives it from the card's PHOTO on a read —
-        // so an archive without it restores a book whose photos are gone.
-        expect(files).toContain(`home/eigen.contacts/avatars/${avatarName}`);
+    test('the derived contact photo rides along, byte for byte', async () => {
+        // The cache is derived at the write alone, from the pristine upload — nothing re-derives it on a
+        // read, and the card's Apple-safe PHOTO is a lesser image — so the archive carries it verbatim.
+        const entry = `home/eigen.contacts/avatars/${avatarName}`;
+        expect(files).toContain(entry);
+        const archived = new Uint8Array(await Bun.file(join(folder, entry)).arrayBuffer());
+        expect(archived).toEqual(new Uint8Array(await Bun.file(avatarPath).arrayBuffer()));
+        const sharp = (await import('sharp')).default;
+        const meta = await sharp(Buffer.from(archived)).metadata();
+        expect(meta.format).toBe('webp');
+        expect(meta.hasAlpha).toBe(true);
     });
 
     test('manifest describes the home', () => {
