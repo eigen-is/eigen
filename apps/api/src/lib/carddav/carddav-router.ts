@@ -16,7 +16,7 @@ import {
 import { handleCardReport } from './report';
 import { handleDeleteCard, handleGetCard, handlePutCard } from './resource';
 
-// Sanitizes the client-chosen name before it can become a filename; returns the refusal Response to serve as-is.
+// Sanitizes the client-chosen resource name; returns the refusal Response to serve as-is.
 function resolveCardUri(parsed: CollectionPath): { uri: string } | Response {
     if (!parsed.ok) return new Response('Bad Request', { status: 400 });
     if (parsed.collection !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });

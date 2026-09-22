@@ -31,7 +31,6 @@ export const PATHS = {
     CONTACTS: {
         ROOT: CONTACTS_ROOT,
         DB: `${CONTACTS_ROOT}/contacts.db`,
-        CARDS: 'cards',
         AVATARS: 'avatars',
     },
     CALENDAR: {

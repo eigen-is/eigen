@@ -295,7 +295,19 @@ describe('Backup snapshotHome', () => {
         expect(files).toContain('home/eigen.calendar/calendar.db');
         expect(files).toContain('home/eigen.notifications/notifications.db');
         expect(files.filter((f) => f.startsWith('home/eigen.mail/Maildir/')).length).toBeGreaterThanOrEqual(2);
-        expect(files.filter((f) => f.startsWith('home/eigen.contacts/cards/')).length).toBeGreaterThanOrEqual(1);
+    });
+
+    test('the archived contacts.db carries the card bytes, not just the projection', () => {
+        // The vCard bytes are the truth, and they live in the database: an archive that carried only the
+        // projected columns would restore a book that serves no card.
+        const db = new Database(join(folder, 'home/eigen.contacts/contacts.db'), { readonly: true });
+        try {
+            const rows = db.query('SELECT vcard FROM contacts').all() as { vcard: Uint8Array }[];
+            expect(rows.length).toBeGreaterThanOrEqual(1);
+            expect(new TextDecoder().decode(rows[0].vcard)).toContain('BEGIN:VCARD');
+        } finally {
+            db.close();
+        }
     });
 
     test('manifest describes the home', () => {

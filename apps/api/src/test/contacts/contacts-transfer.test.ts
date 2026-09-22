@@ -1,7 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
-import { join } from 'node:path';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
@@ -9,7 +8,7 @@ import * as contactsSchema from '../../lib/contacts/schema';
 import { VCARD_IMPORT_MAX_CARDS } from '../../lib/core/transfer';
 import { getHome } from '../../lib/home';
 import { parseVCard, splitVCards } from '../../lib/vcard';
-import { CONTACTS_TEST_ROOT, cardsDirOf, makeContacts, stageAvatar, validContact } from '../contacts-test-helpers';
+import { CONTACTS_TEST_ROOT, makeContacts, stageAvatar, validContact } from '../contacts-test-helpers';
 import { createTestUser, getTestContext } from '../setup';
 
 afterAll(() => {
@@ -93,18 +92,16 @@ describe('Contacts export', () => {
         expect(text).not.toContain(user.id);
     });
 
-    test('a card whose file is gone is skipped, and the rest of the book still exports', async () => {
-        const { contacts, db, dir } = await makeContacts();
+    test('a card whose blob will not parse is skipped, and the rest of the book still exports', async () => {
+        const { contacts, db } = await makeContacts();
         const kept = await contacts.addContact(validContact({ firstName: 'Kept', email: ['kept@example.com'] }));
-        const torn = await contacts.addContact(validContact({ firstName: 'Torn', email: ['torn@example.com'] }));
-        const tornUri = db
-            .select()
-            .from(contactsSchema.contacts)
-            .where(eq(contactsSchema.contacts.id, torn))
-            .get()!.uri;
-        rmSync(join(cardsDirOf(dir), tornUri));
+        const broken = await contacts.addContact(validContact({ firstName: 'Broken', email: ['broken@example.com'] }));
+        db.update(contactsSchema.contacts)
+            .set({ vcard: Buffer.from('this is not a vCard at all') })
+            .where(eq(contactsSchema.contacts.id, broken))
+            .run();
 
-        const cards = splitVCards(await contacts.exportCards([kept, torn])).map((c) => parseVCard(c));
+        const cards = splitVCards(await contacts.exportCards([kept, broken])).map((c) => parseVCard(c));
 
         expect(cards.map((c) => c.firstName)).toEqual(['Kept']);
     });

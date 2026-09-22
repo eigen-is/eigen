@@ -22,10 +22,15 @@ export async function makeContacts() {
     };
 }
 
-// Where a harness home keeps its two card-store directories — one spelling of the layout for every
-// contacts test file that reaches past the API and inspects the files on disk.
-export const cardsDirOf = (dir: string) => join(dir, 'eigen.contacts', 'cards');
+// The avatar cache is the one thing contacts still keeps as files, so tests still reach for its directory.
 export const avatarsDirOf = (dir: string) => join(dir, 'eigen.contacts', 'avatars');
+
+// The stored bytes of a card, which are the truth every card assertion reads.
+export async function cardTextOf(contacts: Contacts, uri: string): Promise<string> {
+    const card = await contacts.getCard(uri);
+    if (!card) throw new Error(`no card stored at ${uri}`);
+    return new TextDecoder().decode(card.bytes);
+}
 
 export const validContact = (over: Partial<CreateContactInput>): CreateContactInput => ({
     firstName: 'Ada',

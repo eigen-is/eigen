@@ -3,14 +3,14 @@ import type { Contacts } from '../contacts/contacts';
 import { davDeleteResponse, davPutResponse, davResourceResponse } from '../dav/write-result';
 import { bookHref } from './discovery';
 
-// GET /dav/addressbooks/:ownerId/contacts/:uri — the file IS the resource. A uri the index doesn't know is a 404.
+// GET /dav/addressbooks/:ownerId/contacts/:uri — the stored bytes ARE the resource. An unknown uri is a 404.
 export async function handleGetCard(contacts: Contacts, uri: string): Promise<Response> {
     const card = await contacts.getCard(uri);
     if (!card) return new Response('Not Found', { status: 404 });
     return davResourceResponse(card.bytes, card.etag, VCARD_CONTENT_TYPE);
 }
 
-// PUT /dav/addressbooks/:ownerId/contacts/:uri — preconditions, UID rules and quota are putCard's, inside its lock.
+// PUT /dav/addressbooks/:ownerId/contacts/:uri — preconditions, UID rules and quota are putCard's, inside the write lock.
 export async function handlePutCard(
     contacts: Contacts,
     ownerId: string,

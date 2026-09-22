@@ -55,11 +55,11 @@ function seedV1Database(dbPath: string): void {
     raw.close();
 }
 
-// A shipped v3 database — the shape every live book carries before the recovery journals land.
-function seedV3Database(dbPath: string): void {
+// A shipped v4 database, populated the way a live book was before the bytes moved into the rows.
+function seedV4Database(dbPath: string): void {
     const raw = new BunDatabase(dbPath, { create: true });
     raw.exec('PRAGMA foreign_keys = ON;');
-    for (const version of [1, 2, 3]) {
+    for (const version of [1, 2, 3, 4]) {
         CONTACTS_DB_CONFIG.migrations.find((migration) => migration.version === version)!.up(raw);
     }
     raw.exec(`
@@ -74,46 +74,14 @@ function seedV3Database(dbPath: string): void {
         INSERT INTO labels (id, name, nameKey, color) VALUES ('l1', 'Friends', 'friends', '#123456');
         INSERT INTO contacts_to_labels (contactId, labelId) VALUES ('c1', 'l1');
         INSERT INTO contact_tombstones (uri, uriKey, deletedAtCtag) VALUES ('Deleted.vcf', 'deleted.vcf', 9);
+        INSERT INTO pending_card_writes (uri) VALUES ('Kept.vcf');
+        INSERT INTO pending_label_renames (labelId, oldName, newName) VALUES ('l1', 'Friends', 'Pals');
 
         CREATE TABLE __schema_version (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             version INTEGER NOT NULL DEFAULT 0
         );
-        INSERT INTO __schema_version (id, version) VALUES (1, 3);
-    `);
-    raw.close();
-}
-
-function seedHistoricalV2Database(dbPath: string): void {
-    const raw = new BunDatabase(dbPath, { create: true });
-    raw.exec('PRAGMA foreign_keys = ON;');
-    CONTACTS_DB_CONFIG.migrations.find((migration) => migration.version === 1)!.up(raw);
-    CONTACTS_DB_CONFIG.migrations.find((migration) => migration.version === 2)!.up(raw);
-    raw.exec(`
-        DROP INDEX idx_contact_tombstones_uriKey;
-        DROP TABLE contact_tombstones;
-        CREATE TABLE contact_tombstones (
-            uri TEXT PRIMARY KEY,
-            deletedAtCtag INTEGER NOT NULL
-        );
-
-        INSERT INTO book (id, ctag, syncGen, ownerSeeded) VALUES (1, 11, 7, 1);
-        INSERT INTO contacts (
-            id, uri, uriKey, uid, firstName, lastName, eigenId, isGroup, data,
-            etag, cardCtag, mtime, size
-        ) VALUES (
-            'c1', 'Kept.vcf', 'kept.vcf', 'uid-kept', 'Kept', 'Contact', '', 0,
-            '{"email":["kept@example.com"],"phone":[]}', 'etag-kept', 10, 1234, 456
-        );
-        INSERT INTO labels (id, name, nameKey, color) VALUES ('l1', 'Friends', 'friends', '#123456');
-        INSERT INTO contacts_to_labels (contactId, labelId) VALUES ('c1', 'l1');
-        INSERT INTO contact_tombstones (uri, deletedAtCtag) VALUES ('Deleted.vcf', 11);
-
-        CREATE TABLE __schema_version (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            version INTEGER NOT NULL DEFAULT 0
-        );
-        INSERT INTO __schema_version (id, version) VALUES (1, 2);
+        INSERT INTO __schema_version (id, version) VALUES (1, 4);
     `);
     raw.close();
 }
@@ -126,7 +94,7 @@ afterAll(() => {
 });
 
 describe('Contacts index-schema migrations', () => {
-    test('v1 → current migration drops populated v1 tables and creates the index shape', async () => {
+    test('v1 → current migration drops populated v1 tables and creates the blob shape', async () => {
         const dbPath = nextDbPath();
         seedV1Database(dbPath);
 
@@ -135,7 +103,7 @@ describe('Contacts index-schema migrations', () => {
 
         expect(
             (mdb.db.all(sql`SELECT version FROM __schema_version WHERE id = 1`)[0] as { version: number }).version,
-        ).toBe(4);
+        ).toBe(5);
 
         const tables = (mdb.db.all(sql`SELECT name FROM sqlite_master WHERE type='table'`) as { name: string }[]).map(
             (r) => r.name,
@@ -144,15 +112,18 @@ describe('Contacts index-schema migrations', () => {
         expect(tables).toContain('contact_tombstones');
 
         const cols = (mdb.db.all(sql`PRAGMA table_info(contacts)`) as { name: string }[]).map((c) => c.name);
-        expect(cols).toContain('uriKey');
+        expect(cols).toContain('vcard');
+        expect(cols).not.toContain('uriKey');
+        expect(cols).not.toContain('mtime');
+        expect(cols).not.toContain('size');
 
-        // The onboarding owner-seed latch lives on book; tombstones carry a folded uriKey for case-safe clears.
+        // The onboarding owner-seed latch lives on book; a tombstone is keyed by the uri alone.
         const bookCols = (mdb.db.all(sql`PRAGMA table_info(book)`) as { name: string }[]).map((c) => c.name);
         expect(bookCols).toContain('ownerSeeded');
         const tombstoneCols = (mdb.db.all(sql`PRAGMA table_info(contact_tombstones)`) as { name: string }[]).map(
             (c) => c.name,
         );
-        expect(tombstoneCols).toContain('uriKey');
+        expect(tombstoneCols).not.toContain('uriKey');
 
         // The junction labelId index is dropped with the v1 table and must be recreated — label
         // rename/delete fan-outs seek contacts_to_labels by labelId.
@@ -161,11 +132,11 @@ describe('Contacts index-schema migrations', () => {
         );
         expect(indexes).toContain('idx_contacts_to_labels_labelId');
 
-        // v1 data is dropped by design, not migrated (the vCard files become the source of truth).
+        // v1 data is dropped by design, not migrated.
         expect(mdb.db.all(sql`SELECT * FROM contacts`).length).toBe(0);
 
-        // The book row is the reconcile's to create: a migration that seeded one would hand a lost index the
-        // generation it just lost, and every outstanding sync token back with it.
+        // The book row is init's to mint, under a clock-seeded generation: a migration that seeded one would
+        // hand a recreated book the generation it just lost, and every outstanding sync token back with it.
         expect(mdb.db.all(sql`SELECT * FROM book`)).toEqual([]);
 
         await mdb.close();
@@ -177,7 +148,7 @@ describe('Contacts index-schema migrations', () => {
 
         expect(
             (mdb.db.all(sql`SELECT version FROM __schema_version WHERE id = 1`)[0] as { version: number }).version,
-        ).toBe(4);
+        ).toBe(5);
 
         const tables = (mdb.db.all(sql`SELECT name FROM sqlite_master WHERE type='table'`) as { name: string }[]).map(
             (r) => r.name,
@@ -187,97 +158,17 @@ describe('Contacts index-schema migrations', () => {
         expect(tables).toContain('contacts_to_labels');
         expect(tables).toContain('book');
         expect(tables).toContain('contact_tombstones');
-        expect(tables).toContain('pending_card_writes');
-        expect(tables).toContain('pending_label_renames');
+        expect(tables).not.toContain('pending_card_writes');
+        expect(tables).not.toContain('pending_label_renames');
 
         const cols = (mdb.db.all(sql`PRAGMA table_info(contacts)`) as { name: string }[]).map((c) => c.name);
-        expect(cols).toContain('uriKey');
+        expect(cols).toContain('vcard');
+        expect(cols).not.toContain('uriKey');
         expect(cols).not.toContain('avatar');
 
         expect(mdb.db.all(sql`SELECT * FROM contacts`).length).toBe(0);
-        // The book row is the reconcile's to create: a migration that seeded one would hand a lost index the
-        // generation it just lost, and every outstanding sync token back with it.
+        // The book row is init's to mint, under a clock-seeded generation.
         expect(mdb.db.all(sql`SELECT * FROM book`)).toEqual([]);
-
-        await mdb.close();
-    });
-
-    test('historical v2 tombstones gain uriKey without losing index data', async () => {
-        const dbPath = nextDbPath();
-        seedHistoricalV2Database(dbPath);
-
-        const mdb = new ManagedDatabase(CONTACTS_DB_CONFIG, dbPath, {}, true);
-        await mdb.open(0);
-
-        expect(
-            (mdb.db.all(sql`SELECT version FROM __schema_version WHERE id = 1`)[0] as { version: number }).version,
-        ).toBe(4);
-        expect(mdb.db.all(sql`SELECT id, uri, uid, data FROM contacts`)).toEqual([
-            {
-                id: 'c1',
-                uri: 'Kept.vcf',
-                uid: 'uid-kept',
-                data: '{"email":["kept@example.com"],"phone":[]}',
-            },
-        ]);
-        expect(mdb.db.all(sql`SELECT id, name, nameKey, color FROM labels`)).toEqual([
-            { id: 'l1', name: 'Friends', nameKey: 'friends', color: '#123456' },
-        ]);
-        expect(mdb.db.all(sql`SELECT contactId, labelId FROM contacts_to_labels`)).toEqual([
-            { contactId: 'c1', labelId: 'l1' },
-        ]);
-        expect(mdb.db.all(sql`SELECT ctag, syncGen, ownerSeeded FROM book`)).toEqual([
-            { ctag: 11, syncGen: 7, ownerSeeded: 1 },
-        ]);
-        expect(mdb.db.all(sql`SELECT uri, uriKey, deletedAtCtag FROM contact_tombstones`)).toEqual([
-            { uri: 'Deleted.vcf', uriKey: 'deleted.vcf', deletedAtCtag: 11 },
-        ]);
-        expect(
-            (mdb.db.all(sql`SELECT name FROM sqlite_master WHERE type = 'index'`) as { name: string }[]).map(
-                (row) => row.name,
-            ),
-        ).toContain('idx_contact_tombstones_uriKey');
-        expect(mdb.db.all(sql`PRAGMA foreign_key_check`)).toEqual([]);
-
-        await mdb.close();
-    });
-
-    test('a live v3 book gains the recovery journals with every row intact', async () => {
-        const dbPath = nextDbPath();
-        seedV3Database(dbPath);
-
-        const mdb = new ManagedDatabase(CONTACTS_DB_CONFIG, dbPath, {}, true);
-        await mdb.open(0);
-
-        expect(
-            (mdb.db.all(sql`SELECT version FROM __schema_version WHERE id = 1`)[0] as { version: number }).version,
-        ).toBe(4);
-
-        // v4 only adds tables: the book, its cards, labels, membership and tombstones ride through untouched.
-        expect(mdb.db.all(sql`SELECT id, uri, uid, etag FROM contacts`)).toEqual([
-            { id: 'c1', uri: 'Kept.vcf', uid: 'uid-kept', etag: 'etag-kept' },
-        ]);
-        expect(mdb.db.all(sql`SELECT id, name, nameKey FROM labels`)).toEqual([
-            { id: 'l1', name: 'Friends', nameKey: 'friends' },
-        ]);
-        expect(mdb.db.all(sql`SELECT contactId, labelId FROM contacts_to_labels`)).toEqual([
-            { contactId: 'c1', labelId: 'l1' },
-        ]);
-        expect(mdb.db.all(sql`SELECT ctag, syncGen, ownerSeeded FROM book`)).toEqual([
-            { ctag: 9, syncGen: 3, ownerSeeded: 1 },
-        ]);
-        expect(mdb.db.all(sql`SELECT uri, uriKey FROM contact_tombstones`)).toEqual([
-            { uri: 'Deleted.vcf', uriKey: 'deleted.vcf' },
-        ]);
-
-        // Both journals start empty, and a pending rename is owned by its label row.
-        expect(mdb.db.all(sql`SELECT * FROM pending_card_writes`)).toEqual([]);
-        expect(mdb.db.all(sql`SELECT * FROM pending_label_renames`)).toEqual([]);
-        mdb.db.run(sql`INSERT INTO pending_card_writes (uri) VALUES ('Kept.vcf')`);
-        mdb.db.run(sql`INSERT INTO pending_label_renames (labelId, oldName, newName) VALUES ('l1', 'Friends', 'Pals')`);
-        mdb.db.run(sql`DELETE FROM labels WHERE id = 'l1'`);
-        expect(mdb.db.all(sql`SELECT * FROM pending_label_renames`)).toEqual([]);
-        expect(mdb.db.all(sql`PRAGMA foreign_key_check`)).toEqual([]);
 
         await mdb.close();
     });
@@ -324,12 +215,40 @@ describe('Contacts index-schema migrations', () => {
         await reopened.open(0);
         expect(
             (reopened.db.all(sql`SELECT version FROM __schema_version WHERE id = 1`)[0] as { version: number }).version,
-        ).toBe(4);
+        ).toBe(5);
         const tables = (
             reopened.db.all(sql`SELECT name FROM sqlite_master WHERE type='table'`) as { name: string }[]
         ).map((r) => r.name);
         expect(tables).toContain('book');
         expect(reopened.db.all(sql`SELECT * FROM contacts`).length).toBe(0);
         await reopened.close();
+    });
+
+    test('a populated v4 book reaches v5 with the blob shape and no rows', async () => {
+        const dbPath = nextDbPath();
+        seedV4Database(dbPath);
+
+        const mdb = new ManagedDatabase(CONTACTS_DB_CONFIG, dbPath, {}, true);
+        await mdb.open(0);
+
+        expect(
+            (mdb.db.all(sql`SELECT version FROM __schema_version WHERE id = 1`)[0] as { version: number }).version,
+        ).toBe(5);
+
+        // Every v4 row is dropped: the bytes lived in files the new schema does not adopt.
+        for (const table of ['contacts', 'book', 'labels', 'contacts_to_labels', 'contact_tombstones']) {
+            expect(mdb.db.all(sql.raw(`SELECT * FROM ${table}`))).toEqual([]);
+        }
+        const tables = (mdb.db.all(sql`SELECT name FROM sqlite_master WHERE type='table'`) as { name: string }[]).map(
+            (r) => r.name,
+        );
+        expect(tables).not.toContain('pending_card_writes');
+        expect(tables).not.toContain('pending_label_renames');
+        expect((mdb.db.all(sql`PRAGMA table_info(contacts)`) as { name: string }[]).map((c) => c.name)).toContain(
+            'vcard',
+        );
+        expect(mdb.db.all(sql`PRAGMA foreign_key_check`)).toEqual([]);
+
+        await mdb.close();
     });
 });

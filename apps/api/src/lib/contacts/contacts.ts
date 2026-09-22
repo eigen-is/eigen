@@ -5,6 +5,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { Semaphore } from '../../utils/semaphore';
 import { enforceHomeDataQuota } from '../config/enforcement';
 import { getServerSettings } from '../config/server-settings';
 import type { ManagedDatabase, PutResourceResult } from '../core';
@@ -14,12 +15,8 @@ import {
     computeResourceEtag,
     DEFAULT_LABELS,
     LocalFilesystem,
+    nextSyncGen,
     PATHS,
-    readResourceFile,
-    statResourceFile,
-    uriKeyOf,
-    WriteGate,
-    writeResourceFile,
 } from '../core';
 import type { Home } from '../home';
 import { atHome, getHome } from '../home';
@@ -27,25 +24,24 @@ import { pushUserProfile } from '../home/home-relay';
 import type { User } from '../user';
 import { getOrgOwner } from '../user/';
 import { createVCard, mergeVCard, normalizeBirthday, parseVCard } from '../vcard';
-import type { CardEdits, ParsedCard, ParsedCardPhoto } from '../vcard/types';
+import type { CardEdits } from '../vcard/types';
 import type { StagedAvatarPair } from './avatars';
 import * as avatars from './avatars';
 import type { CardData, CardRowInput } from './card-store';
 import {
     avatarNameOf,
     CARD_MAX_BYTES,
-    cardPath,
+    cardBytes,
     cardUpdateSet,
     isCardPhotoCacheOf,
     labelColorFor,
     normalizeLabelName,
-    parsedToData,
+    prepareCard,
 } from './card-store';
 import type { CardBook, CardRow, DeleteCardResult } from './dav-store';
 import * as davStore from './dav-store';
 import { CONTACTS_DB_CONFIG } from './db-config';
 import * as labels from './labels';
-import * as reconcile from './reconcile';
 import * as schema from './schema';
 import { buildContactEvent, buildContactsChangedEvent, buildLabelEvent } from './sse-events';
 import * as transfer from './transfer';
@@ -60,9 +56,30 @@ async function getContactsDatabase(home: Home): Promise<ManagedDatabase<typeof s
 }
 
 // The transaction handle drizzle hands a `db.transaction(cb)` callback.
-type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>[0]>[0];
+export type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>[0]>[0];
 
-// Optionals collapse to '' / [] so the shape matches prepareCardRow's and `avatarChanged` can't misfire on `undefined !== ''`.
+// Never the blob: a contact list that read every card's bytes would carry the whole book into memory.
+const CONTACT_ROW = {
+    id: schema.contacts.id,
+    firstName: schema.contacts.firstName,
+    lastName: schema.contacts.lastName,
+    eigenId: schema.contacts.eigenId,
+    data: schema.contacts.data,
+    etag: schema.contacts.etag,
+};
+type ContactRow = { [K in keyof typeof CONTACT_ROW]: (typeof schema.contacts.$inferSelect)[K] };
+
+// What purgeCard needs of the row it removes: its name for the tombstone, its photo for the cache sweep.
+export const PURGED_CARD = {
+    id: schema.contacts.id,
+    uri: schema.contacts.uri,
+    eigenId: schema.contacts.eigenId,
+    etag: schema.contacts.etag,
+    data: schema.contacts.data,
+};
+export type PurgedCard = { [K in keyof typeof PURGED_CARD]: (typeof schema.contacts.$inferSelect)[K] };
+
+// Optionals collapse to '' / [] so the shape matches prepareCard's and `avatarChanged` can't misfire on `undefined !== ''`.
 function toData(contact: CreateContactInput): CardData {
     return {
         email: contact.email,
@@ -103,13 +120,12 @@ export class Contacts {
     home: Home; // internal — used by contacts/*.ts
     storage: LocalFilesystem; // internal — used by contacts/*.ts
 
-    // Process death takes the gate's dirty set with it, which is what `pending_card_writes` is for.
-    gate = new WriteGate((uris, settled) => this.drainDirty(uris, settled)); // internal — used by contacts/*.ts
+    // bun:sqlite makes a transaction atomic and serial by itself, but a write path holds async gaps between
+    // its check and its commit (the quota check, the avatar derivation), and a racing If-Match PUT must lose
+    // inside the lock, not after it.
+    writeLock = new Semaphore(1); // internal — used by contacts/*.ts
 
-    // Only the reconcile/rebuild/drain machinery bumps this; the mutation paths parse for their own merges.
-    private cardParses = 0;
-
-    // Running totals so size() answers from memory: a directory walk per metered write makes an N-card device sync O(N²) stats.
+    // Running totals so size() answers from memory: a SUM per metered write makes an N-card device sync O(N²).
     cardsBytes = 0; // internal — used by contacts/*.ts
     avatarsBytes = 0; // internal — used by contacts/*.ts
 
@@ -145,17 +161,19 @@ export class Contacts {
         this.managedDb = await getContactsDatabase(this.home);
         this.db = this.managedDb.db;
 
-        await this.storage.mkdir(PATHS.CONTACTS.CARDS);
-        await this.storage.sweepAtomicTemps(PATHS.CONTACTS.CARDS);
+        // A recreated book must never reissue a generation a client has seen, so the clock seeds this one.
+        this.db
+            .insert(schema.book)
+            .values({ id: 1, syncGen: nextSyncGen(undefined, Date.now()) })
+            .onConflictDoNothing()
+            .run();
 
-        // Seeded from disk once, then moved by delta per avatar write; cardsBytes is owned by the reconcile pass below.
+        // Seeded once here, then moved by delta at each commit and purge.
+        this.cardsBytes = this.db
+            .select({ total: sql<number>`COALESCE(SUM(${cardBytes}), 0)` })
+            .from(schema.contacts)
+            .get()!.total;
         this.avatarsBytes = await this.storage.dirSize(PATHS.CONTACTS.AVATARS);
-
-        // Bring the index in line with cards/ before seeding; the pass also recovers a lost book row.
-        await this.reconcileIndex();
-
-        // After the index pass, which guarantees the book row the ctag bumps need, and before anything is served.
-        await this.recoverPendingWork();
 
         // Each seed is guarded independently, so a crash between them doesn't skip a later one forever.
         const existingLabels = this.db.select().from(schema.labels).all();
@@ -210,7 +228,6 @@ export class Contacts {
         this.cleanupAvatarImages().catch((e) => console.warn(`contacts: avatar sweep failed: ${e}`));
     }
 
-    // Must never drain: enforceCardBudget reaches size() from inside the write lock, and a pending drain is one card's delta against a soft quota.
     public async size(): Promise<number> {
         return this.cardsBytes + this.avatarsBytes;
     }
@@ -224,21 +241,12 @@ export class Contacts {
         return tx.select({ ctag: schema.book.ctag }).from(schema.book).where(eq(schema.book.id, 1)).get()!.ctag;
     }
 
-    // Keyed by uri but carrying the folded uriKey, so a re-created case-variant card still clears it.
     // internal — used by contacts/*.ts
-    tombstone(tx: Tx, uri: string, uriKey: string, ctag: number): void {
+    tombstone(tx: Tx, uri: string, ctag: number): void {
         tx.insert(schema.contactTombstones)
-            .values({ uri, uriKey, deletedAtCtag: ctag })
+            .values({ uri, deletedAtCtag: ctag })
             .onConflictDoUpdate({ target: schema.contactTombstones.uri, set: { deletedAtCtag: ctag } })
             .run();
-    }
-
-    // A file the index lists but that is gone is a torn pair, so the miss throws into each caller's unreadable-card branch.
-    // internal — used by contacts/*.ts
-    async readCardBytes(uri: string): Promise<Uint8Array> {
-        const bytes = await readResourceFile(this.storage, cardPath(uri));
-        if (!bytes) throw new Error(`contacts: card file ${uri} is missing`);
-        return bytes;
     }
 
     // A missing label is minted with its deterministic color, and its id rides back out so the caller emits LABEL_CREATED after the transaction.
@@ -271,161 +279,77 @@ export class Contacts {
         }
     }
 
-    // A clean stat-only reconcile re-parses nothing; the tests assert this stays flat across a second init over an unchanged book.
-    public get cardParseCount(): number {
-        return this.cardParses;
-    }
-
-    private parseCardFile(bytes: Uint8Array) {
-        this.cardParses++;
-        return parseVCard(new TextDecoder().decode(bytes));
-    }
-
-    // One transaction, so ctag bump, row upsert, label junction, tombstone clear and pending-write clear settle together.
+    // The row half of a card commit, so the label fan-out can rewrite many cards under one ctag and one transaction.
     // internal — used by contacts/*.ts
-    commitCard(opts: { row: CardRowInput; categories: string[]; tombstoneCleared?: boolean }): void {
+    indexCard(tx: Tx, row: CardRowInput, categories: string[], ctag: number, createdLabelIds: string[]): void {
+        tx.insert(schema.contacts)
+            .values({ ...row, cardCtag: ctag })
+            .onConflictDoUpdate({ target: schema.contacts.id, set: cardUpdateSet(row, ctag) })
+            .run();
+
+        this.syncCardLabels(tx, row.id, categories, createdLabelIds);
+
+        // A card at this uri is alive, so one written over a deleted name drops its stale removal.
+        tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uri, row.uri)).run();
+    }
+
+    // One transaction, so the ctag bump, the blob, the label junction and the tombstone clear settle together.
+    // internal — used by contacts/*.ts
+    commitCard(opts: { row: CardRowInput; categories: string[] }): void {
+        const createdLabelIds: string[] = [];
+        let delta = 0;
+        this.db.transaction((tx) => {
+            // Read inside the transaction, applied outside it: a rollback would otherwise leave the delta applied.
+            const previous = tx
+                .select({ size: cardBytes })
+                .from(schema.contacts)
+                .where(eq(schema.contacts.id, opts.row.id))
+                .get();
+            delta = opts.row.vcard.byteLength - (previous?.size ?? 0);
+            this.indexCard(tx, opts.row, opts.categories, this.bumpCtag(tx), createdLabelIds);
+        });
+        this.cardsBytes += delta;
+
+        for (const id of createdLabelIds) this.emitLabel(SSEventType.LABEL_CREATED, id);
+    }
+
+    // The blob is the truth, so every projected column and the junction come back from it. Untouched, because no
+    // blob carries them: the self-link, the ctags, the tombstones, createdAt, and each label's id and color.
+    public rebuildProjection(): void {
+        const rows = this.db
+            .select({
+                id: schema.contacts.id,
+                uid: schema.contacts.uid,
+                vcard: schema.contacts.vcard,
+                data: schema.contacts.data,
+            })
+            .from(schema.contacts)
+            .all();
         const createdLabelIds: string[] = [];
         this.db.transaction((tx) => {
-            const ctag = this.bumpCtag(tx);
-
-            tx.insert(schema.contacts)
-                .values({ ...opts.row, cardCtag: ctag })
-                .onConflictDoUpdate({ target: schema.contacts.id, set: cardUpdateSet(opts.row, ctag) })
-                .run();
-
-            this.syncCardLabels(tx, opts.row.id, opts.categories, createdLabelIds);
-
-            if (opts.tombstoneCleared) {
-                tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uriKey, opts.row.uriKey)).run();
+            for (const row of rows) {
+                const parsed = parseVCard(new TextDecoder().decode(row.vcard));
+                // The avatar cache is derived asynchronously from the PHOTO, so the stored URL is carried over.
+                const { projection, categories } = prepareCard(row.vcard, parsed, row.data?.avatar ?? '', row.uid);
+                tx.update(schema.contacts)
+                    .set({
+                        uid: projection.uid,
+                        firstName: projection.firstName,
+                        lastName: projection.lastName,
+                        isGroup: projection.isGroup,
+                        data: projection.data,
+                        etag: projection.etag,
+                    })
+                    .where(eq(schema.contacts.id, row.id))
+                    .run();
+                this.syncCardLabels(tx, row.id, categories, createdLabelIds);
             }
-
-            // Cleared in the transaction that settles the pair: a crash anywhere earlier leaves the row for init to drain.
-            tx.delete(schema.pendingCardWrites).where(eq(schema.pendingCardWrites.uri, opts.row.uri)).run();
         });
 
         for (const id of createdLabelIds) this.emitLabel(SSEventType.LABEL_CREATED, id);
     }
 
-    // The gate's re-index, caller holding the lock: the file is persisted, the index is behind it.
-    private async drainDirty(uris: string[], settled: (uri: string) => void): Promise<void> {
-        for (const uri of uris) {
-            const existing = this.db
-                .select()
-                .from(schema.contacts)
-                .where(eq(schema.contacts.uriKey, uriKeyOf(uri)))
-                .get();
-            const bytes = await readResourceFile(this.storage, cardPath(uri));
-            // A file the row already describes settles without a commit: a ctag bump for an unchanged book resyncs every client.
-            if (bytes && computeResourceEtag(bytes) !== existing?.etag) {
-                try {
-                    // cardUpdateSet omits eigenId, so this drives a freshly-inserted row only; an incumbent keeps its self-link.
-                    const prep = await this.prepareCardRow(uri, existing?.id ?? randomUUID(), existing?.uid);
-                    // A uid a surviving row owns would throw on the UNIQUE index, as the reconcile's own guard says.
-                    const uidOwner = this.db
-                        .select({ id: schema.contacts.id })
-                        .from(schema.contacts)
-                        .where(eq(schema.contacts.uid, prep.row.uid))
-                        .get();
-                    if (uidOwner && uidOwner.id !== prep.row.id) {
-                        console.warn(`contacts: skipping ${uri} — UID ${prep.row.uid} is claimed by another card`);
-                        if (!existing) this.cardsBytes += bytes.byteLength;
-                        settled(uri);
-                        continue;
-                    }
-                    prep.row.eigenId = this.resolveSelfLink(prep.parsed.eigenId ?? undefined);
-                    // A present file is alive, so a card re-planted at a deleted uri drops its stale removal.
-                    this.commitCard({ row: prep.row, categories: prep.categories, tombstoneCleared: true });
-                    this.cardsBytes += prep.row.size - (existing?.size ?? 0);
-                } catch (e) {
-                    // A throw would leave the uri dirty and rethrow on every later read of the book; the journal row stays, so init retries.
-                    console.warn(`contacts: skipping unindexable card ${uri}: ${e}`);
-                    // The file stays on disk and the next reconcile counts it, so the budget counts it now.
-                    if (!existing) this.cardsBytes += bytes.byteLength;
-                    settled(uri);
-                    continue;
-                }
-            } else if (!bytes && existing) {
-                this.db.transaction((tx) => {
-                    const ctag = this.bumpCtag(tx);
-                    tx.delete(schema.contacts).where(eq(schema.contacts.id, existing.id)).run();
-                    this.tombstone(tx, uri, uriKeyOf(uri), ctag);
-                });
-                this.cardsBytes -= existing.size;
-            }
-            // Covers the tombstoned and nothing-to-do branches; commitCard already dropped the marker for a re-indexed card.
-            this.clearCardWrite(uri);
-            settled(uri);
-        }
-    }
-
-    // Durable write intent: while the row exists, the index owes that uri a commit.
-    // internal — used by contacts/*.ts
-    recordCardWrite(uri: string): void {
-        this.db.insert(schema.pendingCardWrites).values({ uri }).onConflictDoNothing().run();
-    }
-
-    private clearCardWrite(uri: string): void {
-        this.db.delete(schema.pendingCardWrites).where(eq(schema.pendingCardWrites.uri, uri)).run();
-    }
-
-    // Neither half may be fatal — a home whose init throws can't be opened — so unfinished work waits for the next init.
-    private async recoverPendingWork(): Promise<void> {
-        await this.gate.recoverPending(
-            this.db
-                .select()
-                .from(schema.pendingCardWrites)
-                .all()
-                .map((row) => row.uri),
-        );
-
-        try {
-            await this.gate.run(() => this.resumeLabelRenames());
-        } catch (e) {
-            console.warn(`contacts: could not resume a pending label rename: ${e}`);
-        }
-    }
-
-    // The self-link is left `''` here and assigned to the ranked winner afterwards, so no loser is ever indexed as self.
-    // internal — used by contacts/*.ts
-    async prepareCardRow(
-        uri: string,
-        id: string,
-        existingUid: string | undefined,
-    ): Promise<{ row: CardRowInput; categories: string[]; parsed: ParsedCard }> {
-        const bytes = await this.readCardBytes(uri);
-        const parsed = this.parseCardFile(bytes);
-
-        // Regenerated only when an inline photo's hashed cache file is missing: out-of-band drift, or a rebuild after a cache wipe.
-        const avatar = await this.deriveCardPhotoCache(id, parsed.photo);
-
-        const { mtime, size } = await statResourceFile(this.storage, cardPath(uri));
-        return {
-            row: {
-                id,
-                uri,
-                uriKey: uriKeyOf(uri),
-                uid: parsed.uid ?? existingUid ?? randomUUID(),
-                firstName: parsed.firstName.trim(),
-                lastName: parsed.lastName.trim(),
-                eigenId: '',
-                isGroup: parsed.isGroup,
-                data: parsedToData(parsed, avatar),
-                etag: computeResourceEtag(bytes),
-                mtime,
-                size,
-            },
-            categories: parsed.categories,
-            parsed,
-        };
-    }
-
-    // ---- Reconcile facade — implementation in contacts/reconcile.ts ----
-
-    public async reconcileIndex(): Promise<void> {
-        return reconcile.reconcileIndex(this);
-    }
-
-    // At most one row may carry eigenId = user.id; the X-EIGEN-ID stays in the file regardless.
+    // At most one row may carry eigenId = user.id; the X-EIGEN-ID stays in the stored bytes regardless.
     private resolveSelfLink(eigenId: string | undefined): string {
         if (!eigenId || eigenId !== this.home.user.id) return '';
         const claimed = this.db
@@ -436,7 +360,6 @@ export class Contacts {
         return claimed ? '' : eigenId;
     }
 
-    // Runs before any write intent is recorded, so a refusal leaves nothing for a drain to chase.
     // internal — used by contacts/*.ts
     async enforceCardBudget(bytes: Uint8Array, creditBytes: number): Promise<void> {
         if (bytes.byteLength > CARD_MAX_BYTES) {
@@ -452,7 +375,7 @@ export class Contacts {
     }
 
     public async addContact(contact: CreateContactInput): Promise<string> {
-        return this.gate.run(async () => {
+        return this.writeLock.run(async () => {
             normalizeContactInput(contact);
 
             const id = randomUUID();
@@ -483,34 +406,23 @@ export class Contacts {
 
             await this.enforceCardBudget(bytes, 0);
 
-            // Fail closed: a throw marks the uri dirty for the next drain, and the intent recorded first covers a process death.
-            try {
-                this.recordCardWrite(uri);
-                const { mtime, size } = await writeResourceFile(this.storage, cardPath(uri), bytes);
-                // The projection stores the promoted webp's hashed URL, or '' when there is no photo.
-                const avatar = staged ? await this.promoteAvatarCache(id, staged) : '';
-                this.commitCard({
-                    row: {
-                        id,
-                        uri,
-                        uriKey: uriKeyOf(uri),
-                        uid: id,
-                        firstName: contact.firstName.trim(),
-                        lastName: contact.lastName.trim(),
-                        eigenId: this.resolveSelfLink(contact.eigenId),
-                        isGroup: false,
-                        data: toData({ ...contact, avatar }),
-                        etag: computeResourceEtag(bytes),
-                        mtime,
-                        size,
-                    },
-                    categories,
-                });
-                this.cardsBytes += size;
-            } catch (e) {
-                this.gate.markDirty(uri);
-                throw e;
-            }
+            // The projection stores the promoted webp's hashed URL, or '' when there is no photo.
+            const avatar = staged ? await this.promoteAvatarCache(id, staged) : '';
+            this.commitCard({
+                row: {
+                    id,
+                    uri,
+                    uid: id,
+                    vcard: Buffer.from(bytes),
+                    firstName: contact.firstName.trim(),
+                    lastName: contact.lastName.trim(),
+                    eigenId: this.resolveSelfLink(contact.eigenId),
+                    isGroup: false,
+                    data: toData({ ...contact, avatar }),
+                    etag: computeResourceEtag(bytes),
+                },
+                categories,
+            });
 
             this.emitContact(SSEventType.CONTACT_CREATED, id);
             return id;
@@ -518,11 +430,23 @@ export class Contacts {
     }
 
     public async updateContact(id: string, contact: CreateContactInput, expectedEtag?: string): Promise<void> {
-        return this.gate.run(async () => {
+        return this.writeLock.run(async () => {
             // Runs before the self-card own-email prepend below, so that email can't be dropped as a blank.
             normalizeContactInput(contact);
 
-            const row = this.db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
+            const row = this.db
+                .select({
+                    uri: schema.contacts.uri,
+                    uid: schema.contacts.uid,
+                    vcard: schema.contacts.vcard,
+                    eigenId: schema.contacts.eigenId,
+                    isGroup: schema.contacts.isGroup,
+                    data: schema.contacts.data,
+                    etag: schema.contacts.etag,
+                })
+                .from(schema.contacts)
+                .where(eq(schema.contacts.id, id))
+                .get();
             if (!row) throw new ApiError(404, 'Contact not found');
             if (expectedEtag !== undefined && expectedEtag !== row.etag) {
                 throw new ApiError(412, 'Contact was changed elsewhere');
@@ -542,7 +466,7 @@ export class Contacts {
                 }
             }
 
-            const card = parseVCard(new TextDecoder().decode(await this.readCardBytes(row.uri)));
+            const card = parseVCard(new TextDecoder().decode(row.vcard));
             const categories = this.labelNamesFor(contact.labels ?? []);
             // REST is a full replacement and the merge is value-keyed, so unchanged values keep their bytes; X-EIGEN-ID is not REST-owned.
             const edits: CardEdits = {
@@ -570,38 +494,27 @@ export class Contacts {
             const bytes = new TextEncoder().encode(mergeVCard(card, edits));
 
             // The stored card's bytes are credited: a rewrite that shrinks a card is never refused on quota.
-            await this.enforceCardBudget(bytes, row.size);
+            await this.enforceCardBudget(bytes, row.vcard.byteLength);
 
-            // Fail closed on the canonical write or any later step, as addContact does.
             let avatar = contact.avatar ?? '';
-            try {
-                this.recordCardWrite(row.uri);
-                const { mtime, size } = await writeResourceFile(this.storage, cardPath(row.uri), bytes);
-                if (avatarChanged) {
-                    avatar = staged ? await this.promoteAvatarCache(id, staged) : '';
-                }
-                this.commitCard({
-                    row: {
-                        id,
-                        uri: row.uri,
-                        uriKey: row.uriKey,
-                        uid: row.uid,
-                        firstName: contact.firstName.trim(),
-                        lastName: contact.lastName.trim(),
-                        eigenId: row.eigenId,
-                        isGroup: row.isGroup,
-                        data: toData({ ...contact, avatar }),
-                        etag: computeResourceEtag(bytes),
-                        mtime,
-                        size,
-                    },
-                    categories,
-                });
-                this.cardsBytes += size - row.size;
-            } catch (e) {
-                this.gate.markDirty(row.uri);
-                throw e;
+            if (avatarChanged) {
+                avatar = staged ? await this.promoteAvatarCache(id, staged) : '';
             }
+            this.commitCard({
+                row: {
+                    id,
+                    uri: row.uri,
+                    uid: row.uid,
+                    vcard: Buffer.from(bytes),
+                    firstName: contact.firstName.trim(),
+                    lastName: contact.lastName.trim(),
+                    eigenId: row.eigenId,
+                    isGroup: row.isGroup,
+                    data: toData({ ...contact, avatar }),
+                    etag: computeResourceEtag(bytes),
+                },
+                categories,
+            });
 
             // Propagation is downstream of a settled mutation: reporting its failure hands back a stale etag, so the client's retry 412s on an edit that succeeded.
             if (isSelf) {
@@ -615,23 +528,23 @@ export class Contacts {
         });
     }
 
-    // Callers hold the gate and have already run their own guards (self-delete, preconditions).
+    // Callers hold the write lock and have already run their own guards (self-delete, preconditions).
     // internal — used by contacts/*.ts
-    async purgeCard(row: typeof schema.contacts.$inferSelect): Promise<void> {
-        await this.storage.unlinkDurable(cardPath(row.uri));
-        // Fail closed when the index step throws after the file is gone: the next drain's vanished-file branch tombstones it.
-        try {
-            this.db.transaction((tx) => {
-                const ctag = this.bumpCtag(tx);
-                tx.delete(schema.contacts).where(eq(schema.contacts.id, row.id)).run();
-                this.tombstone(tx, row.uri, row.uriKey, ctag);
-            });
-        } catch (e) {
-            this.gate.markDirty(row.uri);
-            throw e;
-        }
+    async purgeCard(row: PurgedCard): Promise<void> {
+        let removed = 0;
+        this.db.transaction((tx) => {
+            // Read inside the transaction, applied outside it: a rollback would otherwise leave the delta applied.
+            removed = tx
+                .select({ size: cardBytes })
+                .from(schema.contacts)
+                .where(eq(schema.contacts.id, row.id))
+                .get()!.size;
+            const ctag = this.bumpCtag(tx);
+            tx.delete(schema.contacts).where(eq(schema.contacts.id, row.id)).run();
+            this.tombstone(tx, row.uri, ctag);
+        });
 
-        this.cardsBytes -= row.size;
+        this.cardsBytes -= removed;
         const avatarName = row.data?.avatar ? avatarNameOf(row.data.avatar) : undefined;
         if (avatarName && isCardPhotoCacheOf(row.id, avatarName)) {
             const avatarPath = `${PATHS.CONTACTS.AVATARS}/${avatarName}`;
@@ -650,8 +563,8 @@ export class Contacts {
     }
 
     public async deleteContact(id: string, expectedEtag?: string): Promise<void> {
-        return this.gate.run(async () => {
-            const row = this.db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
+        return this.writeLock.run(async () => {
+            const row = this.db.select(PURGED_CARD).from(schema.contacts).where(eq(schema.contacts.id, id)).get();
             // Idempotent, and the etag is not evaluated for a resource that no longer exists.
             if (!row) return;
             if (row.eigenId === this.home.user.id) {
@@ -671,10 +584,6 @@ export class Contacts {
         return labels.getLabels(this);
     }
 
-    private async resumeLabelRenames(): Promise<void> {
-        return labels.resumeLabelRenames(this);
-    }
-
     public async addLabel(label: Omit<Label, 'id'>): Promise<string> {
         return labels.addLabel(this, label);
     }
@@ -687,7 +596,7 @@ export class Contacts {
         return labels.deleteLabel(this, id);
     }
 
-    private dbRowToContact(row: typeof schema.contacts.$inferSelect, labelIds: string[]): Contact {
+    private dbRowToContact(row: ContactRow, labelIds: string[]): Contact {
         const data = row.data ?? EMPTY_CARD_DATA;
 
         return {
@@ -702,8 +611,11 @@ export class Contacts {
     }
 
     public async getContactById(id: string): Promise<Contact | null> {
-        await this.gate.ensureDrained();
-        const row = this.db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
+        const row = this.db
+            .select({ ...CONTACT_ROW, isGroup: schema.contacts.isGroup })
+            .from(schema.contacts)
+            .where(eq(schema.contacts.id, id))
+            .get();
         if (!row || row.isGroup) return null;
         const labelIds = this.db
             .select({ labelId: schema.contactsToLabels.labelId })
@@ -715,9 +627,8 @@ export class Contacts {
     }
 
     public async getContacts(): Promise<Contact[]> {
-        await this.gate.ensureDrained();
         // Groups are DAV-only aggregates; the app's contact list never shows them.
-        const rows = this.db.select().from(schema.contacts).where(eq(schema.contacts.isGroup, false)).all();
+        const rows = this.db.select(CONTACT_ROW).from(schema.contacts).where(eq(schema.contacts.isGroup, false)).all();
 
         const labelsByContact = new Map<string, string[]>();
         const relations = this.db
@@ -751,16 +662,16 @@ export class Contacts {
         return avatars.promoteAvatarCache(this, contactId, staged);
     }
 
-    private async deriveCardPhotoCache(id: string, photo: ParsedCardPhoto | null): Promise<string> {
-        return avatars.deriveCardPhotoCache(this, id, photo);
-    }
-
     private cleanupAvatarImages(): Promise<void> {
         return avatars.cleanupAvatarImages(this);
     }
 
     private selfRow() {
-        return this.db.select().from(schema.contacts).where(eq(schema.contacts.eigenId, this.home.user.id)).get();
+        return this.db
+            .select({ id: schema.contacts.id })
+            .from(schema.contacts)
+            .where(eq(schema.contacts.eigenId, this.home.user.id))
+            .get();
     }
 
     private hasContactWithEmail(email: string): boolean {
@@ -792,7 +703,6 @@ export class Contacts {
     }
 
     public async getMe(): Promise<Contact | null> {
-        await this.gate.ensureDrained();
         const found = this.selfRow();
         if (found) {
             return this.getContactById(found.id);

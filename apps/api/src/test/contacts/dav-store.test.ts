@@ -1,13 +1,12 @@
 import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { rmSync } from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { CARD_MAX_BYTES } from '../../lib/contacts/card-store';
 import type { Contacts } from '../../lib/contacts/contacts';
 import * as contactsSchema from '../../lib/contacts/schema';
-import { computeResourceEtag, uriKeyOf } from '../../lib/core';
-import { CONTACTS_TEST_ROOT, cardsDirOf, makeContacts } from '../contacts-test-helpers';
+import { computeResourceEtag, normalizeResourceUri } from '../../lib/core';
+import { CONTACTS_TEST_ROOT, makeContacts } from '../contacts-test-helpers';
 
 afterAll(() => {
     try {
@@ -35,7 +34,7 @@ const rowByUri = (db: Awaited<ReturnType<typeof makeContacts>>['db'], uri: strin
     db
         .select()
         .from(contactsSchema.contacts)
-        .where(eq(contactsSchema.contacts.uriKey, uriKeyOf(uri)))
+        .where(eq(contactsSchema.contacts.uri, normalizeResourceUri(uri)))
         .get();
 
 const put = (
@@ -80,27 +79,15 @@ describe('putCard — create and read', () => {
         const { contacts } = await makeContacts();
         expect(await contacts.getCard(`${randomUUID()}.vcf`)).toBeNull();
     });
-
-    test('getCard whose file vanished returns null and marks the uri for the next drain', async () => {
-        const { contacts, dir } = await makeContacts();
-        const uid = randomUUID();
-        const uri = `${uid}.vcf`;
-        await put(contacts, uri, card({ uid, email: ['gone@example.org'] }));
-        rmSync(`${dir}/eigen.contacts/cards/${uri}`);
-
-        expect(await contacts.getCard(uri)).toBeNull();
-        // The vanished file is drained on the next read: the row is tombstoned and drops out of the list.
-        expect((await contacts.listCards()).some((c) => c.uri === uri)).toBe(false);
-    });
 });
 
 describe('putCard — path safety', () => {
-    test('a traversal uri never becomes a filesystem path and is refused as invalid', async () => {
+    test('a traversal uri is refused as invalid by the resource-name rule', async () => {
         const { contacts } = await makeContacts();
         const res = await put(contacts, '../contacts.db', card({ uid: randomUUID() }));
 
         expect(res).toEqual({ ok: false, error: 'invalid' });
-        // Nothing was written or indexed under the traversal name — the index db is untouched.
+        // The name rule stands even though a uri is no longer a path: nothing is stored under it.
         expect((await contacts.listCards()).some((c) => c.uri === '../contacts.db')).toBe(false);
         expect(await contacts.getCard('../contacts.db')).toBeNull();
     });
@@ -111,40 +98,6 @@ describe('putCard — path safety', () => {
             ok: false,
             error: 'invalid',
         });
-    });
-});
-
-describe('putCard — case-variant uri (incumbent spelling wins)', () => {
-    test('a case-variant update rewrites the incumbent file in place and reconcile leaves it', async () => {
-        const { contacts, db, dir } = await makeContacts();
-        const uid = randomUUID();
-
-        // Create under a mixed-case spelling, then PUT the same card (same UID) under a different case.
-        expect((await put(contacts, 'Abc.vcf', card({ uid, email: ['first@example.org'] }))).ok).toBe(true);
-        expect((await put(contacts, 'abc.vcf', card({ uid, email: ['second@example.org'] }))).ok).toBe(true);
-
-        // Exactly one file backs this card, still under the incumbent spelling — no stale sibling stranded on
-        // a case-sensitive fs (the seeded self-card is filtered out by folding to the same key).
-        const cardFiles = readdirSync(cardsDirOf(dir)).filter((n) => uriKeyOf(n) === uriKeyOf('abc.vcf'));
-        expect(cardFiles).toEqual(['Abc.vcf']);
-
-        // The index keeps the incumbent spelling (uri AND uriKey), so a case-sensitive reconcile that sorts
-        // 'Abc.vcf' first cannot warn-skip the accepted write and re-index the row from the stale bytes.
-        const row = rowByUri(db, 'ABC.vcf')!;
-        expect(row.uri).toBe('Abc.vcf');
-        expect(row.uriKey).toBe(uriKeyOf('Abc.vcf'));
-
-        // getCard (any case) returns the second PUT's bytes.
-        const got = await contacts.getCard('ABC.vcf');
-        const stored = new TextDecoder().decode(got!.bytes);
-        expect(stored).toContain('second@example.org');
-        expect(stored).not.toContain('first@example.org');
-
-        // A stat-only reconcile changes nothing: no re-parse, stable etag.
-        const parsesBefore = contacts.cardParseCount;
-        await contacts.reconcileIndex();
-        expect(contacts.cardParseCount).toBe(parsesBefore);
-        expect((await contacts.getCard('ABC.vcf'))!.etag).toBe(got!.etag);
     });
 });
 
@@ -489,136 +442,5 @@ describe('putCard — self-link', () => {
         expect(rowByUri(db, uri)!.eigenId).toBe('');
         expect(new TextDecoder().decode((await contacts.getCard(uri))!.bytes)).toContain(`X-EIGEN-ID:${user.id}`);
         expect((await contacts.getMe())?.id).toBe(self.id);
-    });
-});
-
-describe('drainDirty — foreign bytes', () => {
-    // A file that drifted out of band is what every other pass over foreign bytes skips and warns about; the
-    // drain used to re-commit it unguarded, so one GET wedged every later read and write of the book.
-    const driftedCard = async (bytes: string) => {
-        const harness = await makeContacts();
-        const uid = randomUUID();
-        const uri = `${uid}.vcf`;
-        expect((await put(harness.contacts, uri, card({ uid, email: ['drift@example.org'] }))).ok).toBe(true);
-        writeFileSync(join(cardsDirOf(harness.dir), uri), bytes);
-        // One CardDAV GET hashes the bytes it read, disagrees with the row and marks the uri dirty.
-        expect(await harness.contacts.getCard(uri)).not.toBeNull();
-        return { ...harness, uri };
-    };
-
-    test('a corrupt card is skipped and the book stays readable and writable', async () => {
-        const { contacts, uri } = await driftedCard('this is not a vCard at all');
-
-        expect((await contacts.getContacts()).length).toBeGreaterThan(0);
-        expect((await contacts.getBook()).ctag).toBeGreaterThan(0);
-        expect((await contacts.listCards()).some((c) => c.uri === uri)).toBe(true);
-        const fresh = randomUUID();
-        expect((await put(contacts, `${fresh}.vcf`, card({ uid: fresh }))).ok).toBe(true);
-    });
-
-    test('a card whose UID duplicates another resource is skipped and the book stays usable', async () => {
-        const { contacts, dir } = await makeContacts();
-        const holderUid = randomUUID();
-        const victimUid = randomUUID();
-        const victim = `${victimUid}.vcf`;
-        expect((await put(contacts, `${holderUid}.vcf`, card({ uid: holderUid }))).ok).toBe(true);
-        expect((await put(contacts, victim, card({ uid: victimUid, email: ['victim@example.org'] }))).ok).toBe(true);
-
-        // The victim's file is re-pointed out of band at the UID the first resource owns.
-        writeFileSync(join(cardsDirOf(dir), victim), card({ uid: holderUid, email: ['stolen@example.org'] }));
-        expect(await contacts.getCard(victim)).not.toBeNull();
-
-        expect((await contacts.getContacts()).length).toBeGreaterThan(0);
-        expect((await contacts.getBook()).ctag).toBeGreaterThan(0);
-        const fresh = randomUUID();
-        expect((await put(contacts, `${fresh}.vcf`, card({ uid: fresh }))).ok).toBe(true);
-    });
-
-    test('a skipped card keeps its journal row so the next init retries it', async () => {
-        const { contacts, db, dir } = await makeContacts();
-        const uid = randomUUID();
-        const uri = `${uid}.vcf`;
-
-        // A crash between the file rename and its index commit: the durable intent is recorded, the file
-        // lands, the commit throws.
-        const priv = contacts as unknown as { commitCard: (o: unknown) => void };
-        const origCommit = priv.commitCard;
-        priv.commitCard = () => {
-            throw new Error('commit boom');
-        };
-        await expect(put(contacts, uri, card({ uid }))).rejects.toThrow('commit boom');
-        priv.commitCard = origCommit;
-        expect(
-            db
-                .select()
-                .from(contactsSchema.pendingCardWrites)
-                .all()
-                .map((r) => r.uri),
-        ).toContain(uri);
-
-        // The bytes on disk are then corrupted out of band, so the drain can never settle that pair.
-        writeFileSync(join(cardsDirOf(dir), uri), 'this is not a vCard at all');
-        expect((await contacts.getContacts()).length).toBeGreaterThan(0);
-
-        expect(
-            db
-                .select()
-                .from(contactsSchema.pendingCardWrites)
-                .all()
-                .map((r) => r.uri),
-        ).toContain(uri);
-    });
-});
-
-describe('putCard — a create displaces an unindexed file', () => {
-    test('a card the index skipped keeps its bytes when a client creates at its name', async () => {
-        const { contacts, dir } = await makeContacts();
-        const uri = 'ghost.vcf';
-        const stranded = 'this is not a vCard at all';
-        writeFileSync(join(cardsDirOf(dir), uri), stranded);
-
-        // The reconcile cannot index it, and skipped is never deleted: the file stays on disk, unknown.
-        await contacts.reconcileIndex();
-        expect(await contacts.getCardMeta(uri)).toBeNull();
-
-        const uid = randomUUID();
-        expect(await put(contacts, uri, card({ uid }))).toMatchObject({ ok: true, created: true });
-        expect(readFileSync(join(cardsDirOf(dir), uri), 'utf8')).toContain(`UID:${uid}`);
-
-        // The bytes nobody indexed are still there, under a name no lister, sweep or client addresses.
-        const displaced = readdirSync(cardsDirOf(dir)).filter((name) => name.includes('.displaced-'));
-        expect(displaced).toHaveLength(1);
-        expect(readFileSync(join(cardsDirOf(dir), displaced[0]), 'utf8')).toBe(stranded);
-
-        // And the budget counts the indexed cards alone: the displaced name is no `.vcf` any scan sees.
-        await contacts.reconcileIndex();
-        const indexedBytes = readdirSync(cardsDirOf(dir))
-            .filter((name) => !name.startsWith('.') && name.endsWith('.vcf'))
-            .reduce((sum, name) => sum + statSync(join(cardsDirOf(dir), name)).size, 0);
-        expect(await contacts.size()).toBe(indexedBytes);
-    });
-});
-
-describe('putCard — fail-closed', () => {
-    test('a commit failure marks the card dirty and the next read heals it', async () => {
-        const { contacts } = await makeContacts();
-        const uid = randomUUID();
-        const uri = `${uid}.vcf`;
-
-        const priv = contacts as unknown as { commitCard: (o: unknown) => void };
-        const origCommit = priv.commitCard;
-        let thrown = false;
-        priv.commitCard = function (this: Contacts, o: unknown) {
-            if (!thrown) {
-                thrown = true;
-                throw new Error('commit boom');
-            }
-            return origCommit.call(this, o);
-        };
-        await expect(put(contacts, uri, card({ uid, email: ['heal@example.org'] }))).rejects.toThrow('commit boom');
-        priv.commitCard = origCommit;
-
-        // The file wrote but the index commit threw; the next read drains the dirty set and indexes it.
-        expect((await contacts.listCards()).some((c) => c.uri === uri)).toBe(true);
     });
 });

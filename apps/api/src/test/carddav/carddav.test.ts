@@ -1,9 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { CARD_MAX_BYTES, cardPath } from '../../lib/contacts/card-store';
-import { computeResourceEtag, PATHS } from '../../lib/core';
+import { CARD_MAX_BYTES } from '../../lib/contacts/card-store';
+import { computeResourceEtag } from '../../lib/core';
 import { encodePathSegment } from '../../lib/dav/href';
 import { REPORT_DATA_BUDGET_BYTES } from '../../lib/dav/report-row';
 import { getHome } from '../../lib/home';
@@ -332,45 +330,9 @@ describe('CardDAV', () => {
         expect(getRes.status).toBe(200);
         expect(getRes.headers.get('Content-Type')).toBe('text/vcard; charset=utf-8');
         expect(await getRes.text()).toBe(body);
+        // Body and validator are one row by construction: both validators hash the stored bytes.
         expect(getRes.headers.get('ETag')).toBe(etag);
-    });
-
-    test('GET hashes the bytes it read, so a stale index row cannot mislabel a body', async () => {
-        const uid = randomUUID();
-        const uri = `${uid}.vcf`;
-        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
-
-        // The file changes out of band — a restore, or the same-stat replacement only a rebuild catches — so
-        // the row's etag now describes bytes that are gone.
-        const edited = vcard(uid, ['NOTE:edited out of band']);
-        const contacts = (await getHome(userId)).contacts;
-        await contacts.storage.write(cardPath(uri), edited);
-
-        const res = await getCard(uri);
-        expect(await res.text()).toBe(edited);
-        expect(res.headers.get('ETag')).toBe(`"${computeResourceEtag(new TextEncoder().encode(edited))}"`);
-    });
-
-    test('a GET that found the row stale re-indexes it, so the etag it served is one a PUT accepts', async () => {
-        const uid = randomUUID();
-        const uri = `${uid}.vcf`;
-        expect((await putCard(uri, vcard(uid, ['NOTE:before']), { 'If-None-Match': '*' })).status).toBe(201);
-
-        // A same-length replacement under the indexed mtime: the row is durably stale and the stat-only
-        // reconcile is blind to it, so the read is the only thing that can notice.
-        const home = await getHome(userId);
-        const cardFile = join(home.homeDir, PATHS.CONTACTS.ROOT, cardPath(uri));
-        const { atime, mtime } = statSync(cardFile);
-        writeFileSync(cardFile, vcard(uid, ['NOTE:beforX']));
-        utimesSync(cardFile, atime, mtime);
-
-        const etag = (await getCard(uri)).headers.get('ETag')!;
-
-        // Without the re-index the client loops forever: the etag every GET serves is one the row's own etag
-        // refuses, so every conditional write answers 412 and every re-GET hands back the same validator.
-        const propfindXml = await (await propfind(`/dav/addressbooks/${userId}/contacts/${uri}`, '0')).text();
-        expect(propfindXml).toContain(`<D:getetag>${etag}</D:getetag>`);
-        expect((await putCard(uri, vcard(uid, ['NOTE:conditional']), { 'If-Match': etag })).status).toBe(204);
+        expect(etag).toBe(`"${computeResourceEtag(new TextEncoder().encode(body))}"`);
     });
 
     test('GET under an unknown book segment is 404 even for an existing card', async () => {
@@ -648,11 +610,11 @@ describe('CardDAV', () => {
         expect(xml.length).toBeLessThan(REPORT_DATA_BUDGET_BYTES);
     }, 120_000);
 
-    test('a card whose file vanished is a 404 row in a multiget, never a 200 without its data', async () => {
+    test('a card deleted after its href was learned is a 404 row in a multiget, never a 200 without its data', async () => {
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
-        rmSync(join((await getHome(userId)).homeDir, PATHS.CONTACTS.ROOT, cardPath(uri)));
+        expect((await deleteCard(uri)).status).toBe(204);
 
         const xml = await (await report(multigetBody([cardHref(uri)]))).text();
         expect(xml).toContain('<D:status>HTTP/1.1 404 Not Found</D:status>');
@@ -723,10 +685,10 @@ describe('CardDAV', () => {
         const uri = `${uid}.vcf`;
         expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
 
-        // The same resource listed three times (spelled two different but equivalent ways) must yield exactly
-        // one <D:response> — a client expects per-resource rows, and assembling one address-data body per
-        // duplicate is the aggregate-bytes amplification this dedupe closes.
-        const res = await report(multigetBody([cardHref(uri), cardHref(uri), cardHref(uri.toUpperCase())]));
+        // The same resource listed three times must yield exactly one <D:response> — a client expects
+        // per-resource rows, and assembling one address-data body per duplicate is the aggregate-bytes
+        // amplification this dedupe closes.
+        const res = await report(multigetBody([cardHref(uri), cardHref(uri), cardHref(uri)]));
         expect(res.status).toBe(207);
         const xml = await res.text();
         expect((xml.match(/<D:response>/g) ?? []).length).toBe(1);
