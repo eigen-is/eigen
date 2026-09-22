@@ -85,6 +85,16 @@ describe('execFunctionGroup — index-driven recalc', () => {
         expect(ctx.sheets[1].data![0][0]?.v).toBe(15);
     });
 
+    it('builds the whole map right when the first recalc runs on another tab', () => {
+        const ctx = makeCtx();
+
+        // Search-and-replace recalcs a cell on Two while One is on screen.
+        execFunctionGroup(ctx, 3, 3, 1, 'id_2', ctx.sheets[1].data);
+        editCell(ctx, 0, 0, 7, 'id_1');
+
+        expect(ctx.sheets[0].data![0][1]?.v).toBe(14);
+    });
+
     it('builds the map from a plain snapshot, not through the edit draft', () => {
         const base = makeCtx();
         const reads = spyOn(cellModule, 'getcellFormula');

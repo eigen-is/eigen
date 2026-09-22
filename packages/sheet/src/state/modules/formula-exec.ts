@@ -687,7 +687,7 @@ export function execFunctionGroup(
         (origin_r != null && origin_c != null ? [{ r: origin_r, c: origin_c, id }] : []);
 
     // 3. formulaCellInfoMap: a cache of ALL formulas vs their ranges
-    const formulaCellInfoMap = warmFormulaCellInfoMap(ctx, data);
+    const formulaCellInfoMap = warmFormulaCellInfoMap(ctx, id === ctx.currentSheetId ? data : undefined);
     const { dependencyIndex } = ctx.formulaCache;
 
     // 4. Collect the affected sub-graph from the reverse index: direct
