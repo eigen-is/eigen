@@ -88,6 +88,7 @@ export function generateAPIs(
                     } catch (e) {
                         console.error(e);
                     }
+                    ctx_.formulaCache.updateFormulaCache(ctx_, { patches, inversePatches: [] }, 'redo');
                 },
                 { noHistory: true },
             );
