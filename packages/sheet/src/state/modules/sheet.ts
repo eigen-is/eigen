@@ -9,6 +9,7 @@ import { type Context, firstVisibleSheetId, updateContextWithSheetData } from '.
 import type { Settings } from '../settings';
 import type { Sheet } from '../types';
 import { generateRandomSheetName, getSheetIndex } from '../utils';
+import { cancelNormalSelected } from './cell';
 import { applySheetFilter } from './filter';
 import { setFormulaCellInfo } from './formula-cache';
 
@@ -23,7 +24,7 @@ export function changeSheet(
     ctx: Context,
     id: string,
     // The current sheet is going away (deleted, hidden, undone): no veto.
-    force: boolean = false,
+    force = false,
 ) {
     if (id === ctx.currentSheetId) {
         return;
@@ -45,6 +46,7 @@ export function changeSheet(
         selectionActive: ctx.selectionActive,
     };
 
+    cancelNormalSelected(ctx);
     ctx.dataVerificationDropDownList = false;
     ctx.currentSheetId = id;
     ctx.currentSheetIsPivot = !!file.isPivotTable;
@@ -60,6 +62,20 @@ export function changeSheet(
             ctx.hooks.afterActivateSheet?.(id);
         });
     }
+}
+
+// False when no other visible sheet is left to land on.
+export function leaveCurrentSheet(ctx: Context, excludeId?: string) {
+    const next = firstVisibleSheetId(ctx, excludeId);
+    if (next == null) return false;
+    changeSheet(ctx, next, true);
+    return true;
+}
+
+// Undo and redo can remove or hide the sheet on screen.
+export function settleCurrentSheet(ctx: Context) {
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null || ctx.sheets[index].hide === 1) leaveCurrentSheet(ctx);
 }
 
 // Everything the grid paints per sheet, derived in the recipe that makes the sheet current: the
@@ -85,7 +101,7 @@ export function addSheet(
     sheetName: string | undefined = undefined,
     sheetData: Sheet | undefined = undefined,
     // Remote mirror (applyOp): a peer's sheet lands for a read-only viewer too.
-    force: boolean = false,
+    force = false,
 ) {
     if (!force && ctx.allowEdit === false) {
         return;
@@ -136,7 +152,7 @@ export function deleteSheet(
     ctx: Context,
     id: string,
     // Remote mirror (applyOp): a peer's deletion lands for a read-only viewer too.
-    force: boolean = false,
+    force = false,
 ) {
     if (!force && ctx.allowEdit === false) {
         return;
@@ -161,10 +177,7 @@ export function deleteSheet(
     });
 
     ctx.sheets.splice(arrIndex, 1);
-    if (id === ctx.currentSheetId) {
-        const next = firstVisibleSheetId(ctx);
-        if (next != null) changeSheet(ctx, next, true);
-    }
+    if (id === ctx.currentSheetId) leaveCurrentSheet(ctx);
 
     if (ctx.hooks.afterDeleteSheet) {
         setTimeout(() => {

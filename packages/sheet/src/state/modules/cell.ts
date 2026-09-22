@@ -25,11 +25,6 @@ import {
 import { getCellTextInfo } from './text';
 import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
 
-// TODO put these in context ref
-// let rangestart = false;
-// let rangedrag_column_start = false;
-// let rangedrag_row_start = false;
-
 // Returns the cell attribute value, normalized to a default when missing. Result is a
 // value-space union (string for color/format/alignment, number for fs, CellType for ct, …);
 // callers narrow at use, e.g. `Number(value)` or `String(value)` per attr.
@@ -182,7 +177,12 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
 
     const vupdateStr = vupdate.toString();
 
-    if (vupdateStr.substr(0, 1) === "'") {
+    // A formula's text result stays text however it reads (=TEXT(5,"000") is "005"), as recalc stores it.
+    if (!isNil(cell.f) && isString(vupdate) && !valueIsError(vupdate)) {
+        cell.v = vupdate;
+        cell.m = vupdate;
+        cell.ct ??= { fa: 'General', t: 'g' };
+    } else if (vupdateStr.substr(0, 1) === "'") {
         cell.m = vupdateStr.substr(1);
         cell.ct = { fa: '@', t: 's' };
         cell.v = vupdateStr.substr(1);
@@ -216,8 +216,8 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         }
         cell.v = vupdate;
     } else {
-        if (!isNil(cell.f) && isRealNum(vupdate) && !ID_CARD_NUMBER.test(vupdate)) {
-            cell.v = parseFloat(vupdate);
+        if (!isNil(cell.f) && isPlainNumber(vupdate) && !ID_CARD_NUMBER.test(vupdateStr)) {
+            cell.v = Number(vupdate);
             if (isNil(cell.ct)) {
                 cell.ct = { fa: 'General', t: 'n' };
             }
@@ -245,7 +245,7 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
                 // If the original cell format cannot be applied to the updated value, get the format of the updated value
                 [cell.m, cell.ct, cell.v] = parseCellInput(vupdate);
             } else {
-                cell.m = mask.toString();
+                cell.m = mask;
                 cell.v = vupdate;
             }
         } else {

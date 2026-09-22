@@ -133,7 +133,9 @@ export function goToLink(ctx: Context, r: number, c: number, linkType: string, l
     } else {
         const range = cloneDeep(getcellrange(ctx, linkAddress));
         if (range == null) return;
-        changeSheet(ctx, range.sheetId || ctx.currentSheetId);
+        const sheetId = range.sheetId || ctx.currentSheetId;
+        changeSheet(ctx, sheetId);
+        if (ctx.currentSheetId !== sheetId) return; // switch vetoed/invalid
         const row_pre = range.row[0] - 1 === -1 ? 0 : ctx.visibledatarow[range.row[0] - 1];
         const col_pre = range.column[0] - 1 === -1 ? 0 : ctx.visibledatacolumn[range.column[0] - 1];
         ctx.scrollRequest = { left: col_pre, top: row_pre };

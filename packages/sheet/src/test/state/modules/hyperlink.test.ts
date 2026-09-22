@@ -101,6 +101,32 @@ describe('goToLink scheme allowlist', () => {
     });
 });
 
+describe('goToLink cell-range links', () => {
+    function rangeLinkContext(): Context {
+        const ctx = contextFactory({ sheetScrollRecord: {} }) as Context;
+        ctx.sheets[1].name = 'Other';
+        ctx.sheets[0].hyperlink = { '0_0': { linkType: 'cellrange', linkAddress: 'Other!C3' } };
+        return ctx;
+    }
+
+    test('switches to the target sheet and selects the range there', () => {
+        const ctx = rangeLinkContext();
+        goToLink(ctx, 0, 0, 'cellrange', 'Other!C3');
+        expect(ctx.currentSheetId).toBe('id_2');
+        expect(ctx.selections?.[0]).toMatchObject({ row: [2, 2], column: [2, 2] });
+    });
+
+    test('a hidden target sheet leaves the current view alone', () => {
+        const ctx = rangeLinkContext();
+        ctx.sheets[1].hide = 1;
+        const selections = ctx.selections;
+        goToLink(ctx, 0, 0, 'cellrange', 'Other!C3');
+        expect(ctx.currentSheetId).toBe('id_1');
+        expect(ctx.selections).toBe(selections);
+        expect(ctx.scrollRequest).toBeUndefined();
+    });
+});
+
 describe('isLinkValid scheme allowlist', () => {
     test('accepts http/https, mailto and scheme-less addresses', () => {
         expect(isLinkValid('webpage', 'https://example.com').isValid).toBe(true);

@@ -176,7 +176,7 @@ describe('engine/format — numberDisplay', () => {
         expect(numberDisplay(1.5e-10)).toBe('1.5E-10');
     });
 
-    test('infinite values', () => {
+    test('an infinite value shows as Infinity, whatever the mask', () => {
         expect(numberDisplay(Infinity)).toBe('Infinity');
         expect(numberDisplay(-Infinity, '0.00')).toBe('-Infinity');
     });

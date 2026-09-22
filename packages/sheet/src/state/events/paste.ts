@@ -24,14 +24,14 @@ import type { Cell, CellMatrix, InlineStringSegment, SingleRange } from '../../e
 import { setRowHeight } from '../api';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import { carrySides, clearSides, getBorderInfoCompute } from '../modules/border';
-import { getdatabyselection, getQKBorder } from '../modules/cell';
+import { getdatabyselection, getQKBorder, setCellValue } from '../modules/cell';
 import { FONT_INDEX_BY_NAME } from '../modules/fonts';
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
 import { COPY_ACTION_TABLE_MARKER, copiedNumberText, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetSelections } from '../modules/sheet';
-import { hasPartMC, isRealNum } from '../modules/validation';
+import { hasPartMC } from '../modules/validation';
 import type { SheetConfig } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 
@@ -292,30 +292,11 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
             const x = d[r + curR];
             for (let c = 0; c < clen; c += 1) {
                 const originCell = x[c + curC];
-                let value: string | number = dataChe[r][c];
-                if (isRealNum(value)) {
-                    // if the cell is formatted as plain text, do not convert to a numeric type
-                    // to prevent large numbers from being automatically displayed in scientific notation
-                    if (originCell?.ct && originCell.ct.fa === '@') {
-                        value = String(value);
-                    } else {
-                        value = parseFloat(value as string);
-                    }
+                if (originCell?.f != null) {
+                    delete originCell.f;
+                    delFunctionGroup(ctx, r + curR, c + curC, ctx.currentSheetId);
                 }
-                if (originCell) {
-                    originCell.v = value;
-                    originCell.m = numberDisplay(value, originCell.ct?.fa);
-
-                    if (originCell.f != null && originCell.f.length > 0) {
-                        originCell.f = '';
-                        delFunctionGroup(ctx, r + curR, c + curC, ctx.currentSheetId);
-                    }
-                } else {
-                    const cell: Cell = {};
-                    [cell.m, cell.ct, cell.v] = parseCellInput(value);
-
-                    x[c + curC] = cell;
-                }
+                setCellValue(ctx, r + curR, c + curC, d, dataChe[r][c]);
             }
             d[r + curR] = x;
         }
@@ -1159,9 +1140,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                         const heightAttr = tr.getAttribute('height');
                         if (!isNil(heightAttr)) {
                             const targetRowHeight = parseInt(heightAttr, 10);
-                            const current = has(currentRowlen, targetR)
-                                ? currentRowlen[targetR]
-                                : ctx.sheets[index].defaultRowHeight;
+                            const current = has(currentRowlen, targetR) ? currentRowlen[targetR] : ctx.defaultrowlen;
                             if (current !== targetRowHeight) {
                                 rowHeightList[targetR] = targetRowHeight;
                             }

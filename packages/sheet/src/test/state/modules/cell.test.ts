@@ -10,6 +10,7 @@ import { unescapeHtml } from '@workspace/lib/html';
 import { Window } from 'happy-dom';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import { evaluateConditionalFormat } from '../../../engine/conditional-format';
+import type { CellType } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import {
     getCellValue,
@@ -209,5 +210,29 @@ describe('state/modules/cell — setCellValue typed numbers', () => {
             data,
         );
         expect(styles['0_0']?.cellColor).toBe('#ff0000');
+    });
+});
+
+describe('state/modules/cell — setCellValue formula results', () => {
+    function computed(v: string | number, ct?: CellType) {
+        const ctx = contextFactory({}) as Context;
+        const data: CellMatrix = [[ct ? { ct } : null]];
+        setCellValue(ctx, 0, 0, data, { f: '=X', v });
+        return data[0][0];
+    }
+
+    test('a text result stays text, as server recalc stores it', () => {
+        expect(computed('005')).toMatchObject({ v: '005', m: '005' });
+        expect(computed('23')).toMatchObject({ v: '23', m: '23' });
+        expect(computed('0x10')?.v).toBe('0x10');
+        expect(computed('2024-05-06', { fa: 'yyyy-mm-dd', t: 'd' })).toMatchObject({
+            v: '2024-05-06',
+            m: '2024-05-06',
+        });
+    });
+
+    test('a number result stays a number in the cell format', () => {
+        expect(computed(2)).toMatchObject({ v: 2, m: '2', ct: { fa: 'General', t: 'n' } });
+        expect(computed(0.5, { fa: '0.00', t: 'n' })).toMatchObject({ v: 0.5, m: '0.50' });
     });
 });

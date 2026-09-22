@@ -178,7 +178,7 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data![0][0]?.m).toBe('4');
     });
 
-    test('General number result shows Excel General', () => {
+    test('a float-noise General result keeps its full value and shows the rounded 0.3', () => {
         const sheets = [
             sheet('s1', 'Sheet1', [[formula('=0.1+0.2', { ct: { fa: 'General', t: 'n' } }), formula('=0.1+0.2')]]),
         ];

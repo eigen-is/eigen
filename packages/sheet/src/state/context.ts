@@ -422,7 +422,7 @@ function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
         visibledatacolumn.push(ch_width);
     }
     ctx.visibledatacolumn = visibledatacolumn;
-    ctx.ch_width = ch_width + 120;
+    ctx.ch_width = ch_width + 120; // add blank space at the far right
 }
 
 export function ensureSheetIndex(data: Sheet[], generateSheetId: () => string) {

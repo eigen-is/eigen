@@ -12,6 +12,7 @@
 // never assert on internal call sequences.
 
 import { describe, expect, it, spyOn } from 'bun:test';
+import { SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import { Window } from 'happy-dom';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
@@ -336,6 +337,15 @@ describe('HTML-table paste — merges, borders, row height', () => {
 
         expect(ctx.sheets[0].config!.rowlen![2]).toBe(30);
         expect(ctx.sheets[0].data![2][1]?.v).toBe('a');
+    });
+
+    it('writes no rowlen for a tr at the default row height', () => {
+        const ctx = makeCtx();
+        ctx.defaultrowlen = SHEET_DEFAULT_ROW_HEIGHT;
+        ctx.selections = single(2, 1);
+        pasteHtml(ctx, `<table><tr height=${SHEET_DEFAULT_ROW_HEIGHT}><td>a</td></tr></table>`);
+
+        expect(ctx.sheets[0].config?.rowlen?.[2]).toBeUndefined();
     });
 
     it('leaves cfg.rowlen untouched for a tr with no height attribute', () => {

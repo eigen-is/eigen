@@ -24,12 +24,10 @@ import {
     type CellWithRowAndCol,
     COPY_ACTION_TABLE_MARKER,
     type Context,
-    changeSheet,
     defaultContext,
     defaultSettings,
     ensureSheetIndex,
     filterPatch,
-    firstVisibleSheetId,
     type GlobalCache,
     getFlowdata,
     getSheetIndex,
@@ -43,6 +41,7 @@ import {
     patchToOp,
     type Settings,
     type Sheet as SheetType,
+    settleCurrentSheet,
     warmFormulaCellInfoMap,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
@@ -277,13 +276,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             } as Patch);
                         }
                     }
-                    let newContext = applyPatches(ctx_, history.inversePatches);
-                    const si = getSheetIndex(newContext, newContext.currentSheetId);
-                    if (si != null) {
-                        newContext = produce(newContext, (draft: Context) => {
-                            draft.insertedImgs = draft.sheets[si].images;
-                        });
-                    }
+                    const newContext = produce(applyPatches(ctx_, history.inversePatches), (draft: Context) => {
+                        settleCurrentSheet(draft);
+                        const si = getSheetIndex(draft, draft.currentSheetId);
+                        if (si != null) draft.insertedImgs = draft.sheets[si].images;
+                    });
                     globalCache.current.redoList.push(history);
                     const inversedOptions = inverseRowColOptions(history.options);
                     if (inversedOptions?.insertRowColOp) {
@@ -319,13 +316,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             const history = globalCache.current.redoList.pop();
             if (history) {
                 setContext((ctx_) => {
-                    let newContext = applyPatches(ctx_, history.patches);
-                    const si = getSheetIndex(newContext, newContext.currentSheetId);
-                    if (si != null) {
-                        newContext = produce(newContext, (draft: Context) => {
-                            draft.insertedImgs = draft.sheets[si].images;
-                        });
-                    }
+                    const newContext = produce(applyPatches(ctx_, history.patches), (draft: Context) => {
+                        settleCurrentSheet(draft);
+                        const si = getSheetIndex(draft, draft.currentSheetId);
+                        if (si != null) draft.insertedImgs = draft.sheets[si].images;
+                    });
                     globalCache.current.undoList.push(history);
                     emitOp(newContext, history.patches, history.options);
 
@@ -422,10 +417,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     draftCtx.fontList = mergedSettings.fontList;
                     if (!draftCtx.currentSheetId) {
                         initSheetIndex(draftCtx);
-                    } else if (getSheetIndex(draftCtx, draftCtx.currentSheetId) == null) {
-                        // An undone add removed the current sheet.
-                        const next = firstVisibleSheetId(draftCtx);
-                        if (next != null) changeSheet(draftCtx, next, true);
                     }
                     const sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
                     if (sheetIdx == null) return;
