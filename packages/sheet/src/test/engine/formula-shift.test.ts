@@ -98,6 +98,22 @@ describe('engine/formula-shift — functionCopy ranges', () => {
         expect(functionCopy('=SUM($B$1:D3)', 0, -3)).toBe('SUM(A$1:$B3)');
     });
 
+    test('a reversed range shifts as its sorted twin', () => {
+        expect(functionCopy('=SUM(A$3:A1)', 1, 0)).toBe('SUM(A2:A$3)');
+        expect(functionCopy('=B3:A1', 1, 1)).toBe('B2:C4');
+        expect(functionCopy('=C:A', 0, 1)).toBe('B:D');
+        expect(functionCopy('=3:1', 1, 0)).toBe('2:4');
+    });
+
+    test('a ref shifted past the last row or column of the grid is #REF!', () => {
+        expect(functionCopy('=A1048575', 1, 0)).toBe('A1048576');
+        expect(functionCopy('=A1048576', 1, 0)).toBe('#REF!');
+        expect(functionCopy('=XFC1', 0, 1)).toBe('XFD1');
+        expect(functionCopy('=XFD1', 0, 1)).toBe('#REF!');
+        expect(functionCopy('=SUM(A1:A1048576)', 1, 0)).toBe('SUM(#REF!)');
+        expect(functionCopy('=SUM(A1:A1048576)', 0, 1)).toBe('SUM(B1:B1048576)');
+    });
+
     test('a shifted range is still a ref the next copy shifts', () => {
         expect(functionCopy(functionCopy('=SUM(A1:A$1)', 3, 1), 1, 0)).toBe('SUM(B$1:B5)');
     });
@@ -300,11 +316,10 @@ describe('functionStrChange — orientation + clamp paths', () => {
         expect(functionStrChange('A2:B5', 'del', 'row', null, 1, 2, 'Sheet1', true)).toBe('A2:B3');
     });
 
-    test('returns the input unchanged on an inverted range', () => {
-        // r1 > r2 (B3:A1 has r1=2, r2=0) — early return preserves the malformed input
-        expect(functionStrChange('B3:A1', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('B3:A1');
-        // c1 > c2 (C1:A3 has c1=2, c2=0)
-        expect(functionStrChange('C1:A3', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true)).toBe('C1:A3');
+    test('adjusts a reversed range as its sorted twin', () => {
+        expect(functionStrChange('B3:A1', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('A2:B4');
+        expect(functionStrChange('C1:A3', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true)).toBe('B1:D3');
+        expect(functionStrChange('SUM(A$3:A1)', 'del', 'row', null, 0, 1, 'Sheet1', true)).toBe('SUM(A1:A$2)');
     });
 });
 

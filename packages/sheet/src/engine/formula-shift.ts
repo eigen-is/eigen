@@ -1,13 +1,6 @@
-import {
-    columnIndexToLabel,
-    columnLabelToIndex,
-    extractLabel,
-    rowIndexToLabel,
-    toLabel,
-    unquoteSheetName,
-} from './a1-notation';
+import { extractLabel, toLabel, unquoteSheetName } from './a1-notation';
 import { iscelldata, operatorjson } from './formula-utils';
-import { offsetCoordinate, offsetRange } from './parser/helper/cell';
+import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
 
 // Returns [rowAbsolute, colAbsolute] for a single ref like "$A$1" → [true, true].
@@ -29,8 +22,8 @@ function shiftRef(txt: string, rowOffset: number, colOffset: number): string {
     const [startRow, startColumn] = extractLabel(startTxt)!;
 
     if (endTxt == null) {
-        const row = offsetCoordinate(startRow, rowOffset, rowIndexToLabel);
-        const column = offsetCoordinate(startColumn, colOffset, columnIndexToLabel);
+        const row = offsetCoordinate(startRow, rowOffset, 'row');
+        const column = offsetCoordinate(startColumn, colOffset, 'column');
         return row == null || column == null ? error['r'] : prefix + toLabel(row, column);
     }
 
@@ -187,95 +180,30 @@ function functionStrChange_range(
     targetSheet: string,
     onTargetSheet: boolean,
 ): string {
-    const sheetSplit = txt.split('!');
-    let rangetxt: string;
-    let prefix = '';
-    if (sheetSplit.length > 1) {
-        [, rangetxt] = sheetSplit;
-        prefix = `${sheetSplit[0]}!`;
-        if (unquoteSheetName(sheetSplit[0]) !== targetSheet) return txt;
-    } else {
-        [rangetxt] = sheetSplit;
-        if (!onTargetSheet) return txt;
-    }
+    const sheetEnd = txt.lastIndexOf('!') + 1;
+    const prefix = txt.slice(0, sheetEnd);
+    if (sheetEnd > 0 ? unquoteSheetName(prefix.slice(0, -1)) !== targetSheet : !onTargetSheet) return txt;
 
-    const parts = rangetxt.split(':');
-    const isRange = parts.length > 1;
+    const [startTxt, endTxt = startTxt] = txt.slice(sheetEnd).split(':');
+    const [startRow, startColumn] = extractLabel(startTxt)!;
+    const [endRow, endColumn] = extractLabel(endTxt)!;
+    const [row0, row1] = sortLegs(startRow, endRow);
+    const [column0, column1] = sortLegs(startColumn, endColumn);
 
-    let r1: number;
-    let r2: number;
-    let c1: number;
-    let c2: number;
-    let $row0: string;
-    let $col0: string;
-    let $row1: string;
-    let $col1: string;
-    let rowsMissing: boolean;
-    let colsMissing: boolean;
-
-    if (!isRange) {
-        const rowPart = parts[0].replace(/[^0-9]/g, '');
-        const colPart = parts[0].replace(/[^A-Za-z]/g, '');
-
-        // A single ref always carries both axes: `iscelldata` demands a column and a row.
-        rowsMissing = false;
-        colsMissing = false;
-
-        r1 = Number.parseInt(rowPart, 10) - 1;
-        r2 = r1;
-
-        c1 = columnLabelToIndex(colPart);
-        c2 = c1;
-
-        const freezonFuc = detectAbsolute(parts[0]);
-        $row0 = freezonFuc[0] ? '$' : '';
-        $col0 = freezonFuc[1] ? '$' : '';
-        $row1 = $row0;
-        $col1 = $col0;
-    } else {
-        const rowPart0 = parts[0].replace(/[^0-9]/g, '');
-        const rowPart1 = parts[1].replace(/[^0-9]/g, '');
-        const colPart0 = parts[0].replace(/[^A-Za-z]/g, '');
-        const colPart1 = parts[1].replace(/[^A-Za-z]/g, '');
-
-        rowsMissing = rowPart0.length === 0 && rowPart1.length === 0;
-        colsMissing = colPart0.length === 0 && colPart1.length === 0;
-
-        r1 = rowsMissing ? -1 : Number.parseInt(rowPart0, 10) - 1;
-        r2 = rowsMissing ? -1 : Number.parseInt(rowPart1, 10) - 1;
-        if (!rowsMissing && r1 > r2) {
-            return txt;
-        }
-
-        c1 = colsMissing ? -1 : columnLabelToIndex(colPart0);
-        c2 = colsMissing ? -1 : columnLabelToIndex(colPart1);
-        if (!colsMissing && c1 > c2) {
-            return txt;
-        }
-
-        const freezonFuc0 = detectAbsolute(parts[0]);
-        $row0 = freezonFuc0[0] ? '$' : '';
-        $col0 = freezonFuc0[1] ? '$' : '';
-
-        const freezonFuc1 = detectAbsolute(parts[1]);
-        $row1 = freezonFuc1[0] ? '$' : '';
-        $col1 = freezonFuc1[1] ? '$' : '';
-    }
+    let r1 = row0.index;
+    let r2 = row1.index;
+    let c1 = column0.index;
+    let c2 = column1.index;
+    const rowsMissing = r1 === -1 && r2 === -1;
+    const colsMissing = c1 === -1 && c2 === -1;
 
     const formatRange = () => {
-        // A range collapses to a single label only when both axes were present in the
-        // source text: a whole-column (`A:A`) or whole-row (`1:1`) range also satisfies
-        // r1 === r2 && c1 === c2 through its -1 sentinels, and must keep both legs.
+        const start = prefix + toLabel({ ...row0, index: r1 }, { ...column0, index: c1 });
+        // A whole-column (`A:A`) or whole-row (`1:1`) range also meets this through its -1 sentinels, and keeps both legs.
         if (!rowsMissing && !colsMissing && r1 === r2 && c1 === c2) {
-            return prefix + $col0 + columnIndexToLabel(c1) + $row0 + (r1 + 1);
+            return start;
         }
-        if (colsMissing) {
-            return `${prefix + $row0 + (r1 + 1)}:${$row1}${r2 + 1}`;
-        }
-        if (rowsMissing) {
-            return `${prefix + $col0 + columnIndexToLabel(c1)}:${$col1}${columnIndexToLabel(c2)}`;
-        }
-        return `${prefix + $col0 + columnIndexToLabel(c1) + $row0 + (r1 + 1)}:${$col1}${columnIndexToLabel(c2)}${$row1}${r2 + 1}`;
+        return `${start}:${toLabel({ ...row1, index: r2 }, { ...column1, index: c2 })}`;
     };
 
     if (type === 'del') {

@@ -45,22 +45,8 @@ export function iscelldata(txt: string) {
     const reg_cellRange =
         /^(((([a-zA-Z]+)|([$][a-zA-Z]+))(([0-9]+)|([$][0-9]+)))|((([a-zA-Z]+)|([$][a-zA-Z]+)))|((([0-9]+)|([$][0-9]+))))$/;
 
+    // A reversed range (`A$3:A1`) is a ref too: Excel reads it as its sorted twin.
     const rangetxtArr = rangetxt.split(':');
-
-    const row: number[] = [];
-    const col: number[] = [];
-    row[0] = parseInt(rangetxtArr[0].replace(/[^0-9]/g, ''), 10) - 1;
-    row[1] = parseInt(rangetxtArr[1].replace(/[^0-9]/g, ''), 10) - 1;
-    if (row[0] > row[1]) {
-        return false;
-    }
-
-    col[0] = columnLabelToIndex(rangetxtArr[0].replace(/[^A-Za-z]/g, ''));
-    col[1] = columnLabelToIndex(rangetxtArr[1].replace(/[^A-Za-z]/g, ''));
-    if (col[0] > col[1]) {
-        return false;
-    }
-
     return reg_cellRange.test(rangetxtArr[0]) && reg_cellRange.test(rangetxtArr[1]);
 }
 

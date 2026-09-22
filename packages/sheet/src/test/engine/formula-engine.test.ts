@@ -182,8 +182,9 @@ describe('engine/formula-engine — compiled formula at an offset', () => {
         expect(at('=SUM($A$1:A1)', 0, 2)).toBe(60);
     });
 
-    test('a reversed range stays where it is, as the text shifter leaves it', () => {
-        expect(at('=SUM(B1:A1)', 1, 0)).toBe(30);
+    test('a reversed range shifts as its sorted twin, as the text shifter does', () => {
+        expect(at('=SUM(B1:A1)', 1, 0)).toBe(5);
+        expect(functionCopy('=SUM(B1:A1)', 1, 0)).toBe('SUM(A2:B2)');
     });
 
     test('a leg moved off the sheet is #REF!', () => {

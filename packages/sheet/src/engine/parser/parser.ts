@@ -12,14 +12,7 @@ import type {
 import errorParser, { ERROR, ERROR_NAME, ERROR_REF, ERROR_VALUE, valueIsError } from './error';
 import evaluateByOperator from './evaluate-by-operator/evaluate-by-operator';
 import { Parser as GrammarParser } from './grammar-parser/grammar-parser';
-import {
-    columnIndexToLabel,
-    extractLabel,
-    offsetCoordinate,
-    offsetRange,
-    rowIndexToLabel,
-    toLabel,
-} from './helper/cell';
+import { extractLabel, offsetCoordinate, offsetRange, toLabel } from './helper/cell';
 import { invertNumber, toNumber } from './helper/number';
 import { trimEdges } from './helper/string';
 
@@ -140,8 +133,8 @@ class Parser {
         }
 
         const { rowOffset = 0, colOffset = 0 } = this.options;
-        const cellRow = offsetCoordinate(row, rowOffset, rowIndexToLabel);
-        const cellColumn = offsetCoordinate(column, colOffset, columnIndexToLabel);
+        const cellRow = offsetCoordinate(row, rowOffset, 'row');
+        const cellColumn = offsetCoordinate(column, colOffset, 'column');
         if (cellRow == null || cellColumn == null) {
             throw Error(ERROR_REF);
         }
