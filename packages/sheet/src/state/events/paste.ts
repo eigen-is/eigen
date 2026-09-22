@@ -180,7 +180,6 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
         if (addr > 0 || addc > 0) {
             expandRowsAndColumns(d, addr, addc);
         }
-        if (!d) return;
 
         if (cfg.rowlen == null) {
             cfg.rowlen = {};
@@ -237,7 +236,6 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
 
                 carrySides(cfg.borderInfo, h, c, borderInfo?.[`${h - minh}_${c - minc}`]);
             }
-            d[h] = x;
 
             if (currentRowLen !== ctx.defaultrowlen) {
                 cfg.rowlen[h] = currentRowLen;
@@ -287,7 +285,6 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
         if (addr > 0 || addc > 0) {
             expandRowsAndColumns(d, addr, addc);
         }
-        if (!d) return;
 
         for (let r = 0; r < rlen; r += 1) {
             const x = d[r + curR];
@@ -299,7 +296,6 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
                 }
                 setCellValue(ctx, r + curR, c + curC, d, dataChe[r][c]);
             }
-            d[r + curR] = x;
         }
 
         last.row = [curR, curR + rlen - 1];
@@ -476,8 +472,6 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
                 }
             }
         }
-
-        d[h] = x;
     }
 
     last.row = [minh, maxh];
@@ -873,7 +867,6 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
                         }
                     }
                 }
-                d[h] = x;
             }
         }
     }

@@ -66,7 +66,7 @@ export function generateAPIs(
                             }
                         } else if (specialOp.op === 'addSheet') {
                             // The name comes from sheetData: opToPatch prefixes every patch path with 'sheets'.
-                            if (specialOp.value?.id) {
+                            if (specialOp.value.id) {
                                 addSheet(ctx_, settings, specialOp.value.id, false, undefined, specialOp.value, true);
                             }
                             const fileIndex = getSheetIndex(ctx_, specialOp.value.id);
