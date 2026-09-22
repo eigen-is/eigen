@@ -8,7 +8,6 @@ import { enablePatches, isDraft, produceWithPatches } from 'immer';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import * as cellModule from '../../../state/modules/cell';
-import { setCellValue, updateCell } from '../../../state/modules/cell';
 import { setFormulaCellInfo } from '../../../state/modules/formula-cache';
 import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { contextFactory } from '../factories/context';
@@ -41,7 +40,7 @@ function editCell(ctx: Context, r: number, c: number, value: number, id: string)
     // then the cell itself is written, then refresh applies dependent results.
     execFunctionGroup(ctx, r, c, value, id);
     const data = ctx.sheets[ctx.sheets.findIndex((s) => s.id === id)].data!;
-    setCellValue(ctx, r, c, data, value);
+    cellModule.setCellValue(ctx, r, c, data, value);
     groupValuesRefresh(ctx);
 }
 
@@ -192,7 +191,7 @@ describe('execFunctionGroup — index-driven recalc', () => {
         ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' }, { r: 1, c: 3, id: 'id_1' });
         warmFormulaCellInfoMap(ctx);
 
-        updateCell(ctx, 1, 0, null, 7);
+        cellModule.updateCell(ctx, 1, 0, null, 7);
         groupValuesRefresh(ctx);
 
         expect(ctx.sheets[0].data![0][2]?.v).toBe(12);
