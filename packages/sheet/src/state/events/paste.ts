@@ -853,20 +853,8 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
                     if (!isNil(value) && !isNil(value.f)) {
                         let func = value.f;
 
-                        if (offsetRow > 0) {
-                            func = `=${functionCopy(func, 'down', offsetRow)}`;
-                        }
-
-                        if (offsetRow < 0) {
-                            func = `=${functionCopy(func, 'up', Math.abs(offsetRow))}`;
-                        }
-
-                        if (offsetCol > 0) {
-                            func = `=${functionCopy(func, 'right', offsetCol)}`;
-                        }
-
-                        if (offsetCol < 0) {
-                            func = `=${functionCopy(func, 'left', Math.abs(offsetCol))}`;
+                        if (offsetRow !== 0 || offsetCol !== 0) {
+                            func = `=${functionCopy(func, offsetRow, offsetCol)}`;
                         }
 
                         const funcV = execfunction(ctx, func, h, c, undefined, undefined, true, undefined, resolver);

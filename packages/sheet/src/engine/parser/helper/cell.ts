@@ -43,7 +43,8 @@ export function columnIndexToLabel(column: number): string {
 export const SIMPLE_SHEET_NAME = '[A-Za-z0-9_\\u00C0-\\u02AF]+';
 export const QUOTED_SHEET_NAME = "'(?:(?!').|'')*'";
 export const SHEET_NAME_PREFIX = `(${SIMPLE_SHEET_NAME}|${QUOTED_SHEET_NAME})!`;
-const LABEL_EXTRACT_REGEXP = new RegExp(`^(?:${SHEET_NAME_PREFIX})?([$])?([A-Za-z]*)([$])?([0-9]*)$`);
+// The column group is optional as a whole so the `$` of a row-only leg (`$1`) binds to the row.
+const LABEL_EXTRACT_REGEXP = new RegExp(`^(?:${SHEET_NAME_PREFIX})?(?:([$])?([A-Za-z]+))?([$])?([0-9]*)$`);
 
 export function unquoteSheetName(raw: string): string {
     return raw.replace(/^'|'$/g, '').replace(/''/g, "'");
@@ -60,7 +61,7 @@ export function extractLabel(label: string): [CellCoordinate, CellCoordinate, st
     const match = label.toUpperCase().match(LABEL_EXTRACT_REGEXP);
     if (!match) return null;
 
-    const [, sheetNameStr, columnAbs, column, rowAbs, row] = match;
+    const [, sheetNameStr, columnAbs, column = '', rowAbs, row] = match;
     const sheetName = sheetNameStr == null ? null : unquoteSheetName(label.slice(0, sheetNameStr.length));
 
     return [
@@ -74,4 +75,56 @@ export function toLabel(row: CellCoordinate, column: CellCoordinate): string {
     const rowLabel = (row.isAbsolute ? '$' : '') + rowIndexToLabel(row.index);
     const columnLabel = (column.isAbsolute ? '$' : '') + columnIndexToLabel(column.index);
     return columnLabel + rowLabel;
+}
+
+// `$` and a missing axis (`A:A`, `1:1`) stay put; null means the copy left the sheet (#REF!).
+export function offsetCoordinate(
+    coordinate: CellCoordinate,
+    offset: number,
+    indexToLabel: (index: number) => string,
+): CellCoordinate | null {
+    if (offset === 0 || coordinate.isAbsolute || coordinate.index === -1) {
+        return coordinate;
+    }
+    const index = coordinate.index + offset;
+    if (index < 0) {
+        return null;
+    }
+    return { index, label: indexToLabel(index), isAbsolute: false };
+}
+
+export type CellLeg = [row: CellCoordinate, column: CellCoordinate];
+
+function isReversed(start: CellCoordinate, end: CellCoordinate): boolean {
+    return start.index !== -1 && end.index !== -1 && start.index > end.index;
+}
+
+function sortLegs(start: CellCoordinate, end: CellCoordinate): [CellCoordinate, CellCoordinate] {
+    return isReversed(start, end) ? [end, start] : [start, end];
+}
+
+// Both axes move at once and crossed legs re-sort, as in Excel (`A1:$B$2` by (2,3) is `$B$2:D3`); a reversed range stays put.
+export function offsetRange(
+    start: CellLeg,
+    end: CellLeg,
+    rowOffset: number,
+    colOffset: number,
+): [CellLeg, CellLeg] | null {
+    let [startRow, startColumn]: (CellCoordinate | null)[] = start;
+    let [endRow, endColumn]: (CellCoordinate | null)[] = end;
+    if (!isReversed(startRow, endRow) && !isReversed(startColumn, endColumn)) {
+        startRow = offsetCoordinate(startRow, rowOffset, rowIndexToLabel);
+        endRow = offsetCoordinate(endRow, rowOffset, rowIndexToLabel);
+        startColumn = offsetCoordinate(startColumn, colOffset, columnIndexToLabel);
+        endColumn = offsetCoordinate(endColumn, colOffset, columnIndexToLabel);
+        if (startRow == null || endRow == null || startColumn == null || endColumn == null) {
+            return null;
+        }
+    }
+    const [rowStart, rowEnd] = sortLegs(startRow, endRow);
+    const [colStart, colEnd] = sortLegs(startColumn, endColumn);
+    return [
+        [rowStart, colStart],
+        [rowEnd, colEnd],
+    ];
 }

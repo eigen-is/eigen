@@ -27,7 +27,7 @@ export { createCfFormulaEvaluator, evaluateConditionalFormat } from './condition
 export { createDefaultSheets } from './defaults';
 export { booleanDisplay, cellWrapsText, numberDisplay, update } from './format';
 export { FormulaEngine } from './formula-engine';
-export { type FormulaShiftMode, functionCopy } from './formula-shift';
+export { functionCopy } from './formula-shift';
 export { iscelldata } from './formula-utils';
 export { recalcSheets, sheetsNeedRecalc } from './recalc';
 export { replaySheetsOps, withMaterializedData } from './replay-ops';

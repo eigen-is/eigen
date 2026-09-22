@@ -185,6 +185,18 @@ describe('formula paste — relative refs shift, absolute refs stay (C5 tokenize
 
         expect(ctx.sheets[0].data![1][1]?.f).toBe('=C3');
     });
+
+    it('shifts both axes of a range at once, re-sorting legs that cross', () => {
+        const ctx = makeCtx(8, 8, (d) => {
+            d[1][1] = { f: '=SUM(A1:A$1)', v: 0, m: '0' };
+            d[1][2] = { f: '=SUM(A1:$B$2)', v: 0, m: '0' };
+        });
+        copyThenPaste(ctx, single(1, 1), single(4, 2));
+        copyThenPaste(ctx, single(1, 2), single(3, 5));
+
+        expect(ctx.sheets[0].data![4][2]?.f).toBe('=SUM(B$1:B4)');
+        expect(ctx.sheets[0].data![3][5]?.f).toBe('=SUM($B$2:D3)');
+    });
 });
 
 describe('internal copy/paste — styles and merges', () => {

@@ -1100,6 +1100,28 @@ describe('Sheets xlsx conversion fidelity', () => {
         ]);
     });
 
+    test('convert pre-shifts a sub-range formula on both axes at once', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Expr');
+        ws.addConditionalFormatting({
+            ref: 'A1:A2 D3:D4',
+            rules: [
+                {
+                    type: 'expression',
+                    formulae: ['SUM(A1:$B$2)>0'],
+                    priority: 1,
+                    style: { font: { color: { argb: 'FF0000FF' } } },
+                },
+            ],
+        });
+        const sheets = await parseWorkbook(workbook);
+
+        expect(sheets[0].conditionalFormatRules).toMatchObject([
+            { cellrange: [{ row: [0, 1], column: [0, 0] }], conditionValue: ['=SUM(A1:$B$2)>0'] },
+            { cellrange: [{ row: [2, 3], column: [3, 3] }], conditionValue: ['=SUM($B$2:D3)>0'] },
+        ]);
+    });
+
     test('convert maps colorScale rules onto colorGradation with engine stop order', async () => {
         const workbook = new ExcelJS.Workbook();
         const ws = workbook.addWorksheet('Scale');

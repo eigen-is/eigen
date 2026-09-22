@@ -503,11 +503,9 @@ function cfFormulaRules(
     const anchorRow = ranges[0].row[0];
     const anchorCol = ranges[0].column[0];
     return ranges.map((range) => {
-        let shifted = formula;
         const dr = range.row[0] - anchorRow;
         const dc = range.column[0] - anchorCol;
-        if (dr !== 0) shifted = functionCopy(shifted, 'down', dr);
-        if (dc !== 0) shifted = functionCopy(shifted, 'right', dc);
+        const shifted = dr !== 0 || dc !== 0 ? functionCopy(formula, dr, dc) : formula;
         return {
             type: 'default',
             cellrange: [range],
