@@ -8,14 +8,14 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
 import { enforceHomeDataQuota } from '../config/enforcement';
 import { getServerSettings } from '../config/server-settings';
-import type { ManagedDatabase, PutResourceResult } from '../core';
+import type { ManagedDatabase, PutResourceResult, ResourcePreconditions } from '../core';
 import {
     ApiError,
     BroadcastBatch,
     computeResourceEtag,
     DEFAULT_LABELS,
     LocalFilesystem,
-    nextSyncGen,
+    newSyncGen,
     PATHS,
 } from '../core';
 import type { Home } from '../home';
@@ -26,49 +26,26 @@ import { createVCard, mergeVCard, normalizeBirthday, parseVCard } from '../vcard
 import type { CardEdits } from '../vcard/types';
 import type { StagedAvatarPair } from './avatars';
 import * as avatars from './avatars';
-import type { CardData, CardRowInput, CardWriteRow, Tx } from './card-store';
+import type { CardData, CardProjection, CardRowInput, ContactRow, PurgedCard, Tx } from './card-store';
 import {
     avatarNameOf,
     CARD_MAX_BYTES,
+    CONTACT_ROW,
     cardBytes,
     indexCard,
     isCardPhotoCacheOf,
     normalizeLabelName,
+    PURGED_CARD,
     prepareCard,
     syncCardLabels,
 } from './card-store';
-import type { CardBook, CardRow, DeleteCardResult, PutCardOptions } from './dav-store';
+import type { CardBook, CardRow, DeleteCardResult } from './dav-store';
 import * as davStore from './dav-store';
 import { CONTACTS_DB_CONFIG } from './db-config';
 import * as labels from './labels';
 import * as schema from './schema';
 import { buildContactEvent, buildContactsChangedEvent, buildLabelEvent } from './sse-events';
 import * as transfer from './transfer';
-
-async function getContactsDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
-    return home.getLocalDatabase(CONTACTS_DB_CONFIG, PATHS.CONTACTS.DB);
-}
-
-// Never the blob: a contact list that read every card's bytes would carry the whole book into memory.
-const CONTACT_ROW = {
-    id: schema.contacts.id,
-    firstName: schema.contacts.firstName,
-    lastName: schema.contacts.lastName,
-    eigenId: schema.contacts.eigenId,
-    data: schema.contacts.data,
-    etag: schema.contacts.etag,
-};
-type ContactRow = { [K in keyof typeof CONTACT_ROW]: (typeof schema.contacts.$inferSelect)[K] };
-
-// What purgeCard needs of the row it removes: its name for the tombstone, its photo for the cache sweep.
-export const PURGED_CARD = {
-    id: schema.contacts.id,
-    uri: schema.contacts.uri,
-    eigenId: schema.contacts.eigenId,
-    etag: schema.contacts.etag,
-    data: schema.contacts.data,
-};
-export type PurgedCard = { [K in keyof typeof PURGED_CARD]: (typeof schema.contacts.$inferSelect)[K] };
 
 // Optionals collapse to '' / [] so the shape matches prepareCard's and `avatarChanged` can't misfire on `undefined !== ''`.
 function toData(contact: CreateContactInput): CardData {
@@ -117,6 +94,7 @@ export class Contacts {
     writeLock = new Semaphore(1);
 
     // Running totals so size() answers from memory: a SUM per metered write makes an N-card device sync O(N²).
+    // Each delta is read inside the transaction that moves it and applied after: a rollback would otherwise leave it applied.
     cardsBytes = 0;
     avatarsBytes = 0;
 
@@ -132,15 +110,10 @@ export class Contacts {
     }
 
     public async init(): Promise<void> {
-        this.managedDb = await getContactsDatabase(this.home);
+        this.managedDb = await this.home.getLocalDatabase(CONTACTS_DB_CONFIG, PATHS.CONTACTS.DB);
         this.db = this.managedDb.db;
 
-        // A recreated book must never reissue a generation a client has seen, so the clock seeds this one.
-        this.db
-            .insert(schema.book)
-            .values({ id: 1, syncGen: nextSyncGen(undefined, Date.now()) })
-            .onConflictDoNothing()
-            .run();
+        this.db.insert(schema.book).values({ id: 1, syncGen: newSyncGen() }).onConflictDoNothing().run();
 
         // Seeded once here, then moved by delta at each commit and purge.
         this.cardsBytes = this.db
@@ -239,17 +212,16 @@ export class Contacts {
 
     // One transaction, so the ctag bump, the blob, the label junction and the tombstone clear settle together.
     private commitCard(opts: { row: CardRowInput; categories: string[] }): void {
-        const createdLabelIds: string[] = [];
-        let delta = 0;
-        this.db.transaction((tx) => {
-            // Read inside the transaction, applied outside it: a rollback would otherwise leave the delta applied.
+        const { delta, createdLabelIds } = this.db.transaction((tx) => {
             const previous = tx
                 .select({ size: cardBytes })
                 .from(schema.contacts)
                 .where(eq(schema.contacts.id, opts.row.id))
                 .get();
-            delta = opts.row.vcard.byteLength - (previous?.size ?? 0);
-            indexCard(tx, opts.row, opts.categories, this.bumpCtag(tx), createdLabelIds);
+            return {
+                delta: opts.row.vcard.byteLength - (previous?.size ?? 0),
+                createdLabelIds: indexCard(tx, opts.row, opts.categories, this.bumpCtag(tx)),
+            };
         });
         this.cardsBytes += delta;
 
@@ -261,7 +233,7 @@ export class Contacts {
     // webp behind. `creditBytes` is the stored card this one replaces, or a rewrite that shrinks a card would
     // be refused on a quota its own bytes already hold. Returns the avatar URL the projection stored.
     async writeCard(opts: {
-        row: CardWriteRow;
+        row: CardProjection & Pick<CardRowInput, 'id' | 'uri' | 'eigenId'>;
         categories: string[];
         creditBytes: number;
         cache: () => Promise<string>;
@@ -279,10 +251,8 @@ export class Contacts {
 
     // Callers hold the write lock and have already run their own guards (self-delete, preconditions).
     async purgeCard(row: PurgedCard): Promise<void> {
-        let removed = 0;
-        this.db.transaction((tx) => {
-            // Read inside the transaction, applied outside it: a rollback would otherwise leave the delta applied.
-            removed = tx
+        const removed = this.db.transaction((tx) => {
+            const size = tx
                 .select({ size: cardBytes })
                 .from(schema.contacts)
                 .where(eq(schema.contacts.id, row.id))
@@ -290,6 +260,7 @@ export class Contacts {
             const ctag = this.bumpCtag(tx);
             tx.delete(schema.contacts).where(eq(schema.contacts.id, row.id)).run();
             this.tombstone(tx, row.uri, ctag);
+            return size;
         });
 
         this.cardsBytes -= removed;
@@ -324,25 +295,16 @@ export class Contacts {
             })
             .from(schema.contacts)
             .all();
-        const createdLabelIds: string[] = [];
-        this.db.transaction((tx) => {
+        const createdLabelIds = this.db.transaction((tx) => {
+            const created: string[] = [];
             for (const row of rows) {
                 const parsed = parseVCard(new TextDecoder().decode(row.vcard));
                 // The avatar cache is derived asynchronously from the PHOTO, so the stored URL is carried over.
-                const { projection, categories } = prepareCard(row.vcard, parsed, row.data?.avatar ?? '', row.uid);
-                tx.update(schema.contacts)
-                    .set({
-                        uid: projection.uid,
-                        firstName: projection.firstName,
-                        lastName: projection.lastName,
-                        isGroup: projection.isGroup,
-                        data: projection.data,
-                        etag: projection.etag,
-                    })
-                    .where(eq(schema.contacts.id, row.id))
-                    .run();
-                syncCardLabels(tx, row.id, categories, createdLabelIds);
+                const projection = prepareCard(row.vcard, parsed, row.data?.avatar ?? '', row.uid);
+                tx.update(schema.contacts).set(projection).where(eq(schema.contacts.id, row.id)).run();
+                created.push(...syncCardLabels(tx, row.id, parsed.categories));
             }
+            return created;
         });
 
         for (const id of createdLabelIds) this.emitLabel(SSEventType.LABEL_CREATED, id);
@@ -690,11 +652,11 @@ export class Contacts {
         return davStore.getCardMeta(this, uri);
     }
 
-    public async putCard(uri: string, body: string, options: PutCardOptions): Promise<PutResourceResult> {
+    public async putCard(uri: string, body: string, options: ResourcePreconditions): Promise<PutResourceResult> {
         return davStore.putCard(this, uri, body, options);
     }
 
-    public async deleteCard(uri: string, pre: { ifMatch: string | null }): Promise<DeleteCardResult> {
+    public async deleteCard(uri: string, pre: Pick<ResourcePreconditions, 'ifMatch'>): Promise<DeleteCardResult> {
         return davStore.deleteCard(this, uri, pre);
     }
 

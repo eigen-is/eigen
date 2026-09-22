@@ -8,13 +8,14 @@ import {
     matchesIfNoneMatch,
     normalizeResourceUri,
     type PutResourceResult,
+    type ResourcePreconditions,
 } from '../core';
 import { pushUserProfile } from '../home/home-relay';
 import { mergeVCard, parseVCard, transcodeTo30 } from '../vcard';
 import type { ParsedCard } from '../vcard/types';
 import { deriveCardPhotoCache, downloadAvatar } from './avatars';
-import { avatarNameOf, CARD_MAX_BYTES, cardBytes, prepareCard, sanitizeCardUri } from './card-store';
-import { type Contacts, PURGED_CARD } from './contacts';
+import { avatarNameOf, CARD_MAX_BYTES, cardBytes, PURGED_CARD, prepareCard, sanitizeCardUri } from './card-store';
+import type { Contacts } from './contacts';
 import * as schema from './schema';
 
 // The CardDAV store seam over the Contacts facade. See docs/CONTACTS.md § CardDAV surface.
@@ -30,8 +31,6 @@ export type DeleteCardResult = DeleteResourceResult | { ok: false; error: 'self-
 
 // A uri is unique as written; only the Unicode form is folded, so an NFD href still finds its row.
 const atUri = (uri: string) => eq(schema.contacts.uri, normalizeResourceUri(uri));
-
-// The reads stay async where the shape looks synchronous, so the DAV layer above them is untouched.
 
 export async function getBook(contacts: Contacts): Promise<CardBook> {
     const book = contacts.db
@@ -111,14 +110,12 @@ function resolveSelfLinkOnPut(
     return { eigenId, bytes, merged: false };
 }
 
-export type PutCardOptions = { ifMatch: string | null; ifNoneMatch: string | null };
-
 // Preconditions, UID rules, quota and the self-link are decided inside the lock, against the state the write overwrites.
 export async function putCard(
     contacts: Contacts,
     uri: string,
     body: string,
-    options: PutCardOptions,
+    options: ResourcePreconditions,
 ): Promise<PutResourceResult> {
     if (sanitizeCardUri(uri) !== uri) return { ok: false, error: 'invalid' };
     return contacts.writeLock.run(async (): Promise<PutResourceResult> => {
@@ -182,13 +179,13 @@ export async function putCard(
 
         // The avatar URL writeCard derived and stored, after both ceilings passed.
         let projectionAvatar: string;
-        const { projection, categories } = prepareCard(bytes, parsed, '', parsed.uid);
+        const projection = prepareCard(bytes, parsed, '', parsed.uid);
         // The stored bytes credit the card this one replaces; a raised 413/507 maps to a typed result.
         try {
             // sanitizeCardUri already accepted this spelling, so the stored uri is the NFC one.
             projectionAvatar = await contacts.writeCard({
                 row: { id, uri, eigenId, ...projection },
-                categories,
+                categories: parsed.categories,
                 creditBytes: existing?.size ?? 0,
                 // Regenerated only when the hash-named file is missing, so an unchanged-photo re-PUT keeps its cache.
                 cache: () => deriveCardPhotoCache(contacts, id, parsed.photo),
@@ -226,7 +223,7 @@ export async function putCard(
 export async function deleteCard(
     contacts: Contacts,
     uri: string,
-    pre: { ifMatch: string | null },
+    pre: Pick<ResourcePreconditions, 'ifMatch'>,
 ): Promise<DeleteCardResult> {
     return contacts.writeLock.run(async (): Promise<DeleteCardResult> => {
         const row = contacts.db.select(PURGED_CARD).from(schema.contacts).where(atUri(uri)).get();

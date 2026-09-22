@@ -3,7 +3,7 @@ import { randomFillSync, randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { cacheCardPhoto } from '../../lib/contacts/avatars';
+import { deriveCardPhotoCache } from '../../lib/contacts/avatars';
 import type { Contacts } from '../../lib/contacts/contacts';
 import * as contactsSchema from '../../lib/contacts/schema';
 import { computeResourceEtag } from '../../lib/core';
@@ -424,7 +424,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         expect(await contacts.size()).toBe(sizeBefore - row.vcard.byteLength);
     });
 
-    test('re-deriving the same photo replaces its cache file instead of double-counting it', async () => {
+    test('a second derive of the same photo keeps one cache file instead of double-counting it', async () => {
         const { instance: contacts, dir } = await makeContacts();
         const db = contacts.db;
         const priv = contacts as unknown as { cleanupAvatarImages(): Promise<void> };
@@ -437,10 +437,10 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         const photo = { kind: 'inline', bytes: new Uint8Array(jpeg), mediaType: 'image/jpeg' } as const;
         const contactId = randomUUID();
 
-        const first = await cacheCardPhoto(contacts, contactId, photo);
-        const second = await cacheCardPhoto(contacts, contactId, photo);
+        const first = await deriveCardPhotoCache(contacts, contactId, photo);
+        const second = await deriveCardPhotoCache(contacts, contactId, photo);
 
-        // Same bytes, same hash, same file — the second write replaced the first one's bytes.
+        // Same bytes, same hash, same file — the second derive found the cache and counted nothing twice.
         expect(second).toBe(first);
         expect(readdirSync(avatarsDirOf(dir)).filter((n) => n.startsWith(contactId))).toHaveLength(1);
         expect(await contacts.size()).toBe(cardBytesOf(db) + avatarBytesOf(dir));
@@ -512,11 +512,11 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         expect(await contacts.downloadAvatar('../contacts.db')).toBeNull();
     });
 
-    test('cacheCardPhoto with a uri-kind photo returns empty and writes nothing', async () => {
+    test('deriveCardPhotoCache with a uri-kind photo returns empty and writes nothing', async () => {
         const { instance: contacts, dir } = await makeContacts();
         const before = readdirSync(avatarsDirOf(dir)).length;
 
-        const url = await cacheCardPhoto(contacts, randomUUID(), {
+        const url = await deriveCardPhotoCache(contacts, randomUUID(), {
             kind: 'uri',
             uri: 'https://example.com/remote.jpg',
         });

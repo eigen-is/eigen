@@ -133,11 +133,7 @@ export async function deriveCardPhotoCache(
 }
 
 // Naming by the embedded bytes' hash lets a superseded photo fall out of reference for the sweep; a uri-kind photo caches nothing, as SSRF bars the fetch.
-export async function cacheCardPhoto(
-    contacts: Contacts,
-    contactId: string,
-    photo: ParsedCardPhoto | null,
-): Promise<string> {
+async function cacheCardPhoto(contacts: Contacts, contactId: string, photo: ParsedCardPhoto | null): Promise<string> {
     if (photo?.kind !== 'inline') return '';
     const result = await generateImagePreview(
         Buffer.from(photo.bytes),

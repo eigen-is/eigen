@@ -18,7 +18,7 @@ import {
     ApiError,
     BroadcastBatch,
     computeResourceEtag,
-    nextSyncGen,
+    newSyncGen,
     normalizeResourceUri,
     PATHS,
     type PutResourceResult,
@@ -238,7 +238,7 @@ export class Calendar {
                     isDefault: input.isDefault ?? false,
                     ctag: 0,
                     // A calendar recreated at a deleted id must never reissue a generation a client has seen.
-                    syncGen: nextSyncGen(undefined, Date.now()),
+                    syncGen: newSyncGen(),
                     shares: null,
                 })
                 .run();
