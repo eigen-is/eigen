@@ -1,12 +1,15 @@
-import type { CalendarEvent, CalendarItem } from '@workspace/lib/types/calendar';
-import type { PropfindRequest } from '../dav/propfind';
+import { ICS_CONTENT_TYPE } from '@workspace/lib/types/drive';
+import type { ResourceRow } from '../calendar/calendar-store';
+import type { CalendarCollection } from '../calendar/resource-store';
+import { type PropfindRequest, selectProps } from '../dav/propfind';
+import { memberRowProps, multistatusResponse, response } from '../dav/xml';
 import { calendarHref, eventHref } from './discovery';
-import { calendarCollectionProps, eventRowProps, multistatusResponse, response, selectProps } from './xml-builder';
+import { calendarCollectionProps } from './xml-builder';
 
 export function handleCalendarPropfind(
     ownerId: string,
-    calendar: CalendarItem,
-    events: CalendarEvent[],
+    calendar: CalendarCollection,
+    resources: ResourceRow[],
     depth: string,
     request: PropfindRequest,
     brief: boolean,
@@ -19,14 +22,11 @@ export function handleCalendarPropfind(
     ];
 
     if (depth === '1') {
-        for (const event of events) {
-            // Skip exception events (they're part of the master event's .ics)
-            if (event.parentEventId) continue;
-
+        for (const resource of resources) {
             responses.push(
                 response(
-                    eventHref(ownerId, calendar.id, event.uri),
-                    selectProps(eventRowProps(event.etag), request, brief),
+                    eventHref(ownerId, calendar.id, resource.uri),
+                    selectProps(memberRowProps(resource.etag, ICS_CONTENT_TYPE), request, brief),
                 ),
             );
         }
@@ -35,7 +35,7 @@ export function handleCalendarPropfind(
     return multistatusResponse(responses);
 }
 
-// PROPFIND /dav/calendars/{ownerId}/{calendarId}/{uri} — a single event resource (its own href + etag).
+// PROPFIND /dav/calendars/{ownerId}/{calendarId}/{uri} — a single resource (its own href + etag).
 export function handleEventPropfind(
     ownerId: string,
     calendarId: string,
@@ -45,6 +45,9 @@ export function handleEventPropfind(
     brief: boolean,
 ): Response {
     return multistatusResponse([
-        response(eventHref(ownerId, calendarId, uri), selectProps(eventRowProps(etag), request, brief)),
+        response(
+            eventHref(ownerId, calendarId, uri),
+            selectProps(memberRowProps(etag, ICS_CONTENT_TYPE), request, brief),
+        ),
     ]);
 }

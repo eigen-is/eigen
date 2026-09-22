@@ -1,12 +1,16 @@
-import { useAuth } from '@workspace/lib/auth';
+import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import {
     isInvitationFromOthers,
+    isSeriesOccurrence,
+    isTransferableCalendarHome,
     occurrenceDateToString,
     parseOccurrenceDate,
     truncateRRule,
     useCreateEvent,
     useDeleteEvent,
+    useExportCalendar,
     useRsvp,
+    useSharedCalendarLabel,
     useUpdateEvent,
 } from '@workspace/lib/calendar';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
@@ -22,9 +26,8 @@ import {
     DialogTitle,
 } from '@workspace/ui/components/dialog';
 import { UserName } from '@workspace/ui/components/user';
-import { Calendar, Check, HelpCircle, Pencil, Trash2, X as XIcon } from 'lucide-react';
+import { Calendar, Check, Download, HelpCircle, Pencil, Trash2, X as XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { useSharedCalendarLabel } from './calendar-utils';
 import { EditEventDialog } from './edit-event-dialog';
 import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
@@ -42,8 +45,6 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const eventOwnerId = sharedCalendar?.ownerUserId || user?.id || '';
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
-    const [showRecurringDeleteConfirm, setShowRecurringDeleteConfirm] = useState(false);
-    const [pendingDeleteAction, setPendingDeleteAction] = useState<RecurringAction | null>(null);
     const [showRsvpScopeDialog, setShowRsvpScopeDialog] = useState(false);
     const [pendingRsvpStatus, setPendingRsvpStatus] = useState<'accepted' | 'declined' | 'tentative' | null>(null);
     const [editOpen, setEditOpen] = useState(false);
@@ -51,6 +52,8 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const createEvent = useCreateEvent(eventOwnerId);
     const updateEvent = useUpdateEvent(eventOwnerId);
     const rsvp = useRsvp(user?.id || '');
+    const { exportCalendar, isExporting } = useExportCalendar();
+    const isGuest = useIsGuest();
     const sharedCalendars = useMemo(() => (sharedCalendar ? [sharedCalendar] : []), [sharedCalendar]);
     const sharedCalendarLabel = useSharedCalendarLabel(sharedCalendars);
 
@@ -58,12 +61,12 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
 
     const isRecurring = !!event.rrule;
     const isException = !!event.parentEventId;
-    const isPartOfSeries = isRecurring || isException;
+    const isPartOfSeries = isSeriesOccurrence(event);
     const calendarName = calendar?.name || (sharedCalendar ? sharedCalendarLabel(sharedCalendar) : null);
     const isShared = !!sharedCalendar;
     const canEdit = !isShared || sharedCalendar?.permission === 'write';
-    // An ORGANIZER equal to the calendar owner is an event they organize, not an invitation to them;
-    // the owner's address is known only when the owner is the viewer.
+    const canExport = !isGuest && isTransferableCalendarHome(eventOwnerId, user?.id ?? '');
+    // The owner's address is known only when the owner is the viewer; without it an organized event reads as an invitation.
     const isLinkedEvent = isInvitationFromOthers(event, eventOwnerId === user?.id ? user.email : undefined);
     const myAttendeeStatus = event.data?.attendees?.find(
         (a) => a.email.toLowerCase() === user?.email?.toLowerCase(),
@@ -129,8 +132,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 await deleteEvent.mutateAsync({ id: targetId, calendarId: event.calendarId });
             }
         }
-        // Close the detail view only after the awaited work resolves (matching handleNonRecurringDelete):
-        // on rejection the nested confirm DeleteDialog stays open for retry instead of being torn down.
+        // Closing only after the await keeps the nested confirm dialog alive for a retry when the delete rejects.
         onOpenChange(false);
     };
 
@@ -144,18 +146,6 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
             setShowRecurringDeleteDialog(true);
         } else {
             setShowDeleteDialog(true);
-        }
-    };
-
-    const handleRecurringDeleteAction = (action: RecurringAction) => {
-        setPendingDeleteAction(action);
-        setShowRecurringDeleteDialog(false);
-        setShowRecurringDeleteConfirm(true);
-    };
-
-    const handleRecurringDeleteConfirm = async () => {
-        if (pendingDeleteAction) {
-            await handleDelete(pendingDeleteAction);
         }
     };
 
@@ -180,14 +170,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     return (
         <>
             <Dialog
-                open={
-                    open &&
-                    !showDeleteDialog &&
-                    !showRecurringDeleteDialog &&
-                    !showRecurringDeleteConfirm &&
-                    !editOpen &&
-                    !showRsvpScopeDialog
-                }
+                open={open && !showDeleteDialog && !showRecurringDeleteDialog && !editOpen && !showRsvpScopeDialog}
                 onOpenChange={onOpenChange}
             >
                 <DialogContent size="md" onOpenAutoFocus={(e) => e.preventDefault()}>
@@ -261,7 +244,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                         {calendarName && (
                             <div className="pt-3 mt-3 border-t flex items-start gap-3">
                                 <Calendar className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-                                <div className="text-sm text-muted-foreground">
+                                <div className="text-sm text-muted-foreground min-w-0 break-words">
                                     {calendarName}
                                     {isShared && sharedCalendar && !isLinkedEvent && (
                                         <div className="text-xs">
@@ -274,14 +257,35 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                     </div>
 
                     <DialogFooter>
-                        {canEdit && (
+                        {(canEdit || canExport) && (
                             <div className="flex gap-1 mr-auto">
-                                <Button variant="ghost" size="icon" onClick={() => setEditOpen(true)}>
-                                    <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" onClick={handleDeleteClick}>
-                                    <Trash2 className="h-4 w-4" />
-                                </Button>
+                                {canEdit && (
+                                    <>
+                                        <Button variant="ghost" size="icon" onClick={() => setEditOpen(true)}>
+                                            <Pencil className="h-4 w-4" />
+                                        </Button>
+                                        <Button variant="ghost" size="icon" onClick={handleDeleteClick}>
+                                            <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                    </>
+                                )}
+                                {canExport && (
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        title="Export event"
+                                        aria-label="Export event"
+                                        disabled={isExporting}
+                                        // An occurrence is drawn from its series, so the series is what leaves.
+                                        onClick={() =>
+                                            void exportCalendar(eventOwnerId, event.calendarId, [
+                                                event.parentEventId || event.id,
+                                            ])
+                                        }
+                                    >
+                                        <Download className="h-4 w-4" />
+                                    </Button>
+                                )}
                             </div>
                         )}
                         <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -304,19 +308,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 open={showRecurringDeleteDialog}
                 onOpenChange={setShowRecurringDeleteDialog}
                 title="Delete recurring event"
-                onConfirm={handleRecurringDeleteAction}
-            />
-
-            <DeleteDialog
-                open={showRecurringDeleteConfirm}
-                onOpenChange={(o) => {
-                    setShowRecurringDeleteConfirm(o);
-                    if (!o) setPendingDeleteAction(null);
-                }}
-                title="Delete Event"
-                description="Are you sure you want to delete this event?"
-                itemName={event.title}
-                onDelete={handleRecurringDeleteConfirm}
+                onConfirm={handleDelete}
             />
 
             <RecurringActionDialog

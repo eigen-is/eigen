@@ -1,71 +1,62 @@
 import { randomUUID } from 'node:crypto';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, gt } from 'drizzle-orm';
-import { mergeVCard } from '../carddav/vcard-serialize';
-import { ApiError, matchesIfMatch, matchesIfNoneMatch } from '../core';
+import {
+    ApiError,
+    computeResourceEtag,
+    type DeleteResourceResult,
+    displaceUnindexedFile,
+    matchesIfMatch,
+    matchesIfNoneMatch,
+    PATHS,
+    type PutResourceResult,
+    readResourceFile,
+    uriKeyOf,
+    writeResourceFile,
+} from '../core';
 import { pushUserProfile } from '../home/home-relay';
-import { parseVCard, transcodeTo30 } from '../vcard';
+import { mergeVCard, parseVCard, transcodeTo30 } from '../vcard';
 import type { ParsedCard } from '../vcard/types';
 import { deriveCardPhotoCache, downloadAvatar } from './avatars';
-import {
-    avatarNameOf,
-    CARD_MAX_BYTES,
-    computeCardEtag,
-    parsedToData,
-    sanitizeCardUri,
-    uriKeyOf,
-    writeCardFile,
-} from './card-store';
+import { avatarNameOf, CARD_MAX_BYTES, cardPath, parsedToData, sanitizeCardUri } from './card-store';
 import type { Contacts } from './contacts';
 import { selfClaimRank } from './reconcile';
 import * as schema from './schema';
 
-// The CardDAV store seam over the Contacts facade: the index reads the protocol handlers sit on, and the
-// PUT/DELETE write seams behind them — preconditions, UID rules, the quota gate and the self-link decision,
-// all evaluated inside the facade's write lock. See docs/CONTACTS.md § CardDAV surface.
+// The CardDAV store seam over the Contacts facade. See docs/CONTACTS.md § CardDAV surface.
 
-// The index projection the sync layer reads for a resource; the etag is the hash the handler quotes.
-export type CardRow = { uri: string; etag: string };
-const CARD_ROW = { uri: schema.contacts.uri, etag: schema.contacts.etag };
+// The size lets a REPORT weigh a row against its byte budget before reading the file at all.
+export type CardRow = { uri: string; etag: string; size: number };
+const CARD_ROW = { uri: schema.contacts.uri, etag: schema.contacts.etag, size: schema.contacts.size };
 
 // ctag advances on each change, syncGen rotates on an index rebuild so stale sync tokens are refused.
 export type CardBook = { ctag: number; syncGen: number };
 
-// The typed outcome of a DAV PUT, which the handler turns into a 4xx or a 201/204. No raw throw crosses this
-// seam for a client-caused failure — only genuine IO errors bubble.
-export type PutCardResult =
-    | { ok: true; etag: string; created: boolean }
-    | { ok: false; error: 'precondition' | 'uid-conflict' | 'invalid' | 'too-large' | 'quota'; message?: string };
+export type DeleteCardResult = DeleteResourceResult | { ok: false; error: 'self-delete' };
 
-// Mirrors PutCardResult so both write seams name their result once: a 404 for an unknown uri, a 403 for your
-// own card, a 412 for a stale If-Match.
-export type DeleteCardResult = { ok: true } | { ok: false; error: 'not-found' | 'precondition' | 'self-delete' };
-
-// The index-only reads the protocol handlers sit on. Each drains a pending failed pair before observing the
-// index so no DAV read is served past a torn write — which is why they are async even where the shape looks
-// synchronous.
+// Each read drains a pending torn write first, which is why they are async where the shape looks synchronous.
 
 export async function getBook(contacts: Contacts): Promise<CardBook> {
-    await contacts.ensureDrained();
+    await contacts.gate.ensureDrained();
     const book = contacts.db.select().from(schema.book).where(eq(schema.book.id, 1)).get()!;
     return { ctag: book.ctag, syncGen: book.syncGen };
 }
 
 // Every resource in the book — group cards included, since DAV serves the whole book (the app list hides them).
 export async function listCards(contacts: Contacts): Promise<CardRow[]> {
-    await contacts.ensureDrained();
+    await contacts.gate.ensureDrained();
     return contacts.db.select(CARD_ROW).from(schema.contacts).all();
 }
 
 // The rows changed after book token N — the sync-collection delta (cardCtag is stamped on every change).
 export async function getChangedCardsSince(contacts: Contacts, sinceCtag: number): Promise<CardRow[]> {
-    await contacts.ensureDrained();
+    await contacts.gate.ensureDrained();
     return contacts.db.select(CARD_ROW).from(schema.contacts).where(gt(schema.contacts.cardCtag, sinceCtag)).all();
 }
 
 // The uris removed after book token N — the sync-collection 404 rows (one row per uri, no duplicate hrefs).
 export async function getDeletedCardsSince(contacts: Contacts, sinceCtag: number): Promise<{ uri: string }[]> {
-    await contacts.ensureDrained();
+    await contacts.gate.ensureDrained();
     return contacts.db
         .select({ uri: schema.contactTombstones.uri })
         .from(schema.contactTombstones)
@@ -73,31 +64,28 @@ export async function getDeletedCardsSince(contacts: Contacts, sinceCtag: number
         .all();
 }
 
-// The stored bytes for a resource (GET/multiget). A row whose file has vanished is not a 500: mark it so the
-// next drain tombstones it and answer this request as a miss.
+// Hashing the bytes just read keeps body and validator one revision; a disagreeing row is marked, or writes loop on 412.
 export async function getCard(contacts: Contacts, uri: string): Promise<{ bytes: Uint8Array; etag: string } | null> {
-    await contacts.ensureDrained();
+    await contacts.gate.ensureDrained();
     const row = contacts.db
         .select(CARD_ROW)
         .from(schema.contacts)
         .where(eq(schema.contacts.uriKey, uriKeyOf(uri)))
         .get();
     if (!row) return null;
-    try {
-        return { bytes: await contacts.readCardBytes(row.uri), etag: row.etag };
-    } catch (e) {
-        if (e instanceof Error && 'code' in e && e.code === 'ENOENT') {
-            contacts.markCardDirty(row.uri);
-            return null;
-        }
-        throw e;
+    const bytes = await readResourceFile(contacts.storage, cardPath(row.uri));
+    if (!bytes) {
+        contacts.gate.markDirty(row.uri);
+        return null;
     }
+    const etag = computeResourceEtag(bytes);
+    if (etag !== row.etag) contacts.gate.markDirty(row.uri);
+    return { bytes, etag };
 }
 
-// The single-resource PROPFIND read: an indexed single-row lookup, unlike a `listCards().find()` over the
-// whole book, and unlike getCard it doesn't read the file bytes a PROPFIND never returns.
+// An indexed single-row lookup, and no file read: a PROPFIND never returns the bytes.
 export async function getCardMeta(contacts: Contacts, uri: string): Promise<CardRow | null> {
-    await contacts.ensureDrained();
+    await contacts.gate.ensureDrained();
     return (
         contacts.db
             .select(CARD_ROW)
@@ -107,16 +95,13 @@ export async function getCardMeta(contacts: Contacts, uri: string): Promise<Card
     );
 }
 
-// The single self-link for a card being PUT, plus the bytes to store. On update the row keeps its existing
-// link — promoting a non-self card is left to the reconcile rematch, as updateContact does. When this card
-// holds the link but its bytes don't assert X-EIGEN-ID (a client stripped it, or an email-only claim never
-// wrote it), the property is restored so the stored file and the index never disagree.
+// An update keeps the row's link — promotion is the reconcile rematch's — and a restored X-EIGEN-ID keeps file and index agreeing.
 function resolveSelfLinkOnPut(
     contacts: Contacts,
     parsed: ParsedCard,
     bytes: Uint8Array,
     existing: { id: string; eigenId: string } | undefined,
-): { eigenId: string; bytes: Uint8Array } {
+): { eigenId: string; bytes: Uint8Array; merged: boolean } {
     const me = contacts.home.user.id;
     let eigenId: string;
     if (existing) {
@@ -131,25 +116,20 @@ function resolveSelfLinkOnPut(
         eigenId = claim && !heldElsewhere ? me : '';
     }
     if (eigenId === me && parsed.eigenId !== me) {
-        return { eigenId, bytes: new TextEncoder().encode(mergeVCard(parsed, { eigenId: me })) };
+        return { eigenId, bytes: new TextEncoder().encode(mergeVCard(parsed, { eigenId: me })), merged: true };
     }
-    return { eigenId, bytes };
+    return { eigenId, bytes, merged: false };
 }
 
-// A DAV PUT: store the client's card verbatim (after the 4.0→3.0 transcode), with every precondition, UID
-// rule, quota gate and self-link decision evaluated INSIDE the writeLock against the state the write
-// overwrites. The router already sanitizes the client-chosen uri, but this is a public method that turns it
-// into a filesystem path, so it re-validates before any write.
+// Preconditions, UID rules, quota and the self-link are decided inside the gate, against the state the write overwrites.
 export async function putCard(
     contacts: Contacts,
     uri: string,
     body: string,
     pre: { ifMatch: string | null; ifNoneMatch: string | null },
-): Promise<PutCardResult> {
+): Promise<PutResourceResult> {
     if (sanitizeCardUri(uri) !== uri) return { ok: false, error: 'invalid' };
-    return contacts.writeLock.run(async (): Promise<PutCardResult> => {
-        await contacts.drainDirty();
-
+    return contacts.gate.run(async (): Promise<PutResourceResult> => {
         // Bounded before any parse, so a hostile multi-MiB payload never reaches the AST unfolder.
         if (Buffer.byteLength(body) > CARD_MAX_BYTES) return { ok: false, error: 'too-large' };
 
@@ -177,27 +157,30 @@ export async function putCard(
             return { ok: false, error: 'precondition' };
         }
 
-        // A case-variant PUT rewrites the existing file in place: writing under the caller's spelling would
-        // strand the old file on a case-sensitive fs and let the next reconcile re-index from its stale
-        // bytes, silently reverting the accepted write.
+        // A case-variant PUT rewrites the existing file, or a case-sensitive fs strands the old one and the next reconcile reverts the write.
         const storedUri = existing?.uri ?? uri;
 
-        // A card carries one UID for its life, and one another resource owns is a conflict, not a raw 500.
+        // A UID another resource owns is a conflict the client can act on, not a raw 500 on the UNIQUE index.
         if (!parsed.uid) return { ok: false, error: 'invalid', message: 'UID is required' };
-        if (existing) {
-            if (parsed.uid !== existing.uid) return { ok: false, error: 'uid-conflict' };
-        } else if (
-            contacts.db
-                .select({ id: schema.contacts.id })
-                .from(schema.contacts)
-                .where(eq(schema.contacts.uid, parsed.uid))
-                .get()
-        ) {
-            return { ok: false, error: 'uid-conflict' };
+        const holder = contacts.db
+            .select({ id: schema.contacts.id, uri: schema.contacts.uri })
+            .from(schema.contacts)
+            .where(eq(schema.contacts.uid, parsed.uid))
+            .get();
+        if (holder && holder.id !== existing?.id) {
+            return { ok: false, error: 'uid-conflict', conflictUri: holder.uri };
         }
+        if (existing && parsed.uid !== existing.uid) return { ok: false, error: 'uid-conflict' };
 
-        // Before the quota gate, so the meter and the returned etag both hash the exact bytes written.
-        const { eigenId, bytes } = resolveSelfLinkOnPut(contacts, parsed, new TextEncoder().encode(stored), existing);
+        // Before the quota gate, so the meter and the stored etag both hash the exact bytes written.
+        const { eigenId, bytes, merged } = resolveSelfLinkOnPut(
+            contacts,
+            parsed,
+            new TextEncoder().encode(stored),
+            existing,
+        );
+        // A body the server rewrote is not the client's revision, so no validator goes back and the client re-reads (RFC 4918 § 9.7.2).
+        const verbatim = stored === body && !merged;
 
         // The stored bytes credit the card this one replaces; a raised 413/507 maps to a typed result.
         try {
@@ -211,15 +194,17 @@ export async function putCard(
         const id = existing?.id ?? randomUUID();
         const isSelf = eigenId === contacts.home.user.id;
 
+        // A name free in the index may still be on disk (a dedupe loser, bytes that won't parse): its bytes move aside rather than be destroyed.
+        if (!existing) await displaceUnindexedFile(contacts.storage, PATHS.CONTACTS.CARDS, storedUri);
+
         // Fail closed on the canonical write or any later step, as addContact does.
         let projectionAvatar = '';
         let etag = '';
         try {
             contacts.recordCardWrite(storedUri);
-            const { mtime, size } = await writeCardFile(contacts.storage, storedUri, bytes);
-            etag = computeCardEtag(bytes);
-            // Regenerates only when the hash-named file is missing, so an unchanged-photo re-PUT keeps the
-            // promoted first-generation cache.
+            const { mtime, size } = await writeResourceFile(contacts.storage, cardPath(storedUri), bytes);
+            etag = computeResourceEtag(bytes);
+            // Regenerated only when the hash-named file is missing, so an unchanged-photo re-PUT keeps its cache.
             projectionAvatar = await deriveCardPhotoCache(contacts, id, parsed.photo);
             contacts.commitCard({
                 row: {
@@ -233,7 +218,7 @@ export async function putCard(
                     isGroup: parsed.isGroup,
                     data: parsedToData(parsed, projectionAvatar),
                     etag,
-                    mtime: Math.round(mtime),
+                    mtime,
                     size,
                 },
                 categories: parsed.categories,
@@ -242,13 +227,11 @@ export async function putCard(
             });
             contacts.cardsBytes += size - (existing?.size ?? 0);
         } catch (e) {
-            contacts.markCardDirty(storedUri);
+            contacts.gate.markDirty(storedUri);
             throw e;
         }
 
-        // A self-card PUT renames the user org-wide, exactly as updateContact's push does — after the commit,
-        // failure logged never rethrown. A DAV PUT carries no staged avatar URL, so the pushed bytes are the
-        // derived webp cache.
+        // A self-card PUT renames the user org-wide; a DAV PUT stages no avatar, so the pushed bytes are the derived webp cache.
         if (isSelf) {
             let avatarWebP: Buffer | null = null;
             if (projectionAvatar) {
@@ -267,19 +250,17 @@ export async function putCard(
         }
 
         contacts.emitContact(existing ? SSEventType.CONTACT_UPDATED : SSEventType.CONTACT_CREATED, id);
-        return { ok: true, etag, created: !existing };
+        return { ok: true, etag: verbatim ? etag : null, created: !existing };
     });
 }
 
-// A DAV DELETE: an unknown uri is a 404 (deliberately unlike REST's idempotent no-op), your own card a 403,
-// a stale If-Match a 412 — then the shared purge tail runs under the lock.
+// An unknown uri is a 404, deliberately unlike REST's idempotent no-op.
 export async function deleteCard(
     contacts: Contacts,
     uri: string,
     pre: { ifMatch: string | null },
 ): Promise<DeleteCardResult> {
-    return contacts.writeLock.run(async (): Promise<DeleteCardResult> => {
-        await contacts.drainDirty();
+    return contacts.gate.run(async (): Promise<DeleteCardResult> => {
         const row = contacts.db
             .select()
             .from(schema.contacts)
@@ -288,13 +269,7 @@ export async function deleteCard(
         if (!row) return { ok: false, error: 'not-found' };
         // Self before etag, mirroring deleteContact: your own card cannot be removed regardless of token.
         if (row.eigenId === contacts.home.user.id) {
-            // The delete is refused, but the client (Thunderbird) drops the card from its view before the
-            // request and ignores the 403 — a delta that doesn't list the self card leaves that view wrong
-            // forever. So touch it: bump the book ctag and re-stamp the self row's cardCtag, bytes/etag/mtime
-            // untouched (no SSE — nothing the app shows changed). The next sync-collection delta then lists
-            // it as an unchanged 200 row and the ignoring client re-downloads it. This deliberately bends
-            // the "ctag bumps only on a real change" rule: a user-initiated mutation WAS refused, and the
-            // trade is one phantom re-fetch row for every other client so the refusal self-heals on theirs.
+            // Thunderbird drops the card from its view and ignores the 403, so bump the ctag: the next delta lists it and that client re-downloads it.
             contacts.db.transaction((tx) => {
                 const ctag = contacts.bumpCtag(tx);
                 tx.update(schema.contacts).set({ cardCtag: ctag }).where(eq(schema.contacts.id, row.id)).run();

@@ -10,8 +10,7 @@ import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
 
-type ImportCall = { calendarId: string; url?: string };
-type ImportCounts = { imported: number; skipped: number; failed: number };
+type ImportCall = { ownerId: string; calendarId: string; url?: string };
 
 const calls: { imported: ImportCall[] } = { imported: [] };
 const calendars = [{ id: 'cal-home', name: 'Home', color: '#222222', isDefault: true }];
@@ -20,13 +19,12 @@ const realCalendarModule = await import('@workspace/lib/calendar');
 mock.module('@workspace/lib/calendar', () => ({
     ...realCalendarModule,
     useCalendars: () => ({ data: calendars, isError: false, refetch: () => {} }),
-    useCreateCalendar: () => ({ mutateAsync: async () => ({ id: 'cal-new' }) }),
-    useDeleteCalendar: () => ({ mutateAsync: async () => {} }),
-    useImportCalendar: () => ({
-        mutateAsync: async (input: ImportCall): Promise<ImportCounts> => {
-            calls.imported.push(input);
-            return { imported: 1, skipped: 0, failed: 0 };
+    useSharedCalendars: () => ({ data: [] }),
+    useImportToCalendar: () => ({
+        importToCalendar: async (source: { url?: string }, target: { ownerId: string; calendarId: string }) => {
+            calls.imported.push({ ownerId: target.ownerId, calendarId: target.calendarId, url: source.url });
         },
+        forgetNewCalendar: () => {},
     }),
 }));
 
@@ -116,6 +114,7 @@ test('the calendar picker imports the subject its row was run for, not the hostâ
     await click('Import');
     expect(calls.imported).toEqual([
         {
+            ownerId: 'owner-1',
             calendarId: 'cal-home',
             url: 'http://localhost/mail/owner-1/message/message-1/attachment/0/Autumn%20market.ics',
         },

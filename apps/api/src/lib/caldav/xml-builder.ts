@@ -1,67 +1,31 @@
 import { escapeXml } from '@workspace/lib/html';
-import type { CalendarItem } from '@workspace/lib/types/calendar';
-import { ICS_CONTENT_TYPE } from '@workspace/lib/types/drive';
+import type { CalendarCollection } from '../calendar/resource-store';
+import { EVENT_MAX_BYTES } from '../calendar/resource-store';
 import { calendarHomeHref } from '../dav/href';
 import type { PropMap } from '../dav/propfind';
-import { ownershipEntries } from '../dav/xml';
-
-export { DAV_BODY_MAX_BYTES, parsePropfind, selectProps, wantsBrief } from '../dav/propfind';
-export { davError, multistatusResponse, principalProps, propstatNotFound, propstatOk, response } from '../dav/xml';
-
-// For the discovery PROPFIND on /dav/ — returns current-user-principal
-export function currentUserPrincipalProp(userId: string): string {
-    return `<D:current-user-principal><D:href>/dav/principals/${userId}/</D:href></D:current-user-principal>`;
-}
-
-// RFC 6578 token, the calendar ctag stamped into a sync URN. The only two sites allowed to spell the
-// grammar — emit/parse drift would 412 every client into a full-resync loop. No generation stamp: unlike the
-// carddav twin, the CalDAV index is never rebuilt, so the ctag alone pins a sync point.
-export const formatSyncToken = (ctag: number) => `urn:eigen:sync:${ctag}`;
-
-export function parseSyncToken(token: string): { since: number } | null {
-    const m = /^urn:eigen:sync:(\d+)$/.exec(token);
-    return m ? { since: Number(m[1]) } : null;
-}
-
-// The two member fragments, single-sourced so the REPORT view (eventEtagProp) and the PROPFIND row map
-// (eventRowProps) can't spell them differently.
-const eventGetetag = (etag: string) => `<D:getetag>"${escapeXml(etag)}"</D:getetag>`;
-const EVENT_CONTENT_TYPE = `<D:getcontenttype>${ICS_CONTENT_TYPE}</D:getcontenttype>`;
+import { formatSyncToken } from '../dav/sync-token';
+import { currentUserPrincipalProp, ownershipEntries } from '../dav/xml';
 
 // Calendar collection properties (for listing calendars)
-export function calendarCollectionProps(cal: CalendarItem, ownerId: string): PropMap {
+export function calendarCollectionProps(cal: CalendarCollection, ownerId: string): PropMap {
     return new Map([
         ['resourcetype', `<D:resourcetype><D:collection/><C:calendar/></D:resourcetype>`],
         ['displayname', `<D:displayname>${escapeXml(cal.name)}</D:displayname>`],
         ...ownershipEntries(ownerId),
         ['calendar-color', `<ICAL:calendar-color>${escapeXml(cal.color)}</ICAL:calendar-color>`],
         ['getctag', `<CS:getctag>${cal.ctag}</CS:getctag>`],
-        ['sync-token', `<D:sync-token>${formatSyncToken(cal.ctag)}</D:sync-token>`],
+        ['sync-token', `<D:sync-token>${formatSyncToken(cal)}</D:sync-token>`],
         [
             'supported-calendar-component-set',
             `<C:supported-calendar-component-set><C:comp name="VEVENT"/></C:supported-calendar-component-set>`,
         ],
-        // macOS Contacts/Calendar keys on supported-report-set to pick sync-collection and is documented not
-        // to fall back when it's missing (spec § 4).
+        // RFC 4791 § 5.2.5 — the ceiling the PUT already enforces, so a client can size a resource first.
+        ['max-resource-size', `<C:max-resource-size>${EVENT_MAX_BYTES}</C:max-resource-size>`],
+        // macOS Calendar keys on supported-report-set to pick sync-collection and does not fall back when it is missing.
         [
             'supported-report-set',
             `<D:supported-report-set><D:supported-report><D:report><C:calendar-query/></D:report></D:supported-report><D:supported-report><D:report><C:calendar-multiget/></D:report></D:supported-report><D:supported-report><D:report><D:sync-collection/></D:report></D:supported-report></D:supported-report-set>`,
         ],
-    ]);
-}
-
-// Event resource properties for REPORT rows (etag + content-type).
-export function eventEtagProp(etag: string): string[] {
-    return [eventGetetag(etag), EVENT_CONTENT_TYPE];
-}
-
-// Event member row for PROPFIND: the REPORT pair plus the empty resourcetype that marks it a non-collection
-// member (the RFC 4918 discriminator).
-export function eventRowProps(etag: string): PropMap {
-    return new Map([
-        ['getetag', eventGetetag(etag)],
-        ['getcontenttype', EVENT_CONTENT_TYPE],
-        ['resourcetype', `<D:resourcetype/>`],
     ]);
 }
 
@@ -74,10 +38,7 @@ export function calendarDataProp(icsData: string): string {
 export function homeCollectionProps(userId: string): PropMap {
     return new Map([
         ['resourcetype', `<D:resourcetype><D:collection/></D:resourcetype>`],
-        [
-            'current-user-principal',
-            `<D:current-user-principal><D:href>/dav/principals/${userId}/</D:href></D:current-user-principal>`,
-        ],
+        ['current-user-principal', currentUserPrincipalProp(userId)],
         [
             'calendar-home-set',
             `<C:calendar-home-set><D:href>${calendarHomeHref(userId)}</D:href></C:calendar-home-set>`,

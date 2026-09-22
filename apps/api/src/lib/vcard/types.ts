@@ -9,12 +9,27 @@ export type VCardLine = {
     raw: string | null; // exact source slice incl. original folding/CRLFs; null for built lines
 };
 
+// The Eigen-owned edits a write merges back into a stored card. An absent key keeps the stored property.
+export type CardEdits = Partial<{
+    firstName: string;
+    lastName: string;
+    email: string[];
+    phone: string[];
+    address: Address[];
+    company: string;
+    jobTitle: string;
+    birthday: string;
+    notes: string;
+    categories: string[];
+    eigenId: string | null; // null = remove X-EIGEN-ID
+    photo: { bytes: Uint8Array; mediaType: string } | null; // null = remove PHOTO; absent key = keep
+}>;
+
 export type ParsedCardPhoto =
     | { kind: 'inline'; bytes: Uint8Array; mediaType: string | null }
     | { kind: 'uri'; uri: string };
 
-// The projection parseVCard maps a card down to: the properties Eigen owns, plus the untouched AST in
-// `lines` so a write can merge edits back without disturbing properties we don't understand.
+// The untouched AST rides along in `lines`, so a write merges edits back without disturbing unknown properties.
 export type ParsedCard = {
     lines: VCardLine[];
     version: string | null;

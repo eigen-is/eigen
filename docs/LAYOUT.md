@@ -136,6 +136,8 @@ The component inventory lives in [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md) �
 registry of every export of `packages/lib` and `packages/ui`. Search there before building any shared
 component, hook or type. Layout components sit under `packages/ui/src/components/layout/`.
 
+`DialogContent` caps its own width and height and scrolls inside, and its single grid track is `minmax(0, 1fr)`, so the box never grows to the min-content width of what a user typed. Text a user owns — a title, a location, a description — still needs `min-w-0 break-words` where it sits in a flex row, or the row itself overflows the dialog it is drawn in.
+
 The comments/activity pane is `PanelColumn` (`components/comments/panel-column.tsx`) on every viewport: a
 `Column` whose toolbar holds the title, the filter and the close affordance (back arrow on mobile, X on
 desktop) around `CommentPanel` or `ActivityPanel`. See [COMMENTS.md](COMMENTS.md).

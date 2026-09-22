@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, teams, members]
 related: [admin/manage-members, admin/team-membership]
 order: 30
-updated: 2026-09-11
+updated: 2026-09-21
 ---
 
 Teams let you group members together so you can share files, folders, and calendars with everyone in the group at once. You manage teams from the [Admin app](/admin/teams).
@@ -41,7 +41,7 @@ You can also add members by going to the **Users** page, selecting one or more p
 2. Click **Edit** at the top of the detail panel.
 3. Change the **Team Name** if needed.
 4. Under **Calendar**, turn the team calendar on or off, and set how much access members have: **Free/Busy**, **Read**, or **Write**.
-5. Under **Quota Overrides**, you can set a custom storage limit for mail and contacts, or for the team Drive, that applies to all members of this team. Leave the fields empty to use the server defaults.
+5. Under **Quota Overrides**, you can set a custom storage limit in **Mail, Contacts & Calendar (MB)**, or for the team Drive, that applies to all members of this team. Leave the fields empty to use the server defaults.
 6. Click **Save Settings**.
 
 ## Delete a team

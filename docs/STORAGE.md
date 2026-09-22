@@ -1,7 +1,7 @@
 # Storage & Mount System
 
 > **TLDR**: Home is the per-user singleton managing DB connections + domain services. Drive uses Mounts with pluggable
-> storage backends (LocalStorage, S3). Mail/Contacts use LocalFilesystem directly. Data lives in
+> storage backends (LocalStorage, S3). Mail, Contacts and Calendar use LocalFilesystem directly. Data lives in
 > `data/home/{userId}/`, teams in `data/team/{teamId}/`, orgs in `data/org/{orgId}/`.
 
 ## Architecture
@@ -11,7 +11,7 @@ Home (per-user singleton)
 ├── Drive → Mount(s) → StorageBackend + metadata.db
 ├── Mail → LocalFilesystem + mail.db
 ├── Contacts → LocalFilesystem (cards/*.vcf) + contacts.db
-├── Calendar → calendar.db
+├── Calendar → LocalFilesystem (calendars/<calendarId>/*.ics) + calendar.db
 └── Notifications → notifications.db
 ```
 
@@ -77,8 +77,10 @@ without reading data into memory. Callers stream or buffer as needed (e.g., `fil
 EIGEN_STORAGE_FAULT=exists-delay=45000 bun --filter '*' dev
 ```
 
-**LocalFilesystem** (`apps/api/src/lib/core/local-filesystem.ts`): Separate class for Mail/Contacts with extended fs
-methods (list, listDirs, stat, dirSize, watch, etc). Exposed as `home.fs`.
+**LocalFilesystem** (`apps/api/src/lib/core/local-filesystem.ts`): Separate class for Mail, Contacts and Calendar,
+with the fs methods those domains need — `list`, `readdir`, `stat`, `dirSize`, `dirExists`, `watch`, and the
+durability family `writeAtomic` / `writeDurable` / `renameDurable` / `moveDurable` / `unlinkDurable` /
+`sweepAtomicTemps`. Exposed as `home.fs`.
 
 ## Mount System
 
@@ -138,12 +140,15 @@ data/home/{userId}/
 │   ├── contacts.db           (index + authoritative sync/label metadata)
 │   └── avatars/              (derived photo cache + staged uploads)
 ├── eigen.calendar/
-│   └── calendar.db
+│   ├── calendars/            (one directory per calendar, one .ics per UID — the source of truth)
+│   └── calendar.db           (index + authoritative calendar metadata)
 └── eigen.notifications/
     └── notifications.db
 ```
 
 Contacts follow the mail model: the `.vcf` files under `cards/` are canonical (each filename is its CardDAV resource name), and `contacts.db` indexes them. What the index projects — names, the `data` JSON, etags, label membership from each card's `CATEGORIES` — re-derives from the files; what it owns is authoritative and lives nowhere else: label ids + colors, the book `ctag`/`syncGen`/`ownerSeeded`, tombstones, and the crash-recovery journals. `avatars/` is a derived cache — one hashed webp per card photo, regenerated from the card's inline `PHOTO` when missing — alongside staged uploads a contact form hasn't saved yet. See [CONTACTS.md](CONTACTS.md).
+
+Calendar follows the same model: the `.ics` files under `calendars/<calendarId>/` are canonical (each filename is its CalDAV resource name, and each file holds one UID's master, its overrides and the VTIMEZONEs they reference), and `calendar.db` indexes them. The directory name **is** the calendar id, so an event id and a calendar id both survive a lost index; what the index owns and no file carries is the calendar's name, color, visibility and default flag, its shares, its `ctag`/`syncGen`, the tombstones and the pending-write journal. A `.`-prefixed `calendars/.<id>.deleting-<uuid>` directory is the staging half of a calendar delete and is swept at the next open. See [CALENDAR.md](CALENDAR.md).
 
 Team data: `data/team/{teamId}/` — Drive + Calendar only, plus `settings.json` for mount/calendar config.
 Org data: `data/org/{orgId}/` — minimal (filesystem only, no domain services).

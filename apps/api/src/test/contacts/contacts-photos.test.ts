@@ -3,12 +3,11 @@ import { randomFillSync, randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { createVCard } from '../../lib/carddav/vcard-serialize';
 import { cacheCardPhoto } from '../../lib/contacts/avatars';
-import { computeCardEtag } from '../../lib/contacts/card-store';
 import type { Contacts } from '../../lib/contacts/contacts';
 import * as contactsSchema from '../../lib/contacts/schema';
-import { parseVCard } from '../../lib/vcard';
+import { computeResourceEtag } from '../../lib/core';
+import { createVCard, parseVCard } from '../../lib/vcard';
 import type { ParsedCardPhoto } from '../../lib/vcard/types';
 import {
     avatarsDirOf,
@@ -53,7 +52,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         expect(bytes[1]).toBe(0xd8);
 
         // The derived cache is <id>-<hash8>.webp, hash8 = first 8 hex of the sha256 of the embedded JPEG bytes.
-        const cacheName = `${id}-${computeCardEtag(bytes).slice(0, 8)}.webp`;
+        const cacheName = `${id}-${computeResourceEtag(bytes).slice(0, 8)}.webp`;
         expect(existsSync(join(avatarsDirOf(dir), cacheName))).toBe(true);
 
         // The projection avatar URL points at that hashed cache file.
@@ -214,13 +213,13 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         const id = await contacts.addContact(validContact({ firstName: 'Promo', lastName: 'Ted', avatar: staged }));
 
         const cachePath = join(avatarsDirOf(dir), (await contacts.getContactById(id))!.avatar!.split('/').pop()!);
-        const before = computeCardEtag(new Uint8Array(readFileSync(cachePath)));
+        const before = computeResourceEtag(new Uint8Array(readFileSync(cachePath)));
         const parsesBefore = (contacts as unknown as { cardParseCount: number }).cardParseCount;
 
         await contacts.reconcileIndex();
 
         // The promoted webp is kept, not re-derived over (identical bytes), and the clean stat pass parsed nothing.
-        expect(computeCardEtag(new Uint8Array(readFileSync(cachePath)))).toBe(before);
+        expect(computeResourceEtag(new Uint8Array(readFileSync(cachePath)))).toBe(before);
         expect((contacts as unknown as { cardParseCount: number }).cardParseCount).toBe(parsesBefore);
     });
 
@@ -231,7 +230,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
 
         const cacheName = (await contacts.getContactById(id))!.avatar!.split('/').pop()!;
         const cachePath = join(avatarsDirOf(dir), cacheName);
-        const before = computeCardEtag(new Uint8Array(readFileSync(cachePath)));
+        const before = computeResourceEtag(new Uint8Array(readFileSync(cachePath)));
 
         // A phone-side name edit re-PUTs the whole card with an unchanged PHOTO. The stored bytes ARE the
         // resource body a client sends back.
@@ -246,7 +245,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         // The promoted generation-one webp is kept, not overwritten with a generation-two encode re-derived
         // from the embed: same cache name, identical bytes.
         expect((await contacts.getContactById(id))!.avatar!.split('/').pop()!).toBe(cacheName);
-        expect(computeCardEtag(new Uint8Array(readFileSync(cachePath)))).toBe(before);
+        expect(computeResourceEtag(new Uint8Array(readFileSync(cachePath)))).toBe(before);
     });
 
     test('updating without changing the avatar leaves the PHOTO bytes byte-identical', async () => {
@@ -313,7 +312,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
             contacts.addContact(validContact({ firstName: 'NoPic', avatar: `contacts/${user.id}/avatar/gone.webp` })),
         ).rejects.toThrow('Avatar upload could not be found');
 
-        // The guard fires before writeCardFile — no new card landed on disk, and nothing was indexed.
+        // The guard fires before writeResourceFile — no new card landed on disk, and nothing was indexed.
         const after = existsSync(cardsDir) ? readdirSync(cardsDir).length : 0;
         expect(after).toBe(before);
         expect((await contacts.getContacts()).some((c) => c.firstName === 'NoPic')).toBe(false);
@@ -494,33 +493,38 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         await priv.cleanupAvatarImages();
 
         // Park the sweep on its closing recount; while it waits there it must still own the write lock.
+        // `parked` is the positive signal that it got there, so nothing here waits on a clock.
         let release!: () => void;
+        let parked!: () => void;
         const gate = new Promise<void>((resolve) => {
             release = resolve;
+        });
+        const reachedRecount = new Promise<void>((resolve) => {
+            parked = resolve;
         });
         const originalDirSize = priv.storage.dirSize;
         let gated = true;
         priv.storage.dirSize = async (dirPath: string) => {
             if (gated) {
                 gated = false;
+                parked();
                 await gate;
             }
             return originalDirSize.call(priv.storage, dirPath);
         };
 
         try {
-            const sweep = priv.cleanupAvatarImages();
-            let deleted = false;
-            const deletion = contacts.deleteContact(id).then(() => {
-                deleted = true;
-            });
-            await new Promise((resolve) => setTimeout(resolve, 50));
+            const order: string[] = [];
+            const sweep = priv.cleanupAvatarImages().then(() => order.push('sweep'));
+            const deletion = contacts.deleteContact(id).then(() => order.push('delete'));
+            await reachedRecount;
 
             // Unserialized, the delete's byte credit lands inside the scan and the recount overwrites it.
-            expect(deleted).toBe(false);
+            expect(order).toEqual([]);
 
             release();
             await Promise.all([sweep, deletion]);
+            expect(order).toEqual(['sweep', 'delete']);
         } finally {
             release();
             priv.storage.dirSize = originalDirSize;

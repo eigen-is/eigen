@@ -1,32 +1,13 @@
-import type { CalendarItem } from '@workspace/lib/types/calendar';
-import { isSafePathSegment } from '../core';
-import { calendarHomeHref, encodePathSegment } from '../dav/href';
-import type { PropfindRequest } from '../dav/propfind';
-import {
-    calendarCollectionProps,
-    currentUserPrincipalProp,
-    homeCollectionProps,
-    multistatusResponse,
-    principalProps,
-    propstatOk,
-    response,
-    selectProps,
-} from './xml-builder';
+import type { CalendarCollection } from '../calendar/resource-store';
+import { calendarHomeHref, encodePathSegment, principalHref } from '../dav/href';
+import { type PropfindRequest, selectProps } from '../dav/propfind';
+import { currentUserPrincipalProp, multistatusResponse, principalProps, propstatOk, response } from '../dav/xml';
+import { calendarCollectionProps, homeCollectionProps } from './xml-builder';
 
-// The two href shapes every CalDAV surface emits (discovery, PROPFIND rows, REPORT rows, the PUT/MKCALENDAR
-// Location header), so the path shape and the escaping rule live in one place. The resource name is client-chosen,
-// so its segment is minimally path-encoded via the shared dav/href encoder (the CardDAV twin's cardHref); ownerId
-// and the calendarId are not — a client-chosen calendarId is charset-restricted by sanitizeCalendarId instead.
+// Only the client-chosen resource name needs path encoding; a calendarId is charset-restricted by sanitizeCalendarId.
 export const calendarHref = (ownerId: string, calendarId: string) => `/dav/calendars/${ownerId}/${calendarId}/`;
 export const eventHref = (ownerId: string, calendarId: string, uri: string) =>
     `${calendarHref(ownerId, calendarId)}${encodePathSegment(uri)}`;
-
-// A client-chosen calendar id (MKCALENDAR) goes raw into an href — calendarHref does not encode it — so it
-// takes the shared segment rule over the NFC form. Null on reject.
-export function sanitizeCalendarId(raw: string): string | null {
-    const id = raw.normalize('NFC');
-    return isSafePathSegment(id) ? id : null;
-}
 
 // PROPFIND /dav/ — returns current-user-principal
 export function handleRootPropfind(userId: string): Response {
@@ -35,13 +16,13 @@ export function handleRootPropfind(userId: string): Response {
 
 // PROPFIND /dav/principals/{userId}/ — returns calendar-home-set + principal props
 export function handlePrincipalPropfind(userId: string): Response {
-    return multistatusResponse([response(`/dav/principals/${userId}/`, [propstatOk(principalProps(userId))])]);
+    return multistatusResponse([response(principalHref(userId), [propstatOk(principalProps(userId))])]);
 }
 
 // PROPFIND /dav/calendars/{ownerId}/ — list calendars (Depth: 0 or 1)
 export function handleCalendarHomePropfind(
     ownerId: string,
-    calendars: CalendarItem[],
+    calendars: CalendarCollection[],
     depth: string,
     request: PropfindRequest,
     brief: boolean,

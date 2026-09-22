@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
+import path from 'node:path';
 import { type S3Config, teamOwnerId } from '@workspace/lib/types';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -17,6 +18,7 @@ import { user } from '../../../auth-schema';
 import { ensureAuthSchemaColumns, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
+import { PATHS } from '../../lib/core';
 import { atHome } from '../../lib/home/get-home';
 import { pullHomeSize } from '../../lib/home/home-relay';
 import * as s3Storage from '../../lib/storage/s3-storage';
@@ -1023,7 +1025,7 @@ describe('GET /settings/users/usage', () => {
         const mine = usage[ctx.alice.user.id];
         expect(mine?.total.max).toBeGreaterThan(0);
         expect(mine?.drive.default).toBeDefined();
-        expect(mine?.mailAndContacts).toBeDefined();
+        expect(mine?.homeData).toBeDefined();
     });
 
     test('sizes a home without booting it', async () => {
@@ -1068,7 +1070,15 @@ describe('GET /settings/users/usage', () => {
         expect(sized).toEqual(live);
         // Both halves have to be reading something, or an always-zero reader would pass the above.
         expect(sized.drive.default.used).toBeGreaterThan(0);
-        expect(sized.mailAndContacts.used).toBeGreaterThan(0);
+        expect(sized.homeData.used).toBeGreaterThan(0);
+
+        // A file no card reader indexes. Neither reader counts it, so a stray note cannot make the admin
+        // view report a figure the owner's own storage page never shows.
+        fs.writeFileSync(
+            path.join(getUserHomePath(owner.id), PATHS.CONTACTS.ROOT, PATHS.CONTACTS.CARDS, 'note.txt'),
+            'n'.repeat(4096),
+        );
+        expect(await pullHomeSize(owner.id)).toEqual(live);
     });
 
     test('refuses a team owner id rather than sizing nothing', async () => {

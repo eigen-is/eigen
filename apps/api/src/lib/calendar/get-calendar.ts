@@ -5,8 +5,9 @@ import { getHome } from '../home';
 import { pullCalendarPermission, pullCalendars } from '../home/home-relay';
 import type { User } from '../user';
 import { getMemberships } from '../user';
+import type { Calendar } from './calendar';
 
-export async function resolveCalendar(user: User, ownerId: string) {
+export async function resolveCalendar(user: User, ownerId: string): Promise<Calendar> {
     const parsed = parseOwnerId(ownerId);
     if (parsed.type === 'team') {
         const memberships = await getMemberships(user.id);
@@ -18,10 +19,7 @@ export async function resolveCalendar(user: User, ownerId: string) {
     return home.calendar;
 }
 
-// Check whether `user` may read or write `ownerId`'s calendar `calendarId`.
-// Returns just the permission — routes call cross-home pull/write functions in
-// `home-relay.ts` rather than touching another user's Calendar instance directly.
-// Throws 403 if the caller has no access.
+// Answers a permission, not a Calendar: another home is only reachable through `home-relay.ts`.
 export async function checkCalendarAccess(
     user: User,
     ownerId: string,
@@ -34,9 +32,7 @@ export async function checkCalendarAccess(
         if (!memberships.teamIds.includes(parsed.id)) {
             throw new ApiError(403, 'Not a member of this team');
         }
-        // Team members get implicit read access to every calendar in the team home —
-        // calendars created inside a team home have no explicit shares but are visible
-        // to all members. Explicit shares (when present) can upgrade to 'write'.
+        // A calendar made inside a team home carries no share row, so membership alone is read; a share upgrades it.
         const permission = await pullCalendarPermission(ownerId, calendarId, user.email, memberships.teamIds);
         return { permission: permission || 'read' };
     }
@@ -61,20 +57,20 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
             for (const tc of teamCalendars) {
                 const permission =
                     (await pullCalendarPermission(teamOwner, tc.id, user.email, memberships.teamIds)) || 'read';
-                cal.ensureSharedEntry(teamOwner, tc.id, tc.name, tc.color, permission);
+                await cal.ensureSharedEntry(teamOwner, tc.id, tc.name, permission);
             }
-        } catch {
-            cal.removeSharedEntriesForOwner(teamOwner);
+        } catch (error) {
+            // Only a 404 removes: any other failure says nothing about the share, so the entries stay.
+            if (error instanceof ApiError && error.status === 404) {
+                await cal.removeSharedEntriesForOwner(teamOwner);
+                continue;
+            }
+            console.warn(`calendar: could not read the calendars of ${teamOwner}`, error);
         }
     }
 
-    // Safety net: re-resolve permissions for user-owned shared calendars.
-    // propagateCalendarShare already resolves the max permission correctly at
-    // propagation time, but this loop catches two edge cases:
-    // 1. Team membership changes (user joins/leaves a team) don't trigger
-    //    propagateCalendarShare, so cached permissions may not reflect new team shares.
-    // 2. If propagation failed silently for a user, the stale cache is repaired here.
-    const sharedCalendars = cal.getSharedCalendars();
+    // Joining or leaving a team runs no share propagation, so a user-owned share's cached permission is re-resolved here.
+    const sharedCalendars = await cal.getSharedCalendars();
     for (const sc of sharedCalendars) {
         const parsed = parseOwnerId(sc.ownerUserId);
         if (parsed.type === 'team') continue;
@@ -86,7 +82,7 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
                 memberships.teamIds,
             );
             if (resolved && resolved !== sc.permission) {
-                cal.ensureSharedEntry(sc.ownerUserId, sc.calendarId, sc.calendarName, sc.calendarColor, resolved);
+                await cal.ensureSharedEntry(sc.ownerUserId, sc.calendarId, sc.calendarName, resolved);
             }
         } catch {
             // Owner home not available, skip

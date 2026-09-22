@@ -8,6 +8,14 @@ import { resolveWithinBase } from './path-utils';
 // Once per process: the mount is the same for every home, so a line per message would be the whole log.
 let warnedDirSyncUnsupported = false;
 
+// What marks a staged file as `writeAtomic`'s, for the writer and the sweep alike.
+const ATOMIC_TEMP_INFIX = '.tmp-';
+
+// "The file is gone" is the only fs error a caller may treat as an outcome; anything else, errno or not, is real.
+export function isEnoent(e: unknown): boolean {
+    return e instanceof Error && 'code' in e && e.code === 'ENOENT';
+}
+
 export class LocalFilesystem {
     private baseDir: string;
 
@@ -27,10 +35,7 @@ export class LocalFilesystem {
         return await Bun.write(fullPath, data);
     }
 
-    // A rename (or an unlink) only reaches the platter once the directory holding the name is fsynced:
-    // without this a power loss resurrects the old name under an already-acknowledged write. It runs after
-    // the rename, so a file system that refuses it (NFS, CIFS, some FUSE mounts) must not fail an operation
-    // that already happened — a mail delivery answering 500 makes the MTA retry a message that landed.
+    // A rename or unlink reaches the platter only once its directory is fsynced, and a mount that refuses the fsync must not fail it.
     async syncDir(dirPath: string): Promise<void> {
         try {
             const handle = await fsPromises.open(this.getFilePath(dirPath), 'r');
@@ -47,8 +52,7 @@ export class LocalFilesystem {
         }
     }
 
-    // The bytes must be on the platter before any name points at them, so the Maildir paths stage into
-    // `tmp/` with this and publish with renameDurable.
+    // The bytes must be on the platter before any name points at them.
     async writeDurable(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
         const fullPath = this.getFilePath(filePath);
         fs.mkdirSync(path.dirname(fullPath), { recursive: true });
@@ -67,30 +71,58 @@ export class LocalFilesystem {
         }
     }
 
-    // Publishes a staged file under its final name. The directory losing the old name is fsynced by the
-    // caller instead, which only a move between mailboxes needs.
+    // Destination-only: a staging name nothing indexes gets swept, so a second fsync would tax every delivery.
     async renameDurable(oldPath: string, newPath: string): Promise<void> {
         await this.rename(oldPath, newPath);
         await this.syncDir(path.dirname(newPath));
     }
 
-    // Durable, crash-safe write: stage a sibling temp file, fsync it, rename over the target so a
-    // reader ever only sees the whole old file or the whole new one, then fsync the directory that
-    // holds the rename — without it a power loss can resurrect the old file under an acknowledged
-    // write. Used for the vCard cards where a torn write would corrupt the source of truth; the temp
-    // is `.`-prefixed so cleanup can sweep leftovers.
+    // Both ends, because an index over the source directory must not get the old name back after it says the file moved.
+    async moveDurable(from: string, to: string): Promise<void> {
+        await this.renameDurable(from, to);
+        const fromDir = path.dirname(from);
+        if (fromDir !== path.dirname(to)) await this.syncDir(fromDir);
+    }
+
+    // A file already gone is the outcome the caller wanted; the fsync stops a power loss resurrecting the name.
+    async unlinkDurable(filePath: string): Promise<void> {
+        try {
+            await fsPromises.unlink(this.getFilePath(filePath));
+        } catch (error) {
+            if (!isEnoent(error)) throw error;
+        }
+        await this.syncDir(path.dirname(filePath));
+    }
+
+    // A reader only ever sees the whole old file or the whole new one; the temp is `.`-prefixed so a sweep finds it.
     async writeAtomic(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
-        const tempPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.tmp-${randomUUID()}`);
+        const tempPath = path.join(
+            path.dirname(filePath),
+            `.${path.basename(filePath)}${ATOMIC_TEMP_INFIX}${randomUUID()}`,
+        );
         try {
             await this.writeDurable(tempPath, data);
             await this.renameDurable(tempPath, filePath);
         } catch (error) {
-            // A failure before the rename lands leaves the staged temp behind. The cards/ init sweep self-heals
-            // its own leftovers, but any other caller would leak — best-effort unlink and rethrow the original
-            // (swallow the unlink's own error: the temp may never have been created).
+            // A process death before this unlink is what sweepAtomicTemps reclaims.
             await fsPromises.unlink(this.getFilePath(tempPath)).catch(() => {});
             throw error;
         }
+    }
+
+    // Unlinks rather than deletes: `delete` reaps a newly-empty parent, taking the swept directory with it.
+    async sweepAtomicTemps(dir: string): Promise<void> {
+        for (const name of await this.list(dir)) {
+            if (name.startsWith('.') && name.includes(ATOMIC_TEMP_INFIX)) {
+                await this.unlink(`${dir}/${name}`);
+            }
+        }
+    }
+
+    // A whole subtree, gone. The parent is fsynced so the name cannot come back after a power loss.
+    async removeDir(dirPath: string): Promise<void> {
+        await fsPromises.rm(this.getFilePath(dirPath), { recursive: true, force: true });
+        await this.syncDir(path.dirname(dirPath));
     }
 
     async delete(filePath: string): Promise<boolean> {
@@ -110,6 +142,11 @@ export class LocalFilesystem {
 
     async exists(filePath: string): Promise<boolean> {
         return await this.file(filePath).exists();
+    }
+
+    // For a library that opens a file by name (bun:sqlite) instead of going through this class; still resolved within the base.
+    absolutePath(filePath: string): string {
+        return this.getFilePath(filePath);
     }
 
     async size(filePath: string): Promise<number | null> {

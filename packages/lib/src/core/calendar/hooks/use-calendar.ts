@@ -1,9 +1,12 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { calendarApi } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
+import { parseOwnerId } from '@workspace/lib/types';
 import type {
     CalendarEvent,
     CalendarEventOccurrence,
+    CalendarItem,
+    CalendarOption,
     CreateEventInput,
     FreeBusyBlock,
     SharedCalendar,
@@ -11,16 +14,16 @@ import type {
     UpdateEventInput,
     UpdateSharedCalendarInput,
 } from '@workspace/lib/types/calendar';
+import { useCallback, useMemo } from 'react';
 import { AppError, onMutationError } from '../../api-error';
+import { usePublicUsers } from '../../public';
 import { formatFreeBusyTitle, occurrenceDateToString } from '../calendar-utils';
 import {
     calendarKeys,
     invalidateCalendarCreated,
     invalidateCalendarDeleted,
     invalidateCalendarUpdated,
-    invalidateEventCreated,
-    invalidateEventDeleted,
-    invalidateEventUpdated,
+    invalidateEventList,
     invalidateSharedCalendarUpdated,
 } from './keys';
 
@@ -98,6 +101,20 @@ export function useEvents(ownerId: string, from: number, to: number, enabled = t
     });
 }
 
+// A range read answers occurrences; only the stored row says where the series itself starts.
+export function useEvent(ownerId: string, calendarId: string, id: string, enabled = true) {
+    return useQuery({
+        queryKey: calendarKeys.event(ownerId, calendarId, id),
+        queryFn: async (): Promise<CalendarEvent> => {
+            const response = await calendarApi({ ownerId }).calendars({ calId: calendarId }).events({ id }).get();
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        staleTime: STALE_TIME.TWO_MINUTES,
+        enabled: enabled && !!ownerId && !!calendarId && !!id,
+    });
+}
+
 export function useCreateEvent(ownerId: string) {
     const queryClient = useQueryClient();
 
@@ -107,7 +124,7 @@ export function useCreateEvent(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateEventCreated(queryClient, ownerId),
+        onSuccess: () => invalidateEventList(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -121,7 +138,7 @@ export function useUpdateEvent(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateEventUpdated(queryClient, ownerId),
+        onSuccess: () => invalidateEventList(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -135,7 +152,7 @@ export function useDeleteEvent(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateEventDeleted(queryClient, ownerId),
+        onSuccess: () => invalidateEventList(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -160,7 +177,7 @@ export function useMoveEvent(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateEventUpdated(queryClient, ownerId),
+        onSuccess: () => invalidateEventList(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -234,7 +251,7 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
 
 // --- Shared calendars ---
 
-export function useSharedCalendars(ownerId: string) {
+export function useSharedCalendars(ownerId: string, enabled = true) {
     return useQuery({
         queryKey: calendarKeys.sharedCalendars(ownerId),
         queryFn: async () => {
@@ -243,8 +260,56 @@ export function useSharedCalendars(ownerId: string) {
             return response.data;
         },
         staleTime: STALE_TIME.FIVE_MINUTES,
-        enabled: !!ownerId,
+        enabled: enabled && !!ownerId,
     });
+}
+
+// A team the viewer is not in still resolves to a name; an unresolved one keeps the calendar's name, never `team_<id>`.
+export function useSharedCalendarLabel(sharedCalendars: SharedCalendar[]): (sc: SharedCalendar) => string {
+    const teamOwnerIds = useMemo(
+        () => [
+            ...new Set(
+                sharedCalendars
+                    .filter((sc) => parseOwnerId(sc.ownerUserId).type === 'team')
+                    .map((sc) => sc.ownerUserId),
+            ),
+        ],
+        [sharedCalendars],
+    );
+    const teams = usePublicUsers(teamOwnerIds);
+
+    return useCallback(
+        (sc: SharedCalendar) => {
+            if (parseOwnerId(sc.ownerUserId).type === 'team') {
+                return teams[sc.ownerUserId]?.name?.trim() || sc.calendarName;
+            }
+            return sc.calendarName;
+        },
+        [teams],
+    );
+}
+
+export function useCalendarOptions(
+    ownerId: string,
+    calendars: CalendarItem[],
+    sharedCalendars: SharedCalendar[],
+): CalendarOption[] {
+    const label = useSharedCalendarLabel(sharedCalendars);
+
+    return useMemo(() => {
+        const options: CalendarOption[] = calendars.map((c) => ({ id: c.id, name: c.name, color: c.color, ownerId }));
+        for (const sc of sharedCalendars) {
+            if (sc.permission === 'write') {
+                options.push({
+                    id: sc.calendarId,
+                    name: label(sc),
+                    color: sc.color || sc.calendarColor,
+                    ownerId: sc.ownerUserId,
+                });
+            }
+        }
+        return options;
+    }, [calendars, sharedCalendars, ownerId, label]);
 }
 
 export function useUpdateSharedCalendar(ownerId: string) {
@@ -302,7 +367,7 @@ export function useRsvp(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateEventUpdated(queryClient, ownerId),
+        onSuccess: () => invalidateEventList(queryClient, ownerId),
         onError: onMutationError,
     });
 }

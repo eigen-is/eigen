@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, attendees, invite, guests, rsvp]
 related: [calendar/create-event, calendar/respond-to-invitation, calendar/external-invitations]
 order: 40
-updated: 2026-06-08
+updated: 2026-09-22
 ---
 
 You can invite other people to any event you create in Calendar. Guests receive the invitation immediately, and
@@ -42,9 +42,10 @@ of their name. Click it, then click **Save**.
 
 ## See the full guest list
 
-Open the event. If the event has guests, the detail dialog shows the full list with each person's current
-response status. Use the **Copy emails** button at the top of the list to copy all addresses to your clipboard
-at once.
+Open the event. If the event has guests, the detail dialog shows the list with each person's current response
+status. Above three people the list starts collapsed, with a count and a summary of the replies so far, such as
+"2 accepted, 3 pending". Click the header to open it. Use the **Copy emails** button at the top of the list to
+copy all addresses to your clipboard at once.
 
 ## Invite people outside Eigen
 

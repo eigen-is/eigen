@@ -281,7 +281,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                         </p>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
-                                <Label>Mail & Contacts (MB)</Label>
+                                <Label>Mail, Contacts & Calendar (MB)</Label>
                                 <Input
                                     type="number"
                                     min={10}
@@ -324,7 +324,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                             <span className="text-sm text-muted-foreground">Quota overrides</span>
                             <span className="text-sm">
                                 {settings?.memberOverrides?.mailAndContactsMaxMB &&
-                                    `Mail: ${settings.memberOverrides.mailAndContactsMaxMB} MB`}
+                                    `Mail, Contacts & Calendar: ${settings.memberOverrides.mailAndContactsMaxMB} MB`}
                                 {settings?.memberOverrides?.mailAndContactsMaxMB &&
                                     settings?.memberOverrides?.defaultMountMaxSizeMB &&
                                     ' · '}

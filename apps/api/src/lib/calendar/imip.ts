@@ -1,24 +1,20 @@
-import { formatEventWhen, isInvitationFromOthers } from '@workspace/lib/calendar/calendar-utils';
+import { formatEventWhen, isInvitationFromOthers, normalizeTimezone } from '@workspace/lib/calendar/calendar-utils';
 import { escapeHtml } from '@workspace/lib/html';
 import type { Attendee, CalendarEvent, EventData, ImipMethod } from '@workspace/lib/types/calendar';
 import { type AddressObject, type Attachment, type CalendarInvite, isCalendarPart } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
-import { parseIcs } from '../caldav/ical-parse';
-import { serializeEventForImip } from '../caldav/ical-serialize';
-import { getMailDomain } from '../config/server-config';
 import { EMAIL_MUTED, EMAIL_TEXT, renderEigenEmail } from '../core/mail-template';
 import type { OutboundICalEvent, OutboundMail } from '../core/mailer';
 import type { Home } from '../home';
-import { verifyImipSender } from '../mail/imip-auth';
-import { computeOccurrenceTimes } from './recurrence';
-import { normalizeTimezone } from './timezone';
-import type { ReceiveInvitationPayload } from './types';
+import { parseIcs, serializeEventForImip } from '../ical';
+import { computeOccurrenceTimes } from '../ical/wall-clock';
 
 type Organizer = NonNullable<EventData['organizer']>;
 
-// Invitation mail has no viewer, so a timed event that stored no usable zone (CalDAV/iMIP import,
-// API create) cannot borrow the browser's viewer zone or the server's own — either would name a wall
-// clock nobody agreed to. It renders in UTC and labels it, so the recipient can convert.
+// Above this a body is a mailed calendar export, not a scheduling message, and it does not get to write a Home once per VEVENT.
+export const IMIP_MAX_EVENTS = 50;
+
+// Invitation mail has no viewer, so an event with no stored zone renders in UTC and says so instead of borrowing the server's.
 function buildEventWhen(event: CalendarEvent): string {
     const timezone = normalizeTimezone(event.timezone);
     const when = formatEventWhen(event.startTime, event.endTime, event.allDay, timezone, 'UTC');
@@ -64,11 +60,21 @@ function withOrganizer(event: CalendarEvent, organizer: Organizer): CalendarEven
     return { ...event, data: { ...event.data, organizer } };
 }
 
-function icalEvent(event: CalendarEvent, method: 'REQUEST' | 'REPLY' | 'CANCEL'): OutboundICalEvent {
-    return { method, content: serializeEventForImip(event, method) };
+// `series` lets the body name the occurrence it replaces (RECURRENCE-ID) instead of reading as a message about the whole series.
+function icalEvent(
+    event: CalendarEvent,
+    method: 'REQUEST' | 'REPLY' | 'CANCEL',
+    series?: CalendarEvent,
+): OutboundICalEvent {
+    return { method, content: serializeEventForImip(event, method, series) };
 }
 
-export function composeInviteEmail(event: CalendarEvent, organizer: Organizer, attendees: Attendee[]): OutboundMail {
+export function composeInviteEmail(
+    event: CalendarEvent,
+    organizer: Organizer,
+    attendees: Attendee[],
+    series?: CalendarEvent,
+): OutboundMail {
     const footer = `Invitation from ${organizer.name || organizer.email}`;
     return {
         from: { name: organizer.name ?? '', address: organizer.email },
@@ -76,11 +82,16 @@ export function composeInviteEmail(event: CalendarEvent, organizer: Organizer, a
         subject: `Invitation: ${event.title}`,
         text: buildEventSummary(event),
         html: buildEventHtml(event, footer),
-        icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST'),
+        icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST', series),
     };
 }
 
-export function composeUpdateEmail(event: CalendarEvent, organizer: Organizer, attendees: Attendee[]): OutboundMail {
+export function composeUpdateEmail(
+    event: CalendarEvent,
+    organizer: Organizer,
+    attendees: Attendee[],
+    series?: CalendarEvent,
+): OutboundMail {
     const footer = `Invitation from ${organizer.name || organizer.email}`;
     return {
         from: { name: organizer.name ?? '', address: organizer.email },
@@ -88,11 +99,16 @@ export function composeUpdateEmail(event: CalendarEvent, organizer: Organizer, a
         subject: `Updated invitation: ${event.title}`,
         text: buildEventSummary(event),
         html: buildEventHtml(event, footer, 'This event has been updated'),
-        icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST'),
+        icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST', series),
     };
 }
 
-export function composeCancelEmail(event: CalendarEvent, organizer: Organizer, attendees: Attendee[]): OutboundMail {
+export function composeCancelEmail(
+    event: CalendarEvent,
+    organizer: Organizer,
+    attendees: Attendee[],
+    series?: CalendarEvent,
+): OutboundMail {
     const footer = `Invitation from ${organizer.name || organizer.email}`;
     return {
         from: { name: organizer.name ?? '', address: organizer.email },
@@ -100,7 +116,7 @@ export function composeCancelEmail(event: CalendarEvent, organizer: Organizer, a
         subject: `Canceled: ${event.title}`,
         text: `This event has been canceled:\n\n${buildEventSummary(event)}`,
         html: buildEventHtml(event, footer, 'This event has been canceled'),
-        icalEvent: icalEvent(withOrganizer(event, organizer), 'CANCEL'),
+        icalEvent: icalEvent(withOrganizer(event, organizer), 'CANCEL', series),
     };
 }
 
@@ -129,10 +145,7 @@ export function composeRsvpReply(
         },
     };
 
-    // A scope:'this' RSVP answers ONE occurrence: carry a RECURRENCE-ID for the original instant
-    // (RFC 5546) so an external organizer applies the PARTSTAT to that instance, not the whole series.
-    // An RSVP never moves the occurrence, so its time comes straight from the master's recurrence via
-    // computeOccurrenceTimes; dropping the rrule makes the VEVENT read as a single instance.
+    // A scope:'this' RSVP carries a RECURRENCE-ID (RFC 5546) so the organizer applies the PARTSTAT to that instance alone.
     if (recurrenceDate) {
         const { startTime, endTime } = computeOccurrenceTimes(event, recurrenceDate);
         replyEvent.rrule = null;
@@ -156,17 +169,14 @@ export function composeRsvpReply(
     };
 }
 
-export function extractCalendarAttachment(mail: {
-    attachments: Attachment[];
-}): { ics: string; method?: ImipMethod } | null {
+function extractCalendarAttachment(mail: { attachments: Attachment[] }): { ics: string; method?: ImipMethod } | null {
     const attachment = mail.attachments.find(isCalendarPart);
     if (!attachment) return null;
 
     return { ics: Buffer.from(attachment.content).toString(), method: attachment.calendarMethod };
 }
 
-// Read-time summary of a single text/calendar attachment for the message-detail payload.
-// Returns null for unparseable ICS — the mail widget renders that as an explicit error state.
+// Null for unparseable ICS: the mail widget renders that as an explicit error state.
 export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite | null {
     const cal = extractCalendarAttachment({ attachments: [attachment] });
     if (!cal) return null;
@@ -176,8 +186,7 @@ export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite 
         if (!event) return null;
         const organizer = event.data?.organizer;
         return {
-            // ICS METHOD wins, then the parser's Content-Type-derived calendarMethod; a bare
-            // event .ics without METHOD anywhere still renders as an invitation card.
+            // A bare event .ics with no METHOD anywhere still renders as an invitation card.
             method: method ?? cal.method ?? 'REQUEST',
             uid: event.uid,
             summary: event.title,
@@ -193,10 +202,12 @@ export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite 
     }
 }
 
-export function processInboundImip(
+// Every mutation below binds to `From:`, trustworthy only where our MTA recorded an aligned DKIM pass (mail-domain.ts).
+export async function processInboundImip(
     home: Home,
-    mail: { attachments: Attachment[]; from?: AddressObject; authenticationResults?: string[] },
-): void {
+    mail: { attachments: Attachment[]; from?: AddressObject },
+    verdict: { verified: boolean; reason: string },
+): Promise<void> {
     const calAttachment = extractCalendarAttachment(mail);
     if (!calAttachment) return;
 
@@ -204,12 +215,15 @@ export function processInboundImip(
     const method = parsedMethod ?? calAttachment.method;
     if (!method || events.length === 0) return;
 
-    // Every mutation binds to `From:`, which is only trustworthy once our own MTA recorded an aligned
-    // DKIM pass; otherwise fail closed and leave the invite as a plain attachment.
     const sender = mail.from?.value?.[0]?.address?.toLowerCase() ?? null;
-    const verdict = verifyImipSender(mail.authenticationResults, getMailDomain(), sender?.split('@')[1] ?? null);
-    if (!verdict.verified) {
+    if (!sender || !verdict.verified) {
         console.info(`iMIP: not acting on ${method} from ${sender ?? 'unknown sender'} — ${verdict.reason}`);
+        return;
+    }
+
+    // The user's own mail coming back: acting on it would seize their own event as somebody else's copy, reducing every CalDAV PUT to alarms.
+    if (method !== 'REPLY' && sender === home.user.email.toLowerCase()) {
+        console.info(`iMIP: not acting on a ${method} the recipient sent themselves (${sender})`);
         return;
     }
 
@@ -217,122 +231,45 @@ export function processInboundImip(
 
     const calendar = home.calendar;
 
-    for (const parsed of events) {
-        // Untrusted external ICS: clamp a reversed interval to zero-duration rather than reject the whole
-        // invite (mirrors the parser degrading a malformed rrule/tzid). iMIP is fire-and-forget email —
-        // there's no synchronous 400 to return, so dropping the invitation would be worse for the user than
-        // showing a zero-length event. The receive* writes bypass the createEvent/updateEvent guard, so this
-        // is where the domain's interval invariant is enforced for the inbound path.
+    if (events.length > IMIP_MAX_EVENTS) {
+        console.info(`iMIP: acting on the first ${IMIP_MAX_EVENTS} of ${events.length} events from ${sender}`);
+    }
+
+    for (const parsed of events.slice(0, IMIP_MAX_EVENTS)) {
+        // iMIP is fire-and-forget with no 400 to return, so a reversed interval clamps to zero duration rather than dropping the invitation.
         if (parsed.endTime < parsed.startTime) parsed.endTime = parsed.startTime;
 
         if (method === 'REQUEST') {
-            const existing = calendar.getEventsByUid(parsed.uid);
-            const linked = existing.find((e) => e.data?.organizer && e.data?.organizerEventId);
-
-            const orgEventId = linked?.data?.organizerEventId;
-            const orgUserId = linked?.data?.organizer?.userId;
-            if (orgEventId && orgUserId) {
-                // Updates bind to the STORED organizer, not the ICS one, so co-attendees can't hijack the invite.
-                if (!sentBy(linked?.data?.organizer?.email)) continue;
-                if (parsed.recurrenceDate) {
-                    // Single-occurrence move (Google/Outlook "this event" edit): attach an exception to
-                    // the linked series. A full-event update here would null the master's rrule and move
-                    // its start, collapsing the whole series (audit #A).
-                    calendar.receiveInvitationException(orgEventId, orgUserId, {
-                        recurrenceDate: parsed.recurrenceDate,
-                        recurrenceInstant: parsed.recurrenceInstant,
-                        title: parsed.title,
-                        description: parsed.description,
-                        location: parsed.location,
-                        startTime: parsed.startTime,
-                        endTime: parsed.endTime,
-                        allDay: parsed.allDay,
-                        timezone: parsed.timezone,
-                        status: parsed.status,
-                        sequence: parsed.sequence,
-                        attendees: parsed.data?.attendees,
-                    });
-                } else {
-                    calendar.receiveInvitationUpdate(orgEventId, orgUserId, {
-                        title: parsed.title,
-                        description: parsed.description,
-                        location: parsed.location,
-                        startTime: parsed.startTime,
-                        endTime: parsed.endTime,
-                        allDay: parsed.allDay,
-                        rrule: parsed.rrule,
-                        timezone: parsed.timezone,
-                        status: parsed.status,
-                        sequence: parsed.sequence,
-                        attendees: parsed.data?.attendees,
-                    });
-                }
-            } else {
-                // New invites are attributed to the sender, so the ICS organizer must equal the From address.
-                const organizerEmail = parsed.data?.organizer?.email;
-                if (!sentBy(organizerEmail)) continue;
-                // A lone exception REQUEST with no known master has nothing to attach to — ignore it
-                // rather than materialise a bogus single event under the series UID.
-                if (parsed.recurrenceDate) continue;
-                const payload: ReceiveInvitationPayload = {
-                    uid: parsed.uid,
-                    title: parsed.title,
-                    description: parsed.description,
-                    location: parsed.location,
-                    startTime: parsed.startTime,
-                    endTime: parsed.endTime,
-                    allDay: parsed.allDay,
-                    rrule: parsed.rrule,
-                    timezone: parsed.timezone,
-                    status: parsed.status,
-                    sequence: parsed.sequence,
-                    data: {
-                        ...parsed.data,
-                        organizer: parsed.data?.organizer
-                            ? { ...parsed.data.organizer, userId: externalOwnerId(organizerEmail) }
-                            : undefined,
-                        organizerEventId: parsed.uid,
-                    },
-                    createByUserId: externalOwnerId(organizerEmail),
-                    organizerEventId: parsed.uid,
-                    organizerUserId: externalOwnerId(organizerEmail),
-                };
-                calendar.receiveInvitation(payload);
-            }
+            // One locked decision: Postfix delivers concurrently, and two deliveries would otherwise file two masters for one UID.
+            await calendar.receiveImipRequest(parsed, sender);
         } else if (method === 'CANCEL') {
             // CANCEL is an organizer action too — same sender binding as REQUEST.
             const organizerEmail = parsed.data?.organizer?.email;
             if (!sentBy(organizerEmail)) continue;
             if (parsed.recurrenceDate) {
-                // Canceling one occurrence must cancel that instance only — removeInvitation would
-                // delete the attendee's entire linked series (audit #B).
-                calendar.cancelInvitationOccurrence(
+                // One instance only: removeInvitation would delete the attendee's whole linked series.
+                await calendar.cancelInvitationOccurrence(
                     parsed.uid,
                     externalOwnerId(organizerEmail),
                     parsed.recurrenceDate,
                     parsed.recurrenceInstant,
-                    parsed.sequence,
+                    parsed,
                 );
             } else {
-                calendar.removeInvitation(parsed.uid, externalOwnerId(organizerEmail));
+                await calendar.removeInvitation(parsed.uid, externalOwnerId(organizerEmail));
             }
         } else if (method === 'REPLY') {
-            // Find the organizer's own MASTER (not a linked copy) by UID. Exceptions share the uid, so a
-            // REPLY must never bind to an exception row directly.
-            const ownerEvent = calendar
-                .getEventsByUid(parsed.uid)
-                .find((e) => !isInvitationFromOthers(e, home.user.email) && !e.parentEventId);
+            // Exceptions share the UID, so a REPLY binds to the organizer's own master and never to an exception row.
+            const ownerEvent = (await calendar.getEventsByUid(parsed.uid)).find(
+                (e) => !isInvitationFromOthers(e, home.user.email) && !e.parentEventId,
+            );
             if (ownerEvent && parsed.data?.attendees) {
                 for (const attendee of parsed.data.attendees) {
                     // A REPLY may only set the PARTSTAT of the attendee who actually sent it.
                     if (!sentBy(attendee.email)) continue;
                     if (parsed.recurrenceDate) {
-                        // An attendee replying to ONE occurrence: land the PARTSTAT on that instance's
-                        // exception — updateAttendeeStatus would mark them for the whole series.
-                        // rsvpForOccurrence self-guards on membership (exception-aware: someone can be
-                        // invited to a single occurrence only) and, with restoreCancelled=false, never
-                        // resurrects an occurrence the organizer deleted.
-                        calendar.rsvpForOccurrence(
+                        // The PARTSTAT lands on that instance's exception, and restoreCancelled=false keeps it from resurrecting an occurrence the organizer deleted.
+                        await calendar.receiveRsvpForOccurrence(
                             ownerEvent.id,
                             attendee.email,
                             attendee.status,
@@ -346,7 +283,7 @@ export function processInboundImip(
                             (a) => a.email.toLowerCase() === attendee.email.toLowerCase(),
                         );
                         if (!invited) continue;
-                        calendar.updateAttendeeStatus(ownerEvent.id, attendee.email, attendee.status);
+                        await calendar.receiveAttendeeStatus(ownerEvent.id, attendee.email, attendee.status);
                     }
                 }
             }

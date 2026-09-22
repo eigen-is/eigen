@@ -1,13 +1,4 @@
-// Cross-home relay — the sharding seam.
-//
-// Every interaction where one user's action touches another user's Home
-// flows through this module. Push operations (writes/notifications) use
-// sendToHome() with a typed HomeMessage. Pull operations (reads) use
-// individual pull*() functions.
-//
-// Today these are direct in-process calls via getHome(). In a sharded
-// deployment, only this file changes: sendToHome() routes to the correct
-// server (or enqueues a message), and pull functions become remote API calls.
+// The sharding seam: every touch of another user's Home goes through here, so a sharded deployment changes only this file.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -23,18 +14,14 @@ import type { NotificationPersistInput } from '@workspace/lib/types/notification
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
-import type {
-    CreateEventArgs,
-    InvitationUpdatePayload,
-    ReceiveInvitationPayload,
-    UpdateEventArgs,
-} from '../calendar/types';
+import { readCalendarTotalSize } from '../calendar/resource-store';
+import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/types';
 import { getAvatarsDir, getUserHomePath } from '../config/paths';
 import { resolveUserQuotas } from '../config/quota';
-import { CARDS_DIR } from '../contacts/card-store';
+import { readContactsTotalSize } from '../contacts/card-store';
 import { LocalFilesystem, PATHS } from '../core';
-import { readMailTotalSize } from '../mail/maildb';
-import { readDraftStagingSize } from '../mail/maildir-store';
+import type { EventPatch } from '../ical/ical-component';
+import { readMailTotalSize } from '../mail/maildir-store';
 import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, updateUser } from '../user';
@@ -47,14 +34,19 @@ export type HomeMessage =
           ownerId: string;
           calendarId: string;
           name: string;
-          color: string;
           permission: CalendarShare['permission'] | null;
           actorEmail?: string;
           actorName?: string;
       }
     | { type: 'calendar:invitation'; payload: ReceiveInvitationPayload }
     | { type: 'calendar:invitation-update'; orgEventId: string; orgUserId: string; payload: InvitationUpdatePayload }
-    | { type: 'calendar:invitation-removal'; orgEventId: string; orgUserId: string }
+    | {
+          type: 'calendar:invitation-removal';
+          orgEventId: string;
+          orgUserId: string;
+          // Set when only ONE occurrence goes, with the revision the RFC 5546 ordering guard compares.
+          occurrence?: { recurrenceDate: string; sequence: number; dtstamp: Date };
+      }
     | {
           type: 'calendar:rsvp';
           eventId: string;
@@ -79,37 +71,57 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
         case 'calendar:share':
             if (!home.hasCalendar) break;
             if (message.permission) {
-                home.calendar.receiveShare(
+                await home.calendar.receiveShare(
                     message.ownerId,
                     message.calendarId,
                     message.name,
-                    message.color,
                     message.permission,
                     message.actorEmail,
                     message.actorName,
                 );
             } else {
-                home.calendar.removeShare(message.ownerId, message.calendarId, message.actorEmail, message.actorName);
+                await home.calendar.removeShare(
+                    message.ownerId,
+                    message.calendarId,
+                    message.actorEmail,
+                    message.actorName,
+                );
             }
             break;
-        case 'calendar:invitation':
+        case 'calendar:invitation': {
             if (!home.hasCalendar) break;
-            home.calendar.receiveInvitation(message.payload);
+            // A dropped invitation is logged: the organizer's side otherwise believes this Home holds a copy it refused.
+            const received = await home.calendar.receiveInvitation(message.payload);
+            if (!received) {
+                console.info(
+                    `home-relay: ${targetUserId} dropped the invitation ${message.payload.uid} from ${message.payload.organizerUserId}`,
+                );
+            }
             break;
+        }
         case 'calendar:invitation-update':
             if (!home.hasCalendar) break;
-            home.calendar.receiveInvitationUpdate(message.orgEventId, message.orgUserId, message.payload);
+            await home.calendar.receiveInvitationUpdate(message.orgEventId, message.orgUserId, message.payload);
             break;
         case 'calendar:invitation-removal':
             if (!home.hasCalendar) break;
-            home.calendar.removeInvitation(message.orgEventId, message.orgUserId);
+            if (message.occurrence) {
+                await home.calendar.cancelInvitationOccurrence(
+                    message.orgEventId,
+                    message.orgUserId,
+                    message.occurrence.recurrenceDate,
+                    null,
+                    message.occurrence,
+                );
+            } else {
+                await home.calendar.removeInvitation(message.orgEventId, message.orgUserId);
+            }
             break;
         case 'calendar:rsvp':
             if (!home.hasCalendar) break;
             if (message.recurrenceDate) {
-                // Organizer-side reception of an attendee RSVP: PARTSTAT only, never resurrect an
-                // occurrence the organizer deleted (same rule as the iMIP REPLY path).
-                home.calendar.rsvpForOccurrence(
+                // PARTSTAT only: an RSVP never resurrects an occurrence the organizer deleted.
+                await home.calendar.receiveRsvpForOccurrence(
                     message.eventId,
                     message.attendeeEmail,
                     message.status,
@@ -118,7 +130,7 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
                     false,
                 );
             } else {
-                home.calendar.updateAttendeeStatus(message.eventId, message.attendeeEmail, message.status);
+                await home.calendar.receiveAttendeeStatus(message.eventId, message.attendeeEmail, message.status);
             }
             break;
         case 'broadcast':
@@ -130,8 +142,7 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
     }
 }
 
-// Single effective-member fan-out for the chat + drive broadcasters, so the null-guard/try-catch
-// behavior can't drift. sendToHome self-gates 'broadcast' on atHome().
+// One fan-out for the chat and drive broadcasters, so their null-guard and catch behavior cannot drift apart.
 export async function relayEventToMembers(members: EffectiveMember[], event: SSEvent): Promise<void> {
     await Promise.all(
         members.map(async (member) => {
@@ -156,9 +167,7 @@ export async function pullDrivePath(ownerUserId: string, mountId: string, pathId
     return home.drive.getPath(mountId, pathId);
 }
 
-// Sizing a foreign user's Home (admin usage view). Answers Home.size() from the home's own files
-// instead of booting the Home: the admin Users page sizes every user at once, and a boot apiece is
-// seconds each.
+// Reads the home's own files instead of booting the Home: the admin Users page sizes every user at once, and a boot apiece costs seconds.
 export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeResponse> {
     // Sizing reads a user home's folder layout and quotas; a team or org home has neither.
     if (ownerUserId.startsWith('team_') || ownerUserId.startsWith('org_')) {
@@ -167,12 +176,11 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
     const homeDir = getUserHomePath(ownerUserId);
     // A user who has never signed in has no home folder yet, and sizing must not create one.
     const homeFs = fs.existsSync(homeDir) ? new LocalFilesystem(homeDir) : null;
-    const [cards, avatars, staged] = await Promise.all([
-        homeFs?.dirSize(`${PATHS.CONTACTS.ROOT}/${CARDS_DIR}`) ?? 0,
-        homeFs?.dirSize(`${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.AVATARS}`) ?? 0,
-        homeFs ? readDraftStagingSize(homeFs) : 0,
+    const [contacts, mail, calendars] = await Promise.all([
+        homeFs ? readContactsTotalSize(homeFs) : 0,
+        homeFs ? readMailTotalSize(homeFs) : 0,
+        homeFs ? readCalendarTotalSize(homeFs) : 0,
     ]);
-    const mail = readMailTotalSize(path.join(homeDir, PATHS.MAIL.DB)) + staged;
     const driveUsed = readMountTotalSize(
         path.join(homeDir, PATHS.DRIVE.ROOT, PATHS.DRIVE.DEFAULT_MOUNT, PATHS.DRIVE.METADATA_DB),
     );
@@ -186,11 +194,11 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
         teamIds,
     );
 
-    const mailAndContactsUsed = mail + cards + avatars;
+    const dataUsed = contacts + mail + calendars;
     return {
-        mailAndContacts: { used: mailAndContactsUsed, max: quotas.mailAndContactsMax },
+        homeData: { used: dataUsed, max: quotas.homeDataMax },
         drive: { default: { used: driveUsed, max: quotas.mountMax } },
-        total: { used: mailAndContactsUsed + driveUsed, max: quotas.mailAndContactsMax + quotas.mountMax },
+        total: { used: dataUsed + driveUsed, max: quotas.homeDataMax + quotas.mountMax },
     };
 }
 
@@ -203,11 +211,7 @@ export async function pullCalendarShares(
     return home.calendar.getSharedWith(email, teamIds);
 }
 
-// --- Calendar event seam (reads + writes on another user's calendar) ---
-// Every read/write on a foreign calendar routes through one of the five functions below.
-// In a sharded deployment, only this module changes: getHome() becomes an RPC to the server
-// hosting ownerUserId. The `user` argument is the actor (for SSE/audit), same-server today,
-// serialized across the wire in a sharded future.
+// The `user` argument below is the acting user, for SSE and audit, not the owner of the calendar.
 
 export async function pullEventsInRange(
     ownerUserId: string,
@@ -224,6 +228,15 @@ export async function pullCalendarById(ownerUserId: string, calendarId: string):
     return home.calendar.getCalendarById(calendarId);
 }
 
+export async function pullEventById(
+    ownerUserId: string,
+    calendarId: string,
+    eventId: string,
+): Promise<CalendarEvent | null> {
+    const home = await getHome(ownerUserId);
+    return home.calendar.getEventById(calendarId, eventId);
+}
+
 export async function createEventAt(
     ownerUserId: string,
     calendarId: string,
@@ -238,7 +251,7 @@ export async function updateEventAt(
     ownerUserId: string,
     calendarId: string,
     eventId: string,
-    input: UpdateEventArgs,
+    input: EventPatch,
     user: User,
 ): Promise<CalendarEvent> {
     const home = await getHome(ownerUserId);
@@ -329,15 +342,13 @@ export async function pullTeamMounts(
     );
 }
 
-// Mime-filtered contents of a team drive, aggregated over its mounts. Team membership grants read
-// of everything in the mount by design, so the caller-side membership check is the only gate.
+// Team membership grants read of the whole mount by design, so the caller-side membership check is the only gate.
 export async function pullMimeContents(ownerId: string, mimeType: string): Promise<DrivePath[]> {
     const home = await getTeamHome(ownerId);
     return home.drive.getMimeTypeContents(mimeType);
 }
 
-// FTS search over a team drive's own mounts (name + body). Same design as pullMimeContents: team
-// membership grants read of the whole mount, so the caller-side membership check is the only gate.
+// Same gate as pullMimeContents: team membership grants read of the whole mount.
 export async function pullDriveSearch(ownerId: string, opts: { q: string; limit: number }): Promise<DrivePath[]> {
     const home = await getTeamHome(ownerId);
     return home.drive.search(opts);

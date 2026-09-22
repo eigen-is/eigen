@@ -1,51 +1,36 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { CARD_MAX_BYTES, computeCardEtag } from '../../lib/contacts/card-store';
+import { rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { CARD_MAX_BYTES, cardPath } from '../../lib/contacts/card-store';
+import { computeResourceEtag, PATHS } from '../../lib/core';
 import { encodePathSegment } from '../../lib/dav/href';
+import { REPORT_DATA_BUDGET_BYTES } from '../../lib/dav/report-row';
 import { getHome } from '../../lib/home';
+import { basicAuth, davRequest } from '../dav-test-helpers';
 import { app, getTestContext } from '../setup';
 
 describe('CardDAV', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let userId: string;
 
-    const basicAuth = (email: string, password = 'testpassword123') => `Basic ${btoa(`${email}:${password}`)}`;
-
     const propfind = (path: string, depth: string) =>
-        app.handle(
-            new Request(`http://localhost${path}`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: depth },
-            }),
-        );
+        davRequest('PROPFIND', path, { email: ctx.alice.user.email, headers: { Depth: depth } });
 
-    const cardUrl = (uri: string) => `http://localhost/dav/addressbooks/${userId}/contacts/${uri}`;
+    const cardPathname = (uri: string) => `/dav/addressbooks/${userId}/contacts/${uri}`;
+    const cardUrl = (uri: string) => `http://localhost${cardPathname(uri)}`;
 
     const putCard = (uri: string, body: string, headers: Record<string, string> = {}) =>
-        app.handle(
-            new Request(cardUrl(uri), {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/vcard; charset=utf-8',
-                    ...headers,
-                },
-                body,
-            }),
-        );
+        davRequest('PUT', cardPathname(uri), {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/vcard; charset=utf-8', ...headers },
+            body,
+        });
 
-    const getCard = (uri: string) =>
-        app.handle(
-            new Request(cardUrl(uri), { method: 'GET', headers: { Authorization: basicAuth(ctx.alice.user.email) } }),
-        );
+    const getCard = (uri: string) => davRequest('GET', cardPathname(uri), { email: ctx.alice.user.email });
 
     const deleteCard = (uri: string, headers: Record<string, string> = {}) =>
-        app.handle(
-            new Request(cardUrl(uri), {
-                method: 'DELETE',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), ...headers },
-            }),
-        );
+        davRequest('DELETE', cardPathname(uri), { email: ctx.alice.user.email, headers });
 
     // A minimal well-formed 3.0 card; extra lines splice in unowned/grouped properties for the fidelity cases.
     const vcard = (uid: string, extra: string[] = []) =>
@@ -350,6 +335,44 @@ describe('CardDAV', () => {
         expect(getRes.headers.get('ETag')).toBe(etag);
     });
 
+    test('GET hashes the bytes it read, so a stale index row cannot mislabel a body', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
+
+        // The file changes out of band — a restore, or the same-stat replacement only a rebuild catches — so
+        // the row's etag now describes bytes that are gone.
+        const edited = vcard(uid, ['NOTE:edited out of band']);
+        const contacts = (await getHome(userId)).contacts;
+        await contacts.storage.write(cardPath(uri), edited);
+
+        const res = await getCard(uri);
+        expect(await res.text()).toBe(edited);
+        expect(res.headers.get('ETag')).toBe(`"${computeResourceEtag(new TextEncoder().encode(edited))}"`);
+    });
+
+    test('a GET that found the row stale re-indexes it, so the etag it served is one a PUT accepts', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid, ['NOTE:before']), { 'If-None-Match': '*' })).status).toBe(201);
+
+        // A same-length replacement under the indexed mtime: the row is durably stale and the stat-only
+        // reconcile is blind to it, so the read is the only thing that can notice.
+        const home = await getHome(userId);
+        const cardFile = join(home.homeDir, PATHS.CONTACTS.ROOT, cardPath(uri));
+        const { atime, mtime } = statSync(cardFile);
+        writeFileSync(cardFile, vcard(uid, ['NOTE:beforX']));
+        utimesSync(cardFile, atime, mtime);
+
+        const etag = (await getCard(uri)).headers.get('ETag')!;
+
+        // Without the re-index the client loops forever: the etag every GET serves is one the row's own etag
+        // refuses, so every conditional write answers 412 and every re-GET hands back the same validator.
+        const propfindXml = await (await propfind(`/dav/addressbooks/${userId}/contacts/${uri}`, '0')).text();
+        expect(propfindXml).toContain(`<D:getetag>${etag}</D:getetag>`);
+        expect((await putCard(uri, vcard(uid, ['NOTE:conditional']), { 'If-Match': etag })).status).toBe(204);
+    });
+
     test('GET under an unknown book segment is 404 even for an existing card', async () => {
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
@@ -401,12 +424,44 @@ describe('CardDAV', () => {
         expect(res.status).toBe(204);
     });
 
-    test('a second uri claiming an owned UID maps to 412 no-uid-conflict', async () => {
+    test('a second uri claiming an owned UID is 409 no-uid-conflict naming the holder', async () => {
         const uid = randomUUID();
-        await putCard(`${uid}.vcf`, vcard(uid), { 'If-None-Match': '*' });
+        // The holder's name carries an @ — pchar-legal, so its href quotes it raw like every other href the
+        // CardDAV layer emits, proving the conflict href goes through the same encoder.
+        const holder = `h${randomUUID().replace(/-/g, '')}@x.vcf`;
+        expect((await putCard(holder.replace('@', '%40'), vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
+
         const res = await putCard(`${randomUUID()}.vcf`, vcard(uid), { 'If-None-Match': '*' });
-        expect(res.status).toBe(412);
-        expect(await res.text()).toContain('no-uid-conflict');
+        expect(res.status).toBe(409);
+        const xml = await res.text();
+        expect(xml).toContain(
+            `<CARD:no-uid-conflict><D:href>/dav/addressbooks/${userId}/contacts/${holder}</D:href></CARD:no-uid-conflict>`,
+        );
+        expect(xml).not.toContain('%40');
+    });
+
+    test('changing the UID of a stored card is a bare 409 no-uid-conflict', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
+
+        const res = await putCard(uri, vcard(randomUUID()));
+        expect(res.status).toBe(409);
+        const xml = await res.text();
+        expect(xml).toContain('<CARD:no-uid-conflict/>');
+        expect(xml).not.toContain('D:href');
+    });
+
+    test('a UID change onto a UID another card holds names that card', async () => {
+        const held = randomUUID();
+        const holder = `${held}.vcf`;
+        expect((await putCard(holder, vcard(held), { 'If-None-Match': '*' })).status).toBe(201);
+        const mine = randomUUID();
+        expect((await putCard(`${mine}.vcf`, vcard(mine), { 'If-None-Match': '*' })).status).toBe(201);
+
+        const res = await putCard(`${mine}.vcf`, vcard(held));
+        expect(res.status).toBe(409);
+        expect(await res.text()).toContain(`<D:href>/dav/addressbooks/${userId}/contacts/${holder}</D:href>`);
     });
 
     test('a card with no UID maps to 400', async () => {
@@ -489,7 +544,9 @@ describe('CardDAV', () => {
 
         const putRes = await putCard(uri, body, { 'If-None-Match': '*' });
         expect(putRes.status).toBe(201);
-        const etag = putRes.headers.get('ETag');
+        // The server did not store what the client sent, so the create carries no validator (RFC 4918 § 9.7.2)
+        // and the client's next fetch is what hands it the 3.0 revision.
+        expect(putRes.headers.get('ETag')).toBeNull();
 
         const getRes = await getCard(uri);
         expect(getRes.status).toBe(200);
@@ -497,9 +554,7 @@ describe('CardDAV', () => {
         expect(stored).not.toBe(body);
         expect(stored).toContain('VERSION:3.0');
         expect(stored).toContain('PHOTO;ENCODING=b');
-        // The etag hashes the stored 3.0 bytes, so an honest client re-converges on the next fetch.
-        expect(getRes.headers.get('ETag')).toBe(etag);
-        expect(etag).toBe(`"${computeCardEtag(new TextEncoder().encode(stored))}"`);
+        expect(getRes.headers.get('ETag')).toBe(`"${computeResourceEtag(new TextEncoder().encode(stored))}"`);
     });
 
     test('DELETE removes a card and a subsequent GET is 404', async () => {
@@ -566,6 +621,43 @@ describe('CardDAV', () => {
 
     // The <D:sync-token> the server appends after the responses (urn:eigen:sync:<syncGen>-<ctag>).
     const syncTokenOf = (xml: string) => xml.match(/<D:sync-token>([^<]+)<\/D:sync-token>/)![1];
+
+    test('an address-data REPORT serves up to its byte budget and lists the rest by etag alone', async () => {
+        const padding = 'x'.repeat(4_000_000);
+        const count = Math.ceil(REPORT_DATA_BUDGET_BYTES / 4_000_000) + 1;
+        const uris: string[] = [];
+        for (let i = 0; i < count; i++) {
+            const uid = randomUUID();
+            const uri = `${uid}.vcf`;
+            expect((await putCard(uri, vcard(uid, [`NOTE:${padding}`]), { 'If-None-Match': '*' })).status).toBe(201);
+            uris.push(uri);
+        }
+
+        const res = await report(multigetBody(uris.map(cardHref)));
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        // Every card is still named; the ones past the budget carry their data as a 404 prop, so a client sees
+        // them and multigets them instead of losing them. Both halves are asserted: a budget that serves
+        // nothing, or spends nothing, would answer this REPORT too.
+        expect((xml.match(/<D:response>/g) ?? []).length).toBe(count);
+        const served = (xml.match(/<CARD:address-data>/g) ?? []).length;
+        const withheld = (xml.match(/<CARD:address-data\/>/g) ?? []).length;
+        expect(served).toBeGreaterThan(0);
+        expect(withheld).toBeGreaterThan(0);
+        expect(served + withheld).toBe(count);
+        expect(xml.length).toBeLessThan(REPORT_DATA_BUDGET_BYTES);
+    }, 120_000);
+
+    test('a card whose file vanished is a 404 row in a multiget, never a 200 without its data', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
+        rmSync(join((await getHome(userId)).homeDir, PATHS.CONTACTS.ROOT, cardPath(uri)));
+
+        const xml = await (await report(multigetBody([cardHref(uri)]))).text();
+        expect(xml).toContain('<D:status>HTTP/1.1 404 Not Found</D:status>');
+        expect(xml).not.toContain('<CARD:address-data>');
+    });
 
     test('addressbook-multiget returns address-data for existing hrefs and a 404 row for a missing one', async () => {
         const uidA = randomUUID();

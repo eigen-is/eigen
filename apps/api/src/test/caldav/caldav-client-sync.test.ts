@@ -5,6 +5,8 @@
 // calendar-timezone.test.ts (occurrence keying).
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
+import { getHome } from '../../lib/home';
+import { basicAuth, davRequest } from '../dav-test-helpers';
 import { app, assertJson, authedRequest, getTestContext } from '../setup';
 
 function epoch(iso: string): number {
@@ -17,20 +19,17 @@ describe('CalDAV client sync on web-created events', () => {
     let token: string;
     let calendarId: string;
 
-    const basicAuth = (email: string) => `Basic ${btoa(`${email}:testpassword123`)}`;
+    const eventPath = (uri: string) => `/dav/calendars/${userId}/${calendarId}/${uri}`;
 
     async function davPut(uri: string, body: string, ifMatch?: string): Promise<Response> {
-        return app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/${uri}`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar; charset=utf-8',
-                    ...(ifMatch ? { 'If-Match': ifMatch } : {}),
-                },
-                body,
-            }),
-        );
+        return davRequest('PUT', eventPath(uri), {
+            email: ctx.alice.user.email,
+            headers: {
+                'Content-Type': 'text/calendar; charset=utf-8',
+                ...(ifMatch ? { 'If-Match': ifMatch } : {}),
+            },
+            body,
+        });
     }
 
     async function davSync(token?: string): Promise<string> {
@@ -40,24 +39,17 @@ describe('CalDAV client sync on web-created events', () => {
   ${tokenEl}
   <D:prop><D:getetag/></D:prop>
 </D:sync-collection>`;
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/`, {
-                method: 'REPORT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body,
-            }),
-        );
+        const res = await davRequest('REPORT', `/dav/calendars/${userId}/${calendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body,
+        });
         expect(res.status).toBe(207);
         return res.text();
     }
 
     async function davGet(uri: string): Promise<{ ics: string; etag: string | null }> {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/${uri}`, {
-                method: 'GET',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const res = await davRequest('GET', eventPath(uri), { email: ctx.alice.user.email });
         expect(res.status).toBe(200);
         return { ics: await res.text(), etag: res.headers.get('ETag') };
     }
@@ -116,7 +108,7 @@ describe('CalDAV client sync on web-created events', () => {
             recurrenceDate: '2026-07-13',
         });
 
-        const { ics } = await davGet(`${ev.uid}.ics`);
+        const { ics } = await davGet(ev.uri);
         const vevents = ics.split('BEGIN:VEVENT').slice(1);
         expect(vevents.length).toBe(2);
         const override = vevents.find((v) => v.includes('RECURRENCE-ID'));
@@ -137,7 +129,7 @@ describe('CalDAV client sync on web-created events', () => {
             rrule: 'FREQ=WEEKLY',
         });
 
-        const { ics, etag } = await davGet(`${ev.uid}.ics`);
+        const { ics, etag } = await davGet(ev.uri);
         // Inject into the VEVENT's RRULE — the VTIMEZONE also carries RRULE lines, so a naive
         // first-match injection would land inside the VTIMEZONE and be ignored.
         const withExdate = ics.replace(
@@ -145,7 +137,7 @@ describe('CalDAV client sync on web-created events', () => {
             'RRULE:FREQ=WEEKLY\r\nEXDATE;TZID=Europe/Amsterdam:20260810T120000',
         );
         expect(withExdate).not.toBe(ics);
-        const put = await davPut(`${ev.uid}.ics`, withExdate, etag ?? undefined);
+        const put = await davPut(ev.uri, withExdate, etag ?? undefined);
         expect(put.status).toBe(204);
 
         expect(await occurrenceDays(ev.uid, '2026-08-01T00:00:00Z', '2026-08-31T00:00:00Z')).toEqual([
@@ -182,7 +174,7 @@ describe('CalDAV client sync on web-created events', () => {
         // The deletion must be served as EXDATE on the master; Thunderbird does not round-trip a
         // STATUS:CANCELLED override VEVENT, and the full-replace exception prune would then
         // resurrect the occurrence on TB's next PUT.
-        const { ics, etag } = await davGet(`${ev.uid}.ics`);
+        const { ics, etag } = await davGet(ev.uri);
         expect(ics).toContain('EXDATE;TZID=Europe/Amsterdam:20260914T120000');
         expect(ics).not.toContain('STATUS:CANCELLED');
 
@@ -203,7 +195,7 @@ describe('CalDAV client sync on web-created events', () => {
                 out.push(line);
             }
         }
-        const put = await davPut(`${ev.uid}.ics`, out.join('\r\n'), etag ?? undefined);
+        const put = await davPut(ev.uri, out.join('\r\n'), etag ?? undefined);
         expect(put.status).toBe(204);
 
         expect(await occurrenceDays(ev.uid, '2026-09-01T00:00:00Z', '2026-09-30T00:00:00Z')).not.toContain(
@@ -269,6 +261,133 @@ describe('CalDAV client sync on web-created events', () => {
         expect(await res.text()).toContain('valid-sync-token');
     });
 
+    // Every writer of a linked copy is a write of its file now, so the resource's change tag moves and a
+    // CalDAV client sees the organizer's update, a PARTSTAT change and a cancellation (L43). Before the
+    // file seam these four paths wrote rows without touching the tag, so no delta ever carried them.
+    describe('an invitation writer moves the change tag', () => {
+        const ORGANIZER = 'external_l43.organizer@external.com';
+
+        async function seedInvitation(uid: string, rrule: string | null): Promise<{ uri: string; eventId: string }> {
+            const home = await getHome(userId);
+            const eventId = await home.calendar.receiveInvitation({
+                uid,
+                title: 'Linked series',
+                description: null,
+                location: null,
+                startTime: new Date('2026-05-04T09:00:00Z'),
+                endTime: new Date('2026-05-04T10:00:00Z'),
+                allDay: false,
+                rrule,
+                timezone: null,
+                status: 'confirmed',
+                sequence: 0,
+                data: {
+                    organizer: { userId: ORGANIZER, email: 'l43.organizer@external.com', name: 'Org' },
+                    organizerEventId: uid,
+                    attendees: [{ email: ctx.alice.user.email, status: 'pending', role: 'required' }],
+                },
+                createByUserId: ORGANIZER,
+                organizerEventId: uid,
+                organizerUserId: ORGANIZER,
+            });
+            const uri = (await home.calendar.listResources(calendarId)).find((r) => r.uid === uid)!.uri;
+            return { uri, eventId: eventId! };
+        }
+
+        const syncToken = async (): Promise<string> =>
+            (await davSync()).match(/<D:sync-token>([^<]+)<\/D:sync-token>/)![1];
+
+        const delta = async (token: string): Promise<string> => davSync(token);
+
+        test("an organizer's update reaches the client", async () => {
+            const uid = `l43-update-${Date.now()}@external.com`;
+            const { uri } = await seedInvitation(uid, null);
+            const before = await syncToken();
+
+            await (await getHome(userId)).calendar.receiveInvitationUpdate(uid, ORGANIZER, {
+                title: 'Linked series (moved)',
+                description: null,
+                location: null,
+                startTime: new Date('2026-05-04T11:00:00Z'),
+                endTime: new Date('2026-05-04T12:00:00Z'),
+                allDay: false,
+                rrule: null,
+                status: 'confirmed',
+                sequence: 1,
+            });
+
+            expect(await delta(before)).toContain(uri);
+            expect((await davGet(uri)).ics).toContain('SUMMARY:Linked series (moved)');
+        });
+
+        test('a PARTSTAT change reaches the client, under a new etag', async () => {
+            const uid = `l43-partstat-${Date.now()}@external.com`;
+            const { uri, eventId } = await seedInvitation(uid, null);
+            const etagBefore = (await davGet(uri)).etag;
+            const before = await syncToken();
+
+            await (await getHome(userId)).calendar.receiveAttendeeStatus(eventId, ctx.alice.user.email, 'accepted');
+
+            expect(await delta(before)).toContain(uri);
+            expect((await davGet(uri)).etag).not.toBe(etagBefore);
+        });
+
+        test('an occurrence RSVP on an existing exception reaches the client', async () => {
+            const uid = `l43-occurrence-${Date.now()}@external.com`;
+            const { uri, eventId } = await seedInvitation(uid, 'FREQ=WEEKLY;COUNT=5');
+            const home = await getHome(userId);
+            // The first RSVP writes the exception; the second moves the PARTSTAT on the one that exists.
+            await home.calendar.receiveRsvpForOccurrence(eventId, ctx.alice.user.email, 'accepted', '2026-05-11');
+            const before = await syncToken();
+
+            await home.calendar.receiveRsvpForOccurrence(eventId, ctx.alice.user.email, 'tentative', '2026-05-11');
+
+            expect(await delta(before)).toContain(uri);
+            expect((await davGet(uri)).ics).toContain('PARTSTAT=TENTATIVE');
+        });
+
+        test('declining this-and-following reaches the client', async () => {
+            const uid = `l43-following-${Date.now()}@external.com`;
+            const { uri, eventId } = await seedInvitation(uid, 'FREQ=WEEKLY;COUNT=5');
+            const before = await syncToken();
+
+            const res = await authedRequest(
+                token,
+                `/calendar/${userId}/calendars/${calendarId}/events/${eventId}/rsvp`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        status: 'declined',
+                        scope: 'this-and-following',
+                        recurrenceDate: '2026-05-18',
+                        remove: true,
+                    }),
+                },
+            );
+            expect(res.status).toBe(200);
+
+            expect(await delta(before)).toContain(uri);
+            expect((await davGet(uri)).ics).toContain('UNTIL=');
+        });
+
+        test('a cancelled invitation leaves one tombstone and no orphan rows', async () => {
+            const uid = `l43-cancel-${Date.now()}@external.com`;
+            const { uri, eventId } = await seedInvitation(uid, 'FREQ=WEEKLY;COUNT=5');
+            const home = await getHome(userId);
+            await home.calendar.receiveRsvpForOccurrence(eventId, ctx.alice.user.email, 'accepted', '2026-05-11');
+            const before = await syncToken();
+
+            await home.calendar.removeInvitation(uid, ORGANIZER);
+
+            const xml = await delta(before);
+            expect(xml).toContain(uri);
+            expect(xml).toContain('404 Not Found');
+            // The exception row went with its master's file: no row survives the resource it came from.
+            expect(await home.calendar.getEventsByUid(uid)).toHaveLength(0);
+        });
+    });
+
     test('client drag of a simple event (If-Match PUT of served bytes) sticks', async () => {
         const ev = await createWebEvent({
             title: 'Dentist',
@@ -278,11 +397,11 @@ describe('CalDAV client sync on web-created events', () => {
             timezone: 'Europe/Amsterdam',
         });
 
-        const { ics, etag } = await davGet(`${ev.uid}.ics`);
+        const { ics, etag } = await davGet(ev.uri);
         expect(etag).toBeTruthy();
 
         const moved = ics.replace(/20260720T/g, '20260721T');
-        const put = await davPut(`${ev.uid}.ics`, moved, etag ?? undefined);
+        const put = await davPut(ev.uri, moved, etag ?? undefined);
         expect(put.status).toBe(204);
 
         expect(await occurrenceDays(ev.uid, '2026-07-19T00:00:00Z', '2026-07-23T00:00:00Z')).toEqual(['2026-07-21']);

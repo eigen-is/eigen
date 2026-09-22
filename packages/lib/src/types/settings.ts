@@ -67,6 +67,7 @@ export type LandingLink = {
 
 export type ServerSettings = {
     quotas: {
+        // Named for the two domains it started with; the budget covers the Home's calendar bytes too.
         mailAndContactsMaxMB: number;
         defaultMountMaxSizeMB: number;
         maxUploadSizeMB: number;
@@ -119,7 +120,8 @@ export type MountResponse = {
 };
 
 export type HomeSizeResponse = {
-    mailAndContacts: { used: number; max: number };
+    // The Home's one data budget: mail, contacts and calendar bytes against the ceiling they share.
+    homeData: { used: number; max: number };
     drive: { default: { used: number; max: number } };
     total: { used: number; max: number };
 };

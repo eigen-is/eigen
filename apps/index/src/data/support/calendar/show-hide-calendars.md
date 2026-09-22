@@ -3,9 +3,9 @@ title: "Show or hide calendars"
 description: "Control which of your calendars appear in the calendar view by toggling them on or off in the sidebar."
 type: how-to
 tags: [calendar, calendars, visibility, shared, team]
-related: [calendar/get-started, calendar/share-calendar]
+related: [calendar/get-started, calendar/share-calendar, calendar/export-events]
 order: 60
-updated: 2026-06-08
+updated: 2026-09-21
 ---
 
 You can have several calendars in Calendar, for example one for work and one for personal events, plus
@@ -31,15 +31,15 @@ next to a calendar's name to show or hide it.
 
 ## Change a calendar's color or name
 
-Each calendar in **My Calendars** has an edit button that appears when you hover over it. Click the pencil
-icon on the right to open the **Edit Calendar** dialog. From there you can:
+Each calendar has a **⋮** button on the right that appears when you hover over it. Click it, then click
+**Edit calendar** to open the **Edit Calendar** dialog. From there you can:
 
 - Change the calendar's name in the **Calendar Name** field.
 - Pick a new color by clicking the color swatch on the left.
 
 Click **Save** when you are done.
 
-For calendars under **Shared with me** or **Team Calendars**, click the pencil icon to open
+For calendars under **Shared with me** or **Team Calendars**, the same **Edit calendar** item opens
 **Shared Calendar Settings**. You can choose a different display color for that calendar. This only
 affects how the calendar looks for you; it does not change the color the owner set.
 
@@ -53,7 +53,7 @@ You cannot delete your default calendar.
 ## Remove a shared calendar from your view
 
 If you no longer want to see a calendar under **Shared with me**, open its **Shared Calendar Settings**
-(the pencil icon on hover) and click **Remove**. The calendar disappears from your sidebar. The owner's
+(the **⋮** button on hover, then **Edit calendar**) and click **Remove**. The calendar disappears from your sidebar. The owner's
 calendar and events are not affected, and the owner can add you again if needed.
 
 Team calendars under **Team Calendars** do not have a **Remove** option.

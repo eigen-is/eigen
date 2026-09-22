@@ -372,6 +372,9 @@ export function isEmlFile(mimeType: string, name: string): boolean {
 // an invitation mail, a CalDAV resource.
 export const ICS_MIME = 'text/calendar';
 
+// The `accept` list for a file input that takes a calendar file, the twin of VCARD_ACCEPT.
+export const ICS_ACCEPT = `.ics,${ICS_MIME}`;
+
 // The media type an iCalendar byte stream is served under (CalDAV GET, PROPFIND getcontenttype, export).
 export const ICS_CONTENT_TYPE = `${ICS_MIME}; charset=utf-8`;
 

@@ -1,8 +1,5 @@
-// Hand-rolled vCard content-line AST (RFC 2426 / RFC 6350 §3). Parses a vCard into logical lines and
-// serializes them back, keeping the exact source bytes of any line we don't rewrite so an untouched
-// card round-trips byte-for-byte through a CardDAV GET. The fold and TEXT-escape algorithms are the
-// shared MIME-directory primitives in @workspace/lib/content-line.
-import { foldLine, isIllegalC0, neuterParamValue } from '@workspace/lib/content-line';
+// vCard content-line AST (RFC 6350 §3): an unrewritten line keeps its source bytes, so a card round-trips byte-for-byte.
+import { foldLine, isIllegalC0, neuterParamValue, unfoldContentLines } from '@workspace/lib/content-line';
 import type { VCardLine } from './types';
 
 export class VCardError extends Error {}
@@ -40,37 +37,6 @@ function stripQuotes(v: string): string {
     return v.length >= 2 && v.startsWith('"') && v.endsWith('"') ? v.slice(1, -1) : v;
 }
 
-// Split into logical lines, unfolding continuations (RFC 2425 §5.8.1: a physical line starting with a
-// single SPACE or TAB continues the previous one — drop the line break and that one whitespace char).
-// Each line keeps `raw`, the exact source slice including its internal folding, so it re-emits verbatim.
-function unfold(text: string): { raw: string; logical: string }[] {
-    const lines: { start: number; end: number; logical: string }[] = [];
-    let i = 0;
-    const n = text.length;
-    while (i < n) {
-        const start = i;
-        let j = i;
-        while (j < n && text[j] !== '\n' && text[j] !== '\r') j++;
-        const content = text.slice(i, j);
-        if (j >= n) i = j;
-        else if (text[j] === '\r' && text[j + 1] === '\n') i = j + 2;
-        else i = j + 1;
-
-        const first = content.charCodeAt(0);
-        if ((first === 0x20 || first === 0x09) && lines.length > 0) {
-            const cur = lines[lines.length - 1];
-            cur.end = j;
-            cur.logical += content.slice(1);
-        } else {
-            lines.push({ start, end: j, logical: content });
-        }
-    }
-    // Drop empty logical lines (blank physical lines, e.g. the trailing CRLF Outlook exports leave): they
-    // carry no property and would otherwise reach parseLine without a colon. Byte-identity of a card with
-    // blanks isn't preserved — the blanks simply don't round-trip.
-    return lines.filter((l) => l.logical !== '').map((l) => ({ raw: text.slice(l.start, l.end), logical: l.logical }));
-}
-
 function parseLine(raw: string, logical: string): VCardLine {
     const colon = indexOfOutsideQuotes(logical, ':');
     if (colon === -1) throw new VCardError(`unparseable vCard line: ${logical}`);
@@ -92,18 +58,14 @@ function parseLine(raw: string, logical: string): VCardLine {
     return { group, name, params, value: logical.slice(colon + 1), raw };
 }
 
-// Exact envelope framing (RFC 6350 §6.1.1/6.1.2): BEGIN:VCARD is the first line, END:VCARD the last, one of
-// each, nothing outside. A payload with a second card, a trailing END, or bytes around the envelope is
-// rejected rather than stored and re-served to every DAV client.
+// RFC 6350 §6.1.1/6.1.2 framing: a payload with a second card or bytes outside the envelope is rejected, not stored.
 export function parseVCardLines(text: string): VCardLine[] {
-    // Reject illegal C0 bytes up front: one stored C0 byte would invalidate every full-book REPORT. The
-    // serialize seams strip them, but an ingest parse must not silently alter the client's bytes — putCard
-    // answers 400 instead.
+    // One stored C0 byte would invalidate every full-book REPORT, and an ingest parse must not silently alter client bytes.
     for (let i = 0; i < text.length; i++) {
         if (isIllegalC0(text.charCodeAt(i))) throw new VCardError('control character in vCard');
     }
 
-    const lines = unfold(text).map(({ raw, logical }) => parseLine(raw, logical));
+    const lines = unfoldContentLines(text).map(({ raw, logical }) => parseLine(raw, logical));
 
     // trimEnd only, mirroring splitVCards: a card a PUT accepts must re-import from its own export
     const frames = (name: string) =>
@@ -121,9 +83,7 @@ export function parseVCardLines(text: string): VCardLine[] {
     return lines;
 }
 
-// parseLine strips the surrounding quotes off a param value, so a rewritten line must re-quote it: a value
-// with ';' ':' or ',' has to be double-quoted or it would truncate the param section / mint bogus params.
-// vCard 3.0 has no quote-escape mechanism, so a literal quote or CR/LF is neutered first.
+// A param value holding ';' ':' or ',' must be re-quoted or it mints bogus params; vCard 3.0 has no quote escape.
 function buildParamValue(value: string): string {
     const clean = neuterParamValue(value);
     return /[;:,]/.test(clean) ? `"${clean}"` : clean;
@@ -155,9 +115,7 @@ export function makeLine(
     };
 }
 
-// Split a structured (';') or list (',') TEXT value on an unescaped delimiter, keeping the escape sequences
-// intact so each component can be unescaped afterward — and so joining the parts back on the delimiter
-// restores the exact source bytes (the merge seam edits one component and re-emits the rest verbatim).
+// Escape sequences stay intact, so joining the parts back on the delimiter restores the exact source bytes.
 export function splitValue(value: string, delim: string): string[] {
     const parts: string[] = [];
     let cur = '';
@@ -177,8 +135,7 @@ export function splitValue(value: string, delim: string): string[] {
     return parts;
 }
 
-// One left-to-right pass so an escaped backslash (\\) can't recombine with the next char into a new
-// escape. `\n`/`\N` become newline; every other `\x` drops the backslash.
+// One left-to-right pass, so an escaped backslash cannot recombine with the next char into a new escape.
 export function unescapeText(v: string): string {
     return v.replace(/\\(.)/g, (_, c) => (c === 'n' || c === 'N' ? '\n' : c));
 }
@@ -187,9 +144,7 @@ export function getVersion(lines: VCardLine[]): string | null {
     return lines.find((l) => l.name === 'VERSION')?.value ?? null;
 }
 
-// data:[<mediatype>];base64,<payload> — split a 4.0 inline-photo data: URI into its media type (null when
-// none) and base64 payload. Returns null when it isn't a `;base64` data: URI (no comma, or no base64
-// marker) so both the parser (-> photo: null) and the transcoder (-> VALUE=uri) can fall back cleanly.
+// Null when the value is not a `;base64` data: URI, so the parser and the photo transcoder can both fall back.
 export function splitDataUri(value: string): { mediaType: string | null; base64: string } | null {
     const comma = value.indexOf(',');
     if (comma === -1) return null;

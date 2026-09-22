@@ -3,6 +3,7 @@ export * from './constants';
 export * from './errors';
 export * from './fts';
 export * from './http';
+export * from './indexed-file-store';
 export * from './json-store';
 export * from './local-filesystem';
 export * from './mailer';

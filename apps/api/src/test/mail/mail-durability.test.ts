@@ -1,11 +1,11 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, fstatSync, readdirSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, fstatSync, mkdirSync, readdirSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import { type FileHandle, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MAILBOX_DRAFTS, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import { getHome } from '../../lib/home';
-import { boxDir, maildirOf, makeEml } from '../mail-test-helpers';
+import { boxDir, maildirOf, mailRootOf, makeEml } from '../mail-test-helpers';
 import { createTestUser, ensureServer, TEST_DATA_DIR } from '../setup';
 
 // Durability can only be proven by killing the machine, so what these tests pin is the protocol that buys
@@ -20,7 +20,7 @@ beforeAll(async () => {
     await ensureServer();
     const user = await createTestUser(`durability-${Date.now()}@test.eigen.is`, 'testpassword123', 'Durability');
     userId = user.id;
-    // The welcome mail is appended with skipSync; one listing indexes it, so new/ is empty below.
+    // The welcome mail is appended with skipReconcile; one listing indexes it, so new/ is empty below.
     const home = await getHome(userId);
     await home.mail.mailboxGet('');
 });
@@ -82,13 +82,19 @@ describe('Maildir write durability', () => {
             await home.mail.mailboxDeliver(eml('Durable delivery'));
         });
 
+        // Publishing out of tmp/ does not fsync the staging directory: nothing indexes a name there, and a
+        // resurrected one is swept.
         expect(events).toEqual(['file', 'rename', 'new', 'rename', 'cur']);
         expect(readdirSync(dirs.tmp)).toEqual([]);
     });
 
     test('a draft save fsyncs the EML before the rename into Drafts cur/', async () => {
         const home = await getHome(userId);
-        const dirs = { tmp: join(box(MAILBOX_DRAFTS), 'tmp'), cur: join(box(MAILBOX_DRAFTS), 'cur') };
+        const dirs = {
+            tmp: join(box(MAILBOX_DRAFTS), 'tmp'),
+            cur: join(box(MAILBOX_DRAFTS), 'cur'),
+            meta: join(mailRootOf(userId), 'draft-meta'),
+        };
 
         const events = await record(dirs, async () => {
             await home.mail.messageHandleDraft({
@@ -99,8 +105,8 @@ describe('Maildir write durability', () => {
             });
         });
 
-        // The sidecar write that follows is writeAtomic's own file + directory pair.
-        expect(events.slice(0, 3)).toEqual(['file', 'rename', 'cur']);
+        // The EML, then the sidecar write that follows — writeAtomic's own file + directory pair.
+        expect(events).toEqual(['file', 'rename', 'cur', 'file', 'rename', 'meta']);
         expect(readdirSync(dirs.tmp)).toEqual([]);
     });
 
@@ -211,6 +217,22 @@ describe('Maildir write durability', () => {
         expect(readdirSync(join(box(''), 'new'))).toEqual([]);
     });
 
+    test('a new/ rename that fails without an errno fails the sync instead of vanishing', async () => {
+        const home = await getHome(userId);
+        const realRename = fsPromises.rename;
+        // Only the new/ → cur/ sweep; the delivery's own tmp/ → new/ rename still has to land.
+        const spy = spyOn(fsPromises, 'rename').mockImplementation(async (from, to) => {
+            if (String(from).includes('/new/')) throw new Error('rename refused');
+            return realRename(from, to);
+        });
+
+        try {
+            await expect(home.mail.mailboxDeliver(eml('Code-less rename'))).rejects.toThrow('rename refused');
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
     test('a tmp/ file a crash left behind is swept after 36 hours', async () => {
         const home = await getHome(userId);
         const store = (home.mail as unknown as { store: { cleanupStaleDraftTemps: () => Promise<void> } }).store;
@@ -226,5 +248,21 @@ describe('Maildir write durability', () => {
 
         expect(existsSync(stale)).toBe(false);
         expect(existsSync(fresh)).toBe(true);
+    });
+
+    test('an atomic temp a crash left in draft-meta/ is swept, and a real sidecar is not', async () => {
+        const home = await getHome(userId);
+        const store = (home.mail as unknown as { store: { cleanupStaleDraftTemps: () => Promise<void> } }).store;
+        const metaDir = join(mailRootOf(userId), 'draft-meta');
+        mkdirSync(metaDir, { recursive: true });
+        const temp = join(metaDir, '.draft-1.json.tmp-abc');
+        const sidecar = join(metaDir, 'draft-1.json');
+        writeFileSync(temp, '{}');
+        writeFileSync(sidecar, '{}');
+
+        await store.cleanupStaleDraftTemps();
+
+        expect(existsSync(temp)).toBe(false);
+        expect(existsSync(sidecar)).toBe(true);
     });
 });

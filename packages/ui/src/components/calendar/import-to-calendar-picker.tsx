@@ -1,7 +1,15 @@
 import { useAuth } from '@workspace/lib/auth';
-import { useCalendars, useCreateCalendar, useDeleteCalendar, useImportCalendar } from '@workspace/lib/calendar';
+import {
+    isTransferableCalendarHome,
+    useCalendarOptions,
+    useCalendars,
+    useImportToCalendar,
+    useSharedCalendars,
+} from '@workspace/lib/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import { importSourceOf, subjectInfo } from '@workspace/lib/file-subject';
+import { parseOwnerId } from '@workspace/lib/types';
+import type { CalendarOption } from '@workspace/lib/types/calendar';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -12,11 +20,21 @@ import { Input } from '../input';
 import { Label } from '../label';
 import { ErrorState } from '../layout/app/error-state';
 import { useOptionalPreview } from '../preview-provider/preview-context';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../select';
 
-// The option that stands for "somewhere that does not exist yet". A leading colon is what keeps it out of
-// the id space: MKCALENDAR admits any safe path segment, and those start with an alphanumeric.
+// The leading colon keeps this out of the target space: every real value is a home and a calendar id joined by one.
 const NEW_CALENDAR = ':new';
+
+const targetValue = (option: CalendarOption) => `${option.ownerId}/${option.id}`;
+
+const renderTarget = (option: CalendarOption) => (
+    <SelectItem key={targetValue(option)} value={targetValue(option)}>
+        <div className="flex items-center gap-2">
+            <div className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: option.color }} />
+            {option.name}
+        </div>
+    </SelectItem>
+);
 
 type ImportToCalendarPickerProps = {
     subject: FileSubject | null;
@@ -24,45 +42,48 @@ type ImportToCalendarPickerProps = {
     onClose: () => void;
 };
 
-// The "which calendar does this go into" dialog, the one thing an .ics import needs that a contacts or
-// a mail import does not. Only calendars this home owns are offered: a calendar shared with the viewer
-// lives in another home, which the import route refuses.
+// The import route refuses a calendar shared out of another user's home, so only own and writable team calendars are offered.
 export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalendarPickerProps) {
     const { user } = useAuth();
     const preview = useOptionalPreview();
     const ownerId = user?.id ?? '';
-    // Every runner host mounts this dialog closed, so the list is not asked for until it opens.
+    // Every runner host mounts this dialog closed, so neither list is asked for until it opens.
     const { data: calendars, isError, refetch } = useCalendars(ownerId, open);
-    const createCalendar = useCreateCalendar(ownerId);
-    const deleteCalendar = useDeleteCalendar(ownerId);
-    const importCalendar = useImportCalendar();
+    const { data: sharedCalendars } = useSharedCalendars(ownerId, open);
+    const { importToCalendar, forgetNewCalendar } = useImportToCalendar(ownerId);
     // No target chosen yet, because the calendars have not arrived: the Select shows its placeholder.
     const [target, setTarget] = useState('');
     const [name, setName] = useState('');
     // Applied once, when the calendars first arrive: a refetch must not overwrite what the user chose or typed.
     const defaultsApplied = useRef(false);
-    // A failed import leaves the dialog open for a retry, which must import into the calendar the first
-    // attempt created rather than make a second one of the same name.
-    const createdCalendarId = useRef<string | null>(null);
     const { pending, run, handleOpenChange } = useDialogPending((next) => {
         if (!next) onClose();
     });
 
+    // A calendar shared out of another user's home is refused by the import route, so it is no target.
+    const options = useCalendarOptions(ownerId, calendars ?? [], sharedCalendars ?? []).filter((option) =>
+        isTransferableCalendarHome(option.ownerId, ownerId),
+    );
+    const ownTargets = options.filter((option) => option.ownerId === ownerId);
+    const teamTargets = options.filter((option) => parseOwnerId(option.ownerId).type === 'team');
+
     const fileName = subject ? subjectInfo(subject).name : '';
     const defaultName = fileName.replace(/\.ics$/i, '') || 'Imported calendar';
-    const defaultTarget = calendars?.find((cal) => cal.isDefault)?.id ?? calendars?.[0]?.id ?? NEW_CALENDAR;
+    // A team calendar is never the default: the file is the viewer's own until they say otherwise.
+    const defaultCalendarId = calendars?.find((cal) => cal.isDefault)?.id ?? calendars?.[0]?.id;
+    const defaultTarget = defaultCalendarId ? `${ownerId}/${defaultCalendarId}` : NEW_CALENDAR;
 
     useEffect(() => {
         if (!open) {
             defaultsApplied.current = false;
-            createdCalendarId.current = null;
+            forgetNewCalendar();
             return;
         }
         if (defaultsApplied.current || !calendars) return;
         defaultsApplied.current = true;
         setTarget(defaultTarget);
         setName(defaultName);
-    }, [open, calendars, defaultTarget, defaultName]);
+    }, [open, calendars, defaultTarget, defaultName, forgetNewCalendar]);
 
     const isNew = target === NEW_CALENDAR;
 
@@ -71,26 +92,19 @@ export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalen
             if (!subject) return;
             const source = importSourceOf(subject);
             if (!source) return;
-            let calendarId = target;
+            // A new calendar is always made in the viewer's own home; a team home is only ever written into.
             if (isNew) {
-                if (!createdCalendarId.current) {
-                    const created = await createCalendar.mutateAsync({
-                        name: name.trim(),
-                        color: EIGEN_ACCENT_COLORS_SHUFFLED[
-                            (calendars?.length ?? 0) % EIGEN_ACCENT_COLORS_SHUFFLED.length
-                        ].value,
-                    });
-                    createdCalendarId.current = created.id;
-                }
-                calendarId = createdCalendarId.current;
+                await importToCalendar(source, {
+                    kind: 'new',
+                    name: name.trim(),
+                    color: EIGEN_ACCENT_COLORS_SHUFFLED[(calendars?.length ?? 0) % EIGEN_ACCENT_COLORS_SHUFFLED.length]
+                        .value,
+                });
+                return;
             }
-            const result = await importCalendar.mutateAsync({ ...source, calendarId });
-            // Nothing landed in a calendar this dialog just made: the user asked for the file's events,
-            // never for an empty calendar, so it goes again. The counts toast already says what happened.
-            if (isNew && result.imported === 0 && createdCalendarId.current) {
-                await deleteCalendar.mutateAsync(createdCalendarId.current);
-                createdCalendarId.current = null;
-            }
+            const chosen = options.find((option) => targetValue(option) === target);
+            if (!chosen) return;
+            await importToCalendar(source, { kind: 'existing', ownerId: chosen.ownerId, calendarId: chosen.id });
         });
 
     return (
@@ -119,17 +133,16 @@ export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalen
                                 <SelectValue placeholder={calendars ? 'Select calendar' : 'Loading calendars…'} />
                             </SelectTrigger>
                             <SelectContent>
-                                {calendars?.map((cal) => (
-                                    <SelectItem key={cal.id} value={cal.id}>
-                                        <div className="flex items-center gap-2">
-                                            <div
-                                                className="h-3 w-3 rounded-full shrink-0"
-                                                style={{ backgroundColor: cal.color }}
-                                            />
-                                            {cal.name}
-                                        </div>
-                                    </SelectItem>
-                                ))}
+                                <SelectGroup>
+                                    <SelectLabel>My Calendars</SelectLabel>
+                                    {ownTargets.map(renderTarget)}
+                                </SelectGroup>
+                                {teamTargets.length > 0 && (
+                                    <SelectGroup>
+                                        <SelectLabel>Team Calendars</SelectLabel>
+                                        {teamTargets.map(renderTarget)}
+                                    </SelectGroup>
+                                )}
                                 <SelectItem value={NEW_CALENDAR}>New calendar</SelectItem>
                             </SelectContent>
                         </Select>

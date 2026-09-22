@@ -1,226 +1,348 @@
-# Calendar App
+# Calendar & CalDAV
 
-> **TLDR**: Per-user SQLite calendar at `{home}/eigen.calendar/calendar.db`. RRULE stored as-is (RFC 5545) and
-> expanded in memory per query; exceptions are events with `parentEventId` + `recurrenceDate`. Sharing is
-> push-based (like Drive ACL) at `free-busy`/`read`/`write`; team calendars are off until an admin enables them.
-> The same store speaks **CalDAV** (RFC 4791, `/dav/calendars/`) and **iMIP** (RFC 6047) for off-server invites.
+> **TLDR**: Calendar follows the **mail and contacts model** — one `.ics` file per UID under `eigen.calendar/calendars/<calendarId>/` is the source of truth, and `calendar.db` is a rebuildable index over those files plus the calendar-level metadata that lives only in the DB. A CalDAV GET returns the exact bytes a client PUT, unknown properties, `VALARM` details and all. `apps/api/src/lib/caldav/` serves RFC 4791 at `/dav/calendars/:ownerId/:calendarId/`, the CardDAV twin plus recurrence and timezones. Sharing is push-based at `free-busy`/`read`/`write`; team calendars are off until an admin enables them. The same store speaks **iMIP** (RFC 6047) for off-server invitations. The domain lives in `apps/api/src/lib/calendar/`, the format in `apps/api/src/lib/ical/`.
 
-## Storage
+## Storage model — files as truth
 
 ```
-data/home/{userId}/eigen.calendar/calendar.db
-data/team/{teamId}/eigen.calendar/calendar.db
+eigen.calendar/
+  calendars/<calendarId>/<uri>       ← source of truth, one VCALENDAR per UID (filename = CalDAV resource name)
+  calendar.db                        ← index over those files + authoritative calendar metadata
 ```
 
-Follows the Contacts/Mail pattern — per-user Home directory, not Drive.
+Per Home, not Drive: `data/home/{userId}/eigen.calendar/` and `data/team/{teamId}/eigen.calendar/`. `calendars/` is a fixed parent (`PATHS.CALENDAR.CALENDARS`), so a client-chosen calendar id can never be a sibling of `calendar.db` and a future sibling directory is not mistaken for a calendar. Like contacts and unlike mail, every write goes through the API process; no other process opens this folder, so there are no fs-watchers.
 
-Calendar is the one domain whose truth is the database: mail is a Maildir plus `mail.db` and contacts are `cards/*.vcf` plus `contacts.db`, each with SQLite as a rebuildable index, while an event exists only as a row here. Like contacts and unlike mail, every write goes through the API process; no other process opens this folder.
+**One file is one series.** The resource holds that UID's master VEVENT, one override VEVENT per stored exception, and the VTIMEZONE block of every TZID those events reference. A cancelled occurrence rides as an `EXDATE` on the master, never as a `STATUS:CANCELLED` override VEVENT (Thunderbird omits those from its next PUT, and a full-replace prune would read that as "the client removed the exception" and resurrect the occurrence). A PUT carrying two UIDs is refused.
+
+**Names.** Eigen mints `<uuid>.ics` for every resource it creates — a REST create, an import, an inbound invitation — because a UID is its author's string and may carry `/`, `..` or quotes. A CalDAV client's chosen name is kept verbatim: `sanitizeEventUri` is `sanitizeResourceUri(raw, '.ics')` (`lib/core/indexed-file-store.ts`), which NFC-normalizes and then applies `isSafePathSegment` (`lib/core/path-utils.ts`, the one rule CardDAV resource names, calendar ids and mail draft ids all take) plus the `.ics` suffix; anything else is a 400. Two uris that differ only in case or Unicode form are one resource, folded through `uriKeyOf` (NFC + lowercase), so a case-variant PUT rewrites the existing file in place rather than stranding it on a case-sensitive file system.
+
+**A calendar id is a directory name**, sanitized by the same predicate (`sanitizeCalendarId`) and unique **case-insensitively** (`calendarIdTaken` folds to lowercase) — two rows would otherwise reconcile one directory. A create makes the directory first and the row second: an empty calendar survives a lost database only if it is on disk.
+
+**What a calendar may be called.** `validateCalendarProps` (`calendar.ts`) is the one rule `createCalendar` and `updateCalendar` hold, so REST, MKCALENDAR and PROPPATCH all inherit it rather than each spelling their own: a trimmed name longer than `CALENDAR_NAME_MAX_LENGTH` (200, shared FE/BE in `packages/lib/src/constants/calendar.ts`) is a 400, and so is a color that is not a `#` followed by three, six or eight hex digits — Apple writes the eight-digit form, so all three lengths are valid.
+
+### What lives in the file
+
+Everything an author wrote, plus the per-event state Eigen owns, which rides as `X-EIGEN-*` properties inside the VEVENT (`EIGEN` in `lib/ical/ical-parse.ts` is the one spelling of every name; ical.js lowercases them).
+
+| Line | Carries | Who sets it |
+|---|---|---|
+| `X-EIGEN-EVENT-ID` | the `events` row id of this VEVENT | every write; minted when no stored resource claims one |
+| `X-EIGEN-CREATED-BY` | the user id that first wrote the resource | the acting user of a create, or of a PUT nobody wrote before |
+| `X-EIGEN-ORGANIZER-EVENT` | the organizer's own event id, on an attendee's linked copy | `stampInvitationLink`, from the relay envelope or a DKIM-aligned iMIP sender |
+| `X-EIGEN-ORGANIZER-USER` | that organizer's owner id (`external_<address>` for an iMIP sender) | the same, never the body |
+| `X-EIGEN-COLOR` | the per-event color, which iCalendar has no home for | an HTTP save |
+| `X-EIGEN-IMPORTED-ORGANIZER` | the `ORGANIZER` address an imported file was filed under | the import, once, on a resource nobody wrote before |
+| `X-EIGEN-EXDATE;X-EIGEN-EVENT-ID=<id>;X-EIGEN-SEQ=<n>[;X-EIGEN-DTSTAMP=<utc>]` | one per `EXDATE`: the value is that occurrence's recurrence key, the parameters its exclusion row's id, its SEQUENCE, and the stamp of the message that cancelled it | `addExclusion`, and `restampResource` for an `EXDATE` a client wrote |
+
+**Incoming stamps are never trusted.** `parseIcs` is the untrusted reader and its result type cannot name a single `X-EIGEN-*` fact, so a forged event id, creator, color or organizer link has nowhere to land and `data.organizer.userId` comes back empty. `restampResource` strips every `X-EIGEN-*` property **and parameter, at every level, group prefixes included** (`stripEigenStamps`), then copies the server-owned lines back from the **stored** resource, matched on UID plus recurrence key — never by string equality on a `RECURRENCE-ID` or an `EXDATE` value, both of which clients rewrite freely between TZID, UTC and comma-joined forms. One stored id belongs to one VEVENT: a second claimant gets a fresh one. A resource nobody wrote before is the only one that takes the caller's own trusted stamps. `stripEigenStamps` also runs on the iMIP body; the whole-file export, the other place a `.ics` leaves the Home, drops the same lines a different way — it splices the stored text and skips every line whose property name `isEigenName` recognizes (`lib/ical/blocks.ts`), because a spliced file is never re-serialized. A CalDAV GET serves the stamps to the owner's own clients on purpose.
+
+### Index schema (`schema.ts`)
+
+| Table | Role |
+|---|---|
+| `calendars` | **Authoritative.** `name`, `color`, `isDefault` (the auto-created primary, cannot be deleted), `visible`, `shares` (JSON `CalendarShare[]`), `ctag` (bumps on any resource change, the CalDAV collection tag) and `syncGen` (rotated when a calendar is recovered from its directory, so every sync token minted against the lost index is refused) |
+| `resources` | One row per stored file: `id`, `calendarId`, `uri`/`uriKey`, `uid`, `etag` (SHA-256 of the file bytes), `mtime` + `size` (the reconcile fast path), `resourceCtag` (the calendar's ctag at this resource's last change — the sync-delta key) and `hasUnindexedRecurrence`. Unique on `(calendarId, uriKey)` and on `(calendarId, uid)` |
+| `events` | One row per VEVENT **and per exclusion** of a resource, the file's own facts projected: the identity (`uid`, `sequence`), the times (`startTime`, `endTime`, `allDay`, `rrule`, `timezone`), `status`, `title`/`description`/`location`, `data` (JSON: reminders, attendees, organizer, url, color), the recurrence-exception link (`parentEventId` + `recurrenceDate`) and the invitation link (`organizerEventId` + `organizerUserId`) |
+| `resource_tombstones` | `{calendarId, uri, uriKey, deletedAtCtag}` — the sync-collection 404 rows. Keyed by the real file name and cleared by the folded key, so a resource re-created under another spelling still drops its removal and no href is ever both a 200 and a 404 in one delta |
+| `pending_writes` | `{calendarId, uri}` — the durable write intent; while the row exists, the index owes that file a commit |
+| `shared_calendars` | **Authoritative**, recipient side: `ownerUserId` + `calendarId` point back at the owner's row, `calendarName`/`calendarColor` are cached copies, `permission` is the resolved level, and `color`/`visible` are the recipient's local overrides |
+
+`CALENDAR_DB_CONFIG` (`db-config.ts`, `currentVersion: 2`). v2 is the files-as-truth refit: the v1 `events` and `event_tombstones` tables are **dropped, not migrated** — init re-derives every row from the files — while `calendars` and `shared_calendars` are reshaped in place, because they are the half no file carries.
+
+### The honest contract
 
 | | Lives in | Rebuilds from the files |
 |---|---|---|
-| Events, their exceptions and the links an invitation keeps between two Homes | `calendar.db` | no — database-only, there are no files to rebuild from |
-| Calendars, their color, visibility, shares and `ctag` | `calendar.db` | no — database-only |
-| Event tombstones (the CalDAV sync 404 rows) | `calendar.db` | no — database-only |
+| An event, its overrides, its exclusions, its alarms, and every other line its author wrote | `calendars/<calendarId>/<uri>` | yes — the bytes a CalDAV GET serves back |
+| The event row ids, the creator, the color, the invitation link, and each exclusion's id and SEQUENCE | the `X-EIGEN-*` lines of that same file | yes — which is why an event id survives a lost index |
+| `resources` and `events` rows, the content-hash etags, `hasUnindexedRecurrence` | `calendar.db` | yes, by the reconcile |
+| A calendar's name, color, visibility, default flag, `shares`, `ctag` and `syncGen` | `calendar.db` | no — database-only |
+| `resource_tombstones`, `pending_writes` | `calendar.db` | no — database-only |
+| The shared-with-me list and its local color/visibility overrides (`shared_calendars`) | `calendar.db` | no — database-only |
 
-Moving events to one `.ics` file per UID, with `calendar.db` as an index that rebuilds from them like the other two domains' do, is designed in [PROPOSAL_CALENDAR_ICS_FILES.md](proposals/PROPOSAL_CALENDAR_ICS_FILES.md).
+So `rm calendar.db` loses the shares, the calendar names, colors, visibility and default flag, the ctag and generation history, and every tombstone. It keeps **every event, override and exclusion, under its old id**, because the ids ride in the files. A directory with no `calendars` row is recreated by `recoverCalendarRows`: the directory name becomes the id, and — unless it is a bare UUID — the display name too, so a calendar a CalDAV client made under `work` comes back as "work" while an Eigen-minted one comes back as "Recovered calendar" (then "Recovered calendar 2", …). The first recovered calendar becomes the default when no default survived, the colors cycle through `EIGEN_ACCENT_COLORS_SHUFFLED`, and `syncGen` is rotated through `nextSyncGen` so no client is told "nothing changed" against a counter that reset under it. A directory a row already holds in another case is left alone and logged.
 
-## Schema
+**Calendar ids survive a lost index where contact ids do not.** A contact id is a random primary key in `contacts.db` and a rebuild mints new ones ([CONTACTS.md](CONTACTS.md)); a calendar id *is* its directory name and an event id *is* a line in its file, so both come back unchanged.
 
-Four tables, Drizzle definitions in `apps/api/src/lib/calendar/schema.ts`. Only the columns that carry meaning
-are listed — UUID primary keys and `createdAt`/`updatedAt` are on every table.
+## The write path
 
-**`calendars`** — `name`, `color`, `isDefault` (the auto-created primary, cannot be deleted), `visible` (UI
-toggle), `shares` (JSON `CalendarShare[]`), and `ctag`, which increments on any event change and is the CalDAV
-collection tag.
+`writePrepared` (`calendar/calendar-store.ts`) is the one pair of file write + index commit. It takes a `PreparedResource` — the serialized text, its bytes, their hash and the rows they project to, all computed once by `prepareResource` — so the bytes a refusal judged are the bytes that land. `writeResource` is the wrapper that prepares and writes in one call, which is what every event mutation goes through; a CalDAV PUT prepares first, because it has preconditions to evaluate against the prepared rows before it commits to writing them. Every mutation serializes through a one-slot write gate (`WriteGate`, a `Semaphore(1)` in `lib/core/indexed-file-store.ts` — the same job `MaildirStore.storeLock` and the contacts gate do), so a file and its index row never straddle a reconcile or a racing write. `gate.run()` drains the dirty set at its entry and **refuses re-entry outright** rather than deadlocking; `gate.ensureDrained()` is the lock-free read's version and a no-op inside the lock.
 
-**`events`** — the iCalendar identity (`uid`, `uri`, `etag`, `sequence`), the times (`startTime`, `endTime`,
-`allDay`, plus `rrule` and `timezone`, the IANA zone recurrence expansion runs in), `status`
-(`confirmed`/`tentative`/`cancelled`), `title`/`description`/`location`, `data` (JSON: reminders, attendees,
-organizer, url, notes, color), the recurrence-exception link (`parentEventId` + `recurrenceDate`, the ISO date
-of the replaced occurrence), the invitation link (`organizerEventId` + `organizerUserId`), and `eventCtag` —
-the calendar's ctag at the time of the last write to this row. `icsBlob` is **vestigial**: never written,
-never read.
+**Atomic, fail-closed writes.** The exact sequence: `prepareResource` → `EVENT_MAX_BYTES` on the bytes that would land → `enforceHomeDataQuota` when the Home is metered → `displaceUnindexedFile` when nothing is being replaced → `recordPendingWrite` → `writeResourceFile` (temp file → `fsync` → rename → directory fsync, via `LocalFilesystem.writeAtomic`) → `commitResource` → the byte counter. Both ceilings hold *before* any intent is recorded, so a refusal leaves nothing for a drain to chase. `commitResource` is the single index-write seam: `indexResource` writes the `resources` row, a delete-and-reinsert of every `events` row of that resource and the tombstone clear by `uriKey`, and `clearPendingWrite` settles the intent, all inside one transaction that opens with the ctag bump. On any failure after the rename the key is marked dirty in the gate and the error rethrown; the next public call — mutation or read — re-indexes that resource before observing the index. Only a **replacement** records a pending write: a new name is always visible to the next stat diff, where a replacement carrying the very same `mtime` and `size` is not.
 
-**`event_tombstones`** — `(uri, calendarId, deletedAtCtag)`. Event rows are hard-deleted, so this is the only
-surviving trace that a resource existed.
+**A create never overwrites bytes the index does not know.** A name no `resources` row holds can still be a file on disk — a dedupe loser, a resource that will not parse, a collection whose index phase threw — so a create moves it aside first: `displaceUnindexedFile` (`lib/core/indexed-file-store.ts`, shared with contacts) renames it to `.<uri>.displaced-<uuid>` and logs one warning. Nothing lists, sweeps or addresses a `.`-prefixed name: the directory scan skips it, so it is outside the Home's calendar bytes, and the atomic-temp sweep matches on `.tmp-` and leaves it alone. For an operator it is a file to look at and then remove by hand; for the client the name is free again instead of wedged against every later verb.
 
-`eventCtag` and the tombstones exist for one reason: the CalDAV **sync-collection REPORT**. Given a client's
-sync token, `getChangedEventsSince()` selects rows with a higher `eventCtag` and `getDeletedEventsSince()`
-reads tombstones past the same mark, so a client that has been offline learns about deletions it never saw.
+**An HTTP save is a patch of what moved; a CalDAV PUT is a full replace.** The submitted form restates WHEN the event is on every save, so `updateEvent` (`calendar/events.ts`) diffs the submitted instants and the all-day flag against the index row — the one reading that knows the end of an event stating a `DURATION` or no end at all — and hands `patchEvent` only the bounds that really moved. `patchEvent` (`lib/ical/ical-component.ts`) then writes a time property only when an instant or the all-day flag moved, or when the stored zone is one Eigen can name and the save names another. A save restating the same instants writes no `DTSTART`, `DTEND` or VTIMEZONE whatever zone it labelled them with, so a `DTSTART:…Z` or a client's own `TZID=` form survives a title edit. A written `DTEND` removes the `DURATION` that stated the length instead (RFC 5545 §3.6.1). A zone-only re-spelling is **not** scheduling-significant: SEQUENCE holds and no guest is mailed a reschedule. Everything else is patched property by property — an `ATTENDEE`'s own line is touched rather than the list re-emitted, so `CUTYPE`, `RSVP`, `SCHEDULE-STATUS` and every `X-` parameter a client hung on it survive an Eigen edit.
 
-**`shared_calendars`** (recipient side) — `ownerUserId` + `calendarId` point back at the owner's row,
-`calendarName`/`calendarColor` are cached copies, `permission` is the resolved level, and `color`/`visible`
-are the recipient's local overrides.
+**The linked-copy rule on PUT.** A stored resource carrying `X-EIGEN-ORGANIZER-EVENT` is a copy of somebody else's event, which its holder may re-alarm and nothing more: the PUT keeps the **stored** component and adopts only the incoming `VALARM`s, matched on UID plus recurrence key and stripped of their own Eigen lines. That is the server-set stamp talking, where the web edit lock (`isInvitationFromOthers`) is the *address* rule — an `ORGANIZER` address is the client's own to spell, and Apple Calendar and Thunderbird write the account's own address on every event they create with guests.
+
+**SEQUENCE, DTSTAMP, LAST-MODIFIED** (`touch`). `LAST-MODIFIED` is always set to now. `DTSTAMP` is set from the applying message's stamp (clamped to the receiver's clock + 24 h, RFC 5546 § 2.1.5) or from the clock — but never by a local edit on a linked copy, where `DTSTAMP` is the organizer's revision stamp the next message is ordered against. `SEQUENCE` bumps only when the change is scheduling-significant, the actor is the organizer, and the VEVENT lists attendees; a submitted `sequence` — an attendee copy mirroring the organizer's number — wins over the rule.
+
+**Delete, move, calendar delete.** `purgeResource` is `unlinkDurable` (which fsyncs the directory that lost the name) plus one transaction: ctag bump, `resources` row dropped — the `events` rows cascade — and a tombstone. Deleting one *occurrence* is a write of its master's file (an `EXDATE` plus its stamp), never a resource delete. Deleting an occurrence that is **already** cancelled is the inverse and puts it back: `removeExclusion` drops the `EXDATE`, and where a client cancelled that instance as a `STATUS:CANCELLED` override VEVENT rather than an `EXDATE` it removes the VEVENT, so both spellings of a cancellation undo the same way. `moveEvent` re-homes a resource inside the Home as **one rename** plus one transaction: the source calendar bumps and tombstones the old uri, the target bumps, clears any tombstone on the target uri and re-points the `resources` row and its `events` rows. A uri the target already uses becomes a fresh `<uuid>.ics` — used means a row holds it **or** a file sits under it, so the rename destroys nothing; a UID the target already holds is a 409; a lone recurrence occurrence cannot be moved. A transaction that throws after the rename rolls the rename back, because a live process must not leave the file in one calendar and the rows in the other; when the rollback itself fails, both keys are marked dirty and the next drain settles the pair. A calendar delete renames the whole directory to `calendars/.<calendarId>.deleting-<uuid>` **first** and deletes the row **second**, then removes the staging — so a crash in between rolls back, and the init sweep decides by the row: staged files under a live row go back (unless the live directory holds files of its own, which is logged and left alone), and staging under a free id is deleted data.
+
+## Reconcile vs. rebuild
+
+`Calendar.init` brings the index in line with the files before anything is served: `mkdir calendars/` → `reconcileIndex` → `gate.recoverPending` over the surviving `pending_writes` rows → seed a default calendar when there are none → set `meteredIngest`. The index comes first because the ctag bumps need its calendar rows.
+
+`reconcileIndex` runs inside the gate and is **home-wide, in three phases**:
+
+- **Before the phases**, `sweepDeleting` runs — ahead of anything in the open that could create a calendar directory, so an absent one means absent. One entry's failure is logged and left for the next open: init throwing here would take every domain of the Home down on every restart.
+- **Phase 1 is stat-only.** Per calendar directory: `mkdir`, `sweepAtomicTemps`, one listing plus a `(mtime, size)` comparison against the index (`diffFileStats`). Zero file reads, zero parses — a second init over an unchanged Home leaves `resourceParseCount` at `0`, which the store suite asserts. A directory that cannot be read is excluded from the pass entirely, because counting it as "every file vanished" would tombstone a whole collection over a transient IO error.
+- **Phase 2 drops every vanished resource of every calendar in ONE transaction.** Vanished before new, and home-wide, because a resource a crashed move left in the target would otherwise be indexed under fresh rows and *then* tombstoned at its source — losing the ids it carried. A failure here ends the pass and leaves the index as the last one left it: a stale index beats an unopenable Home.
+- **Phase 3 indexes the changed and the new, per calendar.** One calendar throwing leaves that calendar stale rather than failing `Home.init`.
+
+**The restore rule.** A per-home restore does not preserve mtimes, so every file drifts at once. A drifted file whose bytes still hash to the row's `etag` changed nothing: it is not parsed, and only its `mtime`/`size` are refreshed — no ctag bump, no re-stamped `resourceCtag`, no tombstone. A restored calendar therefore costs its CalDAV clients zero re-downloads, and the refreshed stats keep the next init off the files.
+
+**Dedupe by UID, per calendar.** `(calendarId, uid)` is unique, so two files naming one UID would trip the index. `dedupeByUid` seeds its owner map with the rows that **remain after the vanished deletes** — a reindexing incumbent keeps its stored uid, so a new same-UID file loses to it — and a loser is skipped and logged, **never deleted**: two files with one UID is the ordinary result of copying one by hand.
+
+**The copy rule for a claimed event id.** A candidate whose row ids another resource already holds — indexed, or another candidate in the same batch — is a copy of it: `remintEventIds` gives its master, its overrides and its exclusion stamps fresh ids, every other Eigen line stays, and the rewritten bytes go back to disk *before* the rows are indexed, so file and index agree.
+
+**A file that does not parse** — unreadable bytes, or no VEVENT with a UID — is skipped and logged, stays on disk, is never deleted, and still counts toward the Home's calendar bytes. A file naming one UID twice as a master is logged and the first master leads.
+
+There is no separate `rebuildIndex`: recovering a calendar row from its directory *is* the from-scratch path, and every file under a recovered calendar is simply new to the index.
+
+## Durability, honestly
+
+**What is fsynced.** `writeDurable` writes the staged temp file and fsyncs it; `renameDurable` renames it into place and fsyncs the directory that gained the name; `unlinkDurable` fsyncs the directory that lost one; `moveDurable` fsyncs both; `removeDir` fsyncs the parent. `syncDir` is the primitive under all of them, and a mount that refuses the call logs **once per process** and returns — a rename that already happened must not fail afterwards. The fsync of the staged file stays fatal, and `writeDurable` unlinks the partial file before it rethrows.
+
+**What is not.** `calendar.db` runs WAL with `synchronous = NORMAL`: `ManagedDatabase` sets `PRAGMA journal_mode = WAL` and leaves `synchronous` at bun:sqlite's default of `1`. A commit therefore survives a process crash but not necessarily a power loss — the last commits may still be in the WAL. That is the deliberate asymmetry of the model: **the files are durable, the index is cheap**, and every window it opens is one the next reconcile closes.
+
+| A crash right after | Leaves | What repairs it |
+|---|---|---|
+| the staged temp write | a `.`-prefixed temp nothing points at | `sweepAtomicTemps`, at the next init of that calendar |
+| the rename, before the commit | the file on disk, the index behind it | the stat diff (a new name, or a changed `mtime`/`size`), and in a live process the gate's dirty set |
+| a commit whose WAL did not reach the platter | the file on disk, the index as it was | the same stat diff |
+| a **replacement** whose bytes happen to carry the same `mtime` **and** `size` | nothing a stat diff can see | the `pending_writes` row — recorded before the rename, cleared inside the commit that settled the pair, replayed by `recoverPending` at init |
+| the unlink of a resource delete | the file gone, the row still naming it | the stat diff's vanished branch, in phase 2 |
+| the staged rename of a calendar delete | the directory under `.<id>.deleting-<uuid>`, the row still live | `sweepDeleting` renames it back |
+
+**The one window that does not self-heal.** A key the drain cannot settle — bytes that will not parse, a file it cannot read — is logged and skipped rather than rethrown: raising escapes the gate and takes every later read and write of the Home with it, and one poison file must not wedge the keys queued behind it. Its `pending_writes` row stays, because the clear runs inside the same guarded block, so the next init retries it, and until then that resource's index row is served as the last commit left it. A read closes it earlier than the next open does: `getResource` hashes the bytes it just read and marks the key dirty when they disagree with the row, so the next call re-indexes it. That is also why the etag a GET quotes is the hash of the bytes it served and never the row's — body and validator are one revision by construction, and a durably stale row would otherwise 412 every conditional write forever.
+
+## CalDAV surface
+
+`apps/api/src/lib/caldav/` serves RFC 4791, mounted in `app.ts` beside `carddavRouter`. Every route is `authenticateBasic` (app password → primary-password fallback, shared `protocol-auth.ts`) + `requireSelf`.
+
+```
+PROPFIND  /dav/                                        current-user-principal
+PROPFIND  /dav/principals/:ownerId/                    principal props (calendar-home-set + addressbook-home-set)
+PROPFIND  /dav/calendars/:ownerId/                     calendar home (Depth 0|1)
+PROPFIND  /dav/calendars/:ownerId/*                    home / one calendar / one resource (Depth 0|1)
+GET       /dav/calendars/:ownerId/:calId/:uri          the stored bytes verbatim (text/calendar), quoted content-hash ETag
+PUT       /dav/calendars/:ownerId/:calId/:uri          create/replace — preconditions, UID, re-stamping, ceiling, quota
+DELETE    /dav/calendars/:ownerId/:calId/:uri          404 unknown · 412 stale If-Match
+DELETE    /dav/calendars/:ownerId/:calId/              the calendar itself — 204 · 404 unknown · 403 the default one
+REPORT    /dav/calendars/:ownerId/:calId/              calendar-query · calendar-multiget · sync-collection
+MKCALENDAR/dav/calendars/:ownerId/:calId/              create at the client-chosen id — 201 + Location · 405 when taken
+PROPPATCH /dav/calendars/:ownerId/:calId/              displayname + calendar-color
+```
+
+**GET is the file.** The resource *is* the bytes, so an `.ics` a client wrote comes back property for property — `VALARM` details, `ATTACH`, `RDATE`, `CATEGORIES`, unknown `X-` properties and `RANGE=THISANDFUTURE` included — with the `X-EIGEN-*` lines the store added, which the owner's own clients are the only readers of.
+
+**PUT answers no ETag when the stored bytes are not the client's bytes.** Re-stamping and the adopted alarms both rewrite the body, so the response carries a validator only when the serialized resource equals the request body (RFC 4791 § 5.3.4); otherwise the client must re-read. A PUT of what is already stored is judged on the **bytes**, never on the row — a stale row would answer a PUT that does change the file with a no-op nobody learns about — and commits nothing, so no ctag moves and no other client is sent back for a resource that never moved.
+
+**Preconditions are evaluated inside the gate**, against the state the write overwrites, so two racing `If-Match` PUTs serialize and the loser gets a 412. A UID another resource in the calendar owns → 409 `C:no-uid-conflict` carrying that resource's `DAV:href`; a PUT that changes an existing resource's own UID → the bare 409 element. A body over `EVENT_MAX_BYTES` (5 MiB) → 413 `C:max-resource-size`, bounded before buffering and again on the bytes that would land; the collection advertises the same number as `C:max-resource-size` so a client can size a resource first. A body that will not parse, carries a UID that is empty, over 255 characters or unprintable, or holds an event ending before it starts → 403 `valid-calendar-data`; one holding two UIDs, naming one UID twice as a master, or holding a VEVENT the parser had to skip → 403 `valid-calendar-object-resource`; one holding no VEVENT at all → 403 `supported-calendar-component`. The three preconditions are the three `InvalidReason` values `dav/write-result.ts` maps. A PUT under a calendar that does not exist → 409 (RFC 4918 § 9.7.1). A quota refusal → 507.
+
+**PROPFIND honors the requested prop list** via the shared core in `lib/dav/propfind.ts` (the CardDAV twin uses the same): requested props we have come back in the 200 propstat, unknown ones in a 404 propstat echoing their namespace (omitted under `Brief: t` / `Prefer: return=minimal`), a bodyless PROPFIND stays allprop, and member rows carry an empty `resourcetype`. The calendar collection advertises a `C:calendar` resourcetype, displayname, the ownership props (Apple clients treat every resource as read-only without them), `ICAL:calendar-color`, `CS:getctag`, `D:sync-token`, `supported-calendar-component-set` (VEVENT), `C:max-resource-size`, and a `supported-report-set` listing exactly the three REPORTs that exist.
+
+### The three REPORTs
+
+- **`calendar-multiget`** — hrefs → etag + `C:calendar-data`. Hrefs are percent-decoded before matching and percent-encoded on every emission, capped at `MULTIGET_HREF_LIMIT` (500) and **deduped per resource** through the collection's own `uriKeyOf`, so a client listing one resource N ways cannot make us retain N copies of its bytes. Missing-but-in-collection comes back as a 404 row on the resource href, unresolvable as a 404 echoing the original.
+- **`calendar-query`** — a filter naming a component Eigen does not store matches nothing; otherwise the VEVENT `time-range` is answered from the index. It **over-reports on purpose**: a resource whose recurrence the index cannot expand (`hasUnindexedRecurrence` — a stripped sub-daily or out-of-range rule, or an `RDATE`) rides along in every window rather than lose an occurrence. Every other filter element is parsed past (see Known limits), so no filter ever narrows the answer. The window itself does: the range read behind it treats a cancelled occurrence as no occurrence, so a resource whose only instance inside the window is cancelled — by an `EXDATE` or by a `STATUS:CANCELLED` override — is not matched by it.
+- **`sync-collection`** (RFC 6578) — generation-stamped tokens `urn:eigen:sync:<syncGen>-<ctag>`, emitted and parsed in `lib/dav/sync-token.ts`. The delta is `resourceCtag > since` as 200 rows plus tombstones as 404 rows; the tombstone primary key and the commit's tombstone-clear together guarantee no href is both in one response. A token whose generation is stale (the calendar was recovered from its directory) **or whose ctag is ahead** of the collection → 403 `D:valid-sync-token`, sabre's status, which clients key their full resync on — an empty delta under a *lower* token would stall that client permanently.
+
+**The byte budget.** One REPORT serves at most `REPORT_DATA_BUDGET_BYTES` (32 MiB) of calendar data. A resource past the remaining budget still gets a row, carrying its etag and a **404 propstat for `<C:calendar-data/>`** (RFC 4918 § 9.1), which the client then multigets — a silently truncated collection would lose events instead.
+
+**Not supported** (each answered with a superset, never a refusal): the `<C:comp>`/`<C:prop>` projection of `calendar-data`, `<C:expand>`, `<C:limit-recurrence-set>`, `prop-filter` / `param-filter` / `text-match` in a `calendar-query`, and `<D:limit><D:nresults>` on a `sync-collection`. `MKCOL` creates no calendar here; `MKCALENDAR` does. OPTIONS and the `Basic realm="Eigen DAV"` challenge live in `app.ts`, one combined header for the whole `/dav` tree.
+
+### Serialization and parsing
+
+`ICAL.Component.toString()` is the one serializer, so folding, escaping and parameter quoting are ical.js's problem and an Eigen edit leaves every property it did not touch as the client wrote it. `buildResource(events)` assembles a VCALENDAR from projected rows (the REST create path), while `patchEvent` / `putOverride` / `addExclusion` / `removeExclusion` edit a stored component **in place**.
+
+- Every referenced TZID gets a generated VTIMEZONE (RFC 5545 §3.6.5): `lib/ical/vtimezone.ts` builds it from `Intl` offset data, compressing transitions to two open-ended RRULE observances when the zone's DST rule is regular and emitting one observance per transition otherwise. A definition a property still names is the client's own and is never rewritten; one nothing references any more is dropped; new blocks go in **front** of the VEVENTs, because a client reads the file top to bottom.
+- `RECURRENCE-ID` names the ORIGINAL occurrence, computed from the master via `computeOccurrenceTimes`, in the master's TZID form — never the exception's moved `startTime`, which would orphan the override.
+- An end instant the stored zone's wall clock cannot name — the second pass through a repeated hour — is written as a UTC `DTEND` beside the TZID `DTSTART` (RFC 5545 allows it), so the duration survives.
+- On the read side there are two entry points and one trust rule: `parseIcs(text)` for bytes a stranger wrote, `projectResource(component)` for a resource the store itself wrote (adding the stamps, `CREATED`/`LAST-MODIFIED` and `hasUnindexedRecurrence` on top of the same projection). `parseResource(ics)` is the only place a stored `.ics` becomes a component tree.
+- A valid IANA TZID resolves through `Intl` whether or not the file defines a VTIMEZONE — the path the builder computes its wall times with — so identical bytes name one instant and a repeated hour resolves to its first pass. A UTC `Z` value is exact; only a TZID `Intl` rejects resolves through the file's own VTIMEZONE; a genuinely floating datetime maps its wall components via `Date.UTC`, never through the server's zone.
+- `RECURRENCE-ID` / `EXDATE` → `recurrenceDate` keys are wall-clock dates: TZID-form values key on their own wall components (RFC 5545 canonical), UTC-`Z` values convert the instant to the **series** timezone, floating and `DATE` values keep their raw components. The series timezone is resolved per UID from that UID's master; a master that named no TZID keeps its series in UTC, which is a resolved answer and not a missing one.
+- The end of an event is its `DTEND`, or its `DURATION` when it names one (RFC 5545 §3.6.1, which Apple and Outlook both emit), through `ICAL.Event.endDate`. A VEVENT with neither keeps the hour a timed row is drawn as and the day an all-day row is.
+- An `EXDATE` becomes a synthetic cancelled row, taking its id and SEQUENCE from the `X-EIGEN-EXDATE` stamp beside it, and the master's SEQUENCE when a client wrote that `EXDATE` itself. One occurrence is one cancelled row, however many `EXDATE` values in however many forms name it.
+- A VEVENT the parser cannot read is skipped and counted rather than failing the file; each caller answers for its own surface (a PUT refuses the payload, a preview counts it in `dropped`, an import in `failed`). Each VEVENT is wrapped in an `ICAL.Event` constructed with `{ exceptions: [] }`, which skips ical.js's per-VEVENT sibling scan — quadratic over a whole file (20 000 events: 17 s).
+- `ATTENDEE` / `ORGANIZER` values are URIs, so the `mailto:` scheme is stripped case-insensitively; a surviving prefix would match no address in any comparison.
+
+Regression nets, under `apps/api/src/test/`: `caldav/caldav.test.ts` (protocol), `caldav/caldav-roundtrip.test.ts` (serialization/parse round-trips, TZ-pinned floating tests), `caldav/caldav-client-sync.test.ts` (client-faithful sync flows), `caldav/ical-imip.test.ts` (iMIP scoping), `ical/ical-parse.test.ts` (multi-series files), `ical/ical-component.test.ts` (kitchen-sink fidelity under a patch, the SEQUENCE rule, stamp trust), `ical/vtimezone.test.ts` (generator vs `Intl`), `calendar/calendar-store.test.ts` (the write seam and its crash points), `calendar/calendar-restart.test.ts` (reconcile on open), `calendar/calendar-replay-guard.test.ts` and `calendar/calendar-inbound-request.test.ts` (the ordering guard and the inbound decision), `calendar/calendar-timezone.test.ts` (occurrence keying), `calendar/calendar-quota.test.ts`, `calendar/calendar-transfer*.test.ts`.
 
 ## Sharing
 
 **Permissions**: `free-busy` (time blocks only), `read` (full details), `write` (can edit).
 
-Push-based propagation — when shares change, `share-propagation.ts` resolves targets and writes to recipient's
-`shared_calendars`. See [ACL.md](ACL.md#share-propagation).
+Push-based propagation — when shares change, `share-propagation.ts` resolves targets and writes to the recipient's `shared_calendars`. See [ACL.md](ACL.md#share-propagation).
 
-**Team calendars**: **opt-in, not opt-out.** A `TeamHome` is constructed with settings defaulting to
-`{ calendar: { enabled: false } }`, and the `TeamHome.calendar` getter throws 404 while that flag is false —
-so a fresh team has no calendar until an admin turns it on from the Admin app team detail page (via
-`PUT /team/:teamId/settings`).
+**Team calendars are opt-in, not opt-out.** A `TeamHome` is constructed with settings defaulting to `{ calendar: { enabled: false } }`, and the `TeamHome.calendar` getter throws 404 while that flag is false — so a fresh team has no calendar until an admin turns it on from the Admin app team detail page (via `PUT /team/:ownerId/settings`).
 
-Once enabled, the team calendar is auto-synced into each member's `shared_calendars` table (with
-`ownerUserId = 'team_{teamId}'`) when `GET /calendar/:ownerId/shared` is called. Default member permission is
-`read`. To grant `write` or `free-busy`, set shares on the team's default calendar:
-`{targetId: 'team_{teamId}', permission: 'write'}`. Permission is resolved via `checkPermission()` and synced on
-every fetch. While disabled, `syncTeamCalendars` catches the 404 and removes any stale entries from members'
-`shared_calendars`. Displayed in a separate "Team Calendars" section in the sidebar, using the same
-`SharedCalendar` infrastructure for visibility/color prefs.
+Once enabled, the team calendar is auto-synced into each member's `shared_calendars` when `GET /calendar/:ownerId/shared` is called. The default member permission is `read`; to grant `write` or `free-busy`, an org admin sets shares on the team's calendar (`{targetId: 'team_{teamId}', permission: 'write'}`) — listing, creating, changing and deleting a team home's calendars takes the same admin that enables the calendar, while a member's `write` share is event-level and the team's events stay on membership. Permission is resolved via `checkPermission()` and re-synced on every fetch. While disabled, `syncTeamCalendars` catches the 404 and removes stale entries from members' `shared_calendars`. The app shows them in a separate "Team Calendars" section, on the same `SharedCalendar` infrastructure.
 
 ## Invitations
 
-Organizer creates event with `data.attendees[]` → server writes a linked copy to each attendee's default calendar →
-attendees RSVP → status propagates back to organizer. All server-side, no email needed.
+An organizer creates an event with `data.attendees[]` → the server writes a linked copy into each attendee's default calendar → attendees RSVP → status propagates back. All server-side, no email needed between Eigen Homes.
 
-**Linked events**: Regular events in the attendee's calendar with `organizerEventId`/`organizerUserId` columns set
-(indexed for fast lookup). Same `uid` as organizer's event (CalDAV requirement). `data.organizer` is also set with
-`{ userId, email, name? }` and `data.organizerEventId`. DB-level detection: `organizerEventId IS NOT NULL` (used by
-`findLinkedEvent`). Application-level detection: `isInvitationFromOthers(event, home.user)` (used by the `updateEvent`
-guard and `deleteEvent` decline logic).
+**Linked events** are ordinary resources in the attendee's calendar whose VEVENTs carry `X-EIGEN-ORGANIZER-EVENT` and `X-EIGEN-ORGANIZER-USER`, projected into the `organizerEventId`/`organizerUserId` columns (indexed for lookup) and into `data.organizer` + `data.organizerEventId`. DB-level detection is an equality lookup on `(organizerEventId, organizerUserId)` restricted to masters (`findLinkedEvent`, which adds `parentEventId IS NULL` so an exception never answers for the series it inherits its link from); application-level detection is `isInvitationFromOthers(event, home.user.email)`.
 
 **Propagation** (`invite-propagation.ts`):
-- Create/update with attendees: diff old vs new → add/remove/update linked copies + SSE notifications
-- Delete by organizer: cancel all attendee copies
-- Delete by attendee: treated as decline (propagates `declined` status to organizer), and only for an attendee — the deleting user's address has to be in the event's `attendees` (case-insensitively), or the row is just deleted: a file or a CalDAV client can hang any `ORGANIZER` on an event, and a REPLY for a meeting the user was never invited to would reach a stranger. An organizer known by address only — no Eigen user id, which is every organizer a CalDAV PUT or an inbound `.ics` parsed — takes the same iMIP `REPLY` path as an `external_` organizer, because in-app propagation has no Home to address
-- Self-invite prevention: organizer's email is skipped during propagation
-- Unknown email: added to share registry for reconciliation on signup
 
-**RSVP**: Attendee calls `PUT .../events/:id/rsvp` with `{status, scope?, recurrenceDate?, remove?}`.
+- Create or update with attendees: diff old vs new → add, remove or update the linked copies, plus SSE notifications.
+- One occurrence ("edit this event", which is a create or update of an override): every message names the **series'** event id as `organizerEventId` plus the occurrence's recurrence key, never the override row's own id — the guest holds one linked series, and an exception on it inherits the series' link. The guest's receiver attaches it through `applyInvitationException`, the same function an iMIP `REQUEST` carrying a `RECURRENCE-ID` takes, and a cancelled override travels as a removal of that instance (`cancelInvitationOccurrence`). A guest's mail carries the `RECURRENCE-ID` of the ORIGINAL instant, which only the series knows once the override has moved — hence `serializeEventForImip`'s `series` argument. The guests of the series are the guests of the occurrence: an override naming none of its own inherits the series' list rather than reading as an occurrence nobody is invited to, because a stored VEVENT cannot tell a client that did not restate the list apart from one that emptied it. So an occurrence edit reaches a guest who already holds the series as an update of that occurrence — never as a second invitation to it.
+- A guest added to a whole series gets the exceptions it already holds, right after the invitation that files the series and only to that guest: every override travels as an update of its occurrence and every cancelled one as a removal of it, the messages a later occurrence edit or cancel sends anyway. The guest's fresh copy holds nothing for those keys, so the ordering guard takes each. Without them a moved occurrence renders at its original slot and one the organizer deleted renders at all.
+- Delete by the organizer: cancel every attendee copy.
+- Delete by an attendee: treated as a decline, and only for an attendee — the deleting user's address has to be in the event's `attendees` (case-insensitively), or the row is just deleted: a file or a CalDAV client can hang any `ORGANIZER` on an event, and a REPLY for a meeting the user was never invited to would reach a stranger. An organizer known by address only — every organizer a CalDAV PUT or a parsed `.ics` names — takes the iMIP `REPLY` path, because in-app propagation has no Home to address.
+- Self-invite prevention: the organizer's own address is skipped during propagation.
+- Unknown email: added to the share registry for reconciliation on signup.
 
-- `scope='all'` (default): updates attendee status on the linked event + propagates to organizer
-- `scope='this'` + `recurrenceDate`: creates a recurrence exception with per-occurrence attendee status + propagates
-  to organizer (who also gets an exception). With `remove: true`, creates a canceled exception instead (hides
-  occurrence) and propagates decline
-- `scope='this-and-following'` + `recurrenceDate` + `remove: true`: truncates the linked event's rrule + propagates
-  series-wide decline
-- `remove: true` without scope: deletes the entire linked event (same as DELETE, propagates decline)
+**A series-wide edit carries the fields an override never claimed.** Patching a master walks the overrides beside it in the same resource — one file, one write: for `title`, `description` and `location`, an override whose value equals the master's value *before* the edit follows the master, and one that set its own keeps it. Times never follow. Guests run the same rule when the master's update reaches them, so an occurrence that was only moved is renamed everywhere without a message of its own.
 
-All handled by `Calendar.rsvp()`. Per-occurrence data is stored as recurrence exceptions (`parentEventId` +
-`recurrenceDate`), reusing the existing expansion model — `getEventsInRange()` already substitutes exception data.
+**RSVP**: an attendee calls `PUT .../events/:id/rsvp` with `{status, scope?, recurrenceDate?, remove?}`.
 
-**rrule constraint**: When an organizer updates a recurring invited event, `receiveInvitationUpdate()` ensures the
-incoming rrule does not extend beyond any local truncation the attendee made. This prevents "delete this and following"
-from being undone by an organizer edit.
+- `scope='all'` (default): updates the attendee's status on the linked event and propagates to the organizer.
+- `scope='this'` + `recurrenceDate`: writes a recurrence exception with a per-occurrence attendee status and propagates (the organizer gets an exception too). With `remove: true`, an exclusion instead — the occurrence is hidden and a decline propagates.
+- `scope='this-and-following'` + `recurrenceDate` + `remove: true`: truncates the linked event's rrule and propagates a series-wide decline.
+- `remove: true` without a scope: deletes the whole linked event (same as DELETE, propagates a decline).
 
-**Linked event guard**: Attendees can only change `data.reminders` and `data.color` on linked copies. Title, time, description, location, rrule changes are blocked by `updateEvent()`. Detection is `isInvitationFromOthers()` from `@workspace/lib/calendar` (not the DB column `organizerEventId`): the organizer is the Home's own when `organizer.email` equals the Home user's address, compared case-insensitively — and an owner with no address of its own never matches, so a team calendar keeps a member-organized CalDAV event locked (a team Home's synthetic user has an empty address). A stored organizer on its own means nothing — Apple Calendar and Thunderbird write `ORGANIZER:mailto:<the account's own address>` on every event they create with guests, and that event is the owner's own: editable by that client, by the web app and by the API, and its delete cancels for the guests instead of declining. One rule, every caller: the `updateEvent` guard and its invitation fan-out, `deleteEvent`, `rsvp()`, the inbound iMIP `REPLY` lookup and the calendar app's detail and edit dialogs. The edit dialog mirrors the guard (`EventFormFields`' `detailsDisabled`) so those fields are disabled rather than silently dropped on save; the calendar select stays live, because moving a linked copy goes through `moveEvent()`. In a shared calendar the viewer does not own, the owner's address is not at hand — so the dialogs pass no address and the event reads as locked, while the server would accept the write.
+A copy that **is** one occurrence of a series the guest does not hold answers for that occurrence: its default-scope RSVP and its delete both name its own `RECURRENCE-ID` key, so the organizer's receiver lands on the override that holds that occurrence's guest list rather than on a series whose own list may name nobody. The iMIP `REPLY` names it by construction, from the stored `RECURRENCE-ID`.
 
-**`organizer` and `organizerEventId` are server-owned**: `EventDataSchema` (`routes/calendar.ts`) has no field for either, so an HTTP edit — the `updateEvent()` call that carries `user` — keeps the stored pair whatever `data` the client posts back. A CalDAV PUT (no `user`) stays a full-resource replace: a payload without `ORGANIZER` removes it.
+**The rrule constraint**: when an organizer updates a recurring invited event, `constrainRRule` keeps the incoming rule from extending past any local truncation the attendee made, so "delete this and following" is not undone by an organizer edit.
+
+**The linked-event guard**: attendees can only change `data.reminders` and `data.color` on a linked copy; title, time, description, location and rrule changes are dropped by `updateEvent`. Detection is `isInvitationFromOthers()` from `@workspace/lib/calendar` — **not** the DB column — comparing the stored organizer address with the Home user's, case-insensitively; an owner with no address of its own never matches, so a team calendar keeps a member-organized CalDAV event locked (a team Home's synthetic user has an empty address, [ROADMAP.md](ROADMAP.md)). A stored organizer on its own means nothing: Apple Calendar and Thunderbird write `ORGANIZER:mailto:<the account's own address>` on every event they create with guests, and that event is the owner's own — editable by that client, by the web app and by the API, and its delete cancels for the guests instead of declining. One rule, every caller: the `updateEvent` guard and its fan-out, `deleteEvent`, `rsvp()`, the inbound iMIP `REPLY` lookup, and the calendar app's detail and edit dialogs. The edit dialog mirrors the guard (`EventFormFields`' `detailsDisabled`) so those fields are disabled rather than silently dropped on save; the calendar select stays live, because moving a linked copy goes through `moveEvent()`, and it is what **Save** waits for — on a linked copy the button appears only once the select has moved, so a dialog that could change nothing offers **Close** alone. In a shared calendar the viewer does not own, the owner's address is not at hand — so the dialogs pass none and the event reads as locked, while the server would accept the write.
+
+**`organizer` and `organizerEventId` are server-owned**: `EventDataSchema` (`routes/calendar.ts`) has no field for either, so an HTTP edit keeps the stored pair whatever `data` the client posts back. On the file side they are `X-EIGEN-*` lines, which an incoming body can never spell.
+
+### The inbound decision
+
+Every inbound REQUEST — relayed from another Eigen Home, or carried by a DKIM-aligned iMIP mail — takes **one** decision, `decideInboundRequest`, inside the write gate and Home-wide by UID, so two concurrent deliveries can never file two masters for one UID.
+
+1. **Update.** A stored event already linked to an organizer wins, *provided* the sender is the organizer that copy is linked to — a co-attendee cannot hijack an invitation. A REQUEST carrying a `RECURRENCE-ID` attaches as an exception; a full update would collapse the series. The relay states that key as its payload's `recurrenceDate`, so one decision serves both transports with no branch of its own.
+2. **Adopt.** A stored master nobody linked is claimed only when the resource's own organizer address — the `X-EIGEN-IMPORTED-ORGANIZER` stamp, else its `ORGANIZER` — equals the verified sender. The file keeps its identity: same resource, same row ids, with the link stamped in and the guest list taken from the message. An occurrence-only REQUEST for a series nobody organizes here yet is dropped.
+3. **Create**, in the default calendar, but only when the body's `ORGANIZER` *is* the sender: a new invitation is attributed to its sender, so the two must agree. A REQUEST naming one occurrence of a series this Home does not hold files as a **standalone event** that keeps its `RECURRENCE-ID` — the only durable record of which occurrence it answers for, and what a later update or cancellation of that occurrence finds, since the copy *is* that instance rather than an exception on a series. A Home with no default calendar is dropped.
+
+**An occurrence copy gives way to the series.** A later REQUEST for the whole series — the organizer widening the invitation — passes the ordering guard against the occurrence copy's own revision first, and only then replaces it: the standalone resource is purged and the series written in its place, in that order inside one gate hold, so nothing the guest holds is dropped before the replacement is certain to file. The guest's own reminders and color carry over, the two fields a linked copy lets them keep; their PARTSTAT does not, because the guest list of the new resource is the one the message states. The organizer's override for that occurrence follows right behind it as an exception and carries the list the organizer holds for it, so the answer they already gave stands. A cancellation naming that occurrence deletes the copy outright rather than excluding an instance from it, since it has no series to exclude one from.
+
+A Home is never its own organizer: a relayed message naming this Home's own id is dropped, because adopting it would make its own event a linked copy of itself.
+
+**The ordering guard.** `isNewerRevision` (RFC 5546 § 2.1.5) orders on SEQUENCE first and `DTSTAMP` second, against the revision the **stored resource** holds for that occurrence (`storedRevision`: the VEVENT's own numbers, or for a cancelled occurrence the `X-EIGEN-EXDATE` stamp beside its `EXDATE`, falling back to the master's SEQUENCE when a client wrote that `EXDATE`). A strictly lower SEQUENCE always loses. With equal SEQUENCEs an equal-or-newer `DTSTAMP` is applied as the redelivery it is — the stamp has one-second resolution, so two revisions inside one second are indistinguishable — and when **either** side carries no stamp there is nothing to order by, so the message is applied for the same reason. A redelivery then patches to nothing, which costs no ctag bump and tells the user nothing twice. An incoming stamp more than 24 hours ahead of the receiver's clock is clamped to now, or it would outrank every genuine update that follows it at the same SEQUENCE.
+
+**Fire-and-forget receivers never raise.** An inbound message the store will not keep — over `EVENT_MAX_BYTES`, or over the storage budget — is dropped and logged rather than thrown: the mail it rode in on has already landed, the remaining VEVENTs of the message still file, and there is nobody to answer a 413 or a 507 to.
 
 **SSE events**: `calendar:invite-received`, `calendar:invite-updated`, `calendar:invite-cancelled`, `calendar:invite-rsvp`.
 
-## SSE Events
+## iMIP (Email-Based Calendar Invitations)
 
-Full list of calendar SSE events (defined in `packages/lib/src/types/sse.ts`):
+iMIP carries invitations between Eigen users and external parties over email (RFC 6047), layered on the invitation system above: external attendees get mail instead of in-app linked copies.
 
-| Event                       | Trigger                           |
-|-----------------------------|-----------------------------------|
-| `calendar:calendar-created` | Calendar created                  |
-| `calendar:calendar-updated` | Calendar updated (name/color/shares) |
-| `calendar:calendar-deleted` | Calendar deleted                  |
-| `calendar:event-created`    | Event created                     |
-| `calendar:event-updated`    | Event updated                     |
-| `calendar:event-deleted`    | Event deleted                     |
-| `calendar:shared`           | Calendar shared with user         |
-| `calendar:unshared`         | Calendar share removed            |
-| `calendar:invite-received`  | Invitation received by attendee   |
-| `calendar:invite-updated`   | Invitation updated by organizer   |
-| `calendar:invite-cancelled` | Invitation canceled by organizer |
-| `calendar:invite-rsvp`      | Attendee RSVP propagated to organizer |
+### Outbound flow (Eigen → external)
 
-Shared calendar users are also notified via `notifySharedCalendarUsers()` when events are created/updated/deleted.
+- **Create with external attendees**: `invite-propagation.ts` detects attendees with no Eigen account and calls `composeInviteEmail()` → `sendMail()`. Sends `METHOD:REQUEST`.
+- **Update**: `composeUpdateEmail()` → an updated `METHOD:REQUEST`. **Cancel**: `composeCancelEmail()` → `METHOD:CANCEL`.
+- **Attendee RSVP**: `composeRsvpReply()` → `METHOD:REPLY`, from `rsvp()` and from `deleteEvent()` (a delete is a decline). A `scope:'this'` RSVP carries a `RECURRENCE-ID` for the original instant, so the organizer applies the PARTSTAT to that occurrence and not to the series.
+- **The body is projected, never the stored file.** `serializeEventForImip` builds a fresh VCALENDAR from the row, so it carries no `X-EIGEN-*` line by construction, and `stripEigenStamps` runs over it anyway. **No `VALARM` ever travels with a message**: the organizer's reminders are their own, and an `email` one would ship as `ACTION:EMAIL` naming the organizer as its `ATTENDEE`, so every guest's client would mail the organizer at the trigger. The `URL` stays — guests seeing the link is the point. A REQUEST asks each guest to reply (`RSVP=TRUE`) and rides the organizer along as an accepted attendee (RFC 5546).
+
+### Inbound flow (external → Eigen)
+
+- **Mail delivery hook**: inside `Mail.mailboxDeliver` (`lib/mail/mail-domain.ts`). Once the raw bytes are appended to INBOX the message is parsed and scanned for a `text/calendar` part; if there is one, `processInboundImip(home, parsedMail)` runs. This is **blocking on purpose**, so a client reacting to the new-mail SSE already finds the event. The surrounding `try`/`catch` only logs: a malformed invite never fails the delivery.
+- **Sender authentication**: every mutation binds to the message `From:`, and the verdict about that sender is **computed at the delivery seam and handed to the calendar**. `mailboxDeliver` calls `verifyImipSender` (`lib/mail/imip-auth.ts`) with the parsed `Authentication-Results`, our own authserv-id and the `From:` domain, and passes the `{ verified, reason }` it answers into `processInboundImip`, which acts on a verified one and logs the reason otherwise. Only delivered mail carries our MTA's stamp, so only that path can produce a verdict — a `.eml` a user imports never reaches the calendar at all. A verdict is `verified` when the message carries an `Authentication-Results` header written by our own verifying MTA (authserv-id equal to `getMailDomain()`) recording a `dkim=pass` whose `header.d`/`header.i` domain is DMARC-relaxed-aligned with the `From:` domain. `verifyImipSender` reads only the topmost header stamped with our authserv-id, because OpenDKIM prepends its result and strips pre-existing ones with that id (`AuthservID` + `RemoveARFrom` in `docker/postfix/entrypoint.sh`), so a header beneath it is a stale hop or a forgery. Any other case fails closed: the part is not processed, one info line is logged with the reason, and the invite stays visible as a normal calendar attachment. An operator fronting Eigen with an MTA that writes no such header has automatic iMIP off by design, and every invite arrives as a plain attachment. Internal Eigen↔Eigen invitations never take this path.
+- **An organizer message this Home's own address signed is dropped.** A REQUEST or CANCEL whose verified sender is the recipient's own address is their own mail coming back — an invitee address that forwards to them, a list they are on. Acting on it would let them seize their own event as somebody else's copy, after which every CalDAV PUT on it is reduced to alarms. A REPLY from one's own address is legitimate and is still processed.
+- **`METHOD:REQUEST`** takes the one inbound decision above (`receiveImipRequest`), with `organizerUserId = external_<sender>`.
+- **`METHOD:CANCEL`** removes the linked event (`removeInvitation`); one carrying a `RECURRENCE-ID` cancels just that instance (`cancelInvitationOccurrence`), under the same ordering guard, and the cancelled occurrence records the CANCEL's SEQUENCE and stamp in its `X-EIGEN-EXDATE`.
+- **`METHOD:REPLY`** moves PARTSTAT on the organizer's own master (`receiveAttendeeStatus`), or onto that instance's exception for an occurrence REPLY (`receiveRsvpForOccurrence`). A REPLY may only set the status of the attendee who sent it, only invited attendees are processed (exception-aware: someone can be invited to a single occurrence only), and a REPLY never resurrects an occurrence the organizer deleted.
+
+### `external_` prefix convention
+
+External organizers have no Eigen user id, so `organizerUserId` is `external_{organizerEmail}` — mirroring the `team_{teamId}` convention. `isExternalOwnerId()` routes an RSVP to email instead of in-app propagation.
+
+### `imip.ts` module
+
+`apps/api/src/lib/calendar/imip.ts` — pure functions, no DB access:
+
+| Function | Purpose |
+|---|---|
+| `composeInviteEmail()` | `OutboundMail` for `METHOD:REQUEST` (new invite) |
+| `composeUpdateEmail()` | `OutboundMail` for `METHOD:REQUEST` (update) |
+| `composeCancelEmail()` | `OutboundMail` for `METHOD:CANCEL` |
+| `composeRsvpReply()` | `OutboundMail` for `METHOD:REPLY` |
+| `summarizeCalendarInvite()` | read-time `CalendarInvite` summary for the message payload |
+| `processInboundImip()` | dispatch inbound iMIP methods to calendar operations |
+
+### Mail UI widget
+
+`apps/mail/src/components/mail/calendar-invite-widget.tsx` renders inline in `email-detail.tsx` for any attachment whose `contentType` starts with `text/calendar`; such parts are excluded from the normal attachment list. The widget is purely presentational: `Mail.messageGet` summarizes each calendar part through the canonical parser into `Attachment.calendarInvite`, and `null` means unparseable ICS, rendered as an explicit error card.
 
 ## Recurrence
 
-- RRULE strings stored/transmitted as-is (no conversion layer)
-- Expansion via `rrule` npm package: `new RRule({...RRule.parseString(rrule), dtstart}).between(from, to)`
-- **Never store expanded occurrences** — expand in memory per query
-- **Exceptions**: Regular events with `parentEventId` + `recurrenceDate`. Cancel = `status: 'cancelled'`, modify =
-  different data at that date
-- **Occurrence keys are wall-clock dates** (`YYYY-MM-DD` in the event's timezone). A substituted
-  modified occurrence renders with the exception's STORED `recurrenceDate` — never the UTC date of
-  its (possibly moved) startTime — so the FE can round-trip `occurrenceDate` into `scope='this'` RSVPs
+- RRULE strings are stored and transmitted as-is (no conversion layer).
+- Expansion runs in memory per query via the `rrule` package; **expanded occurrences are never stored**.
+- **Exceptions** are override VEVENTs in the same file, projected to rows with `parentEventId` + `recurrenceDate`. A cancellation is an `EXDATE`, projected to a `status: 'cancelled'` row.
+- **Occurrence keys are wall-clock dates** (`YYYY-MM-DD` in the series' timezone). A substituted modified occurrence renders with the exception's **stored** `recurrenceDate` — never the UTC date of its possibly-moved `startTime` — so the FE can round-trip `occurrenceDate` into a `scope='this'` RSVP.
+- **A series-wide edit travels as a delta.** The edit dialog opens on the occurrence the user clicked but saves on the master, so "All events in series" sends only what changed: the master's start and end shift by the dialog's own delta (dialog time minus the clicked occurrence's time), and a title, description or location rides along only when the user retyped it — otherwise an override's own title would become the series'. `seriesEditFromOccurrence` (`packages/lib/src/core/calendar/calendar-utils.ts`) is that patch, and the master it shifts comes from `useEvent`.
+- **A range read is bounded by its window**, never by the size of the Home: it loads the non-recurring events that overlap the window, the masters that start at or before its end (rrule never steps back before DTSTART, so a later one has no occurrence inside it), and the exceptions of those masters plus any exception whose own times overlap — which is how an occurrence moved *into* the window shows there. The masters ride into the exception query as a subquery, because one bound variable per master would pass SQLite's cap on a large calendar. A cancelled occurrence is dropped from the answer, and so is the parent occurrence any exception replaces.
 
 ### Recurrence limits
 
-`recurrence-limits.ts` bounds what expansion can be asked to do, because `rrule.between` walks
-occurrence-by-occurrence from dtstart to the query window on the single shared event loop:
+`lib/ical/recurrence-limits.ts` bounds what expansion can be asked to do, because `rrule.between` walks occurrence by occurrence from dtstart to the query window on the single shared event loop:
 
-- **Sub-daily rules are rejected.** `HOURLY`/`MINUTELY`/`SECONDLY` are refused at the API write boundary with a
-  `400` (this is why an HOURLY rule fails to save) and silently stripped at the untrusted-ICS boundary, where a
-  hard error would be the wrong answer. A `SECONDLY` rule starting a year before its window measured ~74s. No
-  mainstream client emits sub-daily recurrence.
-- **Recurring dtstart must fall in 1900–2200.** Same two seams, same reasoning: a pathological dtstart stalls
-  the walk even at `DAILY`. Worst case inside the range is ~110k steps.
+- **Sub-daily rules are rejected**: `HOURLY`/`MINUTELY`/`SECONDLY` are refused at the API write boundary with a 400 and silently stripped at the untrusted-ICS boundary, where a hard error would be the wrong answer. A `SECONDLY` rule starting a year before its window measured ~74 s. No mainstream client emits sub-daily recurrence.
+- **A recurring dtstart must fall in 1900–2200.** Same two seams, same reasoning; the worst case inside the range is ~110k steps.
 - **Materialized occurrences cap** at `MAX_OCCURRENCES` (10 000) per expansion.
-- **Query windows are clamped**, not rejected, to a 5-year span — wide enough for any real view, and it stops
-  a year-9999 range request.
+- **Query windows are clamped**, not rejected, to a 5-year span — the range reads' own bound, in `calendar/occurrences.ts`.
 
-## Rendering a zone-less event
+A rule the index stripped stays in the file, and the resource is flagged `hasUnindexedRecurrence` so a time-range REPORT answers with it for every window.
 
-`timezone` is nullable: only the create/edit dialogs always store one, so API-, CalDAV- and iMIP-created events routinely carry `null` (all-day events store `null` by design). `formatEventWhen` therefore takes the fallback zone as a required argument instead of defaulting to UTC, because the right answer differs per surface:
+## All-day events, intervals and zone-less rendering
 
-- **Browser** (`EventDetailCard`, `calendar-invite-widget.tsx`) passes `viewerTimeZone()` — the runtime's own zone, which is exactly what the month/week grid lays events out in (`formatTime` reads `getHours`, `getEventsForDay` reads `getDate`). Any other choice makes the detail dialog name a different clock time than the slot the grid drew.
+`startTime`/`endTime` of an all-day event are midnight UTC and `endTime` is exclusive (the day after the last day); the frontend must use the UTC date portion and never convert to local time.
+
+`createEvent`/`updateEvent` reject `endTime < startTime` with a 400 and the put seam refuses the same interval with a 403 `valid-calendar-data`, so REST, import and CalDAV PUT all answer it alike. Inbound iMIP bypasses them, so it **clamps** a reversed interval to zero duration at the parse boundary: an emailed invite is fire-and-forget, and dropping it over a malformed interval is worse than showing a zero-length event — the same degrade-don't-reject policy the parser applies to a malformed rrule or TZID. Zero duration stays legal (RFC 5545 §3.6.1). Because all-day uses an exclusive end, one invariant covers timed and all-day alike.
+
+`timezone` is nullable: only the create/edit dialogs always store one, so API-, CalDAV- and iMIP-created events routinely carry `null` (all-day events store `null` by design). `formatEventWhen` therefore takes the fallback zone as a **required** argument:
+
+- **Browser** (`EventDetailCard`, `calendar-invite-widget.tsx`) passes `viewerTimeZone()` — the runtime's own zone, which is what the month/week grid lays events out in. Any other choice makes the detail dialog name a different clock time than the slot the grid drew.
 - **API** (`imip.ts`) has no viewer and must not borrow the server's zone, so invitation mail renders a zone-less timed event in UTC and appends `(UTC)`. An event with a stored zone renders in that zone, unlabelled; the attached `.ics` carries the TZID either way.
 
-All-day events take neither fallback: `formatEventWhen` pins them to UTC, because their bounds are midnight UTC and the date portion is the answer (the same UTC buckets `getEventsForDay` sorts them into). A stored TZID that `Intl` rejects (Outlook's `W. Europe Standard Time`, pre-normalization rows) takes the same fallback as no zone at all — it is the case `normalizeTimezone` now writes as `null` at ingestion.
+All-day events take neither fallback: `formatEventWhen` pins them to UTC, because their bounds are midnight UTC and the date portion is the answer. A stored TZID `Intl` rejects takes the same fallback as no zone at all — the case `normalizeTimezone` writes as `null` at ingestion, after first resolving a Windows zone name (Outlook's `W. Europe Standard Time`) through the CLDR `windowsZones` table beside it (`packages/lib/src/core/calendar/windows-zones.ts`, the `territory="001"` rows, imported by the API through the same React-free deep path). A name neither `Intl` nor that table knows stays `null`: the file's own VTIMEZONE still gives the parser its instants, but an `X-LIC-LOCATION` inside that block is never read, so nothing recovers an IANA name from it ([ROADMAP.md](ROADMAP.md)).
 
-## All-Day Events
+## Quotas
 
-`startTime`/`endTime` are midnight UTC. `endTime` is exclusive (day after last day). Frontend must use UTC date portion,
-never convert to local time.
+Two ceilings guard every calendar write. `EVENT_MAX_BYTES` (5 MiB, `calendar/resource-store.ts`) is the whole-resource safety ceiling — the domain's own, as `CARD_MAX_BYTES` is contacts' — checked on a PUT body before buffering and again on the bytes that would land. Beyond it, calendar shares the **home data** storage budget with mail and contacts: `writePrepared` runs `enforceHomeDataQuota(ownerId, addBytes, creditBytes)` inside the write gate, before any intent is recorded, crediting the size of the stored resource it replaces so every rewrite goes through the edit grace. `Calendar.size()` answers from the in-memory `eventsBytes` counter a reconcile seeds and every write, delete and calendar delete adjusts, so a device sync costs no query per resource. A projection over budget is a 507 — raised directly on REST, returned as the typed `quota` result on a CalDAV PUT (which `davPutResponse` turns into a 507) and on an import (which names how many events landed first). An inbound invitation over budget is **dropped while the mail still lands**, because a fire-and-forget receiver has nobody to answer a 507 to. A move is a rename and a delete is a file removal, so neither is metered. The whole rule — the edit grace and its headroom, the unmetered-Home case, and how the admin Users page sizes a Home nobody has loaded — is in [QUOTA.md](QUOTA.md).
 
-## Interval validation
+## iCalendar import / export
 
-`createEvent`/`updateEvent` reject `endTime < startTime` with `ApiError(400)`. REST and CalDAV PUT both funnel through
-these two methods, so both are covered — interactive protocols where a 400 is actionable. Inbound iMIP bypasses them
-(the `receive*` methods write rows directly), so it instead **clamps** a reversed interval to zero-duration at the
-parse boundary (`imip.ts`): an emailed invite is fire-and-forget, so dropping it over a malformed interval is worse
-than showing a zero-length event — the same degrade-don't-reject policy the parser applies to a malformed rrule/tzid.
-Zero-duration (`endTime == startTime`) stays legal (RFC 5545 §3.6.1; CalDAV/iMIP importers synthesize it). Because
-all-day uses an exclusive end (a valid all-day event is always ≥ `start + 1 day`), the single invariant covers timed
-and all-day alike — no all-day special-casing.
+The whole-file counterpart to the per-resource DAV surface: one route exports stored resources as one `.ics`, two import one. `apps/api/src/lib/calendar/transfer.ts` holds both halves as plain functions over the `Calendar` facade, like the contacts and mail siblings.
 
-## Moving events
+```
+POST /calendar/:ownerId/export             { calendarId, ids? }                             → text/calendar attachment
+POST /calendar/:ownerId/import?calendarId= the .ics file as the raw body                    → { imported, skipped, failed }
+POST /calendar/:ownerId/import-from-drive  { calendarId, sourceOwnerId, sourceMountId, … }  → the same counts
+```
 
-`Calendar.moveEvent(sourceCalId, eventId, targetCalId)` (route `PUT .../events/:id/move`, write on both calendars)
-re-homes an event to another calendar in the same Home as a pure `calendarId` UPDATE, in one transaction. It preserves
-the row identity, timezone, `data` (organizer/attendees/reminders), status and recurrence, and drags the recurrence
-exception children (`parentEventId` rows) along. It never runs the `deleteEvent` iMIP path, so moving a linked invite
-doesn't decline it for the organizer. For CalDAV: the source gets a tombstone for the master uri (clients drop it) and
-the target sees a changed event. Moving a lone recurrence occurrence (an exception row) is rejected.
+All three are `requireNonGuest`, and `resolveTransferCalendar` decides the Home: a **team** home is the only one here that is not the caller's own, reached with `read` access for an export and `write` for an import — the same access `createEvent` takes. Any other owner is refused rather than resolved, because the file would be read out of, or written into, another user's Home and only the relay crosses Homes. `free-busy` may learn *when* a calendar is busy, never what it says, so it is no read access here either.
 
-## Importing an `.ics`
+**Caps.** `ICS_MAX_BYTES` (5 MiB) lives in `packages/lib/src/constants/calendar.ts`, shared FE/BE so a surface refuses an oversize file before uploading it. The server's own ceilings sit in `apps/api/src/lib/core/transfer.ts` with the other whole-file transfer limits: `ICS_IMPORT_MAX_EVENTS` (10 000) and `ICS_IMPORT_MAX_WRITTEN_BYTES` (8 × `ICS_MAX_BYTES`). `/import` reads the body itself (`parse: 'none'`) through `readBoundedBodyBytes`; `/import-from-drive` reads its source through the shared `readImportSourceBytes`, so the ACL decides what a user may read and a name or mime `isIcsFile` does not recognize is a 400 (`NOT_A_CALENDAR_FILE`, spelled once for every whole-file transfer). Both routes exempt themselves from the server idle timeout (`server?.timeout(request, 0)`), because a file of a thousand events writes a resource apiece before either answers.
 
-`POST /calendar/:ownerId/import?calendarId=` takes the file as the raw body; `POST /calendar/:ownerId/import-from-drive` takes the same `calendarId` plus the picked Drive file and reads its bytes server-side through `readImportSourceBytes`. Both are the contacts and mail import pair with a calendar target — same guards (`requireNonGuest` + `requireSelf`), same statuses — and both answer `ImportCountsResult` (`{imported, skipped, failed}`). The target is a calendar this Home owns: an unknown id and a calendar shared *with* the caller both answer 404, because writing into someone else's calendar crosses homes and only the relay may do that. "New calendar" in the picker is `useCreateCalendar` followed by an import, so the route carries no mode union. Both routes exempt themselves from the server idle timeout (`server?.timeout(request, 0)`), because a file of a thousand events writes a row apiece before either answers.
+**Import moves components, so every line the author wrote lands as written.** `Calendar.importEvents(calendarId, bytes)` owns the decode as its mail and contacts siblings do: iCalendar is UTF-8 (RFC 5545 §3.1), so another encoding is a 400 "File is not UTF-8 encoded" and bytes ical.js refuses a 400 `NOT_A_CALENDAR_FILE`, both with nothing written. The event ceiling is counted twice — once on the `BEGIN:VEVENT` lines of the decoded text, before ical.js builds a tree per VEVENT, and again on what the parser returned — because one master can hold ~37 000 `RECURRENCE-ID` VEVENTs inside `ICS_MAX_BYTES`, so a ceiling on masters alone bounds nothing. A `.ics` may be a stream of several VCALENDAR objects (RFC 5545 §3.4), and the whole stream is **grouped by UID** first: a file may spell a master in one object and its overrides in the next. A VEVENT naming no UID gets a minted one.
 
-`Calendar.importEvents(calendarId, bytes)` takes the file's bytes and owns the decode, as `Mail.messageImport` and `Contacts.importCards` do: iCalendar is UTF-8 (RFC 5545 §3.1), so another encoding is a 400 "File is not UTF-8 encoded" and bytes ical.js refuses to parse at all a 400 `NOT_A_CALENDAR_FILE` — both with nothing written, and one over `ICS_MAX_BYTES` a 413. The strict decode (`decodeUtf8Strict`) and the rejection strings live once in `apps/api/src/lib/core/transfer.ts`, with the ceilings every whole-file transfer is bounded by, shared with the preview guards; `packages/lib` keeps only the byte sizes a surface refuses a file at. It then groups the VEVENTs by UID and writes the masters in file order:
+Each series is then assembled as its own resource — the VTIMEZONE blocks it references, the master, its overrides — and written through the **CalDAV PUT seam** under a fresh `<uuid>.ics` with `If-None-Match: *`:
 
-- More than `ICS_IMPORT_MAX_EVENTS` VEVENTs — masters and overrides together, because each one is a row → 413 before anything is written, counted twice: once on the `BEGIN:VEVENT` lines of the decoded text, before ical.js builds a component tree per VEVENT, and again on what the parser returned. The route runs with the idle timeout off on the thread that serves every app, and parsing a file far past the ceiling costs tens of seconds ([ROADMAP.md](ROADMAP.md)). One series fits ~37 000 `RECURRENCE-ID` VEVENTs inside `ICS_MAX_BYTES`, so a ceiling on masters alone bounds nothing.
-- A VEVENT the parser could not read (no DTSTART), and an override whose master the file does not hold, count as `failed`: one malformed member costs the file that member, never the rest of it, the way one refused card costs a vCard import that card.
-- A UID that is empty, longer than 255 characters or carrying a control character → `failed`. It travels into etags and sync deltas, so it has to be storable.
-- A UID any calendar of the Home already holds → `skipped`, so a re-import is a no-op and an invitation already linked never gets a twin.
-- Everything else is inserted as the importing user's own event under a fresh `uri` of `${randomUUID()}.ics`, overrides included — the file's UID is its author's string (it may carry `/`, `..` or quotes), the uri is a CalDAV resource name, and two files that share a UID collide on the `(calendarId, uri)` unique index.
-- **`data.organizer` and `data.attendees` are dropped**, `METHOD` is ignored and reminders are capped at `ICS_IMPORT_MAX_REMINDERS`. A stored organizer locks the event (`isInvitationFromOthers`) and turns its delete into a decline; an attendee list on an organizer-less event sends a REQUEST on every edit and a CANCEL on delete to addresses the file's author chose, and is the row a forged iMIP REPLY matches by UID. An imported invitation is a plain event.
-- That UID's overrides are plain inserts against the master just written, one row per `RECURRENCE-ID`: a file naming the same occurrence twice keeps the **last** VEVENT, where a repeated CalDAV PUT of the same file converges. A fresh master has no stored exceptions, so there is nothing to reconcile and the CalDAV full-replace path (`syncExceptionEvents` in `caldav/resource.ts`) stays out of it. The rows are the ones a PUT of the same file writes: `parentEventId`, the `recurrenceDate` key, the master's timezone when the override names none, and `status: 'cancelled'` for the rows `parseIcs` synthesizes from EXDATE.
-- An event the calendar refuses (a reversed interval, an unparseable RRULE) counts as `failed` and the file continues. A series is all or nothing: an override that fails takes its master and the series' earlier rows with it, through a savepoint per series.
-- The whole file is one `db.transaction`, so a crash mid-file rolls back the ctag bump with the rows and a retry is a clean re-import — without it a half-written master is `skipped` on the retry and its series keeps losing its overrides. The announcement happens after the commit.
+- **Scheduling is the one thing an import takes out.** Every `ATTENDEE` line is dropped (a `VALARM`'s own `ATTENDEE` stays — that is the alarm's recipient, not a guest), and the `ORGANIZER` is removed and kept as one inert `X-EIGEN-IMPORTED-ORGANIZER` that the inbound-REQUEST rule matches a verified sender against. `METHOD` is ignored. An attendee list on an imported event would send a REQUEST on every edit and a CANCEL on delete to addresses the file's author chose, and would be the row a forged iMIP REPLY matches by UID. An imported invitation is a plain event — alarms, `ATTACH`, `CATEGORIES`, unknown `X-` properties and every other line included.
+- **UID uniqueness is Home-wide for an import.** The `import` option of `putResource` widens the holder lookup from "this calendar" to the whole Home, where a device sync — the other caller of that seam — syncs one calendar and owns only that one. A UID any calendar of the Home already holds comes back a `uid-conflict` and counts as `skipped` — which is what makes a partial import retryable: the series already written skip, and a retry finishes the file.
+- A UID that is empty, longer than 255 characters or carrying a control character is `failed`: it travels into etags and sync deltas, so it has to be storable. An override group the file holds no master for is `failed`, one per orphan. A series the put seam refuses for any other reason is `failed` and the file continues.
+- Past `ICS_IMPORT_MAX_WRITTEN_BYTES` the run stops with a 413 naming how many events landed, and past the storage budget with a 507 doing the same — a series is one resource, so a VTIMEZONE the file defines once is copied into every series that names it, and a file well inside its own byte ceiling can ask for many times its size on disk.
+- The whole file runs inside `Calendar.withBatchedEvents()`, so a thousand series cost one list-level broadcast instead of one per series.
 
-A file lands under one ctag bump, one `calendar:event-created` broadcast and one `notifySharedCalendarUsers()`: `createEvent` does all three per call, and a thousand of each would trip the rate limiter. Import and create share `insertEvent()`, the row write, which stamps the ctag its caller bumped.
+**Export is a text splice of the stored lines, not a parse and re-serialize.** `exportEvents` drains the gate, orders the resources by the earliest start among the rows asked for, reads each file's bytes and lifts out its `VTIMEZONE` and `VEVENT` blocks through `spliceBlocks` (`lib/ical/blocks.ts`), dropping every line whose property name `isEigenName` recognizes. A splice rather than `parse → toString`, because ical.js rewrites parameter quoting and order on every line it re-emits, and a file the store only indexed was never Eigen's to rewrite; only Eigen's own lines carry an Eigen name, so dropping those lines whole *is* the strip. The first definition of a TZID wins, so two resources naming one zone carry it once. The result is **one VCALENDAR**, never a concatenation of objects, because many readers take only the first object of a stream. Without `ids` the whole calendar is exported; with them, the resources those ids belong to — an exclusion or an override names the series it is part of — and an unknown id is a 404. A one-event export is named after the event's own title, otherwise after the calendar, clamped to 200 characters and sanitized by `contentDisposition`.
 
-Calendar data has no quota — nothing meters `calendar.db` the way Drive meters bytes — so repeated imports grow it unbounded.
+**Where a user starts an import.** From the calendar itself, and from anywhere an `.ics` is a file. In the calendar app every calendar row's kebab (`apps/calendar/src/components/calendar-sidebar.tsx`) carries **Import events…** beside **Export calendar** — for an own calendar, and for a team calendar the viewer may write in — which opens the shared `FileImportPicker` (a device upload posts the bytes through `useImportCalendarFromDevice`, a Drive pick goes through `useImportCalendar`'s Drive path) with that calendar as the target, the same shape the contacts list's **Import contacts…** takes. Elsewhere the file is the start: a Drive row, a mail attachment chip, a chat or card attachment, and the quick look's own footer. The registry row is `import-calendar` ("Import to Calendar", `packages/lib/src/core/file-actions.ts`), offered for a downloadable `.ics` under `ICS_MAX_BYTES` and hidden for a guest, whose import the route refuses. Unlike the contacts and mail rows it cannot just run: it needs a target, so `useFileActionRunner` opens `ImportToCalendarPicker` (`packages/ui/src/components/calendar/import-to-calendar-picker.tsx`), which lists the viewer's own calendars through `useCalendars` under **My Calendars** and, under **Team Calendars**, the calendars a team home owns and the viewer may write in — a calendar shared out of another *user's* home is no target, because the route refuses it ([ROADMAP.md](ROADMAP.md)) — preselects the viewer's own default calendar, and offers **New calendar** with a name field defaulting to the file name without its extension. Every option carries the home it lives in, and that home rides with the file as `ownerId`: it is the home the route writes into and the one whose event queries go stale. Until the list arrives the select is disabled and reads "Loading calendars…", so the dialog never opens on **New calendar** and then moves under the user. The picker runs the whole action through one hook, `useImportToCalendar` (`hooks/use-transfer.ts`): `useCreateCalendar` first when the target is a new calendar, then `useImportCalendar`. A create that succeeded is remembered for the life of the dialog, so a retry after a failed import imports into it rather than making a second calendar of the same name; a new calendar that took no events at all is deleted again, and the file the picker was opened on rides in as a `FileImportSource`.
 
-**Where a user starts an import.** Anywhere an `.ics` is a file: a Drive row, a mail attachment chip, a chat or card attachment, and the quick look's own footer. The registry row is `import-calendar` ("Import to Calendar", `packages/lib/src/core/file-actions.ts`), offered for a downloadable `.ics` under `ICS_MAX_BYTES` and hidden for a guest, whose import the route refuses. Unlike the contacts and mail rows it cannot just run: it needs a target, so `useFileActionRunner` opens `ImportToCalendarPicker` (`packages/ui/src/components/calendar/import-to-calendar-picker.tsx`), which lists the Home's OWN calendars through `useCalendars` — a calendar shared with the viewer is not a target, and asking only for the owned ones is what keeps one out of the list — preselects the default one, and offers **New calendar** with a name field defaulting to the file name without its extension. The target is always one of the VIEWER's own calendars, a file in a team drive included, exactly as the mail and contacts imports land in the viewer's own mailbox and address book; a team calendar as a target is a ROADMAP row. Until the list arrives the Select is disabled and reads "Loading calendars…", so the dialog never opens on **New calendar** and then moves under the user; the defaults land once, when the calendars first arrive, and never overwrite what the user chose or typed. The picker owns the whole action: it runs `useCreateCalendar` first when the target is a new calendar, then `useImportCalendarFromDrive` for a Drive subject or `useImportCalendarFromUrl` for anything else, stays open with the hook's error toast on failure (`useDialogPending`) and closes on success. A create that succeeded is remembered for the life of the dialog, so a retry after a failed import imports into it rather than making a second calendar of the same name. The subject the row was run for is snapshotted into the runner's `PickerState` the way a save is, because the menu that drew the row is closed — and its subject null — by the time the picker is confirmed.
+Where the bytes come from is one derivation for every import: `importSourceOf(subject)` (`packages/lib/src/core/file-subject.ts`) answers the `DriveImportSource` for a file at a Drive location and the download URL for anything else.
 
-Where the bytes come from is one derivation for every import: `importSourceOf(subject)` (`packages/lib/src/core/file-subject.ts`) answers the `DriveImportSource` for a file at a Drive location and the download URL for anything else, and both the registry's import rows and this picker branch on it.
+## API routes
 
-## API Routes
-
-`apps/api/src/routes/calendar.ts`, `ownerId` can be user ID or `team_{teamId}`:
+`apps/api/src/routes/calendar.ts`; `ownerId` can be a user id or `team_{teamId}`:
 
 ```
 GET    /calendar/:ownerId/calendars
@@ -229,6 +351,7 @@ PUT    /calendar/:ownerId/calendars/:calId        (includes shares)
 DELETE /calendar/:ownerId/calendars/:calId
 GET    /calendar/:ownerId/event-range/:from/:to   (all calendars)
 GET    /calendar/:ownerId/calendars/:calId/event-range/:from/:to
+GET    /calendar/:ownerId/calendars/:calId/events/:id  (one stored row, not an occurrence)
 POST   /calendar/:ownerId/calendars/:calId/events
 PUT    /calendar/:ownerId/calendars/:calId/events/:id
 DELETE /calendar/:ownerId/calendars/:calId/events/:id
@@ -239,6 +362,7 @@ GET    /calendar/:ownerId/shared                  (shared-with-me list, auto-syn
 PUT    /calendar/:ownerId/shared/:id              (local prefs)
 DELETE /calendar/:ownerId/shared/:id
 GET    /calendar/:ownerId/shared-with-me          (pull: what has owner shared with me?)
+POST   /calendar/:ownerId/export                  ({calendarId, ids?})
 POST   /calendar/:ownerId/import?calendarId=      (raw .ics body)
 POST   /calendar/:ownerId/import-from-drive       ({calendarId} + the Drive source)
 ```
@@ -246,189 +370,97 @@ POST   /calendar/:ownerId/import-from-drive       ({calendarId} + the Drive sour
 Team calendar settings (enable/disable, member permission) are managed via the team router, not the calendar router:
 
 ```
-GET    /team/:teamId/settings                     (includes calendar.enabled)
-PUT    /team/:teamId/settings                     (update: {calendar: {enabled}})
+GET    /team/:ownerId/settings                     (includes calendar.enabled)
+PUT    /team/:ownerId/settings                     (update: {calendar: {enabled}})
 ```
 
-Events endpoint returns `CalendarEventOccurrence[]` — expanded occurrences with `occurrenceDate` field. Free-busy
-permission returns time blocks only.
+The event-range endpoints return `CalendarEventOccurrence[]` — expanded occurrences with an `occurrenceDate` field. A `free-busy` caller gets time blocks only, with cancelled occurrences excluded so their existence and time do not leak.
+
+**Two access rules, one router.** Administering a team home's calendars — listing them, creating, changing and deleting one — takes the team-admin rule (`resolveAdministeredCalendar` → `requireTeamAdmin`), because a team admin is who sets a team calendar's shares; the listing alone lets a member of that team through their membership instead (`resolveListedCalendar`). Every event route takes the calendar share (`checkCalendarAccess`), so a member's `write` share is event-level and the team's events stay on membership. A non-team `ownerId` is the caller's own or a 403.
+
+**A REST bound is never tighter than what the put seam stores.** `routes/calendar.ts` caps the ids and keys Eigen mints — a calendar id, a target calendar id, a recurrence key, a color — at 512 characters, and everything a client may spell for itself — a title, description, location, `RRULE`, `URL`, an attendee address or display name — at `EVENT_MAX_BYTES`, with the list bounds sized the same way (a file holds no more lines than it holds bytes). A shorter bound would leave an event a CalDAV client legitimately stored uneditable from the web app. A calendar name takes the domain's own `CALENDAR_NAME_MAX_LENGTH`.
 
 ## Types
 
 ```typescript
 type CalendarShare = { targetId: string; permission: 'free-busy' | 'read' | 'write' }
-type CalendarItem = { id, name, color, isDefault, visible, shares: CalendarShare[] | null, createdAt, updatedAt }
+type CalendarItem = { id, name, color, isDefault, visible, ctag, shares: CalendarShare[] | null, createdAt, updatedAt }
+type CalendarOption = { id, name, color, ownerId }   // one calendar a viewer may write in, with the home it lives in
 type CalendarEvent = { id, calendarId, uid, uri, title, description, location, startTime, endTime, allDay, rrule, timezone, parentEventId, recurrenceDate, status, sequence, etag, data, createByUserId, createdAt, updatedAt }
 type CalendarEventOccurrence = CalendarEvent & { occurrenceDate: string }
 type FreeBusyBlock = { startTime, endTime, allDay, status: 'confirmed' | 'tentative' }
 type SharedCalendar = { id, ownerUserId, calendarId, calendarName, calendarColor, permission, color, visible, createdAt, updatedAt }
 type Attendee = { email, name?, status: 'pending'|'accepted'|'declined'|'tentative', role: 'required'|'optional' }
-type EventData = { reminders?: Reminder[], attendees?: Attendee[], organizer?: { userId, email, name? }, organizerEventId?, url?, notes?, color? }
+type EventData = { reminders?: Reminder[], attendees?: Attendee[], organizer?: { userId, email, name? }, organizerEventId?, url?, color? }
 ```
 
-Defined in `packages/lib/src/types/calendar.ts`.
+Defined in `packages/lib/src/types/calendar.ts`. `CalendarEvent.uri` and `.etag` are the resource's, joined onto every event row of that file.
 
-## Frontend Hooks
+## Frontend hooks
 
-All hooks in `packages/lib/src/core/calendar/hooks/use-calendar.ts`:
+All in `packages/lib/src/core/calendar/hooks/use-calendar.ts`:
 
-| Hook                          | Purpose                                    |
-|-------------------------------|--------------------------------------------|
-| `useCalendars(ownerId)`       | List calendars for an owner                |
-| `useCreateCalendar(ownerId)`  | Create calendar mutation                   |
-| `useUpdateCalendar(ownerId)`  | Update calendar mutation (name/color/shares/visible) |
-| `useDeleteCalendar(ownerId)`  | Delete calendar mutation                   |
-| `useEvents(ownerId, from, to)` | All events in time range (all calendars)  |
-| `useCreateEvent(ownerId)`     | Create event mutation                      |
-| `useUpdateEvent(ownerId)`     | Update event mutation                      |
-| `useDeleteEvent(ownerId)`     | Delete event mutation                      |
-| `useCalendarAccess(ownerId, calId)` | Get calendar shares (if `write` permission) |
-| `useAllSharedCalendarEvents(sharedCalendars, from, to)` | Parallel queries for all visible shared calendar events |
-| `useSharedCalendars(ownerId)` | List shared calendars (triggers team sync) |
-| `useUpdateSharedCalendar(ownerId)` | Update local prefs (color/visible)    |
-| `useDeleteSharedCalendar(ownerId)` | Remove shared calendar entry          |
-| `useRsvp(ownerId)`            | RSVP mutation (accept/decline/tentative)   |
+| Hook | Purpose |
+|---|---|
+| `useCalendars(ownerId)` | list calendars for an owner |
+| `useCreateCalendar(ownerId)` | create calendar |
+| `useUpdateCalendar(ownerId)` | update calendar (name/color/shares/visible) |
+| `useDeleteCalendar(ownerId)` | delete calendar |
+| `useEvents(ownerId, from, to)` | all events in a range (all calendars) |
+| `useEvent(ownerId, calId, id)` | one stored row — the master an edit dialog opened on an occurrence saves on |
+| `useCreateEvent(ownerId)` / `useUpdateEvent(ownerId)` / `useDeleteEvent(ownerId)` | the event mutations |
+| `useMoveEvent(ownerId)` | re-home one event to another calendar |
+| `useCalendarAccess(ownerId, calId)` | calendar shares (with `write` permission) |
+| `useAllSharedCalendarEvents(sharedCalendars, from, to)` | parallel queries for every visible shared calendar |
+| `useSharedCalendars(ownerId)` | shared-calendar list (triggers the team sync) |
+| `useSharedCalendarLabel(sharedCalendars)` | how one shared calendar reads in a list, owner included |
+| `useCalendarOptions(ownerId, calendars, sharedCalendars)` | every calendar the viewer may write in, as `CalendarOption[]` |
+| `useUpdateSharedCalendar(ownerId)` / `useDeleteSharedCalendar(ownerId)` | local prefs / remove entry |
+| `useRsvp(ownerId)` | RSVP mutation |
 
-The import hook lives beside them in `use-transfer.ts`: `useImportCalendar` takes a `FileImportSource` (a Drive file, or the download URL of bytes the browser fetches) plus the target `calendarId` in its mutation variables and reports the three counts in one toast.
+The transfer hooks live beside them in `use-transfer.ts`: `useImportCalendar` takes a `FileImportSource` plus the target home and `calendarId` in its mutation variables and reports the three counts in one toast, `useImportToCalendar` wraps it with the create-then-import the picker needs, and `useExportCalendar` downloads one calendar, or the events an `ids` selection names, as one `.ics`. `isTransferableCalendarHome` is the predicate beside them for which homes a transfer route resolves.
 
-**Query keys**: `calendarKeys` with `ownerId`-scoped hierarchy — `all > owner(ownerId) > calendars/events/shared`.
-SSE handler in `packages/lib/src/core/calendar/sse-handlers.ts` routes events to invalidation functions.
+**Query keys**: `calendarKeys`, `ownerId`-scoped — `all > owner(ownerId) > calendars/events/shared`. The SSE handler in `packages/lib/src/core/calendar/sse-handlers.ts` routes events to the invalidation functions.
 
-## iMIP (Email-Based Calendar Invitations)
+## SSE events
 
-iMIP enables calendar invitations between Eigen users and external parties via email (RFC 6047). It is layered on top of the existing invitation system — external attendees receive emails instead of in-app linked events.
+Defined in `packages/lib/src/types/sse.ts`:
 
-### Outbound flow (Eigen → external)
+| Event | Trigger |
+|---|---|
+| `calendar:calendar-created` | calendar created |
+| `calendar:calendar-updated` | calendar updated (name/color/shares) |
+| `calendar:calendar-deleted` | calendar deleted |
+| `calendar:event-created` | resource created |
+| `calendar:event-updated` | resource updated |
+| `calendar:event-deleted` | resource deleted |
+| `calendar:events-changed` | one bulk write (a whole-file import) stands for every per-resource event it held back |
+| `calendar:shared` / `calendar:unshared` | calendar shared with / unshared from a user |
+| `calendar:invite-received` / `-updated` / `-cancelled` / `-rsvp` | the invitation lifecycle |
 
-- **Create event with external attendees**: `invite-propagation.ts` detects attendees with no Eigen account and calls `composeInviteEmail()` → `sendMail()`. Sends `METHOD:REQUEST`.
-- **Update event**: same path calls `composeUpdateEmail()` → updated `METHOD:REQUEST`.
-- **Cancel event**: `composeCancelEmail()` → `METHOD:CANCEL`.
-- **Attendee RSVP**: when an Eigen user RSVPs to an externally-organized event, `calendar.ts` calls `composeRsvpReply()` → `METHOD:REPLY`. Triggered both from `rsvp()` and from `deleteEvent()` (delete = decline). A `scope:'this'` RSVP passes the occurrence's `recurrenceDate`, so the REPLY carries a `RECURRENCE-ID` for the original instant (from `computeOccurrenceTimes`) and the organizer applies the PARTSTAT to that occurrence, not the whole series; a master-scoped RSVP replies without one (RFC 5546).
+An announcement reaches the owner's own tabs **and** every Home the calendar is shared with (`notifySharedCalendarUsers`). A PUT of bytes that were already stored commits nothing and therefore announces nothing.
 
-### Inbound flow (external → Eigen)
+## Known limits
 
-- **Mail delivery hook**: inside `Mail.mailboxDeliver` (`apps/api/src/lib/mail/mail-domain.ts`). Once the raw bytes are appended to INBOX, the message is parsed and scanned for a `text/calendar` attachment; if there is one, `processInboundImip(home, parsedMail)` runs. This is **blocking on purpose** — "blocking so event exists before client queries" — so a client that reacts to the new-mail SSE already finds the event in its calendar. The surrounding `try`/`catch` only logs: a malformed invite never fails the delivery.
-- **Sender authentication**: every mutation below binds to the message `From:` address, so `processInboundImip` acts automatically only when that sender is authenticated. "Authenticated" means the message carries an `Authentication-Results` header written by our own verifying MTA — authserv-id equal to `getMailDomain()` — recording a `dkim=pass` whose `header.d` (or `header.i`) domain is aligned with the `From:` domain (exact match or a subdomain either way, DMARC-style relaxed alignment). The check (`verifyImipSender` in `apps/api/src/lib/mail/imip-auth.ts`) reads only the topmost header stamped with our authserv-id: OpenDKIM prepends its result and strips pre-existing ones with our authserv-id (`AuthservID` + `RemoveARFrom` in `docker/postfix/entrypoint.sh`), so a header beneath it is a stale hop or a forgery, never authoritative. Any other case — no header, a fail, an unaligned domain, or a forged header from outside — fails closed: the iMIP part is not processed, one info line is logged with the reason, and the invite stays visible as a normal calendar attachment. When inbound mail does not pass through the bundled Postfix/OpenDKIM — an operator fronting Eigen with their own MTA that writes no `Authentication-Results` header with our authserv-id — automatic iMIP processing is off by design and every invite arrives as a plain attachment for the user to add manually. Internal Eigen↔Eigen invitations never take this path (`invite-propagation.ts` delivers them in-app via `sendToHome`, dropping the iMIP attachment on the courtesy email), so they are unaffected.
-- **`METHOD:REQUEST`**: creates a linked event in the recipient's calendar via `calendar.receiveInvitation()`. If a linked event with the same `uid` already exists, updates it via `calendar.receiveInvitationUpdate()`. A single-occurrence REQUEST (one carrying a `RECURRENCE-ID`) instead attaches/updates an exception on the linked series via `calendar.receiveInvitationException()`, so a rescheduled instance doesn't collapse the whole series.
-- **`METHOD:CANCEL`**: removes the linked event via `calendar.removeInvitation()`. A single-occurrence CANCEL (carrying a `RECURRENCE-ID`) instead cancels just that instance via `calendar.cancelInvitationOccurrence()`, which applies the same RFC 5546 SEQUENCE replay guard as the REQUEST path (strictly-older CANCELs are dropped; the canceled exception records the CANCEL's SEQUENCE).
-- **`METHOD:REPLY`**: updates attendee status on the organizer's event via `calendar.updateAttendeeStatus()`. A single-occurrence REPLY (carrying a `RECURRENCE-ID`) instead lands the sender's PARTSTAT on that instance's exception via `calendar.rsvpForOccurrence()`, so declining one occurrence doesn't mark the whole series. Only invited attendees are processed (exception-aware: an occurrence-only invitee lives on the exception's attendee list), and a REPLY never resurrects an occurrence the organizer deleted — it moves PARTSTAT only.
+- **A calendar can grow past what one `.ics` imports back.** The export joins every stored resource into one string in memory and nothing bounds it, while both import routes bound one file ([ROADMAP.md](ROADMAP.md)).
+- **Partial retrieval and filtering are answered as supersets.** A `calendar-data` projection, `expand`, `limit-recurrence-set`, a `prop-filter`/`text-match` and a `sync-collection` `nresults` limit are all parsed past, so a client that asked for a narrow answer pays the full bytes ([ROADMAP.md](ROADMAP.md)).
+- **`RANGE=THISANDFUTURE` on a `RECURRENCE-ID` degrades to a single-instance edit**, and `RDATE`-added occurrences never appear in a range read — mainstream clients split such series into new UIDs. The file keeps both, and the resource is flagged so a time-range REPORT still returns it.
+- **A sub-daily or out-of-range rule is stripped from the index, not from the file**: the event draws as a single occurrence while the bytes a client GETs still carry the rule.
+- **A REST event update carries no `expectedEtag`**, where the contacts twin answers 412 on a mismatch, so two web clients editing one event last-write-win ([ROADMAP.md](ROADMAP.md)).
+- **A CalDAV PUT fans nothing out**: the guests of an event a client created are not mailed until the owner touches it in the web app ([ROADMAP.md](ROADMAP.md)).
+- **An iMIP invitation mail carries one VEVENT**, so an external guest invited to a series gets the master alone, without the override VEVENTs and `EXDATE`s RFC 5546 expects beside it; an Eigen guest gets them as occurrence messages ([ROADMAP.md](ROADMAP.md)).
 
-### `external_` prefix convention
+## Client setup
 
-External organizers have no Eigen user ID. `organizerUserId` is set to `external_{organizerEmail}` (e.g. `external_alice@example.com`). Mirrors the `team_{teamId}` convention used for team owner IDs. Code uses `organizerUserId.startsWith('external_')` to route RSVP replies via email instead of in-app propagation.
-
-### `imip.ts` module
-
-`apps/api/src/lib/calendar/imip.ts` — pure functions, no DB access:
-
-| Function                  | Purpose                                                     |
-|---------------------------|-------------------------------------------------------------|
-| `composeInviteEmail()`    | Build `OutboundMail` for `METHOD:REQUEST` (new invite)      |
-| `composeUpdateEmail()`    | Build `OutboundMail` for `METHOD:REQUEST` (update)          |
-| `composeCancelEmail()`    | Build `OutboundMail` for `METHOD:CANCEL`                    |
-| `composeRsvpReply()`      | Build `OutboundMail` for `METHOD:REPLY` (attendee response) |
-| `extractCalendarAttachment()` | Find `text/calendar` attachment in a parsed mail        |
-| `summarizeCalendarInvite()` | Read-time `CalendarInvite` summary for the message payload |
-| `processInboundImip()`    | Dispatch inbound iMIP methods to calendar operations        |
-
-### Mail UI widget
-
-`apps/mail/src/components/mail/calendar-invite-widget.tsx` — rendered inline in `email-detail.tsx` for any attachment with `contentType.startsWith('text/calendar')`. Regular file attachments with `text/calendar` content type are excluded from the normal attachment list and shown as the widget instead. The widget is purely presentational: `Mail.messageGet` summarizes each calendar part via the canonical ical.js parser (`summarizeCalendarInvite`) into `Attachment.calendarInvite` (`CalendarInvite` in `packages/lib/src/types/mail.ts`); `null` means unparseable ICS and renders as an explicit error card.
-
-## CalDAV
-
-`apps/api/src/lib/caldav/` serves RFC 4791 CalDAV at `/dav/calendars/:ownerId/:calendarId/` (PROPFIND,
-REPORT calendar-query/multiget/sync-collection, MKCALENDAR, DELETE on the collection, per-resource GET/PUT/DELETE). Auth via
-`verifyProtocolAuth()`. One `.ics` resource per UID: the master VEVENT plus one override VEVENT per
-stored exception — exception rows are internal and never appear as their own resources.
-
-**MKCALENDAR creates the calendar at the client-chosen URL segment** (sanitized by `sanitizeCalendarId`, which is `isSafePathSegment` in `lib/core/path-utils.ts` over the NFC form — the one rule CardDAV resource names and mail draft ids take too; 405 when the id already exists, 201 with a `Location` header), so a client's follow-up PROPFIND of the URL it chose resolves. **DELETE on that same URL removes the calendar** (204; 404 for an unknown id, 403 for the default one), through the very `deleteCalendar()` the web route calls, so the guard and the `calendar:calendar-deleted` SSE event are shared by both surfaces. **PROPFIND honors the requested prop list** via the shared core in `lib/dav/propfind.ts` (both DAV surfaces use it): requested props we have come back in the 200 propstat, unknown ones in a 404 propstat echoing their namespace (omitted under `Brief: t` / `Prefer: return=minimal`), a bodyless PROPFIND stays allprop, and member rows carry an empty `resourcetype`. Every multiget href gets a response row — malformed or out-of-collection hrefs come back as 404 rows echoing the original href.
-
-**Serialization** (`ical-serialize.ts`):
-
-- Every referenced TZID gets a generated VTIMEZONE block (RFC 5545 §3.6.5). `vtimezone.ts` builds it
-  from Intl offset data: transitions compressed to two open-ended RRULE observances when the zone's
-  DST rule is regular, one observance per transition otherwise
-- RECURRENCE-ID names the ORIGINAL occurrence — computed from the master via
-  `computeOccurrenceTimes(master, recurrenceDate)` — in the master's TZID form, never the exception's
-  moved startTime (which would orphan the override)
-- The same serializer produces outbound iMIP bodies (`serializeEventForImip`), so Eigen↔Eigen
-  federation keeps instants intact for non-server timezones
-
-**Parsing** (`ical-parse.ts`):
-
-- Datetimes with a resolvable zone (VTIMEZONE present, or UTC `Z`) resolve through ical.js. A valid
-  IANA TZID without a VTIMEZONE is interpreted in that zone (RFC 7809) — consistent with the stored
-  `timezone` column that recurrence expansion trusts. Genuinely floating datetimes map their wall
-  components via `Date.UTC`, never through the server's local timezone
-- RECURRENCE-ID / EXDATE → `recurrenceDate` keys are wall-clock dates: TZID-form values key on their
-  own wall components (RFC 5545 canonical), UTC-`Z` values convert the instant to the SERIES timezone,
-  floating/DATE values keep their raw components
-- The series timezone is resolved per UID, from that UID's master VEVENT (the one without a
-  RECURRENCE-ID). A CalDAV resource holds a single series, but a previewed or imported file holds every
-  series a calendar has, each in its author's own zone — one file-wide series tz would key a second
-  series' UTC-`Z` overrides through the first one's. A master that named no TZID keeps its series in
-  UTC: that is a resolved answer, not a missing one. Only an override no UID groups with — an exporter
-  wrote the UID on one side of the pair only — falls back to its own DTSTART zone and then to the first
-  master's, so a file that names a single series still keys through that series' zone
-- The end of an event is its `DTEND`, or its `DURATION` when it names one (RFC 5545 §3.6.1, which Apple
-  and Outlook both emit), through `ICAL.Event.endDate`. A VEVENT with neither keeps the hour a timed row
-  is drawn as and the day an all-day row is
-- A VEVENT the parser cannot read — no DTSTART, a value it cannot make a date of — is skipped and
-  counted in `IcsParseResult.skipped` instead of failing the file, the way the vCard builder counts a
-  card the parser refuses. Each caller answers for its own surface: a CalDAV PUT is one series a client
-  just wrote, so any skipped VEVENT makes the payload a 400; a preview counts them in `dropped` and an
-  import in `failed`
-- Each VEVENT is wrapped in an `ICAL.Event` constructed with `{ exceptions: [] }`. Handed an exception
-  list, ical.js skips the scan of every sibling VEVENT it otherwise runs to relate a series' overrides —
-  a scan per VEVENT, quadratic over a whole file (20,000 events: 17s, and a 5 MiB export minutes). This
-  parser relates overrides itself and reads only `uid`, `summary`, `startDate` and `endDate` off the
-  event, none of which consult its exceptions
-- `ATTENDEE` / `ORGANIZER` values are URIs, so their `mailto:` scheme is stripped case-insensitively
-  (clients emit `MAILTO:` too). A surviving prefix would match no address in any comparison — the
-  owner check, the attendee lookup, the RSVP fan-out
-- Not supported (accepted, low): `RANGE=THISANDFUTURE` on RECURRENCE-ID degrades to a single-instance
-  edit, and RDATE-added occurrences never appear — mainstream clients split such series into new UIDs
-
-**PUT is a full-resource replace**: `syncExceptionEvents` (`resource.ts`) upserts the exceptions in
-the payload (preserving their SEQUENCE) and deletes stored exceptions of the master that are absent —
-how Apple models "undo delete occurrence". The prune is quiet: ctag bump + master etag touch, no
-tombstone, no cancellation fan-out. The PUT response ETag is re-read after the exception sync so it
-always matches storage.
-
-**Canceled exceptions serve as EXDATE, never as override VEVENTs**: `eventsToIcs` emits a deleted
-occurrence as an `EXDATE` line on the master (master-TZID form; `VALUE=DATE` for all-day) and skips
-the canceled row's VEVENT. Clients round-trip EXDATE natively; a `STATUS:CANCELLED` override VEVENT
-is dropped by Thunderbird's next PUT, which the full-replace prune would read as "client removed the
-exception" and resurrect the occurrence. The parser maps EXDATE back to canceled exception rows, so
-the round-trip is symmetric.
-
-Regression nets: `caldav.test.ts` (protocol), `caldav-roundtrip.test.ts` (serialization/parse
-round-trips, TZ-pinned floating tests), `vtimezone.test.ts` (generator vs Intl),
-`calendar-timezone.test.ts` (occurrence keying), `ical-imip.test.ts` (iMIP scoping),
-`caldav-client-sync.test.ts` (client-faithful sync flows against web-created events),
-`ical-parse.test.ts` (multi-series files, the shape a preview and an import feed the parser).
-
-### Known limits of the regenerate model
-
-Both follow from storing columns and re-synthesizing the resource on GET, and both are addressed in [PROPOSAL_CALENDAR_ICS_FILES.md](proposals/PROPOSAL_CALENDAR_ICS_FILES.md):
-
-- **The round-trip is lossy.** `parseIcs` keeps what the columns model and `eventsToIcs` writes only that back, so a client's `VALARM` details, `ATTACH`, `RDATE`, `CATEGORIES`, `X-` properties and `RANGE=THISANDFUTURE` do not survive a PUT followed by a GET, and a sub-daily `RRULE` comes back as a single event.
-- **No UID-conflict check on PUT.** A UID already stored under another uri in the same calendar creates a second row; CardDAV answers the same case with `no-uid-conflict`.
+The same credential story as CardDAV and IMAP: HTTP Basic auth with an app password (the primary-password fallback fails under 2FA). Point clients at `https://<domain>/` (or `/.well-known/caldav`, redirected to `/dav/` at the Caddy edge) with the Eigen email as username. The device-setup how-to is the help-center article [connect/calendar-client](../apps/index/src/data/support/connect/calendar-client.md). The **Integrations** page (`apps/space/src/routes/_auth.services.tsx`) surfaces a CalDAV address card beside CardDAV, IMAP and WebDAV: the discovery root, the calendar home, and one address per own calendar (`useCalendars`), because a client such as Thunderbird subscribes per collection and never revisits the home for a calendar created after it connected.
 
 ## Where the code lives
 
-- **`apps/api/src/lib/calendar/`** — the domain. `calendar.ts` is the `Calendar` class; around it sit the pure
-  helpers (`recurrence.ts` + `timezone.ts` for expansion and zone math, `recurrence-limits.ts` for the guards,
-  `mappers.ts` for row→domain + `computeEtag`), the storage layer (`schema.ts`, `db-config.ts`, `types.ts`), access
-  resolution (`get-calendar.ts`, the Drive `get-drive.ts` analogue), the two propagators
-  (`share-propagation.ts`, `invite-propagation.ts`), `imip.ts`, and `sse-events.ts`.
-- **`apps/api/src/lib/caldav/`** — the protocol layer: router, REPORT handlers, `ical-serialize.ts`,
-  `ical-parse.ts`, `vtimezone.ts`, `resource.ts`.
-- **`apps/api/src/routes/calendar.ts`** — thin route bindings.
-- **`packages/lib/src/core/calendar/`** — FE hooks + SSE handlers, `calendar-utils.ts` (`formatEventWhen`,
-  `rruleToText`, `viewerTimeZone`) and `preview-lines.ts` (the method labels an `.ics`
-  quick look shows); shared types in `packages/lib/src/types/calendar.ts`.
-- **`packages/ui/src/components/calendar/`** — what draws an event outside the calendar app too:
-  `EventDetailCard` (one event, read-only, from data alone — the detail dialog's body and the `.ics` quick
-  look's card, [PREVIEWS.md](PREVIEWS.md)), `AttendeeList` beside it, and `ImportToCalendarPicker`.
+- **`apps/api/src/lib/calendar/`** — the domain, split Mount-style: `calendar.ts` (the `Calendar` facade — the write gate, the index seams, the byte counter and the announcements; every sibling call goes through it) with sibling modules of plain functions over it: `calendar-store.ts` (the store seam — the index reads, `putResource`/`deleteResource`, the `prepareResource` + `writePrepared` pair `writeResource` wraps, and the row projection), `events.ts` (create, update, delete and move, plus the locked internals every other sibling writes an event through), `reconcile.ts` (the stat-only reconcile, the staged-delete sweep, calendar recovery and the copy rule), `invitations.ts` (every inbound scheduling message and every RSVP), `shares.ts`, `occurrences.ts` (the range reads), `transfer.ts` (whole-file export and import). Beside them: `resource-store.ts` (what `.ics` and `calendars/` mean — `sanitizeCalendarId`, `sanitizeEventUri`, `resourcePath`, `statCalendarDir`, `readCalendarTotalSize`, `EVENT_MAX_BYTES` — plus the two SQL seams every writer of the index shares, `indexResource` and `clearPendingWrite`, over the domain-neutral machinery in `lib/core/indexed-file-store.ts`: the write gate, `sanitizeResourceUri`, `uriKeyOf`, `computeResourceEtag`, `writeResourceFile`, `readResourceFile`, the create-time `displaceUnindexedFile`, the directory scan `statResourceDir` and the stat diff `diffFileStats` it feeds, the rebuild generation `nextSyncGen`, the uid guard `dedupeByUid` and the `BroadcastBatch`, none of which knows SQL; the atomic-temp sweep `sweepAtomicTemps` and the durable write/rename/unlink primitives live in `core/local-filesystem.ts`), `get-calendar.ts` (access resolution, the Drive `get-drive.ts` analogue), `share-propagation.ts`, `invite-propagation.ts`, `imip.ts`, `recurrence.ts`, `event-input.ts`, `mappers.ts`, `types.ts` (the inbound payload shapes), `schema.ts`, `db-config.ts`, `sse-events.ts`.
+- **`apps/api/src/lib/ical/`** — the format itself, read and written by every surface that meets an `.ics` (the store, iMIP, import, export, quick look, CalDAV): `ical-parse.ts` (the two readers, the `EIGEN` names, the address and key helpers), `ical-component.ts` (build, patch, re-stamp, strip), `blocks.ts` (the VTIMEZONE/VEVENT splice an export joins files with), `vtimezone.ts`, `wall-clock.ts`, `recurrence-limits.ts`, behind an `index.ts` barrel.
+- **`apps/api/src/lib/caldav/`** — the protocol layer only: `caldav-router.ts`, `discovery.ts`, `propfind.ts`, `proppatch.ts`, `report.ts`, `resource.ts`, `xml-builder.ts`, `xml-parser.ts`. The shared XML envelope and principal props live in `dav/xml.ts`, the PROPFIND prop selection in `dav/propfind.ts`, the store-result → HTTP mapping both write surfaces take in `dav/write-result.ts`, the sync-token grammar and the `valid-sync-token` refusal in `dav/sync-token.ts`, the href shapes and the multiget resolver in `dav/href.ts`, the OPTIONS header and realm in `app.ts`.
+- **`apps/api/src/routes/calendar.ts`** — thin REST bindings, the transfer routes included.
+- **`packages/lib/src/core/calendar/`** — FE hooks + SSE handlers, `calendar-utils.ts` (`formatEventWhen`, `rruleToText`, `viewerTimeZone`, `normalizeTimezone`, `isInvitationFromOthers`, `isSeriesOccurrence`, `truncateRRule`), `windows-zones.ts` (the CLDR table `normalizeTimezone` resolves an Outlook zone name through, which the API imports through the same deep path) and `preview-lines.ts` (the method labels an `.ics` quick look shows); shared types in `packages/lib/src/types/calendar.ts`.
+- **`packages/ui/src/components/calendar/`** — what draws an event outside the calendar app too: `EventDetailCard` (one event, read-only, from data alone — the detail dialog's body and the `.ics` quick look's card, [PREVIEWS.md](PREVIEWS.md)), `AttendeeList` beside it, and `ImportToCalendarPicker`.
+
+Storage layout: [STORAGE.md](STORAGE.md). Database inventory: [DATABASE.md](DATABASE.md). Quotas: [QUOTA.md](QUOTA.md).

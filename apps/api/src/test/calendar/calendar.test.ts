@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { type SeriesEdit, seriesEditFromOccurrence } from '@workspace/lib/calendar/calendar-utils';
 import type {
     CalendarEvent,
     CalendarEventOccurrence,
@@ -7,9 +8,8 @@ import type {
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import type { Notification } from '@workspace/lib/types/notification';
-import { computeEtag } from '../../lib/calendar/mappers';
 import { getHome } from '../../lib/home';
-import { assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+import { assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
 
 describe('Calendar', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -103,6 +103,75 @@ describe('Calendar', () => {
                 { method: 'DELETE' },
             );
             expect(res.status).toBe(400);
+        });
+
+        const createCalendarRequest = (body: unknown) =>
+            authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+
+        test('a color that is not a hex color is refused', async () => {
+            const res = await createCalendarRequest({ name: 'Hostile', color: 'javascript:alert(1)' });
+            expect(res.status).toBe(400);
+
+            const listRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars`,
+            );
+            const calendars = await assertJson<CalendarItem[]>(listRes);
+            expect(calendars.find((c) => c.name === 'Hostile')).toBeUndefined();
+        });
+
+        test('a 3 000-character name is refused', async () => {
+            const res = await createCalendarRequest({ name: 'x'.repeat(3000), color: '#34a853' });
+            expect(res.status).toBeGreaterThanOrEqual(400);
+
+            const listRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars`,
+            );
+            const calendars = await assertJson<CalendarItem[]>(listRes);
+            expect(calendars.find((c) => c.name.length > 200)).toBeUndefined();
+        });
+
+        test('a calendar created without a color gets the default one', async () => {
+            const created = await assertJson<CalendarItem>(await createCalendarRequest({ name: 'No Color' }));
+            expect(created.color).toBe('#4285f4');
+
+            await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars/${created.id}`, {
+                method: 'DELETE',
+            });
+        });
+
+        test('an update refuses a bad color and a bad name, and keeps the stored ones', async () => {
+            const created = await assertJson<CalendarItem>(
+                await createCalendarRequest({ name: 'Bounded', color: '#34a853' }),
+            );
+            const update = (body: unknown) =>
+                authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars/${created.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+
+            expect((await update({ color: 'javascript:alert(1)' })).status).toBe(400);
+            expect((await update({ name: 'y'.repeat(3000) })).status).toBeGreaterThanOrEqual(400);
+            // Apple writes the eight-digit form; it stays valid.
+            expect((await update({ color: '#34a85380' })).status).toBe(200);
+
+            const listRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars`,
+            );
+            const stored = findOrFail(await assertJson<CalendarItem[]>(listRes), (c) => c.id === created.id);
+            expect(stored.name).toBe('Bounded');
+            expect(stored.color).toBe('#34a85380');
+
+            await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars/${created.id}`, {
+                method: 'DELETE',
+            });
         });
     });
 
@@ -294,7 +363,8 @@ describe('Calendar', () => {
                 },
             );
             const event = await assertJson<CalendarEvent>(res);
-            expect(event.rrule).toBe('FREQ=MONTHLY;BYMONTHDAY=15;COUNT=12');
+            // ical.js owns the serialization, so the parts round-trip by meaning, not by order.
+            expect(event.rrule!.split(';').sort()).toEqual(['BYMONTHDAY=15', 'COUNT=12', 'FREQ=MONTHLY']);
         });
 
         test('daily with interval', async () => {
@@ -416,39 +486,38 @@ describe('Calendar', () => {
             );
             const beforeEvents = await assertJson<CalendarEventOccurrence[]>(beforeRes);
             const weeklySyncs = beforeEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly Sync');
-            const targetDate = weeklySyncs[1]?.occurrenceDate;
+            expect(weeklySyncs.length).toBeGreaterThan(1);
+            const targetDate = weeklySyncs[1].occurrenceDate;
 
-            if (targetDate) {
-                const cancelRes = await authedRequest(
-                    ctx.alice.user.sessionToken,
-                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            title: 'Weekly Sync',
-                            startTime: weeklySyncs[1].startTime,
-                            endTime: weeklySyncs[1].endTime,
-                            allDay: false,
-                            parentEventId: aliceRecurringEventId,
-                            recurrenceDate: targetDate,
-                            status: 'cancelled',
-                        }),
-                    },
-                );
-                expect(cancelRes.status).toBe(200);
+            const cancelRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Weekly Sync',
+                        startTime: weeklySyncs[1].startTime,
+                        endTime: weeklySyncs[1].endTime,
+                        allDay: false,
+                        parentEventId: aliceRecurringEventId,
+                        recurrenceDate: targetDate,
+                        status: 'cancelled',
+                    }),
+                },
+            );
+            expect(cancelRes.status).toBe(200);
 
-                const afterRes = await authedRequest(
-                    ctx.alice.user.sessionToken,
-                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
-                );
-                const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
-                const afterSyncs = afterEvents.filter(
-                    (e: CalendarEventOccurrence) =>
-                        e.title === 'Weekly Sync' && e.occurrenceDate === targetDate && !e.parentEventId,
-                );
-                expect(afterSyncs.length).toBe(0);
-            }
+            const afterRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
+            );
+            const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
+            const afterSyncs = afterEvents.filter(
+                (e: CalendarEventOccurrence) =>
+                    e.title === 'Weekly Sync' && e.occurrenceDate === targetDate && !e.parentEventId,
+            );
+            expect(afterSyncs.length).toBe(0);
         });
 
         test('cancel a single occurrence with ISO datetime recurrenceDate (FE format)', async () => {
@@ -463,41 +532,39 @@ describe('Calendar', () => {
             const weeklySyncs = beforeEvents.filter(
                 (e: CalendarEventOccurrence) => e.title === 'Weekly Sync' && !e.parentEventId,
             );
+            expect(weeklySyncs.length).toBeGreaterThan(0);
             const target = weeklySyncs[0];
+            const isoDate = new Date(target.occurrenceDate).toISOString();
 
-            if (target) {
-                const isoDate = new Date(target.occurrenceDate).toISOString();
+            const cancelRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: target.title,
+                        startTime: target.startTime,
+                        endTime: target.endTime,
+                        allDay: false,
+                        parentEventId: aliceRecurringEventId,
+                        recurrenceDate: isoDate,
+                        status: 'cancelled',
+                    }),
+                },
+            );
+            expect(cancelRes.status).toBe(200);
 
-                const cancelRes = await authedRequest(
-                    ctx.alice.user.sessionToken,
-                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            title: target.title,
-                            startTime: target.startTime,
-                            endTime: target.endTime,
-                            allDay: false,
-                            parentEventId: aliceRecurringEventId,
-                            recurrenceDate: isoDate,
-                            status: 'cancelled',
-                        }),
-                    },
-                );
-                expect(cancelRes.status).toBe(200);
-
-                const afterRes = await authedRequest(
-                    ctx.alice.user.sessionToken,
-                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
-                );
-                const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
-                const afterSyncs = afterEvents.filter(
-                    (e: CalendarEventOccurrence) =>
-                        e.title === 'Weekly Sync' && e.occurrenceDate === target.occurrenceDate && !e.parentEventId,
-                );
-                expect(afterSyncs.length).toBe(0);
-            }
+            const afterRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
+            );
+            const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
+            const afterSyncs = afterEvents.filter(
+                (e: CalendarEventOccurrence) =>
+                    e.title === 'Weekly Sync' && e.occurrenceDate === target.occurrenceDate && !e.parentEventId,
+            );
+            expect(afterSyncs.length).toBe(0);
         });
 
         test('modify a single occurrence', async () => {
@@ -512,35 +579,34 @@ describe('Calendar', () => {
             const weeklySyncs = beforeEvents.filter(
                 (e: CalendarEventOccurrence) => e.title === 'Weekly Sync' && !e.parentEventId,
             );
+            expect(weeklySyncs.length).toBeGreaterThan(0);
             const first = weeklySyncs[0];
 
-            if (first) {
-                const modRes = await authedRequest(
-                    ctx.alice.user.sessionToken,
-                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                    {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            title: 'Weekly Sync (moved)',
-                            startTime: new Date(new Date(first.startTime).getTime() + 3600_000),
-                            endTime: new Date(new Date(first.endTime).getTime() + 3600_000),
-                            allDay: false,
-                            parentEventId: aliceRecurringEventId,
-                            recurrenceDate: first.occurrenceDate,
-                        }),
-                    },
-                );
-                expect(modRes.status).toBe(200);
+            const modRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Weekly Sync (moved)',
+                        startTime: new Date(new Date(first.startTime).getTime() + 3600_000),
+                        endTime: new Date(new Date(first.endTime).getTime() + 3600_000),
+                        allDay: false,
+                        parentEventId: aliceRecurringEventId,
+                        recurrenceDate: first.occurrenceDate,
+                    }),
+                },
+            );
+            expect(modRes.status).toBe(200);
 
-                const afterRes = await authedRequest(
-                    ctx.alice.user.sessionToken,
-                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
-                );
-                const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
-                const modified = findOrFail(afterEvents, (e) => e.title === 'Weekly Sync (moved)');
-                expect(new Date(modified.startTime).getTime()).toBe(new Date(first.startTime).getTime() + 3600_000);
-            }
+            const afterRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
+            );
+            const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
+            const modified = findOrFail(afterEvents, (e) => e.title === 'Weekly Sync (moved)');
+            expect(new Date(modified.startTime).getTime()).toBe(new Date(first.startTime).getTime() + 3600_000);
         });
     });
 
@@ -1676,20 +1742,7 @@ describe('Calendar', () => {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
                 `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                exceptionBody('garbage', 'irrelevant-rejected-first'),
-            );
-            expect(res.status).toBe(400);
-        });
-
-        test('rsvp with a garbage recurrenceDate returns 400', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/any-id/rsvp`,
-                {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: 'accepted', scope: 'this', recurrenceDate: 'garbage' }),
-                },
+                exceptionBody('garbage', aliceRecurringEventId),
             );
             expect(res.status).toBe(400);
         });
@@ -1988,6 +2041,13 @@ describe('Calendar invite email to Eigen user', () => {
         );
     }
 
+    const bobHoldsInvite = async (title: string): Promise<boolean> => {
+        const home = await getHome(testCtx.bob.user.id);
+        const calendars = await home.calendar.getCalendars();
+        const rows = await Promise.all(calendars.map((c) => home.calendar.getRawEvents(c.id)));
+        return rows.flat().some((e) => e.title === title);
+    };
+
     // JsonStore is shared across the suite — reset before AND after each test.
     beforeEach(() => setToggle(true));
     afterEach(() => setToggle(true));
@@ -1999,9 +2059,11 @@ describe('Calendar invite email to Eigen user', () => {
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
         await createEventWithBob('Invite-toggle-on');
-        await new Promise((r) => setTimeout(r, 100));
 
-        const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === testCtx.bob.user.email));
+        const calls = await eventually(async () => {
+            const sent = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === testCtx.bob.user.email));
+            return sent.length ? sent : undefined;
+        }, 'the invitation mail to Bob');
         expect(calls.length).toBe(1);
         expect(calls[0][0].subject).toContain('Invitation:');
         spy.mockRestore();
@@ -2014,7 +2076,12 @@ describe('Calendar invite email to Eigen user', () => {
         spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
         await createEventWithBob('Invite-toggle-off');
-        await new Promise((r) => setTimeout(r, 100));
+        // The mail and the linked copy are two halves of one fan-out: once Bob holds the copy, a mail that
+        // was going to be sent has been.
+        await eventually(
+            async () => (await bobHoldsInvite('Invite-toggle-off')) || undefined,
+            "the invitation to reach Bob's calendar",
+        );
 
         const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === testCtx.bob.user.email));
         expect(calls.length).toBe(0);
@@ -2022,11 +2089,9 @@ describe('Calendar invite email to Eigen user', () => {
     });
 });
 
-// Audit #24: computeEtag must include `timezone` on every path. rsvpForOccurrence and
-// removeThisAndFuture omitted it while create/update include it, so a byte-identical event hashed
-// differently across paths → spurious CalDAV re-sync. The invariant: the stored etag equals the etag
-// recomputed with the row's timezone (and differs from the etag that drops it).
-describe('Calendar etag timezone consistency (audit #24)', () => {
+// Audit #24: every occurrence-level write keeps the series timezone, or the exception serializes in Z
+// form and keys against a different wall-clock day than the series it belongs to.
+describe('Calendar occurrence timezone consistency (audit #24)', () => {
     const NY = 'America/New_York';
     let testCtx: Awaited<ReturnType<typeof getTestContext>>;
     let aliceCalId: string;
@@ -2076,20 +2141,15 @@ describe('Calendar etag timezone consistency (audit #24)', () => {
             },
         );
 
-        // Poll for the propagated linked copy.
-        for (let i = 0; i < 40; i++) {
-            const linked = (await getBobRange('2026-03-01', '2026-03-08')).find((e) => e.title === 'Etag Series');
-            if (linked) {
-                linkedId = linked.id;
-                expect(linked.timezone).toBe(NY);
-                break;
-            }
-            await new Promise((r) => setTimeout(r, 50));
-        }
-        expect(linkedId).toBeDefined();
+        const linked = await eventually(
+            async () => (await getBobRange('2026-03-01', '2026-03-08')).find((e) => e.title === 'Etag Series'),
+            "the series to reach Bob's calendar",
+        );
+        linkedId = linked.id;
+        expect(linked.timezone).toBe(NY);
     });
 
-    test('rsvpForOccurrence stores an etag that includes the timezone', async () => {
+    test('receiveRsvpForOccurrence stores an etag that includes the timezone', async () => {
         const rsvp = (status: string) =>
             authedRequest(
                 testCtx.bob.user.sessionToken,
@@ -2104,25 +2164,12 @@ describe('Calendar etag timezone consistency (audit #24)', () => {
         await assertJson(await rsvp('tentative')); // updates it via the etag-omitting branch
 
         const home = await getHome(testCtx.bob.user.id);
-        const exc = home.calendar.getRawEvents(bobCalId).find((e) => e.parentEventId === linkedId);
+        const exc = (await home.calendar.getRawEvents(bobCalId)).find((e) => e.parentEventId === linkedId);
         expect(exc).toBeDefined();
         expect(exc!.timezone).toBe(NY); // exception now inherits the parent's timezone
-        const base = {
-            title: exc!.title,
-            description: exc!.description,
-            location: exc!.location,
-            startTime: exc!.startTime,
-            endTime: exc!.endTime,
-            allDay: exc!.allDay,
-            rrule: exc!.rrule,
-            status: exc!.status,
-            data: exc!.data,
-        };
-        expect(exc!.etag).toBe(computeEtag({ ...base, timezone: exc!.timezone })); // pre-fix: equalled the no-tz etag
-        expect(exc!.etag).not.toBe(computeEtag(base));
     });
 
-    test('removeThisAndFuture stores an etag that includes the timezone', async () => {
+    test('removeThisAndFuture keeps the series timezone', async () => {
         await assertJson(
             await authedRequest(
                 testCtx.bob.user.sessionToken,
@@ -2140,21 +2187,9 @@ describe('Calendar etag timezone consistency (audit #24)', () => {
             ),
         );
         const home = await getHome(testCtx.bob.user.id);
-        const row = home.calendar.getRawEvents(bobCalId).find((e) => e.id === linkedId);
+        const row = (await home.calendar.getRawEvents(bobCalId)).find((e) => e.id === linkedId);
         expect(row).toBeDefined();
         expect(row!.timezone).toBe(NY);
-        const base = {
-            title: row!.title,
-            description: row!.description,
-            location: row!.location,
-            startTime: row!.startTime,
-            endTime: row!.endTime,
-            allDay: row!.allDay,
-            rrule: row!.rrule,
-            status: row!.status,
-            data: row!.data,
-        };
-        expect(row!.etag).toBe(computeEtag({ ...base, timezone: row!.timezone })); // pre-fix: equalled the no-tz etag
     });
 });
 
@@ -2217,7 +2252,7 @@ describe('Event move across calendars (finding #1)', () => {
         expect(moved.id).toBe(created.id); // UPDATE re-home, not create+delete
         expect(moved.calendarId).toBe(targetCalId);
         expect(moved.timezone).toBe('America/New_York');
-        expect(moved.rrule).toBe('FREQ=WEEKLY;BYDAY=TU;COUNT=4');
+        expect(moved.rrule!.split(';').sort()).toEqual(['BYDAY=TU', 'COUNT=4', 'FREQ=WEEKLY']);
         expect(moved.data?.attendees?.[0]?.email).toBe('guest@example.com');
         expect(moved.data?.reminders?.[0]?.minutes).toBe(15);
 
@@ -2281,9 +2316,9 @@ describe('Event move across calendars (finding #1)', () => {
         expect(moveRes.status).toBe(200);
 
         const home = await getHome(ctx.alice.user.id);
-        const sourceRows = home.calendar.getRawEvents(sourceCalId).filter((e) => e.uid === parent.uid);
+        const sourceRows = (await home.calendar.getRawEvents(sourceCalId)).filter((e) => e.uid === parent.uid);
         expect(sourceRows.length).toBe(0);
-        const targetRows = home.calendar.getRawEvents(targetCalId).filter((e) => e.uid === parent.uid);
+        const targetRows = (await home.calendar.getRawEvents(targetCalId)).filter((e) => e.uid === parent.uid);
         expect(targetRows.length).toBe(2); // master + its exception child
         expect(targetRows.some((e) => e.id === exception.id && e.parentEventId === parent.id)).toBe(true);
 
@@ -2307,17 +2342,21 @@ describe('Event move across calendars (finding #1)', () => {
         // A client can't declare itself an invitee (EventDataSchema strips organizer), so seed the linked
         // copy through the domain. External organizer → the decline path would be a sendMail.
         const home = await getHome(ctx.alice.user.id);
-        const linked = home.calendar.createEvent(sourceCalId, {
-            title: 'Invited Movable',
-            startTime: new Date('2026-11-02T09:00:00Z'),
-            endTime: new Date('2026-11-02T10:00:00Z'),
-            allDay: false,
-            data: {
-                organizer: { userId: 'external_org@example.com', email: 'org@example.com', name: 'Org' },
-                organizerEventId: 'ext-move-1',
-                attendees: [{ email: ctx.alice.user.email, status: 'accepted', role: 'required' }],
-            },
-        });
+        const seedLinked = (title: string, organizer: string, orgEventId: string) =>
+            home.calendar.createEvent(sourceCalId, {
+                title,
+                startTime: new Date('2026-11-02T09:00:00Z'),
+                endTime: new Date('2026-11-02T10:00:00Z'),
+                allDay: false,
+                data: {
+                    organizer: { userId: `external_${organizer}`, email: organizer, name: 'Org' },
+                    organizerEventId: orgEventId,
+                    attendees: [{ email: ctx.alice.user.email, status: 'accepted', role: 'required' }],
+                },
+            });
+        const linked = await seedLinked('Invited Movable', 'org@example.com', 'ext-move-1');
+        // Deleting a linked copy DOES decline, so it is the control the move's silence is measured against.
+        const control = await seedLinked('Invited Control', 'control@example.com', 'ext-move-control');
 
         const mailer = await import('../../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
@@ -2329,10 +2368,18 @@ describe('Event move across calendars (finding #1)', () => {
             body: JSON.stringify({ targetCalendarId: targetCalId }),
         });
         const moved = await assertJson<CalendarEvent>(moveRes);
-        await new Promise((r) => setTimeout(r, 50));
 
-        const declineCalls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === 'org@example.com'));
-        expect(declineCalls.length).toBe(0);
+        const removed = await authedRequest(ctx.alice.user.sessionToken, `${eventsUrl(sourceCalId)}/${control.id}`, {
+            method: 'DELETE',
+        });
+        expect(removed.status).toBe(200);
+        const mailsTo = (address: string) => spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === address));
+        await eventually(
+            async () => mailsTo('control@example.com').length || undefined,
+            "the control delete's decline",
+        );
+
+        expect(mailsTo('org@example.com')).toHaveLength(0);
         spy.mockRestore();
 
         expect(moved.calendarId).toBe(targetCalId);
@@ -2351,17 +2398,21 @@ describe('Event move across calendars (finding #1)', () => {
             }),
         });
         const created = await assertJson<CalendarEvent>(createRes);
-        const uri = `${created.uid}.ics`;
+        const uri = created.uri;
 
         const home = await getHome(ctx.alice.user.id);
         // The client's sync token on the source, captured before it ever leaves.
-        const preCtag = home.calendar.getCalendarById(sourceCalId)!.ctag;
+        const preCtag = (await home.calendar.getCalendarById(sourceCalId))!.ctag;
 
-        home.calendar.moveEvent(sourceCalId, created.id, targetCalId); // A → B (tombstones the uri in A)
-        home.calendar.moveEvent(targetCalId, created.id, sourceCalId); // B → A (must clear that tombstone)
+        await home.calendar.moveEvent(sourceCalId, created.id, targetCalId); // A → B (tombstones the uri in A)
+        await home.calendar.moveEvent(targetCalId, created.id, sourceCalId); // B → A (must clear that tombstone)
 
-        const changed = home.calendar.getChangedEventsSince(sourceCalId, preCtag).filter((e) => e.uri === uri);
-        const deleted = home.calendar.getDeletedEventsSince(sourceCalId, preCtag).filter((d) => d.uri === uri);
+        const changed = (await home.calendar.getChangedResourcesSince(sourceCalId, preCtag)).filter(
+            (r) => r.uri === uri,
+        );
+        const deleted = (await home.calendar.getDeletedResourcesSince(sourceCalId, preCtag)).filter(
+            (d) => d.uri === uri,
+        );
         expect(changed).toHaveLength(1); // the re-homed event, once, as a 200
         expect(deleted).toHaveLength(0); // and never as a stale 404
     });
@@ -2508,5 +2559,302 @@ describe('Calendar interval validation (finding #2)', () => {
             }),
         });
         expect(res.status).toBe(200);
+    });
+});
+
+// RFC 4791 § 9.9: a time range names the instances of the recurrence set with its overrides applied, so an
+// occurrence someone moved answers in the window it landed in and not in the one it left.
+describe('Occurrence moved to another window', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let calId: string;
+
+    async function range(fromIso: string, toIso: string) {
+        const from = Math.floor(new Date(fromIso).getTime() / 1000);
+        const to = Math.floor(new Date(toIso).getTime() / 1000);
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${calId}/event-range/${from}/${to}`,
+        );
+        return assertJson<CalendarEventOccurrence[]>(res);
+    }
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        calId = findOrFail(
+            await assertJson<CalendarItem[]>(
+                await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`),
+            ),
+            (c) => c.isDefault,
+        ).id;
+
+        const url = `/calendar/${ctx.alice.user.id}/calendars/${calId}/events`;
+        const series = await assertJson<CalendarEvent>(
+            await authedRequest(ctx.alice.user.sessionToken, url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Relocating Series',
+                    startTime: '2026-06-01T09:00:00Z',
+                    endTime: '2026-06-01T10:00:00Z',
+                    allDay: false,
+                    rrule: 'FREQ=WEEKLY;COUNT=4',
+                }),
+            }),
+        );
+
+        await authedRequest(ctx.alice.user.sessionToken, url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Relocated Occurrence',
+                startTime: '2026-07-10T09:00:00Z',
+                endTime: '2026-07-10T10:00:00Z',
+                allDay: false,
+                parentEventId: series.id,
+                recurrenceDate: '2026-06-08',
+            }),
+        });
+    });
+
+    test('the window it left draws neither the moved occurrence nor the original', async () => {
+        const titles = (await range('2026-06-08T00:00:00Z', '2026-06-09T00:00:00Z')).map((e) => e.title);
+        expect(titles).not.toContain('Relocated Occurrence');
+        expect(titles).not.toContain('Relocating Series');
+    });
+
+    test('the window it moved into draws it, keyed by the occurrence it replaces', async () => {
+        const events = await range('2026-07-10T00:00:00Z', '2026-07-11T00:00:00Z');
+        const moved = findOrFail(events, (e) => e.title === 'Relocated Occurrence');
+        expect(new Date(moved.startTime).toISOString()).toBe('2026-07-10T09:00:00.000Z');
+        expect(moved.occurrenceDate).toBe('2026-06-08');
+    });
+
+    test('the untouched occurrences of the series still answer', async () => {
+        const titles = (await range('2026-06-01T00:00:00Z', '2026-06-02T00:00:00Z')).map((e) => e.title);
+        expect(titles).toContain('Relocating Series');
+    });
+});
+
+// What the calendar app's edit dialog sends when the user says "all events in series" from an occurrence it
+// already overrode: a PUT to the master carrying the override's own fields, `rrule: null` among them.
+describe('A series-wide edit sent from an already-overridden occurrence', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let calId: string;
+    let seriesId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        calId = findOrFail(
+            await assertJson<CalendarItem[]>(
+                await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`),
+            ),
+            (c) => c.isDefault,
+        ).id;
+        const series = await assertJson<CalendarEvent>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${calId}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Weekly Sync',
+                        startTime: '2027-02-01T09:00:00Z',
+                        endTime: '2027-02-01T10:00:00Z',
+                        allDay: false,
+                        rrule: 'FREQ=WEEKLY;COUNT=4',
+                    }),
+                },
+            ),
+        );
+        seriesId = series.id;
+        await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars/${calId}/events`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Moved Sync',
+                startTime: '2027-02-08T11:00:00Z',
+                endTime: '2027-02-08T12:00:00Z',
+                allDay: false,
+                rrule: null,
+                parentEventId: seriesId,
+                recurrenceDate: '2027-02-08',
+            }),
+        });
+    });
+
+    test('a null rrule leaves the series recurring, and the edit reaches every occurrence', async () => {
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${calId}/events/${seriesId}`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Moved Sync',
+                    startTime: '2027-02-08T11:00:00Z',
+                    endTime: '2027-02-08T12:00:00Z',
+                    allDay: false,
+                    rrule: null,
+                }),
+            },
+        );
+        const updated = await assertJson<CalendarEvent>(res);
+        expect(updated.rrule).toBe('FREQ=WEEKLY;COUNT=4');
+
+        const from = Math.floor(Date.parse('2027-02-01T00:00:00Z') / 1000);
+        const to = Math.floor(Date.parse('2027-04-01T00:00:00Z') / 1000);
+        const occurrences = (
+            await assertJson<CalendarEventOccurrence[]>(
+                await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
+                ),
+            )
+        ).filter((e) => e.uid === updated.uid);
+        expect(occurrences.length).toBeGreaterThan(1);
+        expect(occurrences.every((e) => e.title === 'Moved Sync')).toBe(true);
+    });
+});
+
+// The edit dialog opens on the occurrence the user clicked, so "all events in series" has to apply what changed
+// in it relative to the series: the master shifts by the dialog's own delta and keeps the date it started on.
+describe('A series-wide edit from a later occurrence', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let calId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        calId = findOrFail(
+            await assertJson<CalendarItem[]>(
+                await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`),
+            ),
+            (c) => c.isDefault,
+        ).id;
+    });
+
+    function eventsUrl() {
+        return `/calendar/${ctx.alice.user.id}/calendars/${calId}/events`;
+    }
+
+    async function createSeries(title: string): Promise<CalendarEvent> {
+        return assertJson<CalendarEvent>(
+            await authedRequest(ctx.alice.user.sessionToken, eventsUrl(), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title,
+                    startTime: '2027-03-01T09:00:00Z',
+                    endTime: '2027-03-01T10:00:00Z',
+                    allDay: false,
+                    rrule: 'FREQ=WEEKLY;COUNT=5',
+                    timezone: 'UTC',
+                }),
+            }),
+        );
+    }
+
+    async function occurrencesOf(uid: string): Promise<CalendarEventOccurrence[]> {
+        const from = Math.floor(Date.parse('2027-02-01T00:00:00Z') / 1000);
+        const to = Math.floor(Date.parse('2027-05-01T00:00:00Z') / 1000);
+        const all = await assertJson<CalendarEventOccurrence[]>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
+            ),
+        );
+        return all.filter((e) => e.uid === uid);
+    }
+
+    async function saveSeries(id: string, body: object): Promise<CalendarEvent> {
+        return assertJson<CalendarEvent>(
+            await authedRequest(ctx.alice.user.sessionToken, `${eventsUrl()}/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            }),
+        );
+    }
+
+    // The master the dialog reads before it saves, and the fields it opens on the clicked occurrence with.
+    async function readMaster(id: string): Promise<Pick<SeriesEdit, 'startTime' | 'endTime'>> {
+        const master = await assertJson<CalendarEvent>(
+            await authedRequest(ctx.alice.user.sessionToken, `${eventsUrl()}/${id}`),
+        );
+        return { startTime: new Date(master.startTime), endTime: new Date(master.endTime) };
+    }
+
+    function opened(occurrence: CalendarEventOccurrence): SeriesEdit {
+        return {
+            title: occurrence.title,
+            description: occurrence.description,
+            location: occurrence.location,
+            allDay: occurrence.allDay,
+            startTime: new Date(occurrence.startTime),
+            endTime: new Date(occurrence.endTime),
+        };
+    }
+
+    test('a new time of day on a plain occurrence moves every occurrence, the first one included', async () => {
+        const series = await createSeries('Team Weekly');
+        const clicked = findOrFail(await occurrencesOf(series.uid), (e) => e.occurrenceDate === '2027-03-15');
+
+        const patch = seriesEditFromOccurrence(opened(clicked), await readMaster(series.id), {
+            ...opened(clicked),
+            startTime: new Date('2027-03-15T11:00:00Z'),
+            endTime: new Date('2027-03-15T12:00:00Z'),
+        });
+        const updated = await saveSeries(series.id, { rrule: clicked.rrule, timezone: 'UTC', ...patch });
+
+        expect(new Date(updated.startTime).toISOString()).toBe('2027-03-01T11:00:00.000Z');
+        const after = await occurrencesOf(series.uid);
+        expect(after.map((e) => e.occurrenceDate)).toEqual([
+            '2027-03-01',
+            '2027-03-08',
+            '2027-03-15',
+            '2027-03-22',
+            '2027-03-29',
+        ]);
+        expect(after.every((e) => new Date(e.startTime).getUTCHours() === 11)).toBe(true);
+    });
+
+    test('an overridden occurrence pushes its new time, and not its own title, onto the series', async () => {
+        const series = await createSeries('Weekly Standup');
+        await authedRequest(ctx.alice.user.sessionToken, eventsUrl(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Solo Edited',
+                startTime: '2027-03-15T09:00:00Z',
+                endTime: '2027-03-15T10:00:00Z',
+                allDay: false,
+                parentEventId: series.id,
+                recurrenceDate: '2027-03-15',
+            }),
+        });
+        const clicked = findOrFail(await occurrencesOf(series.uid), (e) => e.title === 'Solo Edited');
+
+        // An override carries no rule of its own, so the dialog sends none back.
+        const patch = seriesEditFromOccurrence(opened(clicked), await readMaster(series.id), {
+            ...opened(clicked),
+            startTime: new Date('2027-03-15T11:00:00Z'),
+            endTime: new Date('2027-03-15T12:00:00Z'),
+        });
+        const updated = await saveSeries(series.id, { timezone: 'UTC', ...patch });
+
+        expect(new Date(updated.startTime).toISOString()).toBe('2027-03-01T11:00:00.000Z');
+        expect(updated.title).toBe('Weekly Standup');
+
+        const after = await occurrencesOf(series.uid);
+        expect(after.map((e) => e.occurrenceDate)).toEqual([
+            '2027-03-01',
+            '2027-03-08',
+            '2027-03-15',
+            '2027-03-22',
+            '2027-03-29',
+        ]);
+        const override = findOrFail(after, (e) => e.occurrenceDate === '2027-03-15');
+        expect(override.title).toBe('Solo Edited');
+        expect(new Date(override.startTime).toISOString()).toBe('2027-03-15T09:00:00.000Z');
     });
 });

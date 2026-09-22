@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { getHome } from '../../lib/home';
-import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
+import { davRequest } from '../dav-test-helpers';
+import { assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
 
 describe('Calendar Timezone', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -32,6 +33,14 @@ describe('Calendar Timezone', () => {
     async function getEvents(token: string, ownerId: string, from: number, to: number) {
         const res = await authedRequest(token, `/calendar/${ownerId}/event-range/${from}/${to}`);
         return assertJson<CalendarEventOccurrence[]>(res);
+    }
+
+    // The invitation fan-out is fire-and-forget: Bob's Home writes its own file after Alice's call answered.
+    function bobEvent(from: number, to: number, predicate: (e: CalendarEventOccurrence) => boolean) {
+        return eventually(
+            async () => (await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, from, to)).find(predicate),
+            "the invitation to reach Bob's calendar",
+        );
     }
 
     describe('Timezone storage', () => {
@@ -265,9 +274,9 @@ describe('Calendar Timezone', () => {
             expect(starts).toContain('2025-11-02T01:30:00.000Z'); // 02:30 CET
         });
 
-        test('weekly recurring event at nonexistent 02:30 Amsterdam keeps its spring-forward resolution', async () => {
-            // Sunday 2025-03-16 02:30 CET (UTC+1) = 01:30Z. On 2025-03-30 the clock jumps 02:00→03:00,
-            // so 02:30 never occurs; pins the current resolution (03:30Z) so the fall-back fix can't drift it.
+        test('weekly recurring event at nonexistent 02:30 Amsterdam resolves with the pre-transition offset', async () => {
+            // Sunday 2025-03-16 02:30 CET (UTC+1) = 01:30Z. On 2025-03-30 the clock jumps 02:00→03:00, so
+            // 02:30 never occurs and resolves through the offset before the gap: 01:30Z, which reads 03:30.
             const sundayStart = new Date('2025-03-16T01:30:00Z');
 
             await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
@@ -287,7 +296,7 @@ describe('Calendar Timezone', () => {
                 .map((e) => new Date(e.startTime).toISOString());
 
             expect(starts).toContain('2025-03-23T01:30:00.000Z'); // 02:30 CET
-            expect(starts).toContain('2025-03-30T03:30:00.000Z'); // gap time: characterized current output
+            expect(starts).toContain('2025-03-30T01:30:00.000Z'); // gap time: 02:30 CET = 03:30 CEST on the clock
             expect(starts).toContain('2025-04-06T00:30:00.000Z'); // 02:30 CEST
         });
 
@@ -432,8 +441,7 @@ describe('Calendar Timezone', () => {
             const from = Math.floor(new Date('2026-03-16T00:00:00Z').getTime() / 1000);
             const to = Math.floor(new Date('2026-04-14T00:00:00Z').getTime() / 1000);
 
-            const bobEvents = await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, from, to);
-            const linked = findOrFail(bobEvents, (e) => e.title === 'TZ Invite Weekly');
+            const linked = await bobEvent(from, to, (e) => e.title === 'TZ Invite Weekly');
             expect(linked.timezone).toBe('Europe/Amsterdam');
         });
 
@@ -458,6 +466,7 @@ describe('Calendar Timezone', () => {
             const to = Math.floor(new Date('2026-04-14T00:00:00Z').getTime() / 1000);
 
             // Bob's expanded occurrences should also respect the timezone
+            await bobEvent(from, to, (e) => e.title === 'TZ Invite DST Check');
             const bobEvents = await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, from, to);
             const occurrences = bobEvents.filter((e: CalendarEventOccurrence) => e.title === 'TZ Invite DST Check');
 
@@ -492,46 +501,44 @@ describe('Calendar Timezone', () => {
             // RSVP for a post-DST occurrence (April 6, 2026 is a Monday)
             const bobFrom = Math.floor(new Date('2026-03-16T00:00:00Z').getTime() / 1000);
             const bobTo = Math.floor(new Date('2026-04-14T00:00:00Z').getTime() / 1000);
+            const linkedParent = await bobEvent(bobFrom, bobTo, (e) => e.title === 'TZ RSVP Test');
             const bobEvents = await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, bobFrom, bobTo);
-            const linkedParent = findOrFail(bobEvents, (e) => e.title === 'TZ RSVP Test');
 
             // Find a post-DST occurrence (after March 29)
-            const postDSTOcc = bobEvents.find(
-                (e: CalendarEventOccurrence) =>
-                    e.title === 'TZ RSVP Test' && new Date(e.startTime) > new Date('2026-03-29T00:00:00Z'),
+            const postDSTOcc = findOrFail(
+                bobEvents,
+                (e) => e.title === 'TZ RSVP Test' && new Date(e.startTime) > new Date('2026-03-29T00:00:00Z'),
             );
 
-            if (postDSTOcc) {
-                // RSVP for this occurrence
-                const rsvpRes = await authedRequest(
-                    ctx.bob.user.sessionToken,
-                    `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events/${linkedParent.id}/rsvp`,
-                    {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            status: 'accepted',
-                            scope: 'this',
-                            recurrenceDate: postDSTOcc.occurrenceDate,
-                        }),
-                    },
-                );
-                expect(rsvpRes.status).toBe(200);
+            // RSVP for this occurrence
+            const rsvpRes = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars/${bobCalendarId}/events/${linkedParent.id}/rsvp`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        status: 'accepted',
+                        scope: 'this',
+                        recurrenceDate: postDSTOcc.occurrenceDate,
+                    }),
+                },
+            );
+            expect(rsvpRes.status).toBe(200);
 
-                // Verify the exception was created with correct times
-                const afterEvents = await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, bobFrom, bobTo);
-                const exception = findOrFail(
-                    afterEvents,
-                    (e) => e.title === 'TZ RSVP Test' && e.occurrenceDate === postDSTOcc.occurrenceDate,
-                );
+            // Verify the exception was created with correct times
+            const afterEvents = await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, bobFrom, bobTo);
+            const exception = findOrFail(
+                afterEvents,
+                (e) => e.title === 'TZ RSVP Test' && e.occurrenceDate === postDSTOcc.occurrenceDate,
+            );
 
-                // The exception's start time should match the post-DST occurrence time
-                const excDate = new Date(exception.startTime);
-                expect(excDate.getUTCDay()).toBe(1); // Monday
-                // Post-DST: 23:30 CEST = 21:30 UTC
-                expect(excDate.getUTCHours()).toBe(21);
-                expect(excDate.getUTCMinutes()).toBe(30);
-            }
+            // The exception's start time should match the post-DST occurrence time
+            const excDate = new Date(exception.startTime);
+            expect(excDate.getUTCDay()).toBe(1); // Monday
+            // Post-DST: 23:30 CEST = 21:30 UTC
+            expect(excDate.getUTCHours()).toBe(21);
+            expect(excDate.getUTCMinutes()).toBe(30);
         });
 
         test('cancel occurrence of timezone-aware recurring event', async () => {
@@ -551,38 +558,32 @@ describe('Calendar Timezone', () => {
 
             const events = await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, from, to);
             const occurrences = events.filter((e: CalendarEventOccurrence) => e.title === 'TZ Cancel Occ');
-            const postDSTOcc = occurrences.find(
-                (e: CalendarEventOccurrence) => new Date(e.startTime) > new Date('2026-03-29T00:00:00Z'),
+            const postDSTOcc = findOrFail(occurrences, (e) => new Date(e.startTime) > new Date('2026-03-29T00:00:00Z'));
+
+            // Cancel the post-DST occurrence
+            await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
+                title: 'TZ Cancel Occ',
+                startTime: postDSTOcc.startTime,
+                endTime: postDSTOcc.endTime,
+                allDay: false,
+                parentEventId: event.id,
+                recurrenceDate: postDSTOcc.occurrenceDate,
+                status: 'cancelled',
+            });
+
+            // Verify it's gone
+            const afterEvents = await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, from, to);
+            const afterOccs = afterEvents.filter(
+                (e: CalendarEventOccurrence) =>
+                    e.title === 'TZ Cancel Occ' && e.occurrenceDate === postDSTOcc.occurrenceDate && !e.parentEventId,
             );
+            expect(afterOccs.length).toBe(0);
 
-            if (postDSTOcc) {
-                // Cancel the post-DST occurrence
-                await createEvent(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceCalendarId, {
-                    title: 'TZ Cancel Occ',
-                    startTime: postDSTOcc.startTime,
-                    endTime: postDSTOcc.endTime,
-                    allDay: false,
-                    parentEventId: event.id,
-                    recurrenceDate: postDSTOcc.occurrenceDate,
-                    status: 'cancelled',
-                });
-
-                // Verify it's gone
-                const afterEvents = await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, from, to);
-                const afterOccs = afterEvents.filter(
-                    (e: CalendarEventOccurrence) =>
-                        e.title === 'TZ Cancel Occ' &&
-                        e.occurrenceDate === postDSTOcc.occurrenceDate &&
-                        !e.parentEventId,
-                );
-                expect(afterOccs.length).toBe(0);
-
-                // Other occurrences still present
-                const remainingOccs = afterEvents.filter(
-                    (e: CalendarEventOccurrence) => e.title === 'TZ Cancel Occ' && !e.parentEventId,
-                );
-                expect(remainingOccs.length).toBe(occurrences.length - 1);
-            }
+            // Other occurrences still present
+            const remainingOccs = afterEvents.filter(
+                (e: CalendarEventOccurrence) => e.title === 'TZ Cancel Occ' && !e.parentEventId,
+            );
+            expect(remainingOccs.length).toBe(occurrences.length - 1);
         });
     });
 
@@ -642,7 +643,6 @@ describe('Calendar Timezone', () => {
     // next-day 04:00Z), the pre-fix parser stored the UTC date, so exceptions attached to the wrong
     // occurrence: the cancellation killed a neighbor and the modification duplicated.
     describe('#8 RECURRENCE-ID keyed on wall-clock date (CalDAV PUT)', () => {
-        const basicAuth = (email: string, password = 'testpassword123') => `Basic ${btoa(`${email}:${password}`)}`;
         const VTIMEZONE_NY = [
             'BEGIN:VTIMEZONE',
             'TZID:America/New_York',
@@ -673,13 +673,11 @@ describe('Calendar Timezone', () => {
             ].join('\r\n');
         const sec = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
         const davPut = (email: string, ownerId: string, calId: string, uri: string, body: string) =>
-            app.handle(
-                new Request(`http://localhost/dav/calendars/${ownerId}/${calId}/${uri}`, {
-                    method: 'PUT',
-                    headers: { Authorization: basicAuth(email), 'Content-Type': 'text/calendar' },
-                    body,
-                }),
-            );
+            davRequest('PUT', `/dav/calendars/${ownerId}/${calId}/${uri}`, {
+                email,
+                headers: { 'Content-Type': 'text/calendar' },
+                body,
+            });
 
         test('cross-midnight-UTC exceptions store the wall-clock date and attach to the intended occurrence', async () => {
             const UID = 'audit8-daily@test';
@@ -740,7 +738,9 @@ describe('Calendar Timezone', () => {
 
             // The exceptions are stored under the wall-clock date, not the UTC date of the instant.
             const home = await getHome(ctx.alice.user.id);
-            const stored = home.calendar.getRawEvents(aliceCalendarId).filter((e) => e.uid === UID && e.parentEventId);
+            const stored = (await home.calendar.getRawEvents(aliceCalendarId)).filter(
+                (e) => e.uid === UID && e.parentEventId,
+            );
             const modified = findOrFail(stored, (e) => e.title === 'Moved occurrence');
             const cancelledDates = stored.filter((e) => e.status === 'cancelled').map((e) => e.recurrenceDate);
             expect(modified.recurrenceDate).toBe('2026-01-15'); // pre-fix: '2026-01-16' (UTC date)
@@ -802,7 +802,7 @@ describe('Calendar Timezone', () => {
 
             const home = await getHome(ctx.alice.user.id);
             const exc = findOrFail(
-                home.calendar.getRawEvents(aliceCalendarId).filter((e) => e.uid === UID && e.parentEventId),
+                (await home.calendar.getRawEvents(aliceCalendarId)).filter((e) => e.uid === UID && e.parentEventId),
                 (e) => e.title === 'DST Moved',
             );
             expect(exc.recurrenceDate).toBe('2026-11-02'); // pre-fix: '2026-11-03' (UTC date, offset had shifted)
@@ -863,7 +863,9 @@ describe('Calendar Timezone', () => {
             expect(put2.status).toBe(204);
 
             const home = await getHome(ctx.alice.user.id);
-            const stored = home.calendar.getRawEvents(aliceCalendarId).filter((e) => e.uid === UID && e.parentEventId);
+            const stored = (await home.calendar.getRawEvents(aliceCalendarId)).filter(
+                (e) => e.uid === UID && e.parentEventId,
+            );
             const moved = findOrFail(stored, (e) => e.title === 'Moved via Z-form');
             // Keyed on the SERIES (master TZID) wall-clock date, not the UTC date of the Z-form instant.
             expect(moved.recurrenceDate).toBe('2026-01-22'); // pre-fix: '2026-01-23' (UTC date)
@@ -895,10 +897,7 @@ describe('Calendar Timezone', () => {
             });
             const from = Math.floor(new Date('2026-06-01T00:00:00Z').getTime() / 1000);
             const to = Math.floor(new Date('2026-06-08T00:00:00Z').getTime() / 1000);
-            const linked = findOrFail(
-                await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, from, to),
-                (e) => e.title === 'Rekey Series',
-            );
+            const linked = await bobEvent(from, to, (e) => e.title === 'Rekey Series');
 
             const rsvp = async (recurrenceDate: string) =>
                 assertJson(
@@ -923,8 +922,68 @@ describe('Calendar Timezone', () => {
             // What the FE sends on the next RSVP for this same occurrence:
             await rsvp(rendered[0].occurrenceDate);
             const home = await getHome(ctx.bob.user.id);
-            const exceptions = home.calendar.getRawEvents(bobCalendarId).filter((e) => e.parentEventId === linked.id);
+            const exceptions = (await home.calendar.getRawEvents(bobCalendarId)).filter(
+                (e) => e.parentEventId === linked.id,
+            );
             expect(exceptions).toHaveLength(1); // pre-fix: 2 rows for one occurrence
+        });
+    });
+
+    // Every Outlook and Exchange invitation names its zone the Windows way, and a series whose zone the
+    // index dropped expands in UTC: its wall time then jumps by the offset at the next DST change.
+    describe('A series whose TZID is a Windows zone name', () => {
+        test('a weekly 10:00 Berlin series reads 10:00 on both sides of the March transition', async () => {
+            const ics = [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'PRODID:-//Microsoft Corporation//Outlook 16.0 MIMEDIR//EN',
+                'BEGIN:VTIMEZONE',
+                'TZID:W. Europe Standard Time',
+                'BEGIN:STANDARD',
+                'DTSTART:16011028T030000',
+                'TZOFFSETFROM:+0200',
+                'TZOFFSETTO:+0100',
+                'RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=10',
+                'END:STANDARD',
+                'BEGIN:DAYLIGHT',
+                'DTSTART:16010325T020000',
+                'TZOFFSETFROM:+0100',
+                'TZOFFSETTO:+0200',
+                'RRULE:FREQ=YEARLY;BYDAY=-1SU;BYMONTH=3',
+                'END:DAYLIGHT',
+                'END:VTIMEZONE',
+                'BEGIN:VEVENT',
+                'UID:outlook-windows-zone@test',
+                'SUMMARY:Berlin Standup',
+                'DTSTART;TZID="W. Europe Standard Time":20260302T100000',
+                'DTEND;TZID="W. Europe Standard Time":20260302T103000',
+                'RRULE:FREQ=WEEKLY;COUNT=8',
+                'DTSTAMP:20260101T000000Z',
+                'END:VEVENT',
+                'END:VCALENDAR',
+            ].join('\r\n');
+
+            const put = await davRequest(
+                'PUT',
+                `/dav/calendars/${ctx.alice.user.id}/${aliceCalendarId}/outlook-windows-zone.ics`,
+                { email: ctx.alice.user.email, headers: { 'Content-Type': 'text/calendar' }, body: ics },
+            );
+            expect([201, 204]).toContain(put.status);
+
+            const berlin = new Intl.DateTimeFormat('en-GB', {
+                timeZone: 'Europe/Berlin',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+            });
+            const from = Math.floor(new Date('2026-03-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2026-05-01T00:00:00Z').getTime() / 1000);
+            const occurrences = (await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, from, to)).filter(
+                (e) => e.title === 'Berlin Standup',
+            );
+
+            expect(occurrences).toHaveLength(8);
+            expect(occurrences.map((e) => berlin.format(new Date(e.startTime)))).toEqual(Array(8).fill('10:00'));
         });
     });
 });

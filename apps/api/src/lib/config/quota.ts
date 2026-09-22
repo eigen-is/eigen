@@ -1,31 +1,47 @@
 import type { MountConfig } from '@workspace/lib/types/mount';
 import { teamOwnerId } from '@workspace/lib/types/owner';
-import { pullTeamQuotaOverrides } from '../home/home-relay';
+import { pullTeamQuotaOverrides, type TeamQuotaOverrides } from '../home/home-relay';
 import { getServerSettings } from './server-settings';
 
 export type ResolvedQuotas = {
-    mailAndContactsMax: number;
+    homeDataMax: number;
     mountMax: number;
 };
 
-export async function resolveUserQuotas(mountConfig: MountConfig, teamIds: string[]): Promise<ResolvedQuotas> {
-    const settings = getServerSettings();
+// One relay read per team home, and every drive upload resolves quotas.
+function pullOverrides(teamIds: string[]): Promise<TeamQuotaOverrides[]> {
+    return Promise.all(teamIds.map((teamId) => pullTeamQuotaOverrides(teamOwnerId(teamId))));
+}
 
-    const mailCandidates = [settings.quotas.mailAndContactsMaxMB];
-    const mountCandidates = [mountConfig.maxSizeMB ?? settings.quotas.defaultMountMaxSizeMB];
+function homeDataMaxOf(overrides: TeamQuotaOverrides[]): number {
+    const candidates = [getServerSettings().quotas.mailAndContactsMaxMB];
 
-    for (const teamId of teamIds) {
-        const overrides = await pullTeamQuotaOverrides(teamOwnerId(teamId));
-        if (overrides.mailAndContactsMaxMB != null) {
-            mailCandidates.push(overrides.mailAndContactsMaxMB);
+    for (const override of overrides) {
+        if (override.mailAndContactsMaxMB != null) {
+            candidates.push(override.mailAndContactsMaxMB);
         }
-        if (overrides.defaultMountMaxSizeMB != null) {
-            mountCandidates.push(overrides.defaultMountMaxSizeMB);
+    }
+
+    return Math.max(...candidates) * 1024 * 1024;
+}
+
+// Its own function because it needs no mount: a team Home has none, yet its calendar meters against this budget.
+export async function resolveHomeDataMax(teamIds: string[]): Promise<number> {
+    return homeDataMaxOf(await pullOverrides(teamIds));
+}
+
+export async function resolveUserQuotas(mountConfig: MountConfig, teamIds: string[]): Promise<ResolvedQuotas> {
+    const overrides = await pullOverrides(teamIds);
+    const mountCandidates = [mountConfig.maxSizeMB ?? getServerSettings().quotas.defaultMountMaxSizeMB];
+
+    for (const override of overrides) {
+        if (override.defaultMountMaxSizeMB != null) {
+            mountCandidates.push(override.defaultMountMaxSizeMB);
         }
     }
 
     return {
-        mailAndContactsMax: Math.max(...mailCandidates) * 1024 * 1024,
+        homeDataMax: homeDataMaxOf(overrides),
         mountMax: Math.max(...mountCandidates) * 1024 * 1024,
     };
 }

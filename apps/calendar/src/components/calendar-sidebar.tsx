@@ -1,23 +1,29 @@
 import { useNavigate } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
+import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import {
     getMonthRange,
     getWeekRange,
     useCalendars,
+    useExportCalendar,
+    useImportCalendar,
+    useImportCalendarFromDevice,
+    useSharedCalendarLabel,
     useSharedCalendars,
     useUpdateCalendar,
     useUpdateSharedCalendar,
 } from '@workspace/lib/calendar';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
-import { SidebarBody, SidebarItem, SidebarSection, TooltipButton } from '@workspace/ui';
+import { ICS_ACCEPT, isIcsFile } from '@workspace/lib/types/drive';
+import { KebabTrigger, SidebarBody, SidebarItem, SidebarSection, TooltipButton } from '@workspace/ui';
+import { FileImportPicker } from '@workspace/ui/components/drive/file-import-picker';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { StorageUsage } from '@workspace/ui/components/home';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { cn } from '@workspace/ui/lib/utils';
-import { CalendarDays, CalendarPlus, CalendarRange, Check, Pencil, Plus } from 'lucide-react';
+import { CalendarDays, CalendarPlus, CalendarRange, Check, Download, Pencil, Plus, Upload } from 'lucide-react';
 import { type MouseEvent, useMemo, useState } from 'react';
 import { CalendarConfigDialog } from './calendar-config-dialog';
-import { useSharedCalendarLabel } from './calendar-utils';
 import { CreateEventDialog } from './create-event-dialog';
 import { SharedCalendarConfigDialog } from './shared-calendar-config-dialog';
 
@@ -45,8 +51,8 @@ function CalendarCheckbox({ color, checked, onChange }: { color: string; checked
     );
 }
 
-// One row for both personal calendars and shared/team calendars — callers resolve
-// the color, label and checked state from whichever calendar shape they hold.
+// No onExport means the calendar cannot be downloaded here: it lives in another user's home, or the viewer is a guest.
+// No onImport means nothing can be brought in either: the same two cases, plus a team calendar the viewer may only read.
 function CalendarRow({
     color,
     label,
@@ -54,6 +60,8 @@ function CalendarRow({
     condensed,
     onToggle,
     onEdit,
+    onImport,
+    onExport,
 }: {
     color: string;
     label: string;
@@ -61,6 +69,8 @@ function CalendarRow({
     condensed: boolean;
     onToggle: () => void;
     onEdit: () => void;
+    onImport?: () => void;
+    onExport?: () => void;
 }) {
     return (
         <div
@@ -73,14 +83,26 @@ function CalendarRow({
             {!condensed && (
                 <>
                     <span className="text-sm truncate flex-1">{label}</span>
-                    <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100 pointer-coarse:opacity-80">
-                        <TooltipButton
-                            icon={Pencil}
-                            tooltipText="Edit calendar"
-                            variant="ghost"
-                            size="icon"
-                            onClick={onEdit}
-                        />
+                    {/* focus-within holds the trigger visible while its own menu is open. */}
+                    <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-80">
+                        <DropdownMenu>
+                            <KebabTrigger title="Calendar options" />
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={onEdit}>
+                                    <Pencil className="h-4 w-4 mr-2" /> Edit calendar
+                                </DropdownMenuItem>
+                                {onImport && (
+                                    <DropdownMenuItem onClick={onImport}>
+                                        <Upload className="h-4 w-4 mr-2" /> Import events…
+                                    </DropdownMenuItem>
+                                )}
+                                {onExport && (
+                                    <DropdownMenuItem onClick={onExport}>
+                                        <Download className="h-4 w-4 mr-2" /> Export calendar
+                                    </DropdownMenuItem>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </>
             )}
@@ -95,6 +117,10 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
     const { data: sharedCalendars = [], isLoading: sharedLoading } = useSharedCalendars(ownerId);
     const updateCalendar = useUpdateCalendar(ownerId);
     const updateSharedCalendar = useUpdateSharedCalendar(ownerId);
+    const { exportCalendar } = useExportCalendar();
+    const importCalendar = useImportCalendar();
+    const importFromDevice = useImportCalendarFromDevice();
+    const isGuest = useIsGuest();
     const navigate = useNavigate();
 
     const [configCalendar, setConfigCalendar] = useState<CalendarItem | null>(null);
@@ -104,6 +130,8 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
     const [configSharedCalendar, setConfigSharedCalendar] = useState<SharedCalendar | null>(null);
     const [sharedConfigDialogOpen, setSharedConfigDialogOpen] = useState(false);
     const [createEventOpen, setCreateEventOpen] = useState(false);
+    // The calendar the picked file goes into; null while no import dialog is open.
+    const [importTarget, setImportTarget] = useState<{ ownerId: string; calendarId: string } | null>(null);
 
     const { personalShared, teamShared } = useMemo(() => {
         const personal: SharedCalendar[] = [];
@@ -136,9 +164,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
         setSharedConfigDialogOpen(true);
     };
 
-    // Recompute the target period at click time so a tab left open across a midnight or month
-    // boundary still lands on today's period. The render-time ranges below only seed the Link's
-    // params and its active-route highlight, which re-derive on the post-navigation render.
+    // Recomputed at click time: a tab left open across midnight would navigate to yesterday's period.
     const navigateToCurrentPeriod = (e: MouseEvent, mode: 'month' | 'week') => {
         e.preventDefault();
         const range = mode === 'month' ? getMonthRange(new Date()) : getWeekRange(new Date());
@@ -198,6 +224,8 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                                 condensed={condensed}
                                 onToggle={() => updateCalendar.mutate({ id: cal.id, visible: !cal.visible })}
                                 onEdit={() => handleEditCalendar(cal)}
+                                onImport={isGuest ? undefined : () => setImportTarget({ ownerId, calendarId: cal.id })}
+                                onExport={isGuest ? undefined : () => void exportCalendar(ownerId, cal.id)}
                             />
                         ))}
                     </SidebarSection>
@@ -236,6 +264,20 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                                             updateSharedCalendar.mutate({ id: sc.id, visible: !sc.visible })
                                         }
                                         onEdit={() => handleEditSharedCalendar(display)}
+                                        onImport={
+                                            isGuest || sc.permission !== 'write'
+                                                ? undefined
+                                                : () =>
+                                                      setImportTarget({
+                                                          ownerId: sc.ownerUserId,
+                                                          calendarId: sc.calendarId,
+                                                      })
+                                        }
+                                        onExport={
+                                            isGuest
+                                                ? undefined
+                                                : () => void exportCalendar(sc.ownerUserId, sc.calendarId)
+                                        }
                                     />
                                 );
                             })}
@@ -266,6 +308,25 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
             />
 
             <CreateEventDialog open={createEventOpen} onOpenChange={setCreateEventOpen} />
+
+            {importTarget && (
+                <FileImportPicker
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setImportTarget(null);
+                    }}
+                    title="Import events"
+                    accept={ICS_ACCEPT}
+                    canPick={(item) => isIcsFile(item.mimeType, item.name)}
+                    onDeviceFile={(file) => importFromDevice.mutate({ file, ...importTarget })}
+                    onDrivePick={(item) =>
+                        importCalendar.mutate({
+                            drive: { sourceOwnerId: item.ownerId, sourceMountId: item.mountId, sourcePathId: item.id },
+                            ...importTarget,
+                        })
+                    }
+                />
+            )}
         </>
     );
 }

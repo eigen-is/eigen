@@ -1,27 +1,12 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { debounce } from 'es-toolkit';
+import { debouncePerOwner } from '../debounce-per-owner';
 import { invalidateContactList, invalidateLabelChanged, invalidateLabelCreated } from './hooks/keys';
 
-// A CardDAV bulk sync emits one event per card (a whole-file import sends the one batched contacts:changed
-// instead), and every card's invalidation restarts the mounted list refetch — 500 cards would mean 500
-// refetches per open tab, enough to trip the per-IP rate limiter. One trailing refetch per owner per burst
-// instead. The importing tab's own onSuccess invalidation is untouched, so a single write still lands
-// immediately.
-const INVALIDATE_DEBOUNCE_MS = 250;
-const debouncedListInvalidations = new Map<string, (queryClient: QueryClient) => void>();
-
-// The QueryClient travels as the argument (es-toolkit's debounce calls with the latest ones) rather than
-// in the closure, which is stored for the owner's lifetime.
-function invalidateListSoon(queryClient: QueryClient, ownerId: string): void {
-    let run = debouncedListInvalidations.get(ownerId);
-    if (!run) {
-        run = debounce((client: QueryClient) => invalidateContactList(client, ownerId), INVALIDATE_DEBOUNCE_MS);
-        debouncedListInvalidations.set(ownerId, run);
-    }
-    run(queryClient);
-}
+// A whole-file import sends the one batched contacts:changed instead. The importing tab's own onSuccess
+// invalidation is untouched, so a single write still lands immediately.
+const invalidateListSoon = debouncePerOwner(invalidateContactList, 250);
 
 export function handleContactsSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): boolean {
     if (!event?.type?.startsWith('contacts:')) return false;

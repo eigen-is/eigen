@@ -2,7 +2,7 @@ import { ApiError } from '../core';
 import { getHome } from '../home';
 import type { Home } from '../home/home';
 import { getMemberships } from '../user';
-import { type ResolvedQuotas, resolveUserQuotas } from './quota';
+import { type ResolvedQuotas, resolveHomeDataMax, resolveUserQuotas } from './quota';
 import { getMaxUploadSize } from './server-settings';
 
 async function resolveQuotas(
@@ -27,9 +27,7 @@ export async function getMountQuotaState(
     return { used, max: quotas.mountMax };
 }
 
-// addBytes is the bytes about to be written; creditExisting is the size of the
-// file being overwritten (subtracted from the projected total). Throws 507 if
-// the projection would exceed the mount's quota.
+// creditExisting is the size of the file being overwritten, so an in-place rewrite is charged only its growth.
 export async function enforceMountQuota(
     ownerId: string,
     userId: string,
@@ -54,18 +52,16 @@ export async function getUploadMaxSize(ownerId: string, userId: string, mountId:
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 
-// The other half of the storage budget — mail and contacts share one quota. Mirrors getMountQuotaState.
-// Both halves answer from in-memory byte counters (MaildirStore.size, Contacts.size), so a CardDAV device
-// sync metering every card it PUTs costs no query per card and every write is charged to the next check.
-async function getMailAndContactsQuotaState(userId: string): Promise<{ used: number; max: number }> {
-    const { home, quotas } = await resolveQuotas(userId, userId, 'default');
-    const used = ((await home.mail?.size()) || 0) + ((await home.contacts?.size()) || 0);
-    return { used, max: quotas.mailAndContactsMax };
+// Resolves no mount, so a team Home (which has none) meters its calendar here too; every part answers from an in-memory byte counter, so a device sync costs no query per write.
+async function getHomeDataQuotaState(ownerId: string): Promise<{ used: number; max: number }> {
+    const home = await getHome(ownerId); // ownerId-routed: this is the Home whose bytes are being charged
+    const { teamIds } = await getMemberships(ownerId);
+    return { used: await home.dataSize(), max: await resolveHomeDataMax(teamIds) };
 }
 
 export async function getMailUploadMaxSize(userId: string): Promise<number> {
     const maxUpload = Math.min(getMaxUploadSize(), MAX_ATTACHMENT_SIZE);
-    const { used, max } = await getMailAndContactsQuotaState(userId);
+    const { used, max } = await getHomeDataQuotaState(userId);
     const remainingQuota = max - used;
     if (remainingQuota <= 0) {
         throw new ApiError(507, 'Insufficient Storage');
@@ -81,18 +77,23 @@ export function enforceMaxUploadSize(fileSize: number): void {
 
 export async function enforceAvatarUpload(userId: string, fileSize: number): Promise<void> {
     enforceMaxUploadSize(fileSize);
-    const { used, max } = await getMailAndContactsQuotaState(userId);
+    const { used, max } = await getHomeDataQuotaState(userId);
     if (used + fileSize > max) {
         throw new ApiError(507, 'Insufficient Storage');
     }
 }
 
-// Bytes about to be written into the mail+contacts half of the budget — a contact card, an imported
-// message: addBytes is what lands, creditBytes the size of what it replaces (subtracted from the
-// projection, so a rewrite that shrinks a card is never refused). Same credit convention as enforceMountQuota.
-export async function enforceMailAndContactsQuota(userId: string, addBytes: number, creditBytes = 0): Promise<void> {
-    const { used, max } = await getMailAndContactsQuotaState(userId);
-    if (used + addBytes - creditBytes > max) {
+// How a user at a full budget still edits and cleans up: a rewrite growing by at most the grace passes, and every such edit together overshoots by at most the headroom.
+const HOME_DATA_EDIT_GRACE_BYTES = 1024;
+const HOME_DATA_EDIT_HEADROOM_BYTES = 1024 * 1024;
+
+// Same credit convention as enforceMountQuota: creditBytes is what the write replaces, 0 for a create.
+export async function enforceHomeDataQuota(ownerId: string, addBytes: number, creditBytes = 0): Promise<void> {
+    if (creditBytes > 0 && addBytes <= creditBytes) return;
+    const { used, max } = await getHomeDataQuotaState(ownerId);
+    const withinGrace = creditBytes > 0 && addBytes - creditBytes <= HOME_DATA_EDIT_GRACE_BYTES;
+    const ceiling = withinGrace ? max + HOME_DATA_EDIT_HEADROOM_BYTES : max;
+    if (used + addBytes - creditBytes > ceiling) {
         throw new ApiError(507, 'Insufficient Storage');
     }
 }

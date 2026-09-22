@@ -1,6 +1,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import {
     toLocalDateString,
+    useCalendarOptions,
     useCalendars,
     useCreateEvent,
     useSharedCalendars,
@@ -19,7 +20,7 @@ import {
 import { UsersRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
-import { buildEventTimes, useCalendarOptions } from './calendar-utils';
+import { buildEventTimes } from './calendar-utils';
 import { EventFormFields } from './event-form-fields';
 import { addMinutes, roundToNext15Minutes, toTimeString } from './time-select';
 

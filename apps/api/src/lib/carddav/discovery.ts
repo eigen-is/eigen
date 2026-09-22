@@ -1,21 +1,14 @@
+import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
 import type { CardBook, CardRow } from '../contacts/dav-store';
 import { addressbookHomeHref, encodePathSegment } from '../dav/href';
-import type { PropfindRequest } from '../dav/propfind';
-import {
-    addressbookCollectionProps,
-    addressbookHomeProps,
-    cardRowProps,
-    multistatusResponse,
-    response,
-    selectProps,
-} from './xml-builder';
+import { type PropfindRequest, selectProps } from '../dav/propfind';
+import { memberRowProps, multistatusResponse, response } from '../dav/xml';
+import { addressbookCollectionProps, addressbookHomeProps } from './xml-builder';
 
 // The one fixed book: URL segment `contacts`, displayname `Contacts` — no MKADDRESSBOOK.
 export const ADDRESSBOOK_ID = 'contacts';
 
-// The book and card hrefs every CardDAV surface emits (discovery, REPORT rows, the PUT Location header), on
-// top of the home href dav/href.ts owns. Card names are client-chosen, so the resource segment is minimally
-// path-encoded via the shared dav/href encoder — the same one the CalDAV twin's eventHref uses.
+// Card names are client-chosen, so the resource segment goes through the shared dav/href encoder.
 export const bookHref = (ownerId: string) => `${addressbookHomeHref(ownerId)}${ADDRESSBOOK_ID}/`;
 export const cardHref = (ownerId: string, uri: string) => `${bookHref(ownerId)}${encodePathSegment(uri)}`;
 
@@ -38,8 +31,7 @@ export function handleAddressbookHomePropfind(
     return multistatusResponse(responses);
 }
 
-// PROPFIND /dav/addressbooks/{ownerId}/contacts/ — the book collection, plus one card per resource at Depth:1
-// (etag + content-type). The card listing comes from the index; DAV serves every card, group cards included.
+// PROPFIND /dav/addressbooks/{ownerId}/contacts/ — DAV serves every card in the index, group cards included.
 export function handleAddressbookPropfind(
     ownerId: string,
     book: CardBook,
@@ -53,7 +45,12 @@ export function handleAddressbookPropfind(
     ];
     if (depth === '1') {
         for (const card of cards) {
-            responses.push(response(cardHref(ownerId, card.uri), selectProps(cardRowProps(card.etag), request, brief)));
+            responses.push(
+                response(
+                    cardHref(ownerId, card.uri),
+                    selectProps(memberRowProps(card.etag, VCARD_CONTENT_TYPE), request, brief),
+                ),
+            );
         }
     }
     return multistatusResponse(responses);
@@ -67,5 +64,7 @@ export function handleCardPropfind(
     request: PropfindRequest,
     brief: boolean,
 ): Response {
-    return multistatusResponse([response(cardHref(ownerId, uri), selectProps(cardRowProps(etag), request, brief))]);
+    return multistatusResponse([
+        response(cardHref(ownerId, uri), selectProps(memberRowProps(etag, VCARD_CONTENT_TYPE), request, brief)),
+    ]);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { parseIcs } from '../../lib/caldav/ical-parse';
+import { parseIcs } from '../../lib/ical';
 import { vcal } from '../ics-test-helpers';
 
 // A CalDAV resource holds one UID, but a preview and an import feed the parser whole files: a calendar

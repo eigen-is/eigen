@@ -407,7 +407,7 @@ events.addEventListener('state', async (ev) => {
 ```
 
 One EventSource per `UserHome` (cheap), shut down in `destruct()`. This replaces the
-`fs.watch()` + `syncMailbox()` pipeline.
+`fs.watch()` + `reconcileMailbox()` pipeline.
 
 **iMIP latency**: previously synchronous to delivery; now event-driven (sub-second under normal
 operation). For most flows this is fine. The one place it isn't is *concurrent* request

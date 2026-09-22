@@ -1,7 +1,5 @@
 // RFC 5545 §3.6.5 — build a VTIMEZONE from Intl offset data so serialized TZIDs carry a definition.
-// The zone's UTC transitions are discovered by probing Intl offsets, then compressed to two RRULE
-// observances when the DST rule is regular, else emitted one observance per transition.
-import { utcToLocal } from '../calendar/recurrence';
+import { utcToLocal } from './wall-clock';
 
 const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
 const DAY_MS = 86_400_000;
@@ -107,8 +105,6 @@ function observance(
     return lines;
 }
 
-// A group is compressible when every transition shares (from, to), month, weekday, wall time, follows one
-// "nth weekday" (or "last weekday") pattern, and has exactly one transition per year over a gapless span.
 function compressGroup(tzid: string, type: 'DAYLIGHT' | 'STANDARD', group: Transition[]): string[] | null {
     const first = group[0];
     const infos = group.map(wallInfo);
@@ -144,8 +140,7 @@ export function buildVTimezone(tzid: string, fromYear: number, toYear: number): 
     const cached = resultCache.get(key);
     if (cached) return cached;
 
-    // ical.js returns UTC (0) for instants before the earliest onset, so scan a year early: the last
-    // transition before fromYear-01-01 (Nov/Oct of fromYear-1) then anchors the whole requested range.
+    // ical.js reports UTC for instants before the earliest onset, so the scan starts a year early to anchor the range.
     const scanStart = Date.UTC(fromYear - 1, 0, 1);
     const transitions = scanTransitions(tzid, scanStart, Date.UTC(toYear + 1, 0, 1));
 

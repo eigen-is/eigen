@@ -1,10 +1,15 @@
-import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEvent, CreateEventInput, EventData } from '@workspace/lib/types/calendar';
 
-// Internal type extending the shared CalendarEvent with CalDAV-only storage fields
-export type CalendarEventRow = CalendarEvent & { eventCtag: number | null };
+// Sender's SEQUENCE plus the instant it stamped: together they order two messages the way RFC 5546 § 2.1.5 does.
+type MessageRevision = {
+    sequence: number;
+    dtstamp?: Date | null;
+};
 
-export type ReceiveInvitationPayload = {
+export type ReceiveInvitationPayload = MessageRevision & {
     uid: string;
+    // Set when the message addresses ONE occurrence: its RECURRENCE-ID key, so the receiver attaches an exception instead of replacing the series.
+    recurrenceDate?: string | null;
     title: string;
     description: string | null;
     location: string | null;
@@ -14,14 +19,15 @@ export type ReceiveInvitationPayload = {
     rrule: string | null;
     timezone: string | null;
     status: CalendarEvent['status'];
-    sequence: number;
     data: EventData;
     createByUserId: string;
     organizerEventId: string;
     organizerUserId: string;
 };
 
-export type InvitationUpdatePayload = {
+export type InvitationUpdatePayload = MessageRevision & {
+    // Same rule as ReceiveInvitationPayload: an update naming an occurrence moves that instance only.
+    recurrenceDate?: string | null;
     title: string;
     description: string | null;
     location: string | null;
@@ -31,16 +37,13 @@ export type InvitationUpdatePayload = {
     rrule: string | null;
     timezone?: string | null;
     status: CalendarEvent['status'];
-    sequence: number;
     attendees?: Attendee[];
 };
 
-// A single moved/canceled occurrence of an externally-organized recurring invite (inbound iMIP
-// REQUEST/CANCEL carrying a RECURRENCE-ID). Attaches as an exception on the linked series.
-export type InvitationExceptionPayload = {
+// Inbound iMIP REQUEST/CANCEL naming one occurrence: attaches as an exception on the linked series.
+export type InvitationExceptionPayload = MessageRevision & {
     recurrenceDate: string;
-    // Absolute instant of a UTC-Z RECURRENCE-ID (else undefined). Lets the receiver re-key against the
-    // linked series' timezone when the ICS carried no usable tz (audit #8).
+    // Absolute instant of a UTC-Z RECURRENCE-ID: lets the receiver re-key against the series timezone when the ICS carried none usable.
     recurrenceInstant?: Date | null;
     title: string;
     description: string | null;
@@ -50,43 +53,14 @@ export type InvitationExceptionPayload = {
     allDay: boolean;
     timezone: string | null;
     status: CalendarEvent['status'];
-    sequence: number;
     attendees?: Attendee[];
 };
 
-// Server-side input shapes for Calendar.createEvent / updateEvent. Distinct from the shared
-// `CreateEventInput` / `UpdateEventInput` (FE wire shape — see packages/lib/src/types/calendar.ts)
-// because they (a) take calendarId as a separate positional arg and (b) carry internal CalDAV
-// fields (createByUserId, uid, uri, sequence) that the FE must never set.
-export type CreateEventArgs = {
-    title: string;
-    startTime: Date;
-    endTime: Date;
-    allDay: boolean;
-    description?: string | null;
-    location?: string | null;
-    rrule?: string | null;
-    timezone?: string | null;
-    parentEventId?: string | null;
-    recurrenceDate?: string | null;
-    status?: CalendarEvent['status'];
+// The wire shape minus the positional calendarId, plus the internal CalDAV fields the FE must never set.
+export type CreateEventArgs = Omit<CreateEventInput, 'calendarId'> & {
     sequence?: number;
-    data?: EventData | null;
+    // Set only by an invitation receiver: the organizer's stamp replaces the local clock so the next message can be ordered against it.
+    dtstamp?: Date | null;
     createByUserId?: string | null;
     uid?: string | null;
-    uri?: string | null;
-};
-
-export type UpdateEventArgs = {
-    title?: string;
-    startTime?: Date;
-    endTime?: Date;
-    allDay?: boolean;
-    description?: string | null;
-    location?: string | null;
-    rrule?: string | null;
-    timezone?: string | null;
-    status?: CalendarEvent['status'];
-    sequence?: number;
-    data?: EventData | null;
 };

@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { debouncePerOwner } from '../../debounce-per-owner';
 
 // Define query keys for reuse
 export const homeKeys = {
@@ -8,20 +9,10 @@ export const homeKeys = {
     myTeams: (ownerId: string) => [...homeKeys.owner(ownerId), 'my-teams'] as const,
 };
 
-const homeSizeTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-export function invalidateHomeSize(queryClient: QueryClient, ownerId: string): void {
-    const existing = homeSizeTimers.get(ownerId);
-    if (existing) clearTimeout(existing);
-
-    homeSizeTimers.set(
-        ownerId,
-        setTimeout(() => {
-            homeSizeTimers.delete(ownerId);
-            queryClient.invalidateQueries({ queryKey: homeKeys.size(ownerId) });
-        }, 5000),
-    );
-}
+// A write settles asynchronously (an S3 sync, a maildir move), so the size is read well after it lands.
+export const invalidateHomeSize = debouncePerOwner((queryClient, ownerId) => {
+    queryClient.invalidateQueries({ queryKey: homeKeys.size(ownerId) });
+}, 5000);
 
 export function invalidateMyTeams(queryClient: QueryClient): void {
     queryClient.invalidateQueries({

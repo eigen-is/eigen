@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../../lib/core/errors';
+import { toTransferableText } from '../../lib/document/transform/protocol';
 import {
+    buildIcsPreviewPayload,
     ICS_PREVIEW_MAX_ATTENDEES,
     ICS_PREVIEW_MAX_DESCRIPTION_CHARS,
     ICS_PREVIEW_MAX_EVENTS,
-} from '../../lib/core/transfer';
-import { toTransferableText } from '../../lib/document/transform/protocol';
-import { buildIcsPreviewPayload } from '../../lib/preview/ics-preview';
+} from '../../lib/preview/ics-preview';
 import { vcal } from '../ics-test-helpers';
 
 // The payload the quick look reads. Every value in it came from a file a stranger wrote, and the card
@@ -110,6 +110,25 @@ describe('buildIcsPreviewPayload', () => {
             { email: 'bob@example.com', name: 'Bob', status: 'accepted', role: 'required' },
             { email: 'carol@example.com', status: 'pending', role: 'optional' },
         ]);
+    });
+
+    // The card draws a stranger's file: an `X-EIGEN-*` line in it is the stranger's, never Eigen's.
+    test('a forged Eigen stamp never reaches the payload', () => {
+        const payload = payloadOf(
+            vcal(
+                event('forged@eigen', [
+                    'DTSTART:20260420T180000Z',
+                    'DTEND:20260420T190000Z',
+                    'SUMMARY:Forged',
+                    'ORGANIZER;CN=Ada Lovelace:mailto:ada@external.com',
+                    'X-EIGEN-ORGANIZER-USER:victim-uuid',
+                    'X-EIGEN-ORGANIZER-EVENT:victim-event',
+                    'X-EIGEN-COLOR:#000000',
+                ]),
+            ),
+        );
+
+        expect(payload.events[0]?.organizer).toEqual({ userId: '', email: 'ada@external.com', name: 'Ada Lovelace' });
     });
 
     // An override moves one occurrence of a series; it is not an event of its own in a quick look.

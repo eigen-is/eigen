@@ -1,13 +1,17 @@
 import { useAuth } from '@workspace/lib/auth';
 import {
     isInvitationFromOthers,
+    isSeriesOccurrence,
     occurrenceDateToString,
     parseOccurrenceDate,
+    seriesEditFromOccurrence,
     toLocalDateString,
     truncateRRule,
+    useCalendarOptions,
     useCalendars,
     useCreateEvent,
     useDeleteEvent,
+    useEvent,
     useMoveEvent,
     useSharedCalendars,
     useUpdateEvent,
@@ -28,7 +32,7 @@ import {
 import { UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
-import { buildEventTimes, useCalendarOptions } from './calendar-utils';
+import { buildEventTimes } from './calendar-utils';
 import { EventFormFields } from './event-form-fields';
 import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
@@ -76,9 +80,7 @@ export function EditEventDialog({
     const [showRecurringDialog, setShowRecurringDialog] = useState(false);
     const [showMoveConfirm, setShowMoveConfirm] = useState(false);
 
-    // A cross-Home move creates the destination event then deletes the source. If the delete fails the
-    // dialog stays open; remember that the destination already exists so a retry only re-runs the delete
-    // instead of creating a second event (and re-fanning-out invitations). Reset each time the dialog opens.
+    // A retry after a failed source delete must not create the destination twice, nor fan invitations out again.
     const createdDestRef = useRef(false);
     useEffect(() => {
         if (open) createdDestRef.current = false;
@@ -93,6 +95,13 @@ export function EditEventDialog({
     const createEvent = useCreateEvent(selectedCal?.ownerId || eventOwnerId);
     const deleteEventOnSource = useDeleteEvent(eventOwnerId);
     const moveEvent = useMoveEvent(eventOwnerId);
+    // A series is saved on its master, and only the master's own row says which date the series starts on.
+    const { data: master } = useEvent(
+        eventOwnerId,
+        event?.calendarId ?? '',
+        event ? event.parentEventId || event.id : '',
+        open && !!event && isSeriesOccurrence(event),
+    );
     const saving =
         updateEvent.isPending || createEvent.isPending || deleteEventOnSource.isPending || moveEvent.isPending;
 
@@ -133,11 +142,14 @@ export function EditEventDialog({
     if (!event) return null;
 
     const isRecurring = !!event.rrule;
+    // An override of one occurrence carries no rule of its own: sending one back saves over the whole series.
+    const isOverride = !!event.parentEventId;
+    const isPartOfSeries = isSeriesOccurrence(event);
     const isLinkedEvent = isInvitationFromOthers(event, eventOwnerId === user?.id ? user.email : undefined);
+    // An invitation from someone else is read-only except for which calendar holds the copy.
+    const canSave = !isLinkedEvent || calendarChanged;
 
-    // A cross-Home move recreates the event in the other Home and deletes the source — which fires
-    // deleteEvent's iMIP side effects and can't carry exception children. Warn honestly before that
-    // (same precedence as deleteEvent: invitee-decline over organizer-cancel).
+    // A cross-Home move fires deleteEvent's iMIP side effects and leaves the exception children behind, so warn first.
     const crossHomeMove = calendarChanged && !!selectedCal && selectedCal.ownerId !== eventOwnerId;
     const moveLossReasons: string[] = [];
     if (isLinkedEvent) moveLossReasons.push('the invitation link will be removed (the organizer will see a decline)');
@@ -149,7 +161,7 @@ export function EditEventDialog({
         if (!title.trim()) return;
         if (crossHomeMove && moveLossReasons.length > 0) {
             setShowMoveConfirm(true);
-        } else if (isRecurring && !calendarChanged) {
+        } else if (isPartOfSeries && !calendarChanged) {
             setShowRecurringDialog(true);
         } else {
             doSave('all');
@@ -161,36 +173,44 @@ export function EditEventDialog({
 
         const data = { ...event.data, attendees: attendees.length > 0 ? attendees : undefined };
         const timezone = allDay ? null : (event.timezone ?? viewerTimeZone());
-        const updates = {
+        const edited = {
             title: title.trim(),
-            startTime: start,
-            endTime: end,
-            allDay,
             description: description.trim() || null,
             location: location.trim() || null,
-            rrule: rruleString,
+            allDay,
+            startTime: start,
+            endTime: end,
+        };
+        const updates = {
+            ...edited,
+            rrule: isOverride ? undefined : rruleString,
             timezone,
             data: Object.values(data).some((v) => v !== undefined) ? data : null,
         };
+        // The master is saved with what the user changed, never with the clicked occurrence's own times: taking
+        // those would drag the series' start onto that date and drop every occurrence before it.
+        const seriesUpdates = master
+            ? {
+                  rrule: updates.rrule,
+                  timezone,
+                  data: updates.data,
+                  ...seriesEditFromOccurrence(event, master, edited),
+              }
+            : updates;
 
         const targetId = event.parentEventId || event.id;
 
         if (calendarChanged && selectedCal) {
             if (selectedCal.ownerId === eventOwnerId) {
-                // Same Home: apply the edits in place, then the server-owned atomic move re-homes the master
-                // and its exception children, preserving the organizer link, timezone, and data a client can't
-                // re-send — and never firing deleteEvent's decline.
-                await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...updates });
+                // The server-owned move carries the exception children and the organizer link, and fires no decline.
+                await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...seriesUpdates });
                 await moveEvent.mutateAsync({
                     calendarId: event.calendarId,
                     id: targetId,
                     targetCalendarId: selectedCal.id,
                 });
             } else {
-                // Cross-Home move can't be atomic (the calendars live in different Homes): recreate the event
-                // in the target Home and delete the source. Organizer link and exception overrides don't cross Homes.
-                // The ref keeps the move retry-safe — skip re-creation if a prior attempt already created the
-                // destination and only the source delete failed.
+                // Two Homes have no atomic move: recreate, then delete, and the organizer link and overrides stay behind.
                 if (!createdDestRef.current) {
                     await createEvent.mutateAsync({ calendarId: selectedCal.id, ...updates });
                     createdDestRef.current = true;
@@ -199,7 +219,7 @@ export function EditEventDialog({
                 createdDestRef.current = false;
             }
         } else if (action === 'all') {
-            await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...updates });
+            await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...seriesUpdates });
         } else if (action === 'this') {
             await createEvent.mutateAsync({
                 calendarId: event.calendarId,
@@ -301,11 +321,16 @@ export function EditEventDialog({
 
                     <DialogFooter>
                         <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-                            Cancel
+                            {canSave ? 'Cancel' : 'Close'}
                         </Button>
-                        <Button onClick={handleSaveClick} disabled={saving || !title.trim()}>
-                            {saving ? 'Saving...' : 'Save'}
-                        </Button>
+                        {canSave && (
+                            <Button
+                                onClick={handleSaveClick}
+                                disabled={saving || !title.trim() || (isPartOfSeries && !master)}
+                            >
+                                {saving ? 'Saving...' : 'Save'}
+                            </Button>
+                        )}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -315,6 +340,7 @@ export function EditEventDialog({
                 onOpenChange={setShowRecurringDialog}
                 title="Edit recurring event"
                 onConfirm={doSave}
+                options={isOverride ? ['this', 'all'] : undefined}
             />
 
             <ConfirmDialog

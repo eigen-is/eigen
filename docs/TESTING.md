@@ -9,7 +9,9 @@ Every workspace has exactly one test folder, `<workspace>/src/test/`. Inside it,
 - **A test covering one module mirrors that module's path.** `packages/lib/src/vector/snap.ts` is tested by `packages/lib/src/test/vector/snap.test.ts`. This is the shape in `packages/lib`, `packages/ui`, `packages/sheet`, `apps/slides` and `apps/stickies`, where tests genuinely target single modules.
 - **A test covering a feature end-to-end gets a feature folder.** `apps/api/src/test/mail/`, `.../drive/`, `.../caldav/`. Most of the API suite boots a Home and drives the real API, so its subject is a feature, not a module — there is no module path to mirror.
 
-Shared harness files (`setup.ts`, `preload.ts`, `contacts-test-helpers.ts`, `fault-storage-helpers.ts`, `fixtures/`, `bench/`) sit at the `src/test/` root, not in a feature folder. `fault-storage-helpers.ts` is the one storage double for the resilience suites: a `StorageBackend` over a real `LocalStorage` whose writes and `exists()` probes can fail, stall, hang or be parked, plus `createFaultMount` to build a Mount on it.
+Shared harness files (`setup.ts`, `preload.ts`, `test-env.ts`, `home-test-helpers.ts`, `contacts-test-helpers.ts`, `calendar-test-helpers.ts`, `mail-test-helpers.ts`, `mount-test-helpers.ts`, `dav-test-helpers.ts`, `ics-test-helpers.ts`, `transfer-test-helpers.ts`, `fault-storage-helpers.ts`, `fixtures/`) sit at the `src/test/` root, not in a feature folder. `fault-storage-helpers.ts` is the storage double for the drive resilience suites: a `StorageBackend` over a real `LocalStorage` whose writes and `exists()` probes can fail, stall, hang or be parked, plus `createFaultMount` to build a Mount on it. The file+index stores need a different seam — they hold a `LocalFilesystem`, not a mount backend — so `calendar-test-helpers.ts` carries `DyingFilesystem`, a `LocalFilesystem` that can die after a write, an unlink or a move, or refuse the Nth write: that is how the store suite stops the process at each crash point and reopens the Home to see what the next reconcile does with it. `makeCalendar(storageOf?)` hands one over by **assigning `calendar.storage` on the fresh instance before `init`** — the constructor takes the Home alone, and `init` is the first call to touch the field.
+
+`home-test-helpers.ts` is the one fake-Home harness: `openTestHome(create, dir, user)` builds a domain class over a temp directory with no booted app behind it (a stub Home with a memoized `getLocalDatabase`, the current user and a broadcast sink), and `makeTestHome(create, root)` gives each harness its own subdir. The returned harness carries `reopen()` — a fresh instance over the same directory, which is how a crash or restart is simulated — plus `database(relativePath)` and `close()`. Close at most one harness per home dir: a second close unlinks a `-shm` another handle still maps and sqlite answers `SQLITE_IOERR_VNODE`, so a restart test closes the reopened half and leaves the first open. `makeContacts` (`contacts-test-helpers.ts`) and `makeCalendar` (`calendar-test-helpers.ts`) are thin callers of it. `dav-test-helpers.ts` holds the DAV request pair every protocol suite shares: `basicAuth(email)` and `davRequest(method, path, { email, headers, body })`.
 
 Two rules are enforced by `bun scripts/check-test-layout.ts`, which runs as part of `bun run check`:
 
@@ -90,10 +92,10 @@ Test -> Eden Treaty / authedRequest() -> app.handle() -> Real business logic -> 
 
 ## Test Files
 
-Every API test lives in a feature folder under `apps/api/src/test/` — `acl/`, `auth/`, `caldav/`,
-`calendar/`, `carddav/`, `chat/`, `collab/`, `comments/`, `contacts/`, `core/`, `document/`, `drive/`,
-`export/`, `home/`, `import/`, `mail/`, `mount/`, `preview/`, `search/`, `server/`, `storage/`, `webdav/`
-— one `<subject>.test.ts` per subject. Coverage spans CalDAV, WebDAV, mail, drive, collab, file history,
+Every API test lives in a feature folder under `apps/api/src/test/` — `acl/`, `auth/`, `backup/`, `caldav/`,
+`calendar/`, `carddav/`, `chat/`, `collab/`, `comments/`, `contacts/`, `core/`, `dav/`, `document/`, `drive/`,
+`export/`, `home/`, `ical/`, `import/`, `mail/`, `mount/`, `preview/`, `search/`, `server/`, `storage/`,
+`vcard/`, `webdav/` — one `<subject>.test.ts` per subject. Coverage spans CalDAV, WebDAV, mail, drive, collab, file history,
 search, import/export, demo mode, upload-queue chaos and more — grep the tree rather than assuming an
 area is untested.
 

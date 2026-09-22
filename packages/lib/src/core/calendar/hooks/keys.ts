@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query';
+import { invalidateHomeSize } from '../../home';
 
 export const calendarKeys = {
     all: ['calendar'] as const,
@@ -16,6 +17,8 @@ export const calendarKeys = {
                 to,
             },
         ] as const,
+    event: (ownerId: string, calendarId: string, id: string) =>
+        [...calendarKeys.events(ownerId), calendarId, id] as const,
     sharedCalendars: (ownerId: string) => [...calendarKeys.owner(ownerId), 'shared'] as const,
     access: (ownerId: string, calendarId: string) => [...calendarKeys.owner(ownerId), 'access', calendarId] as const,
 };
@@ -32,24 +35,13 @@ export function invalidateCalendarUpdated(queryClient: QueryClient, ownerId: str
 
 export function invalidateCalendarDeleted(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: calendarKeys.calendarList(ownerId) });
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
+    invalidateEventList(queryClient, ownerId);
 }
 
-export function invalidateEventCreated(queryClient: QueryClient, ownerId: string): void {
+// A moved event stales every range query, and its `.ics` bytes count against the Home's storage budget.
+export function invalidateEventList(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
-}
-
-// A whole file of events landed in one calendar: every range query is stale.
-export function invalidateEventsImported(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
-}
-
-export function invalidateEventUpdated(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
-}
-
-export function invalidateEventDeleted(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
+    invalidateHomeSize(queryClient, ownerId);
 }
 
 export function invalidateSharedCalendarUpdated(queryClient: QueryClient, ownerId: string): void {

@@ -4,6 +4,7 @@ import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
 import { type DrivePath, VCARD_MIMES } from '@workspace/lib/types/drive';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { splitVCards } from '../../lib/vcard';
+import { basicAuth, DAV_PASSWORD } from '../dav-test-helpers';
 import {
     app,
     assertJson,
@@ -17,8 +18,6 @@ import {
     type TestUser,
 } from '../setup';
 import { importFromDriveRequest, importRaw } from '../transfer-test-helpers';
-
-const PASSWORD = 'testpassword123';
 
 // LF-terminated 3.0 cards, the way every desktop client writes an export.
 const card = (fn: string, email: string, uid: string = randomUUID()) =>
@@ -68,8 +67,8 @@ describe('Contacts transfer routes', () => {
 
     beforeAll(async () => {
         await getTestContext();
-        alice = await createTestUser('vcard-routes-alice@test.eigen.is', PASSWORD, 'VCard Routes Alice');
-        bob = await createTestUser('vcard-routes-bob@test.eigen.is', PASSWORD, 'VCard Routes Bob');
+        alice = await createTestUser('vcard-routes-alice@test.eigen.is', DAV_PASSWORD, 'VCard Routes Alice');
+        bob = await createTestUser('vcard-routes-bob@test.eigen.is', DAV_PASSWORD, 'VCard Routes Bob');
 
         mountId = await firstMountId(alice.sessionToken, alice.id);
         rootId = (await driveGet(alice.sessionToken, alice.id, mountId, 'root')).id;
@@ -141,6 +140,16 @@ describe('Contacts transfer routes', () => {
         expect(res.status).toBe(200);
         expect(disposition).toContain('.vcf');
         expect(disposition.length).toBeLessThan(300);
+    });
+
+    // The clamp cuts at a UTF-16 unit, so an FN whose 200th unit is half an emoji reaches the header as a
+    // lone surrogate — which is not a string a percent-encoder can spell.
+    test('an emoji at the filename clamp still exports', async () => {
+        const id = await createContact(`${'a'.repeat(199)}😀tail`, 'Long', 'emoji@vcard-routes.example');
+
+        const res = await exportRequest(alice, alice.id, { ids: [id] });
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-disposition')).toContain('.vcf');
     });
 
     test('import-from-drive on own drive imports', async () => {
@@ -224,7 +233,7 @@ describe('Contacts transfer routes', () => {
             new Request(`http://localhost/dav/addressbooks/${alice.id}/contacts/${randomUUID()}.vcf`, {
                 method: 'PUT',
                 headers: {
-                    Authorization: `Basic ${btoa(`${alice.email}:${PASSWORD}`)}`,
+                    Authorization: basicAuth(alice.email),
                     'Content-Type': 'text/vcard; charset=utf-8',
                     'If-None-Match': '*',
                 },

@@ -19,3 +19,10 @@ apps/api/data
 caddy-data/
 # The image runs the API from source; never ship a stale local bundle.
 apps/api/build
+# Local-only trees the image never reads: the test data root, backup archives, agent state and
+# the docs' screenshots (well over a gigabyte together, all shipped to the daemon on every build).
+data-test/
+backups/
+.claude/
+.superpowers/
+docs/

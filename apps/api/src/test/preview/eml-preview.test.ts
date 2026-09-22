@@ -2,13 +2,13 @@ import { describe, expect, test } from 'bun:test';
 import type { EmlPreview } from '@workspace/lib/types/preview';
 import DOMPurify from 'isomorphic-dompurify';
 import { ApiError } from '../../lib/core/errors';
+import { toTransferableText } from '../../lib/document/transform/protocol';
 import {
+    buildEmlPreviewPayload,
     EML_PREVIEW_MAX_ATTACHMENTS,
     EML_PREVIEW_MAX_HTML_BYTES,
     EML_PREVIEW_MAX_TEXT_CHARS,
-} from '../../lib/core/transfer';
-import { toTransferableText } from '../../lib/document/transform/protocol';
-import { buildEmlPreviewPayload } from '../../lib/preview/eml-preview';
+} from '../../lib/preview/eml-preview';
 
 // The payload the quick look reads. Every value in it came from a file a stranger wrote, and its html is
 // injected into a shadow root on the app's own origin — so the preview makes no request when it renders:

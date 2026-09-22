@@ -1,4 +1,5 @@
 import { toLocalDateString } from '@workspace/lib/calendar';
+import type { CalendarOption } from '@workspace/lib/types/calendar';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -6,7 +7,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@workspace/ui/components/textarea';
 import { AlignLeft, Calendar, Clock, MapPin } from 'lucide-react';
 import type { ReactNode } from 'react';
-import type { CalendarOption } from './calendar-utils';
 import { RecurrencePicker } from './recurrence-picker';
 import { addMinutes, roundToNext15Minutes, TimeSelect, timeToMinutes, toTimeString } from './time-select';
 
@@ -39,8 +39,7 @@ type EventFormFieldsProps = {
     timezone: string;
     allDayId: string;
     attendeesSection: ReactNode;
-    // Title, time, recurrence, location and description of an invitation are the organizer's to change:
-    // updateEvent's linked event guard drops them (docs/CALENDAR.md). The calendar select stays live.
+    // An invitation's details belong to the organizer: updateEvent's linked-event guard drops them anyway.
     detailsDisabled?: boolean;
 };
 
@@ -223,7 +222,7 @@ export function EventFormFields({
                 <div className="flex items-center gap-3">
                     <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
                     <Select value={selectedCalKey} onValueChange={setSelectedCalKey}>
-                        <SelectTrigger className="flex-1">
+                        <SelectTrigger className="flex-1 min-w-0">
                             <SelectValue placeholder="Select calendar" />
                         </SelectTrigger>
                         <SelectContent>

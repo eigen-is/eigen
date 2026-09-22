@@ -1,11 +1,6 @@
 # Mail
 
-> **TLDR**: `apps/mail` is a personal email client over a per-user Maildir. The React app talks to a thin
-> Elysia router (`routes/mail.ts`) that delegates to the `Mail` domain class (`mail-domain.ts`) over a
-> swappable `MailStore` (today only `MaildirStore`), backed by a per-user `mail.db` (SQLite + FTS5). Mail is
-> **personal-only** — every route is `requireSelf`, there is no sharing/ACL. The list is keyset-paginated and
-> optimistically cached; sync runs off the request path. This doc is the app-level map; the on-disk Maildir
-> format, flag encoding, sync-engine mechanics, and Dovecot coexistence live in **[IMAP.md](IMAP.md)**.
+> **TLDR**: `apps/mail` is a personal email client over a per-user Maildir. The React app talks to a thin Elysia router (`routes/mail.ts`) that delegates to the `Mail` domain class (`mail-domain.ts`) over a swappable `MailStore` (today only `MaildirStore`), backed by a per-user `mail.db` (SQLite + FTS5). Mail is **personal-only** — every route is `requireSelf`, there is no sharing/ACL. The list is keyset-paginated and optimistically cached; sync runs off the request path. This doc is the app-level map; the on-disk Maildir format, flag encoding, sync-engine mechanics, and Dovecot coexistence live in **[IMAP.md](IMAP.md)**.
 
 ## Architecture
 
@@ -32,47 +27,37 @@ apps/mail (React)                          apps/api (Elysia)
                                      Maildir on disk  ── see IMAP.md
 ```
 
-`MailStore` is a deliberate seam: a second backend (JMAP/Stalwart) is proposed in
-[PROPOSAL_STALWART_MAIL.md](proposals/PROPOSAL_STALWART_MAIL.md) but not built. See
-[IMAP.md § Code Architecture](IMAP.md#code-architecture) for the storage side in depth.
+`MailStore` is a deliberate seam: a second backend (JMAP/Stalwart) is proposed in [PROPOSAL_STALWART_MAIL.md](proposals/PROPOSAL_STALWART_MAIL.md) but not built. See [IMAP.md § Code Architecture](IMAP.md#code-architecture) for the storage side in depth.
 
 ## Data model
 
-The `emails` table **is** the `EmailSummary` DTO — the DB row is returned to the client with no mapping
-(`packages/lib/src/types/mail.ts`). Columns: `id` (Maildir unique id, TEXT PK), `filename`, `subject`,
-`fromShort`/`fromAddress`, `toShort`/`toAddress`, `recipientsAll`, `textShort` (plain-text body — full text
-in the DB for FTS, capped only at the list-response seam), `size`, `date`, the `isRead`/`isFlagged`/
-`isDraft`/`isReplied`/`hasAttachments` booleans, `mailbox`, and `created/updatedAt`. The full parsed message
-(`Email = ParsedMail & EmailSummary`) is re-parsed from the `.eml` on demand; only the summary is cached.
+The `emails` table **is** the `EmailSummary` DTO — the DB row is returned to the client with no mapping (`packages/lib/src/types/mail.ts`). Columns: `id` (Maildir unique id, TEXT PK), `filename`, `subject`, `fromShort`/`fromAddress`, `toShort`/`toAddress`, `recipientsAll`, `textShort` (plain-text body — full text in the DB for FTS, capped only at the list-response seam), `size`, `date`, the `isRead`/`isFlagged`/ `isDraft`/`isReplied`/`hasAttachments` booleans, `mailbox`, and `created/updatedAt`. The full parsed message (`Email = ParsedMail & EmailSummary`) is re-parsed from the `.eml` on demand; only the summary is cached.
 
-`mail.db` lives at `<home>/eigen.mail/mail.db`. `MAIL_DB_CONFIG` (`db-config.ts`, `currentVersion: 5`):
-v1 creates `emails` + base indexes; v2 adds the address columns; v3 adds the `emails_fts` FTS5 table (porter
-+ unicode61) with `emails_ai/ad/au` sync triggers; v4 adds `idx_emails_mailbox_date (mailbox, date DESC, id
-DESC)` — the composite index backing keyset pagination; v5 drops the `email_labels`/`emails_to_labels` tables
-v1 created and nothing ever read. `emails` is the only table the mail code touches.
+`mail.db` lives at `<home>/eigen.mail/mail.db`. `MAIL_DB_CONFIG` (`db-config.ts`, `currentVersion: 5`): v1 creates `emails` + base indexes; v2 adds the address columns; v3 adds the `emails_fts` FTS5 table (porter
++ unicode61) with `emails_ai/ad/au` sync triggers; v4 adds `idx_emails_mailbox_date (mailbox, date DESC, id DESC)` — the composite index backing keyset pagination; v5 drops the `email_labels`/`emails_to_labels` tables v1 created and nothing ever read. `emails` is the only table the mail code touches.
 
-## Files and index
+## Storage model — files as truth
 
-This section describes `MaildirStore`, the only `MailStore` today; under a remote backend ([PROPOSAL_EXTERNAL_MAIL_PROVIDER.md](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)) the provider holds the truth and `mail.db` is a cache of it. Mail follows the contract contacts follow: standard files are the truth and SQLite is an index that rebuilds from them ([CONTACTS.md](CONTACTS.md) states the same for `cards/*.vcf`; calendar is the one domain whose truth is still its database, [CALENDAR.md](CALENDAR.md)). What differs is the writer count. The contacts cards are written by the API process alone; the Maildir is also written by Dovecot, out of process, which is why this store has `fs.watch` handles and a full readdir diff where contacts has a pending-write journal and a stat-only reconcile. The two share the primitives (`LocalFilesystem.writeAtomic`, `Semaphore(1)`, `ManagedDatabase`) and not a store class.
+This section describes `MaildirStore`, the only `MailStore` today; under a remote backend ([PROPOSAL_EXTERNAL_MAIL_PROVIDER.md](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)) the provider holds the truth and `mail.db` is a cache of it. Mail, contacts and calendar all follow one contract: standard files are the truth and SQLite is an index that rebuilds from them ([CONTACTS.md](CONTACTS.md) states it for `cards/*.vcf`, [CALENDAR.md](CALENDAR.md) for `calendars/<calendarId>/*.ics`). What differs is the writer count. The contacts cards are written by the API process alone; the Maildir is also written by Dovecot, out of process, which is why this store has `fs.watch` handles and a full readdir diff where contacts has a pending-write journal and a stat-only reconcile. The two share the durability primitives (`LocalFilesystem.writeDurable`, `renameDurable`, `moveDurable`, `unlinkDurable`, `writeAtomic` and its `sweepAtomicTemps`) and `ManagedDatabase`, not a store class: mail serializes on its own `Semaphore(1)`, contacts on the core's `WriteGate`.
 
 | | Lives in | Rebuilds from the files |
 |---|---|---|
 | Messages, flags, mailbox membership | the `.eml` files and their Maildir names | yes |
-| `emails` rows, `emails_fts` | `mail.db` | yes, by `syncMailbox` |
-| A fast-saved draft's subject, preview and recipients | the `draft-meta/` sidecar | yes, by `syncMailbox`: a Drafts row rebuilt from the stale `.eml` gets the sidecar projected back over it |
+| `emails` rows, `emails_fts` | `mail.db` | yes, by `reconcileMailbox` |
+| A fast-saved draft's subject, preview and recipients | the `draft-meta/` sidecar | yes, by `reconcileMailbox`: a Drafts row rebuilt from the stale `.eml` gets the sidecar projected back over it |
 | Staged draft attachments | `draft-attachments/`, swept after 24 h | not indexed, but charged to the mail quota, which re-walks that directory on every change to it ([QUOTA.md](QUOTA.md)) |
 
 The sidecar is written through `writeAtomic`, and a sidecar that cannot be read reads as absent — torn bytes, or an id no sidecar can exist under because another MDA named the file (`readDraftMeta` answers null rather than throwing, so one such file can't fail the whole Drafts reconcile). `applyDraftMeta` (`MaildirStore`) is the one projection of a sidecar onto its index row: the fast save applies it beside the sidecar write, and the Drafts sync re-applies it over each row it has just rebuilt.
 
 **A client-chosen id is a path segment.** A draft id names a Maildir file, its `draft-meta/` sidecar and, for a staged part, its `draft-attachments/` entry, so `messageHandleDraft` rejects an id `isSafePathSegment` (`lib/core/path-utils.ts`) refuses with a 400 — in the domain, not only in the store, because an id Eigen did not mint is wrong under any `MailStore`. `MaildirStore` asks the same predicate where it builds those filenames, for the staged temp ids too: a refusal, never a character mapping, since two mapped ids would collide on one file. The predicate is the one CardDAV resource names and calendar ids take ([CONTACTS.md](CONTACTS.md)); every id the server mints — `createUniqueMessageId`, `crypto.randomUUID` — passes it, which is why `createUniqueMessageId` reduces the host part to the predicate's charset instead of using Maildir's `\057`/`\072` escapes.
 
-**Every Maildir write is durable.** `writeAtomic` is not the primitive here: its temp file sits beside the target, while Maildir delivery renames *across* directories, so both the source and the destination entry matter. Three `LocalFilesystem` methods carry it (`lib/core/local-filesystem.ts`): `writeDurable` writes the file in `tmp/` and fsyncs it, `renameDurable` renames it into place and fsyncs the directory that gained the name, and `syncDir` is called by the caller for a directory that *lost* one — which only a move between mailboxes needs, because there both ends are indexed and a resurrected old name would re-index as a second copy. So a delivery fsyncs the file, then `new/`, then `cur/` when the sync moves it over; a draft save fsyncs the file and `Drafts/cur/`; a flag change is one rename and one directory fsync; a delete unlinks and fsyncs `cur/`; `moveNewToCur` renames its whole batch and fsyncs `cur/` **once**, since the guarantee is per directory and a cold sync of a large `new/` would otherwise pay thousands of fsyncs for one. Creating a mailbox fsyncs the new folder and the Maildir root that gained its entry, and the `subscriptions` file goes through `writeAtomic`. `writeAtomic` shares `syncDir` and stays what the sidecar and the vCards use. Dovecot's own writes are outside this: it owns `new/` → `cur/` whenever it runs ([IMAP.md](IMAP.md)).
+**Every Maildir write is durable.** `writeAtomic` is not the primitive here: its temp file sits beside the target, while Maildir delivery renames *across* directories, so both the source and the destination entry matter. Five `LocalFilesystem` methods carry it (`lib/core/local-filesystem.ts`): `writeDurable` writes the file in `tmp/` and fsyncs it, `renameDurable` renames it into place and fsyncs the directory that gained the name, `moveDurable` is that plus an fsync of the directory that *lost* it — a rename between two **indexed** directories, which only a move between mailboxes is, because there a resurrected old name would re-index as a second copy while a staging name is swept — `unlinkDurable` removes a name (a file already gone is the wanted outcome) and fsyncs the directory that held it, and `syncDir` is the primitive underneath all four. So a delivery fsyncs the file, then `new/`, then `cur/` when the sync moves it over; a draft save fsyncs the file and `Drafts/cur/`; a flag change is one rename and one directory fsync; a delete unlinks and fsyncs `cur/`; `moveNewToCur` renames its whole batch and fsyncs `cur/` **once**, since the guarantee is per directory and a cold sync of a large `new/` would otherwise pay thousands of fsyncs for one. Creating a mailbox fsyncs the new folder and the Maildir root that gained its entry, and the `subscriptions` file goes through `writeAtomic`. `writeAtomic` shares `syncDir` and stays what the sidecar and the vCards use. Dovecot's own writes are outside this: it owns `new/` → `cur/` whenever it runs ([IMAP.md](IMAP.md)).
 
 **Two limits of the guarantee.** A directory fsync runs *after* the rename or unlink it makes durable, so a file system that refuses the call (NFS, CIFS, some FUSE mounts) must not fail an operation that already happened — `syncDir` logs once per process and returns, because a delivery answering 500 makes the sending MTA retry a message that is already in `new/`, and every retry is a duplicate. The fsync of the staged file stays fatal: those bytes are not safe yet, and `writeDurable` unlinks the partial file before it rethrows. And on macOS `fsync` only hands the data to the drive, which may hold it in its own write cache (`F_FULLFSYNC` would flush that too), so the guarantee is weaker there than on Linux.
 
 A crash between a staged write and its rename leaves a file in a mailbox's `tmp/` that nothing else sweeps in standalone mode, so `cleanupStaleDraftTemps` sweeps those too, over every mailbox the enumeration lists, at the Maildir spec's age of 36 hours.
 
-**The file lands before the index row, always** — the files are the truth, so a crash between the two leaves the index behind the disk and the next `syncMailbox` repairs it:
+**The file lands before the index row, always** — the files are the truth, so a crash between the two leaves the index behind the disk and the next `reconcileMailbox` repairs it:
 
 | A crash right after | Leaves | The next sync |
 |---|---|---|
@@ -104,10 +89,7 @@ The behavior contract is the golden corpus: every `.eml` under `apps/api/src/tes
 | FE query keys (`emailKeys.list`) | `'inbox'` | standard lowercased; a custom folder verbatim |
 | URL segment | `box/inbox` | standard lowercased; a custom folder verbatim |
 
-The mailbox list search box passes the URL `filterId` (`'inbox'`) **verbatim** to the search endpoint —
-`Mail.search` re-canonicalizes it, so passing `''` would strip the filter and search every mailbox. The
-optimistic list patch sidesteps all of this by matching on message `id`, not the mailbox key. See
-[IMAP.md § Mailbox Structure](IMAP.md#mailbox-structure) for the on-disk `.Mailbox` layout.
+The mailbox list search box passes the URL `filterId` (`'inbox'`) **verbatim** to the search endpoint — `Mail.search` re-canonicalizes it, so passing `''` would strip the filter and search every mailbox. The optimistic list patch sidesteps all of this by matching on message `id`, not the mailbox key. See [IMAP.md § Mailbox Structure](IMAP.md#mailbox-structure) for the on-disk `.Mailbox` layout.
 
 **A mailbox name is a folder name, not an id.** `isValidMailboxPath` (`maildir-store.ts`) splits a path on either delimiter, `.` or `/`, and refuses a segment for what would break a path or the hierarchy rather than holding it to an allowlist: nothing empty, at most 200 characters, no control character, and no leading or trailing space. Splitting on both delimiters is what leaves no separator inside a segment, so `..` and a leading dot are empty segments and cannot be spelled at all. An allowlist is the wrong rule here because Dovecot writes `&` and everything outside printable ASCII in modified UTF-7 (`Ärger` is the directory `.&AMQ-rger`, `R&D` is `.R&-D`), and those folders are ordinary names this store lists, opens and moves into. `mailboxDir` turns a passing name into a directory and answers anything else with a 400. The segments are joined with `.`, so `Clients/Acme/2026` and `Clients.Acme.2026` are the one directory `.Clients.Acme.2026`, which is also the dotted form `mailboxesList` reports as `MaildirMailbox.path`. `''` stays the inbox and is the Maildir root itself.
 
@@ -147,19 +129,11 @@ POST   /mail/:ownerId/import-from-drive                   import an .eml that si
 
 ## Reading and the list (FE)
 
-`useEmails(mailboxPath)` (`packages/lib/src/core/mail/hooks/use-emails.ts`) is a `useInfiniteQuery` returning
-a flat `emails` array. `useMailList` (`apps/mail/src/components/mail/hooks/use-mail-list.ts`) owns the ordered
-rows (stable date-desc sort over the loaded window), selection, and the **id-tracked** keyboard cursor —
-shared with the shortcuts layer so both act on identical state. `EmailList` (`email-list.tsx`) virtualizes
-the rows (`@tanstack/react-virtual`) and fetches the next page as the end nears; it snaps the virtualizer to
-the top when the view identity changes (mailbox switch or entering/leaving search) via a `resetKey`, so the
-scroll window can't desync from a shrunken/grown list. The toolbar search box hits the server FTS endpoint
-(`useSearchQuery`, scoped to the current mailbox) instead of filtering the loaded window.
+`useEmails(mailboxPath)` (`packages/lib/src/core/mail/hooks/use-emails.ts`) is a `useInfiniteQuery` returning a flat `emails` array. `useMailList` (`apps/mail/src/components/mail/hooks/use-mail-list.ts`) owns the ordered rows (stable date-desc sort over the loaded window), selection, and the **id-tracked** keyboard cursor — shared with the shortcuts layer so both act on identical state. `EmailList` (`email-list.tsx`) virtualizes the rows (`@tanstack/react-virtual`) and fetches the next page as the end nears; it snaps the virtualizer to the top when the view identity changes (mailbox switch or entering/leaving search) via a `resetKey`, so the scroll window can't desync from a shrunken/grown list. The toolbar search box hits the server FTS endpoint (`useSearchQuery`, scoped to the current mailbox) instead of filtering the loaded window.
 
 ## Performance design
 
-At a real account shape (~50k Inbox + ~50k Archive) the naive list was ~34 MB per fetch and every mutation
-re-fetched the whole mailbox. Four shipped changes fix it (measured on a dev Mac):
+At a real account shape (~50k Inbox + ~50k Archive) the naive list was ~34 MB per fetch and every mutation re-fetched the whole mailbox. Four shipped changes fix it (measured on a dev Mac):
 
 | Concern | Before | After |
 |---|---|---|
@@ -168,52 +142,25 @@ re-fetched the whole mailbox. Four shipped changes fix it (measured on a dev Mac
 | Cold index (first sync) | 92 s baseline @100k, per-row inserts | batched, ~1.7× faster @10k+10k |
 | Archive with N pages loaded | ~8 full-list refetches | 0 |
 
-1. **Keyset pagination.** `MailDB.listMessages` uses a composite `(date, id)` cursor (`WHERE (date,id) <
-   (?,?) ORDER BY date DESC, id DESC LIMIT`) backed by the v4 index; the route caps `textShort` at 200 chars
-   in the response only (the full body stays in the DB for FTS). Page size 200, max 500.
-2. **Optimistic cache updates.** move/read/flag/delete patch the cached pages by id (`patchEmailInLists`)
-   inside an `onMutate` snapshot → patch → rollback-on-error contract, instead of invalidating. The UI is
-   instant; no mutation-path refetch.
-3. **Own-echo suppression.** The server echoes every mutation back to its originator over SSE. Each mutation
-   records the echo it expects (`markRecentMailMutation`) in a short-TTL per-tab registry; the SSE handler
-   `consumeRecentMailMutation`s it and skips the list refetch (keeping the cheap counts/search invalidations).
-   Other clients' changes are unaffected (no registry entry).
-4. **Non-blocking sync + batched cold-index.** `MaildirStore.listMessages` serves the DB immediately and
-   reconciles via a fire-and-forget `syncMailbox` (it blocks only on the first open of an empty mailbox); the
-   cold-index loop parses in chunks of 250 and bulk-inserts each chunk in one `insertEmails` upsert
-   transaction. See [IMAP.md § Sync Engine](IMAP.md#sync-engine) for the reconcile diff.
+1. **Keyset pagination.** `MailDB.listMessages` uses a composite `(date, id)` cursor (`WHERE (date,id) < (?,?) ORDER BY date DESC, id DESC LIMIT`) backed by the v4 index; the route caps `textShort` at 200 chars in the response only (the full body stays in the DB for FTS). Page size 200, max 500.
+2. **Optimistic cache updates.** move/read/flag/delete patch the cached pages by id (`patchEmailInLists`) inside an `onMutate` snapshot → patch → rollback-on-error contract, instead of invalidating. The UI is instant; no mutation-path refetch.
+3. **Own-echo suppression.** The server echoes every mutation back to its originator over SSE. Each mutation records the echo it expects (`markRecentMailMutation`) in a short-TTL per-tab registry; the SSE handler `consumeRecentMailMutation`s it and skips the list refetch (keeping the cheap counts/search invalidations). Other clients' changes are unaffected (no registry entry).
+4. **Non-blocking sync + batched cold-index.** `MaildirStore.listMessages` serves the DB immediately and reconciles via a fire-and-forget `reconcileMailbox` (it blocks only on the first open of an empty mailbox); the cold-index loop parses in chunks of 250 and bulk-inserts each chunk in one `insertEmails` upsert transaction. See [IMAP.md § Sync Engine](IMAP.md#sync-engine) for the reconcile diff.
 
-Deferred (Step 4, only for big imports): moving `parseEml` into a worker so a cold index of tens of
-thousands of messages doesn't saturate the shared event loop. A one-time bulk import still causes a stretch
-of slowness while the background index drains.
+Deferred (Step 4, only for big imports): moving `parseEml` into a worker so a cold index of tens of thousands of messages doesn't saturate the shared event loop. A one-time bulk import still causes a stretch of slowness while the background index drains.
 
 ## Sync and real-time
 
-The store exposes a change stream `MailStoreEvents` — `received(email, isNew)`, `flagsChanged`, `deleted` —
-which `Mail.init` wires to `home.broadcast(buildMailEvent(...))` (SSE via `sse-events.ts`) and, for new mail,
-`home.notifications.persist({ tag: 'mail:new', coalesce: true })` so a burst collapses to one notification.
-`isNew` asks whether a message is mail arriving: the one `append` just delivered is — unless the caller says
-otherwise with `arrival: false`, as an import, a copy and the welcome seed do — and any other file a sync
-finds is only when the mailbox already had rows, since a first index is discovery
-([IMAP.md § Sync Engine](IMAP.md#sync-engine)).
-SSE event types: `MAIL_RECEIVED`, `MAIL_MOVED`, `MAIL_DELETED`, `MAIL_READ_CHANGED`, `MAIL_FLAGS_CHANGED`,
-`MAIL_DRAFT_UPDATED`, `MAIL_SENT`. The FE `sse-handlers.ts` maps each to cache invalidation. See
-[SSE.md](SSE.md) and [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md); the fs-watcher and reconcile mechanics
-are in [IMAP.md § File Watching](IMAP.md#file-watching).
+The store exposes a change stream `MailStoreEvents` — `received(email, isNew)`, `flagsChanged`, `deleted` — which `Mail.init` wires to `home.broadcast(buildMailEvent(...))` (SSE via `sse-events.ts`) and, for new mail, `home.notifications.persist({ tag: 'mail:new', coalesce: true })` so a burst collapses to one notification. `isNew` asks whether a message is mail arriving: the one `append` just delivered is — unless the caller says otherwise with `arrival: false`, as an import, a copy and the welcome seed do — and any other file a sync finds is only when the mailbox already had rows, since a first index is discovery ([IMAP.md § Sync Engine](IMAP.md#sync-engine)). SSE event types: `MAIL_RECEIVED`, `MAIL_MOVED`, `MAIL_DELETED`, `MAIL_READ_CHANGED`, `MAIL_FLAGS_CHANGED`, `MAIL_DRAFT_UPDATED`, `MAIL_SENT`. The FE `sse-handlers.ts` maps each to cache invalidation. See [SSE.md](SSE.md) and [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md); the fs-watcher and reconcile mechanics are in [IMAP.md § File Watching](IMAP.md#file-watching).
 
 ## Compose, drafts, and send
 
 `messageHandleDraft` (`mail-domain.ts`) runs a two-mode draft state machine:
 
-- **Fast save** — writes only the `DraftMeta` JSON sidecar + a light DB content update; skips the EML
-  rebuild. Used when the kept set is exactly the set of parts the sidecar lists and the last full save is
-  recent (`FULL_SAVE_INTERVAL_MS` = 5 min). This leaves the on-disk `.eml` stale until a full save
-  (external IMAP clients see old content), so the sidecar is what the index and the composer read those
-  fields from.
+- **Fast save** — writes only the `DraftMeta` JSON sidecar + a light DB content update; skips the EML rebuild. Used when the kept set is exactly the set of parts the sidecar lists and the last full save is recent (`FULL_SAVE_INTERVAL_MS` = 5 min). This leaves the on-disk `.eml` stale until a full save (external IMAP clients see old content), so the sidecar is what the index and the composer read those fields from.
 - **Full save** — rebuilds the RFC 5322 `.eml` (`createEmlContent`), baking Drive reference-pill HTML in.
 
-`messageGet` overlays the sidecar onto the parsed draft so the composer shows what the user typed, not the
-baked markup. `Mail.destruct` force-flushes pending sidecars so a restart never leaves a stale draft.
+`messageGet` overlays the sidecar onto the parsed draft so the composer shows what the user typed, not the baked markup. `Mail.destruct` force-flushes pending sidecars so a restart never leaves a stale draft.
 
 The composer (`apps/mail/src/components/mail/email-draft.tsx` + its `hooks/use-draft.ts`) handles To/Cc/Bcc via `ContactAutosuggest`, a `LightEditor` (Tiptap) body, drag/paste-to-attach, debounced (2.5 s) autosave keyed off a fingerprint diff, a forced full save on unmount, signature injection for new/reply drafts, and Mod+Enter to send. Reply/forward are FE-only (quoted-body composition in `use-mail-actions.ts`); reply drafts also seed the `inReplyTo`/`references` threading headers. The send flow (recipient canonicalization, per-recipient link copies, and the access-grant dialog) is its own topic below.
 
@@ -251,13 +198,7 @@ Mailing a linked container document (a `driveReference`: an eigendoc, folder, ch
 
 ## Attachments
 
-Uploaded files stream to a draft-temp staging area (`uploadDraftAttachment` → `tempId`), passed back as
-`tempAttachmentIds` on the next draft save. Drive **files** are copied through the same staging path
-(`attachFromDrive`); Drive **containers** (docs, folders) are added as `driveReferences` instead and rendered
-as reference-pill `<a>` links at save/send (`renderAttachmentPills`, `mail-template.ts`) — see
-[MEDIA-REFERENCES.md](MEDIA-REFERENCES.md). Received attachments re-parse from the `.eml` on read and can be
-copied into Drive (`saveAttachmentsToDrive`); `text/calendar` parts are additionally summarized into a typed
-`Attachment.calendarInvite` for the invite widget — see [CALENDAR.md § iMIP](CALENDAR.md#imip-email-based-calendar-invitations).
+Uploaded files stream to a draft-temp staging area (`uploadDraftAttachment` → `tempId`), passed back as `tempAttachmentIds` on the next draft save. Drive **files** are copied through the same staging path (`attachFromDrive`); Drive **containers** (docs, folders) are added as `driveReferences` instead and rendered as reference-pill `<a>` links at save/send (`renderAttachmentPills`, `mail-template.ts`) — see [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md). Received attachments re-parse from the `.eml` on read and can be copied into Drive (`saveAttachmentsToDrive`); `text/calendar` parts are additionally summarized into a typed `Attachment.calendarInvite` for the invite widget — see [CALENDAR.md § iMIP](CALENDAR.md#imip-email-based-calendar-invitations).
 
 **One message, drawn once.** `MessageView` (`packages/ui/src/components/mail/message-view.tsx`) is the header block — subject, the sender row with the avatar, the expandable from/reply-to/to/cc/bcc/date details behind the "to: …" popover — and the body, `ShadowContent` for html and a `pre-wrap` block for a text-only message. It takes data and nothing else: each header field is typed wide enough for both a stored `Email`, whose ParsedMail fields may be a list, and an `EmlPreview`, whose fields are one object or null, so neither caller casts; `date` takes the `Date` the reader holds or the ISO string the preview serves. Two slots carry what a host owns: `attachments` above the body (the reader's `ReadAttachments`, the preview's plain chips) and `footer` under it (the reader's invite widgets). `apps/mail/src/components/mail/email-detail.tsx` keeps the toolbar, the mark-read effect, the context menu and those two, and the `.eml` quick look draws a served payload with the same component ([PREVIEWS.md](PREVIEWS.md)) — which is why a saved message reads as the message it was.
 
@@ -271,11 +212,7 @@ copied into Drive (`saveAttachmentsToDrive`); `text/calendar` parts are addition
 
 ## Delivery and inbound
 
-`POST /mail/deliver/:to` is unauthenticated but `requireLocalhost` (trusts Postfix on localhost): it resolves
-the user by address, appends the raw bytes to INBOX, then synchronously scans for iMIP calendar parts
-(`processInboundImip`) — see [CALENDAR.md § iMIP](CALENDAR.md#imip-email-based-calendar-invitations). On a
-user's first mail init a welcome message is written straight into their INBOX (`welcome.ts`, gated by the
-`onboarding.welcomeMail` server setting), bypassing SMTP.
+`POST /mail/deliver/:to` is unauthenticated but `requireLocalhost` (trusts Postfix on localhost): it resolves the user by address, appends the raw bytes to INBOX, then synchronously scans for iMIP calendar parts (`processInboundImip`) — see [CALENDAR.md § iMIP](CALENDAR.md#imip-email-based-calendar-invitations). On a user's first mail init a welcome message is written straight into their INBOX (`welcome.ts`, gated by the `onboarding.welcomeMail` server setting), bypassing SMTP.
 
 **Role addresses.** When no user owns the recipient and `isRoleAddress` (`apps/api/src/lib/config/server-config.ts`) matches — an address on this server's mail domain whose local part is `postmaster`, `abuse`, or `noreply` (`ROLE_MAILBOX_LOCAL_PARTS`, `packages/lib/src/validation/username.ts`, also part of the reserved-username list) — `mailboxDeliver` delivers the raw bytes unchanged to the INBOX of every org admin (owners and admins, `getOrgAdmins`), so DMARC aggregate reports to `postmaster@` and delivery-status notifications for system mail sent as `noreply@` reach a human instead of bouncing (RFC 2142). No mailbox is created for these addresses. Nobody can claim one: the better-auth `user.create.before` / `user.update.before` hooks reject a role address on every creation and email-change path, and `requestOtp` refuses a guest sign-in for any address on the mail domain, since guest rows bypass those hooks. External addresses such as `postmaster@example.com` are unaffected.
 
@@ -283,60 +220,33 @@ user's first mail init a welcome message is written straight into their INBOX (`
 
 ## Importing an .eml
 
-`POST /mail/:ownerId/import` takes one `.eml` as the raw body and `POST /mail/:ownerId/import-from-drive` takes one the user may read from any drive (`readImportSourceBytes`, [ARCHITECTURE.md](ARCHITECTURE.md); not an `.eml` by `isEmlFile` → 400, past `EML_MAX_BYTES` → 413, the ceiling the raw route enforces on the body too). Both are `requireNonGuest` + `requireSelf` and end in `Mail.messageImport`, which reads the envelope headers first (`splitMime`, not a full parse: the sync the append kicks parses the message anyway) — a file carrying none of `From`, `Date`, `Subject` or `Message-ID` is not a message and is a 400 with nothing written — charges them to the mail + contacts budget (`enforceMailAndContactsQuota`, 507 before any write, [QUOTA.md](QUOTA.md)), then appends them to the INBOX through the store with `arrival: false`, so the message lands unread and the list updates over SSE the way a delivery does, but **an import raises no "New mail" notification**: the user is holding the file, and the `From` header on it is the sender's to choose, so a notification would show a stranger's name and avatar in the bell on the user's own action. It never runs `processInboundImip`: an imported file carries no DKIM verdict this server recorded, so a `text/calendar` REQUEST inside it stays an attachment and no calendar event is created or changed. Importing the same file twice gives two messages, the way an IMAP `APPEND` does. A user reaches both through one row: **Import to Mail** in the `FILE_ACTIONS` registry, on any `.eml` under the ceiling wherever a file menu is drawn — a Drive item, a mail or chat attachment, the quick-look footer — run by `useFileActionRunner`, which posts a Drive path to `/import-from-drive` and fetches a subject without one in the browser first. The row is hidden for a guest, because the routes refuse one ([PREVIEWS.md](PREVIEWS.md)).
+`POST /mail/:ownerId/import` takes one `.eml` as the raw body and `POST /mail/:ownerId/import-from-drive` takes one the user may read from any drive (`readImportSourceBytes`, [ARCHITECTURE.md](ARCHITECTURE.md); not an `.eml` by `isEmlFile` → 400, past `EML_MAX_BYTES` → 413, the ceiling the raw route enforces on the body too). Both are `requireNonGuest` + `requireSelf` and end in `Mail.messageImport`, which reads the envelope headers first (`splitMime`, not a full parse: the sync the append kicks parses the message anyway) — a file carrying none of `From`, `Date`, `Subject` or `Message-ID` is not a message and is a 400 with nothing written — charges them to the mail + contacts budget (`enforceHomeDataQuota`, 507 before any write, [QUOTA.md](QUOTA.md)), then appends them to the INBOX through the store with `arrival: false`, so the message lands unread and the list updates over SSE the way a delivery does, but **an import raises no "New mail" notification**: the user is holding the file, and the `From` header on it is the sender's to choose, so a notification would show a stranger's name and avatar in the bell on the user's own action. It never runs `processInboundImip`: an imported file carries no DKIM verdict this server recorded, so a `text/calendar` REQUEST inside it stays an attachment and no calendar event is created or changed. Importing the same file twice gives two messages, the way an IMAP `APPEND` does. A user reaches both through one row: **Import to Mail** in the `FILE_ACTIONS` registry, on any `.eml` under the ceiling wherever a file menu is drawn — a Drive item, a mail or chat attachment, the quick-look footer — run by `useFileActionRunner`, which posts a Drive path to `/import-from-drive` and fetches a subject without one in the browser first. The row is hidden for a guest, because the routes refuse one ([PREVIEWS.md](PREVIEWS.md)).
 
 ## Protocol access (IMAP/CalDAV/WebDAV)
 
-There is **no in-repo IMAP server**. The Maildir is written in a Dovecot-compatible on-disk format; Dovecot
-runs as a separate container (`docker/dovecot/`) serving real IMAP off the same files. It authenticates via
-its `checkpassword` mechanism → Eigen's `POST /internal/auth/verify` → `verifyProtocolAuth`
-(`lib/auth/protocol-auth.ts`), which tries an app-password (better-auth API key) first and falls back to the
-primary account password (the fallback fails if 2FA is on). The same `verifyProtocolAuth` is shared by CalDAV
-and WebDAV. Full Dovecot config/deployment is in [IMAP.md](IMAP.md#dovecot-configuration-reference).
+There is **no in-repo IMAP server**. The Maildir is written in a Dovecot-compatible on-disk format; Dovecot runs as a separate container (`docker/dovecot/`) serving real IMAP off the same files. It authenticates via its `checkpassword` mechanism → Eigen's `POST /internal/auth/verify` → `verifyProtocolAuth` (`lib/auth/protocol-auth.ts`), which tries an app-password (better-auth API key) first and falls back to the primary account password (the fallback fails if 2FA is on). The same `verifyProtocolAuth` is shared by CalDAV and WebDAV. Full Dovecot config/deployment is in [IMAP.md](IMAP.md#dovecot-configuration-reference).
 
-`verifyProtocolAuth` counts failures per address and per client IP (`protocol-rate-limit.ts`). Both buckets now
-fill on the SASL path too: `eigen-checkpassword` forwards Dovecot's `TCPREMOTEIP`, and for a submission login that is
-the SMTP client's address, which Postfix reports to Dovecot as `rip`. A valid app password is checked before
-the limiter, so a saturated bucket never locks out an app-password client.
+`verifyProtocolAuth` counts failures per address and per client IP (`protocol-rate-limit.ts`). Both buckets now fill on the SASL path too: `eigen-checkpassword` forwards Dovecot's `TCPREMOTEIP`, and for a submission login that is the SMTP client's address, which Postfix reports to Dovecot as `rip`. A valid app password is checked before the limiter, so a saturated bucket never locks out an app-password client.
 
 ## Keyboard shortcuts and settings
 
-Opt-in Gmail-style shortcuts (`use-mail-shortcuts.ts`; cheat sheet in `mail-shortcuts-dialog.tsx`, opened
-with `?`) cover navigation (`j`/`k`/`o`/`u`), actions (`e`/`#`/`s`/`r`/`a`/`f`/`[`/`]`), `g`-chord jumps, and
-`*`-chord bulk selection; compose sends on ⌘/Ctrl+Enter. The whole set stands down while a dialog is open (`useDialogOpen`, [LAYOUT.md § Keyboard Shortcuts](LAYOUT.md#keyboard-shortcuts)), and the chords also while a field is focused. Mail preferences live in the **space** app, not
-`apps/mail`: `apps/space/src/components/space/mail-prefs-section.tsx` (the `keyboardShortcuts` toggle +
-`autoAdvance` select) and `signature-section.tsx` (a single rich-text signature), both stored under
-`UserSettings.email` (`packages/lib/src/types/settings.ts`) and consumed by the mail route via
-`useSpaceSettings`.
+Opt-in Gmail-style shortcuts (`use-mail-shortcuts.ts`; cheat sheet in `mail-shortcuts-dialog.tsx`, opened with `?`) cover navigation (`j`/`k`/`o`/`u`), actions (`e`/`#`/`s`/`r`/`a`/`f`/`[`/`]`), `g`-chord jumps, and `*`-chord bulk selection; compose sends on ⌘/Ctrl+Enter. The whole set stands down while a dialog is open (`useDialogOpen`, [LAYOUT.md § Keyboard Shortcuts](LAYOUT.md#keyboard-shortcuts)), and the chords also while a field is focused. Mail preferences live in the **space** app, not `apps/mail`: `apps/space/src/components/space/mail-prefs-section.tsx` (the `keyboardShortcuts` toggle + `autoAdvance` select) and `signature-section.tsx` (a single rich-text signature), both stored under `UserSettings.email` (`packages/lib/src/types/settings.ts`) and consumed by the mail route via `useSpaceSettings`.
 
 ## Not yet implemented / limitations
 
 - **No labels** — a message belongs to exactly one mailbox, and that is the only organization mail offers.
-- **Step 4 (worker offload) is deferred** — a cold index of tens of thousands of messages saturates the
-  shared event loop until it drains (only matters for one-time bulk imports). The move also covers the
-  residuals from the mail-parser audit: `DOMPurify.sanitize` still runs uncapped synchronous CPU on untrusted
-  HTML in `mail-parse.ts` (the `htmlToText`/`textToHtml` inputs are capped at 2 MB in `html.ts`, DOMPurify's isn't).
-  `html-to-text` throws on pathologically nested HTML (tens of thousands of nested tags); that propagates out of
-  `parseMail`, so that one email becomes unreadable rather than degrading.
-  Measured cost of the uncapped sanitize: ≈420 MB peak RSS per MB of HTML, so a 12 MiB `text/html` part peaks at 4.4 GB over 7 s; `inlineCidImages` (`mail-parser/html.ts`) is the other unbounded half of the same read, copying one cid's bytes per reference. The `.eml` preview bounds both on its own path (`EML_PREVIEW_MAX_HTML_BYTES`, [PREVIEWS.md](PREVIEWS.md)); the reader does not.
-- The summary/cold-index parse fully decodes + buffers attachment content it never reads (audit #12) —
-  a `skipAttachmentContent` flag is deliberately unbuilt; add it only if a real large-mailbox profile
-  justifies it (largely subsumed by the worker move).
+- **Step 4 (worker offload) is deferred** — a cold index of tens of thousands of messages saturates the shared event loop until it drains (only matters for one-time bulk imports). The move also covers the residuals from the mail-parser audit: `DOMPurify.sanitize` still runs uncapped synchronous CPU on untrusted HTML in `mail-parse.ts` (the `htmlToText`/`textToHtml` inputs are capped at 2 MB in `html.ts`, DOMPurify's isn't). `html-to-text` throws on pathologically nested HTML (tens of thousands of nested tags); that propagates out of `parseMail`, so that one email becomes unreadable rather than degrading. Measured cost of the uncapped sanitize: ≈420 MB peak RSS per MB of HTML, so a 12 MiB `text/html` part peaks at 4.4 GB over 7 s; `inlineCidImages` (`mail-parser/html.ts`) is the other unbounded half of the same read, copying one cid's bytes per reference. The `.eml` preview bounds both on its own path (`EML_PREVIEW_MAX_HTML_BYTES`, [PREVIEWS.md](PREVIEWS.md)); the reader does not.
+- The summary/cold-index parse fully decodes + buffers attachment content it never reads (audit #12) — a `skipAttachmentContent` flag is deliberately unbuilt; add it only if a real large-mailbox profile justifies it (largely subsumed by the worker move).
 - Fast-saved drafts leave the on-disk `.eml` stale until a full save — external IMAP clients see old content.
 - Folders outside the standard six are listed and openable, but Eigen offers no way to create, rename or delete one — that stays an IMAP client's job (the `POST /mail/:ownerId/mailbox` route exists and no UI calls it).
 - Primary-password protocol auth fails when 2FA is enabled (use an app password).
-- A second `MailStore` backend (JMAP/Stalwart) is proposed only — see
-  [PROPOSAL_STALWART_MAIL.md](proposals/PROPOSAL_STALWART_MAIL.md).
+- A second `MailStore` backend (JMAP/Stalwart) is proposed only — see [PROPOSAL_STALWART_MAIL.md](proposals/PROPOSAL_STALWART_MAIL.md).
 - Mail is hosted or absent: `MaildirStore` is the only `MailStore`, and inbound mail and inbound iMIP only ever arrive through an MTA on localhost (`POST /mail/deliver/:to`). A user whose mailbox lives at another provider has no Mail app and no inbound invitations. An IMAP-backed store for that case is proposed in [PROPOSAL_EXTERNAL_MAIL_PROVIDER.md](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md).
 
 ## Where the code lives
 
-- **Backend**: `apps/api/src/lib/mail/` — the whole stack in the diagram above (routes are the one exception,
-  `apps/api/src/routes/mail.ts`). Shared with other protocols: `lib/auth/protocol-auth.ts`, `lib/core/mailer.ts`.
-- **Shared**: `packages/lib/src/core/mail/` — hooks (`hooks/use-emails.ts`, `use-mailboxes.ts`, `use-draft.ts`),
-  query keys, optimistic-patch helpers, `sse-handlers.ts`. Types in `packages/lib/src/types/mail.ts`.
-- **Frontend**: `apps/mail/src/components/mail/` — list, detail, composer, plus their `hooks/` (list state,
-  actions, shortcuts). The route wiring sits in `apps/mail/src/routes/`. Mail *settings* live in
-  `apps/space/src/components/space/`.
+- **Backend**: `apps/api/src/lib/mail/` — the whole stack in the diagram above (routes are the one exception, `apps/api/src/routes/mail.ts`). Shared with other protocols: `lib/auth/protocol-auth.ts`, `lib/core/mailer.ts`.
+- **Shared**: `packages/lib/src/core/mail/` — hooks (`hooks/use-emails.ts`, `use-mailboxes.ts`, `use-draft.ts`), query keys, optimistic-patch helpers, `sse-handlers.ts`. Types in `packages/lib/src/types/mail.ts`.
+- **Frontend**: `apps/mail/src/components/mail/` — list, detail, composer, plus their `hooks/` (list state, actions, shortcuts). The route wiring sits in `apps/mail/src/routes/`. Mail *settings* live in `apps/space/src/components/space/`.
 
 Storage internals (Maildir layout, flag encoding, sync-engine diff, Dovecot): **[IMAP.md](IMAP.md)**.

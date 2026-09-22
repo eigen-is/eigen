@@ -72,9 +72,9 @@ export interface MailStore {
     getMessage(messageId: string): Promise<Email | null>;
     getRawMessage(messageId: string): Promise<ArrayBuffer>;
     getAttachments(messageId: string): Promise<Attachment[]>;
-    // skipSync: leave discovery to the next sync. arrival: false for a message the user placed there —
+    // skipReconcile: leave discovery to the next pass. arrival: false for a message the user placed there —
     // indexed and broadcast, but not mail arriving, so it reaches `received` as not new.
-    append(mailbox: string, message: Buffer, opts?: { skipSync?: boolean; arrival?: boolean }): Promise<string>;
+    append(mailbox: string, message: Buffer, opts?: { skipReconcile?: boolean; arrival?: boolean }): Promise<string>;
     // Writes raw draft bytes under existingId (or a fresh id), indexes them, returns the parsed result.
     saveDraft(raw: string, existingId?: string): Promise<Email>;
     delete(messageId: string): Promise<void>;

@@ -1,17 +1,14 @@
-import { XMLParser } from 'fast-xml-parser';
 import type { Calendar } from '../calendar/calendar';
+import { sanitizeCalendarId } from '../calendar/resource-store';
 import { ApiError } from '../core';
+import { multistatusResponse, propstatOk, response } from '../dav/xml';
 import { isXmlNode, type XmlNode } from '../dav/xml-node';
-import { calendarHref, sanitizeCalendarId } from './discovery';
-import { multistatusResponse, propstatOk, response } from './xml-builder';
+import { calendarHref } from './discovery';
+import { caldavXmlParser } from './xml-parser';
 
-// removeNSPrefix strips the D:/C:/ICAL: prefixes, so property lookups below stay unprefixed — no fallback needed.
-const parser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
-
-// A prop element is either the bare text (fxp coerces purely numeric text to a number) or, when it carried an
-// attribute (e.g. xml:lang), an object with the value under '#text'. Return the string form; null when absent.
+// A prop that carried an attribute (xml:lang) parses to an object holding the value under '#text', not a bare string.
 function textOf(value: unknown): string | null {
-    if (typeof value === 'string' || typeof value === 'number') return String(value);
+    if (typeof value === 'string') return value;
     if (isXmlNode(value) && '#text' in value) return String(value['#text']);
     return null;
 }
@@ -28,16 +25,19 @@ function extractCalendarProps(prop: XmlNode): { name?: string; color?: string } 
 }
 
 // MKCALENDAR /dav/calendars/:ownerId/:calendarId/ — creates the calendar at the client-chosen id.
-export function handleMkcalendar(calendar: Calendar, ownerId: string, calendarId: string, body: string): Response {
+export async function handleMkcalendar(
+    calendar: Calendar,
+    ownerId: string,
+    calendarId: string,
+    body: string,
+): Promise<Response> {
     const id = sanitizeCalendarId(calendarId);
     if (!id) return new Response('Bad Request', { status: 400 });
-    // MKCALENDAR on an existing collection is a precondition failure (RFC 5689 / WebDAV MKCOL semantics).
-    if (calendar.getCalendarById(id)) return new Response('Method Not Allowed', { status: 405 });
 
     let props: { name?: string; color?: string } = {};
     if (body?.trim()) {
         try {
-            const parsed = parser.parse(body);
+            const parsed = caldavXmlParser.parse(body);
             const mkcal = parsed['mkcalendar'] || {};
             const set = mkcal['set'] || {};
             props = extractCalendarProps(set['prop'] || {});
@@ -46,13 +46,20 @@ export function handleMkcalendar(calendar: Calendar, ownerId: string, calendarId
         }
     }
 
-    calendar.createCalendar({ id, name: props.name ?? id, color: props.color ?? '#4285f4' });
+    try {
+        await calendar.createCalendar({ id, name: props.name ?? id, color: props.color });
+    } catch (error) {
+        if (!(error instanceof ApiError)) throw error;
+        // One directory is one calendar, so a case variant of an existing name hits the same collection: 405 (RFC 5689).
+        if (error.status === 409) return new Response('Method Not Allowed', { status: 405 });
+        // A property value the domain refuses is WebDAV's 403 on a property the server will not set.
+        if (error.status === 400) return new Response('Forbidden', { status: 403 });
+        throw error;
+    }
     return new Response(null, { status: 201, headers: { Location: calendarHref(ownerId, id) } });
 }
 
-// DELETE /dav/calendars/:ownerId/:calendarId/ — the MKCALENDAR twin. deleteCalendar owns which calendars may go
-// (and the SSE broadcast), and DAV renames exactly one of its statuses: the default calendar's 400 refusal is
-// WebDAV's 403 on a protected collection. Every other failure travels on with its own status.
+// DAV renames one status deleteCalendar raises: the default calendar's 400 refusal is WebDAV's 403 on a protected collection.
 export async function handleDeleteCalendar(calendar: Calendar, calendarId: string): Promise<Response> {
     try {
         await calendar.deleteCalendar(calendarId);
@@ -72,7 +79,7 @@ export async function handleProppatch(
     ownerId: string,
     body: string,
 ): Promise<Response> {
-    const calendarItem = calendar.getCalendarById(calendarId);
+    const calendarItem = await calendar.getCalendarById(calendarId);
     if (!calendarItem) return new Response('Not Found', { status: 404 });
 
     const updates: { name?: string; color?: string } = {};
@@ -80,7 +87,7 @@ export async function handleProppatch(
 
     if (body?.trim()) {
         try {
-            const parsed = parser.parse(body);
+            const parsed = caldavXmlParser.parse(body);
             const propertyupdate = parsed['propertyupdate'] || {};
             const set = propertyupdate['set'] || {};
             const props = extractCalendarProps(set['prop'] || {});
@@ -99,7 +106,15 @@ export async function handleProppatch(
     }
 
     if (Object.keys(updates).length > 0) {
-        await calendar.updateCalendar(calendarId, updates);
+        try {
+            await calendar.updateCalendar(calendarId, updates);
+        } catch (error) {
+            // A property value the domain refuses is WebDAV's 403 on a property the server will not set.
+            if (error instanceof ApiError && error.status === 400) {
+                return new Response('Forbidden', { status: 403 });
+            }
+            throw error;
+        }
     }
 
     return multistatusResponse([response(calendarHref(ownerId, calendarId), [propstatOk(updatedProps)])]);

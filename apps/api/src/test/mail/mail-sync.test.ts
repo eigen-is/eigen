@@ -106,7 +106,7 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
         const user = await createTestUser(userEmail, 'testpassword123', 'Mail Sync Test');
         userId = user.id;
         token = user.sessionToken;
-        // Initialize the home — delivers welcome mail (skipSync) and creates the Maildir tree.
+        // Initialize the home — delivers welcome mail (skipReconcile) and creates the Maildir tree.
         const sizeRes = await authedRequest(token, `/home/${userId}/size`);
         expect(sizeRes.status).toBe(200);
     });
@@ -229,7 +229,7 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
             const sse = collectSSE(coalesceUserId);
             await new Promise((r) => setTimeout(r, 50));
 
-            // The still-unindexed welcome mail (delivered with skipSync at home-init) surfaces as
+            // The still-unindexed welcome mail (delivered with skipReconcile at home-init) surfaces as
             // its own "new mail" discovery on the first sync below, alongside the burst — both
             // count toward the same coalesce window.
             for (let i = 0; i < 4; i++) {
@@ -256,7 +256,7 @@ describe.skipIf(isWindows)('Only the delivered message is new', () => {
     test('a first index announces the delivery alone, not the welcome mail beside it', async () => {
         const userEmail = `mailcold-${Date.now()}@test.eigen.is`;
         const user = await createTestUser(userEmail, 'testpassword123', 'Mail Cold Index Test');
-        // Writes the welcome mail into the inbox without indexing it (skipSync), so the delivery below
+        // Writes the welcome mail into the inbox without indexing it (skipReconcile), so the delivery below
         // is the sync that indexes them both.
         await initHome(user);
 

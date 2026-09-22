@@ -5,15 +5,13 @@ import { join } from 'node:path';
 import type { Contact } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
-import { mergeVCard } from '../../lib/carddav/vcard-serialize';
+import { handleCardReport } from '../../lib/carddav/report';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
-import { labelColorFor, normalizeLabelName, uriKeyOf } from '../../lib/contacts/card-store';
+import { labelColorFor, normalizeLabelName } from '../../lib/contacts/card-store';
 import { Contacts } from '../../lib/contacts/contacts';
-import { CONTACTS_DB_CONFIG } from '../../lib/contacts/db-config';
 import * as contactsSchema from '../../lib/contacts/schema';
-import { ManagedDatabase } from '../../lib/core';
-import type { Home } from '../../lib/home';
-import { parseVCard } from '../../lib/vcard';
+import { PATHS, uriKeyOf } from '../../lib/core';
+import { mergeVCard, parseVCard } from '../../lib/vcard';
 import {
     avatarsDirOf,
     CONTACTS_TEST_ROOT,
@@ -22,6 +20,7 @@ import {
     stageAvatar,
     validContact,
 } from '../contacts-test-helpers';
+import { openTestHome, type TestHomeUser } from '../home-test-helpers';
 import { ensureServer } from '../setup';
 
 afterAll(() => {
@@ -34,6 +33,19 @@ const cardPathOf = (dir: string, uri: string) => join(cardsDirOf(dir), uri);
 const parseCount = (contacts: Contacts) => contacts.cardParseCount;
 const uriOf = (db: Awaited<ReturnType<typeof makeContacts>>['db'], id: string) =>
     db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.uri;
+
+// A restart whose contacts.db is gone while cards/ is untouched: the index has to come back from the files
+// alone. The first handle is closed before the unlink, and only that one — a home file takes a single close.
+const loseIndex = async (harness: Awaited<ReturnType<typeof makeContacts>>) => {
+    await harness.close();
+    const contactsRoot = join(harness.dir, PATHS.CONTACTS.ROOT);
+    for (const name of readdirSync(contactsRoot)) {
+        if (name.startsWith('contacts.db')) rmSync(join(contactsRoot, name));
+    }
+    const reopened = await openTestHome((home) => new Contacts(home), harness.dir, harness.user);
+    const managed = await reopened.database<typeof contactsSchema>(PATHS.CONTACTS.DB);
+    return { contacts: reopened.instance, db: managed.db, dir: harness.dir, user: harness.user };
+};
 
 // Skipped cards are logged, not thrown — capture the warnings so a test can assert them and the run stays quiet.
 const captureWarnings = async (fn: () => Promise<void>): Promise<string[]> => {
@@ -58,6 +70,51 @@ describe('reconcileIndex (stat-only pass)', () => {
 
         expect(parseCount(contacts)).toBe(parsesBefore);
         expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore);
+    });
+
+    test('a restore that moved every mtime refreshes the stats and nothing else', async () => {
+        const { contacts, broadcasts, db, dir, user } = await makeContacts();
+        await contacts.addContact(validContact({ firstName: 'One', email: ['one@example.com'] }));
+        await contacts.addContact(validContact({ firstName: 'Two', email: ['two@example.com'] }));
+        const before = new Map(
+            db
+                .select()
+                .from(contactsSchema.contacts)
+                .all()
+                .map((r) => [r.id, r] as const),
+        );
+        const book = db.select().from(contactsSchema.book).get()!;
+        const token = `urn:eigen:sync:${book.syncGen}-${book.ctag}`;
+
+        // A per-home restore does not preserve mtimes, so every card drifts while its bytes are the ones the
+        // backup held. Re-stamping them all would make every CardDAV client re-download the whole book.
+        const future = new Date(Date.now() + 5000);
+        for (const row of before.values()) utimesSync(cardPathOf(dir, row.uri), future, future);
+        broadcasts.length = 0;
+
+        await contacts.init();
+
+        expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(book.ctag);
+        for (const row of db.select().from(contactsSchema.contacts).all()) {
+            const was = before.get(row.id)!;
+            expect(row.cardCtag).toBe(was.cardCtag);
+            expect(row.etag).toBe(was.etag);
+            expect(row.mtime).not.toBe(was.mtime);
+        }
+        expect(broadcasts).toEqual([]);
+
+        // The client's token from before the restore still resolves, and its delta is empty.
+        const body =
+            `<?xml version="1.0" encoding="utf-8"?>\n<D:sync-collection xmlns:D="DAV:">\n` +
+            `<D:sync-token>${token}</D:sync-token>\n<D:prop><D:getetag/></D:prop>\n</D:sync-collection>`;
+        const res = await handleCardReport(contacts, user.id, body);
+        expect(res.status).toBe(207);
+        expect(await res.text()).not.toContain('<D:response>');
+
+        // The refreshed stats are what keeps the NEXT init off the files.
+        const parsesBefore = parseCount(contacts);
+        await contacts.init();
+        expect(parseCount(contacts)).toBe(parsesBefore);
     });
 
     test('a cards directory enumeration failure leaves rows, ctag, and tombstones untouched', async () => {
@@ -381,17 +438,19 @@ describe('self-link ranking', () => {
         expect(readFileSync(cardPathOf(dir, '0.vcf'), 'utf8')).not.toContain('X-EIGEN-ID');
     });
 
-    test('rebuild keeps the self-link on the incumbent over an earlier owner-email twin', async () => {
-        const { contacts, db, dir, user } = await makeContacts();
-        const me = (await contacts.getMe())!;
-        writeFileSync(cardPathOf(dir, '0.vcf'), emailTwin(user.email));
-        await contacts.init(); // index the twin (loses to the clean incumbent self row)
-        const syncGenBefore = db.select().from(contactsSchema.book).get()!.syncGen;
+    test('an index rebuilt from the files hands the slot to the card that asserts X-EIGEN-ID', async () => {
+        const harness = await makeContacts();
+        const me = (await harness.contacts.getMe())!;
+        const selfUri = uriOf(harness.db, me.id);
+        writeFileSync(cardPathOf(harness.dir, '0.vcf'), emailTwin(harness.user.email));
+        await harness.contacts.init(); // index the twin (loses to the clean incumbent self row)
+        const syncGenBefore = harness.db.select().from(contactsSchema.book).get()!.syncGen;
 
-        await contacts.rebuildIndex();
+        // With every index row gone the twin sorts first, so only the self card's own X-EIGEN-ID outranks it.
+        const { db, dir, user } = await loseIndex(harness);
 
-        expect((await contacts.getMe())?.id).toBe(me.id);
-        expect(selfLinkRows(db, user.id)).toEqual([me.id]);
+        expect(selfLinkRows(db, user.id).length).toBe(1);
+        expect(uriOf(db, selfLinkRows(db, user.id)[0])).toBe(selfUri);
         const twin = db
             .select()
             .from(contactsSchema.contacts)
@@ -399,7 +458,7 @@ describe('self-link ranking', () => {
             .get()!;
         expect(twin.eigenId).toBe('');
         expect(readFileSync(cardPathOf(dir, '0.vcf'), 'utf8')).not.toContain('X-EIGEN-ID');
-        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBe(syncGenBefore + 1);
+        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBeGreaterThan(syncGenBefore);
     });
 
     test('a deleted self card lets an owner-email twin claim the slot without duplicating me', async () => {
@@ -494,85 +553,114 @@ describe('self-link ranking', () => {
     });
 });
 
-describe('rebuildIndex', () => {
-    test('rebuilding a populated book reproduces projections + etags, rotates syncGen, clears tombstones', async () => {
-        const { contacts, db } = await makeContacts();
-        await contacts.addContact(validContact({ firstName: 'Keep', lastName: 'One', email: ['keep1@example.com'] }));
-        await contacts.addContact(validContact({ firstName: 'Keep', lastName: 'Two', email: ['keep2@example.com'] }));
-        const goneId = await contacts.addContact(validContact({ firstName: 'Gone', email: ['gone@example.com'] }));
-        await contacts.deleteContact(goneId);
-        expect(db.select().from(contactsSchema.contactTombstones).all().length).toBe(1);
+// The book row, its ctag and its syncGen live nowhere but contacts.db, so losing that file loses the
+// authoritative half of the index: it comes back from cards/ alone, under a new sync generation.
+describe('a lost index', () => {
+    const syncBody = (token: string) =>
+        `<?xml version="1.0" encoding="utf-8"?>\n<D:sync-collection xmlns:D="DAV:">\n` +
+        `<D:sync-token>${token}</D:sync-token>\n<D:prop><D:getetag/></D:prop>\n</D:sync-collection>`;
+
+    test('a token of the dead generation is refused, so clients full-resync instead of trusting a reset counter', async () => {
+        const harness = await makeContacts();
+        await harness.contacts.addContact(validContact({ firstName: 'Kept', email: ['kept@example.com'] }));
+        const before = await harness.contacts.getBook();
+        const oldToken = `urn:eigen:sync:${before.syncGen}-${before.ctag}`;
+
+        const { contacts, user } = await loseIndex(harness);
+        // Past the dead token's ctag, so the ctag-ahead guard cannot be what refuses it.
+        for (let i = 0; i <= before.ctag; i++) {
+            await contacts.addContact(validContact({ firstName: `New${i}`, email: [`new${i}@example.com`] }));
+        }
+        expect((await contacts.getBook()).ctag).toBeGreaterThanOrEqual(before.ctag);
+
+        const res = await handleCardReport(contacts, user.id, syncBody(oldToken));
+        expect(res.status).toBe(403);
+        expect(await res.text()).toContain('valid-sync-token');
+    });
+
+    test('the index comes back from the cards with the same projections and etags, and no tombstones', async () => {
+        const harness = await makeContacts();
+        await harness.contacts.addContact(
+            validContact({ firstName: 'Keep', lastName: 'One', email: ['keep1@example.com'] }),
+        );
+        await harness.contacts.addContact(
+            validContact({ firstName: 'Keep', lastName: 'Two', email: ['keep2@example.com'] }),
+        );
+        const goneId = await harness.contacts.addContact(
+            validContact({ firstName: 'Gone', email: ['gone@example.com'] }),
+        );
+        await harness.contacts.deleteContact(goneId);
+        expect(harness.db.select().from(contactsSchema.contactTombstones).all().length).toBe(1);
 
         // Compare faithfully, not byte-for-byte: an unset optional field is a dropped key from addContact's
         // toData but an '' / [] from the file-parse projection — both are empty. Drop empty optionals on both
-        // sides so a real value difference (not a representation one) is what would fail.
+        // sides, and the contact id, which a book rebuilt from the files alone mints fresh.
         const projection = (list: Contact[]) =>
             JSON.stringify(
                 list
-                    .sort((a, b) => a.id.localeCompare(b.id))
+                    .sort((a, b) => `${a.firstName}${a.lastName}`.localeCompare(`${b.firstName}${b.lastName}`))
                     .map((c) => {
                         const out: Record<string, unknown> = {};
                         for (const [k, v] of Object.entries(c)) {
-                            if (v === '' || (Array.isArray(v) && v.length === 0)) continue;
+                            if (k === 'id' || v === '' || (Array.isArray(v) && v.length === 0)) continue;
                             out[k] = v;
                         }
                         return out;
                     }),
             );
-        const projectionsBefore = projection(await contacts.getContacts());
-        const etagsBefore = new Map(
+        const projectionsBefore = projection(await harness.contacts.getContacts());
+        const etagsBefore = harness.db
+            .select()
+            .from(contactsSchema.contacts)
+            .all()
+            .map((r) => r.etag)
+            .sort();
+
+        const { contacts, db } = await loseIndex(harness);
+
+        expect(projection(await contacts.getContacts())).toBe(projectionsBefore);
+        expect(
             db
                 .select()
                 .from(contactsSchema.contacts)
                 .all()
-                .map((r) => [r.id, r.etag] as const),
-        );
-        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBe(1);
-
-        await contacts.rebuildIndex();
-
-        expect(projection(await contacts.getContacts())).toBe(projectionsBefore);
-        for (const r of db.select().from(contactsSchema.contacts).all()) {
-            expect(r.etag).toBe(etagsBefore.get(r.id)!);
-        }
-        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBe(2);
+                .map((r) => r.etag)
+                .sort(),
+        ).toEqual(etagsBefore);
         expect(db.select().from(contactsSchema.contactTombstones).all().length).toBe(0);
     });
 
-    test('init rebuilds when the book row is missing, rotating syncGen', async () => {
+    test('a book row alone going missing rotates syncGen and leaves the indexed rows in place', async () => {
         const { contacts, db } = await makeContacts();
         const me = (await contacts.getMe())!;
         db.delete(contactsSchema.book).run();
 
         await contacts.init();
 
-        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBe(2);
+        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBeGreaterThan(1);
         expect((await contacts.getContactById(me.id))?.eigenId).toBe(me.eigenId);
     });
 
-    test('a same-length, timestamp-preserved replacement is missed by reconcile but caught by rebuild', async () => {
-        const { contacts, db, dir } = await makeContacts();
-        const id = await contacts.addContact(
-            validContact({ firstName: 'Same', email: ['same@example.com'], notes: 'ZZZZ' }),
-        );
-        const before = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
-        const syncGenBefore = db.select().from(contactsSchema.book).get()!.syncGen;
+    test('a recovered book row stamps the wall clock, so a generation of the dead history never returns', async () => {
+        const { contacts, db } = await makeContacts();
+        const clockBefore = Math.floor(Date.now() / 1000);
 
-        // Overwrite with different, same-length bytes and pin the mtime back to the indexed value.
-        const raw = readFileSync(cardPathOf(dir, before.uri), 'utf8');
-        expect(raw).toContain('ZZZZ');
-        writeFileSync(cardPathOf(dir, before.uri), raw.replace('ZZZZ', 'QQQQ'));
-        utimesSync(cardPathOf(dir, before.uri), new Date(), new Date(before.mtime));
+        db.delete(contactsSchema.book).run();
+        await contacts.init();
+        const first = db.select().from(contactsSchema.book).get()!.syncGen;
 
-        await contacts.init(); // stat-only reconcile cannot see it
-        expect(db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.etag).toBe(
-            before.etag,
-        );
+        // Counting up from the stored row is not enough: that row is exactly what a lost book took with it,
+        // so a generation derived from it alone repeats, and a client replays a token of the dead history.
+        expect(first).toBeGreaterThanOrEqual(clockBefore);
 
-        await contacts.rebuildIndex(); // full re-read does
-        const after = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
-        expect(after.etag).not.toBe(before.etag);
-        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBe(syncGenBefore + 1);
+        db.delete(contactsSchema.book).run();
+        await contacts.init();
+        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBeGreaterThanOrEqual(first);
+    });
+
+    test('a fresh book with no cards starts at the first generation', async () => {
+        const { db } = await makeContacts();
+        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBe(1);
     });
 });
 
@@ -597,7 +685,7 @@ describe('per-file fault tolerance', () => {
         expect(warnings.some((w) => w.includes('garbage.vcf'))).toBe(true);
     });
 
-    test('a garbage .vcf never bumps the ctag and is counted on disk by both passes', async () => {
+    test('a garbage .vcf never bumps the ctag and its bytes still count against the book', async () => {
         const { contacts, db, dir } = await makeContacts();
         mkdirSync(cardsDirOf(dir), { recursive: true });
         writeFileSync(cardPathOf(dir, 'garbage.vcf'), 'this is not a vcard at all\r\n');
@@ -613,12 +701,7 @@ describe('per-file fault tolerance', () => {
         expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore);
         expect(await contacts.size()).toBe(bytesAfterReconcile);
 
-        // Both passes answer the same question — how many bytes cards/ holds — so unindexable bytes count in
-        // both. Otherwise a rebuild would silently hand the user back quota the files still occupy.
-        await captureWarnings(() => contacts.rebuildIndex());
-        expect(await contacts.size()).toBe(bytesAfterReconcile);
-
-        // Deleting it gives back exactly its bytes — proof both totals really carried them.
+        // Deleting it gives back exactly its bytes — proof the total really carried them.
         rmSync(cardPathOf(dir, 'garbage.vcf'));
         await contacts.init();
         expect(await contacts.size()).toBe(bytesAfterReconcile - garbageSize);
@@ -710,15 +793,17 @@ describe('per-file fault tolerance', () => {
 // the source of truth and echoing a phone's BDAY remains a no-op.
 describe('birthday normalization at the seam', () => {
     test('addContact stores a date-only birthday as a date BDAY and round-trips it', async () => {
-        const { contacts, dir } = await makeContacts();
-        const id = await contacts.addContact(
+        const harness = await makeContacts();
+        const id = await harness.contacts.addContact(
             validContact({ firstName: 'Born', email: ['born@example.com'], birthday: '1990-01-01' }),
         );
 
-        expect(readFileSync(cardPathOf(dir, `${id}.vcf`), 'utf8')).toContain('BDAY:1990-01-01');
-        expect((await contacts.getContactById(id))?.birthday).toBe('1990-01-01');
-        await contacts.rebuildIndex();
-        expect((await contacts.getContactById(id))?.birthday).toBe('1990-01-01');
+        expect(readFileSync(cardPathOf(harness.dir, `${id}.vcf`), 'utf8')).toContain('BDAY:1990-01-01');
+        expect((await harness.contacts.getContactById(id))?.birthday).toBe('1990-01-01');
+
+        // The file is the truth, so an index re-derived from it alone reads the same date back.
+        const { contacts } = await loseIndex(harness);
+        expect((await contacts.getContacts()).find((c) => c.firstName === 'Born')?.birthday).toBe('1990-01-01');
     });
 
     test('external ISO input keeps its date prefix verbatim instead of shifting by timezone', async () => {
@@ -808,22 +893,41 @@ describe('self-profile propagation', () => {
 });
 
 describe('canonical file operation failures', () => {
+    test('a card delete fsyncs the directory that held its name', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const id = await contacts.addContact(validContact({ firstName: 'Durable', email: ['durable@example.com'] }));
+        const uri = uriOf(db, id);
+        const synced: string[] = [];
+        const spy = spyOn(contacts.storage, 'syncDir').mockImplementation(async (dirPath: string) => {
+            synced.push(dirPath);
+        });
+
+        try {
+            await contacts.deleteContact(id);
+        } finally {
+            spy.mockRestore();
+        }
+
+        // Without it a power loss resurrects the card under an acknowledged delete, and the next reconcile
+        // re-indexes a contact the user removed.
+        expect(synced).toContain(PATHS.CONTACTS.CARDS);
+        expect(existsSync(cardPathOf(dir, uri))).toBe(false);
+    });
+
     test('a non-ENOENT unlink failure leaves the row, ctag, tombstones, and file untouched', async () => {
         const { contacts, db, dir } = await makeContacts();
         const id = await contacts.addContact(validContact({ firstName: 'Keep', email: ['keep-unlink@example.com'] }));
         const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
         const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
         const tombstonesBefore = db.select().from(contactsSchema.contactTombstones).all();
-        const storage = (contacts as unknown as { storage: { unlink: (filePath: string) => Promise<void> } }).storage;
-        const originalUnlink = storage.unlink;
-        storage.unlink = async () => {
+        const spy = spyOn(contacts.storage, 'unlinkDurable').mockImplementation(async () => {
             throw Object.assign(new Error('unlink boom'), { code: 'EIO' });
-        };
+        });
 
         try {
             await expect(contacts.deleteContact(id)).rejects.toThrow('unlink boom');
         } finally {
-            storage.unlink = originalUnlink;
+            spy.mockRestore();
         }
 
         expect(existsSync(cardPathOf(dir, row.uri))).toBe(true);
@@ -931,11 +1035,16 @@ describe('fail-closed drain guard', () => {
         const { contacts } = await makeContacts();
 
         let drainCalls = 0;
-        const proto = Object.getPrototypeOf(contacts) as { drainDirty: () => Promise<void> };
+        type Drain = (uris: string[], settled: (uri: string) => void) => Promise<void>;
+        const proto = Object.getPrototypeOf(contacts) as { drainDirty: Drain };
         const origDrain = proto.drainDirty;
-        (contacts as unknown as { drainDirty: () => Promise<void> }).drainDirty = function (this: Contacts) {
+        (contacts as unknown as { drainDirty: Drain }).drainDirty = function (
+            this: Contacts,
+            uris: string[],
+            settled: (uri: string) => void,
+        ) {
             drainCalls++;
-            return origDrain.apply(this);
+            return origDrain.call(this, uris, settled);
         };
 
         // Clean book: the guard short-circuits on the empty set — no drain, no lock, no file touch.
@@ -963,6 +1072,24 @@ describe('fail-closed drain guard', () => {
         const list = await contacts.getContacts();
         expect(drainCalls).toBe(1);
         expect(list.some((c) => c.firstName === 'Orphan')).toBe(true);
+    });
+
+    test('a dirty card whose file the index already describes settles without a re-commit', async () => {
+        const { contacts, db, broadcasts } = await makeContacts();
+        const id = await contacts.addContact(validContact({ firstName: 'Healthy', email: ['healthy@example.com'] }));
+        const before = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+        const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
+        broadcasts.length = 0;
+
+        // A lock-free read that raced a PUT sees the new bytes against the old row and marks a uri that is
+        // not out of sync at all; re-committing it would bump the ctag for a book that never changed.
+        (contacts as unknown as { gate: { markDirty(uri: string): void } }).gate.markDirty(before.uri);
+        await contacts.getContacts();
+
+        expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore);
+        const after = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+        expect(after.cardCtag).toBe(before.cardCtag);
+        expect(broadcasts).toEqual([]);
     });
 
     test('deleteContact fails closed: a commit throw after the file delete tombstones on the next read', async () => {
@@ -1015,11 +1142,16 @@ describe('fail-closed drain guard', () => {
 
         // Spy AFTER the failure so we can prove which read drains.
         let drainCalls = 0;
-        const proto = Object.getPrototypeOf(contacts) as { drainDirty: () => Promise<void> };
+        type Drain = (uris: string[], settled: (uri: string) => void) => Promise<void>;
+        const proto = Object.getPrototypeOf(contacts) as { drainDirty: Drain };
         const origDrain = proto.drainDirty;
-        (contacts as unknown as { drainDirty: () => Promise<void> }).drainDirty = function (this: Contacts) {
+        (contacts as unknown as { drainDirty: Drain }).drainDirty = function (
+            this: Contacts,
+            uris: string[],
+            settled: (uri: string) => void,
+        ) {
             drainCalls++;
-            return origDrain.apply(this);
+            return origDrain.call(this, uris, settled);
         };
 
         // size() must NEVER drain: it is reachable from the in-lock quota gate, so draining here would re-enter
@@ -1034,6 +1166,49 @@ describe('fail-closed drain guard', () => {
         expect(drainCalls).toBe(1);
         expect(await contacts.size()).toBeGreaterThan(sizeBefore);
     });
+
+    test('a card that can never drain does not re-commit a healthy one on every read', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const id = await contacts.addContact(validContact({ firstName: 'Healthy', email: ['healthy@example.com'] }));
+        const uri = uriOf(db, id);
+
+        // A poison card: its file is there, so the drain takes the re-index branch and throws every time.
+        writeFileSync(
+            cardPathOf(dir, 'poison.vcf'),
+            'BEGIN:VCARD\r\nVERSION:3.0\r\nUID:poison\r\nFN:Poison\r\nEND:VCARD\r\n',
+        );
+        const priv = contacts as unknown as {
+            gate: { markDirty(uri: string): void };
+            prepareCardRow: (uri: string, id: string, uid: string | undefined) => Promise<unknown>;
+        };
+        const origPrepare = priv.prepareCardRow;
+        priv.prepareCardRow = function (this: Contacts, u: string, cardId: string, uid: string | undefined) {
+            if (u === 'poison.vcf') throw new Error('prepare boom');
+            return origPrepare.call(this, u, cardId, uid);
+        };
+
+        priv.gate.markDirty(uri);
+        priv.gate.markDirty('poison.vcf');
+        const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
+        const sizeBefore = await contacts.size();
+
+        // The poison card is skipped once and warned about once — it leaves the dirty set like any settled
+        // uri — and the reads it rode along with still answer.
+        const warnings = await captureWarnings(async () => {
+            for (let i = 0; i < 3; i++) {
+                expect((await contacts.getContacts()).some((c) => c.firstName === 'Healthy')).toBe(true);
+            }
+        });
+        expect(warnings.filter((w) => w.includes('poison.vcf')).length).toBe(1);
+
+        // The healthy card settled on the first drain, and its pair was whole, so it committed nothing.
+        // Re-committing it behind the poison card would bump the ctag on every read and send every CardDAV
+        // client into a no-op delta poll.
+        expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore);
+
+        // The poison bytes stay on disk and the next reconcile counts them, so the budget counts them now.
+        expect(await contacts.size()).toBe(sizeBefore + statSync(cardPathOf(dir, 'poison.vcf')).size);
+    });
 });
 
 // The in-memory dirty set and the in-process rename compensation both die with the process. These pin the
@@ -1041,18 +1216,10 @@ describe('fail-closed drain guard', () => {
 describe('crash recovery (durable journals)', () => {
     // A fresh Contacts over the same home dir and user — a process restart, carrying none of the first
     // instance's in-memory state.
-    const restart = async (dir: string, user: Awaited<ReturnType<typeof makeContacts>>['user']) => {
-        const managed = new ManagedDatabase(CONTACTS_DB_CONFIG, join(dir, 'eigen.contacts', 'contacts.db'));
-        await managed.open(0);
-        const home = {
-            homeDir: dir,
-            user,
-            getLocalDatabase: async () => managed,
-            broadcast: () => {},
-        } as unknown as Home;
-        const contacts = new Contacts(home);
-        await contacts.init();
-        return { contacts, db: managed.db, close: () => managed.close() };
+    const restart = async (dir: string, user: TestHomeUser) => {
+        const reopened = await openTestHome((home) => new Contacts(home), dir, user);
+        const managed = await reopened.database<typeof contactsSchema>(PATHS.CONTACTS.DB);
+        return { contacts: reopened.instance, db: managed.db, close: reopened.close };
     };
 
     test('a card write killed before its index commit is re-indexed on init, same stat or not', async () => {
@@ -1193,6 +1360,50 @@ describe('crash recovery (durable journals)', () => {
         }
     });
 
+    test('a restored card the pass settled carries no write intent into the recovery drain', async () => {
+        const { contacts, db, dir, user } = await makeContacts();
+        const id = await contacts.addContact(
+            validContact({ firstName: 'Restored', email: ['restored-crash@example.com'] }),
+        );
+        const before = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+        const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
+
+        // What a per-home restore replays: the indexed bytes under a moved mtime, plus the journal row a
+        // crash left behind. The etag match proves the pair is settled, so the pass owes that uri nothing.
+        db.insert(contactsSchema.pendingCardWrites).values({ uri: before.uri }).run();
+        const future = new Date(Date.now() + 5000);
+        utimesSync(cardPathOf(dir, before.uri), future, future);
+
+        let drainCalls = 0;
+        type Drain = (uris: string[], settled: (uri: string) => void) => Promise<void>;
+        const proto = Object.getPrototypeOf(contacts) as { drainDirty: Drain };
+        const origDrain = proto.drainDirty;
+        proto.drainDirty = function (this: Contacts, uris: string[], settled: (uri: string) => void) {
+            drainCalls++;
+            return origDrain.call(this, uris, settled);
+        };
+        let restarted!: Awaited<ReturnType<typeof restart>>;
+        try {
+            restarted = await restart(dir, user);
+        } finally {
+            proto.drainDirty = origDrain;
+        }
+
+        try {
+            expect(restarted.db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([]);
+            expect(drainCalls).toBe(0);
+            expect(restarted.db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore);
+            const after = restarted.db
+                .select()
+                .from(contactsSchema.contacts)
+                .where(eq(contactsSchema.contacts.id, id))
+                .get()!;
+            expect(after.cardCtag).toBe(before.cardCtag);
+        } finally {
+            await restarted.close();
+        }
+    });
+
     test('a rename killed mid-fan-out finishes on init, and a later rebuild changes nothing', async () => {
         const { contacts, db, dir, user } = await makeContacts();
         const labelId = await contacts.addLabel({ name: 'Bandmates', color: '#abcdef' });
@@ -1257,8 +1468,8 @@ describe('crash recovery (durable journals)', () => {
             expect(labels.some((l) => l.nameKey === 'bandmates')).toBe(false);
             for (const id of ids) expect((await restarted.contacts.getContactById(id))?.labels).toEqual([labelId]);
 
-            // A rebuild re-derives labels from the files; with the files converged it re-mints nothing.
-            await restarted.contacts.rebuildIndex();
+            // The files are converged, so a further pass over them re-mints no label.
+            await restarted.contacts.init();
             expect(
                 restarted.db
                     .select()
@@ -1365,18 +1576,18 @@ describe('size() must never re-enter the non-reentrant write lock', () => {
     test('size() called from inside the write lock still completes when a lock-free read marked a card dirty', async () => {
         const { contacts } = await makeContacts();
         const priv = contacts as unknown as {
-            writeLock: { run<T>(fn: () => Promise<T>): Promise<T> };
-            markCardDirty(uri: string): void;
+            gate: { run<T>(fn: () => Promise<T>): Promise<T>; markDirty(uri: string): void };
         };
 
-        // getCard's ENOENT branch marks a uri dirty WITHOUT holding the lock — reproduce that state. If it
-        // lands between a mutation's drainDirty() and its quota gate, size() sees a non-empty dirty set.
-        priv.markCardDirty('ghost.vcf');
-
-        // enforceCardBudget reaches Contacts.size() from INSIDE the write lock on every metered mutation.
-        // Reproduce that position: hold the lock, then call size(). If size() drains — taking the same
-        // non-reentrant Semaphore(1) it is already inside — it self-deadlocks the whole home forever.
-        const sizeFromInsideLock = priv.writeLock.run(() => contacts.size());
+        // enforceCardBudget reaches Contacts.size() from INSIDE the write gate on every metered mutation.
+        // Reproduce that position, with getCard's ENOENT branch marking a uri dirty in the window between
+        // the gate's drain and the quota check — the one way size() can see a non-empty dirty set. If size()
+        // drains — taking the same non-reentrant Semaphore(1) it is already inside — it self-deadlocks the
+        // whole home forever.
+        const sizeFromInsideLock = priv.gate.run(() => {
+            priv.gate.markDirty('ghost.vcf');
+            return contacts.size();
+        });
         const bytes = await completesWithin(
             sizeFromInsideLock,
             2000,
