@@ -26,7 +26,7 @@ Select the cell, then do one of the following:
 
 - **Double-click** the cell to place your cursor inside it.
 - Press **F2** to open the cell for editing at the end of its contents.
-- Click the formula bar (the input area just below the menu bar) and edit there.
+- Click the formula bar (the input area below the menu bar) and edit there.
 
 While the cell is open for editing, the arrow keys move the cursor within the text rather than moving to a
 neighboring cell. Press **Enter** when you are done.
@@ -64,7 +64,7 @@ To copy the top row of a selection into the rows below it, or its left column in
 - Press **Ctrl+D** (Mac: **⌘D**) to fill down through the selected rows.
 - Press **Ctrl+R** (Mac: **⌘R**) to fill right across the selected columns.
 
-Each cell is copied whole: its value or formula, formatting, borders, data validation, and conditional formatting. When filling formulas, Sheets adjusts relative cell references automatically. An empty source cell clears the cells it fills.
+Sheets copies each cell whole: its value or formula, formatting, borders, data validation, and conditional formatting. When filling formulas, Sheets adjusts relative cell references automatically. An empty source cell clears the cells it fills.
 
 ## Undo and redo
 
