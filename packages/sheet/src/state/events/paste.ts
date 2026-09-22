@@ -51,6 +51,13 @@ type CutPasteSide = {
 };
 
 function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, RowlChange: boolean) {
+    // The map reads the cells, so both sheets hold their post-cut data first.
+    if (ctx.currentSheetId === source.sheetId) {
+        ctx.sheets[getSheetIndex(ctx, target.sheetId)!].data = target.curData;
+    } else if (ctx.currentSheetId === target.sheetId) {
+        ctx.sheets[getSheetIndex(ctx, source.sheetId)!].data = source.curData;
+    }
+
     // trigger linked cell data updates
     const execF_rc: Record<string, number> = {};
     ctx.formulaCache.execFunctionExist = [];
@@ -68,7 +75,7 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
 
     for (let r = target.range.row[0]; r <= target.range.row[1]; r += 1) {
         for (let c = target.range.column[0]; c <= target.range.column[1]; c += 1) {
-            setFormulaCellInfo(ctx, { r, c, id: source.sheetId });
+            setFormulaCellInfo(ctx, { r, c, id: target.sheetId });
             if (`${r}_${c}_${target.sheetId}` in execF_rc) {
                 continue;
             }
@@ -106,12 +113,6 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
             ctx.visibledatarow.push(ctx.rh_height); // temporary row height distribution
         }
         ctx.rh_height += 80;
-    }
-
-    if (ctx.currentSheetId === source.sheetId) {
-        ctx.sheets[getSheetIndex(ctx, target.sheetId)!].data = target.curData;
-    } else if (ctx.currentSheetId === target.sheetId) {
-        ctx.sheets[getSheetIndex(ctx, source.sheetId)!].data = source.curData;
     }
 
     // selections

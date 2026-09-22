@@ -458,4 +458,52 @@ describe('pasted formulas and the dependency map', () => {
             expect(ctx.sheets[0].data![0][2]?.v).toBe(6);
         });
     }
+
+    // One!A1 = 5, One!B1 = =A1*2, Two!A1 = 100; B1 is cut from One and pasted at Two!D1.
+    function cutAcrossSheets(): Context {
+        const one = grid(6, 6);
+        one[0][0] = { v: 5, m: '5' };
+        one[0][1] = { f: '=A1*2', v: 10, m: '10' };
+        const two = grid(6, 6);
+        two[0][0] = { v: 100, m: '100' };
+        const base = contextFactory({
+            currentSheetId: 'id_1',
+            selections: single(0, 0),
+            sheets: [
+                { name: 'One', id: 'id_1', order: 0, data: one, calcChain: [{ r: 0, c: 1, id: 'id_1' }] },
+                { name: 'Two', id: 'id_2', order: 1, data: two, calcChain: [] },
+            ],
+        }) as Context;
+        warmFormulaCellInfoMap(base);
+        const [ctx] = edit(base, (d) => {
+            d.selections = single(0, 1);
+            copy(d);
+            d.pasteIsCut = true;
+            d.currentSheetId = 'id_2';
+            d.selections = single(0, 3);
+            handlePasteByClick(d, 'internal');
+        });
+        return ctx;
+    }
+
+    it('a formula cut to another sheet is not resurrected by its old precedent', () => {
+        let ctx = cutAcrossSheets();
+        expect(ctx.sheets[0].data![0][1]).toBeNull();
+
+        [ctx] = edit(ctx, (d) => {
+            d.currentSheetId = 'id_1';
+            typed(0, 0, '7')(d);
+        });
+
+        expect(ctx.sheets[0].data![0][1]).toBeNull();
+    });
+
+    it('a formula cut to another sheet recalcs there', () => {
+        let ctx = cutAcrossSheets();
+        expect(ctx.sheets[1].data![0][3]?.f).toBe('=A1*2');
+
+        [ctx] = edit(ctx, typed(0, 0, '3'));
+
+        expect(ctx.sheets[1].data![0][3]?.v).toBe(6);
+    });
 });
