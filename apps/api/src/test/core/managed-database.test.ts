@@ -54,14 +54,24 @@ describe('ManagedDatabase open-vs-create intent', () => {
 });
 
 describe('ManagedDatabase durability option', () => {
-    // 0 = OFF, 1 = NORMAL (what WAL gives every other database), 2 = FULL.
+    // 0 = OFF, 1 = NORMAL, 2 = FULL.
     const synchronousOf = (mdb: ManagedDatabase<Schema>) =>
         (mdb.db.all(sql`PRAGMA synchronous`)[0] as { synchronous: number }).synchronous;
 
-    test('a config asking for FULL gets it, and one that does not keeps WAL NORMAL', async () => {
+    // What WAL alone gives on this SQLite build: NORMAL on macOS's system library
+    // (SQLITE_DEFAULT_WAL_SYNCHRONOUS=1), FULL on bun's bundled Linux one. Only the FULL option is absolute.
+    const walDefault = () => {
+        const raw = new BunDatabase(nextDbPath(), { create: true });
+        raw.run('PRAGMA journal_mode = WAL;');
+        const value = (raw.query('PRAGMA synchronous').get() as { synchronous: number }).synchronous;
+        raw.close();
+        return value;
+    };
+
+    test('a config asking for FULL gets it, and one that does not keeps the WAL default', async () => {
         const normal = new ManagedDatabase(makeConfig(1000), nextDbPath());
         await normal.open(0);
-        expect(synchronousOf(normal)).toBe(1);
+        expect(synchronousOf(normal)).toBe(walDefault());
         await normal.close({ skipFinalSnapshot: true });
 
         const full = new ManagedDatabase({ ...makeConfig(1000), synchronous: 'FULL' }, nextDbPath());
