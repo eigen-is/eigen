@@ -18,13 +18,16 @@ afterAll(() => {
 const rowOf = (db: Contacts['db'], id: string) =>
     db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
 
-// The one failure a blob write has left: the transaction carrying it does not commit. Returns the undo.
+// The one failure a blob write has left: the transaction carrying it rolls back. The throw goes inside the
+// callback, so SQLite really does undo the statements — a throw before it would prove nothing. Returns the undo.
 function breakTransaction(contacts: Contacts): () => void {
-    const db = contacts.db as unknown as { transaction: unknown };
+    const db = contacts.db as unknown as { transaction: (cb: (tx: unknown) => unknown) => unknown };
     const original = db.transaction;
-    db.transaction = () => {
-        throw new Error('transaction boom');
-    };
+    db.transaction = (cb) =>
+        original.call(db, (tx: unknown) => {
+            cb(tx);
+            throw new Error('transaction boom');
+        });
     return () => {
         db.transaction = original;
     };
