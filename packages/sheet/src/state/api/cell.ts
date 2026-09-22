@@ -1,12 +1,13 @@
 import { forEach, isNil, isNumber, isPlainObject } from 'es-toolkit/compat';
 import { numberDisplay } from '../../engine/format';
-import type { Cell, CellStyle } from '../../engine/types';
+import type { Cell, CellMatrix, CellStyle } from '../../engine/types';
 import type { Context } from '../context';
 import {
     delFunctionGroup,
     dropCellCache,
     getTypeItemHide,
     setCellValue as setCellValueInternal,
+    setFormulaCellInfo,
     updateCell,
     updateDropCell,
     updateFormatCell,
@@ -87,7 +88,7 @@ export function setCellValue(
     const { data } = sheet;
 
     if (value == null || value.toString().length === 0) {
-        delFunctionGroup(ctx, row, column, sheet.id);
+        dropFormula(ctx, sheet.id!, data, row, column);
         setCellValueInternal(ctx, row, column, data, value);
     } else if (value instanceof Object) {
         if (!data) throw sheetNotFound();
@@ -134,10 +135,19 @@ export function setCellValue(
         if (value.toString().substr(0, 1) === '=' || value.toString().substr(0, 5) === '<span') {
             updateCell(ctx, row, column, cellInput, value); // update formula value or convert inline string html to object
         } else {
-            delFunctionGroup(ctx, row, column, sheet.id);
+            dropFormula(ctx, sheet.id!, data, row, column);
             setCellValueInternal(ctx, row, column, data, value);
         }
     }
+}
+
+// A kept `f` would store the value as the formula's text result; typed entry drops it too.
+function dropFormula(ctx: Context, sheetId: string, data: CellMatrix | undefined, row: number, column: number) {
+    delFunctionGroup(ctx, row, column, sheetId);
+    const cell = data?.[row]?.[column];
+    if (cell?.f == null) return;
+    delete cell.f;
+    setFormulaCellInfo(ctx, { r: row, c: column, id: sheetId }, data, sheetId);
 }
 
 export function clearCell(ctx: Context, row: number, column: number, options: CommonOptions = {}) {
