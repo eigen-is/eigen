@@ -15,7 +15,7 @@ import { storedRecurrenceKey } from '../ical/wall-clock';
 import type { User } from '../user';
 import type { Calendar } from './calendar';
 import * as store from './dav-store';
-import { eventForFile, validateEventInput } from './event-input';
+import { eventForResource, validateEventInput } from './event-input';
 import { composeRsvpReply } from './imip';
 import { answeredOccurrence, propagateCancellation, propagateDecline, propagateInvitation } from './invite-propagation';
 import { toEvent } from './mappers';
@@ -151,7 +151,7 @@ export async function writeEvent(
     const uri = `${randomUUID()}.ics`;
     const uid = input.uid || randomUUID();
     if (uidHolder(calendar, calendarId, uid)) throw new ApiError(409, 'An event with this UID already exists');
-    const event = eventForFile({ id: randomUUID(), calendarId, uid, input, now: new Date() });
+    const event = eventForResource({ id: randomUUID(), calendarId, uid, input, now: new Date() });
     await store.writeResource(calendar, calendarId, uri, buildResource([event]), null);
     return eventById(calendar, event.id)!;
 }
@@ -169,7 +169,7 @@ async function writeOverride(calendar: Calendar, calendarId: string, input: Crea
         throw new ApiError(400, 'Invalid occurrence date');
     }
 
-    const override = eventForFile({
+    const override = eventForResource({
         id: randomUUID(),
         calendarId,
         uid: parent.uid,
@@ -348,7 +348,7 @@ async function eraseStoredEvent(calendar: Calendar, calendarId: string, id: stri
     if (existing.parentEventId) {
         // A synthetic exclusion row carries no data of its own, so the link is the master's to state.
         const parent = eventById(calendar, existing.parentEventId)!;
-        // Deleting one occurrence writes the master's file: a cancelled row is the exclusion itself, so deleting it puts the occurrence back.
+        // Deleting one occurrence writes the master's resource: a cancelled row is the exclusion itself, so deleting it puts the occurrence back.
         await editResource(calendar, resource, (component) => {
             const key = existing.recurrenceDate ? storedRecurrenceKey(existing.recurrenceDate) : null;
             if (!key) return;

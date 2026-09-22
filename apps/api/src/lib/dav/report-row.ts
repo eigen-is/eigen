@@ -16,7 +16,7 @@ export type ResourceDataRow = {
     dataElement: string;
     dataProp: (text: string) => string;
     read: () => Promise<{ bytes: Uint8Array; etag: string } | null>;
-    // The row a member whose file is gone takes: a multiget's 404 propstat, or RFC 6578's removed row in a sync-collection.
+    // The row a member that is gone takes: a multiget's 404 propstat, or RFC 6578's removed row in a sync-collection.
     vanished: (href: string) => string;
     budget: DataBudget;
 };
@@ -30,7 +30,7 @@ export async function resourceDataRow(member: ResourceDataRow): Promise<string> 
     }
 
     const served = await member.read();
-    // The row is there and the file is not: the drain tombstones it, and this response says it is gone.
+    // The listing named it and the read found nothing: a DELETE raced this lock-free read, and the row is gone.
     if (!served) return member.vanished(member.href);
     member.budget.left -= served.bytes.length;
     return response(member.href, [

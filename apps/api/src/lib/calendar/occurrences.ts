@@ -97,7 +97,7 @@ export async function getEventsInRange(
     return results;
 }
 
-// The files a window touches: a resource matches when an occurrence of it does.
+// The resources a window touches: one matches when an occurrence of it does.
 export async function getResourceUrisInRange(
     calendar: Calendar,
     calendarId: string,

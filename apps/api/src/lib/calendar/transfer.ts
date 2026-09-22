@@ -16,9 +16,9 @@ import { bareName, calAddress, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
 import * as schema from './schema';
 
-// Export joins the stored files into one VCALENDAR; import replays one into the PUT seam a device sync takes (docs/CALENDAR.md § iCalendar import / export).
+// Export joins the stored resources into one VCALENDAR; import replays one into the PUT seam a device sync takes (docs/CALENDAR.md § iCalendar import / export).
 
-// A VTIMEZONE is copied into every series that names it, so a file well inside its own ceiling can ask for many times its size on disk.
+// A VTIMEZONE is copied into every series that names it, so an upload well inside its own ceiling can ask for many times its size in stored bytes.
 const ICS_IMPORT_MAX_WRITTEN_BYTES = 8 * ICS_MAX_BYTES;
 
 // A `.ics` may be a stream of several VCALENDAR objects (RFC 5545 §3.4), which ICAL.parse answers with an array of jCal arrays.
@@ -131,7 +131,7 @@ export async function importEvents(
             resource.addSubcomponent(group.master);
             for (const override of group.overrides) resource.addSubcomponent(override);
 
-            // A fresh name every time: a UID is not a safe filename, and If-None-Match: * turns a UID the Home already holds into a skippable conflict.
+            // A fresh name every time: a UID is not a safe uri, and If-None-Match: * turns a UID the Home already holds into a skippable conflict.
             const body = serializeResource(resource);
             let put: PutResourceResult;
             try {

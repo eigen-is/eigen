@@ -108,7 +108,7 @@ export class Calendar {
             });
         }
 
-        // A home nobody registered stays unmetered: its quota lookup would boot a second Home over these very files.
+        // A home nobody registered stays unmetered: its quota lookup would boot a second Home over this very database.
         this.meteredIngest = atHome(this.home.user.id);
     }
 
