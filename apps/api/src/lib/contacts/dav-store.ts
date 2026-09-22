@@ -248,6 +248,6 @@ export async function deleteCard(
             return { ok: false, error: 'precondition' };
         }
         await contacts.purgeCard(row);
-        return { ok: true };
+        return { ok: true, id: row.id };
     });
 }

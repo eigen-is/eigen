@@ -327,6 +327,6 @@ export async function deleteResource(
             return { ok: false, error: 'precondition' };
         }
         await calendar.purgeResource(row);
-        return { ok: true };
+        return { ok: true, id: row.id };
     });
 }

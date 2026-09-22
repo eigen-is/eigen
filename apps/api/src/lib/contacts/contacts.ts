@@ -239,7 +239,8 @@ export class Contacts {
         return avatar;
     }
 
-    // Callers hold the write lock and have already run their own guards (self-delete, preconditions).
+    // Callers hold the write lock and have already run their own guards (self-delete, preconditions); the
+    // deletion is theirs to announce once they let go of it.
     async purgeCard(row: PurgedCard): Promise<void> {
         const removed = this.db.transaction((tx) => {
             const size = tx
@@ -268,7 +269,6 @@ export class Contacts {
                 console.error(`contacts: failed to delete derived avatar ${avatarName}:`, e);
             }
         }
-        this.announce(SSEventType.CONTACT_DELETED, row.id);
     }
 
     // --- Contacts ---
@@ -474,10 +474,10 @@ export class Contacts {
     }
 
     public async deleteContact(id: string, expectedEtag?: string): Promise<void> {
-        return this.writeLock.run(async () => {
+        const deleted = await this.writeLock.run(async () => {
             const row = this.db.select(PURGED_CARD).from(schema.contacts).where(eq(schema.contacts.id, id)).get();
             // Idempotent, and the etag is not evaluated for a resource that no longer exists.
-            if (!row) return;
+            if (!row) return null;
             if (row.eigenId === this.home.user.id) {
                 throw new ApiError(400, 'You cannot delete yourself');
             }
@@ -486,7 +486,10 @@ export class Contacts {
             }
 
             await this.purgeCard(row);
+            return row.id;
         });
+
+        if (deleted) this.announce(SSEventType.CONTACT_DELETED, deleted);
     }
 
     // --- Label facade — implementation in contacts/labels.ts ---
@@ -645,7 +648,10 @@ export class Contacts {
     }
 
     public async deleteCard(uri: string, pre: Pick<ResourcePreconditions, 'ifMatch'>): Promise<DeleteCardResult> {
-        return davStore.deleteCard(this, uri, pre);
+        const result = await davStore.deleteCard(this, uri, pre);
+        // Told once the write lock is released, the way a PUT is.
+        if (result.ok) this.announce(SSEventType.CONTACT_DELETED, result.id);
+        return result;
     }
 
     // --- vCard transfer facade — implementation in contacts/transfer.ts ---

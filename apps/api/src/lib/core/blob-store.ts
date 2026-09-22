@@ -70,7 +70,8 @@ export type PutResourceResult =
           conflictUri?: string;
       };
 
-export type DeleteResourceResult = { ok: true } | { ok: false; error: 'not-found' | 'precondition' };
+// The id is the row the delete removed, read inside the lock, for the announcement the facade makes after it.
+export type DeleteResourceResult = { ok: true; id: string } | { ok: false; error: 'not-found' | 'precondition' };
 
 // A bulk write broadcasts one list-level event instead of one per resource, and the flush runs even when the body throws.
 export class BroadcastBatch {

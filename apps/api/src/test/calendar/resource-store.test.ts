@@ -121,7 +121,10 @@ describe('deleting', () => {
         const bytesBefore = await calendar.size();
         const row = resourceRowOf(calendar, calendarId, 'gone.ics');
 
-        expect(await calendar.deleteResource(calendarId, 'gone.ics', { ifMatch: null })).toEqual({ ok: true });
+        expect(await calendar.deleteResource(calendarId, 'gone.ics', { ifMatch: null })).toEqual({
+            ok: true,
+            id: row.id,
+        });
 
         expect(await calendar.getResource(calendarId, 'gone.ics')).toBeNull();
         expect((await calendar.getDeletedResourcesSince(calendarId, 0)).map((d) => d.uri)).toEqual(['gone.ics']);

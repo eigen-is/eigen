@@ -113,7 +113,7 @@ describe('davPutResponse', () => {
 
 describe('davDeleteResponse', () => {
     test('maps the three shared outcomes', () => {
-        expect(davDeleteResponse({ ok: true }).status).toBe(204);
+        expect(davDeleteResponse({ ok: true, id: 'r1' }).status).toBe(204);
         expect(davDeleteResponse({ ok: false, error: 'not-found' }).status).toBe(404);
         expect(davDeleteResponse({ ok: false, error: 'precondition' }).status).toBe(412);
     });

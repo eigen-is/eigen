@@ -233,7 +233,8 @@ describe('putCard — precondition shapes (RFC 7232)', () => {
     test('deleteCard honors If-Match:* as an existence check', async () => {
         const { instance: contacts } = await makeContacts();
         const { uri } = await seed(contacts);
-        expect(await contacts.deleteCard(uri, { ifMatch: '*' })).toEqual({ ok: true });
+        const id = rowByUri(contacts.db, uri)!.id;
+        expect(await contacts.deleteCard(uri, { ifMatch: '*' })).toEqual({ ok: true, id });
     });
 });
 
@@ -361,11 +362,7 @@ describe('putCard — announcements', () => {
 
         expect(created.ok).toBe(true);
         expect(deleted.ok).toBe(true);
-        // Sorted: what matters is that neither event is lost, not which lock got to announce first.
-        expect(broadcasts.map((e) => e.type).sort()).toEqual([
-            SSEventType.CONTACT_CREATED,
-            SSEventType.CONTACT_DELETED,
-        ]);
+        expect(broadcasts.map((e) => e.type)).toEqual([SSEventType.CONTACT_CREATED, SSEventType.CONTACT_DELETED]);
     });
 });
 
@@ -375,8 +372,9 @@ describe('deleteCard', () => {
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid }));
+        const id = rowByUri(contacts.db, uri)!.id;
 
-        expect(await contacts.deleteCard(uri, { ifMatch: null })).toEqual({ ok: true });
+        expect(await contacts.deleteCard(uri, { ifMatch: null })).toEqual({ ok: true, id });
         expect((await contacts.getDeletedCardsSince(0)).some((d) => d.uri === uri)).toBe(true);
 
         const afterDelete = (await contacts.getBook()).ctag;
