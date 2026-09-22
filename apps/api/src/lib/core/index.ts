@@ -1,4 +1,5 @@
 export * from './access';
+export * from './blob-store';
 export * from './constants';
 export * from './errors';
 export * from './fts';
