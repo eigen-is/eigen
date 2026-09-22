@@ -7,10 +7,10 @@ type KetTileProps = {
     icon: LucideIcon;
     title: string;
     description: string;
-    /** A CSS color, usually `var(--app-<name>-color)`: drives the stripe, icon, title and hover wash. */
+    // A CSS color, usually `var(--app-<name>-color)`: drives the stripe, icon, title and hover wash.
     color: string;
     className?: string;
-    /** The link element (`<a>` or a router `<Link>`); the tile's content renders inside it. */
+    // The link element (`<a>` or a router `<Link>`); the tile's content renders inside it.
     children: ReactNode;
 };
 

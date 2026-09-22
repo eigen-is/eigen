@@ -30,7 +30,7 @@ const colors = [
     '#96dee8',
 ];
 
-/** Color of the formula reference at `rangeIndex`; cycles past the palette's end. */
+// Color of the formula reference at `rangeIndex`; cycles past the palette's end.
 export function rangeColor(rangeIndex: number): string {
     return colors[rangeIndex % colors.length];
 }
