@@ -314,6 +314,8 @@ export class Calendar {
                     .get()!.total;
                 // The resources and their event rows go with the row, by cascade.
                 tx.delete(schema.calendars).where(eq(schema.calendars.id, id)).run();
+                // No cascade reaches these: a calendar recreated at this id would inherit the 404s.
+                tx.delete(schema.resourceTombstones).where(eq(schema.resourceTombstones.calendarId, id)).run();
             });
             this.eventsBytes -= removed;
         });

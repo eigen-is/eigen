@@ -248,7 +248,7 @@ describe('deleting', () => {
         });
     });
 
-    test('deleting a calendar takes its blobs off the byte counter', async () => {
+    test('deleting a calendar takes its blobs off the byte counter and its tombstones with it', async () => {
         const harness = await makeCalendar();
         const calendar = harness.instance;
         const scratch = (await calendar.createCalendar({ name: 'Scratch', color: '#2563eb' })).id;
@@ -257,6 +257,7 @@ describe('deleting', () => {
         await put(calendar, scratch, 'b.ics', vcal(event('cal-delete-b@eigen', 'B')));
         const added = (await calendar.size()) - before;
         expect(added).toBeGreaterThan(0);
+        await calendar.deleteResource(scratch, 'b.ics', { ifMatch: null });
 
         await calendar.deleteCalendar(scratch);
 
@@ -264,6 +265,8 @@ describe('deleting', () => {
         expect(await calendar.size()).toBe(storedBytes(calendar));
         // The resources and their event rows went with the row, by cascade.
         expect(calendar.db.select().from(schema.events).all()).toEqual([]);
+        // No cascade reaches a tombstone, so a calendar recreated at this id would inherit its 404s.
+        expect(calendar.db.select().from(schema.resourceTombstones).all()).toEqual([]);
     });
 });
 
