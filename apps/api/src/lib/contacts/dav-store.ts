@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, gt } from 'drizzle-orm';
 import {
     ApiError,
@@ -20,9 +19,15 @@ import * as schema from './schema';
 
 // The CardDAV store seam over the Contacts facade. See docs/CONTACTS.md § CardDAV surface.
 
-// The size lets a REPORT weigh a row against its byte budget before reading the bytes at all.
-export type CardRow = { uri: string; etag: string; size: number };
-const CARD_ROW = { uri: schema.contacts.uri, etag: schema.contacts.etag, size: cardBytes };
+// The size lets a REPORT weigh a row against its byte budget before reading the bytes at all; the id is what
+// an announcement names.
+export type CardRow = { id: string; uri: string; etag: string; size: number };
+const CARD_ROW = {
+    id: schema.contacts.id,
+    uri: schema.contacts.uri,
+    etag: schema.contacts.etag,
+    size: cardBytes,
+};
 
 // ctag advances on each change, syncGen rotates on a recreated book so stale sync tokens are refused.
 export type CardBook = { ctag: number; syncGen: number };
@@ -118,20 +123,24 @@ export async function putCard(
     options: ResourcePreconditions,
 ): Promise<PutResourceResult> {
     if (sanitizeCardUri(uri) !== uri) return { ok: false, error: 'invalid' };
+
+    // Bounded before any parse, so a hostile multi-MiB payload never reaches the AST unfolder.
+    if (Buffer.byteLength(body) > CARD_MAX_BYTES) return { ok: false, error: 'too-large' };
+
+    // The body says nothing about stored state, so a 5 MiB parse waits for no other writer. The book is
+    // stored as 3.0, and anything that isn't one well-formed vCard is a client error, not a 500.
+    let parsed: ParsedCard;
+    let stored: string;
+    try {
+        stored = transcodeTo30(body);
+        parsed = parseVCard(stored);
+    } catch {
+        return { ok: false, error: 'invalid' };
+    }
+    const uid = parsed.uid;
+    if (!uid) return { ok: false, error: 'invalid', message: 'UID is required' };
+
     return contacts.writeLock.run(async (): Promise<PutResourceResult> => {
-        // Bounded before any parse, so a hostile multi-MiB payload never reaches the AST unfolder.
-        if (Buffer.byteLength(body) > CARD_MAX_BYTES) return { ok: false, error: 'too-large' };
-
-        // The book is stored as 3.0. Anything that isn't one well-formed vCard is a client error, not a 500.
-        let parsed: ParsedCard;
-        let stored: string;
-        try {
-            stored = transcodeTo30(body);
-            parsed = parseVCard(stored);
-        } catch {
-            return { ok: false, error: 'invalid' };
-        }
-
         // Two racing If-Match PUTs serialize through the lock, so the loser sees the winner's new etag here.
         const existing = contacts.db
             .select({
@@ -153,16 +162,15 @@ export async function putCard(
         }
 
         // A UID another resource owns is a conflict the client can act on, not a raw 500 on the UNIQUE index.
-        if (!parsed.uid) return { ok: false, error: 'invalid', message: 'UID is required' };
         const holder = contacts.db
             .select({ id: schema.contacts.id, uri: schema.contacts.uri })
             .from(schema.contacts)
-            .where(eq(schema.contacts.uid, parsed.uid))
+            .where(eq(schema.contacts.uid, uid))
             .get();
         if (holder && holder.id !== existing?.id) {
             return { ok: false, error: 'uid-conflict', conflictUri: holder.uri };
         }
-        if (existing && parsed.uid !== existing.uid) return { ok: false, error: 'uid-conflict' };
+        if (existing && uid !== existing.uid) return { ok: false, error: 'uid-conflict' };
 
         // Before the quota check, so the meter and the stored etag both hash the exact bytes stored.
         const { eigenId, bytes, merged } = resolveSelfLinkOnPut(
@@ -179,7 +187,7 @@ export async function putCard(
 
         // The avatar URL writeCard derived and stored, after both ceilings passed.
         let projectionAvatar: string;
-        const projection = prepareCard(bytes, parsed, '', parsed.uid);
+        const projection = prepareCard(bytes, parsed, '', uid);
         // The stored bytes credit the card this one replaces; a raised 413/507 maps to a typed result.
         try {
             // sanitizeCardUri already accepted this spelling, so the stored uri is the NFC one.
@@ -214,7 +222,6 @@ export async function putCard(
             }
         }
 
-        contacts.announce(existing ? SSEventType.CONTACT_UPDATED : SSEventType.CONTACT_CREATED, id);
         return { ok: true, etag: verbatim ? projection.etag : null, created: !existing };
     });
 }

@@ -629,7 +629,15 @@ export class Contacts {
     }
 
     public async putCard(uri: string, body: string, options: ResourcePreconditions): Promise<PutResourceResult> {
-        return davStore.putCard(this, uri, body, options);
+        const result = await davStore.putCard(this, uri, body, options);
+        if (result.ok) {
+            // Told once the write lock is released, naming the row the write landed on.
+            const written = davStore.getCardMeta(this, uri);
+            if (written) {
+                this.announce(result.created ? SSEventType.CONTACT_CREATED : SSEventType.CONTACT_UPDATED, written.id);
+            }
+        }
+        return result;
     }
 
     public async deleteCard(uri: string, pre: Pick<ResourcePreconditions, 'ifMatch'>): Promise<DeleteCardResult> {
