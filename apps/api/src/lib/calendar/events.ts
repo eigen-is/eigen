@@ -25,22 +25,26 @@ import type { CreateEventArgs } from './types';
 
 // Event mutation over the Calendar facade. See docs/CALENDAR.md § Event writes.
 
-// What an edit needs of the resource it rewrites: its bytes to mutate, its size to credit against the quota.
+// Where an edit writes and what it credits against the quota; the bytes are the one column no caller needs by default.
 const STORED_RESOURCE = {
     id: schema.resources.id,
     calendarId: schema.resources.calendarId,
     uri: schema.resources.uri,
     uid: schema.resources.uid,
-    ics: schema.resources.ics,
     size: resourceBytes,
 };
-export type StoredResource = Pick<typeof schema.resources.$inferSelect, 'id' | 'calendarId' | 'uri' | 'uid' | 'ics'> & {
+export type StoredResource = Pick<typeof schema.resources.$inferSelect, 'id' | 'calendarId' | 'uri' | 'uid'> & {
     size: number;
 };
 
-// The stored component of a resource: the bytes are the truth, so every edit starts by parsing them.
-export function storedComponent(resource: Pick<StoredResource, 'ics'>): ICAL.Component {
-    return parseResource(new TextDecoder().decode(resource.ics));
+// The stored component of a resource: the bytes are the truth, so every path that parses them reads them itself.
+export function storedComponent(calendar: Calendar, resource: Pick<StoredResource, 'id'>): ICAL.Component {
+    const row = calendar.db
+        .select({ ics: schema.resources.ics })
+        .from(schema.resources)
+        .where(eq(schema.resources.id, resource.id))
+        .get()!;
+    return parseResource(new TextDecoder().decode(row.ics));
 }
 
 export function eventById(calendar: Calendar, id: string): CalendarEvent | null {
@@ -65,7 +69,7 @@ async function editResource(
     resource: StoredResource,
     mutate: (component: ICAL.Component) => void,
 ): Promise<void> {
-    const component = storedComponent(resource);
+    const component = storedComponent(calendar, resource);
     mutate(component);
     await store.writeResource(calendar, resource.calendarId, resource.uri, component, resource);
 }

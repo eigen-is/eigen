@@ -269,7 +269,7 @@ async function applyInvitationUpdate(
 ): Promise<boolean> {
     const resource = events.resourceOf(calendar, linked.id);
     if (!resource) return false;
-    const component = events.storedComponent(resource);
+    const component = events.storedComponent(calendar, resource);
     // A copy that is one occurrence of a series this Home does not hold is keyed by its RECURRENCE-ID.
     const key = linked.recurrenceDate;
     if (!isNewerRevision(payload, storedRevision(component, key))) return false;
@@ -337,7 +337,7 @@ async function applyInvitationException(
     const recurrenceDate = recurrenceKeyForSeries(payload.recurrenceDate, payload.recurrenceInstant, linked.timezone);
     const resource = events.resourceOf(calendar, linked.id);
     if (!resource) return false;
-    const component = events.storedComponent(resource);
+    const component = events.storedComponent(calendar, resource);
     if (!isNewerRevision(payload, storedRevision(component, recurrenceDate))) return false;
 
     const existing = events.exceptionOf(calendar, linked.id, recurrenceDate);
@@ -443,7 +443,7 @@ async function decideInboundRequest(
         // A copy that is one occurrence of an unheld series gives way to the series once the organizer invites this Home to all of it.
         if (linked.recurrenceDate && !parsed.recurrenceDate) {
             const resource = events.resourceOf(calendar, linked.id);
-            const component = resource ? events.storedComponent(resource) : null;
+            const component = resource ? events.storedComponent(calendar, resource) : null;
             if (component && !isNewerRevision(parsed, storedRevision(component, linked.recurrenceDate))) {
                 return { kind: 'dropped', reason: 'nothing newer to apply' };
             }
@@ -460,7 +460,7 @@ async function decideInboundRequest(
     if (master) {
         // The organizer may claim an event nobody linked, but only when it names the verified sender.
         const resource = events.resourceOf(calendar, master.id);
-        const component = resource ? events.storedComponent(resource) : null;
+        const component = resource ? events.storedComponent(calendar, resource) : null;
         if (!resource || !component || storedOrganizerAddress(component) !== sender) {
             return { kind: 'dropped', reason: 'the stored event names another organizer' };
         }
@@ -553,7 +553,7 @@ export async function cancelInvitationOccurrence(
                 if (!linked) return null;
                 const resource = events.resourceOf(calendar, linked.id);
                 if (!resource) return null;
-                const component = events.storedComponent(resource);
+                const component = events.storedComponent(calendar, resource);
                 const key = recurrenceKeyForSeries(recurrenceDate, recurrenceInstant, linked.timezone);
                 // A copy that IS the cancelled occurrence has no series to exclude it from: it goes.
                 if (!exceptionKeyOf(linked, key)) {
