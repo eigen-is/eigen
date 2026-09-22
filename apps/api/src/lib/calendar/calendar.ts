@@ -23,7 +23,7 @@ import {
     PATHS,
     type PutResourceResult,
 } from '../core';
-import type { DeleteResourceResult, ManagedDatabase } from '../core/';
+import type { DeleteResourceResult, ManagedDatabase, ResourcePreconditions } from '../core/';
 import type { Home } from '../home';
 import { atHome } from '../home';
 import { parseResource } from '../ical';
@@ -38,7 +38,7 @@ import * as invitations from './invitations';
 import { dbCalendarToCalendarItem, toEvent } from './mappers';
 import * as occurrences from './occurrences';
 import type { CalendarCollection, Tx } from './resource-store';
-import { indexResource, resourceBytes, sanitizeCalendarId } from './resource-store';
+import { indexResource, reindexEvents, resourceBytes, sanitizeCalendarId } from './resource-store';
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
 import * as shares from './shares';
@@ -46,10 +46,6 @@ import { buildCalendarEvent, buildEventsChangedEvent } from './sse-events';
 import { exportEvents, importEvents } from './transfer';
 
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from './types';
-
-function getCalendarDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
-    return home.getLocalDatabase(CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB);
-}
 
 // Apple writes the eight-digit form, so all three hex lengths are valid.
 const CALENDAR_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
@@ -75,6 +71,7 @@ export class Calendar {
     writeLock = new Semaphore(1);
 
     // Running total so size() answers from memory: a SUM per metered write makes an N-event device sync O(N²).
+    // Each delta is read inside the transaction that moves it and applied after: a rollback would otherwise leave it applied.
     eventsBytes = 0;
 
     // Whether resource writes are quota-metered — see the assignment in init() for what turns it on.
@@ -91,7 +88,7 @@ export class Calendar {
     }
 
     public async init(): Promise<void> {
-        this.managedDb = await getCalendarDatabase(this.home);
+        this.managedDb = await this.home.getLocalDatabase(CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB);
         this.db = this.managedDb.db;
 
         // Seeded once here, then moved by delta at each commit and purge.
@@ -154,26 +151,22 @@ export class Calendar {
     // One transaction, so the ctag bump, the blob, the event rows and the tombstone clear settle together.
     commitResource(commit: ResourceCommit): void {
         const { rows, ...resource } = commit;
-        let delta = 0;
-        this.db.transaction((tx) => {
-            // Read inside the transaction, applied outside it: a rollback would otherwise leave the delta applied.
+        const delta = this.db.transaction((tx) => {
             const previous = tx
                 .select({ size: resourceBytes })
                 .from(schema.resources)
                 .where(eq(schema.resources.id, commit.id))
                 .get();
-            delta = commit.ics.byteLength - (previous?.size ?? 0);
             indexResource(tx, { ...resource, resourceCtag: this.bumpCtag(tx, commit.calendarId) }, rows);
+            return commit.ics.byteLength - (previous?.size ?? 0);
         });
         this.eventsBytes += delta;
     }
 
     // Callers hold the write lock and have already run their own guards (preconditions, the linked-copy rule).
     async purgeResource(row: { id: string; calendarId: string; uri: string }): Promise<void> {
-        let removed = 0;
-        this.db.transaction((tx) => {
-            // Read inside the transaction, applied outside it: a rollback would otherwise leave the delta applied.
-            removed = tx
+        const removed = this.db.transaction((tx) => {
+            const size = tx
                 .select({ size: resourceBytes })
                 .from(schema.resources)
                 .where(eq(schema.resources.id, row.id))
@@ -181,6 +174,7 @@ export class Calendar {
             const ctag = this.bumpCtag(tx, row.calendarId);
             tx.delete(schema.resources).where(eq(schema.resources.id, row.id)).run();
             this.tombstone(tx, row.calendarId, row.uri, ctag);
+            return size;
         });
         this.eventsBytes -= removed;
     }
@@ -249,6 +243,14 @@ export class Calendar {
         return created;
     }
 
+    private calendarCtag(calendarId: string): number | undefined {
+        return this.db
+            .select({ ctag: schema.calendars.ctag })
+            .from(schema.calendars)
+            .where(eq(schema.calendars.id, calendarId))
+            .get()?.ctag;
+    }
+
     calendarIdTaken(id: string): boolean {
         return !!this.db
             .select({ id: schema.calendars.id })
@@ -304,10 +306,8 @@ export class Calendar {
         }
 
         await this.writeLock.run(async () => {
-            let removed = 0;
-            this.db.transaction((tx) => {
-                // Read inside the transaction, applied outside it: a rollback would otherwise leave the delta applied.
-                removed = tx
+            const removed = this.db.transaction((tx) => {
+                const total = tx
                     .select({ total: sql<number>`COALESCE(SUM(${resourceBytes}), 0)` })
                     .from(schema.resources)
                     .where(eq(schema.resources.calendarId, id))
@@ -316,6 +316,7 @@ export class Calendar {
                 tx.delete(schema.calendars).where(eq(schema.calendars.id, id)).run();
                 // No cascade reaches these: a calendar recreated at this id would inherit the 404s.
                 tx.delete(schema.resourceTombstones).where(eq(schema.resourceTombstones.calendarId, id)).run();
+                return total;
             });
             this.eventsBytes -= removed;
         });
@@ -330,7 +331,7 @@ export class Calendar {
     }
 
     public async getResourceMeta(calendarId: string, uri: string): Promise<ResourceRow | null> {
-        return store.getResourceMeta(this, calendarId, uri);
+        return store.resourceRowOf(this, calendarId, uri);
     }
 
     public async getResourcesByUris(calendarId: string, uris: string[]): Promise<ResourceRow[]> {
@@ -355,10 +356,10 @@ export class Calendar {
         body: string,
         options: PutResourceOptions,
     ): Promise<PutResourceResult> {
-        const ctagBefore = this.calendarRow(calendarId)?.ctag;
+        const ctagBefore = this.calendarCtag(calendarId);
         const result = await store.putResource(this, calendarId, uri, body, options);
         // A PUT of what is already stored commits nothing, so there is nothing to tell the clients about.
-        if (result.ok && this.calendarRow(calendarId)?.ctag !== ctagBefore) {
+        if (result.ok && this.calendarCtag(calendarId) !== ctagBefore) {
             this.announce(
                 calendarId,
                 result.created ? SSEventType.CALENDAR_EVENT_CREATED : SSEventType.CALENDAR_EVENT_UPDATED,
@@ -370,7 +371,7 @@ export class Calendar {
     public async deleteResource(
         calendarId: string,
         uri: string,
-        pre: { ifMatch: string | null },
+        pre: Pick<ResourcePreconditions, 'ifMatch'>,
     ): Promise<DeleteResourceResult> {
         const result = await store.deleteResource(this, calendarId, uri, pre);
         if (result.ok) this.announce(calendarId, SSEventType.CALENDAR_EVENT_DELETED);
@@ -455,8 +456,7 @@ export class Calendar {
                     })
                     .where(eq(schema.resources.id, row.id))
                     .run();
-                tx.delete(schema.events).where(eq(schema.events.resourceId, row.id)).run();
-                for (const event of projection.rows) tx.insert(schema.events).values(event).run();
+                reindexEvents(tx, row.id, projection.rows);
             }
         });
     }

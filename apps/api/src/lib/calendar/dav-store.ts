@@ -10,6 +10,7 @@ import {
     matchesIfNoneMatch,
     normalizeResourceUri,
     type PutResourceResult,
+    type ResourcePreconditions,
 } from '../core';
 import { parseResource, projectResource, restampResource, serializeResource, stripEigenStamps } from '../ical';
 import { EIGEN, readStamp, recurrenceKeyOf, seriesTimezones, uidOf } from '../ical/ical-parse';
@@ -114,18 +115,8 @@ export function projectRows(
 
 // ---- Index reads: what the protocol handlers sit on ----
 
-// The reads stay async where the shape looks synchronous, so the DAV layer above them is untouched.
-
 export function resourceRowOf(calendar: Calendar, calendarId: string, uri: string): ResourceRow | null {
     return calendar.db.select(RESOURCE_ROW).from(schema.resources).where(atUri(calendarId, uri)).get() ?? null;
-}
-
-export async function getResourceMeta(
-    calendar: Calendar,
-    calendarId: string,
-    uri: string,
-): Promise<ResourceRow | null> {
-    return resourceRowOf(calendar, calendarId, uri);
 }
 
 export async function listResources(calendar: Calendar, calendarId: string): Promise<ResourceRow[]> {
@@ -336,9 +327,7 @@ function adoptAlarms(stored: ICAL.Component, incoming: ICAL.Component): void {
     }
 }
 
-export type PutResourceOptions = {
-    ifMatch: string | null;
-    ifNoneMatch: string | null;
+export type PutResourceOptions = ResourcePreconditions & {
     actor?: string | null;
     // Set by a whole-file import alone: it files one UID once per Home, where a device owns only the calendar it syncs.
     import?: { organizer: string | null };
@@ -469,7 +458,7 @@ export async function deleteResource(
     calendar: Calendar,
     calendarId: string,
     uri: string,
-    pre: { ifMatch: string | null },
+    pre: Pick<ResourcePreconditions, 'ifMatch'>,
 ): Promise<DeleteResourceResult> {
     return calendar.writeLock.run(async (): Promise<DeleteResourceResult> => {
         const row = calendar.db

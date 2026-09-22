@@ -399,8 +399,11 @@ export async function receiveImipRequest(calendar: Calendar, parsed: ParsedEvent
 }
 
 // The broadcast and the notification an applied REQUEST owes, run after the write lock is released.
-function settleInboundRequest(calendar: Calendar, outcome: InboundRequestOutcome, link: InvitationLink): string | null {
-    if (outcome.kind === 'dropped') return null;
+function settleInboundRequest(
+    calendar: Calendar,
+    outcome: Exclude<InboundRequestOutcome, { kind: 'dropped' }>,
+    link: InvitationLink,
+): string {
     if (outcome.kind === 'created') {
         calendar.announce(outcome.event.calendarId, SSEventType.CALENDAR_EVENT_CREATED);
         notifyInvitationReceived(calendar, outcome.payload);
