@@ -28,16 +28,16 @@ export function DrivePickerWithUpload({
 }: DrivePickerWithUploadProps) {
     const inputRef = useRef<HTMLInputElement>(null);
 
-    const triggerUpload = () => {
-        // Close the picker first so focus can move to the native file chooser cleanly.
-        onOpenChange(false);
-        setTimeout(() => inputRef.current?.click(), 0);
-    };
+    // The picker stays open over the native file chooser: closing it first unmounts this input
+    // wherever the caller renders the picker conditionally, and the chooser then never opens.
+    const triggerUpload = () => inputRef.current?.click();
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files ? Array.from(e.target.files) : [];
-        if (files.length > 0) onPickFromDevice?.(files);
         e.target.value = '';
+        if (files.length === 0) return;
+        onPickFromDevice?.(files);
+        onOpenChange(false);
     };
 
     return (
