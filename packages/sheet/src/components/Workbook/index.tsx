@@ -112,41 +112,6 @@ function dataToCelldata(data: CellMatrix) {
     return cellData;
 }
 
-function reduceUndoList(ctx: Context, ctxBefore: Context, globalCache: React.MutableRefObject<GlobalCache>) {
-    const sheetsId = ctx.sheets.map((sheet) => sheet.id);
-    const sheetDeletedByMe = globalCache.current.undoList
-        .filter((undo) => undo.options?.deleteSheetOp)
-        .map((item) => item.options?.deleteSheetOp?.id);
-    globalCache.current.undoList = globalCache.current.undoList.filter(
-        (undo) =>
-            undo.options?.deleteSheetOp ||
-            undo.options?.id === undefined ||
-            sheetsId.indexOf(undo.options?.id) !== -1 ||
-            sheetDeletedByMe.indexOf(undo.options?.id) !== -1,
-    );
-    if (ctxBefore.sheets.length > ctx.sheets.length) {
-        const sheetDeleted = ctxBefore.sheets
-            .filter((oneSheet) => sheetsId.indexOf(oneSheet.id) === -1)
-            .map((item) => getSheetIndex(ctxBefore, item.id as string));
-        const deletedIndex = sheetDeleted[0];
-        globalCache.current.undoList = globalCache.current.undoList.map((oneStep) => {
-            oneStep.patches = oneStep.patches.map((onePatch) => {
-                if (typeof onePatch.path[1] === 'number' && onePatch.path[1] > (deletedIndex as number)) {
-                    onePatch.path[1] -= 1;
-                }
-                return onePatch;
-            });
-            oneStep.inversePatches = oneStep.inversePatches.map((onePatch) => {
-                if (typeof onePatch.path[1] === 'number' && onePatch.path[1] > (deletedIndex as number)) {
-                    onePatch.path[1] -= 1;
-                }
-                return onePatch;
-            });
-            return oneStep;
-        });
-    }
-}
-
 export const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
     ({ onChange, onOp, toolbarLeftItems, toolbarRightItems, data: originalData, ...props }, ref) => {
         const scrollListeners = useRef(new Set<() => void>());
@@ -283,10 +248,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                 globalCache.current.redoList = [];
                             }
                             emitOp(result, filteredPatches, options);
-                        }
-                    } else {
-                        if (patches?.[0]?.value?.length < ctx_?.sheets?.length) {
-                            reduceUndoList(result, ctx_, globalCache);
                         }
                     }
                     return result;
