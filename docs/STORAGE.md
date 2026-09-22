@@ -10,8 +10,8 @@
 Home (per-user singleton)
 ├── Drive → Mount(s) → StorageBackend + metadata.db
 ├── Mail → LocalFilesystem + mail.db
-├── Contacts → LocalFilesystem (cards/*.vcf) + contacts.db
-├── Calendar → LocalFilesystem (calendars/<calendarId>/*.ics) + calendar.db
+├── Contacts → contacts.db (vCard bytes in the row) + LocalFilesystem (avatars)
+├── Calendar → calendar.db (VCALENDAR bytes in the row)
 └── Notifications → notifications.db
 ```
 
@@ -136,19 +136,17 @@ data/home/{userId}/
 │   ├── mail.db
 │   └── Maildir/
 ├── eigen.contacts/
-│   ├── cards/                (one vCard per contact — the source of truth)
-│   ├── contacts.db           (index + authoritative sync/label metadata)
-│   └── avatars/              (derived photo cache + staged uploads)
+│   ├── contacts.db           (the cards themselves, one vCard BLOB per row, + the sync/label metadata)
+│   └── avatars/              (the photo rendition the web UI serves + staged uploads)
 ├── eigen.calendar/
-│   ├── calendars/            (one directory per calendar, one .ics per UID — the source of truth)
-│   └── calendar.db           (index + authoritative calendar metadata)
+│   └── calendar.db           (the resources themselves, one VCALENDAR BLOB per row, + the calendar metadata)
 └── eigen.notifications/
     └── notifications.db
 ```
 
-Contacts follow the mail model: the `.vcf` files under `cards/` are canonical (each filename is its CardDAV resource name), and `contacts.db` indexes them. What the index projects — names, the `data` JSON, etags, label membership from each card's `CATEGORIES` — re-derives from the files; what it owns is authoritative and lives nowhere else: label ids + colors, the book `ctag`/`syncGen`/`ownerSeeded`, tombstones, and the crash-recovery journals. `avatars/` is a derived cache — one hashed webp per card photo, regenerated from the card's inline `PHOTO` when missing — alongside staged uploads a contact form hasn't saved yet. See [CONTACTS.md](CONTACTS.md).
+Contacts keep the cards themselves in `contacts.db`: a row's `vcard` BLOB is the truth, and the columns beside it — names, the `data` JSON, the etag, label membership from each card's `CATEGORIES` — are a projection that rebuilds from those bytes, while what no card carries lives only here: label ids + colors, the book `ctag`/`syncGen`/`ownerSeeded`, and the tombstones. `avatars/` holds one hashed webp per card photo, the rendition the web UI serves, alongside staged uploads a contact form hasn't saved yet; it is a second source of truth rather than a cache, because a promoted webp comes from the pristine upload. See [CONTACTS.md](CONTACTS.md).
 
-Calendar follows the same model: the `.ics` files under `calendars/<calendarId>/` are canonical (each filename is its CalDAV resource name, and each file holds one UID's master, its overrides and the VTIMEZONEs they reference), and `calendar.db` indexes them. The directory name **is** the calendar id, so an event id and a calendar id both survive a lost index; what the index owns and no file carries is the calendar's name, color, visibility and default flag, its shares, its `ctag`/`syncGen`, the tombstones and the pending-write journal. A `.`-prefixed `calendars/.<id>.deleting-<uuid>` directory is the staging half of a calendar delete and is swept at the next open. See [CALENDAR.md](CALENDAR.md).
+Calendar follows the same model: a `resources` row's `ics` BLOB holds one UID's master, its overrides and the VTIMEZONEs they reference — the bytes a CalDAV GET serves back — and the `events` rows beside it are the projection. What no resource carries lives only in the database: the calendar's name, color, visibility and default flag, its shares, its `ctag`/`syncGen`, the tombstones and the recipient-side share list. See [CALENDAR.md](CALENDAR.md).
 
 Team data: `data/team/{teamId}/` — Drive + Calendar only, plus `settings.json` for mount/calendar config.
 Org data: `data/org/{orgId}/` — minimal (filesystem only, no domain services).

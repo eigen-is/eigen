@@ -1,26 +1,34 @@
 import type { CreateContactInput } from '@workspace/lib/types/contact';
-import { relations, sql } from 'drizzle-orm';
-import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
+import { blob, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
-export const contacts = sqliteTable('contacts', {
-    id: text('id').primaryKey(),
-    uri: text('uri').notNull(),
-    uriKey: text('uriKey').notNull(),
-    uid: text('uid').notNull(),
-    firstName: text('firstName').notNull(),
-    lastName: text('lastName').notNull(),
-    eigenId: text('eigenId').notNull().default(''),
-    isGroup: integer('isGroup', { mode: 'boolean' }).notNull().default(false),
-    data: text('data', { mode: 'json' }).$type<
-        Omit<CreateContactInput, 'firstName' | 'lastName' | 'eigenId' | 'labels'>
-    >(),
-    etag: text('etag').notNull(),
-    cardCtag: integer('cardCtag').notNull(),
-    mtime: integer('mtime').notNull(),
-    size: integer('size').notNull(),
-    createdAt: integer('createdAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
-    updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
-});
+// The vCard bytes are the truth; every other column of this table is a projection of them and is rebuildable from them.
+export const contacts = sqliteTable(
+    'contacts',
+    {
+        id: text('id').primaryKey(),
+        uri: text('uri').notNull(),
+        uid: text('uid').notNull(),
+        vcard: blob('vcard', { mode: 'buffer' }).notNull(),
+        firstName: text('firstName').notNull(),
+        lastName: text('lastName').notNull(),
+        eigenId: text('eigenId').notNull().default(''),
+        isGroup: integer('isGroup', { mode: 'boolean' }).notNull().default(false),
+        data: text('data', { mode: 'json' }).$type<
+            Omit<CreateContactInput, 'firstName' | 'lastName' | 'eigenId' | 'labels'>
+        >(),
+        etag: text('etag').notNull(),
+        cardCtag: integer('cardCtag').notNull(),
+    },
+    (table) => ({
+        // A uri is unique as written and a uid across the whole book: both are how a DAV client names a card.
+        cardUri: uniqueIndex('idx_contacts_uri').on(table.uri),
+        cardUid: uniqueIndex('idx_contacts_uid').on(table.uid),
+        selfLink: index('idx_contacts_eigenId').on(table.eigenId),
+        // The sync-collection delta is one indexed scan of the cards changed after token N.
+        cardCtag: index('idx_contacts_cardCtag').on(table.cardCtag),
+    }),
+);
 
 export const book = sqliteTable('book', {
     id: integer('id').primaryKey(),
@@ -31,42 +39,32 @@ export const book = sqliteTable('book', {
     ownerSeeded: integer('ownerSeeded').notNull().default(0),
 });
 
-export const contactTombstones = sqliteTable('contact_tombstones', {
-    uri: text('uri').primaryKey(),
-    // Case/normalization-folded key so a tombstone clears (and re-creates match) by the same identity the
-    // contacts index uses — a re-created card at a case-variant uri must clear its own tombstone.
-    uriKey: text('uriKey').notNull(),
-    deletedAtCtag: integer('deletedAtCtag').notNull(),
-});
+export const contactTombstones = sqliteTable(
+    'contact_tombstones',
+    {
+        uri: text('uri').primaryKey(),
+        deletedAtCtag: integer('deletedAtCtag').notNull(),
+    },
+    (table) => ({
+        ctag: index('idx_contact_tombstones_ctag').on(table.deletedAtCtag),
+    }),
+);
 
-// The durable half of the fail-closed write contract: a uri is recorded here before its card file is
-// written and cleared inside the index commit that follows. A row that survives a process death means the
-// pair never completed, so init re-indexes that card — the case a stat-only reconcile cannot see is a
-// replacement carrying the very same mtime and size.
-export const pendingCardWrites = sqliteTable('pending_card_writes', {
-    uri: text('uri').primaryKey(),
-});
-
-export const labels = sqliteTable('labels', {
-    id: text('id').primaryKey(),
-    name: text('name').notNull(),
-    nameKey: text('nameKey').notNull(),
-    color: text('color').notNull(),
-    createdAt: integer('createdAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
-    updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
-});
-
-// A label rename in flight, written in the same transaction that renames the row and cleared once every
-// member card's CATEGORIES has been rewritten. A survivor means the fan-out was cut short (process death,
-// or a compensation that itself failed); the files it never reached are stat-clean, so nothing but this
-// record can find them.
-export const pendingLabelRenames = sqliteTable('pending_label_renames', {
-    labelId: text('labelId')
-        .primaryKey()
-        .references(() => labels.id, { onDelete: 'cascade' }),
-    oldName: text('oldName').notNull(),
-    newName: text('newName').notNull(),
-});
+export const labels = sqliteTable(
+    'labels',
+    {
+        id: text('id').primaryKey(),
+        name: text('name').notNull(),
+        nameKey: text('nameKey').notNull(),
+        color: text('color').notNull(),
+        createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+        updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+    },
+    (table) => ({
+        // The normalized name is the identity a card's CATEGORIES resolves against.
+        nameKey: uniqueIndex('idx_labels_nameKey').on(table.nameKey),
+    }),
+);
 
 export const contactsToLabels = sqliteTable(
     'contacts_to_labels',
@@ -80,24 +78,7 @@ export const contactsToLabels = sqliteTable(
     },
     (table) => ({
         pk: primaryKey({ columns: [table.contactId, table.labelId] }),
+        // The fan-out of a rename or a delete asks for one label's members.
+        label: index('idx_contacts_to_labels_labelId').on(table.labelId),
     }),
 );
-
-export const contactsRelations = relations(contacts, ({ many }) => ({
-    labels: many(contactsToLabels),
-}));
-
-export const labelsRelations = relations(labels, ({ many }) => ({
-    contacts: many(contactsToLabels),
-}));
-
-export const contactsToLabelsRelations = relations(contactsToLabels, ({ one }) => ({
-    contact: one(contacts, {
-        fields: [contactsToLabels.contactId],
-        references: [contacts.id],
-    }),
-    label: one(labels, {
-        fields: [contactsToLabels.labelId],
-        references: [labels.id],
-    }),
-}));

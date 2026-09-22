@@ -28,8 +28,8 @@ export function validateEventInput(input: { rrule?: string | null; startTime: Da
     if (input.endTime < input.startTime) throw new ApiError(400, 'Event end time cannot be before start time');
 }
 
-// The shape of a row about to be written; the file buildResource makes of it is what the index re-derives.
-export function eventForFile(args: {
+// The shape of a row about to be written; the VCALENDAR buildResource makes of it is what the projection re-derives.
+export function eventForResource(args: {
     id: string;
     calendarId: string;
     uid: string;

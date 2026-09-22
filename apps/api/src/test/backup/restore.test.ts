@@ -23,6 +23,7 @@ import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getAvatarsDir } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
+import { avatarNameOf } from '../../lib/contacts/card-store';
 import { getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
 import { paths } from '../../lib/mount/schema';
@@ -165,6 +166,12 @@ describe('Backup restoreHome', () => {
     let localRootId: string;
     let nestedFileId: string;
     let keptThumbPath: string;
+    let avatarPath: string;
+    let avatarName: string;
+    let avatarBytes: Uint8Array<ArrayBuffer>;
+    let animatedAvatarPath: string;
+    let animatedAvatarName: string;
+    let animatedAvatarBytes: Uint8Array<ArrayBuffer>;
     let port: number;
 
     beforeAll(async () => {
@@ -237,6 +244,54 @@ describe('Backup restoreHome', () => {
         await authedRequest(target.sessionToken, `/mail/${target.id}/mailbox/`);
 
         const home = await getHome(target.id);
+        // A contact photo: the derived webp is written once, at the card write, from the pristine upload,
+        // so a restore has to bring those very bytes back the way it brings a thumbnail back.
+        const staged = await home.contacts.uploadAvatar(
+            new File([TEST_PNG_BYTES], 'avatar.png', { type: 'image/png' }),
+        );
+        const photoContactId = await home.contacts.addContact({
+            firstName: 'Photo',
+            lastName: 'Contact',
+            email: ['photo@test.eigen.is'],
+            phone: [],
+            avatar: staged,
+        });
+        const photoContact = await home.contacts.getContactById(photoContactId);
+        avatarName = avatarNameOf(photoContact?.avatar ?? '');
+        expect(avatarName).toEndWith('.webp');
+        avatarPath = join(TEST_DATA_DIR, 'home', target.id, 'eigen.contacts', 'avatars', avatarName);
+        avatarBytes = new Uint8Array(await Bun.file(avatarPath).arrayBuffer());
+
+        // A second photo, animated: its cache is a multi-frame webp, which a tar that re-encodes anything —
+        // or a restore that writes the stream back frame by frame — would flatten.
+        const sharp = (await import('sharp')).default;
+        const frames = await Promise.all(
+            [
+                { r: 220, g: 20, b: 20 },
+                { r: 20, g: 220, b: 20 },
+                { r: 20, g: 20, b: 220 },
+            ].map((background) =>
+                sharp({ create: { width: 32, height: 32, channels: 3, background } })
+                    .png()
+                    .toBuffer(),
+            ),
+        );
+        const gif = await sharp(frames, { join: { animated: true } })
+            .gif()
+            .toBuffer();
+        const animatedContactId = await home.contacts.addContact({
+            firstName: 'Animated',
+            lastName: 'Contact',
+            email: ['animated@test.eigen.is'],
+            phone: [],
+            avatar: await home.contacts.uploadAvatar(
+                new File([new Uint8Array(gif)], 'animated.gif', { type: 'image/gif' }),
+            ),
+        });
+        animatedAvatarName = avatarNameOf((await home.contacts.getContactById(animatedContactId))?.avatar ?? '');
+        animatedAvatarPath = join(TEST_DATA_DIR, 'home', target.id, 'eigen.contacts', 'avatars', animatedAvatarName);
+        animatedAvatarBytes = new Uint8Array(await Bun.file(animatedAvatarPath).arrayBuffer());
+        expect((await sharp(animatedAvatarBytes, { animated: true }).metadata()).pages).toBe(3);
         const settings = await home.settings.set({
             mounts: {
                 [LOCAL_MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Restore Local' },
@@ -293,8 +348,10 @@ describe('Backup restoreHome', () => {
         );
         await deliverMail(target.email, 'After the backup');
         await authedRequest(target.sessionToken, `/mail/${target.id}/mailbox/`);
-        // ...and lose the thumbnail nothing would ever generate again.
+        // ...and lose the thumbnail and the contact photo nothing would ever generate again.
         rmSync(keptThumbPath, { force: true });
+        rmSync(avatarPath, { force: true });
+        rmSync(animatedAvatarPath, { force: true });
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual([
             'after-backup.png',
             CHATS_FOLDER,
@@ -373,6 +430,17 @@ describe('Backup restoreHome', () => {
         );
         expect(thumb.status).toBe(200);
         expect(thumb.headers.get('content-type')).toBe('image/webp');
+
+        // The contact photo cache is derived at the write alone, so the archive is the only copy left —
+        // and it comes back as the very bytes the upload was encoded to, not a re-derivation.
+        const restoredAvatar = await home.contacts.downloadAvatar(avatarName);
+        expect(restoredAvatar).not.toBeNull();
+        expect(new Uint8Array(restoredAvatar!)).toEqual(avatarBytes);
+
+        // The animated cache comes back frame for frame, because the archive copies bytes and never re-encodes.
+        const restoredAnimated = await home.contacts.downloadAvatar(animatedAvatarName);
+        expect(restoredAnimated).not.toBeNull();
+        expect(new Uint8Array(restoredAnimated!)).toEqual(animatedAvatarBytes);
 
         const [preRestore] = safetyCopies(target.id, PRE_RESTORE_SUFFIX);
         expect(preRestore).toBeTruthy();

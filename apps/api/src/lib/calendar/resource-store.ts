@@ -1,32 +1,27 @@
+import { randomUUID } from 'node:crypto';
 import type { CalendarItem } from '@workspace/lib/types/calendar';
-import { and, eq } from 'drizzle-orm';
-import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import {
-    type LocalFilesystem,
-    PATHS,
-    type ResourceScan,
-    sanitizeResourceUri,
-    statResourceDir,
-    uriKeyOf,
-} from '../core';
+import { and, eq, sql } from 'drizzle-orm';
+import type ICAL from 'ical.js';
+import { computeResourceEtag, type Tx as DatabaseTx, PATHS, readBlobTableSize, sanitizeResourceUri } from '../core';
+import type { LocalFilesystem } from '../core/local-filesystem';
+import { projectResource, serializeResource } from '../ical';
+import { uidOf } from '../ical/ical-parse';
+import { CALENDAR_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 
-// The calendar-shaped half of `core/indexed-file-store.ts`; the protocol layers import from here, never the reverse.
+// The calendar-shaped half of the store over `core/blob-store.ts`. See docs/CALENDAR.md § Storage model.
+
+export type Tx = DatabaseTx<typeof schema>;
 
 const ICS_SUFFIX = '.ics';
 
 // CalDAV bounds a PUT body against this before buffering and advertises it as C:max-resource-size.
 export const EVENT_MAX_BYTES = 5_242_880;
 
-export function calendarDir(calendarId: string): string {
-    return `${PATHS.CALENDAR.CALENDARS}/${calendarId}`;
-}
+// A resource's stored size is the length of its bytes; no column beside them can drift from them.
+export const resourceBytes = sql<number>`length(${schema.resources.ics})`;
 
-export function resourcePath(calendarId: string, uri: string): string {
-    return `${calendarDir(calendarId)}/${uri}`;
-}
-
-// A client-chosen calendar id is a directory name and goes raw into an href, so it takes the shared segment rule over the NFC form.
+// A client-chosen calendar id goes raw into an href, so it takes the shared segment rule over the NFC form.
 export function sanitizeCalendarId(raw: string): string | null {
     return sanitizeResourceUri(raw, '');
 }
@@ -35,34 +30,17 @@ export function sanitizeEventUri(raw: string): string | null {
     return sanitizeResourceUri(raw, ICS_SUFFIX);
 }
 
-export function statCalendarDir(storage: LocalFilesystem, calendarId: string): Promise<ResourceScan> {
-    return statResourceDir(storage, calendarDir(calendarId), ICS_SUFFIX);
-}
-
-// The calendar bytes of a Home nobody has booted: the `.ics` of every directory a calendar row can own, never the `.`-prefixed staging.
+// `homeFs` is rooted at the home folder, not at the calendar root.
 export async function readCalendarTotalSize(homeFs: LocalFilesystem): Promise<number> {
-    const root = `${PATHS.CALENDAR.ROOT}/${PATHS.CALENDAR.CALENDARS}`;
-    if (!(await homeFs.dirExists(root))) return 0;
-    let total = 0;
-    for (const entry of await homeFs.readdir(root, { withFileTypes: true })) {
-        if (!entry.isDirectory() || sanitizeCalendarId(entry.name) !== entry.name) continue;
-        const scan = await statResourceDir(homeFs, `${root}/${entry.name}`, ICS_SUFFIX);
-        for (const file of scan.files.values()) total += file.size;
-    }
-    return total;
+    return readBlobTableSize(
+        homeFs.absolutePath(PATHS.CALENDAR.DB),
+        'resources',
+        'ics',
+        CALENDAR_DB_CONFIG.currentVersion,
+    );
 }
 
-// The gate key of one resource. Neither segment holds a `/`, so the pair round-trips through one string.
-export function gateKey(calendarId: string, uri: string): string {
-    return `${calendarId}/${uri}`;
-}
-
-export function parseGateKey(key: string): { calendarId: string; uri: string } {
-    const slash = key.indexOf('/');
-    return { calendarId: key.slice(0, slash), uri: key.slice(slash + 1) };
-}
-
-// ctag advances on each change, syncGen rotates on an index rebuild so stale sync tokens are refused.
+// ctag advances on each change, syncGen rotates on a recreated calendar so stale sync tokens are refused.
 export type CalendarCollection = CalendarItem & { syncGen: number };
 
 // The columns a (re)index computes for one projected VEVENT or exclusion.
@@ -71,22 +49,128 @@ export type EventRowInput = Omit<typeof schema.events.$inferInsert, 'createdAt' 
     updatedAt: Date;
 };
 
-// The transaction handle drizzle hands a `db.transaction(cb)` callback.
-export type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>[0]>[0];
+// What purgeResource needs of the row it removes: its calendar and its name for the tombstone, its etag for
+// the precondition the DAV delete evaluates.
+export const PURGED_RESOURCE = {
+    id: schema.resources.id,
+    calendarId: schema.resources.calendarId,
+    uri: schema.resources.uri,
+    etag: schema.resources.etag,
+};
+export type PurgedResource = { [K in keyof typeof PURGED_RESOURCE]: (typeof schema.resources.$inferSelect)[K] };
 
-// Runs inside the transaction that bumped the ctag, so a write, a drain and a reconcile all leave one shape behind.
-export function indexResource(
-    tx: Tx,
-    resource: Omit<typeof schema.resources.$inferInsert, 'uriKey'>,
-    rows: EventRowInput[],
-): void {
+// What one commit writes: the resource's own columns plus every event row its bytes project to.
+export type ResourceCommit = {
+    id: string;
+    calendarId: string;
+    uri: string;
+    uid: string;
+    ics: Buffer;
+    etag: string;
+    rows: EventRowInput[];
+    hasUnindexedRecurrence: boolean;
+};
+
+export function uidOfResource(resource: ICAL.Component): string {
+    return uidOf(resource.getAllSubcomponents('vevent')[0]);
+}
+
+// The rows a file projects to, ids from its `X-EIGEN-EVENT-ID` lines: one stored id belongs to one row.
+export function projectRows(
+    calendarId: string,
+    resourceId: string,
+    resource: ICAL.Component,
+): { rows: EventRowInput[]; hasUnindexedRecurrence: boolean; skipped: number; duplicateMaster: boolean } {
+    const projected = projectResource(resource);
+    const now = new Date();
+    const claimed = new Set<string>();
+    const identified = projected.events.map((event) => {
+        const id = event.eventId && !claimed.has(event.eventId) ? event.eventId : randomUUID();
+        claimed.add(id);
+        return { event, id };
+    });
+
+    // A master leads its overrides whatever order the file lists them in; a second master is malformed, the first still leads.
+    const masterIdByUid = new Map<string, string>();
+    let duplicateMaster = false;
+    for (const { event, id } of identified) {
+        if (event.recurrenceDate !== null) continue;
+        if (masterIdByUid.has(event.uid)) duplicateMaster = true;
+        else masterIdByUid.set(event.uid, id);
+    }
+
+    const rows = identified.map(({ event, id }) => ({
+        id,
+        resourceId,
+        calendarId,
+        uid: event.uid,
+        title: event.title,
+        description: event.description,
+        location: event.location,
+        startTime: event.startTime,
+        endTime: event.endTime,
+        allDay: event.allDay,
+        rrule: event.rrule,
+        timezone: event.timezone,
+        parentEventId: event.recurrenceDate === null ? null : (masterIdByUid.get(event.uid) ?? null),
+        recurrenceDate: event.recurrenceDate,
+        status: event.status,
+        data: event.data,
+        organizerEventId: event.data?.organizerEventId ?? null,
+        organizerUserId: event.data?.organizer?.userId || null,
+        sequence: event.sequence,
+        createByUserId: event.createByUserId,
+        createdAt: event.createdAt ?? now,
+        updatedAt: event.updatedAt ?? now,
+    }));
+
+    return {
+        rows,
+        hasUnindexedRecurrence: projected.hasUnindexedRecurrence,
+        skipped: projected.skipped,
+        duplicateMaster,
+    };
+}
+
+export type PreparedResource = {
+    id: string;
+    uid: string;
+    text: string;
+    bytes: Buffer;
+    etag: string;
+    rows: EventRowInput[];
+    hasUnindexedRecurrence: boolean;
+    skipped: number;
+    duplicateMaster: boolean;
+};
+
+// The pure half of a resource write: a component in, the bytes it serializes to and the rows they project
+// to out. `existingId` is the id of the resource this one replaces, so a rewrite keeps its row.
+export function prepareResource(
+    calendarId: string,
+    resource: ICAL.Component,
+    existingId: string | null,
+): PreparedResource {
+    const id = existingId ?? randomUUID();
+    const text = serializeResource(resource);
+    const bytes = Buffer.from(new TextEncoder().encode(text));
+    return {
+        id,
+        uid: uidOfResource(resource),
+        text,
+        bytes,
+        etag: computeResourceEtag(bytes),
+        ...projectRows(calendarId, id, resource),
+    };
+}
+
+// Runs inside the transaction that bumped the ctag, so a write and a rebuild leave one shape behind.
+export function indexResource(tx: Tx, resource: typeof schema.resources.$inferInsert, rows: EventRowInput[]): void {
     const row = {
         uri: resource.uri,
-        uriKey: uriKeyOf(resource.uri),
         uid: resource.uid,
+        ics: resource.ics,
         etag: resource.etag,
-        mtime: resource.mtime,
-        size: resource.size,
         resourceCtag: resource.resourceCtag,
         hasUnindexedRecurrence: resource.hasUnindexedRecurrence,
     };
@@ -94,22 +178,20 @@ export function indexResource(
         .values({ id: resource.id, calendarId: resource.calendarId, ...row })
         .onConflictDoUpdate({ target: schema.resources.id, set: row })
         .run();
-    tx.delete(schema.events).where(eq(schema.events.resourceId, resource.id)).run();
-    for (const event of rows) tx.insert(schema.events).values(event).run();
-    // So no href is ever both a 200 and a 404 in one sync response.
+    reindexEvents(tx, resource.id, rows);
+    // A resource at this uri is alive, so one written over a deleted name drops its stale removal.
     tx.delete(schema.resourceTombstones)
         .where(
             and(
                 eq(schema.resourceTombstones.calendarId, resource.calendarId),
-                eq(schema.resourceTombstones.uriKey, row.uriKey),
+                eq(schema.resourceTombstones.uri, resource.uri),
             ),
         )
         .run();
 }
 
-// A settled write intent: the index owes that file nothing any more.
-export function clearPendingWrite(db: Tx | BunSQLiteDatabase<typeof schema>, calendarId: string, uri: string): void {
-    db.delete(schema.pendingWrites)
-        .where(and(eq(schema.pendingWrites.calendarId, calendarId), eq(schema.pendingWrites.uri, uri)))
-        .run();
+// The projected rows are replaced wholesale, so an event a rewrite no longer carries leaves no row behind.
+export function reindexEvents(tx: Tx, resourceId: string, rows: EventRowInput[]): void {
+    tx.delete(schema.events).where(eq(schema.events.resourceId, resourceId)).run();
+    for (const event of rows) tx.insert(schema.events).values(event).run();
 }

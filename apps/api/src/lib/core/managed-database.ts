@@ -25,7 +25,13 @@ export type DatabaseConfig<S extends SchemaType> = {
         // Trigger a snapshot once at least this many writes have accumulated.
         writesPerSnapshot: number;
     };
+    // For a database that holds the truth rather than an index of it: a power loss must not lose an
+    // acknowledged write. Every other database keeps WAL's default NORMAL.
+    synchronous?: 'FULL';
 };
+
+// The transaction handle drizzle hands a `db.transaction(cb)` callback, for the schema of one database.
+export type Tx<S extends SchemaType> = Parameters<Parameters<BunSQLiteDatabase<S>['transaction']>[0]>[0];
 
 export type SyncCallbacks = {
     onOpen?: () => Promise<void>;
@@ -100,6 +106,8 @@ export class ManagedDatabase<S extends SchemaType> {
         // download) or a throwing migration — must not leak the raw handle (fd + mapped journals).
         try {
             this.rawDb.run('PRAGMA journal_mode = WAL;');
+            // Per connection, so it is re-applied on every open, not stored in the file.
+            if (this.config.synchronous === 'FULL') this.rawDb.run('PRAGMA synchronous = FULL;');
             this.rawDb.run('PRAGMA foreign_keys = ON;');
             this.rawDb.run('PRAGMA busy_timeout = 5000;');
 

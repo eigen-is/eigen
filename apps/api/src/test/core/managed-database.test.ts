@@ -2,6 +2,7 @@ import { Database as BunDatabase } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase, withAutoFinalize } from '../../lib/core';
@@ -49,6 +50,24 @@ describe('ManagedDatabase open-vs-create intent', () => {
         writeFileSync(dbPath, '');
         const db = new ManagedDatabase(makeConfig(1000), dbPath, {}, true);
         await expect(db.open(0)).rejects.toThrow();
+    });
+});
+
+describe('ManagedDatabase durability option', () => {
+    // 0 = OFF, 1 = NORMAL (what WAL gives every other database), 2 = FULL.
+    const synchronousOf = (mdb: ManagedDatabase<Schema>) =>
+        (mdb.db.all(sql`PRAGMA synchronous`)[0] as { synchronous: number }).synchronous;
+
+    test('a config asking for FULL gets it, and one that does not keeps WAL NORMAL', async () => {
+        const normal = new ManagedDatabase(makeConfig(1000), nextDbPath());
+        await normal.open(0);
+        expect(synchronousOf(normal)).toBe(1);
+        await normal.close({ skipFinalSnapshot: true });
+
+        const full = new ManagedDatabase({ ...makeConfig(1000), synchronous: 'FULL' }, nextDbPath());
+        await full.open(0);
+        expect(synchronousOf(full)).toBe(2);
+        await full.close({ skipFinalSnapshot: true });
     });
 });
 

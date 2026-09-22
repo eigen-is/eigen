@@ -31,14 +31,11 @@ export const PATHS = {
     CONTACTS: {
         ROOT: CONTACTS_ROOT,
         DB: `${CONTACTS_ROOT}/contacts.db`,
-        CARDS: 'cards',
         AVATARS: 'avatars',
     },
     CALENDAR: {
         ROOT: CALENDAR_ROOT,
         DB: `${CALENDAR_ROOT}/calendar.db`,
-        // A fixed parent, so a client-chosen calendar id can never be a sibling of calendar.db.
-        CALENDARS: 'calendars',
     },
     NOTIFICATIONS: {
         DB: 'eigen.notifications/notifications.db',

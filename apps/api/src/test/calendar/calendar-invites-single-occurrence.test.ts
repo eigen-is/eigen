@@ -116,7 +116,7 @@ describe('An invitation to one occurrence of a series the guest does not hold', 
         }, "the organizer's message to reach Bob's calendar");
     }
 
-    // Bob's stored file, read the way a CalDAV client reads it.
+    // Bob's stored resource, read the way a CalDAV client reads it.
     async function bobStored(uid: string) {
         const home = await getHome(ctx.bob.user.id);
         const resource = findOrFail(await home.calendar.listResources(bobCalendarId), (r) => r.uid === uid);

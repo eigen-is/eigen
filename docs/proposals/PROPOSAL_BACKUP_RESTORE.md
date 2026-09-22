@@ -67,7 +67,7 @@ eigen-home-{ownerId}-{timestamp}/
     │   │   └── data/…         (all files; S3 objects materialized here)
     │   └── shared.db          (VACUUM INTO copy)
     ├── eigen.mail/            (mail.db vacuumed + Maildir/ files as-is)
-    ├── eigen.contacts/        (contacts.db vacuumed + cards/*.vcf as-is)
+    ├── eigen.contacts/        (contacts.db vacuumed — the cards are inside it — + avatars/ as-is)
     ├── eigen.calendar/        (calendar.db vacuumed)
     └── eigen.notifications/   (notifications.db vacuumed)
 ```

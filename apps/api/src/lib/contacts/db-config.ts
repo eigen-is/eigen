@@ -3,8 +3,10 @@ import * as schema from './schema';
 
 export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'contacts',
-    currentVersion: 4,
+    currentVersion: 5,
     schema,
+    // The book's bytes live here now, so an acknowledged PUT must survive a power loss.
+    synchronous: 'FULL',
     migrations: [
         {
             version: 1,
@@ -42,7 +44,7 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
             `),
         },
         {
-            // v1 rows are DROPPED, not migrated: init rebuilds the index from the vCard files (docs/CONTACTS.md § Storage model — files as truth).
+            // v1 rows are DROPPED, not migrated: the vCard files became the source of truth (v5 moves them into the rows).
             version: 2,
             up: (db) =>
                 db.exec(`
@@ -140,6 +142,72 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     newName TEXT NOT NULL,
                     FOREIGN KEY (labelId) REFERENCES labels(id) ON DELETE CASCADE
                 );
+            `),
+        },
+        {
+            // The vCard bytes move into the `vcard` column, so every v4 row is dropped: the card files that
+            // held them are not adopted. Children before parents, because foreign_keys is ON.
+            version: 5,
+            up: (db) =>
+                db.exec(`
+                DROP TABLE IF EXISTS pending_label_renames;
+                DROP TABLE IF EXISTS pending_card_writes;
+                DROP TABLE IF EXISTS contacts_to_labels;
+                DROP TABLE IF EXISTS contact_tombstones;
+                DROP TABLE IF EXISTS contacts;
+                DROP TABLE IF EXISTS labels;
+                DROP TABLE IF EXISTS book;
+
+                CREATE TABLE contacts (
+                    id TEXT PRIMARY KEY,
+                    uri TEXT NOT NULL,
+                    uid TEXT NOT NULL,
+                    vcard BLOB NOT NULL,
+                    firstName TEXT NOT NULL,
+                    lastName TEXT NOT NULL,
+                    eigenId TEXT NOT NULL DEFAULT '',
+                    isGroup INTEGER NOT NULL DEFAULT 0,
+                    data TEXT,
+                    etag TEXT NOT NULL,
+                    cardCtag INTEGER NOT NULL
+                );
+
+                CREATE TABLE book (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    ctag INTEGER NOT NULL DEFAULT 0,
+                    syncGen INTEGER NOT NULL DEFAULT 1,
+                    ownerSeeded INTEGER NOT NULL DEFAULT 0
+                );
+
+                CREATE TABLE contact_tombstones (
+                    uri TEXT PRIMARY KEY,
+                    deletedAtCtag INTEGER NOT NULL
+                );
+
+                CREATE TABLE labels (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    nameKey TEXT NOT NULL,
+                    color TEXT NOT NULL,
+                    createdAt INTEGER NOT NULL DEFAULT (unixepoch()),
+                    updatedAt INTEGER NOT NULL DEFAULT (unixepoch())
+                );
+
+                CREATE TABLE contacts_to_labels (
+                    contactId TEXT NOT NULL,
+                    labelId TEXT NOT NULL,
+                    PRIMARY KEY (contactId, labelId),
+                    FOREIGN KEY (contactId) REFERENCES contacts(id) ON DELETE CASCADE,
+                    FOREIGN KEY (labelId) REFERENCES labels(id) ON DELETE CASCADE
+                );
+
+                CREATE UNIQUE INDEX idx_contacts_uri ON contacts(uri);
+                CREATE UNIQUE INDEX idx_contacts_uid ON contacts(uid);
+                CREATE INDEX idx_contacts_eigenId ON contacts(eigenId);
+                CREATE INDEX idx_contacts_cardCtag ON contacts(cardCtag);
+                CREATE UNIQUE INDEX idx_labels_nameKey ON labels(nameKey);
+                CREATE INDEX idx_contact_tombstones_ctag ON contact_tombstones(deletedAtCtag);
+                CREATE INDEX idx_contacts_to_labels_labelId ON contacts_to_labels(labelId);
             `),
         },
     ],

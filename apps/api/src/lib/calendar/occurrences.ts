@@ -24,7 +24,6 @@ export async function getEventsInRange(
     calendarId?: string,
 ): Promise<CalendarEventOccurrence[]> {
     const clampedTo = clampRangeEnd(from, to);
-    await calendar.gate.ensureDrained();
 
     const scoped = calendarId ? [eq(schema.events.calendarId, calendarId)] : [];
     const overlaps = and(lte(schema.events.startTime, clampedTo), gte(schema.events.endTime, from));
@@ -98,7 +97,7 @@ export async function getEventsInRange(
     return results;
 }
 
-// The files a window touches: a resource matches when an occurrence of it does.
+// The resources a window touches: one matches when an occurrence of it does.
 export async function getResourceUrisInRange(
     calendar: Calendar,
     calendarId: string,

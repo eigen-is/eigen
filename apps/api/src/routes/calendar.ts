@@ -184,11 +184,10 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .delete(
         '/calendar/:ownerId/calendars/:calId',
-        async ({ params, user }): Promise<{ success: boolean }> => {
+        async ({ params, user }): Promise<void> => {
             requireNonGuest(user);
             const cal = await resolveAdministeredCalendar(user, params.ownerId);
             await cal.deleteCalendar(params.calId);
-            return { success: true };
         },
         { auth: true },
     )
@@ -279,12 +278,11 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .delete(
         '/calendar/:ownerId/calendars/:calId/events/:id',
-        async ({ params, user }): Promise<{ success: boolean }> => {
+        async ({ params, user }): Promise<void> => {
             requireNonGuest(user);
             const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
             await deleteEventAt(params.ownerId, params.calId, params.id, user);
-            return { success: true };
         },
         { auth: true },
     )
@@ -374,12 +372,11 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
 
     .delete(
         '/calendar/:ownerId/shared/:id',
-        async ({ params, user }): Promise<{ success: boolean }> => {
+        async ({ params, user }): Promise<void> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             const cal = await resolveCalendar(user, user.id);
             await cal.deleteSharedCalendar(params.id);
-            return { success: true };
         },
         { auth: true },
     )

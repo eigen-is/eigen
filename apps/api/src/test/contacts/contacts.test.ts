@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
@@ -38,19 +38,11 @@ describe('Contacts', () => {
 
             const listRes = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/contacts`);
             const all = await assertJson<Contact[]>(listRes);
+            expect(all.length).toBe(initialContactCount + 1);
             const charlie = findOrFail(all, (c) => c.firstName === 'Charlie');
             expect(charlie.firstName).toBe('Charlie');
             expect(charlie.lastName).toBe('Test');
             contactId = charlie.id;
-        });
-
-        test('list contacts includes new contact', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/contacts`);
-            const data = await assertJson<Contact[]>(res);
-            expect(Array.isArray(data)).toBe(true);
-            expect(data.length).toBe(initialContactCount + 1);
-            const contact = findOrFail(data, (c) => c.firstName === 'Charlie');
-            expect(contact.lastName).toBe('Test');
         });
 
         test('get contact by id', async () => {
@@ -326,6 +318,11 @@ describe('Contacts', () => {
             expect(res.status).toBe(200);
             const data = await assertJson<Label>(res);
             expect(data).toEqual({ id: labelId, name: 'VIP Updated', color: '#00ff00' });
+
+            const listRes = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/labels`);
+            const label = findOrFail(await assertJson<Label[]>(listRes), (l) => l.id === labelId);
+            expect(label.name).toBe('VIP Updated');
+            expect(label.color).toBe('#00ff00');
         });
 
         test('updating a label that does not exist is rejected with 404', async () => {
@@ -341,14 +338,6 @@ describe('Contacts', () => {
             expect(res.status).toBe(404);
         });
 
-        test('list labels reflects updated label', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/labels`);
-            const data = await assertJson<Label[]>(res);
-            const label = findOrFail(data, (l) => l.id === labelId);
-            expect(label.name).toBe('VIP Updated');
-            expect(label.color).toBe('#00ff00');
-        });
-
         test('delete label', async () => {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
@@ -356,12 +345,9 @@ describe('Contacts', () => {
                 { method: 'DELETE' },
             );
             expect(res.status).toBe(200);
-        });
 
-        test('deleted label is removed from labels list', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/labels`);
-            const data = await assertJson<Label[]>(res);
-            expect(data.find((l) => l.id === labelId)).toBeUndefined();
+            const listRes = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/labels`);
+            expect((await assertJson<Label[]>(listRes)).find((l) => l.id === labelId)).toBeUndefined();
         });
     });
 
@@ -461,78 +447,6 @@ describe('Contacts', () => {
             // No card was rewritten: the etag (a hash of the card bytes) and the membership are untouched.
             expect(memberAfter.etag).toBe(memberBefore.etag);
             expect(memberAfter.labels).toEqual([blankableId]);
-        });
-    });
-
-    describe('Label ↔ contact membership', () => {
-        // The rename/delete fan-outs rewrite each member card's CATEGORIES; the observable REST contract is
-        // that membership survives a rename and drops on a delete, end to end through the route + writeLock.
-        test('renaming a label keeps it assigned to its contacts and surfaces the new name', async () => {
-            const token = ctx.alice.user.sessionToken;
-            const labelRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: 'Renamable', color: '#654321' }),
-            });
-            const renamableId = (await labelRes.text()).replace(/^"|"$/g, '');
-
-            const createRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    firstName: 'Renamed',
-                    lastName: 'Member',
-                    email: ['renamed-member@test.eigen.is'],
-                    phone: [],
-                    labels: [renamableId],
-                }),
-            });
-            const memberId = (await createRes.text()).replace(/^"|"$/g, '');
-
-            const rename = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels/${renamableId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: 'Renamed Label', color: '#654321' }),
-            });
-            expect(rename.status).toBe(200);
-
-            const byIdRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts/${memberId}`);
-            expect((await assertJson<Contact>(byIdRes)).labels).toEqual([renamableId]);
-
-            const labelsRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels`);
-            const labels = await assertJson<Label[]>(labelsRes);
-            expect(findOrFail(labels, (l) => l.id === renamableId).name).toBe('Renamed Label');
-        });
-
-        test('deleting a label removes it from its contacts', async () => {
-            const token = ctx.alice.user.sessionToken;
-            const labelRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: 'Deletable', color: '#0000ff' }),
-            });
-            const deletableId = (await labelRes.text()).replace(/^"|"$/g, '');
-
-            const createRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    firstName: 'Delete',
-                    lastName: 'Member',
-                    email: ['delete-member@test.eigen.is'],
-                    phone: [],
-                    labels: [deletableId],
-                }),
-            });
-            const memberId = (await createRes.text()).replace(/^"|"$/g, '');
-
-            const del = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels/${deletableId}`, {
-                method: 'DELETE',
-            });
-            expect(del.status).toBe(200);
-
-            const byIdRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts/${memberId}`);
-            expect((await assertJson<Contact>(byIdRes)).labels).toEqual([]);
         });
     });
 
@@ -682,46 +596,6 @@ describe('Contacts', () => {
             expect(res.status).toBe(403);
         });
 
-        // The org-wide profile push runs after the card committed, so its failure cannot be the answer the
-        // client gets: a 5xx here would leave the user holding a stale etag that 412s on every retry.
-        test('a self-card update that fails to propagate is still saved and reported as saved', async () => {
-            const token = ctx.alice.user.sessionToken;
-            const me = await assertJson<Contact>(await authedRequest(token, `/contacts/${ctx.alice.user.id}/me`));
-
-            const relay = await import('../../lib/home/home-relay');
-            let pushed = false;
-            const push = spyOn(relay, 'pushUserProfile').mockImplementation(async () => {
-                pushed = true;
-                throw new Error('push boom');
-            });
-            const errorLog = spyOn(console, 'error').mockImplementation(() => {});
-
-            try {
-                const res = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts/${me.id}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...me, notes: 'propagation failed' }),
-                });
-                expect(res.status).toBe(200);
-            } finally {
-                push.mockRestore();
-                errorLog.mockRestore();
-            }
-            expect(pushed).toBe(true);
-
-            const after = await assertJson<Contact>(await authedRequest(token, `/contacts/${ctx.alice.user.id}/me`));
-            expect(after.notes).toBe('propagation failed');
-            expect(after.etag).not.toBe(me.etag);
-
-            // One data dir is shared by every test file in the run, so put Alice's self card back as found.
-            const restored = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts/${me.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...after, notes: me.notes }),
-            });
-            expect(restored.status).toBe(200);
-        });
-
         test('cannot delete own profile contact', async () => {
             const meRes = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/me`);
             const me = await assertJson<Contact>(meRes);
@@ -735,64 +609,5 @@ describe('Contacts', () => {
             expect(deleteRes.status).toBe(400);
             expect(await deleteRes.text()).toContain('You cannot delete yourself');
         });
-    });
-});
-
-// enforceHomeDataQuota's mail half is a live byte counter, so mail that arrives between two metered
-// card writes is charged to the second one. makeContacts homes are deliberately unmetered (never registered,
-// so atHome is false), so this pins it against a real registered home where putCard's quota gate runs.
-describe('CardDAV quota gate', () => {
-    const burstCard = (i: number) => {
-        const uid = randomUUID();
-        const body = `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nN:Burst;Card${i};;;\r\nFN:Card${i} Burst\r\nEMAIL:burst-${uid}@example.org\r\nEND:VCARD\r\n`;
-        return { uri: `${uid}.vcf`, body };
-    };
-
-    test('a message delivered between two metered putCards is charged to the second', async () => {
-        const MB = 1024 * 1024;
-        const ctx = await getTestContext();
-        const home = await getHome(ctx.bob.user.id);
-        const contacts = home.contacts;
-        const originalMaxMB = getServerSettings().quotas.mailAndContactsMaxMB;
-
-        const created: string[] = [];
-        let deliveredId: string | undefined;
-        try {
-            // Headroom of at least 1 MB, so the card below fits and the 3 MB message below does not.
-            const used = (await home.mail.size()) + (await home.contacts.size());
-            await updateServerSettings({ quotas: { mailAndContactsMaxMB: Math.ceil(used / MB) + 1 } });
-
-            const fits = burstCard(1);
-            expect((await contacts.putCard(fits.uri, fits.body, { ifMatch: null, ifNoneMatch: null })).ok).toBe(true);
-            created.push(fits.uri);
-
-            deliveredId = await home.mail.mailboxDeliver(
-                Buffer.from(
-                    [
-                        'From: sender@example.com',
-                        `To: ${ctx.bob.user.email}`,
-                        'Subject: Quota filler',
-                        `Date: ${new Date().toUTCString()}`,
-                        `Message-ID: <${Date.now()}.quota@test>`,
-                        '',
-                        'q'.repeat(3 * MB),
-                    ].join('\r\n'),
-                    'utf-8',
-                ),
-            );
-
-            // The refusal is the typed 'quota' result (putCard's 507→'quota' mapping) and it comes on the very
-            // next write: the budget the delivery took is gone the moment the index row exists.
-            const over = burstCard(2);
-            expect(await contacts.putCard(over.uri, over.body, { ifMatch: null, ifNoneMatch: null })).toEqual({
-                ok: false,
-                error: 'quota',
-            });
-            expect(await contacts.getCard(over.uri)).toBeNull();
-        } finally {
-            await updateServerSettings({ quotas: { mailAndContactsMaxMB: originalMaxMB } });
-            if (deliveredId) await home.mail.messageDelete(deliveredId);
-            for (const uri of created) await contacts.deleteCard(uri, { ifMatch: null });
-        }
     });
 });

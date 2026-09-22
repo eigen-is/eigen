@@ -42,6 +42,26 @@ async function syncProto(): Promise<{ sync: () => Promise<void> }> {
     return proto;
 }
 
+describe('writeAtomic', () => {
+    test('a failed write sweeps its own temp file and rethrows the original error', async () => {
+        const store = nextStore();
+        const base = join(TEST_DIR, `store-${counter - 1}`, 'cards');
+        const proto = await syncProto();
+        const spy = spyOn(proto, 'sync').mockImplementation(async () => {
+            throw new Error('fsync failed');
+        });
+
+        try {
+            await expect(store.writeAtomic('cards/doomed.vcf', 'doomed')).rejects.toThrow('fsync failed');
+        } finally {
+            spy.mockRestore();
+        }
+
+        // Only a process death leaves debris for sweepAtomicTemps: a write that fails on its own tidies up.
+        expect(readdirSync(base)).toEqual([]);
+    });
+});
+
 describe('sweepAtomicTemps', () => {
     test('removes only the dot-prefixed .tmp- leftovers writeAtomic stages', async () => {
         const store = nextStore();

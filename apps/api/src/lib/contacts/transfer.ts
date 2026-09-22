@@ -6,7 +6,7 @@ import {
     decodeUtf8Strict,
     NOT_A_VCARD_FILE,
     NOT_UTF8_FILE,
-    readResourceFile,
+    type PutResourceResult,
     VCARD_IMPORT_MAX_CARDS,
 } from '../core';
 import {
@@ -19,7 +19,6 @@ import {
     VCardError,
 } from '../vcard';
 import type { ParsedCard, VCardLine } from '../vcard/types';
-import { cardPath } from './card-store';
 import type { Contacts } from './contacts';
 import * as schema from './schema';
 
@@ -30,27 +29,30 @@ const isEigenName = (name: string) => name.startsWith('X-EIGEN-');
 
 // Groups are excluded, as import skips them; every line but Eigen's own re-emits from its own source bytes.
 export async function exportCards(contacts: Contacts, ids?: string[]): Promise<string> {
-    await contacts.gate.ensureDrained();
-    const rows = contacts.db
-        .select({ id: schema.contacts.id, uri: schema.contacts.uri, isGroup: schema.contacts.isGroup })
-        .from(schema.contacts)
-        .all();
-    const uriById = new Map(rows.map((row) => [row.id, row.uri]));
-    const targets = ids ?? rows.filter((row) => !row.isGroup).map((row) => row.id);
+    const targets =
+        ids ??
+        contacts.db
+            .select({ id: schema.contacts.id })
+            .from(schema.contacts)
+            .where(eq(schema.contacts.isGroup, false))
+            .all()
+            .map((row) => row.id);
 
     const cards: string[] = [];
     for (const id of targets) {
-        const uri = uriById.get(id);
-        if (!uri) throw new ApiError(404, 'Contact not found');
-        const bytes = await readResourceFile(contacts.storage, cardPath(uri));
-        // A row whose file is gone is a torn pair the next drain repairs; it is nothing to export.
-        if (!bytes) continue;
+        // Read one card at a time: the whole book's bytes at once is the one query that would not scale.
+        const row = contacts.db
+            .select({ uri: schema.contacts.uri, vcard: schema.contacts.vcard })
+            .from(schema.contacts)
+            .where(eq(schema.contacts.id, id))
+            .get();
+        if (!row) throw new ApiError(404, 'Contact not found');
         let lines: VCardLine[];
         try {
-            lines = parseVCardLines(new TextDecoder().decode(bytes));
+            lines = parseVCardLines(new TextDecoder().decode(row.vcard));
         } catch (e) {
             // Bytes that will not parse cannot have Eigen's own lines taken out of them, so they stay in.
-            console.warn(`contacts: skipping ${uri} in the export — it does not parse: ${e}`);
+            console.warn(`contacts: skipping ${row.uri} in the export — it does not parse: ${e}`);
             continue;
         }
         cards.push(serializeVCardLines(lines.filter((line) => !isEigenName(line.name))));
@@ -124,7 +126,14 @@ export async function importCards(contacts: Contacts, bytes: Uint8Array): Promis
             if (!parsed.uid) body = withMintedUid(parsed);
 
             // A UID is not a safe filename (Apple's `…:ABPerson`, `urn:uuid:`), so mint one; If-None-Match: * keeps the write a create.
-            const put = await contacts.putCard(`${randomUUID()}.vcf`, body, { ifMatch: null, ifNoneMatch: '*' });
+            let put: PutResourceResult;
+            try {
+                put = await contacts.putCard(`${randomUUID()}.vcf`, body, { ifMatch: null, ifNoneMatch: '*' });
+            } catch {
+                // One card's write failing is that card's failure; a retry finishes the file.
+                result.failed++;
+                continue;
+            }
             if (put.ok) {
                 result.imported++;
                 for (const email of parsed.email) {

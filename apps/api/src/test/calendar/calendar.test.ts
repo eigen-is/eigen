@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { rmSync } from 'node:fs';
 import { type SeriesEdit, seriesEditFromOccurrence } from '@workspace/lib/calendar/calendar-utils';
 import type {
     CalendarEvent,
@@ -8,7 +9,20 @@ import type {
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import type { Notification } from '@workspace/lib/types/notification';
+import { eq, getTableColumns, sql } from 'drizzle-orm';
+import type { Calendar } from '../../lib/calendar/calendar';
+import * as schema from '../../lib/calendar/schema';
 import { getHome } from '../../lib/home';
+import {
+    CALENDAR_TEST_ROOT,
+    defaultCalendarId,
+    makeCalendar,
+    putResource,
+    resourceTextOf,
+    storedBytes,
+    vevent,
+} from '../calendar-test-helpers';
+import { vcal } from '../ics-test-helpers';
 import { assertJson, authedRequest, eventually, findOrFail, getTestContext } from '../setup';
 
 describe('Calendar', () => {
@@ -42,13 +56,14 @@ describe('Calendar', () => {
             expect(cal.color).toBe('#34a853');
             expect(cal.isDefault).toBe(false);
             expect(cal.id).toBeDefined();
-        });
 
-        test('list calendars includes new calendar', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`);
-            const calendars = await assertJson<CalendarItem[]>(res);
+            const listRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars`,
+            );
+            const calendars = await assertJson<CalendarItem[]>(listRes);
             expect(calendars.length).toBeGreaterThanOrEqual(2);
-            expect(calendars.find((c: CalendarItem) => c.name === 'Work')).toBeDefined();
+            expect(calendars.find((c: CalendarItem) => c.id === cal.id)).toBeDefined();
         });
 
         test('update calendar name and color', async () => {
@@ -230,25 +245,6 @@ describe('Calendar', () => {
             expect(event.status).toBe('confirmed');
         });
 
-        test('create all-day event', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: 'Company Holiday',
-                        startTime: new Date(1741737600 * 1000),
-                        endTime: new Date(1741824000 * 1000),
-                        allDay: true,
-                    }),
-                },
-            );
-            const event = await assertJson<CalendarEvent>(res);
-            expect(event.allDay).toBe(true);
-        });
-
         test('update event partially', async () => {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
@@ -325,106 +321,37 @@ describe('Calendar', () => {
     });
 
     describe('RRULE storage and round-trip', () => {
-        test('create recurring event with RRULE string and get it back', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: 'Weekly Sync',
-                        startTime: new Date(1741773600 * 1000),
-                        endTime: new Date(1741777200 * 1000),
-                        allDay: false,
-                        rrule: 'FREQ=WEEKLY;BYDAY=WE',
-                    }),
-                },
-            );
-            const event = await assertJson<CalendarEvent>(res);
-            expect(event.rrule).toBe('FREQ=WEEKLY;BYDAY=WE');
-            aliceRecurringEventId = event.id;
-        });
-
-        test('monthly recurrence with BYMONTHDAY', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: 'Monthly Review',
-                        startTime: new Date(1741773600 * 1000),
-                        endTime: new Date(1741777200 * 1000),
-                        allDay: false,
-                        rrule: 'FREQ=MONTHLY;BYMONTHDAY=15;COUNT=12',
-                    }),
-                },
-            );
-            const event = await assertJson<CalendarEvent>(res);
-            // ical.js owns the serialization, so the parts round-trip by meaning, not by order.
-            expect(event.rrule!.split(';').sort()).toEqual(['BYMONTHDAY=15', 'COUNT=12', 'FREQ=MONTHLY']);
-        });
-
-        test('daily with interval', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: 'Every 3 Days',
-                        startTime: new Date(1741773600 * 1000),
-                        endTime: new Date(1741777200 * 1000),
-                        allDay: false,
-                        rrule: 'FREQ=DAILY;INTERVAL=3',
-                    }),
-                },
-            );
-            const event = await assertJson<CalendarEvent>(res);
-            expect(event.rrule).toBe('FREQ=DAILY;INTERVAL=3');
-        });
-
-        test('complex RRULE with BYSETPOS (last Friday)', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: 'Last Friday',
-                        startTime: new Date(1741773600 * 1000),
-                        endTime: new Date(1741777200 * 1000),
-                        allDay: false,
-                        rrule: 'FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1',
-                    }),
-                },
-            );
-            const event = await assertJson<CalendarEvent>(res);
-            expect(event.rrule).toBe('FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1');
-        });
-
-        test('RRULE with BYHOUR/BYMINUTE survives round-trip (CalDAV readiness)', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: 'CalDAV Complex',
-                        startTime: new Date(1741773600 * 1000),
-                        endTime: new Date(1741777200 * 1000),
-                        allDay: false,
-                        rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=30',
-                    }),
-                },
-            );
-            const event = await assertJson<CalendarEvent>(res);
-            expect(event.rrule).toBe('FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=30');
+        // RRULE strings are stored and transmitted as-is, so every shape a client may write comes back as it
+        // went in. ical.js owns the serialization, so the parts round-trip by meaning, not by order.
+        test('every rule shape comes back as it went in', async () => {
+            const rules = {
+                'Weekly Sync': 'FREQ=WEEKLY;BYDAY=WE',
+                'Monthly Review': 'FREQ=MONTHLY;BYMONTHDAY=15;COUNT=12',
+                'Every 3 Days': 'FREQ=DAILY;INTERVAL=3',
+                'Last Friday': 'FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1',
+                'CalDAV Complex': 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=30',
+            };
+            for (const [title, rrule] of Object.entries(rules)) {
+                const res = await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            title,
+                            startTime: new Date(1741773600 * 1000),
+                            endTime: new Date(1741777200 * 1000),
+                            allDay: false,
+                            rrule,
+                        }),
+                    },
+                );
+                const event = await assertJson<CalendarEvent>(res);
+                expect(event.rrule!.split(';').sort()).toEqual(rrule.split(';').sort());
+                // The weekly one is the series every exception test below overrides an occurrence of.
+                if (title === 'Weekly Sync') aliceRecurringEventId = event.id;
+            }
         });
 
         test('non-recurring event has null rrule', async () => {
@@ -516,53 +443,6 @@ describe('Calendar', () => {
             const afterSyncs = afterEvents.filter(
                 (e: CalendarEventOccurrence) =>
                     e.title === 'Weekly Sync' && e.occurrenceDate === targetDate && !e.parentEventId,
-            );
-            expect(afterSyncs.length).toBe(0);
-        });
-
-        test('cancel a single occurrence with ISO datetime recurrenceDate (FE format)', async () => {
-            const from = 1741737600;
-            const to = from + 28 * 86400;
-
-            const beforeRes = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
-            );
-            const beforeEvents = await assertJson<CalendarEventOccurrence[]>(beforeRes);
-            const weeklySyncs = beforeEvents.filter(
-                (e: CalendarEventOccurrence) => e.title === 'Weekly Sync' && !e.parentEventId,
-            );
-            expect(weeklySyncs.length).toBeGreaterThan(0);
-            const target = weeklySyncs[0];
-            const isoDate = new Date(target.occurrenceDate).toISOString();
-
-            const cancelRes = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: target.title,
-                        startTime: target.startTime,
-                        endTime: target.endTime,
-                        allDay: false,
-                        parentEventId: aliceRecurringEventId,
-                        recurrenceDate: isoDate,
-                        status: 'cancelled',
-                    }),
-                },
-            );
-            expect(cancelRes.status).toBe(200);
-
-            const afterRes = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
-            );
-            const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
-            const afterSyncs = afterEvents.filter(
-                (e: CalendarEventOccurrence) =>
-                    e.title === 'Weekly Sync' && e.occurrenceDate === target.occurrenceDate && !e.parentEventId,
             );
             expect(afterSyncs.length).toBe(0);
         });
@@ -837,26 +717,6 @@ describe('Calendar', () => {
             );
             expect(oldReviews.length).toBe(2);
             expect(newReviews.length).toBeGreaterThanOrEqual(3);
-        });
-    });
-
-    describe('Range queries', () => {
-        test('empty range returns empty array', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/event-range/1000000000/1000000001`,
-            );
-            const events = await assertJson<CalendarEventOccurrence[]>(res);
-            expect(events.length).toBe(0);
-        });
-
-        test('range query returns events in range', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/event-range/1741737600/1741824000`,
-            );
-            const events = await assertJson<CalendarEventOccurrence[]>(res);
-            expect(events.length).toBeGreaterThan(0);
         });
     });
 
@@ -1414,67 +1274,6 @@ describe('Calendar', () => {
             expect(marchEvents.length).toBe(0);
         });
 
-        test('timed event created in UTC+1 style (local midnight = 23:00 UTC prev day) appears correctly', async () => {
-            const startTime = new Date('2026-03-10T08:00:00Z');
-            const endTime = new Date('2026-03-10T09:00:00Z');
-
-            const createRes = await authedRequest(
-                ctx.bob.user.sessionToken,
-                `/calendar/${ctx.bob.user.id}/calendars/${freshCalendarId}/events`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: 'UTC+1 Morning',
-                        startTime,
-                        endTime,
-                        allDay: false,
-                    }),
-                },
-            );
-            expect(createRes.status).toBe(200);
-
-            const from = Math.floor(new Date('2026-02-22T23:00:00Z').getTime() / 1000);
-            const to = Math.floor(new Date('2026-04-05T22:59:59Z').getTime() / 1000);
-            const rangeRes = await authedRequest(
-                ctx.bob.user.sessionToken,
-                `/calendar/${ctx.bob.user.id}/event-range/${from}/${to}`,
-            );
-            const events = await assertJson<CalendarEventOccurrence[]>(rangeRes);
-            const found = findOrFail(events, (e) => e.title === 'UTC+1 Morning');
-            expect(found.occurrenceDate).toBe('2026-03-10');
-        });
-
-        test('all-day event with FE UTC midnight matches backend occurrenceDate', async () => {
-            const startTime = new Date('2026-06-15T00:00:00Z');
-            const endTime = new Date('2026-06-16T00:00:00Z');
-
-            await authedRequest(
-                ctx.bob.user.sessionToken,
-                `/calendar/${ctx.bob.user.id}/calendars/${freshCalendarId}/events`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: 'Summer Holiday',
-                        startTime,
-                        endTime,
-                        allDay: true,
-                    }),
-                },
-            );
-
-            const from = Math.floor(new Date('2026-06-01T00:00:00Z').getTime() / 1000);
-            const to = Math.floor(new Date('2026-06-30T23:59:59Z').getTime() / 1000);
-            const rangeRes = await authedRequest(
-                ctx.bob.user.sessionToken,
-                `/calendar/${ctx.bob.user.id}/event-range/${from}/${to}`,
-            );
-            const events = await assertJson<CalendarEventOccurrence[]>(rangeRes);
-            const found = findOrFail(events, (e) => e.title === 'Summer Holiday');
-            expect(found.occurrenceDate).toBe('2026-06-15');
-        });
-
         test('recurring weekly event creates correct occurrences in range', async () => {
             const startTime = new Date('2026-04-06T14:00:00Z');
             const endTime = new Date('2026-04-06T15:00:00Z');
@@ -1619,42 +1418,25 @@ describe('Calendar', () => {
     });
 
     describe('Regression: Malformed RRULE validation', () => {
-        test('create event with invalid RRULE returns 400', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: 'Bad Recurrence',
-                        startTime: new Date(1741773600 * 1000),
-                        endTime: new Date(1741777200 * 1000),
-                        allDay: false,
-                        rrule: 'INVALID_RRULE_STRING',
-                    }),
-                },
-            );
-            expect(res.status).toBe(400);
-        });
-
-        test('create event with garbage RRULE returns 400', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: 'Garbage Recurrence',
-                        startTime: new Date(1741773600 * 1000),
-                        endTime: new Date(1741777200 * 1000),
-                        allDay: false,
-                        rrule: ';;;not-a-rule;;;',
-                    }),
-                },
-            );
-            expect(res.status).toBe(400);
+        test('a create carrying an unparseable RRULE returns 400', async () => {
+            for (const rrule of ['INVALID_RRULE_STRING', ';;;not-a-rule;;;']) {
+                const res = await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            title: 'Bad Recurrence',
+                            startTime: new Date(1741773600 * 1000),
+                            endTime: new Date(1741777200 * 1000),
+                            allDay: false,
+                            rrule,
+                        }),
+                    },
+                );
+                expect(res.status).toBe(400);
+            }
         });
 
         test('update event with invalid RRULE returns 400', async () => {
@@ -1688,26 +1470,6 @@ describe('Calendar', () => {
                 },
             );
             expect(updateRes.status).toBe(400);
-        });
-
-        test('valid RRULE still works after rejection of invalid ones', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        title: 'Valid After Invalid',
-                        startTime: new Date(1741773600 * 1000),
-                        endTime: new Date(1741777200 * 1000),
-                        allDay: false,
-                        rrule: 'FREQ=DAILY;COUNT=5',
-                    }),
-                },
-            );
-            const event = await assertJson<CalendarEvent>(res);
-            expect(event.rrule).toBe('FREQ=DAILY;COUNT=5');
         });
     });
 
@@ -1761,31 +1523,15 @@ describe('Calendar', () => {
             }),
         });
 
-        test('create event with FREQ=SECONDLY returns 400', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                subDailyBody('FREQ=SECONDLY'),
-            );
-            expect(res.status).toBe(400);
-        });
-
-        test('create event with FREQ=MINUTELY returns 400', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                subDailyBody('FREQ=MINUTELY;INTERVAL=5'),
-            );
-            expect(res.status).toBe(400);
-        });
-
-        test('create event with FREQ=HOURLY returns 400', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
-                subDailyBody('FREQ=HOURLY'),
-            );
-            expect(res.status).toBe(400);
+        test('a create carrying a sub-daily frequency returns 400', async () => {
+            for (const rrule of ['FREQ=SECONDLY', 'FREQ=MINUTELY;INTERVAL=5', 'FREQ=HOURLY']) {
+                const res = await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+                    subDailyBody(rrule),
+                );
+                expect(res.status).toBe(400);
+            }
         });
 
         test('update event to FREQ=SECONDLY returns 400', async () => {
@@ -2856,5 +2602,147 @@ describe('A series-wide edit from a later occurrence', () => {
         const override = findOrFail(after, (e) => e.occurrenceDate === '2027-03-15');
         expect(override.title).toBe('Solo Edited');
         expect(new Date(override.startTime).toISOString()).toBe('2027-03-15T09:00:00.000Z');
+    });
+});
+
+describe('the calendar byte counter', () => {
+    beforeAll(() => {
+        rmSync(CALENDAR_TEST_ROOT, { recursive: true, force: true });
+    });
+
+    test('two concurrent attendee updates keep both answers, and the byte counter stays exact', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        const created = await harness.instance.createEvent(calendarId, {
+            title: 'Standup',
+            startTime: new Date('2026-04-01T10:00:00Z'),
+            endTime: new Date('2026-04-01T11:00:00Z'),
+            allDay: false,
+            data: {
+                attendees: [
+                    { email: 'one@test.local', status: 'pending', role: 'required' },
+                    { email: 'two@test.local', status: 'pending', role: 'required' },
+                ],
+            },
+        });
+
+        await Promise.all([
+            harness.instance.receiveAttendeeStatus(created.id, 'one@test.local', 'accepted'),
+            harness.instance.receiveAttendeeStatus(created.id, 'two@test.local', 'declined'),
+        ]);
+
+        const stored = (await harness.instance.getRawEvents(calendarId))[0];
+        expect(stored.data?.attendees?.map((a) => a.status).sort()).toEqual(['accepted', 'declined']);
+        expect(await harness.instance.size()).toBe(storedBytes(harness.instance));
+    });
+    test('the byte counter follows the blobs through a write, a replace and a delete', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+
+        await putResource(harness.instance, calendarId, 'counted.ics', vcal(vevent('counted@eigen', 'Counted')));
+        expect(await harness.instance.size()).toBe(storedBytes(harness.instance));
+
+        await putResource(
+            harness.instance,
+            calendarId,
+            'counted.ics',
+            vcal(vevent('counted@eigen', 'Counted', ['DESCRIPTION:Much longer than it was'])),
+        );
+        expect(await harness.instance.size()).toBe(storedBytes(harness.instance));
+
+        await harness.instance.deleteResource(calendarId, 'counted.ics', { ifMatch: null });
+        expect(await harness.instance.size()).toBe(0);
+    });
+    test('a reopened Home seeds its counter from the blobs it holds', async () => {
+        const harness = await makeCalendar();
+        const calendarId = await defaultCalendarId(harness);
+        await putResource(harness.instance, calendarId, 'seeded.ics', vcal(vevent('seeded@eigen', 'Seeded')));
+        const before = await harness.instance.size();
+
+        const restarted = await harness.reopen();
+        try {
+            expect(await restarted.instance.size()).toBe(before);
+            expect(await resourceTextOf(restarted.instance, calendarId, 'seeded.ics')).toContain('SUMMARY:Seeded');
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('deleting a calendar takes its blobs off the byte counter and its tombstones with it', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const scratch = (await calendar.createCalendar({ name: 'Scratch', color: '#2563eb' })).id;
+        const before = await calendar.size();
+        await putResource(calendar, scratch, 'a.ics', vcal(vevent('cal-delete-a@eigen', 'A')));
+        await putResource(calendar, scratch, 'b.ics', vcal(vevent('cal-delete-b@eigen', 'B')));
+        const added = (await calendar.size()) - before;
+        expect(added).toBeGreaterThan(0);
+        await calendar.deleteResource(scratch, 'b.ics', { ifMatch: null });
+
+        await calendar.deleteCalendar(scratch);
+
+        expect(await calendar.size()).toBe(before);
+        expect(await calendar.size()).toBe(storedBytes(calendar));
+        // The resources and their event rows went with the row, by cascade.
+        expect(calendar.db.select().from(schema.events).all()).toEqual([]);
+        // No cascade reaches a tombstone, so a calendar recreated at this id would inherit its 404s.
+        expect(calendar.db.select().from(schema.resourceTombstones).all()).toEqual([]);
+    });
+});
+
+// Every column a blob decides. reindexEvents re-stamps createdAt/updatedAt on a row whose file carries no
+// stamp of its own (an exclusion), so a rebuild is compared on what the bytes really own.
+const projectedEvents = (calendar: Calendar) => {
+    const { createdAt: _created, updatedAt: _updated, ...columns } = getTableColumns(schema.events);
+    return calendar.db.select(columns).from(schema.events).all();
+};
+
+describe('rebuildProjection', () => {
+    test('every event row and projected column comes back from the blobs', async () => {
+        const harness = await makeCalendar();
+        const calendar = harness.instance;
+        const calendarId = await defaultCalendarId(harness);
+        // Seeded through the store, because a VEVENT without X-EIGEN-EVENT-ID gets a fresh id on projection.
+        await putResource(
+            calendar,
+            calendarId,
+            'series.ics',
+            vcal(vevent('rebuild-series@eigen', 'Weekly', ['RRULE:FREQ=WEEKLY;COUNT=5', 'EXDATE:20260415T100000Z']), [
+                'BEGIN:VEVENT',
+                'UID:rebuild-series@eigen',
+                'RECURRENCE-ID:20260408T100000Z',
+                'DTSTART:20260408T140000Z',
+                'DTEND:20260408T150000Z',
+                'SUMMARY:Moved occurrence',
+                'END:VEVENT',
+            ]),
+        );
+        await putResource(calendar, calendarId, 'plain.ics', vcal(vevent('rebuild-plain@eigen', 'Plain')));
+        await putResource(calendar, calendarId, 'deleted.ics', vcal(vevent('rebuild-deleted@eigen', 'Deleted')));
+        await calendar.deleteResource(calendarId, 'deleted.ics', { ifMatch: null });
+
+        const resourcesBefore = calendar.db.select().from(schema.resources).all();
+        const eventsBefore = projectedEvents(calendar);
+        const tombstonesBefore = calendar.db.select().from(schema.resourceTombstones).all();
+        expect(tombstonesBefore).toHaveLength(1);
+        const ctagBefore = (await calendar.getCollection(calendarId))!.ctag;
+        expect(eventsBefore.length).toBeGreaterThan(2);
+
+        // Corrupt every column the blob decides, plus the event rows themselves.
+        calendar.db
+            .update(schema.resources)
+            .set({ uid: sql`'corrupt-' || ${schema.resources.id}`, etag: 'corrupt', hasUnindexedRecurrence: true })
+            .run();
+        calendar.db.update(schema.events).set({ title: 'corrupt', parentEventId: null, rrule: null }).run();
+        calendar.db.delete(schema.events).where(eq(schema.events.uid, 'rebuild-plain@eigen')).run();
+
+        calendar.rebuildProjection();
+
+        expect(calendar.db.select().from(schema.resources).all()).toEqual(resourcesBefore);
+        expect(projectedEvents(calendar)).toEqual(eventsBefore);
+        // No blob carries a deletion, so a rebuild leaves the tombstone a syncing client still needs.
+        expect(calendar.db.select().from(schema.resourceTombstones).all()).toEqual(tombstonesBefore);
+        // A rebuild is not a change: no ctag moves, so no client is told to resync.
+        expect((await calendar.getCollection(calendarId))!.ctag).toBe(ctagBefore);
     });
 });

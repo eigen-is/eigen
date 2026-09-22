@@ -1,22 +1,18 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { mkdir, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
-import { getUserHomePath } from '../../lib/config/paths';
 import { getMailDomain, getServerConfig } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
-import { PATHS } from '../../lib/core';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import { pullHomeSize, sendToHome } from '../../lib/home/home-relay';
 import { makeCalendar } from '../calendar-test-helpers';
 import { basicAuth } from '../dav-test-helpers';
 import { app, assertJson, authedRequest, createTestUser, findOrFail, getTestContext, type TestUser } from '../setup';
 
-// The calendar's `.ics` bytes are metered against the Home's one data budget, the same budget mail and
+// The calendar's VCALENDAR bytes are metered against the Home's one data budget, the same budget mail and
 // contacts share. Every test here owns its own Home, because the ceiling is a server-wide setting and the
 // projection is against everything that Home already holds.
 
@@ -190,6 +186,14 @@ async function expectEditsFit(user: TestUser, calendarId: string, fill: () => Pr
     expect(excluded.status).toBe(200);
     expect((await putJson(user, `${eventsUrl}/${exception.id}`, { status: 'cancelled' })).status).toBe(200);
 
+    const removed = await putJson(user, `${eventsUrl}/${linked.id}/rsvp`, {
+        status: 'declined',
+        scope: 'this',
+        recurrenceDate: '2026-05-11',
+        remove: true,
+    });
+    expect(removed.status).toBe(200);
+
     const truncated = await putJson(user, `${eventsUrl}/${linked.id}/rsvp`, {
         status: 'declined',
         scope: 'this-and-following',
@@ -244,52 +248,6 @@ describe('Calendar storage quota', () => {
                 body: JSON.stringify({ description: '' }),
             });
             expect(shrink.status).toBe(200);
-        });
-    });
-
-    test('a full budget refuses a create but never a write that takes an occurrence away', async () => {
-        const user = await makeUser();
-        const calendarId = await defaultCalendarOf(user);
-        const eventsUrl = `/calendar/${user.id}/calendars/${calendarId}/events`;
-
-        await restoringBudget(async () => {
-            const series = await assertJson<CalendarEvent>(
-                await postEvent(user, calendarId, { ...eventBody('Weekly', 1.5 * MB), rrule: 'FREQ=WEEKLY;COUNT=6' }),
-            );
-            const exception = await assertJson<CalendarEvent>(
-                await postEvent(user, calendarId, {
-                    ...eventBody('Moved', 0),
-                    startTime: new Date('2026-05-11T12:00:00Z'),
-                    endTime: new Date('2026-05-11T13:00:00Z'),
-                    parentEventId: series.id,
-                    recurrenceDate: '2026-05-11',
-                }),
-            );
-            const linked = await inviteFromAlice(user, 'remove-quota@test');
-
-            await fillBudget(user);
-            expect((await createEvent(user, calendarId, 'Refused')).status).toBe(507);
-
-            // Deleting one occurrence of an own series: an EXDATE plus its stamp, a few bytes MORE on disk.
-            const excluded = await postEvent(user, calendarId, {
-                ...eventBody('Weekly', 0),
-                startTime: new Date('2026-05-18T10:00:00Z'),
-                endTime: new Date('2026-05-18T11:00:00Z'),
-                parentEventId: series.id,
-                recurrenceDate: '2026-05-18',
-                status: 'cancelled',
-            });
-            expect(excluded.status).toBe(200);
-
-            expect((await putJson(user, `${eventsUrl}/${exception.id}`, { status: 'cancelled' })).status).toBe(200);
-
-            const removed = await putJson(user, `${eventsUrl}/${linked.id}/rsvp`, {
-                status: 'declined',
-                scope: 'this',
-                recurrenceDate: '2026-05-11',
-                remove: true,
-            });
-            expect(removed.status).toBe(200);
         });
     });
 
@@ -632,7 +590,7 @@ describe('Calendar storage quota', () => {
         expect(await home.calendar.getEventsByUid('relay-quota@test')).toHaveLength(0);
     });
 
-    test('the booted and the unbooted reader both carry the calendar bytes Calendar.size() answers', async () => {
+    test('the booted and the unbooted reader both carry the blob bytes Calendar.size() answers', async () => {
         const user = await makeUser();
         const calendarId = await defaultCalendarOf(user);
         const extra = await assertJson<CalendarItem>(
@@ -656,26 +614,14 @@ describe('Calendar storage quota', () => {
         const empty = await agree();
         const kept = await assertJson<CalendarEvent>(await createEvent(user, calendarId, 'Kept', 64 * 1024));
         await assertJson<CalendarEvent>(await createEvent(user, extra.id, 'Scratch', 64 * 1024));
-        expect(await agree()).toBeGreaterThan(empty);
+        const withEvents = await agree();
+        expect(withEvents).toBeGreaterThan(empty);
 
         await authedRequest(user.sessionToken, `/calendar/${user.id}/calendars/${calendarId}/events/${kept.id}`, {
             method: 'DELETE',
         });
         const afterDelete = await agree();
-
-        // A file no calendar reader indexes. Neither reader counts it, so a stray note cannot make the admin
-        // Users page report a figure the owner's own settings page never shows.
-        await writeFile(
-            path.join(getUserHomePath(user.id), PATHS.CALENDAR.ROOT, PATHS.CALENDAR.CALENDARS, calendarId, 'note.txt'),
-            'n'.repeat(4096),
-        );
-        expect(await agree()).toBe(afterDelete);
-
-        // A directory whose name is no calendar id: the index never recovers one, so neither reader counts it.
-        const calendarsRoot = path.join(getUserHomePath(user.id), PATHS.CALENDAR.ROOT, PATHS.CALENDAR.CALENDARS);
-        await mkdir(path.join(calendarsRoot, 'stray calendar'));
-        await writeFile(path.join(calendarsRoot, 'stray calendar', 'stray.ics'), 's'.repeat(4096));
-        expect(await agree()).toBe(afterDelete);
+        expect(afterDelete).toBeLessThan(withEvents);
 
         await authedRequest(user.sessionToken, `/calendar/${user.id}/calendars/${extra.id}`, { method: 'DELETE' });
         expect(await agree()).toBeLessThan(afterDelete);
@@ -704,7 +650,7 @@ describe('Calendar storage quota', () => {
         await harness.close();
     });
 
-    test('a Home reopened over its files seeds its counter from disk and meters the next write', async () => {
+    test('a Home reopened over its database seeds its counter from its blob rows and meters the next write', async () => {
         const user = await makeUser();
         const calendarId = await defaultCalendarOf(user);
         await assertJson<CalendarEvent>(await createEvent(user, calendarId, 'Fat', 1.5 * MB));

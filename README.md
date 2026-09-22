@@ -79,8 +79,8 @@ Eigen ships as a monorepo with a single API server and a set of tightly integrat
 - **Calendar** — Full calendar with recurring events (RFC 5545 RRULE), invitations with RSVP, shared calendars, and
   team calendars. Includes a **CalDAV server** — sync with Thunderbird, Apple Calendar, or DAVx5 using standard
   protocols.
-- **Contacts** — Contact management with labels and avatars. Contacts are stored as standard vCard files on disk,
-  indexed in SQLite. Includes a **CardDAV server** — sync your address book with iOS/macOS Contacts, Thunderbird,
+- **Contacts** — Contact management with labels and avatars. Each contact is stored as its standard vCard bytes
+  in SQLite, with the indexed columns projected from them. Includes a **CardDAV server** — sync your address book with iOS/macOS Contacts, Thunderbird,
   or DAVx5.
 - **Chat** — Real-time chat inspired by classic MUDs. Over 80 built-in slash commands including emotes, whispers,
   and @mentions. Chat rooms live inside Drive (inheriting its ACL), and can be embedded inside documents and
@@ -155,7 +155,7 @@ data/home/{userId}/
 ├── settings.json         # Per-user settings
 ├── mounts/default/       # Drive files + metadata.db
 ├── eigen.mail/           # Maildir + mail.db
-├── eigen.contacts/       # vCard files + contacts.db + avatars
+├── eigen.contacts/       # contacts.db (the vCards themselves) + avatars
 ├── eigen.calendar/       # calendar.db
 └── eigen.notifications/  # notifications.db
 ```

@@ -60,10 +60,18 @@ function isValidMailboxPath(mailbox: string): boolean {
         );
 }
 
+// The NFC fold `isSafePathSegment` assumes, so an accented id names one file and not two. Null for a name
+// no Eigen id could have, which a read treats as absent where a write refuses it.
+function foldFileId(id: string): string | null {
+    const name = id.normalize('NFC');
+    return isSafePathSegment(name) ? name : null;
+}
+
 // Refused, never mapped onto a safe name: two mapped ids would collide on one file.
 function safeFileId(id: string): string {
-    if (!isSafePathSegment(id)) throw new ApiError(400, `Invalid mail id: ${id}`);
-    return id;
+    const name = foldFileId(id);
+    if (!name) throw new ApiError(400, `Invalid mail id: ${id}`);
+    return name;
 }
 
 export class MaildirStore implements MailStore {
@@ -436,18 +444,20 @@ export class MaildirStore implements MailStore {
         return 'draft-meta';
     }
 
-    private getDraftMetaPath(draftId: string): string {
-        return path.join(this.getDraftMetaDir(), `${safeFileId(draftId)}.json`);
+    // Takes the folded name, so a caller's gate and the sidecar it names can never disagree.
+    private getDraftMetaPath(name: string): string {
+        return path.join(this.getDraftMetaDir(), `${name}.json`);
     }
 
     async writeDraftMeta(draftId: string, meta: DraftMeta): Promise<void> {
-        await this.storage.writeAtomic(this.getDraftMetaPath(draftId), JSON.stringify(meta));
+        await this.storage.writeAtomic(this.getDraftMetaPath(safeFileId(draftId)), JSON.stringify(meta));
     }
 
     async readDraftMeta(draftId: string): Promise<DraftMeta | null> {
         // Another MDA's filename can hold characters no Eigen id has: no sidecar exists for it, and it must not fail the sync.
-        if (!isSafePathSegment(draftId)) return null;
-        const metaPath = this.getDraftMetaPath(draftId);
+        const name = foldFileId(draftId);
+        if (!name) return null;
+        const metaPath = this.getDraftMetaPath(name);
         if (!(await this.storage.exists(metaPath))) return null;
         try {
             return await this.storage.file(metaPath).json();
@@ -459,8 +469,9 @@ export class MaildirStore implements MailStore {
 
     async deleteDraftMeta(draftId: string): Promise<void> {
         // No sidecar can exist under an id Eigen did not mint.
-        if (!isSafePathSegment(draftId)) return;
-        const metaPath = this.getDraftMetaPath(draftId);
+        const name = foldFileId(draftId);
+        if (!name) return;
+        const metaPath = this.getDraftMetaPath(name);
         try {
             if (await this.storage.exists(metaPath)) {
                 await this.storage.unlink(metaPath);

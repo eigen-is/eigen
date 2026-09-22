@@ -1,13 +1,11 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
 import { handleDeleteCalendar } from '../../lib/caldav/proppatch';
 import { Calendar } from '../../lib/calendar/calendar';
 import { EVENT_MAX_BYTES } from '../../lib/calendar/resource-store';
 import { ApiError } from '../../lib/core';
 import { REPORT_DATA_BUDGET_BYTES } from '../../lib/dav/report-row';
 import { getHome } from '../../lib/home/get-home';
-import { basicAuth, davRequest } from '../dav-test-helpers';
+import { davRequest } from '../dav-test-helpers';
 import { app, createTestUser, getTestContext } from '../setup';
 
 describe('CalDAV', () => {
@@ -20,12 +18,10 @@ describe('CalDAV', () => {
         userId = ctx.alice.user.id;
 
         // Find default calendar
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
-            }),
-        );
+        const res = await davRequest('PROPFIND', `/dav/calendars/${userId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '1' },
+        });
         const xml = await res.text();
         // Extract first real calendar ID — skip the home collection entry (trailing slash only)
         // and find hrefs that contain a sub-path like /<calendarId>/
@@ -38,12 +34,9 @@ describe('CalDAV', () => {
     // Eigen stamps every stored resource with its own lines, so a PUT hands back no validator (RFC 4791
     // § 5.3.4): the etag of the bytes the server kept comes from reading them.
     async function etagOf(uri: string): Promise<string> {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
-                method: 'GET',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const res = await davRequest('GET', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+            email: ctx.alice.user.email,
+        });
         expect(res.status).toBe(200);
         return res.headers.get('ETag')!;
     }
@@ -79,12 +72,7 @@ describe('CalDAV', () => {
     });
 
     test('PROPFIND /dav/ returns current-user-principal', async () => {
-        const res = await app.handle(
-            new Request('http://localhost/dav/', {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
+        const res = await davRequest('PROPFIND', '/dav/', { email: ctx.alice.user.email, headers: { Depth: '0' } });
         expect(res.status).toBe(207);
         const xml = await res.text();
         expect(xml).toContain(`/dav/principals/${userId}/`);
@@ -98,12 +86,10 @@ describe('CalDAV', () => {
     });
 
     test('PROPFIND principals returns calendar-home-set', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/principals/${userId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
+        const res = await davRequest('PROPFIND', `/dav/principals/${userId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+        });
         expect(res.status).toBe(207);
         const xml = await res.text();
         expect(xml).toContain(`/dav/calendars/${userId}/`);
@@ -111,12 +97,10 @@ describe('CalDAV', () => {
     });
 
     test('PROPFIND calendar home lists calendars', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
-            }),
-        );
+        const res = await davRequest('PROPFIND', `/dav/calendars/${userId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '1' },
+        });
         expect(res.status).toBe(207);
         const xml = await res.text();
         expect(xml).toContain('calendar');
@@ -128,12 +112,10 @@ describe('CalDAV', () => {
     // Apple clients derive per-source editability from these props; without them every edit of an
     // existing resource is saved as a NEW one (the CardDAV duplicate-on-edit class, fixed 2026-08-18).
     test('calendar home and collections advertise write privileges and ownership', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
-            }),
-        );
+        const res = await davRequest('PROPFIND', `/dav/calendars/${userId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '1' },
+        });
         const xml = await res.text();
         expect(xml).toContain('<D:current-user-privilege-set><D:privilege><D:all/></D:privilege>');
         expect(xml).toContain(`<D:owner><D:href>/dav/principals/${userId}/</D:href></D:owner>`);
@@ -155,28 +137,19 @@ describe('CalDAV', () => {
         ].join('\r\n');
 
         // PUT to create
-        const putRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-test-1.ics`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar; charset=utf-8',
-                    'If-None-Match': '*',
-                },
-                body: ics,
-            }),
-        );
+        const putRes = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-test-1.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'If-None-Match': '*' },
+            body: ics,
+        });
         expect(putRes.status).toBe(201);
         // A body the server re-stamped before storing carries no validator back.
         expect(putRes.headers.get('ETag')).toBeNull();
 
         // GET to verify
-        const getRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-test-1.ics`, {
-                method: 'GET',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const getRes = await davRequest('GET', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-test-1.ics`, {
+            email: ctx.alice.user.email,
+        });
         expect(getRes.status).toBe(200);
         const body = await getRes.text();
         expect(body).toContain('CalDAV Test Event');
@@ -188,36 +161,24 @@ describe('CalDAV', () => {
         const ics =
             'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-test-1@eigen\r\nSUMMARY:Duplicate\r\nDTSTART:20260401T100000Z\r\nDTEND:20260401T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
 
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-test-1.ics`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-None-Match': '*',
-                },
-                body: ics,
-            }),
-        );
+        const res = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-test-1.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-None-Match': '*' },
+            body: ics,
+        });
         expect(res.status).toBe(412); // Precondition Failed
     });
 
     test('DELETE removes event', async () => {
-        const delRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-test-1.ics`, {
-                method: 'DELETE',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const delRes = await davRequest('DELETE', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-test-1.ics`, {
+            email: ctx.alice.user.email,
+        });
         expect(delRes.status).toBe(204);
 
         // Verify it's gone
-        const getRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-test-1.ics`, {
-                method: 'GET',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const getRes = await davRequest('GET', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-test-1.ics`, {
+            email: ctx.alice.user.email,
+        });
         expect(getRes.status).toBe(404);
     });
 
@@ -229,38 +190,24 @@ describe('CalDAV', () => {
         const ics = (summary: string) =>
             `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:${summary}\r\nDTSTART:20260701T100000Z\r\nDTEND:20260701T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR`;
 
-        const create = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-None-Match': '*',
-                },
-                body: ics('Star Create'),
-            }),
-        );
+        const create = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-None-Match': '*' },
+            body: ics('Star Create'),
+        });
         expect(create.status).toBe(201);
 
-        const update = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-Match': '*',
-                },
-                body: ics('Star Update'),
-            }),
-        );
+        const update = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-Match': '*' },
+            body: ics('Star Update'),
+        });
         expect(update.status).toBe(204);
 
-        const del = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
-                method: 'DELETE',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'If-Match': '*' },
-            }),
-        );
+        const del = await davRequest('DELETE', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+            email: ctx.alice.user.email,
+            headers: { 'If-Match': '*' },
+        });
         expect(del.status).toBe(204);
     });
 
@@ -269,25 +216,16 @@ describe('CalDAV', () => {
         const ics =
             'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-ifmatch-missing@eigen\r\nSUMMARY:Should Not Exist\r\nDTSTART:20260702T100000Z\r\nDTEND:20260702T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
 
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-Match': '"nonexistent-etag"',
-                },
-                body: ics,
-            }),
-        );
+        const res = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-Match': '"nonexistent-etag"' },
+            body: ics,
+        });
         expect(res.status).toBe(412);
 
-        const get = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
-                method: 'GET',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const get = await davRequest('GET', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+            email: ctx.alice.user.email,
+        });
         expect(get.status).toBe(404);
     });
 
@@ -297,39 +235,24 @@ describe('CalDAV', () => {
         const ics = (summary: string) =>
             `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:${summary}\r\nDTSTART:20260703T100000Z\r\nDTEND:20260703T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR`;
 
-        const create = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-None-Match': '*',
-                },
-                body: ics('Original'),
-            }),
-        );
+        const create = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-None-Match': '*' },
+            body: ics('Original'),
+        });
         expect(create.status).toBe(201);
         const etag = await etagOf(uri);
 
-        const stale = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-Match': '"stale-etag"',
-                },
-                body: ics('Overwritten'),
-            }),
-        );
+        const stale = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-Match': '"stale-etag"' },
+            body: ics('Overwritten'),
+        });
         expect(stale.status).toBe(412);
 
-        const get = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
-                method: 'GET',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const get = await davRequest('GET', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+            email: ctx.alice.user.email,
+        });
         expect(get.status).toBe(200);
         const body = await get.text();
         expect(body).toContain('Original');
@@ -342,31 +265,19 @@ describe('CalDAV', () => {
         const uri = 'caldav-inm-current.ics';
         const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:INM Current\r\nDTSTART:20260704T100000Z\r\nDTEND:20260704T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR`;
 
-        const create = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-None-Match': '*',
-                },
-                body: ics,
-            }),
-        );
+        const create = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-None-Match': '*' },
+            body: ics,
+        });
         expect(create.status).toBe(201);
         const etag = await etagOf(uri);
 
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-None-Match': etag!,
-                },
-                body: ics,
-            }),
-        );
+        const res = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-None-Match': etag! },
+            body: ics,
+        });
         expect(res.status).toBe(412);
     });
 
@@ -376,31 +287,19 @@ describe('CalDAV', () => {
         const ics = (summary: string) =>
             `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:${summary}\r\nDTSTART:20260705T100000Z\r\nDTEND:20260705T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR`;
 
-        const create = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-None-Match': '*',
-                },
-                body: ics('List Create'),
-            }),
-        );
+        const create = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-None-Match': '*' },
+            body: ics('List Create'),
+        });
         expect(create.status).toBe(201);
         const etag = await etagOf(uri);
 
-        const update = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-Match': `"deadbeef", ${etag}`,
-                },
-                body: ics('List Update'),
-            }),
-        );
+        const update = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-Match': `"deadbeef", ${etag}` },
+            body: ics('List Update'),
+        });
         expect(update.status).toBe(204);
     });
 
@@ -417,16 +316,11 @@ describe('CalDAV', () => {
             'END:VCALENDAR',
         ].join('\r\n');
 
-        await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-allday-1.ics`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                },
-                body: ics,
-            }),
-        );
+        await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-allday-1.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar' },
+            body: ics,
+        });
 
         // Fetch via REST API to check stored values
         const res = await app.handle(
@@ -459,16 +353,11 @@ describe('CalDAV', () => {
             'END:VCALENDAR',
         ].join('\r\n');
 
-        const putRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-recur-1.ics`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                },
-                body: ics,
-            }),
-        );
+        const putRes = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-recur-1.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar' },
+            body: ics,
+        });
         expect(putRes.status).toBe(201);
         const originalEtag = await etagOf('caldav-recur-1.ics');
 
@@ -494,26 +383,18 @@ describe('CalDAV', () => {
             'END:VCALENDAR',
         ].join('\r\n');
 
-        const updateRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-recur-1.ics`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                },
-                body: icsWithException,
-            }),
-        );
+        const updateRes = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-recur-1.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar' },
+            body: icsWithException,
+        });
         expect(updateRes.status).toBe(204);
 
         // GET the event — the canceled exception round-trips as EXDATE on the master, not as a
         // STATUS:CANCELLED override VEVENT (clients like Thunderbird drop those from their next PUT).
-        const getRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-recur-1.ics`, {
-                method: 'GET',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const getRes = await davRequest('GET', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-recur-1.ics`, {
+            email: ctx.alice.user.email,
+        });
         const body = await getRes.text();
         expect(body).toContain('RRULE:FREQ=DAILY');
         // A PUT is a full-resource replace: the cancelled override the client wrote is stored as it
@@ -527,15 +408,10 @@ describe('CalDAV', () => {
     });
 
     test('cross-user access denied', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${ctx.bob.user.id}/`, {
-                method: 'PROPFIND',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    Depth: '1',
-                },
-            }),
-        );
+        const res = await davRequest('PROPFIND', `/dav/calendars/${ctx.bob.user.id}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '1' },
+        });
         expect(res.status).toBe(403);
     });
 
@@ -547,16 +423,11 @@ describe('CalDAV', () => {
   <D:prop><D:getetag/></D:prop>
 </D:sync-collection>`;
 
-        const initialRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'REPORT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'application/xml',
-                },
-                body: initialReport,
-            }),
-        );
+        const initialRes = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: initialReport,
+        });
         expect(initialRes.status).toBe(207);
         const initialXml = await initialRes.text();
         const tokenMatch = initialXml.match(/<D:sync-token>([^<]+)<\/D:sync-token>/);
@@ -567,17 +438,11 @@ describe('CalDAV', () => {
         const ics =
             'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:sync-test-1@eigen\r\nSUMMARY:Sync Test\r\nDTSTART:20260601T100000Z\r\nDTEND:20260601T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
 
-        await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/sync-test-1.ics`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-None-Match': '*',
-                },
-                body: ics,
-            }),
-        );
+        await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/sync-test-1.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-None-Match': '*' },
+            body: ics,
+        });
 
         // Incremental sync — should return the new event
         const incrementalReport = `<?xml version="1.0" encoding="utf-8"?>
@@ -586,16 +451,11 @@ describe('CalDAV', () => {
   <D:prop><D:getetag/></D:prop>
 </D:sync-collection>`;
 
-        const syncRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'REPORT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'application/xml',
-                },
-                body: incrementalReport,
-            }),
-        );
+        const syncRes = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: incrementalReport,
+        });
         expect(syncRes.status).toBe(207);
         const syncXml = await syncRes.text();
         expect(syncXml).toContain('sync-test-1.ics');
@@ -609,16 +469,11 @@ describe('CalDAV', () => {
   <D:prop><D:getetag/></D:prop>
 </D:sync-collection>`;
 
-        const initialRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'REPORT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'application/xml',
-                },
-                body: reportBody,
-            }),
-        );
+        const initialRes = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: reportBody,
+        });
         const initialXml = await initialRes.text();
         const syncToken = initialXml.match(/<D:sync-token>([^<]+)<\/D:sync-token>/)![1];
 
@@ -626,16 +481,11 @@ describe('CalDAV', () => {
         const updatedIcs =
             'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:sync-test-1@eigen\r\nSUMMARY:Sync Test Updated\r\nDTSTART:20260601T100000Z\r\nDTEND:20260601T120000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
 
-        await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/sync-test-1.ics`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                },
-                body: updatedIcs,
-            }),
-        );
+        await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/sync-test-1.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar' },
+            body: updatedIcs,
+        });
 
         // Sync should return the updated event
         const syncReport = `<?xml version="1.0" encoding="utf-8"?>
@@ -644,16 +494,11 @@ describe('CalDAV', () => {
   <D:prop><D:getetag/></D:prop>
 </D:sync-collection>`;
 
-        const syncRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'REPORT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'application/xml',
-                },
-                body: syncReport,
-            }),
-        );
+        const syncRes = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: syncReport,
+        });
         const syncXml = await syncRes.text();
         expect(syncXml).toContain('sync-test-1.ics');
     });
@@ -661,24 +506,20 @@ describe('CalDAV', () => {
     test('REPORT with an unknown root element is 400', async () => {
         const body = `<?xml version="1.0" encoding="utf-8"?>
 <D:not-a-real-report xmlns:D="DAV:"><D:prop><D:getetag/></D:prop></D:not-a-real-report>`;
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'REPORT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body,
-            }),
-        );
+        const res = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body,
+        });
         expect(res.status).toBe(400);
     });
 
     test('REPORT with an empty body is 400, never a full etag dump', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'REPORT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: '',
-            }),
-        );
+        const res = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: '',
+        });
         expect(res.status).toBe(400);
     });
 
@@ -690,13 +531,11 @@ describe('CalDAV', () => {
   <D:sync-token>${token}</D:sync-token>
   <D:prop><D:getetag/></D:prop>
 </D:sync-collection>`;
-            const res = await app.handle(
-                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                    method: 'REPORT',
-                    headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                    body,
-                }),
-            );
+            const res = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'application/xml' },
+                body,
+            });
             expect(res.status).toBe(403);
             expect(await res.text()).toContain('valid-sync-token');
         }
@@ -717,50 +556,33 @@ describe('CalDAV', () => {
         ].join('\r\n');
 
         // Create
-        const putRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/seq-preserve.ics`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-None-Match': '*',
-                },
-                body: ics,
-            }),
-        );
+        const putRes = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/seq-preserve.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-None-Match': '*' },
+            body: ics,
+        });
         expect(putRes.status).toBe(201);
 
         // GET and verify sequence is preserved
-        const getRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/seq-preserve.ics`, {
-                method: 'GET',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const getRes = await davRequest('GET', `/dav/calendars/${userId}/${defaultCalendarId}/seq-preserve.ics`, {
+            email: ctx.alice.user.email,
+        });
         const body = await getRes.text();
         expect(body).toContain('SEQUENCE:5');
 
         // Update with new sequence
         const updatedIcs = ics.replace('SEQUENCE:5', 'SEQUENCE:7').replace('Sequence Preserve', 'Sequence Updated');
-        const updateRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/seq-preserve.ics`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                },
-                body: updatedIcs,
-            }),
-        );
+        const updateRes = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/seq-preserve.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar' },
+            body: updatedIcs,
+        });
         expect(updateRes.status).toBe(204);
 
         // Verify new sequence is preserved
-        const getRes2 = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/seq-preserve.ics`, {
-                method: 'GET',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const getRes2 = await davRequest('GET', `/dav/calendars/${userId}/${defaultCalendarId}/seq-preserve.ics`, {
+            email: ctx.alice.user.email,
+        });
         const body2 = await getRes2.text();
         expect(body2).toContain('SEQUENCE:7');
     });
@@ -780,32 +602,20 @@ describe('CalDAV', () => {
         ].join('\r\n');
 
         // Create
-        const putRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/etag-stable.ics`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-None-Match': '*',
-                },
-                body: ics,
-            }),
-        );
+        const putRes = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/etag-stable.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-None-Match': '*' },
+            body: ics,
+        });
         expect(putRes.status).toBe(201);
         const etag1 = await etagOf('etag-stable.ics');
 
         // Re-PUT identical content
-        const putRes2 = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/etag-stable.ics`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-Match': etag1!,
-                },
-                body: ics,
-            }),
-        );
+        const putRes2 = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/etag-stable.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-Match': etag1! },
+            body: ics,
+        });
         expect(putRes2.status).toBe(204);
         const etag2 = await etagOf('etag-stable.ics');
 
@@ -818,16 +628,11 @@ describe('CalDAV', () => {
         const ics =
             'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-report-1@eigen\r\nSUMMARY:Report Test\r\nDTSTART:20260501T090000Z\r\nDTEND:20260501T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
 
-        await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-report-1.ics`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                },
-                body: ics,
-            }),
-        );
+        await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-report-1.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar' },
+            body: ics,
+        });
 
         // REPORT calendar-multiget
         const reportBody = `<?xml version="1.0" encoding="utf-8"?>
@@ -839,16 +644,11 @@ describe('CalDAV', () => {
   <D:href>/dav/calendars/${userId}/${defaultCalendarId}/caldav-report-1.ics</D:href>
 </C:calendar-multiget>`;
 
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'REPORT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'application/xml',
-                },
-                body: reportBody,
-            }),
-        );
+        const res = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: reportBody,
+        });
         expect(res.status).toBe(207);
         const xml = await res.text();
         expect(xml).toContain('Report Test');
@@ -858,13 +658,11 @@ describe('CalDAV', () => {
     test('REPORT calendar-query with a basic-format time-range returns in-window events', async () => {
         const ics =
             'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-timerange-1@eigen\r\nSUMMARY:TimeRange Hit\r\nDTSTART:20260601T090000Z\r\nDTEND:20260601T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
-        await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-timerange-1.ics`, {
-                method: 'PUT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
-                body: ics,
-            }),
-        );
+        await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-timerange-1.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar' },
+            body: ics,
+        });
 
         // RFC 5545 BASIC-format bounds that bracket the event (new Date() reads these as Invalid Date).
         const reportBody = `<?xml version="1.0" encoding="utf-8"?>
@@ -879,13 +677,11 @@ describe('CalDAV', () => {
   </C:filter>
 </C:calendar-query>`;
 
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'REPORT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: reportBody,
-            }),
-        );
+        const res = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: reportBody,
+        });
         expect(res.status).toBe(207);
         const xml = await res.text();
         // Pre-fix the Invalid Date bounds emptied the REPORT; the in-window event must appear.
@@ -906,13 +702,11 @@ describe('CalDAV', () => {
     </C:comp-filter>
   </C:filter>
 </C:calendar-query>`;
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'REPORT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: reportBody,
-            }),
-        );
+        const res = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: reportBody,
+        });
         expect(res.status).toBe(207);
         const xml = await res.text();
         expect(xml).not.toContain('TimeRange Hit');
@@ -943,11 +737,10 @@ describe('CalDAV', () => {
         expect((await putIcs('caldav-moved-1.ics', ics)).status).toBe(201);
 
         const query = async (start: string, end: string) => {
-            const res = await app.handle(
-                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                    method: 'REPORT',
-                    headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                    body: `<?xml version="1.0" encoding="utf-8"?>
+            const res = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'application/xml' },
+                body: `<?xml version="1.0" encoding="utf-8"?>
 <C:calendar-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
   <D:prop><D:getetag/></D:prop>
   <C:filter>
@@ -958,8 +751,7 @@ describe('CalDAV', () => {
     </C:comp-filter>
   </C:filter>
 </C:calendar-query>`,
-                }),
-            );
+            });
             expect(res.status).toBe(207);
             return res.text();
         };
@@ -973,23 +765,18 @@ describe('CalDAV', () => {
         // DTSTART far in the future so pre-fix range queries in this file never iterate toward it.
         const ics =
             'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-subdaily-1@eigen\r\nSUMMARY:SubDaily PUT\r\nDTSTART:20990101T090000Z\r\nDTEND:20990101T100000Z\r\nRRULE:FREQ=SECONDLY\r\nEND:VEVENT\r\nEND:VCALENDAR';
-        const putRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-subdaily-1.ics`, {
-                method: 'PUT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
-                body: ics,
-            }),
-        );
-        // Untrusted ICS must not 500 the sync; the file keeps what the client wrote and the index
+        const putRes = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-subdaily-1.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar' },
+            body: ics,
+        });
+        // Untrusted ICS must not 500 the sync; the stored bytes keep what the client wrote and the index
         // degrades the explosive rule to a single event instead of expanding it.
         expect([201, 204]).toContain(putRes.status);
 
-        const getRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-subdaily-1.ics`, {
-                method: 'GET',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const getRes = await davRequest('GET', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-subdaily-1.ics`, {
+            email: ctx.alice.user.email,
+        });
         const body = await getRes.text();
         expect(body).toContain('SubDaily PUT');
         // The stored resource is the client's, rule included — the index is what drops it.
@@ -999,13 +786,11 @@ describe('CalDAV', () => {
     });
 
     test('a REPORT body over 1 MiB is 413 before parsing', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'REPORT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: 'a'.repeat(1_048_577),
-            }),
-        );
+        const res = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: 'a'.repeat(1_048_577),
+        });
         expect(res.status).toBe(413);
     });
 
@@ -1014,13 +799,11 @@ describe('CalDAV', () => {
             'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-oversize@eigen\r\nSUMMARY:Big\r\nDTSTART:20260801T090000Z\r\nDTEND:20260801T100000Z\r\nDESCRIPTION:';
         const suffix = '\r\nEND:VEVENT\r\nEND:VCALENDAR';
         const pad = EVENT_MAX_BYTES + 1 - Buffer.byteLength(prefix) - Buffer.byteLength(suffix);
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-oversize.ics`, {
-                method: 'PUT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
-                body: prefix + 'a'.repeat(pad) + suffix,
-            }),
-        );
+        const res = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-oversize.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar' },
+            body: prefix + 'a'.repeat(pad) + suffix,
+        });
         expect(res.status).toBe(413);
         expect(await res.text()).toContain('max-resource-size');
     });
@@ -1029,13 +812,11 @@ describe('CalDAV', () => {
         const longUri = `${'x'.repeat(300)}.ics`;
         const ics =
             'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-longuri@eigen\r\nSUMMARY:Long\r\nDTSTART:20260901T090000Z\r\nDTEND:20260901T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${longUri}`, {
-                method: 'PUT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
-                body: ics,
-            }),
-        );
+        const res = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/${longUri}`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar' },
+            body: ics,
+        });
         expect(res.status).toBe(400);
     });
 
@@ -1058,13 +839,11 @@ describe('CalDAV', () => {
             'END:VEVENT',
             'END:VCALENDAR',
         ].join('\r\n');
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-unreadable.ics`, {
-                method: 'PUT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
-                body: ics,
-            }),
-        );
+        const res = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/caldav-unreadable.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar' },
+            body: ics,
+        });
 
         expect(res.status).toBe(403);
         expect(await res.text()).toContain('valid-calendar-object-resource');
@@ -1080,13 +859,11 @@ describe('CalDAV', () => {
   <D:prop><D:getetag/></D:prop>
   ${hrefs}
 </C:calendar-multiget>`;
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'REPORT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: reportBody,
-            }),
-        );
+        const res = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: reportBody,
+        });
         expect(res.status).toBe(400);
     });
 
@@ -1096,13 +873,11 @@ describe('CalDAV', () => {
         const href = (uri: string) => `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`;
         const ics =
             'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-multiget-dup@eigen\r\nSUMMARY:Dup Test\r\nDTSTART:20260701T090000Z\r\nDTEND:20260701T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
-        await app.handle(
-            new Request(`http://localhost${href(present)}`, {
-                method: 'PUT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
-                body: ics,
-            }),
-        );
+        await davRequest('PUT', `${href(present)}`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar' },
+            body: ics,
+        });
 
         // The same two resources listed four ways: the present one twice, the missing one twice.
         const reportBody = `<?xml version="1.0" encoding="utf-8"?>
@@ -1113,13 +888,11 @@ describe('CalDAV', () => {
   <D:href>${href(missing)}</D:href>
   <D:href>${href(missing)}</D:href>
 </C:calendar-multiget>`;
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'REPORT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: reportBody,
-            }),
-        );
+        const res = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: reportBody,
+        });
         expect(res.status).toBe(207);
         const xml = await res.text();
         // Two distinct resources → exactly two rows, and the missing one 404s exactly once (the dedupe nit).
@@ -1132,22 +905,18 @@ describe('CalDAV', () => {
         const uri = 'caldav-propfind-one.ics';
         const ics =
             'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-propfind-one@eigen\r\nSUMMARY:One Event\r\nDTSTART:20261001T090000Z\r\nDTEND:20261001T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
-        const putRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
-                method: 'PUT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
-                body: ics,
-            }),
-        );
+        const putRes = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar' },
+            body: ics,
+        });
         expect(putRes.status).toBe(201);
         const etag = await etagOf(uri);
 
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
+        const res = await davRequest('PROPFIND', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+        });
         expect(res.status).toBe(207);
         const xml = await res.text();
         // The event's own href, not the collection's, and its quoted etag matching the PUT response.
@@ -1156,11 +925,10 @@ describe('CalDAV', () => {
     });
 
     test('PROPFIND a missing event uri is 404', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-propfind-nope.ics`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
+        const res = await davRequest(
+            'PROPFIND',
+            `/dav/calendars/${userId}/${defaultCalendarId}/caldav-propfind-nope.ics`,
+            { email: ctx.alice.user.email, headers: { Depth: '0' } },
         );
         expect(res.status).toBe(404);
     });
@@ -1171,25 +939,21 @@ describe('CalDAV', () => {
         let propEtag: string;
 
         const propfindEvent = (body: string, headers: Record<string, string> = {}) =>
-            app.handle(
-                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${propUri}`, {
-                    method: 'PROPFIND',
-                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0', ...headers },
-                    body,
-                }),
-            );
+            davRequest('PROPFIND', `/dav/calendars/${userId}/${defaultCalendarId}/${propUri}`, {
+                email: ctx.alice.user.email,
+                headers: { Depth: '0', ...headers },
+                body,
+            });
 
         beforeAll(async () => {
             propUri = 'caldav-proplist.ics';
             const ics =
                 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-proplist@eigen\r\nSUMMARY:Prop List\r\nDTSTART:20261201T090000Z\r\nDTEND:20261201T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
-            const putRes = await app.handle(
-                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${propUri}`, {
-                    method: 'PUT',
-                    headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
-                    body: ics,
-                }),
-            );
+            const putRes = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/${propUri}`, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'text/calendar' },
+                body: ics,
+            });
             expect(putRes.status).toBe(201);
             propEtag = await etagOf(propUri);
         });
@@ -1250,13 +1014,11 @@ describe('CalDAV', () => {
         });
 
         test('a collection row honors a subset request', async () => {
-            const res = await app.handle(
-                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                    method: 'PROPFIND',
-                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-                    body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:displayname/></D:prop></D:propfind>`,
-                }),
-            );
+            const res = await davRequest('PROPFIND', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                email: ctx.alice.user.email,
+                headers: { Depth: '0' },
+                body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:displayname/></D:prop></D:propfind>`,
+            });
             expect(res.status).toBe(207);
             const xml = await res.text();
             expect(xml).toContain('<D:displayname>');
@@ -1283,43 +1045,55 @@ describe('CalDAV', () => {
             'END:VCALENDAR',
         ].join('\r\n');
 
-        const putRes = await app.handle(
-            new Request(`http://localhost${requestHref}`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-None-Match': '*',
-                },
-                body: ics,
-            }),
-        );
+        const putRes = await davRequest('PUT', `${requestHref}`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-None-Match': '*' },
+            body: ics,
+        });
         expect(putRes.status).toBe(201);
         expect(putRes.headers.get('Location')).toBe(emittedHref);
 
-        const getRes = await app.handle(
-            new Request(`http://localhost${requestHref}`, {
-                method: 'GET',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const getRes = await davRequest('GET', `${requestHref}`, { email: ctx.alice.user.email });
         expect(getRes.status).toBe(200);
         expect(await getRes.text()).toContain('Encoded URI Event');
         const etag = getRes.headers.get('ETag');
         expect(etag).toBeTruthy();
 
-        const propRes = await app.handle(
-            new Request(`http://localhost${requestHref}`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
+        const propRes = await davRequest('PROPFIND', `${requestHref}`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+        });
         expect(propRes.status).toBe(207);
         const propXml = await propRes.text();
         // The emitted href carries the raw @, never the %40-encoded form, and its etag matches the PUT.
         expect(propXml).toContain(emittedHref);
         expect(propXml).not.toContain('a%40b.ics');
         expect(propXml).toContain(`<D:getetag>${etag}</D:getetag>`);
+    });
+
+    test('an accented resource name round-trips, and its decomposed spelling finds the same row', async () => {
+        // The stored name is the composed one, so the emitted Location is its percent-encoded form and the NFD
+        // spelling a macOS client sends folds onto the same row rather than creating a second resource.
+        const nfc = encodeURIComponent('café.ics');
+        const nfd = encodeURIComponent('café.ics'.normalize('NFD'));
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:caldav-accented@eigen',
+            'SUMMARY:Accented name',
+            'DTSTART:20261104T090000Z',
+            'DTEND:20261104T100000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const putRes = await putIcs(nfc, ics, { 'If-None-Match': '*' });
+        expect(putRes.status).toBe(201);
+        expect(putRes.headers.get('Location')).toBe(`/dav/calendars/${userId}/${defaultCalendarId}/${nfc}`);
+
+        expect(await getIcs(nfc)).toContain('Accented name');
+        expect(await getIcs(nfd)).toContain('Accented name');
     });
 
     test('REPORT multiget and sync-collection resolve a %40-encoded href and emit the @ raw', async () => {
@@ -1338,17 +1112,11 @@ describe('CalDAV', () => {
             'END:VEVENT',
             'END:VCALENDAR',
         ].join('\r\n');
-        const putRes = await app.handle(
-            new Request(`http://localhost${requestHref}`, {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'text/calendar',
-                    'If-None-Match': '*',
-                },
-                body: ics,
-            }),
-        );
+        const putRes = await davRequest('PUT', `${requestHref}`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar', 'If-None-Match': '*' },
+            body: ics,
+        });
         expect(putRes.status).toBe(201);
 
         const multigetBody = `<?xml version="1.0" encoding="utf-8"?>
@@ -1356,13 +1124,11 @@ describe('CalDAV', () => {
   <D:prop><D:getetag/><C:calendar-data/></D:prop>
   <D:href>${requestHref}</D:href>
 </C:calendar-multiget>`;
-        const multigetRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'REPORT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: multigetBody,
-            }),
-        );
+        const multigetRes = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: multigetBody,
+        });
         expect(multigetRes.status).toBe(207);
         const multigetXml = await multigetRes.text();
         expect(multigetXml).toContain('Encoded Report Event');
@@ -1374,13 +1140,11 @@ describe('CalDAV', () => {
   <D:sync-token/>
   <D:prop><D:getetag/></D:prop>
 </D:sync-collection>`;
-        const syncRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'REPORT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: syncBody,
-            }),
-        );
+        const syncRes = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: syncBody,
+        });
         expect(syncRes.status).toBe(207);
         const syncXml = await syncRes.text();
         expect(syncXml).toContain(emittedHref);
@@ -1397,79 +1161,105 @@ describe('CalDAV', () => {
     <C:supported-calendar-component-set><C:comp name="VEVENT"/></C:supported-calendar-component-set>
   </D:prop></D:set>
 </C:mkcalendar>`;
-        const mkRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'MKCALENDAR',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: mkBody,
-            }),
-        );
+        const mkRes = await davRequest('MKCALENDAR', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: mkBody,
+        });
         expect(mkRes.status).toBe(201);
         expect(mkRes.headers.get('Location')).toBe(`/dav/calendars/${userId}/${calId}/`);
 
         // PROPFIND the exact client-chosen URL resolves and carries the displayname + color the client set.
-        const propRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
+        const propRes = await davRequest('PROPFIND', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+        });
         expect(propRes.status).toBe(207);
         const propXml = await propRes.text();
         expect(propXml).toContain('My New Calendar');
         expect(propXml).toContain('#ff0000');
 
         // And it appears in the calendar-home listing under the very same href.
-        const homeRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
-            }),
-        );
+        const homeRes = await davRequest('PROPFIND', `/dav/calendars/${userId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '1' },
+        });
         expect(await homeRes.text()).toContain(`/dav/calendars/${userId}/${calId}/`);
+    });
+
+    test('MKCALENDAR of an accented id creates it, and the home lists it percent-encoded', async () => {
+        // A calendar id is a client-chosen name like a resource name is, so it may carry accents — and every
+        // href that names it back, Location included, carries the composed spelling percent-encoded.
+        const encoded = encodeURIComponent('café');
+        const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname>Café</D:displayname></D:prop></D:set></C:mkcalendar>`;
+        const mkRes = await davRequest('MKCALENDAR', `/dav/calendars/${userId}/${encoded}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body,
+        });
+        expect(mkRes.status).toBe(201);
+        expect(mkRes.headers.get('Location')).toBe(`/dav/calendars/${userId}/${encoded}/`);
+
+        const homeRes = await davRequest('PROPFIND', `/dav/calendars/${userId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '1' },
+        });
+        expect(await homeRes.text()).toContain(`/dav/calendars/${userId}/${encoded}/`);
     });
 
     test('a duplicate MKCALENDAR to the same URL is 405 and leaves the existing calendar untouched', async () => {
         const calId = 'dup-cal';
         const mk = (body: string) =>
-            app.handle(
-                new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                    method: 'MKCALENDAR',
-                    headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                    body,
-                }),
-            );
+            davRequest('MKCALENDAR', `/dav/calendars/${userId}/${calId}/`, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'application/xml' },
+                body,
+            });
         expect((await mk('')).status).toBe(201);
         const usurper = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname>Usurper</D:displayname></D:prop></D:set></C:mkcalendar>`;
         expect((await mk(usurper)).status).toBe(405);
-        const propRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
+        const propRes = await davRequest('PROPFIND', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+        });
         const xml = await propRes.text();
         expect(xml).toContain(`<D:displayname>${calId}</D:displayname>`);
         expect(xml).not.toContain('Usurper');
     });
 
+    test('MKCALENDAR of a case variant of an existing id creates a second calendar', async () => {
+        const mk = (calId: string) =>
+            davRequest('MKCALENDAR', `/dav/calendars/${userId}/${calId}/`, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'application/xml' },
+                body: '',
+            });
+        expect((await mk('case-cal')).status).toBe(201);
+        // The id is taken as written, so the variant is a free name and not the same collection.
+        expect((await mk('Case-Cal')).status).toBe(201);
+
+        const homeRes = await davRequest('PROPFIND', `/dav/calendars/${userId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '1' },
+        });
+        const xml = await homeRes.text();
+        expect(xml).toContain(`/dav/calendars/${userId}/case-cal/`);
+        expect(xml).toContain(`/dav/calendars/${userId}/Case-Cal/`);
+    });
+
     test('MKCALENDAR without a displayname names the calendar after the URL segment', async () => {
         const calId = 'unnamed-cal';
         const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><C:supported-calendar-component-set><C:comp name="VEVENT"/></C:supported-calendar-component-set></D:prop></D:set></C:mkcalendar>`;
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'MKCALENDAR',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body,
-            }),
-        );
+        const res = await davRequest('MKCALENDAR', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body,
+        });
         expect(res.status).toBe(201);
-        const propRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
+        const propRes = await davRequest('PROPFIND', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+        });
         expect(await propRes.text()).toContain(`<D:displayname>${calId}</D:displayname>`);
     });
 
@@ -1477,20 +1267,16 @@ describe('CalDAV', () => {
         const calId = 'attr-shape-cal';
         // An xml:lang attribute makes fast-xml-parser wrap the value as { '@_...': ..., '#text': ... }.
         const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:ICAL="http://apple.com/ns/ical/"><D:set><D:prop><D:displayname xml:lang="en">Localized Name</D:displayname><ICAL:calendar-color symbolic-color="custom">#00ff00</ICAL:calendar-color></D:prop></D:set></C:mkcalendar>`;
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'MKCALENDAR',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body,
-            }),
-        );
+        const res = await davRequest('MKCALENDAR', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body,
+        });
         expect(res.status).toBe(201);
-        const propRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
+        const propRes = await davRequest('PROPFIND', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+        });
         const xml = await propRes.text();
         expect(xml).toContain('Localized Name');
         expect(xml).toContain('#00ff00');
@@ -1499,99 +1285,79 @@ describe('CalDAV', () => {
     test('MKCALENDAR keeps a purely numeric displayname verbatim', async () => {
         const calId = 'numeric-name-cal';
         const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname>0612</D:displayname></D:prop></D:set></C:mkcalendar>`;
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'MKCALENDAR',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body,
-            }),
-        );
+        const res = await davRequest('MKCALENDAR', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body,
+        });
         expect(res.status).toBe(201);
-        const propRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
+        const propRes = await davRequest('PROPFIND', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+        });
         expect(await propRes.text()).toContain('<D:displayname>0612</D:displayname>');
     });
 
     test('PROPPATCH keeps a purely numeric displayname verbatim', async () => {
         const calId = 'numeric-rename-cal';
-        await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'MKCALENDAR',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: '',
-            }),
-        );
+        await davRequest('MKCALENDAR', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: '',
+        });
         const body = `<?xml version="1.0"?><D:propertyupdate xmlns:D="DAV:"><D:set><D:prop><D:displayname>0612</D:displayname></D:prop></D:set></D:propertyupdate>`;
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'PROPPATCH',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body,
-            }),
-        );
+        const res = await davRequest('PROPPATCH', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body,
+        });
         expect(res.status).toBe(207);
-        const propRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
+        const propRes = await davRequest('PROPFIND', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+        });
         expect(await propRes.text()).toContain('<D:displayname>0612</D:displayname>');
     });
 
     test('MKCALENDAR refuses a color that is not a hex color and creates nothing', async () => {
         const calId = 'hostile-color-cal';
         const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:ICAL="http://apple.com/ns/ical/"><D:set><D:prop><D:displayname>Hostile</D:displayname><ICAL:calendar-color>javascript:alert(1)</ICAL:calendar-color></D:prop></D:set></C:mkcalendar>`;
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'MKCALENDAR',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body,
-            }),
-        );
+        const res = await davRequest('MKCALENDAR', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body,
+        });
         expect(res.status).toBe(403);
-        const propRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
+        const propRes = await davRequest('PROPFIND', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+        });
         expect(propRes.status).toBe(404);
     });
 
     test('PROPPATCH refuses a hostile color and a 3 000-character displayname, and keeps the stored ones', async () => {
         const calId = 'bounded-props-cal';
-        await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'MKCALENDAR',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:ICAL="http://apple.com/ns/ical/"><D:set><D:prop><D:displayname>Bounded</D:displayname><ICAL:calendar-color>#34a853</ICAL:calendar-color></D:prop></D:set></C:mkcalendar>`,
-            }),
-        );
+        await davRequest('MKCALENDAR', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:ICAL="http://apple.com/ns/ical/"><D:set><D:prop><D:displayname>Bounded</D:displayname><ICAL:calendar-color>#34a853</ICAL:calendar-color></D:prop></D:set></C:mkcalendar>`,
+        });
         const proppatch = (props: string) =>
-            app.handle(
-                new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                    method: 'PROPPATCH',
-                    headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                    body: `<?xml version="1.0"?><D:propertyupdate xmlns:D="DAV:" xmlns:ICAL="http://apple.com/ns/ical/"><D:set><D:prop>${props}</D:prop></D:set></D:propertyupdate>`,
-                }),
-            );
+            davRequest('PROPPATCH', `/dav/calendars/${userId}/${calId}/`, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'application/xml' },
+                body: `<?xml version="1.0"?><D:propertyupdate xmlns:D="DAV:" xmlns:ICAL="http://apple.com/ns/ical/"><D:set><D:prop>${props}</D:prop></D:set></D:propertyupdate>`,
+            });
 
         expect((await proppatch('<ICAL:calendar-color>javascript:alert(1)</ICAL:calendar-color>')).status).toBe(403);
         expect((await proppatch(`<D:displayname>${'x'.repeat(3000)}</D:displayname>`)).status).toBe(403);
         // Apple writes the eight-digit form; it stays valid.
         expect((await proppatch('<ICAL:calendar-color>#34a85380</ICAL:calendar-color>')).status).toBe(207);
 
-        const propRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
+        const propRes = await davRequest('PROPFIND', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+        });
         const xml = await propRes.text();
         expect(xml).toContain('<D:displayname>Bounded</D:displayname>');
         expect(xml).toContain('<ICAL:calendar-color>#34a85380</ICAL:calendar-color>');
@@ -1600,84 +1366,63 @@ describe('CalDAV', () => {
     test('MKCALENDAR with an empty <displayname/> falls back to the URL segment', async () => {
         const calId = 'empty-name-cal';
         const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname/></D:prop></D:set></C:mkcalendar>`;
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'MKCALENDAR',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body,
-            }),
-        );
+        const res = await davRequest('MKCALENDAR', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body,
+        });
         expect(res.status).toBe(201);
-        const propRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
+        const propRes = await davRequest('PROPFIND', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+        });
         expect(await propRes.text()).toContain(`<D:displayname>${calId}</D:displayname>`);
     });
 
     test('DELETE on a client-created calendar removes it, and PROPFIND no longer lists it', async () => {
         const calId = 'doomed-cal';
-        const mkRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'MKCALENDAR',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: '',
-            }),
-        );
+        const mkRes = await davRequest('MKCALENDAR', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: '',
+        });
         expect(mkRes.status).toBe(201);
 
-        const delRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'DELETE',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const delRes = await davRequest('DELETE', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+        });
         expect(delRes.status).toBe(204);
 
-        const homeRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
-            }),
-        );
+        const homeRes = await davRequest('PROPFIND', `/dav/calendars/${userId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '1' },
+        });
         expect(await homeRes.text()).not.toContain(`/dav/calendars/${userId}/${calId}/`);
 
-        const propRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
+        const propRes = await davRequest('PROPFIND', `/dav/calendars/${userId}/${calId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+        });
         expect(propRes.status).toBe(404);
     });
 
     test('DELETE on an unknown calendar URL is 404', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/no-such-cal/`, {
-                method: 'DELETE',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const res = await davRequest('DELETE', `/dav/calendars/${userId}/no-such-cal/`, {
+            email: ctx.alice.user.email,
+        });
         expect(res.status).toBe(404);
     });
 
     test('DELETE on the default calendar is refused and leaves it in place', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'DELETE',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const res = await davRequest('DELETE', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+        });
         expect(res.status).toBe(403);
 
-        const homeRes = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
-            }),
-        );
+        const homeRes = await davRequest('PROPFIND', `/dav/calendars/${userId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '1' },
+        });
         expect(await homeRes.text()).toContain(`/dav/calendars/${userId}/${defaultCalendarId}/`);
     });
 
@@ -1695,13 +1440,11 @@ describe('CalDAV', () => {
 
     // The props that fixed the macOS duplicate-on-edit class (2026-08-18) — a named request must serve them.
     test('a named PROPFIND requesting current-user-privilege-set and owner returns both', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-                body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:current-user-privilege-set/><D:owner/></D:prop></D:propfind>`,
-            }),
-        );
+        const res = await davRequest('PROPFIND', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+            body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:current-user-privilege-set/><D:owner/></D:prop></D:propfind>`,
+        });
         expect(res.status).toBe(207);
         const xml = await res.text();
         expect(xml).toContain('<D:current-user-privilege-set>');
@@ -1710,13 +1453,11 @@ describe('CalDAV', () => {
     });
 
     test('a malformed PROPFIND body degrades to allprop', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-                body: `<D:propfind xmlns:D="DAV:><D:prop><D:getetag/></D:prop></D:propfind>`,
-            }),
-        );
+        const res = await davRequest('PROPFIND', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+            body: `<D:propfind xmlns:D="DAV:><D:prop><D:getetag/></D:prop></D:propfind>`,
+        });
         expect(res.status).toBe(207);
         const xml = await res.text();
         expect(xml).toContain('getctag');
@@ -1725,13 +1466,11 @@ describe('CalDAV', () => {
 
     test('the calendar collection advertises the resource ceiling its PUT enforces', async () => {
         const propfindCalendar = (body: string) =>
-            app.handle(
-                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                    method: 'PROPFIND',
-                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-                    body,
-                }),
-            );
+            davRequest('PROPFIND', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                email: ctx.alice.user.email,
+                headers: { Depth: '0' },
+                body,
+            });
 
         const all = await propfindCalendar('');
         expect(all.status).toBe(207);
@@ -1748,45 +1487,37 @@ describe('CalDAV', () => {
     });
 
     test('MKCALENDAR with an invalid id segment (leading dot) is 400', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/.hidden/`, {
-                method: 'MKCALENDAR',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: '',
-            }),
-        );
+        const res = await davRequest('MKCALENDAR', `/dav/calendars/${userId}/.hidden/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: '',
+        });
         expect(res.status).toBe(400);
     });
 
     test('MKCALENDAR with a malformed percent-escape in the URL is 400', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/%zz/`, {
-                method: 'MKCALENDAR',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: '',
-            }),
-        );
+        const res = await davRequest('MKCALENDAR', `/dav/calendars/${userId}/%zz/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: '',
+        });
         expect(res.status).toBe(400);
     });
 
     test('MKCALENDAR targeting a resource path (two segments) is 400', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/some-cal/nested.ics`, {
-                method: 'MKCALENDAR',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: '',
-            }),
-        );
+        const res = await davRequest('MKCALENDAR', `/dav/calendars/${userId}/some-cal/nested.ics`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: '',
+        });
         expect(res.status).toBe(400);
     });
 
     test('PROPFIND with a malformed percent-escape in the URL is 400', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/%zz.ics`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-            }),
-        );
+        const res = await davRequest('PROPFIND', `/dav/calendars/${userId}/${defaultCalendarId}/%zz.ics`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '0' },
+        });
         expect(res.status).toBe(400);
     });
 
@@ -1794,13 +1525,11 @@ describe('CalDAV', () => {
         const present = 'caldav-multiget-mixed.ics';
         const ics =
             'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-multiget-mixed@eigen\r\nSUMMARY:Mixed Row Test\r\nDTSTART:20260801T090000Z\r\nDTEND:20260801T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
-        await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${present}`, {
-                method: 'PUT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
-                body: ics,
-            }),
-        );
+        await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/${present}`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'text/calendar' },
+            body: ics,
+        });
         const presentHref = `/dav/calendars/${userId}/${defaultCalendarId}/${present}`;
         const malformedHref = `/dav/calendars/${userId}/${defaultCalendarId}/%zz.ics`;
         const outOfCollectionHref = `/dav/calendars/${userId}/some-other-calendar/x.ics`;
@@ -1811,13 +1540,11 @@ describe('CalDAV', () => {
   <D:href>${malformedHref}</D:href>
   <D:href>${outOfCollectionHref}</D:href>
 </C:calendar-multiget>`;
-        const res = await app.handle(
-            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                method: 'REPORT',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                body: reportBody,
-            }),
-        );
+        const res = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml' },
+            body: reportBody,
+        });
         expect(res.status).toBe(207);
         const xml = await res.text();
         // One row per href: the present one 200, the two bad ones 404 echoing the original href.
@@ -1844,17 +1571,11 @@ describe('CalDAV', () => {
         ].join('\r\n');
 
         for (const name of ['a%20b.ics', '..%2Fescape.ics', 'no-suffix', `${'x'.repeat(300)}.ics`, 'calendar.db']) {
-            const res = await app.handle(
-                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${name}`, {
-                    method: 'PUT',
-                    headers: {
-                        Authorization: basicAuth(ctx.alice.user.email),
-                        'Content-Type': 'text/calendar',
-                        'If-None-Match': '*',
-                    },
-                    body: ics,
-                }),
-            );
+            const res = await davRequest('PUT', `/dav/calendars/${userId}/${defaultCalendarId}/${name}`, {
+                email: ctx.alice.user.email,
+                headers: { 'Content-Type': 'text/calendar', 'If-None-Match': '*' },
+                body: ics,
+            });
             expect([400, 404]).toContain(res.status);
         }
     });
@@ -2025,41 +1746,54 @@ describe('CalDAV', () => {
             expect(xml.length).toBeLessThan(REPORT_DATA_BUDGET_BYTES);
         }, 120_000);
 
-        test('a row whose file vanished is a 404 row, never a 200 without its data', async () => {
-            const uri = 'caldav-vanished.ics';
-            expect((await putIcs(uri, ics('caldav-vanished@eigen', 'Vanished Row'))).status).toBe(201);
-            const home = await getHome(userId);
-            rmSync(join(home.homeDir, 'eigen.calendar', 'calendars', defaultCalendarId, uri));
-
-            const xml = await (await multiget([uri])).text();
-            expect(xml).toContain('404 Not Found');
-            expect(xml).not.toContain('Vanished Row');
-        });
-
         // RFC 6578 § 3.2: inside a sync-collection a member that is gone is a bare 404 status on the
         // response, never the multiget's 404 propstat — a client keying on propstat keeps a ghost resource.
-        test('a row whose file vanished is a removed row inside a sync-collection', async () => {
-            const uri = 'caldav-vanished-sync.ics';
-            expect((await putIcs(uri, ics('caldav-vanished-sync@eigen', 'Vanished Sync'))).status).toBe(201);
-            const home = await getHome(userId);
-            rmSync(join(home.homeDir, 'eigen.calendar', 'calendars', defaultCalendarId, uri));
-
-            const res = await davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                email: ctx.alice.user.email,
-                headers: { 'Content-Type': 'application/xml' },
-                body: `<?xml version="1.0" encoding="utf-8"?>
+        test('a deleted resource is a removed row inside a sync-collection', async () => {
+            const uri = 'caldav-deleted-sync.ics';
+            expect((await putIcs(uri, ics('caldav-deleted-sync@eigen', 'Deleted Sync'))).status).toBe(201);
+            const syncReport = (token?: string) =>
+                davRequest('REPORT', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                    email: ctx.alice.user.email,
+                    headers: { 'Content-Type': 'application/xml' },
+                    body: `<?xml version="1.0" encoding="utf-8"?>
 <D:sync-collection xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
-  <D:sync-token/>
+  <D:sync-token>${token ?? ''}</D:sync-token>
   <D:prop><D:getetag/><C:calendar-data/></D:prop>
 </D:sync-collection>`,
-            });
+                });
+            const before = (await (await syncReport()).text()).match(/<D:sync-token>([^<]+)<\/D:sync-token>/)![1];
+            expect(
+                (
+                    await davRequest('DELETE', `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                        email: ctx.alice.user.email,
+                    })
+                ).status,
+            ).toBe(204);
+
+            const res = await syncReport(before);
             expect(res.status).toBe(207);
             const xml = await res.text();
             const tail = xml.slice(xml.indexOf(uri));
             const row = tail.slice(0, tail.indexOf('</D:response>'));
             expect(row).toContain('<D:status>HTTP/1.1 404 Not Found</D:status>');
             expect(row).not.toContain('<D:propstat>');
-            expect(xml).not.toContain('Vanished Sync');
+            expect(xml).not.toContain('Deleted Sync');
+        });
+
+        // A uri is unique as written: nothing folds the case of a name the client chose, so a variant is a
+        // resource of its own and a multiget href that misspells it is a 404.
+        test('a case-variant href names no stored resource, and a case-variant PUT creates a second one', async () => {
+            const stored = 'caldav-Case-Fold.ics';
+            expect((await putIcs(stored, ics('caldav-case-fold@eigen', 'Case Fold'))).status).toBe(201);
+
+            const xml = await (await multiget(['caldav-case-fold.ics'])).text();
+            expect(xml).toContain('404 Not Found');
+            expect(xml).not.toContain('Case Fold');
+
+            expect((await putIcs('caldav-case-put.ics', ics('caldav-case-put@eigen', 'Second'))).status).toBe(201);
+            expect((await putIcs('CALDAV-CASE-PUT.ics', ics('caldav-case-put-2@eigen', 'Third'))).status).toBe(201);
+            expect(await getIcs('caldav-case-put.ics')).toContain('SUMMARY:Second');
+            expect(await getIcs('CALDAV-CASE-PUT.ics')).toContain('SUMMARY:Third');
         });
 
         test('a PUT into a calendar that does not exist is 409 and creates nothing', async () => {
@@ -2067,7 +1801,8 @@ describe('CalDAV', () => {
             const res = await putIcs('anywhere.ics', ics('caldav-no-collection@eigen', 'Nowhere'), {}, missing);
             expect(res.status).toBe(409);
             const home = await getHome(userId);
-            expect(existsSync(join(home.homeDir, 'eigen.calendar', 'calendars', missing))).toBe(false);
+            expect(await home.calendar.getCalendarById(missing)).toBeNull();
+            expect(await home.calendar.listResources(missing)).toHaveLength(0);
         });
 
         test('a comp-filter for a component Eigen does not store matches nothing', async () => {
@@ -2099,34 +1834,6 @@ describe('CalDAV', () => {
             );
             expect(res.status).toBe(207);
             expect(await res.text()).toContain('By UID');
-        });
-
-        test('a multiget href folds to the stored resource the way a GET does', async () => {
-            const stored = 'caldav-Case-Fold.ics';
-            expect((await putIcs(stored, ics('caldav-case-fold@eigen', 'Case Fold'))).status).toBe(201);
-
-            const xml = await (await multiget(['caldav-case-fold.ics'])).text();
-            expect(xml).toContain('Case Fold');
-            expect(xml).toContain(stored);
-            expect(xml).not.toContain('404 Not Found');
-        });
-
-        test('a case-variant PUT rewrites the stored resource under its stored name', async () => {
-            const stored = 'caldav-Case-Put.ics';
-            expect((await putIcs(stored, ics('caldav-case-put@eigen', 'First'))).status).toBe(201);
-
-            const res = await putIcs('CALDAV-CASE-PUT.ics', ics('caldav-case-put@eigen', 'Second'));
-            expect(res.status).toBe(204);
-            expect(res.headers.get('Location')).toBeNull();
-            expect(await getIcs(stored)).toContain('SUMMARY:Second');
-
-            const propfind = await davRequest('PROPFIND', `/dav/calendars/${userId}/${defaultCalendarId}/`, {
-                email: ctx.alice.user.email,
-                headers: { Depth: '1' },
-            });
-            const xml = await propfind.text();
-            expect(xml).toContain(stored);
-            expect(xml).not.toContain('CALDAV-CASE-PUT.ics');
         });
 
         test('an identical re-PUT changes nothing: no ctag bump, no sync row, an ETag back', async () => {

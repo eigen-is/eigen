@@ -10,17 +10,15 @@ import {
     NOT_A_CALENDAR_FILE,
     NOT_UTF8_FILE,
     type PutResourceResult,
-    readResourceFile,
 } from '../core';
 import { newVCalendar, PRODID, serializeResource, spliceBlocks } from '../ical';
 import { bareName, calAddress, uidOf } from '../ical/ical-parse';
 import type { Calendar } from './calendar';
-import { resourcePath } from './resource-store';
 import * as schema from './schema';
 
-// Export joins the stored files into one VCALENDAR; import replays one into the PUT seam a device sync takes (docs/CALENDAR.md § iCalendar import / export).
+// Export joins the stored resources into one VCALENDAR; import replays one into the PUT seam a device sync takes (docs/CALENDAR.md § iCalendar import / export).
 
-// A VTIMEZONE is copied into every series that names it, so a file well inside its own ceiling can ask for many times its size on disk.
+// A VTIMEZONE is copied into every series that names it, so an upload well inside its own ceiling can ask for many times its size in stored bytes.
 const ICS_IMPORT_MAX_WRITTEN_BYTES = 8 * ICS_MAX_BYTES;
 
 // A `.ics` may be a stream of several VCALENDAR objects (RFC 5545 §3.4), which ICAL.parse answers with an array of jCal arrays.
@@ -133,7 +131,7 @@ export async function importEvents(
             resource.addSubcomponent(group.master);
             for (const override of group.overrides) resource.addSubcomponent(override);
 
-            // A fresh name every time: a UID is not a safe filename, and If-None-Match: * turns a UID the Home already holds into a skippable conflict.
+            // A fresh name every time: a UID is not a safe uri, and If-None-Match: * turns a UID the Home already holds into a skippable conflict.
             const body = serializeResource(resource);
             let put: PutResourceResult;
             try {
@@ -166,7 +164,7 @@ export async function importEvents(
     return result;
 }
 
-// ---- Export ----
+// --- Export ---
 
 // Ordered by the earliest start among the rows asked for, so a reader meets the events in the order a calendar draws them.
 function exportedUris(calendar: Calendar, calendarId: string, ids?: string[]): string[] {
@@ -192,15 +190,18 @@ function exportedUris(calendar: Calendar, calendarId: string, ids?: string[]): s
 // One VCALENDAR, never a concatenation of objects: many readers take only the first object of a stream.
 export async function exportEvents(calendar: Calendar, calendarId: string, ids?: string[]): Promise<string> {
     if (!calendar.calendarRow(calendarId)) throw new ApiError(404, 'Calendar not found');
-    await calendar.gate.ensureDrained();
 
     const uris = exportedUris(calendar, calendarId, ids);
     const zones = new Map<string, string[]>();
     const events: string[][] = [];
     for (const uri of uris) {
-        const bytes = await readResourceFile(calendar.storage, resourcePath(calendarId, uri));
-        // A row whose file is gone is a torn pair the next drain repairs; it is nothing to export.
-        if (bytes) spliceBlocks(new TextDecoder().decode(bytes), zones, events);
+        // Read one resource at a time: the whole calendar's bytes at once is the one query that would not scale.
+        const row = calendar.db
+            .select({ ics: schema.resources.ics })
+            .from(schema.resources)
+            .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uri, uri)))
+            .get();
+        if (row) spliceBlocks(new TextDecoder().decode(row.ics), zones, events);
     }
 
     return [

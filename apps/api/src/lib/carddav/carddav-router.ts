@@ -1,7 +1,7 @@
 import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
 import { CARD_MAX_BYTES, sanitizeCardUri } from '../contacts/card-store';
-import { getContacts } from '../contacts/contacts';
+import { resolveContacts } from '../contacts/get-contacts';
 import { requireSelf } from '../core/access';
 import { readBoundedBody } from '../core/http';
 import { type CollectionPath, parseCollectionPath } from '../dav/href';
@@ -16,7 +16,7 @@ import {
 import { handleCardReport } from './report';
 import { handleDeleteCard, handleGetCard, handlePutCard } from './resource';
 
-// Sanitizes the client-chosen name before it can become a filename; returns the refusal Response to serve as-is.
+// Sanitizes the client-chosen resource name; returns the refusal Response to serve as-is.
 function resolveCardUri(parsed: CollectionPath): { uri: string } | Response {
     if (!parsed.ok) return new Response('Bad Request', { status: 400 });
     if (parsed.collection !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
@@ -27,6 +27,7 @@ function resolveCardUri(parsed: CollectionPath): { uri: string } | Response {
 }
 
 // One fixed book per user — MKCOL and MKADDRESSBOOK both create another collection, so both are forbidden.
+// It answers without ever resolving a book, so it carries the owner check resolveContacts gives the rest.
 async function forbidCollectionCreate({
     request,
     params,
@@ -43,10 +44,9 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
     // PROPFIND /dav/addressbooks/:ownerId — addressbook home (the /* route catches the trailing-slash variant)
     .route('PROPFIND', '/dav/addressbooks/:ownerId', async ({ request, params }) => {
         const user = await authenticateBasic(request);
-        requireSelf(params.ownerId, user.id);
+        const contacts = await resolveContacts(user, params.ownerId);
         const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
-        const contacts = await getContacts(user);
         const depth = request.headers.get('Depth') || '0';
         return handleAddressbookHomePropfind(
             params.ownerId,
@@ -60,7 +60,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
     // PROPFIND /dav/addressbooks/:ownerId/* — home, the book collection, or a single card resource
     .route('PROPFIND', '/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
-        requireSelf(params.ownerId, user.id);
+        const contacts = await resolveContacts(user, params.ownerId);
         const parsed = parseCollectionPath(params['*']);
         if (!parsed.ok) return new Response('Bad Request', { status: 400 });
 
@@ -68,7 +68,6 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         if (body === null) return new Response('Payload Too Large', { status: 413 });
         const req = parsePropfind(body);
         const brief = wantsBrief(request);
-        const contacts = await getContacts(user);
         const book = await contacts.getBook();
         const depth = request.headers.get('Depth') || '0';
 
@@ -90,9 +89,9 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
     // GET a card resource, or a 200 stub on the collection URL so HEAD/GET probes pass.
     .get('/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
-        requireSelf(params.ownerId, user.id);
+        const contacts = await resolveContacts(user, params.ownerId);
         const parsed = parseCollectionPath(params['*']);
-        // The stub answers any well-formed collection URL before the book check — the CalDAV twin's order.
+        // The book resolves first, so the stub carries the owner check, and answers any well-formed collection URL.
         if (parsed.ok && !parsed.resource) {
             return new Response('This is a CardDAV endpoint. Use a CardDAV client.', {
                 status: 200,
@@ -101,13 +100,13 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         }
         const resolved = resolveCardUri(parsed);
         if (resolved instanceof Response) return resolved;
-        return handleGetCard(await getContacts(user), resolved.uri);
+        return handleGetCard(contacts, resolved.uri);
     })
 
     // The If-Match / If-None-Match preconditions are evaluated inside the store's write lock.
     .put('/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
-        requireSelf(params.ownerId, user.id);
+        const contacts = await resolveContacts(user, params.ownerId);
         const resolved = resolveCardUri(parseCollectionPath(params['*']));
         if (resolved instanceof Response) return resolved;
 
@@ -116,24 +115,24 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         if (body === null) return davError(413, '<CARD:max-resource-size/>');
         const ifMatch = request.headers.get('If-Match');
         const ifNoneMatch = request.headers.get('If-None-Match');
-        return handlePutCard(await getContacts(user), params.ownerId, resolved.uri, body, ifMatch, ifNoneMatch);
+        return handlePutCard(contacts, params.ownerId, resolved.uri, body, ifMatch, ifNoneMatch);
     })
 
     // DELETE a card resource — 404 for an unknown name (DAV DELETE is not idempotent), 403 for your own card.
     .delete('/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
-        requireSelf(params.ownerId, user.id);
+        const contacts = await resolveContacts(user, params.ownerId);
         const resolved = resolveCardUri(parseCollectionPath(params['*']));
         if (resolved instanceof Response) return resolved;
 
         const ifMatch = request.headers.get('If-Match');
-        return handleDeleteCard(await getContacts(user), resolved.uri, ifMatch);
+        return handleDeleteCard(contacts, resolved.uri, ifMatch);
     })
 
     // A REPORT targets the book collection; the body cap is enforced here, before the body reaches the XML parser.
     .route('REPORT', '/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
-        requireSelf(params.ownerId, user.id);
+        const contacts = await resolveContacts(user, params.ownerId);
         const parsed = parseCollectionPath(params['*']);
         if (!parsed.ok) return new Response('Bad Request', { status: 400 });
         if (!parsed.collection) return new Response('Bad Request', { status: 400 });
@@ -141,7 +140,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
 
         const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
-        return handleCardReport(await getContacts(user), params.ownerId, body);
+        return handleCardReport(contacts, params.ownerId, body);
     })
 
     .route('MKCOL', '/dav/addressbooks/:ownerId/*', forbidCollectionCreate)

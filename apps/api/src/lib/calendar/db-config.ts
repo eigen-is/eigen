@@ -5,6 +5,8 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'calendar',
     currentVersion: 2,
     schema,
+    // A calendar's bytes live here now, so an acknowledged PUT must survive a power loss.
+    synchronous: 'FULL',
     migrations: [
         {
             version: 1,
@@ -39,7 +41,9 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
             `),
         },
         {
-            // The v1 event rows are dropped, not migrated: init re-derives them from the files, where `calendars` and `shared_calendars` are authoritative (docs/CALENDAR.md § Storage model — files as truth).
+            // Migrates a v1 database, the only shape ever deployed: only `calendars` and `shared_calendars`
+            // carry rows no blob holds — a calendar's name, colors and share grants, the last of which other
+            // Homes point at. v1's event tables are dropped and the blob shape is written fresh.
             version: 2,
             up: (db) =>
                 db.exec(`
@@ -58,8 +62,9 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     createdAt INTEGER NOT NULL DEFAULT (unixepoch()),
                     updatedAt INTEGER NOT NULL DEFAULT (unixepoch())
                 );
-                INSERT INTO calendars_v2 (id, name, color, isDefault, visible, ctag, shares, createdAt, updatedAt)
-                    SELECT id, name, color, isDefault, visible, ctag, shares,
+                -- The clock seeds the carried generation, so every token a client holds from before is refused.
+                INSERT INTO calendars_v2 (id, name, color, isDefault, visible, ctag, syncGen, shares, createdAt, updatedAt)
+                    SELECT id, name, color, isDefault, visible, ctag, unixepoch(), shares,
                            COALESCE(createdAt, unixepoch()), COALESCE(updatedAt, unixepoch())
                     FROM calendars;
                 DROP TABLE calendars;
@@ -83,23 +88,20 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     FROM shared_calendars;
                 DROP TABLE shared_calendars;
                 ALTER TABLE shared_calendars_v2 RENAME TO shared_calendars;
-                CREATE INDEX IF NOT EXISTS idx_shared_calendars_ownerUserId ON shared_calendars(ownerUserId);
 
-                CREATE TABLE IF NOT EXISTS resources (
+                CREATE TABLE resources (
                     id TEXT PRIMARY KEY,
                     calendarId TEXT NOT NULL,
                     uri TEXT NOT NULL,
-                    uriKey TEXT NOT NULL,
                     uid TEXT NOT NULL,
+                    ics BLOB NOT NULL,
                     etag TEXT NOT NULL,
-                    mtime INTEGER NOT NULL,
-                    size INTEGER NOT NULL,
                     resourceCtag INTEGER NOT NULL,
                     hasUnindexedRecurrence INTEGER NOT NULL DEFAULT 0,
                     FOREIGN KEY (calendarId) REFERENCES calendars(id) ON DELETE CASCADE
                 );
 
-                CREATE TABLE IF NOT EXISTS events (
+                CREATE TABLE events (
                     id TEXT PRIMARY KEY,
                     resourceId TEXT NOT NULL,
                     calendarId TEXT NOT NULL,
@@ -126,34 +128,26 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     FOREIGN KEY (calendarId) REFERENCES calendars(id) ON DELETE CASCADE
                 );
 
-                CREATE TABLE IF NOT EXISTS resource_tombstones (
+                CREATE TABLE resource_tombstones (
                     calendarId TEXT NOT NULL,
                     uri TEXT NOT NULL,
-                    uriKey TEXT NOT NULL,
                     deletedAtCtag INTEGER NOT NULL,
                     PRIMARY KEY (calendarId, uri)
                 );
 
-                CREATE TABLE IF NOT EXISTS pending_writes (
-                    calendarId TEXT NOT NULL,
-                    uri TEXT NOT NULL,
-                    PRIMARY KEY (calendarId, uri),
-                    FOREIGN KEY (calendarId) REFERENCES calendars(id) ON DELETE CASCADE
-                );
-
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_resources_calendar_key ON resources(calendarId, uriKey);
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_resources_calendar_uid ON resources(calendarId, uid);
-                CREATE INDEX IF NOT EXISTS idx_resources_uid ON resources(uid);
-                CREATE INDEX IF NOT EXISTS idx_resources_calendar_ctag ON resources(calendarId, resourceCtag);
-                CREATE INDEX IF NOT EXISTS idx_events_calendar_start ON events(calendarId, startTime);
-                CREATE INDEX IF NOT EXISTS idx_events_calendar_end ON events(calendarId, endTime);
-                CREATE INDEX IF NOT EXISTS idx_events_parent ON events(parentEventId);
-                CREATE INDEX IF NOT EXISTS idx_events_linked ON events(organizerEventId, organizerUserId);
-                CREATE INDEX IF NOT EXISTS idx_events_resource ON events(resourceId);
-                CREATE INDEX IF NOT EXISTS idx_events_uid_calendar ON events(calendarId, uid);
-                CREATE INDEX IF NOT EXISTS idx_events_uid ON events(uid);
-                CREATE INDEX IF NOT EXISTS idx_resource_tombstones_cal_ctag ON resource_tombstones(calendarId, deletedAtCtag);
-                CREATE INDEX IF NOT EXISTS idx_resource_tombstones_cal_key ON resource_tombstones(calendarId, uriKey);
+                CREATE INDEX idx_shared_calendars_ownerUserId ON shared_calendars(ownerUserId);
+                CREATE UNIQUE INDEX idx_resources_calendar_uri ON resources(calendarId, uri);
+                CREATE UNIQUE INDEX idx_resources_calendar_uid ON resources(calendarId, uid);
+                CREATE INDEX idx_resources_uid ON resources(uid);
+                CREATE INDEX idx_resources_calendar_ctag ON resources(calendarId, resourceCtag);
+                CREATE INDEX idx_events_calendar_start ON events(calendarId, startTime);
+                CREATE INDEX idx_events_calendar_end ON events(calendarId, endTime);
+                CREATE INDEX idx_events_parent ON events(parentEventId);
+                CREATE INDEX idx_events_linked ON events(organizerEventId, organizerUserId);
+                CREATE INDEX idx_events_resource ON events(resourceId);
+                CREATE INDEX idx_events_uid_calendar ON events(calendarId, uid);
+                CREATE INDEX idx_events_uid ON events(uid);
+                CREATE INDEX idx_resource_tombstones_cal_ctag ON resource_tombstones(calendarId, deletedAtCtag);
             `),
         },
     ],

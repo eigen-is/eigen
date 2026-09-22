@@ -1,11 +1,12 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { rmSync } from 'node:fs';
+import { eq } from 'drizzle-orm';
 import type { Calendar } from '../../lib/calendar/calendar';
+import * as schema from '../../lib/calendar/schema';
 import type { ReceiveInvitationPayload } from '../../lib/calendar/types';
 import { parseIcs } from '../../lib/ical';
 import type { ParsedEvent } from '../../lib/ical/ical-parse';
-import { CALENDAR_TEST_ROOT, calendarsDirOf, makeCalendar } from '../calendar-test-helpers';
+import { CALENDAR_TEST_ROOT, makeCalendar } from '../calendar-test-helpers';
 import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
@@ -57,6 +58,18 @@ async function harnessWith(body?: string): Promise<{ harness: TestHome<Calendar>
 
 const NO_PRECONDITIONS = { ifMatch: null, ifNoneMatch: null };
 
+// Bytes a PUT would strip its Eigen lines from: the blob is the truth, so they are planted as the blob and
+// the projection is rebuilt from them, exactly as a resource written by another build would be read back.
+async function plantResource(calendar: Calendar, calendarId: string, uri: string, text: string): Promise<void> {
+    expect((await calendar.putResource(calendarId, uri, stored(null, `seed-${uri}`), NO_PRECONDITIONS)).ok).toBe(true);
+    calendar.db
+        .update(schema.resources)
+        .set({ ics: Buffer.from(new TextEncoder().encode(text)) })
+        .where(eq(schema.resources.uri, uri))
+        .run();
+    calendar.rebuildProjection();
+}
+
 describe('inbound iMIP REQUEST', () => {
     beforeAll(() => {
         rmSync(CALENDAR_TEST_ROOT, { recursive: true, force: true });
@@ -83,23 +96,21 @@ describe('inbound iMIP REQUEST', () => {
     test('the address an imported event was filed under adopts it too', async () => {
         const harness = await makeCalendar();
         const id = (await harness.instance.getCalendars())[0].id;
-        // Stage 7's import writes this stamp; a planted file stands in for one, indexed by the reconcile.
-        const planted = stored(null)
-            .replace('DTSTAMP:20260101T000000Z', `X-EIGEN-IMPORTED-ORGANIZER:${ORG}\r\nDTSTAMP:20260101T000000Z`)
-            .concat('\r\n');
-        mkdirSync(join(calendarsDirOf(harness.dir), id), { recursive: true });
-        writeFileSync(join(calendarsDirOf(harness.dir), id, 'imported.ics'), planted);
+        // Stage 7's import writes this stamp; the put seam does the same for an imported organizer.
+        expect(
+            (
+                await harness.instance.putResource(id, 'imported.ics', stored(null), {
+                    ...NO_PRECONDITIONS,
+                    import: { organizer: ORG },
+                })
+            ).ok,
+        ).toBe(true);
 
-        const restarted = await harness.reopen();
-        try {
-            await restarted.instance.receiveImipRequest(parsedOf(request()), ORG);
-            const rows = await restarted.instance.getEventsByUid(UID);
-            expect(rows).toHaveLength(1);
-            expect(rows[0].uri).toBe('imported.ics');
-            expect(rows[0].data?.organizerEventId).toBe(UID);
-        } finally {
-            await restarted.close();
-        }
+        await harness.instance.receiveImipRequest(parsedOf(request()), ORG);
+        const rows = await harness.instance.getEventsByUid(UID);
+        expect(rows).toHaveLength(1);
+        expect(rows[0].uri).toBe('imported.ics');
+        expect(rows[0].data?.organizerEventId).toBe(UID);
     });
 
     test('a sender the stored event does not name is dropped', async () => {
@@ -285,22 +296,16 @@ describe('relayed invitation', () => {
                 'END:VEVENT',
             ],
         )}\r\n`;
-        mkdirSync(join(calendarsDirOf(harness.dir), id), { recursive: true });
-        writeFileSync(join(calendarsDirOf(harness.dir), id, 'linked.ics'), planted);
+        await plantResource(harness.instance, id, 'linked.ics', planted);
 
-        const restarted = await harness.reopen();
-        try {
-            const series = request(['RRULE:FREQ=DAILY;COUNT=5'])
-                .replace('SEQUENCE:2', 'SEQUENCE:3')
-                .replace('SUMMARY:Quarterly review', 'SUMMARY:Renamed series');
-            await restarted.instance.receiveImipRequest(parsedOf(series), ORG);
+        const series = request(['RRULE:FREQ=DAILY;COUNT=5'])
+            .replace('SEQUENCE:2', 'SEQUENCE:3')
+            .replace('SUMMARY:Quarterly review', 'SUMMARY:Renamed series');
+        await harness.instance.receiveImipRequest(parsedOf(series), ORG);
 
-            const rows = await restarted.instance.getEventsByUid(UID);
-            expect(rows.find((r) => !r.parentEventId)?.title).toBe('Renamed series');
-            expect(rows.find((r) => r.parentEventId)?.title).toBe('Moved occurrence');
-        } finally {
-            await restarted.close();
-        }
+        const rows = await harness.instance.getEventsByUid(UID);
+        expect(rows.find((r) => !r.parentEventId)?.title).toBe('Renamed series');
+        expect(rows.find((r) => r.parentEventId)?.title).toBe('Moved occurrence');
     });
 
     test('the organizer an event in another calendar names adopts it in place', async () => {

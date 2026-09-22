@@ -1,7 +1,6 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
-import { join } from 'node:path';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
@@ -9,14 +8,8 @@ import * as contactsSchema from '../../lib/contacts/schema';
 import { VCARD_IMPORT_MAX_CARDS } from '../../lib/core/transfer';
 import { getHome } from '../../lib/home';
 import { parseVCard, splitVCards } from '../../lib/vcard';
-import { CONTACTS_TEST_ROOT, cardsDirOf, makeContacts, stageAvatar, validContact } from '../contacts-test-helpers';
+import { CONTACTS_TEST_ROOT, makeContacts, stageAvatar, validContact } from '../contacts-test-helpers';
 import { createTestUser, getTestContext } from '../setup';
-
-afterAll(() => {
-    try {
-        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
-    } catch {}
-});
 
 // The fixtures are built as text, LF-terminated, the way every desktop client writes an export — the
 // importer's own transcode/normalization is what the tests are pinning. The domain takes the file's
@@ -50,8 +43,12 @@ const card40 = (fn: string, email: string, uid: string) =>
     ].join('\n')}\n`;
 
 describe('Contacts export', () => {
+    beforeAll(() => {
+        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
+    });
+
     test('export of two ids returns two cards in id order, FN and PHOTO preserved', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const staged = await stageAvatar(contacts);
         const a = await contacts.addContact(validContact({ firstName: 'Ada', avatar: staged }));
         const b = await contacts.addContact(validContact({ firstName: 'Bob', email: ['bob@example.com'] }));
@@ -66,7 +63,7 @@ describe('Contacts export', () => {
     });
 
     test('export without ids returns the whole book, in getContacts order', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         await contacts.addContact(validContact({ firstName: 'Ada' }));
         await contacts.addContact(validContact({ firstName: 'Bob', email: ['bob@example.com'] }));
 
@@ -78,12 +75,12 @@ describe('Contacts export', () => {
     });
 
     test('export of an unknown id throws 404', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         await expect(contacts.exportCards([randomUUID()])).rejects.toMatchObject({ status: 404 });
     });
 
     test('the self card exports without the server-owned X-EIGEN-ID', async () => {
-        const { contacts, user } = await makeContacts();
+        const { instance: contacts, user } = await makeContacts();
         const me = (await contacts.getMe())!;
 
         const text = await contacts.exportCards([me.id]);
@@ -93,18 +90,17 @@ describe('Contacts export', () => {
         expect(text).not.toContain(user.id);
     });
 
-    test('a card whose file is gone is skipped, and the rest of the book still exports', async () => {
-        const { contacts, db, dir } = await makeContacts();
+    test('a card whose blob will not parse is skipped, and the rest of the book still exports', async () => {
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const kept = await contacts.addContact(validContact({ firstName: 'Kept', email: ['kept@example.com'] }));
-        const torn = await contacts.addContact(validContact({ firstName: 'Torn', email: ['torn@example.com'] }));
-        const tornUri = db
-            .select()
-            .from(contactsSchema.contacts)
-            .where(eq(contactsSchema.contacts.id, torn))
-            .get()!.uri;
-        rmSync(join(cardsDirOf(dir), tornUri));
+        const broken = await contacts.addContact(validContact({ firstName: 'Broken', email: ['broken@example.com'] }));
+        db.update(contactsSchema.contacts)
+            .set({ vcard: Buffer.from('this is not a vCard at all') })
+            .where(eq(contactsSchema.contacts.id, broken))
+            .run();
 
-        const cards = splitVCards(await contacts.exportCards([kept, torn])).map((c) => parseVCard(c));
+        const cards = splitVCards(await contacts.exportCards([kept, broken])).map((c) => parseVCard(c));
 
         expect(cards.map((c) => c.firstName)).toEqual(['Kept']);
     });
@@ -112,7 +108,7 @@ describe('Contacts export', () => {
 
 describe('Contacts import', () => {
     test('import three LF cards, one v4.0 with PHOTO, creates three rows', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const before = (await contacts.getContacts()).length;
         const text =
             card30('Grace Hopper', 'grace@example.com', randomUUID()) +
@@ -129,7 +125,7 @@ describe('Contacts import', () => {
     });
 
     test('re-import skips all three by UID', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const text =
             card30('Grace Hopper', 'grace@example.com', randomUUID()) +
             card30('Alan Turing', 'alan@example.com', randomUUID()) +
@@ -140,7 +136,7 @@ describe('Contacts import', () => {
     });
 
     test('same first email under a fresh UID is skipped, case and padding folded', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         await contacts.addContact(validContact({ firstName: 'Grace', email: ['grace@example.com'] }));
 
         const again = card30('Grace Hopper', '  GRACE@Example.COM  ', randomUUID());
@@ -148,7 +144,7 @@ describe('Contacts import', () => {
     });
 
     test('duplicate email inside one file imports once', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const text =
             card30('Grace Hopper', 'grace@example.com', randomUUID()) +
             card30('Grace Hopper', 'grace@example.com', randomUUID());
@@ -157,14 +153,14 @@ describe('Contacts import', () => {
     });
 
     test('a KIND:group card is skipped', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const text = card30('Colleagues', 'group@example.com', randomUUID(), ['X-ADDRESSBOOKSERVER-KIND:group']);
 
         expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 0, skipped: 1, failed: 0 });
     });
 
     test('a malformed card fails, the others import', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const text =
             card30('Grace Hopper', 'grace@example.com', randomUUID()) +
             'BEGIN:VCARD\nVERSION:3.0\nthis line carries no colon\nEND:VCARD\n' +
@@ -176,7 +172,7 @@ describe('Contacts import', () => {
     // 'too-large' is the other failure putCard returns rather than throws: the card parses, then loses at the
     // CARD_MAX_BYTES gate, and lands in the same `failed` bucket as a parse error.
     test('a card over the card ceiling fails, the other imports', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const text =
             card30('Grace Hopper', 'grace@example.com', randomUUID()) +
             card30('Fat Card', 'fat@example.com', randomUUID(), [`NOTE:${'n'.repeat(6 * 1024 * 1024)}`]);
@@ -185,7 +181,7 @@ describe('Contacts import', () => {
     });
 
     test('a card without UID imports with a minted UID', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const before = new Set((await contacts.getContacts()).map((c) => c.id));
 
         expect(await contacts.importCards(fileBytes(card30('Grace Hopper', 'grace@example.com')))).toEqual({
@@ -201,12 +197,12 @@ describe('Contacts import', () => {
     });
 
     test('text that is not a vCard file throws 400', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         await expect(contacts.importCards(fileBytes('just some notes\n'))).rejects.toMatchObject({ status: 400 });
     });
 
     test('a whole file broadcasts one batched event, not one per card', async () => {
-        const { contacts, broadcasts } = await makeContacts();
+        const { instance: contacts, broadcasts } = await makeContacts();
         const text = Array.from({ length: 25 }, (_, i) =>
             card30(`Batch${i} Import`, `batch-${i}@example.com`, randomUUID()),
         ).join('');
@@ -223,7 +219,7 @@ describe('Contacts import', () => {
     });
 
     test('more than VCARD_IMPORT_MAX_CARDS throws 413', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const text = Array.from({ length: VCARD_IMPORT_MAX_CARDS + 1 }, (_, i) =>
             card30(`Card${i} Many`, `many-${i}@example.com`, randomUUID()),
         ).join('');

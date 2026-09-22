@@ -747,15 +747,6 @@ export function stampInvitationLink(
     }
 }
 
-// A file whose row ids another resource already holds is a copy of it: every other Eigen line stays and the ids are minted fresh.
-export function remintEventIds(resource: ICAL.Component): void {
-    for (const vevent of resource.getAllSubcomponents('vevent')) {
-        vevent.removeAllProperties(EIGEN.eventId);
-        vevent.addProperty(rawProperty(EIGEN.eventId, randomUUID()));
-        for (const stamp of vevent.getAllProperties(EIGEN.exdate)) stamp.setParameter(EIGEN.eventId, randomUUID());
-    }
-}
-
 export function stripEigenStamps(comp: ICAL.Component): void {
     // By name, once per name: ical.js scans the whole property array per removal, which 20 000 stamps turn into a quadratic stall.
     const names = new Set<string>();

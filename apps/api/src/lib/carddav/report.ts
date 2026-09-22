@@ -1,7 +1,7 @@
 import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
 import type { Contacts } from '../contacts/contacts';
 import type { CardRow } from '../contacts/dav-store';
-import { uriKeyOf } from '../core';
+import { normalizeResourceUri } from '../core';
 import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
 import { type DataBudget, REPORT_DATA_BUDGET_BYTES, resourceDataRow } from '../dav/report-row';
 import { formatSyncToken, invalidSyncToken, parseSyncToken } from '../dav/sync-token';
@@ -58,9 +58,9 @@ async function handleMultiget(
 ): Promise<Response> {
     if (report.hrefs.length > MULTIGET_HREF_LIMIT) return new Response('Too many hrefs', { status: 400 });
 
-    // Cards fold by uri key, so two spellings of one name yield one row (the shared resolver's `keyOf`).
+    // Only the Unicode form is folded, so an NFD href and its NFC twin yield one row (the shared resolver's `keyOf`).
     const responses: string[] = [];
-    for (const { uri, href } of resolveMultigetHrefs(report.hrefs, bookHref(ownerId), uriKeyOf)) {
+    for (const { uri, href } of resolveMultigetHrefs(report.hrefs, bookHref(ownerId), normalizeResourceUri)) {
         if (uri === null) {
             responses.push(notFoundRow(href));
             continue;
@@ -97,12 +97,12 @@ async function handleQuery(
             break;
         }
         const got = await contacts.getCard(card.uri);
-        if (!got) continue; // vanished under us — the drain tombstones it, this query just skips it
+        if (!got) continue; // deleted under us between the listing and this read
         let lines: VCardLine[];
         try {
             lines = parseVCardLines(new TextDecoder().decode(got.bytes));
         } catch {
-            continue; // a stored card that won't parse can't match a filter (the same-stat replacement edge)
+            continue; // a stored card that won't parse can't match a filter
         }
         if (matchCard(lines, report.filter)) matched.push({ row: card, served: got });
     }
@@ -159,7 +159,7 @@ async function handleSyncCollection(
     return multistatusResponse(responses, `<D:sync-token>${formatSyncToken(book)}</D:sync-token>`);
 }
 
-// A row normally reads its own file; the query passes the bytes it already matched, so its cards are read once.
+// A row normally reads its own blob; the query passes the bytes it already matched, so its cards are read once.
 async function cardRow(
     contacts: Contacts,
     ownerId: string,

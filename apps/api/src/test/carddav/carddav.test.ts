@@ -1,13 +1,11 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { CARD_MAX_BYTES, cardPath } from '../../lib/contacts/card-store';
-import { computeResourceEtag, PATHS } from '../../lib/core';
+import { CARD_MAX_BYTES } from '../../lib/contacts/card-store';
+import { computeResourceEtag } from '../../lib/core';
 import { encodePathSegment } from '../../lib/dav/href';
 import { REPORT_DATA_BUDGET_BYTES } from '../../lib/dav/report-row';
 import { getHome } from '../../lib/home';
-import { basicAuth, davRequest } from '../dav-test-helpers';
+import { davRequest } from '../dav-test-helpers';
 import { app, getTestContext } from '../setup';
 
 describe('CardDAV', () => {
@@ -18,7 +16,6 @@ describe('CardDAV', () => {
         davRequest('PROPFIND', path, { email: ctx.alice.user.email, headers: { Depth: depth } });
 
     const cardPathname = (uri: string) => `/dav/addressbooks/${userId}/contacts/${uri}`;
-    const cardUrl = (uri: string) => `http://localhost${cardPathname(uri)}`;
 
     const putCard = (uri: string, body: string, headers: Record<string, string> = {}) =>
         davRequest('PUT', cardPathname(uri), {
@@ -144,13 +141,11 @@ describe('CardDAV', () => {
         let propEtag: string;
 
         const propfindCard = (body: string, headers: Record<string, string> = {}) =>
-            app.handle(
-                new Request(cardUrl(propUri), {
-                    method: 'PROPFIND',
-                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0', ...headers },
-                    body,
-                }),
-            );
+            davRequest('PROPFIND', cardPathname(propUri), {
+                email: ctx.alice.user.email,
+                headers: { Depth: '0', ...headers },
+                body,
+            });
 
         beforeAll(async () => {
             const putRes = await putCard(propUri, vcard('carddav-proplist@eigen'));
@@ -212,13 +207,11 @@ describe('CardDAV', () => {
         });
 
         test('a collection row honors a subset request', async () => {
-            const res = await app.handle(
-                new Request(`http://localhost/dav/addressbooks/${userId}/contacts/`, {
-                    method: 'PROPFIND',
-                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-                    body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:displayname/></D:prop></D:propfind>`,
-                }),
-            );
+            const res = await davRequest('PROPFIND', `/dav/addressbooks/${userId}/contacts/`, {
+                email: ctx.alice.user.email,
+                headers: { Depth: '0' },
+                body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:displayname/></D:prop></D:propfind>`,
+            });
             expect(res.status).toBe(207);
             const xml = await res.text();
             expect(xml).toContain('<D:displayname>Contacts</D:displayname>');
@@ -228,13 +221,11 @@ describe('CardDAV', () => {
 
         // The props that fixed the macOS duplicate-on-edit class (2026-08-18) — a named request must serve them.
         test('a named PROPFIND requesting current-user-privilege-set and owner returns both', async () => {
-            const res = await app.handle(
-                new Request(`http://localhost/dav/addressbooks/${userId}/contacts/`, {
-                    method: 'PROPFIND',
-                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-                    body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:current-user-privilege-set/><D:owner/></D:prop></D:propfind>`,
-                }),
-            );
+            const res = await davRequest('PROPFIND', `/dav/addressbooks/${userId}/contacts/`, {
+                email: ctx.alice.user.email,
+                headers: { Depth: '0' },
+                body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:current-user-privilege-set/><D:owner/></D:prop></D:propfind>`,
+            });
             expect(res.status).toBe(207);
             const xml = await res.text();
             expect(xml).toContain('<D:current-user-privilege-set>');
@@ -256,22 +247,14 @@ describe('CardDAV', () => {
     });
 
     test('MKCOL under the addressbook tree is forbidden', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/addressbooks/${userId}/newbook/`, {
-                method: 'MKCOL',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const res = await davRequest('MKCOL', `/dav/addressbooks/${userId}/newbook/`, { email: ctx.alice.user.email });
         expect(res.status).toBe(403);
     });
 
     test('MKADDRESSBOOK is forbidden — one fixed book per user', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/addressbooks/${userId}/newbook/`, {
-                method: 'MKADDRESSBOOK',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const res = await davRequest('MKADDRESSBOOK', `/dav/addressbooks/${userId}/newbook/`, {
+            email: ctx.alice.user.email,
+        });
         expect(res.status).toBe(403);
     });
 
@@ -284,28 +267,20 @@ describe('CardDAV', () => {
     });
 
     test('cross-user access is denied', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/addressbooks/${ctx.bob.user.id}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
-            }),
-        );
+        const res = await davRequest('PROPFIND', `/dav/addressbooks/${ctx.bob.user.id}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '1' },
+        });
         expect(res.status).toBe(403);
     });
 
     test('a cross-user PUT (bob writing into alice’s book) is denied 403', async () => {
         const uid = randomUUID();
-        const res = await app.handle(
-            new Request(cardUrl(`${uid}.vcf`), {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.bob.user.email),
-                    'Content-Type': 'text/vcard; charset=utf-8',
-                    'If-None-Match': '*',
-                },
-                body: vcard(uid),
-            }),
-        );
+        const res = await davRequest('PUT', cardPathname(`${uid}.vcf`), {
+            email: ctx.bob.user.email,
+            headers: { 'Content-Type': 'text/vcard; charset=utf-8', 'If-None-Match': '*' },
+            body: vcard(uid),
+        });
         expect(res.status).toBe(403);
     });
 
@@ -332,57 +307,18 @@ describe('CardDAV', () => {
         expect(getRes.status).toBe(200);
         expect(getRes.headers.get('Content-Type')).toBe('text/vcard; charset=utf-8');
         expect(await getRes.text()).toBe(body);
+        // Body and validator are one row by construction: both validators hash the stored bytes.
         expect(getRes.headers.get('ETag')).toBe(etag);
-    });
-
-    test('GET hashes the bytes it read, so a stale index row cannot mislabel a body', async () => {
-        const uid = randomUUID();
-        const uri = `${uid}.vcf`;
-        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
-
-        // The file changes out of band — a restore, or the same-stat replacement only a rebuild catches — so
-        // the row's etag now describes bytes that are gone.
-        const edited = vcard(uid, ['NOTE:edited out of band']);
-        const contacts = (await getHome(userId)).contacts;
-        await contacts.storage.write(cardPath(uri), edited);
-
-        const res = await getCard(uri);
-        expect(await res.text()).toBe(edited);
-        expect(res.headers.get('ETag')).toBe(`"${computeResourceEtag(new TextEncoder().encode(edited))}"`);
-    });
-
-    test('a GET that found the row stale re-indexes it, so the etag it served is one a PUT accepts', async () => {
-        const uid = randomUUID();
-        const uri = `${uid}.vcf`;
-        expect((await putCard(uri, vcard(uid, ['NOTE:before']), { 'If-None-Match': '*' })).status).toBe(201);
-
-        // A same-length replacement under the indexed mtime: the row is durably stale and the stat-only
-        // reconcile is blind to it, so the read is the only thing that can notice.
-        const home = await getHome(userId);
-        const cardFile = join(home.homeDir, PATHS.CONTACTS.ROOT, cardPath(uri));
-        const { atime, mtime } = statSync(cardFile);
-        writeFileSync(cardFile, vcard(uid, ['NOTE:beforX']));
-        utimesSync(cardFile, atime, mtime);
-
-        const etag = (await getCard(uri)).headers.get('ETag')!;
-
-        // Without the re-index the client loops forever: the etag every GET serves is one the row's own etag
-        // refuses, so every conditional write answers 412 and every re-GET hands back the same validator.
-        const propfindXml = await (await propfind(`/dav/addressbooks/${userId}/contacts/${uri}`, '0')).text();
-        expect(propfindXml).toContain(`<D:getetag>${etag}</D:getetag>`);
-        expect((await putCard(uri, vcard(uid, ['NOTE:conditional']), { 'If-Match': etag })).status).toBe(204);
+        expect(etag).toBe(`"${computeResourceEtag(new TextEncoder().encode(body))}"`);
     });
 
     test('GET under an unknown book segment is 404 even for an existing card', async () => {
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
-        const res = await app.handle(
-            new Request(`http://localhost/dav/addressbooks/${userId}/bogus/${uri}`, {
-                method: 'GET',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const res = await davRequest('GET', `/dav/addressbooks/${userId}/bogus/${uri}`, {
+            email: ctx.alice.user.email,
+        });
         expect(res.status).toBe(404);
     });
 
@@ -522,9 +458,29 @@ describe('CardDAV', () => {
         expect(await getRes.text()).toBe(vcard(uid));
     });
 
-    // sanitizeCardUri forbids every non-pchar char (a valid card name is `[A-Za-z0-9._@-]*.vcf`), so no storable
-    // card ever needs encoding — the emitted-href encoder is proven directly: pchar-legal chars stay raw, the
-    // rest still percent-encode. This pins that the @ flip narrowed the escaped set, it did not disable it.
+    test('an accented card name round-trips, and its decomposed spelling finds the same row', async () => {
+        // The stored name is the composed one, so the emitted href is its percent-encoded form and the NFD
+        // spelling a macOS client sends folds onto the same row rather than creating a second resource.
+        const uid = randomUUID();
+        const nfc = encodeURIComponent('café.vcf');
+        const nfd = encodeURIComponent('café.vcf'.normalize('NFD'));
+
+        const putRes = await putCard(nfc, vcard(uid), { 'If-None-Match': '*' });
+        expect(putRes.status).toBe(201);
+        expect(putRes.headers.get('Location')).toBe(`/dav/addressbooks/${userId}/contacts/${nfc}`);
+
+        const composed = await getCard(nfc);
+        expect(composed.status).toBe(200);
+        expect(await composed.text()).toBe(vcard(uid));
+
+        const decomposed = await getCard(nfd);
+        expect(decomposed.status).toBe(200);
+        expect(await decomposed.text()).toBe(vcard(uid));
+    });
+
+    // A card name may carry accents but never a separator or a space, so the emitted-href encoder is proven
+    // directly: pchar-legal chars stay raw, the rest still percent-encode. This pins that the @ flip narrowed
+    // the escaped set, it did not disable it.
     test('the shared href encoder leaves pchar-legal chars raw but still encodes the rest', () => {
         expect(encodePathSegment('A@B.vcf')).toBe('A@B.vcf');
         expect(encodePathSegment("a:b+c,d;e=f&g$h!i'j(k)l*m")).toBe("a:b+c,d;e=f&g$h!i'j(k)l*m");
@@ -591,17 +547,11 @@ describe('CardDAV', () => {
     // contract (RFC 6352 § 8.6 — only matching cards come back). ---
 
     const report = (body: string) =>
-        app.handle(
-            new Request(`http://localhost/dav/addressbooks/${userId}/contacts/`, {
-                method: 'REPORT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'application/xml',
-                    Depth: '1',
-                },
-                body,
-            }),
-        );
+        davRequest('REPORT', `/dav/addressbooks/${userId}/contacts/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml', Depth: '1' },
+            body,
+        });
 
     const cardHref = (uri: string) => `/dav/addressbooks/${userId}/contacts/${uri}`;
 
@@ -648,11 +598,11 @@ describe('CardDAV', () => {
         expect(xml.length).toBeLessThan(REPORT_DATA_BUDGET_BYTES);
     }, 120_000);
 
-    test('a card whose file vanished is a 404 row in a multiget, never a 200 without its data', async () => {
+    test('a card deleted after its href was learned is a 404 row in a multiget, never a 200 without its data', async () => {
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
-        rmSync(join((await getHome(userId)).homeDir, PATHS.CONTACTS.ROOT, cardPath(uri)));
+        expect((await deleteCard(uri)).status).toBe(204);
 
         const xml = await (await report(multigetBody([cardHref(uri)]))).text();
         expect(xml).toContain('<D:status>HTTP/1.1 404 Not Found</D:status>');
@@ -723,10 +673,20 @@ describe('CardDAV', () => {
         const uri = `${uid}.vcf`;
         expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
 
-        // The same resource listed three times (spelled two different but equivalent ways) must yield exactly
-        // one <D:response> — a client expects per-resource rows, and assembling one address-data body per
-        // duplicate is the aggregate-bytes amplification this dedupe closes.
-        const res = await report(multigetBody([cardHref(uri), cardHref(uri), cardHref(uri.toUpperCase())]));
+        // The same resource listed three times must yield exactly one <D:response> — a client expects
+        // per-resource rows, and assembling one address-data body per duplicate is the aggregate-bytes
+        // amplification this dedupe closes.
+        const res = await report(multigetBody([cardHref(uri), cardHref(uri), cardHref(uri)]));
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect((xml.match(/<D:response>/g) ?? []).length).toBe(1);
+    });
+
+    test('addressbook-multiget collapses an NFD href and its NFC twin into one row', async () => {
+        // macOS clients spell the same name decomposed in a URL, so the dedupe key folds the Unicode form:
+        // one resource must never take two rows of one response (a stored name is ASCII, so both 404).
+        const base = `cafe\u0301-${randomUUID()}.vcf`;
+        const res = await report(multigetBody([cardHref(base), cardHref(base.normalize('NFC'))]));
         expect(res.status).toBe(207);
         const xml = await res.text();
         expect((xml.match(/<D:response>/g) ?? []).length).toBe(1);

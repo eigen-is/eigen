@@ -1,19 +1,13 @@
-import { afterAll, describe, expect, spyOn, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { rmSync } from 'node:fs';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { CARD_MAX_BYTES } from '../../lib/contacts/card-store';
 import type { Contacts } from '../../lib/contacts/contacts';
 import * as contactsSchema from '../../lib/contacts/schema';
-import { computeResourceEtag, uriKeyOf } from '../../lib/core';
-import { CONTACTS_TEST_ROOT, cardsDirOf, makeContacts } from '../contacts-test-helpers';
-
-afterAll(() => {
-    try {
-        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
-    } catch {}
-});
+import { computeResourceEtag, normalizeResourceUri } from '../../lib/core';
+import { CONTACTS_TEST_ROOT, makeContacts } from '../contacts-test-helpers';
 
 // Minimal well-formed vCard 3.0 body — the bytes a DAV client PUTs, kept as CRLF text so the store writes
 // them verbatim.
@@ -31,11 +25,11 @@ function card(
     return `${lines.join('\r\n')}\r\n`;
 }
 
-const rowByUri = (db: Awaited<ReturnType<typeof makeContacts>>['db'], uri: string) =>
+const rowByUri = (db: Contacts['db'], uri: string) =>
     db
         .select()
         .from(contactsSchema.contacts)
-        .where(eq(contactsSchema.contacts.uriKey, uriKeyOf(uri)))
+        .where(eq(contactsSchema.contacts.uri, normalizeResourceUri(uri)))
         .get();
 
 const put = (
@@ -46,19 +40,28 @@ const put = (
 ) => contacts.putCard(uri, body, { ifMatch: pre?.ifMatch ?? null, ifNoneMatch: pre?.ifNoneMatch ?? null });
 
 describe('putCard — create and read', () => {
+    beforeAll(() => {
+        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
+    });
+
     test('a create returns created:true and an etag hashing the stored bytes', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         const body = card({ uid, email: ['stranger@example.org'] });
 
         const res = await put(contacts, uri, body);
 
-        expect(res).toEqual({ ok: true, etag: computeResourceEtag(new TextEncoder().encode(body)), created: true });
+        expect(res).toEqual({
+            ok: true,
+            id: rowByUri(contacts.db, uri)!.id,
+            etag: computeResourceEtag(new TextEncoder().encode(body)),
+            created: true,
+        });
     });
 
     test('getCard returns a 3.0 body byte-identically, folded X-props and all', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         const body =
@@ -77,36 +80,24 @@ describe('putCard — create and read', () => {
     });
 
     test('getCard is null for an unknown uri', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         expect(await contacts.getCard(`${randomUUID()}.vcf`)).toBeNull();
-    });
-
-    test('getCard whose file vanished returns null and marks the uri for the next drain', async () => {
-        const { contacts, dir } = await makeContacts();
-        const uid = randomUUID();
-        const uri = `${uid}.vcf`;
-        await put(contacts, uri, card({ uid, email: ['gone@example.org'] }));
-        rmSync(`${dir}/eigen.contacts/cards/${uri}`);
-
-        expect(await contacts.getCard(uri)).toBeNull();
-        // The vanished file is drained on the next read: the row is tombstoned and drops out of the list.
-        expect((await contacts.listCards()).some((c) => c.uri === uri)).toBe(false);
     });
 });
 
 describe('putCard — path safety', () => {
-    test('a traversal uri never becomes a filesystem path and is refused as invalid', async () => {
-        const { contacts } = await makeContacts();
+    test('a traversal uri is refused as invalid by the resource-name rule', async () => {
+        const { instance: contacts } = await makeContacts();
         const res = await put(contacts, '../contacts.db', card({ uid: randomUUID() }));
 
         expect(res).toEqual({ ok: false, error: 'invalid' });
-        // Nothing was written or indexed under the traversal name — the index db is untouched.
+        // The name rule stands even though a uri is no longer a path: nothing is stored under it.
         expect((await contacts.listCards()).some((c) => c.uri === '../contacts.db')).toBe(false);
         expect(await contacts.getCard('../contacts.db')).toBeNull();
     });
 
     test('a dot-prefixed uri is refused as invalid', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         expect(await put(contacts, '.hidden.vcf', card({ uid: randomUUID() }))).toEqual({
             ok: false,
             error: 'invalid',
@@ -114,43 +105,9 @@ describe('putCard — path safety', () => {
     });
 });
 
-describe('putCard — case-variant uri (incumbent spelling wins)', () => {
-    test('a case-variant update rewrites the incumbent file in place and reconcile leaves it', async () => {
-        const { contacts, db, dir } = await makeContacts();
-        const uid = randomUUID();
-
-        // Create under a mixed-case spelling, then PUT the same card (same UID) under a different case.
-        expect((await put(contacts, 'Abc.vcf', card({ uid, email: ['first@example.org'] }))).ok).toBe(true);
-        expect((await put(contacts, 'abc.vcf', card({ uid, email: ['second@example.org'] }))).ok).toBe(true);
-
-        // Exactly one file backs this card, still under the incumbent spelling — no stale sibling stranded on
-        // a case-sensitive fs (the seeded self-card is filtered out by folding to the same key).
-        const cardFiles = readdirSync(cardsDirOf(dir)).filter((n) => uriKeyOf(n) === uriKeyOf('abc.vcf'));
-        expect(cardFiles).toEqual(['Abc.vcf']);
-
-        // The index keeps the incumbent spelling (uri AND uriKey), so a case-sensitive reconcile that sorts
-        // 'Abc.vcf' first cannot warn-skip the accepted write and re-index the row from the stale bytes.
-        const row = rowByUri(db, 'ABC.vcf')!;
-        expect(row.uri).toBe('Abc.vcf');
-        expect(row.uriKey).toBe(uriKeyOf('Abc.vcf'));
-
-        // getCard (any case) returns the second PUT's bytes.
-        const got = await contacts.getCard('ABC.vcf');
-        const stored = new TextDecoder().decode(got!.bytes);
-        expect(stored).toContain('second@example.org');
-        expect(stored).not.toContain('first@example.org');
-
-        // A stat-only reconcile changes nothing: no re-parse, stable etag.
-        const parsesBefore = contacts.cardParseCount;
-        await contacts.reconcileIndex();
-        expect(contacts.cardParseCount).toBe(parsesBefore);
-        expect((await contacts.getCard('ABC.vcf'))!.etag).toBe(got!.etag);
-    });
-});
-
 describe('putCard — 4.0 transcode', () => {
     test('a 4.0 PUT is stored as 3.0 with the photo in ENCODING=b form', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const sharp = (await import('sharp')).default;
         const jpeg = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 9, g: 40, b: 90 } } })
             .jpeg()
@@ -172,7 +129,7 @@ describe('putCard — 4.0 transcode', () => {
     });
 
     test('a 3.0 PUT stored verbatim still answers with the etag of its own bytes', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         const body = card({ uid, email: ['verbatim@example.org'] });
@@ -185,7 +142,7 @@ describe('putCard — 4.0 transcode', () => {
 
 describe('putCard — preconditions', () => {
     test('If-None-Match:* against an existing card is a precondition failure', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid }));
@@ -197,7 +154,7 @@ describe('putCard — preconditions', () => {
     });
 
     test('a stale If-Match is a precondition failure', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid }));
@@ -209,7 +166,7 @@ describe('putCard — preconditions', () => {
     });
 
     test('two racing PUTs with the same stale If-Match yield exactly one precondition failure', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         const created = await put(contacts, uri, card({ uid, fn: 'V1' }));
@@ -235,7 +192,7 @@ describe('putCard — precondition shapes (RFC 7232)', () => {
     };
 
     test('If-Match:* succeeds against an existing card (means "exists", not a literal etag)', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const { uid, uri } = await seed(contacts);
         const res = await put(contacts, uri, card({ uid, fn: 'Updated' }), { ifMatch: '*' });
         expect(res.ok).toBe(true);
@@ -243,7 +200,7 @@ describe('putCard — precondition shapes (RFC 7232)', () => {
     });
 
     test('If-Match:* against a missing card is a precondition failure', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         expect(await put(contacts, `${uid}.vcf`, card({ uid }), { ifMatch: '*' })).toEqual({
             ok: false,
@@ -252,14 +209,14 @@ describe('putCard — precondition shapes (RFC 7232)', () => {
     });
 
     test('If-Match with a multi-etag list matches any member', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const { uid, uri, etag } = await seed(contacts);
         const res = await put(contacts, uri, card({ uid, fn: 'Updated' }), { ifMatch: `"deadbeef", "${etag}"` });
         expect(res.ok).toBe(true);
     });
 
     test('a specific If-None-Match matching the current etag is a precondition failure', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const { uid, uri, etag } = await seed(contacts);
         expect(await put(contacts, uri, card({ uid, fn: 'Updated' }), { ifNoneMatch: `"${etag}"` })).toEqual({
             ok: false,
@@ -268,27 +225,28 @@ describe('putCard — precondition shapes (RFC 7232)', () => {
     });
 
     test('a specific If-None-Match not matching the current etag succeeds', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const { uid, uri } = await seed(contacts);
         expect((await put(contacts, uri, card({ uid, fn: 'Updated' }), { ifNoneMatch: '"deadbeef"' })).ok).toBe(true);
     });
 
     test('deleteCard honors If-Match:* as an existence check', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const { uri } = await seed(contacts);
-        expect(await contacts.deleteCard(uri, { ifMatch: '*' })).toEqual({ ok: true });
+        const id = rowByUri(contacts.db, uri)!.id;
+        expect(await contacts.deleteCard(uri, { ifMatch: '*' })).toEqual({ ok: true, id });
     });
 });
 
 describe('putCard — UID rules', () => {
     test('a body with no UID is invalid', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const res = await put(contacts, `${randomUUID()}.vcf`, card({}));
         expect(res).toEqual({ ok: false, error: 'invalid', message: 'UID is required' });
     });
 
     test('changing the UID of an existing card is a uid-conflict', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid }));
@@ -297,7 +255,7 @@ describe('putCard — UID rules', () => {
     });
 
     test('a second uri claiming an owned UID is a uid-conflict naming the holder', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const holder = `${uid}.vcf`;
         await put(contacts, holder, card({ uid }));
@@ -312,7 +270,7 @@ describe('putCard — UID rules', () => {
 
 describe('putCard — size ceiling', () => {
     test('a 5 MiB card is accepted and one byte more is too-large', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const prefix = `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nFN:Big\r\nNOTE:`;
         const suffix = `\r\nEND:VCARD\r\n`;
@@ -329,7 +287,8 @@ describe('putCard — size ceiling', () => {
 
 describe('putCard — index projection', () => {
     test('a group card is indexed and served to DAV but hidden from the app list', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         await put(
@@ -338,16 +297,18 @@ describe('putCard — index projection', () => {
             card({ uid, n: 'Design Team;;;;', fn: 'Design Team', extra: ['X-ADDRESSBOOKSERVER-KIND:group'] }),
         );
 
-        // Served to DAV: the group's uri is in the book listing and single-resource meta (its group-ness in the
-        // stored row is pinned by contacts-reconcile.test.ts). Hidden from the app: getContacts drops it.
+        // Served to DAV: the group's uri is in the book listing and single-resource meta. Hidden from the
+        // app: the row projects isGroup and getContacts drops it.
         expect((await contacts.listCards()).some((c) => c.uri === uri)).toBe(true);
         expect((await contacts.getCardMeta(uri))?.uri).toBe(uri);
         const row = rowByUri(db, uri)!;
+        expect(row.isGroup).toBe(true);
         expect((await contacts.getContacts()).some((c) => c.id === row.id)).toBe(false);
     });
 
     test('an inline photo never leaks base64 into the row data JSON', async () => {
-        const { contacts, db } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
+        const db = contacts.db;
         const sharp = (await import('sharp')).default;
         const jpeg = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 5, g: 5, b: 5 } } })
             .jpeg()
@@ -363,7 +324,7 @@ describe('putCard — index projection', () => {
     });
 
     test('a changed card is exactly what getChangedCardsSince reports past the prior ctag', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const before = (await contacts.getBook()).ctag;
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
@@ -374,14 +335,46 @@ describe('putCard — index projection', () => {
     });
 });
 
+describe('putCard — announcements', () => {
+    test('the event names the row the write landed on', async () => {
+        const { instance: contacts, broadcasts } = await makeContacts();
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        broadcasts.length = 0;
+
+        await put(contacts, uri, card({ uid }));
+
+        expect(broadcasts).toEqual([{ type: SSEventType.CONTACT_CREATED, contactId: rowByUri(contacts.db, uri)!.id }]);
+    });
+
+    test('a create whose delete is already queued behind it still announces both', async () => {
+        const { instance: contacts, broadcasts } = await makeContacts();
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        broadcasts.length = 0;
+
+        // The delete takes the write lock the moment the create lets go of it, so an announcement that read
+        // the row back after the lock would find nothing to name.
+        const [created, deleted] = await Promise.all([
+            put(contacts, uri, card({ uid })),
+            contacts.deleteCard(uri, { ifMatch: null }),
+        ]);
+
+        expect(created.ok).toBe(true);
+        expect(deleted.ok).toBe(true);
+        expect(broadcasts.map((e) => e.type)).toEqual([SSEventType.CONTACT_CREATED, SSEventType.CONTACT_DELETED]);
+    });
+});
+
 describe('deleteCard', () => {
     test('a delete tombstones the uri and a later create at that uri clears it (single href)', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         await put(contacts, uri, card({ uid }));
+        const id = rowByUri(contacts.db, uri)!.id;
 
-        expect(await contacts.deleteCard(uri, { ifMatch: null })).toEqual({ ok: true });
+        expect(await contacts.deleteCard(uri, { ifMatch: null })).toEqual({ ok: true, id });
         expect((await contacts.getDeletedCardsSince(0)).some((d) => d.uri === uri)).toBe(true);
 
         const afterDelete = (await contacts.getBook()).ctag;
@@ -392,7 +385,7 @@ describe('deleteCard', () => {
     });
 
     test('deleting an unknown uri is not-found (DAV DELETE is not idempotent)', async () => {
-        const { contacts } = await makeContacts();
+        const { instance: contacts } = await makeContacts();
         expect(await contacts.deleteCard(`${randomUUID()}.vcf`, { ifMatch: null })).toEqual({
             ok: false,
             error: 'not-found',
@@ -400,7 +393,8 @@ describe('deleteCard', () => {
     });
 
     test('deleting your own card is refused as self-delete', async () => {
-        const { contacts, db, user } = await makeContacts();
+        const { instance: contacts, user } = await makeContacts();
+        const db = contacts.db;
         const self = db
             .select()
             .from(contactsSchema.contacts)
@@ -410,7 +404,8 @@ describe('deleteCard', () => {
     });
 
     test('a refused self-delete touches the self card so an ignoring client re-converges', async () => {
-        const { contacts, db, user } = await makeContacts();
+        const { instance: contacts, user } = await makeContacts();
+        const db = contacts.db;
         const self = db
             .select()
             .from(contactsSchema.contacts)
@@ -431,7 +426,8 @@ describe('deleteCard', () => {
 
 describe('putCard — self-link', () => {
     test('a self-card PUT that strips X-EIGEN-ID keeps the indexed link and restores the property', async () => {
-        const { contacts, db, user } = await makeContacts();
+        const { instance: contacts, user } = await makeContacts();
+        const db = contacts.db;
         const self = db
             .select()
             .from(contactsSchema.contacts)
@@ -473,7 +469,8 @@ describe('putCard — self-link', () => {
     });
 
     test('a create forging X-EIGEN-ID indexes as a plain contact and leaves getMe pinned', async () => {
-        const { contacts, db, user } = await makeContacts();
+        const { instance: contacts, user } = await makeContacts();
+        const db = contacts.db;
         const self = db
             .select()
             .from(contactsSchema.contacts)
@@ -489,136 +486,5 @@ describe('putCard — self-link', () => {
         expect(rowByUri(db, uri)!.eigenId).toBe('');
         expect(new TextDecoder().decode((await contacts.getCard(uri))!.bytes)).toContain(`X-EIGEN-ID:${user.id}`);
         expect((await contacts.getMe())?.id).toBe(self.id);
-    });
-});
-
-describe('drainDirty — foreign bytes', () => {
-    // A file that drifted out of band is what every other pass over foreign bytes skips and warns about; the
-    // drain used to re-commit it unguarded, so one GET wedged every later read and write of the book.
-    const driftedCard = async (bytes: string) => {
-        const harness = await makeContacts();
-        const uid = randomUUID();
-        const uri = `${uid}.vcf`;
-        expect((await put(harness.contacts, uri, card({ uid, email: ['drift@example.org'] }))).ok).toBe(true);
-        writeFileSync(join(cardsDirOf(harness.dir), uri), bytes);
-        // One CardDAV GET hashes the bytes it read, disagrees with the row and marks the uri dirty.
-        expect(await harness.contacts.getCard(uri)).not.toBeNull();
-        return { ...harness, uri };
-    };
-
-    test('a corrupt card is skipped and the book stays readable and writable', async () => {
-        const { contacts, uri } = await driftedCard('this is not a vCard at all');
-
-        expect((await contacts.getContacts()).length).toBeGreaterThan(0);
-        expect((await contacts.getBook()).ctag).toBeGreaterThan(0);
-        expect((await contacts.listCards()).some((c) => c.uri === uri)).toBe(true);
-        const fresh = randomUUID();
-        expect((await put(contacts, `${fresh}.vcf`, card({ uid: fresh }))).ok).toBe(true);
-    });
-
-    test('a card whose UID duplicates another resource is skipped and the book stays usable', async () => {
-        const { contacts, dir } = await makeContacts();
-        const holderUid = randomUUID();
-        const victimUid = randomUUID();
-        const victim = `${victimUid}.vcf`;
-        expect((await put(contacts, `${holderUid}.vcf`, card({ uid: holderUid }))).ok).toBe(true);
-        expect((await put(contacts, victim, card({ uid: victimUid, email: ['victim@example.org'] }))).ok).toBe(true);
-
-        // The victim's file is re-pointed out of band at the UID the first resource owns.
-        writeFileSync(join(cardsDirOf(dir), victim), card({ uid: holderUid, email: ['stolen@example.org'] }));
-        expect(await contacts.getCard(victim)).not.toBeNull();
-
-        expect((await contacts.getContacts()).length).toBeGreaterThan(0);
-        expect((await contacts.getBook()).ctag).toBeGreaterThan(0);
-        const fresh = randomUUID();
-        expect((await put(contacts, `${fresh}.vcf`, card({ uid: fresh }))).ok).toBe(true);
-    });
-
-    test('a skipped card keeps its journal row so the next init retries it', async () => {
-        const { contacts, db, dir } = await makeContacts();
-        const uid = randomUUID();
-        const uri = `${uid}.vcf`;
-
-        // A crash between the file rename and its index commit: the durable intent is recorded, the file
-        // lands, the commit throws.
-        const priv = contacts as unknown as { commitCard: (o: unknown) => void };
-        const origCommit = priv.commitCard;
-        priv.commitCard = () => {
-            throw new Error('commit boom');
-        };
-        await expect(put(contacts, uri, card({ uid }))).rejects.toThrow('commit boom');
-        priv.commitCard = origCommit;
-        expect(
-            db
-                .select()
-                .from(contactsSchema.pendingCardWrites)
-                .all()
-                .map((r) => r.uri),
-        ).toContain(uri);
-
-        // The bytes on disk are then corrupted out of band, so the drain can never settle that pair.
-        writeFileSync(join(cardsDirOf(dir), uri), 'this is not a vCard at all');
-        expect((await contacts.getContacts()).length).toBeGreaterThan(0);
-
-        expect(
-            db
-                .select()
-                .from(contactsSchema.pendingCardWrites)
-                .all()
-                .map((r) => r.uri),
-        ).toContain(uri);
-    });
-});
-
-describe('putCard — a create displaces an unindexed file', () => {
-    test('a card the index skipped keeps its bytes when a client creates at its name', async () => {
-        const { contacts, dir } = await makeContacts();
-        const uri = 'ghost.vcf';
-        const stranded = 'this is not a vCard at all';
-        writeFileSync(join(cardsDirOf(dir), uri), stranded);
-
-        // The reconcile cannot index it, and skipped is never deleted: the file stays on disk, unknown.
-        await contacts.reconcileIndex();
-        expect(await contacts.getCardMeta(uri)).toBeNull();
-
-        const uid = randomUUID();
-        expect(await put(contacts, uri, card({ uid }))).toMatchObject({ ok: true, created: true });
-        expect(readFileSync(join(cardsDirOf(dir), uri), 'utf8')).toContain(`UID:${uid}`);
-
-        // The bytes nobody indexed are still there, under a name no lister, sweep or client addresses.
-        const displaced = readdirSync(cardsDirOf(dir)).filter((name) => name.includes('.displaced-'));
-        expect(displaced).toHaveLength(1);
-        expect(readFileSync(join(cardsDirOf(dir), displaced[0]), 'utf8')).toBe(stranded);
-
-        // And the budget counts the indexed cards alone: the displaced name is no `.vcf` any scan sees.
-        await contacts.reconcileIndex();
-        const indexedBytes = readdirSync(cardsDirOf(dir))
-            .filter((name) => !name.startsWith('.') && name.endsWith('.vcf'))
-            .reduce((sum, name) => sum + statSync(join(cardsDirOf(dir), name)).size, 0);
-        expect(await contacts.size()).toBe(indexedBytes);
-    });
-});
-
-describe('putCard — fail-closed', () => {
-    test('a commit failure marks the card dirty and the next read heals it', async () => {
-        const { contacts } = await makeContacts();
-        const uid = randomUUID();
-        const uri = `${uid}.vcf`;
-
-        const priv = contacts as unknown as { commitCard: (o: unknown) => void };
-        const origCommit = priv.commitCard;
-        let thrown = false;
-        priv.commitCard = function (this: Contacts, o: unknown) {
-            if (!thrown) {
-                thrown = true;
-                throw new Error('commit boom');
-            }
-            return origCommit.call(this, o);
-        };
-        await expect(put(contacts, uri, card({ uid, email: ['heal@example.org'] }))).rejects.toThrow('commit boom');
-        priv.commitCard = origCommit;
-
-        // The file wrote but the index commit threw; the next read drains the dirty set and indexes it.
-        expect((await contacts.listCards()).some((c) => c.uri === uri)).toBe(true);
     });
 });

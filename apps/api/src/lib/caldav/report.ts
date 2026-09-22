@@ -1,8 +1,8 @@
 import { ICS_CONTENT_TYPE } from '@workspace/lib/types/drive';
 import type { Calendar } from '../calendar/calendar';
-import type { ResourceRow } from '../calendar/calendar-store';
+import type { ResourceRow } from '../calendar/dav-store';
 import type { CalendarCollection } from '../calendar/resource-store';
-import { uriKeyOf } from '../core';
+import { normalizeResourceUri } from '../core';
 import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
 import { type DataBudget, REPORT_DATA_BUDGET_BYTES, resourceDataRow } from '../dav/report-row';
 import { formatSyncToken, invalidSyncToken, parseSyncToken } from '../dav/sync-token';
@@ -54,7 +54,7 @@ async function resourceRow(
         wantsData,
         dataElement: '<C:calendar-data/>',
         dataProp: calendarDataProp,
-        read: () => calendar.readResource(calendarId, resource),
+        read: () => calendar.getResource(calendarId, resource.uri),
         vanished,
         budget,
     });
@@ -89,20 +89,20 @@ async function handleCalendarMultiget(
 ): Promise<Response> {
     if (report.hrefs.length > MULTIGET_HREF_LIMIT) return new Response('Too many hrefs', { status: 400 });
 
-    // Resources fold by uri key, so two spellings of one name name one resource — as a GET resolves it.
-    const resolved = resolveMultigetHrefs(report.hrefs, calendarHref(ownerId, calendarId), uriKeyOf);
+    // Only the Unicode form is folded, so an NFD href and its NFC twin yield one row (the shared resolver's `keyOf`).
+    const resolved = resolveMultigetHrefs(report.hrefs, calendarHref(ownerId, calendarId), normalizeResourceUri);
     const found = new Map(
         (
             await calendar.getResourcesByUris(
                 calendarId,
                 resolved.map((r) => r.uri).filter((u) => u !== null),
             )
-        ).map((resource) => [uriKeyOf(resource.uri), resource] as const),
+        ).map((resource) => [normalizeResourceUri(resource.uri), resource] as const),
     );
 
     const responses: string[] = [];
     for (const { uri, href } of resolved) {
-        const resource = uri ? found.get(uriKeyOf(uri)) : undefined;
+        const resource = uri ? found.get(normalizeResourceUri(uri)) : undefined;
         if (!resource) {
             // Missing but in-collection → 404 on the resource href; unresolvable → 404 echoing the original.
             responses.push(notFoundRow(uri ? eventHref(ownerId, calendarId, uri) : href));

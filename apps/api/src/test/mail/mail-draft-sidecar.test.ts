@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { MAILBOX_DRAFTS } from '@workspace/lib/constants/mailboxes';
 import type { Email, EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { getHome } from '../../lib/home';
+import type { DraftMeta, MailStore } from '../../lib/mail/mail-store';
 import { mailRootOf, makeEml, seedMaildirFile } from '../mail-test-helpers';
 import {
     assertJson,
@@ -159,6 +161,28 @@ describe.skipIf(isWindows)('Mail — draft sidecar', () => {
         expect((await listDrafts(user)).map((row) => row.id)).not.toContain(uniqueId);
         expect(sse.events.some((event) => event.type === SSEventType.MAIL_DELETED)).toBe(true);
         sse.stop();
+    });
+
+    test('a decomposed draft id reads back and deletes the sidecar it wrote', async () => {
+        const user = await createTestUser(
+            `draft-sidecar-nfd-${Date.now()}@test.eigen.is`,
+            'testpassword123',
+            'Draft Sidecar NFD',
+        );
+        expect((await authedRequest(user.sessionToken, `/home/${user.id}/size`)).status).toBe(200);
+        const home = await getHome(user.id);
+        const store = (home.mail as unknown as { store: MailStore }).store;
+        // Decomposed, each accent costs a byte more and the id overruns the segment budget its folded
+        // spelling sits under: a gate on the id as sent would miss the sidecar the write stored.
+        const draftId = `${'é'.repeat(80)}.draft`.normalize('NFD');
+        const meta: DraftMeta = { subject: 'Folded once', text: 'body', html: '<p>body</p>', attachments: [] };
+
+        await store.writeDraftMeta(draftId, meta);
+
+        expect(await store.readDraftMeta(draftId)).toEqual(meta);
+        await store.deleteDraftMeta(draftId);
+        expect(await store.readDraftMeta(draftId)).toBeNull();
+        expect(readdirSync(draftMetaDir(user.id))).toEqual([]);
     });
 
     test('a fast save leaves the sidecar complete and no temp debris beside it', async () => {

@@ -55,8 +55,8 @@ export async function uploadAvatar(contacts: Contacts, file: File): Promise<stri
 
     const webpName = `${randomUUID()}.webp`;
     const embedName = stagedEmbedName(webpName, format);
-    // The encodes stay outside the gate; the writes and their byte delta take it, so the sweep's recount can't land between them.
-    await contacts.gate.run(async () => {
+    // The encodes stay outside the lock; the writes and their byte delta take it, so the sweep's recount can't land between them.
+    await contacts.writeLock.run(async () => {
         await contacts.storage.write(`${PATHS.CONTACTS.AVATARS}/${webpName}`, webp.data);
         await contacts.storage.write(`${PATHS.CONTACTS.AVATARS}/${embedName}`, embed.data);
         contacts.avatarsBytes += webp.data.byteLength + embed.data.byteLength;
@@ -133,11 +133,7 @@ export async function deriveCardPhotoCache(
 }
 
 // Naming by the embedded bytes' hash lets a superseded photo fall out of reference for the sweep; a uri-kind photo caches nothing, as SSRF bars the fetch.
-export async function cacheCardPhoto(
-    contacts: Contacts,
-    contactId: string,
-    photo: ParsedCardPhoto | null,
-): Promise<string> {
+async function cacheCardPhoto(contacts: Contacts, contactId: string, photo: ParsedCardPhoto | null): Promise<string> {
     if (photo?.kind !== 'inline') return '';
     const result = await generateImagePreview(
         Buffer.from(photo.bytes),
@@ -157,13 +153,13 @@ export async function cacheCardPhoto(
     return avatarUrl(contacts.home.user.id, name);
 }
 
-// Runs under the write gate: every other avatarsBytes mutation holds it too, so the closing recount can't clobber an interleaved delta.
+// Runs under the write lock: every other avatarsBytes mutation holds it too, so the closing recount can't clobber an interleaved delta.
 export function cleanupAvatarImages(contacts: Contacts): Promise<void> {
-    return contacts.gate.run(async () => {
+    return contacts.writeLock.run(async () => {
         await contacts.storage.mkdir(PATHS.CONTACTS.AVATARS);
         const files = await contacts.storage.list(PATHS.CONTACTS.AVATARS);
 
-        // Straight from the index: the public list would re-enter the lock this holds, and it hides group rows whose photo caches are referenced too.
+        // Straight from the index: the public list hides group rows, whose photo caches are referenced too.
         const referenced = new Set(
             contacts.db
                 .select({ data: schema.contacts.data })

@@ -27,14 +27,25 @@ describe('isSafePathSegment', () => {
         expect(isSafePathSegment('a\x00b')).toBe(false);
     });
 
-    test('rejects an empty name and caps the length at 200', () => {
+    test('rejects an empty name and caps the length at 200 bytes', () => {
         expect(isSafePathSegment('')).toBe(false);
         expect(isSafePathSegment('a'.repeat(200))).toBe(true);
         expect(isSafePathSegment('a'.repeat(201))).toBe(false);
+        // An accented character costs two bytes, and NAME_MAX is a byte budget.
+        expect(isSafePathSegment('é'.repeat(100))).toBe(true);
+        expect(isSafePathSegment('é'.repeat(101))).toBe(false);
     });
 
-    test('rejects anything outside ASCII, decomposed or composed', () => {
-        expect(isSafePathSegment('café')).toBe(false);
-        expect(isSafePathSegment('café'.normalize('NFD'))).toBe(false);
+    test('accepts accented and non-Latin names, composed or decomposed', () => {
+        expect(isSafePathSegment('café')).toBe(true);
+        expect(isSafePathSegment('café'.normalize('NFD'))).toBe(true);
+        expect(isSafePathSegment('Zoë-Ångström.vcf')).toBe(true);
+        expect(isSafePathSegment('会議')).toBe(true);
+    });
+
+    test('still rejects a leading combining mark and anything outside letters, marks and digits', () => {
+        expect(isSafePathSegment('́abc')).toBe(false);
+        expect(isSafePathSegment('café!')).toBe(false);
+        expect(isSafePathSegment('🎉')).toBe(false);
     });
 });
