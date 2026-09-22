@@ -1,6 +1,7 @@
 import { TinyEmitter } from 'tiny-emitter';
 import type {
     CellInfo,
+    CompiledFormula,
     FormulaArg,
     FormulaValue,
     ParseResult,
@@ -8,14 +9,35 @@ import type {
     ParserOptions,
     RangeCell,
 } from '../types';
-import errorParser, { ERROR, ERROR_NAME, ERROR_VALUE, valueIsError } from './error';
+import errorParser, { ERROR, ERROR_NAME, ERROR_REF, ERROR_VALUE, valueIsError } from './error';
 import evaluateByOperator from './evaluate-by-operator/evaluate-by-operator';
 import { Parser as GrammarParser } from './grammar-parser/grammar-parser';
-import { extractLabel, toLabel } from './helper/cell';
+import { type CellCoordinate, columnIndexToLabel, extractLabel, rowIndexToLabel, toLabel } from './helper/cell';
 import { invertNumber, toNumber } from './helper/number';
 import { trimEdges } from './helper/string';
 
-type GrammarParserInstance = { parse: (expression: string) => unknown; yy: Record<string, unknown> };
+type GrammarParserInstance = { parse: (expression: string) => CompiledFormula; yy: Record<string, unknown> };
+
+// Moves a relative leg by the evaluation offset, the way functionCopy shifts reference text:
+// `$` legs and a missing axis (`A:A`, `1:1`) stay put.
+function offsetCoordinate(
+    coordinate: CellCoordinate,
+    offset: number,
+    indexToLabel: (index: number) => string,
+): CellCoordinate {
+    if (offset === 0 || coordinate.isAbsolute || coordinate.index === -1) {
+        return coordinate;
+    }
+    const index = coordinate.index + offset;
+    if (index < 0) {
+        throw Error(ERROR_REF);
+    }
+    return { index, label: indexToLabel(index), isAbsolute: false };
+}
+
+function isReversed(start: CellCoordinate, end: CellCoordinate): boolean {
+    return start.index !== -1 && end.index !== -1 && start.index > end.index;
+}
 
 class Parser {
     private parser: GrammarParserInstance;
@@ -48,16 +70,30 @@ class Parser {
     }
 
     parse(expression: string, options: ParserOptions = {}): ParseResult {
+        return this.evaluate(this.compile(expression), options);
+    }
+
+    // A syntax error is deferred to evaluation, where it surfaces like any other error.
+    compile(expression: string): CompiledFormula {
+        if (expression === '') {
+            return () => '';
+        }
+        try {
+            return this.parser.parse(expression);
+        } catch (ex) {
+            return () => {
+                throw ex;
+            };
+        }
+    }
+
+    evaluate(compiled: CompiledFormula, options: ParserOptions = {}): ParseResult {
         let result: unknown = null;
         let error: string | null = null;
         this.options = options;
 
         try {
-            if (expression === '') {
-                result = '';
-            } else {
-                result = this.parser.parse(expression);
-            }
+            result = compiled();
         } catch (ex) {
             const message = ex instanceof Error ? errorParser(ex.message) : null;
             error = message ?? errorParser(ERROR);
@@ -117,8 +153,12 @@ class Parser {
             return this._callVariable(label);
         }
 
+        const { rowOffset = 0, colOffset = 0 } = this.options;
+        const cellRow = offsetCoordinate(row, rowOffset, rowIndexToLabel);
+        const cellColumn = offsetCoordinate(column, colOffset, columnIndexToLabel);
+
         let value: FormulaValue;
-        const cell: CellInfo = { label: toLabel(row, column), row, column, sheetName };
+        const cell: CellInfo = { label: toLabel(cellRow, cellColumn), row: cellRow, column: cellColumn, sheetName };
         this.emit('callCellValue', cell, this.options, (_value: FormulaValue) => {
             value = _value;
         });
@@ -134,10 +174,19 @@ class Parser {
             throw Error(ERROR);
         }
 
-        const [startRow, startColumn, startSheetName] = start;
-        const [endRow, endColumn, endSheetName] = end;
+        let [startRow, startColumn, startSheetName] = start;
+        let [endRow, endColumn, endSheetName] = end;
         if (endSheetName != null && startSheetName !== endSheetName) {
             throw Error(ERROR_VALUE);
+        }
+
+        // functionCopy leaves a reversed range (`B2:A1`) unshifted, so the offset does too.
+        const { rowOffset = 0, colOffset = 0 } = this.options;
+        if (!isReversed(startRow, endRow) && !isReversed(startColumn, endColumn)) {
+            startRow = offsetCoordinate(startRow, rowOffset, rowIndexToLabel);
+            endRow = offsetCoordinate(endRow, rowOffset, rowIndexToLabel);
+            startColumn = offsetCoordinate(startColumn, colOffset, columnIndexToLabel);
+            endColumn = offsetCoordinate(endColumn, colOffset, columnIndexToLabel);
         }
 
         const [rowStart, rowEnd] = startRow.index <= endRow.index ? [startRow, endRow] : [endRow, startRow];

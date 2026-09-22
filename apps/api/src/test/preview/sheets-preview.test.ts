@@ -347,7 +347,7 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
             ],
         };
 
-        const evaluate = spyOn(FormulaEngine.prototype, 'evaluate');
+        const evaluate = spyOn(FormulaEngine.prototype, 'evaluateCompiled');
         const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
         const evaluated = evaluate.mock.calls.length;
         evaluate.mockRestore();
@@ -404,7 +404,7 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
             ],
         };
 
-        const evaluate = spyOn(FormulaEngine.prototype, 'evaluate');
+        const evaluate = spyOn(FormulaEngine.prototype, 'evaluateCompiled');
         const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
         const evaluated = evaluate.mock.calls.length;
         evaluate.mockRestore();

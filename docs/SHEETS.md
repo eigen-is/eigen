@@ -414,10 +414,7 @@ inside the matrix are still visited). Overlapping rules layer per style property
 rule's fill never erases an earlier rule's text colour. `textContains` ignores case, and `duplicateValue`
 never counts or styles a blank cell, both as in Excel.
 
-The callback shifts the rule's formula by `(targetRow - anchorRow, targetCol - anchorCol)` via the
-shared `functionCopy` ref shifter (in `engine/formula-shift.ts`), then evaluates against a
-`CellResolver`. Both state (`state/modules/condition-format.ts::getComputeMap`) and the server-side
-HTML/PDF export use this same shape — see § HTML/PDF export below.
+Both state (`state/modules/condition-format.ts::getComputeMap`) and the server-side HTML/PDF export pass the same callback, `createCfFormulaEvaluator` (in `engine/conditional-format.ts`). It parses each rule formula once (`FormulaEngine.compile`) and evaluates it per cell with `evaluateCompiled` at the offset `(targetRow - anchorRow, targetCol - anchorCol)`: the parser moves every relative reference leg by that offset at lookup time, following the same rules as the `functionCopy` text shifter (`$` legs, a missing axis in `A:A` or `1:1`, and a reversed range all stay put). The grammar actions compile to closures, so `Parser.parse` is `compile` followed by `evaluate`, and a formula that has both a syntax error and an earlier evaluation error reports the syntax error.
 
 ### HTML/PDF export
 
@@ -457,7 +454,7 @@ The sanitizer applies the data-URI-only `url()` rule to style-element text as we
 
 Formula-based CF rules are wired too: `renderSheetsHtml` builds a single `FormulaEngine` plus a
 `createArrayResolver` over all loaded sheets (so cross-sheet refs like `=Sheet2!A1>10` resolve),
-threads them to `renderSheet`, and the per-sheet `buildCfFormulaEvaluator` produces the
+threads them to `renderSheet`, and the per-sheet `createCfFormulaEvaluator` produces the
 `evaluateFormula` callback. This CF pass reads `cell.v` — it doesn't recompute the sheet's own
 formulas, only the CF rule's formula against existing values. The cell values it reads are already
 engine-fresh, though: `readSheetsFromDoc` runs the gated `recalcSheets` (see § Server-side recalc)

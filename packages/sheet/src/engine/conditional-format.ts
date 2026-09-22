@@ -1,6 +1,7 @@
 import { isNil } from 'es-toolkit/compat';
 import { parseCellInput } from './format';
-import type { CellMatrix, ConditionalFormatRule, SingleRange } from './types';
+import type { FormulaEngine } from './formula-engine';
+import type { CellMatrix, CellResolver, CompiledFormula, ConditionalFormatRule, SingleRange } from './types';
 import { isRealNull } from './validation';
 
 // CF rule shapes (`ConditionalFormatRule`, `DataBarRule`, etc.) are defined in
@@ -30,6 +31,25 @@ export type ConditionalFormatFormulaEvaluator = (
 export type EvaluateConditionalFormatOptions = {
     evaluateFormula?: ConditionalFormatFormulaEvaluator;
 };
+
+// The evaluator both the canvas and the HTML export use. A rule runs at every cell of its range,
+// so each formula parses once and resolves its relative refs at the cell's offset from the anchor.
+export function createCfFormulaEvaluator(
+    engine: FormulaEngine,
+    resolver: CellResolver,
+    sheetId: string,
+): ConditionalFormatFormulaEvaluator {
+    const compiled = new Map<string, CompiledFormula>();
+    return (formula, anchorRow, anchorCol, targetRow, targetCol) => {
+        let expression = compiled.get(formula);
+        if (!expression) {
+            expression = engine.compile(formula);
+            compiled.set(formula, expression);
+        }
+        return engine.evaluateCompiled(expression, sheetId, resolver, targetRow - anchorRow, targetCol - anchorCol)
+            .value;
+    };
+}
 
 // Returns the cell's display value at (r, c). Mirrors the "v" attribute path of
 // state-side getCellValue, simplified for the conditional-format evaluator.

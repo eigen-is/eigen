@@ -5,6 +5,7 @@ import type {
     Cell,
     CellInfo,
     CellResolver,
+    CompiledFormula,
     EvaluationResult,
     FormulaEngineState,
     ParserDoneCallback,
@@ -118,10 +119,25 @@ export class FormulaEngine {
     }
 
     evaluate(formula: string, sheetId: string, resolver: CellResolver): EvaluationResult {
+        return this.evaluateCompiled(this.compile(formula), sheetId, resolver);
+    }
+
+    // For a formula evaluated at many cells (a conditional-format rule): parse once, then
+    // evaluateCompiled per cell with its offset from the cell the formula was written for.
+    compile(formula: string): CompiledFormula {
+        return this.parser.compile(formula.substring(1));
+    }
+
+    evaluateCompiled(
+        compiled: CompiledFormula,
+        sheetId: string,
+        resolver: CellResolver,
+        rowOffset = 0,
+        colOffset = 0,
+    ): EvaluationResult {
         this.currentResolver = resolver;
         try {
-            const expression = formula.substring(1);
-            const { error, result } = this.parser.parse(expression, { sheetId });
+            const { error, result } = this.parser.evaluate(compiled, { sheetId, rowOffset, colOffset });
 
             if (error != null) {
                 return { value: error, display: error, type: 'error' };
