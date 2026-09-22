@@ -53,12 +53,9 @@ export function iscelldata(txt: string) {
     return reg_cellRange.test(rangetxtArr[0]) && reg_cellRange.test(rangetxtArr[1]);
 }
 
-// Ported from state's columnCharToIndex (state/utils). NOT engine's
-// columnLabelToIndex: that returns -1 for '' where this returns NaN, and the
-// range parser below distinguishes "no column part" (NaN → whole row) from
-// "column A" via the NaN sentinel.
+// NaN, not columnLabelToIndex's -1, marks a missing column: the range parser reads it as a whole row.
 function columnCharToIndex(a: string): number {
-    if (a == null || a.length === 0) {
+    if (a.length === 0) {
         return NaN;
     }
     const str = a.toLowerCase().split('');
@@ -90,9 +87,7 @@ function addToCellIndexList(
     }
 }
 
-// Resolves a cell or range ref into the rows and columns a formula on sheet `formulaId` reads,
-// memoized in `cellTextToIndexList`. `data` is that sheet's matrix, the bounds of a whole-row or
-// whole-column range. A reversed range (`A3:A1`) reads as its sorted twin, as in Excel.
+// `data` is sheet `formulaId`'s matrix, which bounds a whole-row or whole-column range.
 export function resolveCellRange(
     sheets: readonly Pick<Sheet, 'id' | 'name' | 'data'>[],
     cellTextToIndexList: Record<string, FormulaDependency>,
@@ -100,7 +95,7 @@ export function resolveCellRange(
     formulaId: string,
     data: CellMatrix | null | undefined,
 ): FormulaDependency | null {
-    if (txt == null || txt.length === 0) {
+    if (txt.length === 0) {
         return null;
     }
 

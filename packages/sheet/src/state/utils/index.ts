@@ -52,28 +52,6 @@ export function indexToColumnChar(n: number) {
     return s.toUpperCase();
 }
 
-// column index: letter to number
-export function columnCharToIndex(a: string) {
-    if (a == null || a.length === 0) {
-        return NaN;
-    }
-    const str = a.toLowerCase().split('');
-    const al = str.length;
-    const getCharNumber = (charx: string) => {
-        return charx.charCodeAt(0) - 96;
-    };
-    let numout = 0;
-    let charnum = 0;
-    for (let i = 0; i < al; i += 1) {
-        charnum = getCharNumber(str[i]);
-        numout += charnum * 26 ** (al - i - 1);
-    }
-    if (numout === 0) {
-        return NaN;
-    }
-    return numout - 1;
-}
-
 export function getSheetIndex(ctx: Context, id: string) {
     for (let i = 0; i < ctx.sheets.length; i += 1) {
         if (ctx.sheets[i]?.id === id) {

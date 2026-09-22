@@ -11,6 +11,9 @@ import { describe, expect, it } from 'bun:test';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import { autoFillCell } from '../../../state/api/cell';
 import type { Context } from '../../../state/context';
+import { setCellValue } from '../../../state/modules/cell';
+import { fillFromEdge, onDropCellSelectEnd } from '../../../state/modules/drop-cell';
+import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import type { Cell, DataVerificationRule, SingleRange } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
 import { contextFactory } from '../factories/context';
@@ -261,5 +264,114 @@ describe('drag-fill shifts a formula block by the distance to its source cell', 
         const d = fill(seed, src, { row: [3, 7], column: [0, 0] }, 'down');
         expect([3, 5, 6].map((r) => d[r][0]?.f)).toEqual(['=B4', '=B6', '=B7']);
         expect([4, 7].map((r) => d[r][0]?.v)).toEqual([5, 5]);
+    });
+});
+
+// Excel refuses a fill that would split or overwrite a merge; every fill door bails the same way.
+describe('a fill touching a merge changes nothing', () => {
+    type Merge = { r: number; c: number; rs: number; cs: number };
+
+    function mergedContext(merge: Merge, selection: SingleRange) {
+        const ctx = makeCtx((d) => {
+            for (let r = 0; r < 3; r += 1) {
+                for (let c = 0; c < 3; c += 1) d[r][c] = { v: r * 10 + c, m: `${r * 10 + c}` };
+            }
+            for (let r = merge.r; r < merge.r + merge.rs; r += 1) {
+                for (let c = merge.c; c < merge.c + merge.cs; c += 1) {
+                    d[r][c] = { ...d[r][c], mc: r === merge.r && c === merge.c ? merge : { r: merge.r, c: merge.c } };
+                }
+            }
+        }, selection);
+        ctx.sheets[0].config = { merge: { [`${merge.r}_${merge.c}`]: merge } };
+        return ctx;
+    }
+
+    function expectUnchanged(ctx: Context, fill: (ctx: Context) => void) {
+        const before = structuredClone(ctx.sheets[0]);
+        fill(ctx);
+        expect(ctx.sheets[0].data).toEqual(before.data);
+        expect(ctx.sheets[0].config).toEqual(before.config);
+    }
+
+    const cases: { name: string; merge: Merge; direction: 'down' | 'right' }[] = [
+        { name: 'Ctrl+D with a merged top row', merge: { r: 0, c: 0, rs: 1, cs: 2 }, direction: 'down' },
+        { name: 'Ctrl+D with a merge in the filled rows', merge: { r: 1, c: 0, rs: 1, cs: 2 }, direction: 'down' },
+        { name: 'Ctrl+R with a merged left column', merge: { r: 0, c: 0, rs: 2, cs: 1 }, direction: 'right' },
+        { name: 'Ctrl+R with a merge in the filled columns', merge: { r: 0, c: 1, rs: 2, cs: 1 }, direction: 'right' },
+    ];
+
+    for (const { name, merge, direction } of cases) {
+        it(name, () => {
+            const range: SingleRange = { row: [0, 2], column: [0, 2] };
+            expectUnchanged(mergedContext(merge, range), (ctx) => fillFromEdge(ctx, range, direction));
+        });
+    }
+
+    it('autoFillCell with a merged source', () => {
+        const src: SingleRange = { row: [0, 0], column: [0, 1] };
+        expectUnchanged(mergedContext({ r: 0, c: 0, rs: 1, cs: 2 }, src), (ctx) =>
+            autoFillCell(ctx, src, { row: [1, 2], column: [0, 1] }, 'down'),
+        );
+    });
+
+    // Drags the fill handle from A1 down to row 3 (y = 50 lands in the third 20px row).
+    function dragDown(ctx: Context) {
+        Object.assign(ctx, { rowHeaderWidth: 0, columnHeaderHeight: 0, cellSelectExtendIndex: [0, 0] });
+        ctx.selections = [
+            { row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0, top: 0, left: 0, height: 19, width: 73 },
+        ];
+        const container = {
+            getBoundingClientRect: () => ({ left: 0, top: 0 }),
+            querySelectorAll: () => [],
+        } as unknown as HTMLDivElement;
+        onDropCellSelectEnd(ctx, { pageX: 10, pageY: 50 } as MouseEvent, container);
+    }
+
+    it('the fill-handle drag over a merge', () => {
+        expectUnchanged(mergedContext({ r: 1, c: 0, rs: 1, cs: 2 }, { row: [0, 0], column: [0, 0] }), dragDown);
+    });
+
+    it('the fill-handle drag without a merge still fills', () => {
+        const ctx = makeCtx(
+            (d) => {
+                d[0][0] = { v: 'x', m: 'x' };
+            },
+            { row: [0, 0], column: [0, 0] },
+        );
+        dragDown(ctx);
+        expect([1, 2].map((r) => ctx.sheets[0].data![r][0]?.v)).toEqual(['x', 'x']);
+    });
+});
+
+describe('a filled formula', () => {
+    it('keeps its text result as text', () => {
+        const src: SingleRange = { row: [0, 0], column: [1, 1] };
+        const ctx = makeCtx((d) => {
+            d[0][0] = { v: 7, m: '7', ct: { fa: 'General', t: 'n' } };
+            d[1][0] = { v: 8, m: '8', ct: { fa: 'General', t: 'n' } };
+            d[0][1] = { f: '=TEXT(A1,"000")', v: '007', m: '007', ct: { fa: 'General', t: 'g' } };
+        }, src);
+
+        autoFillCell(ctx, src, { row: [1, 1], column: [1, 1] }, 'down');
+
+        const filled = ctx.sheets[0].data![1][1]!;
+        expect([filled.v, filled.m]).toEqual(['008', '008']);
+    });
+
+    it('recalcs when its precedent changes', () => {
+        const src: SingleRange = { row: [0, 0], column: [1, 1] };
+        const ctx = makeCtx((d) => {
+            for (let r = 0; r < 3; r += 1) d[r][0] = { v: r + 1, m: `${r + 1}` };
+            d[0][1] = { f: '=A1*2', v: 2, m: '2' };
+        }, src);
+        ctx.sheets[0].calcChain = [{ r: 0, c: 1, id: 'id_1' }];
+        warmFormulaCellInfoMap(ctx);
+
+        autoFillCell(ctx, src, { row: [1, 2], column: [1, 1] }, 'down');
+        execFunctionGroup(ctx, 2, 0, 10, 'id_1');
+        setCellValue(ctx, 2, 0, ctx.sheets[0].data, 10);
+        groupValuesRefresh(ctx);
+
+        expect(ctx.sheets[0].data![2][1]?.v).toBe(20);
     });
 });
