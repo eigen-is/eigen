@@ -8,7 +8,7 @@ import { enablePatches, isDraft, produceWithPatches } from 'immer';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import * as cellModule from '../../../state/modules/cell';
-import { setCellValue } from '../../../state/modules/cell';
+import { setCellValue, updateCell } from '../../../state/modules/cell';
 import { setFormulaCellInfo } from '../../../state/modules/formula-cache';
 import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { contextFactory } from '../factories/context';
@@ -183,5 +183,19 @@ describe('execFunctionGroup — index-driven recalc', () => {
         expect(next.sheets[1].data![0][0]?.v).toBe(15);
         // base untouched
         expect(base.sheets[0].data![0][1]?.v).toBe(10);
+    });
+
+    it('recomputes a formula over a reversed range when a cell inside it changes', () => {
+        const ctx = makeCtx();
+        ctx.sheets[0].data![0][2] = { f: '=SUM(A3:A1)', v: 5, m: '5' };
+        ctx.sheets[0].data![1][3] = { f: '=SUM(B$3:A1)', v: 15, m: '15' };
+        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' }, { r: 1, c: 3, id: 'id_1' });
+        warmFormulaCellInfoMap(ctx);
+
+        updateCell(ctx, 1, 0, null, 7);
+        groupValuesRefresh(ctx);
+
+        expect(ctx.sheets[0].data![0][2]?.v).toBe(12);
+        expect(ctx.sheets[0].data![1][3]?.v).toBe(22);
     });
 });
