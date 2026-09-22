@@ -5,7 +5,7 @@ import { computeResourceEtag } from '../../lib/core';
 import { encodePathSegment } from '../../lib/dav/href';
 import { REPORT_DATA_BUDGET_BYTES } from '../../lib/dav/report-row';
 import { getHome } from '../../lib/home';
-import { basicAuth, davRequest } from '../dav-test-helpers';
+import { davRequest } from '../dav-test-helpers';
 import { app, getTestContext } from '../setup';
 
 describe('CardDAV', () => {
@@ -16,7 +16,6 @@ describe('CardDAV', () => {
         davRequest('PROPFIND', path, { email: ctx.alice.user.email, headers: { Depth: depth } });
 
     const cardPathname = (uri: string) => `/dav/addressbooks/${userId}/contacts/${uri}`;
-    const cardUrl = (uri: string) => `http://localhost${cardPathname(uri)}`;
 
     const putCard = (uri: string, body: string, headers: Record<string, string> = {}) =>
         davRequest('PUT', cardPathname(uri), {
@@ -142,13 +141,11 @@ describe('CardDAV', () => {
         let propEtag: string;
 
         const propfindCard = (body: string, headers: Record<string, string> = {}) =>
-            app.handle(
-                new Request(cardUrl(propUri), {
-                    method: 'PROPFIND',
-                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0', ...headers },
-                    body,
-                }),
-            );
+            davRequest('PROPFIND', cardPathname(propUri), {
+                email: ctx.alice.user.email,
+                headers: { Depth: '0', ...headers },
+                body,
+            });
 
         beforeAll(async () => {
             const putRes = await putCard(propUri, vcard('carddav-proplist@eigen'));
@@ -210,13 +207,11 @@ describe('CardDAV', () => {
         });
 
         test('a collection row honors a subset request', async () => {
-            const res = await app.handle(
-                new Request(`http://localhost/dav/addressbooks/${userId}/contacts/`, {
-                    method: 'PROPFIND',
-                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-                    body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:displayname/></D:prop></D:propfind>`,
-                }),
-            );
+            const res = await davRequest('PROPFIND', `/dav/addressbooks/${userId}/contacts/`, {
+                email: ctx.alice.user.email,
+                headers: { Depth: '0' },
+                body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:displayname/></D:prop></D:propfind>`,
+            });
             expect(res.status).toBe(207);
             const xml = await res.text();
             expect(xml).toContain('<D:displayname>Contacts</D:displayname>');
@@ -226,13 +221,11 @@ describe('CardDAV', () => {
 
         // The props that fixed the macOS duplicate-on-edit class (2026-08-18) — a named request must serve them.
         test('a named PROPFIND requesting current-user-privilege-set and owner returns both', async () => {
-            const res = await app.handle(
-                new Request(`http://localhost/dav/addressbooks/${userId}/contacts/`, {
-                    method: 'PROPFIND',
-                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
-                    body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:current-user-privilege-set/><D:owner/></D:prop></D:propfind>`,
-                }),
-            );
+            const res = await davRequest('PROPFIND', `/dav/addressbooks/${userId}/contacts/`, {
+                email: ctx.alice.user.email,
+                headers: { Depth: '0' },
+                body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:current-user-privilege-set/><D:owner/></D:prop></D:propfind>`,
+            });
             expect(res.status).toBe(207);
             const xml = await res.text();
             expect(xml).toContain('<D:current-user-privilege-set>');
@@ -254,22 +247,14 @@ describe('CardDAV', () => {
     });
 
     test('MKCOL under the addressbook tree is forbidden', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/addressbooks/${userId}/newbook/`, {
-                method: 'MKCOL',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const res = await davRequest('MKCOL', `/dav/addressbooks/${userId}/newbook/`, { email: ctx.alice.user.email });
         expect(res.status).toBe(403);
     });
 
     test('MKADDRESSBOOK is forbidden — one fixed book per user', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/addressbooks/${userId}/newbook/`, {
-                method: 'MKADDRESSBOOK',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const res = await davRequest('MKADDRESSBOOK', `/dav/addressbooks/${userId}/newbook/`, {
+            email: ctx.alice.user.email,
+        });
         expect(res.status).toBe(403);
     });
 
@@ -282,28 +267,20 @@ describe('CardDAV', () => {
     });
 
     test('cross-user access is denied', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/dav/addressbooks/${ctx.bob.user.id}/`, {
-                method: 'PROPFIND',
-                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
-            }),
-        );
+        const res = await davRequest('PROPFIND', `/dav/addressbooks/${ctx.bob.user.id}/`, {
+            email: ctx.alice.user.email,
+            headers: { Depth: '1' },
+        });
         expect(res.status).toBe(403);
     });
 
     test('a cross-user PUT (bob writing into alice’s book) is denied 403', async () => {
         const uid = randomUUID();
-        const res = await app.handle(
-            new Request(cardUrl(`${uid}.vcf`), {
-                method: 'PUT',
-                headers: {
-                    Authorization: basicAuth(ctx.bob.user.email),
-                    'Content-Type': 'text/vcard; charset=utf-8',
-                    'If-None-Match': '*',
-                },
-                body: vcard(uid),
-            }),
-        );
+        const res = await davRequest('PUT', cardPathname(`${uid}.vcf`), {
+            email: ctx.bob.user.email,
+            headers: { 'Content-Type': 'text/vcard; charset=utf-8', 'If-None-Match': '*' },
+            body: vcard(uid),
+        });
         expect(res.status).toBe(403);
     });
 
@@ -339,12 +316,9 @@ describe('CardDAV', () => {
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
         expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
-        const res = await app.handle(
-            new Request(`http://localhost/dav/addressbooks/${userId}/bogus/${uri}`, {
-                method: 'GET',
-                headers: { Authorization: basicAuth(ctx.alice.user.email) },
-            }),
-        );
+        const res = await davRequest('GET', `/dav/addressbooks/${userId}/bogus/${uri}`, {
+            email: ctx.alice.user.email,
+        });
         expect(res.status).toBe(404);
     });
 
@@ -573,17 +547,11 @@ describe('CardDAV', () => {
     // contract (RFC 6352 § 8.6 — only matching cards come back). ---
 
     const report = (body: string) =>
-        app.handle(
-            new Request(`http://localhost/dav/addressbooks/${userId}/contacts/`, {
-                method: 'REPORT',
-                headers: {
-                    Authorization: basicAuth(ctx.alice.user.email),
-                    'Content-Type': 'application/xml',
-                    Depth: '1',
-                },
-                body,
-            }),
-        );
+        davRequest('REPORT', `/dav/addressbooks/${userId}/contacts/`, {
+            email: ctx.alice.user.email,
+            headers: { 'Content-Type': 'application/xml', Depth: '1' },
+            body,
+        });
 
     const cardHref = (uri: string) => `/dav/addressbooks/${userId}/contacts/${uri}`;
 
