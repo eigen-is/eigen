@@ -570,11 +570,7 @@ function extractDependencies(
 
 // ── Write-back ─────────────────────────────────────────────────────────────────
 
-// Derive `m` (display) + `v` from an evaluation result, mirroring the client's
-// setCellValue where it is cheap to: error sentinels become `v = m = '#…'` with
-// `ct.t = 'e'`; booleans render TRUE/FALSE; numbers render through the shared
-// `numberDisplay` under the cell's mask (General when it has none); everything
-// else falls back to `String(v)`.
+// Mirrors the client's setCellValue where cheap: error sentinels carry ct.t 'e', the rest display like the editor.
 function writeCellValue(cell: Cell, result: EvaluationResult): void {
     if (result.type === 'error') {
         const sentinel = String(result.value);
