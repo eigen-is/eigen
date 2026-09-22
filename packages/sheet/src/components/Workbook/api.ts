@@ -30,6 +30,7 @@ import {
     type SearchHighlight,
     type SearchResult,
     type Settings,
+    setFormulaCellInfo,
     setSearchHighlights,
     updateImage,
 } from '../../state';
@@ -69,9 +70,17 @@ export function generateAPIs(
                             if (specialOp.value.id) {
                                 addSheet(ctx_, settings, specialOp.value.id, false, undefined, specialOp.value, true);
                             }
-                            const fileIndex = getSheetIndex(ctx_, specialOp.value.id);
+                            const { id } = specialOp.value;
+                            const fileIndex = getSheetIndex(ctx_, id);
                             if (fileIndex == null) continue;
-                            api.initSheetData(ctx_, fileIndex, specialOp.value);
+                            const data = api.initSheetData(ctx_, fileIndex, specialOp.value);
+                            // No cell patch carries the new sheet's formulas, so a built map registers them here.
+                            if (ctx_.formulaCache.formulaCellInfoMap == null) continue;
+                            for (let r = 0; r < data.length; r += 1) {
+                                for (let c = 0; c < data[r].length; c += 1) {
+                                    if (data[r][c]?.f != null) setFormulaCellInfo(ctx_, { r, c, id }, data, id);
+                                }
+                            }
                         } else if (specialOp.op === 'deleteSheet') {
                             deleteSheet(ctx_, specialOp.value.id, true);
                             patches.length = 0;

@@ -174,38 +174,30 @@ export class FormulaCache {
         this.engine = new FormulaEngine();
     }
 
-    updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo', data?: CellMatrix) {
+    updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo') {
         // An unbuilt map reads the patched cells when it builds.
-        if (this.formulaCellInfoMap == null) return;
+        const map = this.formulaCellInfoMap;
+        if (map == null) return;
 
-        function requestUpdate(value: unknown) {
-            if (value instanceof Object) {
-                const v = value as { r?: number; c?: number; id?: string };
-                if (!isNil(v.r) && !isNil(v.c)) {
-                    setFormulaCellInfo(
-                        ctx,
-                        {
-                            r: v.r,
-                            c: v.c,
-                            id: v.id || history.options?.id || ctx.currentSheetId,
-                        },
-                        data,
-                    );
-                }
+        // Every formula change carries a `data` patch, so the map follows those alone.
+        for (const patch of type === 'undo' ? history.inversePatches : history.patches) {
+            const [root, sheetIndex, field, r, c, cellField] = patch.path;
+            if (root !== 'sheets' || (field != null && field !== 'data')) continue;
+            const id = ctx.sheets[sheetIndex as number]?.id;
+            if (typeof r === 'number' && typeof c === 'number') {
+                if (id != null && (cellField == null || cellField === 'f')) setFormulaCellInfo(ctx, { r, c, id });
+                continue;
             }
-        }
-
-        const changesHistory = type === 'undo' ? history.inversePatches : history.patches;
-        for (const patch of changesHistory) {
-            const [, sheetIndex, field, r, c, cellField] = patch.path;
-            if (field === 'data' && c != null && (cellField == null || cellField === 'f')) {
-                requestUpdate({ r, c, id: ctx.sheets[sheetIndex as number]?.id });
-            } else if (Array.isArray(patch.value)) {
-                for (const value of patch.value) {
-                    requestUpdate(value);
+            // A sheet added or dropped, a whole matrix, or a shrunk row or matrix: rebuild on next use.
+            if (id == null || typeof r !== 'number' || c != null || patch.op === 'remove') {
+                this.formulaCellInfoMap = null;
+                return;
+            }
+            const row: (Cell | null)[] = patch.value;
+            for (let col = 0; col < row.length; col += 1) {
+                if (row[col]?.f != null || map[`r${r}c${col}i${id}`] != null) {
+                    setFormulaCellInfo(ctx, { r, c: col, id });
                 }
-            } else {
-                requestUpdate(patch.value);
             }
         }
     }
