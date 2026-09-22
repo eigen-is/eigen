@@ -148,7 +148,7 @@ export function updateFormatCell(
                 if (value && isPlainObject(value)) {
                     updateInlineStringFormatOutside(value, attr, foucsStatus);
                     (value as Record<string, unknown>)[attr as string] = foucsStatus;
-                    const cellWidth = cfg.columnlen?.[c] || ctx.sheets[sheetIndex].defaultColWidth;
+                    const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
                     if (attr === 'fs' && canvas) {
                         const textInfo = getCellTextInfo(d[r][c]!, canvas, ctx, {
                             r,
