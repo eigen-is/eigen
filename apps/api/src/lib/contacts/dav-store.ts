@@ -215,7 +215,7 @@ export async function putCard(
             }
         }
 
-        contacts.emitContact(existing ? SSEventType.CONTACT_UPDATED : SSEventType.CONTACT_CREATED, id);
+        contacts.announce(existing ? SSEventType.CONTACT_UPDATED : SSEventType.CONTACT_CREATED, id);
         return { ok: true, etag: verbatim ? projection.etag : null, created: !existing };
     });
 }

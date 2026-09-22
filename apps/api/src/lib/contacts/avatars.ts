@@ -163,7 +163,7 @@ export function cleanupAvatarImages(contacts: Contacts): Promise<void> {
         await contacts.storage.mkdir(PATHS.CONTACTS.AVATARS);
         const files = await contacts.storage.list(PATHS.CONTACTS.AVATARS);
 
-        // Straight from the index: the public list would re-enter the lock this holds, and it hides group rows whose photo caches are referenced too.
+        // Straight from the index: the public list hides group rows, whose photo caches are referenced too.
         const referenced = new Set(
             contacts.db
                 .select({ data: schema.contacts.data })

@@ -119,7 +119,7 @@ function rewriteCardCategories(
 function settleFanOut(contacts: Contacts, fanout: FanOut): void {
     contacts.cardsBytes += fanout.bytes;
     for (const id of fanout.createdLabelIds) contacts.emitLabel(SSEventType.LABEL_CREATED, id);
-    for (const id of fanout.contactIds) contacts.emitContact(SSEventType.CONTACT_UPDATED, id);
+    for (const id of fanout.contactIds) contacts.announce(SSEventType.CONTACT_UPDATED, id);
 }
 
 export async function addLabel(contacts: Contacts, label: Omit<Label, 'id'>): Promise<string> {

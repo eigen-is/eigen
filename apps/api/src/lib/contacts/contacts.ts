@@ -107,18 +107,18 @@ function normalizeContactInput(contact: CreateContactInput): void {
 
 export class Contacts {
     private managedDb!: ManagedDatabase<typeof schema>;
-    db!: BunSQLiteDatabase<typeof schema>; // internal — used by contacts/*.ts
-    home: Home; // internal — used by contacts/*.ts
-    storage: LocalFilesystem; // internal — used by contacts/*.ts
+    db!: BunSQLiteDatabase<typeof schema>;
+    home: Home;
+    storage: LocalFilesystem;
 
     // bun:sqlite makes a transaction atomic and serial by itself, but a write path holds async gaps between
     // its check and its commit (the quota check, the avatar derivation), and a racing If-Match PUT must lose
     // inside the lock, not after it.
-    writeLock = new Semaphore(1); // internal — used by contacts/*.ts
+    writeLock = new Semaphore(1);
 
     // Running totals so size() answers from memory: a SUM per metered write makes an N-card device sync O(N²).
-    cardsBytes = 0; // internal — used by contacts/*.ts
-    avatarsBytes = 0; // internal — used by contacts/*.ts
+    cardsBytes = 0;
+    avatarsBytes = 0;
 
     // Whether card writes are quota-metered — see the assignment in init() for what turns it on.
     private meteredIngest = false;
@@ -129,23 +129,6 @@ export class Contacts {
     constructor(home: Home) {
         this.home = home;
         this.storage = new LocalFilesystem(`${home.homeDir}/${PATHS.CONTACTS.ROOT}`);
-    }
-
-    // internal — used by contacts/*.ts
-    emitContact(type: Parameters<typeof buildContactEvent>[0], contactId: string): void {
-        if (this.batch.hold()) return;
-        this.home.broadcast(buildContactEvent(type, contactId));
-    }
-
-    // internal — used by contacts/*.ts
-    // A card written by something else inside the window loses nothing: its invalidation is owner-wide too.
-    async withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
-        return this.batch.run(fn);
-    }
-
-    // internal — used by contacts/*.ts
-    emitLabel(type: Parameters<typeof buildLabelEvent>[0], labelId: string): void {
-        this.home.broadcast(buildLabelEvent(type, labelId));
     }
 
     public async init(): Promise<void> {
@@ -223,7 +206,22 @@ export class Contacts {
         return this.cardsBytes + this.avatarsBytes;
     }
 
-    // internal — used by contacts/*.ts
+    // --- Seams used by contacts/*.ts ---
+
+    announce(type: Parameters<typeof buildContactEvent>[0], contactId: string): void {
+        if (this.batch.hold()) return;
+        this.home.broadcast(buildContactEvent(type, contactId));
+    }
+
+    // A card written by something else inside the window loses nothing: its invalidation is owner-wide too.
+    async withBatchedEvents<T>(fn: () => Promise<T>): Promise<T> {
+        return this.batch.run(fn);
+    }
+
+    emitLabel(type: Parameters<typeof buildLabelEvent>[0], labelId: string): void {
+        this.home.broadcast(buildLabelEvent(type, labelId));
+    }
+
     bumpCtag(tx: Tx): number {
         tx.update(schema.book)
             .set({ ctag: sql`${schema.book.ctag} + 1` })
@@ -232,7 +230,6 @@ export class Contacts {
         return tx.select({ ctag: schema.book.ctag }).from(schema.book).where(eq(schema.book.id, 1)).get()!.ctag;
     }
 
-    // internal — used by contacts/*.ts
     tombstone(tx: Tx, uri: string, ctag: number): void {
         tx.insert(schema.contactTombstones)
             .values({ uri, deletedAtCtag: ctag })
@@ -258,6 +255,54 @@ export class Contacts {
 
         for (const id of createdLabelIds) this.emitLabel(SSEventType.LABEL_CREATED, id);
     }
+
+    // The one write every card path takes: both ceilings judge the bytes right before the transaction that
+    // stores them, so a refusal leaves the book as it was. `creditBytes` is the stored card this one replaces,
+    // or a rewrite that shrinks a card would be refused on a quota its own bytes already hold.
+    async writeCard(opts: { row: CardRowInput; categories: string[]; creditBytes: number }): Promise<void> {
+        if (opts.row.vcard.byteLength > CARD_MAX_BYTES) {
+            throw new ApiError(413, 'Contact card is too large');
+        }
+        if (this.meteredIngest) {
+            await enforceHomeDataQuota(this.home.user.id, opts.row.vcard.byteLength, opts.creditBytes);
+        }
+        this.commitCard(opts);
+    }
+
+    // Callers hold the write lock and have already run their own guards (self-delete, preconditions).
+    async purgeCard(row: PurgedCard): Promise<void> {
+        let removed = 0;
+        this.db.transaction((tx) => {
+            // Read inside the transaction, applied outside it: a rollback would otherwise leave the delta applied.
+            removed = tx
+                .select({ size: cardBytes })
+                .from(schema.contacts)
+                .where(eq(schema.contacts.id, row.id))
+                .get()!.size;
+            const ctag = this.bumpCtag(tx);
+            tx.delete(schema.contacts).where(eq(schema.contacts.id, row.id)).run();
+            this.tombstone(tx, row.uri, ctag);
+        });
+
+        this.cardsBytes -= removed;
+        const avatarName = row.data?.avatar ? avatarNameOf(row.data.avatar) : undefined;
+        if (avatarName && isCardPhotoCacheOf(row.id, avatarName)) {
+            const avatarPath = `${PATHS.CONTACTS.AVATARS}/${avatarName}`;
+            try {
+                const avatarSize = await this.storage.size(avatarPath);
+                if (avatarSize !== null) {
+                    await this.storage.unlink(avatarPath);
+                    this.avatarsBytes -= avatarSize;
+                }
+            } catch (e) {
+                // The card and index deletion are already committed; a derived-cache failure is cleanup-only.
+                console.error(`contacts: failed to delete derived avatar ${avatarName}:`, e);
+            }
+        }
+        this.announce(SSEventType.CONTACT_DELETED, row.id);
+    }
+
+    // --- Contacts ---
 
     // The blob is the truth, so every projected column and the junction come back from it. Untouched, because no
     // blob carries them: the self-link, the ctags, the tombstones, createdAt, and each label's id and color.
@@ -304,20 +349,6 @@ export class Contacts {
             .where(eq(schema.contacts.eigenId, this.home.user.id))
             .get();
         return claimed ? '' : eigenId;
-    }
-
-    // The one write every card path takes: both ceilings judge the bytes right before the transaction that
-    // stores them, so a refusal leaves the book as it was. `creditBytes` is the stored card this one replaces,
-    // or a rewrite that shrinks a card would be refused on a quota its own bytes already hold.
-    // internal — used by contacts/*.ts
-    async writeCard(opts: { row: CardRowInput; categories: string[]; creditBytes: number }): Promise<void> {
-        if (opts.row.vcard.byteLength > CARD_MAX_BYTES) {
-            throw new ApiError(413, 'Contact card is too large');
-        }
-        if (this.meteredIngest) {
-            await enforceHomeDataQuota(this.home.user.id, opts.row.vcard.byteLength, opts.creditBytes);
-        }
-        this.commitCard(opts);
     }
 
     private labelNamesFor(labelIds: string[]): string[] {
@@ -373,7 +404,7 @@ export class Contacts {
                 categories,
             });
 
-            this.emitContact(SSEventType.CONTACT_CREATED, id);
+            this.announce(SSEventType.CONTACT_CREATED, id);
             return id;
         });
     }
@@ -471,42 +502,8 @@ export class Contacts {
                     console.error(`contacts: failed to propagate the profile of ${this.home.user.id}:`, e);
                 }
             }
-            this.emitContact(SSEventType.CONTACT_UPDATED, id);
+            this.announce(SSEventType.CONTACT_UPDATED, id);
         });
-    }
-
-    // Callers hold the write lock and have already run their own guards (self-delete, preconditions).
-    // internal — used by contacts/*.ts
-    async purgeCard(row: PurgedCard): Promise<void> {
-        let removed = 0;
-        this.db.transaction((tx) => {
-            // Read inside the transaction, applied outside it: a rollback would otherwise leave the delta applied.
-            removed = tx
-                .select({ size: cardBytes })
-                .from(schema.contacts)
-                .where(eq(schema.contacts.id, row.id))
-                .get()!.size;
-            const ctag = this.bumpCtag(tx);
-            tx.delete(schema.contacts).where(eq(schema.contacts.id, row.id)).run();
-            this.tombstone(tx, row.uri, ctag);
-        });
-
-        this.cardsBytes -= removed;
-        const avatarName = row.data?.avatar ? avatarNameOf(row.data.avatar) : undefined;
-        if (avatarName && isCardPhotoCacheOf(row.id, avatarName)) {
-            const avatarPath = `${PATHS.CONTACTS.AVATARS}/${avatarName}`;
-            try {
-                const avatarSize = await this.storage.size(avatarPath);
-                if (avatarSize !== null) {
-                    await this.storage.unlink(avatarPath);
-                    this.avatarsBytes -= avatarSize;
-                }
-            } catch (e) {
-                // The card and index deletion are already committed; a derived-cache failure is cleanup-only.
-                console.error(`contacts: failed to delete derived avatar ${avatarName}:`, e);
-            }
-        }
-        this.emitContact(SSEventType.CONTACT_DELETED, row.id);
     }
 
     public async deleteContact(id: string, expectedEtag?: string): Promise<void> {
@@ -525,7 +522,7 @@ export class Contacts {
         });
     }
 
-    // ---- Label facade — implementation in contacts/labels.ts ----
+    // --- Label facade — implementation in contacts/labels.ts ---
 
     public async getLabels(): Promise<Label[]> {
         return labels.getLabels(this);
@@ -591,7 +588,7 @@ export class Contacts {
         return rows.map((row) => this.dbRowToContact(row, labelsByContact.get(row.id) ?? []));
     }
 
-    // ---- Avatar facade — implementation in contacts/avatars.ts ----
+    // --- Avatar facade — implementation in contacts/avatars.ts ---
 
     public async uploadAvatar(file: File): Promise<string> {
         return avatars.uploadAvatar(this, file);
@@ -658,7 +655,7 @@ export class Contacts {
         return this.getContactById(addedId);
     }
 
-    // ---- CardDAV store facade — implementation in contacts/dav-store.ts ----
+    // --- CardDAV store facade — implementation in contacts/dav-store.ts ---
 
     public async getBook(): Promise<CardBook> {
         return davStore.getBook(this);
@@ -692,7 +689,7 @@ export class Contacts {
         return davStore.deleteCard(this, uri, pre);
     }
 
-    // ---- vCard transfer facade — implementation in contacts/transfer.ts ----
+    // --- vCard transfer facade — implementation in contacts/transfer.ts ---
 
     public async exportCards(ids?: string[]): Promise<string> {
         return transfer.exportCards(this, ids);
