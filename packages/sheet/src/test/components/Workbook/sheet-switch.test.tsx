@@ -55,7 +55,7 @@ async function mountWorkbook(props: Record<string, unknown> = {}) {
         if (!ref.current) throw new Error('workbook did not mount');
         return ref.current;
     };
-    const current = () => container.querySelector('.bg-background.text-foreground span')?.textContent;
+    const current = () => container.querySelector('[aria-current="true"] span')?.textContent;
     return { container, render, workbook, current };
 }
 

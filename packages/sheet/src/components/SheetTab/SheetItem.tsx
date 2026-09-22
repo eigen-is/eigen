@@ -262,6 +262,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
     return (
         <div
             role="button"
+            aria-current={isActive || undefined}
             onDragOver={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -284,7 +285,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             key={sheet.id}
             className={cn(
                 'relative flex shrink-0 items-center outline-hidden',
-                isDropPlaceholder ? 'w-8' : 'cursor-pointer px-2 text-xs transition-colors',
+                isDropPlaceholder ? 'w-8' : 'cursor-pointer px-2 text-xs',
                 !isDropPlaceholder &&
                     (isActive
                         ? 'bg-background text-foreground'
