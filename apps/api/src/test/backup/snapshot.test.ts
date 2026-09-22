@@ -228,7 +228,9 @@ describe('Backup snapshotHome', () => {
             phone: [],
             avatar: staged,
         });
-        avatarName = avatarNameOf((await home.contacts.getContactById(photoContactId))!.avatar);
+        const photoContact = await home.contacts.getContactById(photoContactId);
+        avatarName = avatarNameOf(photoContact?.avatar ?? '');
+        expect(avatarName).toEndWith('.webp');
         const calendars = await assertJson<CalendarItem[]>(
             await authedRequest(alice.sessionToken, `/calendar/${alice.id}/calendars`),
         );

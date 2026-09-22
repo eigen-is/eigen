@@ -252,7 +252,9 @@ describe('Backup restoreHome', () => {
             phone: [],
             avatar: staged,
         });
-        avatarName = avatarNameOf((await home.contacts.getContactById(photoContactId))!.avatar);
+        const photoContact = await home.contacts.getContactById(photoContactId);
+        avatarName = avatarNameOf(photoContact?.avatar ?? '');
+        expect(avatarName).toEndWith('.webp');
         avatarPath = join(TEST_DATA_DIR, 'home', target.id, 'eigen.contacts', 'avatars', avatarName);
         const settings = await home.settings.set({
             mounts: {
