@@ -1,5 +1,6 @@
 import dayjs from 'dayjs';
 import { cloneDeep, pick } from 'es-toolkit/compat';
+import { current, isDraft } from 'immer';
 import { cfSplitRange } from '../../engine/conditional-format';
 import { numberDisplay, parseCellInput, update } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
@@ -8,12 +9,12 @@ import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { Rect } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { carrySides, getBorderInfoCompute } from './border';
+import { setCellValue } from './cell';
 import { createContextResolver } from './formula-cache';
 import { execFunctionGroup, execfunction } from './formula-exec';
 import { colLocation, rowLocation } from './location';
 import { jfrefreshgrid } from './refresh';
 import { normalizeSelection } from './selection';
-import { ID_CARD_NUMBER, isPlainNumber } from './validation';
 
 function toPx(v: number) {
     return `${v}px`;
@@ -29,12 +30,7 @@ type DropDirection = 'down' | 'up' | 'left' | 'right';
 //   '6' = fill by months, '7' = fill by years, '8' = Chinese lowercase numbers.
 type DropApplyType = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8';
 
-// Module-scope cache of the in-progress drag-fill operation. Constants
-// (chnNumChar/chnNameValue/…) live alongside the mutable copyRange/applyRange/
-// applyType/direction state so callers in api/cell.ts can prime everything in
-// one place. Producers fill copyRange/applyRange/direction before
-// `updateDropCell` reads them; first run leaves them as the empty-object
-// initial values, hence the partial `SingleRange` on the cache.
+// Every fill seeds copyRange/applyRange/direction/applyType before `updateDropCell` reads them.
 type DropCellCache = {
     copyRange: SingleRange;
     applyRange: SingleRange;
@@ -1655,9 +1651,7 @@ function getApplyData(
 ) {
     const applyData = [];
 
-    // direction + applyType are seeded by onDropCellSelectEnd / autoFillCell
-    // before updateDropCell calls into this function. Cache nulls are only
-    // possible at module init, never on a real fill.
+    // Null only at module init, never on a real fill.
     const direction = dropCellCache.direction ?? 'down';
     const type = dropCellCache.applyType ?? '0';
 
@@ -1900,8 +1894,7 @@ export function updateDropCell(ctx: Context) {
     // to sync and undo (Excel and Google both carry validation on a fill).
     const { dataVerification } = file;
 
-    // direction is seeded by onDropCellSelectEnd / autoFillCell before they call
-    // updateDropCell; the null fallback only matters for module-init safety.
+    // Null only at module init, never on a real fill.
     const direction = dropCellCache.direction ?? 'down';
 
     // copy range
@@ -1959,33 +1952,30 @@ export function updateDropCell(ctx: Context) {
             const col = axisIsRow ? outer : pos;
             const cell = applyData[step];
 
-            // The source cell this one repeats (modulo the copy-block length): its formula
-            // shifts by the distance to it, its border and validation carry over.
+            // The source cell this one repeats: formula shift, border and validation come from it.
             const srcAxis = reverse ? copyEndAxis - (step % csLen) : copyStartAxis + (step % csLen);
             const bd_r = axisIsRow ? srcAxis : outer;
             const bd_c = axisIsRow ? outer : srcAxis;
 
+            d[row][col] = cell || null;
+
             if (cell?.f != null) {
                 const offset = pos - srcAxis;
                 const f = `=${functionCopy(cell.f, axisIsRow ? offset : 0, axisIsRow ? 0 : offset)}`;
-                const v = execfunction(ctx, f, row, col, undefined, undefined, undefined, undefined, resolver);
-
-                execFunctionGroup(ctx, row, col, v[1], undefined, d);
-
-                [, cell.v, cell.f] = v;
-
-                if (cell.v != null) {
-                    if (isPlainNumber(cell.v) && !ID_CARD_NUMBER.test(`${cell.v}`)) {
-                        cell.m = numberDisplay(Number(cell.v), cell.ct?.fa);
-
-                        cell.ct = cell.ct || { fa: 'General', t: 'n' };
-                    } else {
-                        [cell.m, cell.ct] = parseCellInput(cell.v);
-                    }
-                }
+                const [, value, filledF] = execfunction(
+                    ctx,
+                    f,
+                    row,
+                    col,
+                    undefined,
+                    undefined,
+                    undefined,
+                    undefined,
+                    resolver,
+                );
+                execFunctionGroup(ctx, row, col, value);
+                setCellValue(ctx, row, col, d, { v: value, f: filledF });
             }
-
-            d[row][col] = cell || null;
 
             carrySides(cfg.borderInfo, row, col, borderInfoCompute[`${bd_r}_${bd_c}`]);
 
@@ -2021,8 +2011,22 @@ export function updateDropCell(ctx: Context) {
         }
     }
 
-    // refresh the grid
-    jfrefreshgrid(ctx, d, ctx.selections);
+    // A plain matrix keeps registering the filled formulas off the draft proxies.
+    jfrefreshgrid(ctx, isDraft(d) ? current(d) : d, ctx.selections);
+}
+
+// Excel refuses a fill that would split or overwrite a merge.
+export function fillTouchesMerge(ctx: Context, copyRange: SingleRange, applyRange: SingleRange): boolean {
+    const d = getFlowdata(ctx);
+    if (d == null || getSheetConfig(ctx)?.merge == null) return false;
+    return [copyRange, applyRange].some(({ row, column }) => {
+        for (let r = row[0]; r <= row[1]; r += 1) {
+            for (let c = column[0]; c <= column[1]; c += 1) {
+                if (d[r]?.[c]?.mc != null) return true;
+            }
+        }
+        return false;
+    });
 }
 
 // Ctrl+D / Ctrl+R: copy the top row (or left column) of the range over the rest of it.
@@ -2037,6 +2041,7 @@ export function fillFromEdge(ctx: Context, range: SingleRange, direction: 'down'
         dropCellCache.copyRange = { row, column: [column[0], column[0]] };
         dropCellCache.applyRange = { row, column: [column[0] + 1, column[1]] };
     }
+    if (fillTouchesMerge(ctx, dropCellCache.copyRange, dropCellCache.applyRange)) return;
     dropCellCache.direction = direction;
     dropCellCache.applyType = '0';
     updateDropCell(ctx);
@@ -2157,42 +2162,7 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
             [col_e] = last.column;
         }
 
-        const flowdata = getFlowdata(ctx);
-        if (flowdata == null) return;
-
-        if (getSheetConfig(ctx)?.merge != null) {
-            let HasMC = false;
-
-            for (let r = last.row[0]; r <= last.row[1]; r += 1) {
-                for (let c = last.column[0]; c <= last.column[1]; c += 1) {
-                    const cell = flowdata[r]?.[c];
-
-                    if (cell != null && cell.mc != null) {
-                        HasMC = true;
-                        break;
-                    }
-                }
-            }
-
-            if (HasMC) {
-                return;
-            }
-
-            for (let r = row_s; r <= row_e; r += 1) {
-                for (let c = col_s; c <= col_e; c += 1) {
-                    const cell = flowdata[r]?.[c];
-
-                    if (cell != null && cell.mc != null) {
-                        HasMC = true;
-                        break;
-                    }
-                }
-            }
-
-            if (HasMC) {
-                return;
-            }
-        }
+        if (fillTouchesMerge(ctx, dropCellCache.copyRange, dropCellCache.applyRange)) return;
 
         last.row = [row_s, row_e];
         last.column = [col_s, col_e];
