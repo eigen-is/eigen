@@ -21,8 +21,10 @@ import { describe, expect, it } from 'bun:test';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { handlePasteByClick } from '../../../state/events/paste';
+import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { copy } from '../../../state/modules/selection';
 import { contextFactory } from '../factories/context';
+import { edit, typed } from '../factories/edit-cycle';
 
 // Explicit selection builders. selectionFactory takes (row, column, ...) as
 // [start, end] pairs; hand-writing those inline is error-prone, so name the two
@@ -434,4 +436,26 @@ describe('copy/paste round-trip (item 6)', () => {
         expect(pick(d[7][6])).toEqual(pick(d[2][1]));
         expect(pick(d[7][7])).toEqual(pick(d[2][2]));
     });
+});
+
+describe('pasted formulas and the dependency map', () => {
+    const pasteText = (text: string, r: number, c: number) => (d: Context) => {
+        d.selections = single(r, c);
+        handlePasteByClick(d, text);
+    };
+
+    for (const warm of [false, true]) {
+        it(`a pasted formula string recalcs when its precedent changes (${warm ? 'warm' : 'cold'} map)`, () => {
+            let ctx = makeCtx(6, 6, (d) => {
+                d[0][0] = { v: 5, m: '5' };
+            });
+            if (warm) warmFormulaCellInfoMap(ctx);
+
+            [ctx] = edit(ctx, pasteText('=A1*3', 0, 2));
+            expect(ctx.sheets[0].data![0][2]?.v).toBe(15);
+            [ctx] = edit(ctx, typed(0, 0, '2'));
+
+            expect(ctx.sheets[0].data![0][2]?.v).toBe(6);
+        });
+    }
 });

@@ -969,6 +969,9 @@ function handleFormulaStringPaste(ctx: Context, formulaStr: string) {
     cell.m = numberDisplay(val, cell.ct?.fa);
     cell.v = val;
     cell.f = formulaStr;
+
+    setFormulaCellInfo(ctx, { r, c, id: ctx.currentSheetId });
+    ctx.formulaCache.execFunctionGlobalData = null;
 }
 
 export function handlePaste(ctx: Context, e: ClipboardEvent) {
