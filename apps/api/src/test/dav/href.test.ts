@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { uriKeyOf } from '../../lib/core';
+import { normalizeResourceUri } from '../../lib/core';
 import { MULTIGET_HREF_LIMIT, parseCollectionPath, principalHref, resolveMultigetHrefs } from '../../lib/dav/href';
 
 // The path and href rules both DAV surfaces route on. A divergence here is a misroute or a duplicated
@@ -74,9 +74,16 @@ describe('resolveMultigetHrefs', () => {
         );
     });
 
-    test('the collection folds its own uris: case and Unicode form are one card, not two rows', () => {
-        expect(resolveMultigetHrefs([`${prefix}Ann.vcf`, `${prefix}ann.vcf`], prefix, uriKeyOf)).toEqual([
+    test('the collection folds the Unicode form alone: an NFD href and its NFC twin are one row', () => {
+        const nfd = 'Ann\u0301.vcf';
+        const nfc = nfd.normalize('NFC');
+        expect(resolveMultigetHrefs([`${prefix}${nfd}`, `${prefix}${nfc}`], prefix, normalizeResourceUri)).toEqual([
+            { uri: nfd, href: `${prefix}${nfd}` },
+        ]);
+        // Case is not folded: two spellings a client chose are two resources.
+        expect(resolveMultigetHrefs([`${prefix}Ann.vcf`, `${prefix}ann.vcf`], prefix, normalizeResourceUri)).toEqual([
             { uri: 'Ann.vcf', href: `${prefix}Ann.vcf` },
+            { uri: 'ann.vcf', href: `${prefix}ann.vcf` },
         ]);
     });
 

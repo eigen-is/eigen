@@ -119,12 +119,6 @@ export class LocalFilesystem {
         }
     }
 
-    // A whole subtree, gone. The parent is fsynced so the name cannot come back after a power loss.
-    async removeDir(dirPath: string): Promise<void> {
-        await fsPromises.rm(this.getFilePath(dirPath), { recursive: true, force: true });
-        await this.syncDir(path.dirname(dirPath));
-    }
-
     async delete(filePath: string): Promise<boolean> {
         try {
             const fullPath = this.getFilePath(filePath);
