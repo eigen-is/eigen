@@ -308,9 +308,13 @@ describe('rebuildProjection', () => {
             ]),
         );
         await put(calendar, calendarId, 'plain.ics', vcal(event('rebuild-plain@eigen', 'Plain')));
+        await put(calendar, calendarId, 'deleted.ics', vcal(event('rebuild-deleted@eigen', 'Deleted')));
+        await calendar.deleteResource(calendarId, 'deleted.ics', { ifMatch: null });
 
         const resourcesBefore = calendar.db.select().from(schema.resources).all();
         const eventsBefore = calendar.db.select().from(schema.events).all();
+        const tombstonesBefore = calendar.db.select().from(schema.resourceTombstones).all();
+        expect(tombstonesBefore).toHaveLength(1);
         const ctagBefore = (await calendar.getCollection(calendarId))!.ctag;
         expect(eventsBefore.length).toBeGreaterThan(2);
 
@@ -326,6 +330,8 @@ describe('rebuildProjection', () => {
 
         expect(calendar.db.select().from(schema.resources).all()).toEqual(resourcesBefore);
         expect(calendar.db.select().from(schema.events).all()).toEqual(eventsBefore);
+        // No blob carries a deletion, so a rebuild leaves the tombstone a syncing client still needs.
+        expect(calendar.db.select().from(schema.resourceTombstones).all()).toEqual(tombstonesBefore);
         // A rebuild is not a change: no ctag moves, so no client is told to resync.
         expect((await calendar.getCollection(calendarId))!.ctag).toBe(ctagBefore);
     });

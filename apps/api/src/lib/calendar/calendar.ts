@@ -437,9 +437,7 @@ export class Calendar {
             .select({
                 id: schema.resources.id,
                 calendarId: schema.resources.calendarId,
-                uri: schema.resources.uri,
                 ics: schema.resources.ics,
-                resourceCtag: schema.resources.resourceCtag,
             })
             .from(schema.resources)
             .all();
@@ -447,16 +445,16 @@ export class Calendar {
             for (const row of rows) {
                 const resource = parseResource(new TextDecoder().decode(row.ics));
                 const projection = store.projectRows(row.calendarId, row.id, resource);
-                indexResource(
-                    tx,
-                    {
-                        ...row,
+                tx.update(schema.resources)
+                    .set({
                         uid: store.uidOfResource(resource),
                         etag: computeResourceEtag(row.ics),
                         hasUnindexedRecurrence: projection.hasUnindexedRecurrence,
-                    },
-                    projection.rows,
-                );
+                    })
+                    .where(eq(schema.resources.id, row.id))
+                    .run();
+                tx.delete(schema.events).where(eq(schema.events.resourceId, row.id)).run();
+                for (const event of projection.rows) tx.insert(schema.events).values(event).run();
             }
         });
     }
