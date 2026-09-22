@@ -194,8 +194,10 @@ export class FormulaCache {
                 return;
             }
             const row: (Cell | null)[] = patch.value;
+            // An appended row has no map entries: every shrink above resets the map.
+            const added = patch.op === 'add';
             for (let col = 0; col < row.length; col += 1) {
-                if (row[col]?.f != null || map[`r${r}c${col}i${id}`] != null) {
+                if (row[col]?.f != null || (!added && map[`r${r}c${col}i${id}`] != null)) {
                     setFormulaCellInfo(ctx, { r, c: col, id });
                 }
             }
