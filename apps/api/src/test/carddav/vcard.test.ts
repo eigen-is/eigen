@@ -321,15 +321,10 @@ describe('vCard merge + builder', () => {
         expect(out).not.toContain('ORG:Example Corporation');
     });
 
-    test('unchanged names keep the N middle name byte-for-byte; a real change preserves the unowned N tail', () => {
+    test('unchanged names keep the N middle name byte-for-byte', () => {
         const unchanged = mergeVCard(parseVCard(APPLE_FIXTURE), { firstName: 'John', lastName: 'Doe' });
         expect(unchanged).toContain('N:Doe;John;Quinlan;;');
         expect(unchanged).toContain('FN:John Quinlan Doe');
-
-        // A real rename rewrites only family+given; the additional name (Quinlan) rides through untouched.
-        const changed = mergeVCard(parseVCard(APPLE_FIXTURE), { lastName: 'Smith' });
-        expect(changed).toContain('N:Smith;John;Quinlan;;');
-        expect(changed).toContain('FN:John Smith');
     });
 
     test('a real name change preserves the unowned N tail (additional name, honorific prefix, suffix)', () => {
