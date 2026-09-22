@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
 import { eq } from 'drizzle-orm';
-import { ApiError, decodeUtf8Strict, NOT_A_VCARD_FILE, NOT_UTF8_FILE, VCARD_IMPORT_MAX_CARDS } from '../core';
+import {
+    ApiError,
+    decodeUtf8Strict,
+    NOT_A_VCARD_FILE,
+    NOT_UTF8_FILE,
+    type PutResourceResult,
+    VCARD_IMPORT_MAX_CARDS,
+} from '../core';
 import {
     makeLine,
     parseVCard,
@@ -116,7 +123,14 @@ export async function importCards(contacts: Contacts, bytes: Uint8Array): Promis
             if (!parsed.uid) body = withMintedUid(parsed);
 
             // A UID is not a safe filename (Apple's `…:ABPerson`, `urn:uuid:`), so mint one; If-None-Match: * keeps the write a create.
-            const put = await contacts.putCard(`${randomUUID()}.vcf`, body, { ifMatch: null, ifNoneMatch: '*' });
+            let put: PutResourceResult;
+            try {
+                put = await contacts.putCard(`${randomUUID()}.vcf`, body, { ifMatch: null, ifNoneMatch: '*' });
+            } catch {
+                // One card's write failing is that card's failure; a retry finishes the file.
+                result.failed++;
+                continue;
+            }
             if (put.ok) {
                 result.imported++;
                 for (const email of parsed.email) {
