@@ -211,18 +211,49 @@ describe('engine/formula-engine — compiled formula at an offset', () => {
     const onGrid = (formula: string, rowOffset: number, colOffset: number) =>
         engine.evaluateCompiled(engine.compile(formula), 'grid', grid, rowOffset, colOffset).value;
     // What paste and autofill evaluate: the formula text shifted by functionCopy.
-    const shifted = (formula: string, rowOffset: number, colOffset: number) => {
-        const down = `=${functionCopy(formula, 'down', rowOffset)}`;
-        return engine.evaluate(`=${functionCopy(down, 'right', colOffset)}`, 'grid', grid).value;
-    };
+    const shifted = (formula: string, rowOffset: number, colOffset: number) =>
+        engine.evaluate(`=${functionCopy(formula, rowOffset, colOffset)}`, 'grid', grid).value;
 
-    // functionCopy, one axis at a time, stops at the range its first step reversed; Excel moves both axes at once.
     test('a range whose legs shift differently reads B4:B$1 for A1:A$1 at (3,1)', () => {
-        expect(onGrid('=SUM(A1:A$1)', 3, 1)).toBe(2 ** 1 + 2 ** 6 + 2 ** 11 + 2 ** 16);
+        const expected = 2 ** 1 + 2 ** 6 + 2 ** 11 + 2 ** 16;
+        expect(onGrid('=SUM(A1:A$1)', 3, 1)).toBe(expected);
+        expect(shifted('=SUM(A1:A$1)', 3, 1)).toBe(expected);
     });
 
     test('a relative leg that crosses its $ leg reads D3:$B$2 for A1:$B$2 at (2,3)', () => {
-        expect(onGrid('=SUM(A1:$B$2)', 2, 3)).toBe(2 ** 6 + 2 ** 7 + 2 ** 8 + 2 ** 11 + 2 ** 12 + 2 ** 13);
+        const expected = 2 ** 6 + 2 ** 7 + 2 ** 8 + 2 ** 11 + 2 ** 12 + 2 ** 13;
+        expect(onGrid('=SUM(A1:$B$2)', 2, 3)).toBe(expected);
+        expect(shifted('=SUM(A1:$B$2)', 2, 3)).toBe(expected);
+    });
+
+    test('shifted formula text evaluates to the compiled formula at the same offset', () => {
+        const formulas = [
+            '=A1',
+            '=$A1+A$1',
+            '=SUM(A1:B2)',
+            '=SUM(A1:A$1)',
+            '=SUM(A1:$B$2)',
+            '=SUM($A1:B$3)',
+            '=SUM($C$3:E5)',
+            '=SUM(B:C)',
+            '=SUM($B:C)',
+            '=SUM(2:3)',
+            '=SUM($2:$3)',
+            '=SUM(Grid!A1:$C$2)',
+            '=SUM(B2:B2)*C3',
+        ];
+        const offsets = [-3, -1, 0, 1, 2, 3];
+        for (const formula of formulas) {
+            for (const rowOffset of offsets) {
+                for (const colOffset of offsets) {
+                    const label = `${formula} at (${rowOffset},${colOffset})`;
+                    expect([label, shifted(formula, rowOffset, colOffset)]).toEqual([
+                        label,
+                        onGrid(formula, rowOffset, colOffset),
+                    ]);
+                }
+            }
+        }
     });
 
     test('an offset past the last row and column reads empty cells, not an error', () => {

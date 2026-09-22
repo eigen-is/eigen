@@ -3,63 +3,63 @@ import { detectAbsolute, functionCopy, functionStrChange } from '../../engine/fo
 
 describe('engine/formula-shift — functionCopy single-cell refs', () => {
     test('shifts a relative ref down', () => {
-        expect(functionCopy('=A1', 'down', 1)).toBe('A2');
-        expect(functionCopy('=A1', 'down', 5)).toBe('A6');
+        expect(functionCopy('=A1', 1, 0)).toBe('A2');
+        expect(functionCopy('=A1', 5, 0)).toBe('A6');
     });
 
     test('shifts a relative ref right', () => {
-        expect(functionCopy('=A1', 'right', 1)).toBe('B1');
-        expect(functionCopy('=A1', 'right', 25)).toBe('Z1');
-        expect(functionCopy('=A1', 'right', 26)).toBe('AA1');
+        expect(functionCopy('=A1', 0, 1)).toBe('B1');
+        expect(functionCopy('=A1', 0, 25)).toBe('Z1');
+        expect(functionCopy('=A1', 0, 26)).toBe('AA1');
     });
 
     test('absolute refs do not shift', () => {
-        expect(functionCopy('=$A$1', 'down', 1)).toBe('$A$1');
-        expect(functionCopy('=$A1', 'right', 1)).toBe('$A1');
-        expect(functionCopy('=A$1', 'down', 1)).toBe('A$1');
+        expect(functionCopy('=$A$1', 1, 0)).toBe('$A$1');
+        expect(functionCopy('=$A1', 0, 1)).toBe('$A1');
+        expect(functionCopy('=A$1', 1, 0)).toBe('A$1');
     });
 
     test('shifting off the sheet produces #REF!', () => {
-        expect(functionCopy('=A1', 'up', 1)).toBe('#REF!');
-        expect(functionCopy('=A1', 'left', 1)).toBe('#REF!');
-        expect(functionCopy('=B2', 'up', 5)).toBe('#REF!');
+        expect(functionCopy('=A1', -1, 0)).toBe('#REF!');
+        expect(functionCopy('=A1', 0, -1)).toBe('#REF!');
+        expect(functionCopy('=B2', -5, 0)).toBe('#REF!');
     });
 
     test('a $-frozen axis never moves and never errors', () => {
-        expect(functionCopy('=A$1', 'up', 1)).toBe('A$1');
-        expect(functionCopy('=$A1', 'left', 1)).toBe('$A1');
-        expect(functionCopy('=$A$1', 'up', 5)).toBe('$A$1');
+        expect(functionCopy('=A$1', -1, 0)).toBe('A$1');
+        expect(functionCopy('=$A1', 0, -1)).toBe('$A1');
+        expect(functionCopy('=$A$1', -5, 0)).toBe('$A$1');
     });
 
     test('sheet-qualified refs keep the prefix when they do not error', () => {
-        expect(functionCopy('=Sheet1!A2', 'up', 1)).toBe('Sheet1!A1');
-        expect(functionCopy('=Sheet1!A1', 'up', 1)).toBe('#REF!');
+        expect(functionCopy('=Sheet1!A2', -1, 0)).toBe('Sheet1!A1');
+        expect(functionCopy('=Sheet1!A1', -1, 0)).toBe('#REF!');
     });
 
     test('sheet-qualified refs preserve the prefix', () => {
-        expect(functionCopy('=Sheet1!A1', 'down', 1)).toBe('Sheet1!A2');
-        expect(functionCopy('=Sheet1!$A$1', 'down', 1)).toBe('Sheet1!$A$1');
+        expect(functionCopy('=Sheet1!A1', 1, 0)).toBe('Sheet1!A2');
+        expect(functionCopy('=Sheet1!$A$1', 1, 0)).toBe('Sheet1!$A$1');
     });
 
     test('strips a single leading equals before processing', () => {
-        expect(functionCopy('=A1', 'down', 1)).toBe('A2');
-        expect(functionCopy('A1', 'down', 1)).toBe('A2');
+        expect(functionCopy('=A1', 1, 0)).toBe('A2');
+        expect(functionCopy('A1', 1, 0)).toBe('A2');
     });
 });
 
 describe('engine/formula-shift — functionCopy ranges', () => {
     test('shifts a relative range', () => {
-        expect(functionCopy('=A1:B3', 'down', 1)).toBe('A2:B4');
-        expect(functionCopy('=A1:B3', 'right', 1)).toBe('B1:C3');
+        expect(functionCopy('=A1:B3', 1, 0)).toBe('A2:B4');
+        expect(functionCopy('=A1:B3', 0, 1)).toBe('B1:C3');
     });
 
     test('preserves $-anchored leg in mixed range', () => {
-        expect(functionCopy('=$A1:B$3', 'down', 1)).toBe('$A2:B$3');
+        expect(functionCopy('=$A1:B$3', 1, 0)).toBe('$A2:B$3');
     });
 
     test('column-only range shifts cols only', () => {
-        expect(functionCopy('=A:C', 'right', 1)).toBe('B:D');
-        expect(functionCopy('=A:C', 'down', 1)).toBe('A:C');
+        expect(functionCopy('=A:C', 0, 1)).toBe('B:D');
+        expect(functionCopy('=A:C', 1, 0)).toBe('A:C');
     });
 
     test('row-only range shifts rows only', () => {
@@ -70,63 +70,79 @@ describe('engine/formula-shift — functionCopy ranges', () => {
         // routed row-only ranges to the cols-missing branch. The engine port
         // switched to `columnLabelToIndex` (returns -1) without updating the
         // missing-axis detection.
-        expect(functionCopy('=1:3', 'down', 1)).toBe('2:4');
-        expect(functionCopy('=1:3', 'right', 1)).toBe('1:3');
+        expect(functionCopy('=1:3', 1, 0)).toBe('2:4');
+        expect(functionCopy('=1:3', 0, 1)).toBe('1:3');
     });
 
     test('range going negative produces #REF!', () => {
-        expect(functionCopy('=A1:B3', 'up', 5)).toBe('#REF!');
-        expect(functionCopy('=A1:B3', 'left', 5)).toBe('#REF!');
-        expect(functionCopy('=1:3', 'up', 5)).toBe('#REF!');
-        expect(functionCopy('=B:C', 'left', 5)).toBe('#REF!');
-        expect(functionCopy('=A:C', 'left', 1)).toBe('#REF!');
+        expect(functionCopy('=A1:B3', -5, 0)).toBe('#REF!');
+        expect(functionCopy('=A1:B3', 0, -5)).toBe('#REF!');
+        expect(functionCopy('=1:3', -5, 0)).toBe('#REF!');
+        expect(functionCopy('=B:C', 0, -5)).toBe('#REF!');
+        expect(functionCopy('=A:C', 0, -1)).toBe('#REF!');
     });
 
     test('a range leg shifted off the sheet produces #REF!', () => {
         // Rows are 1-based here: row 1 shifted up by 1 lands on row 0, which does not exist.
-        expect(functionCopy('=A1:A2', 'up', 1)).toBe('#REF!');
-        expect(functionCopy('=A1:B2', 'left', 1)).toBe('#REF!');
+        expect(functionCopy('=A1:A2', -1, 0)).toBe('#REF!');
+        expect(functionCopy('=A1:B2', 0, -1)).toBe('#REF!');
         // A frozen leg stays put while the other one walks off.
-        expect(functionCopy('=A$2:B3', 'up', 5)).toBe('#REF!');
-        expect(functionCopy('=$A1:$B2', 'left', 5)).toBe('$A1:$B2');
+        expect(functionCopy('=A$2:B3', -5, 0)).toBe('#REF!');
+        expect(functionCopy('=$A1:$B2', 0, -5)).toBe('$A1:$B2');
+    });
+
+    test('shifts both axes at once, so legs that cross re-sort per axis', () => {
+        expect(functionCopy('=SUM(A1:A$1)', 3, 1)).toBe('SUM(B$1:B4)');
+        expect(functionCopy('=SUM(A1:$B$2)', 2, 3)).toBe('SUM($B$2:D3)');
+        expect(functionCopy('=SUM(A1:$C$3)', 0, 3)).toBe('SUM($C1:D$3)');
+        expect(functionCopy('=SUM($B$1:D3)', 0, -3)).toBe('SUM(A$1:$B3)');
+    });
+
+    test('a shifted range is still a ref the next copy shifts', () => {
+        expect(functionCopy(functionCopy('=SUM(A1:A$1)', 3, 1), 1, 0)).toBe('SUM(B$1:B5)');
+    });
+
+    test('a $ on a row-only leg keeps the row put', () => {
+        expect(functionCopy('=SUM($1:$3)', 2, 0)).toBe('SUM($1:$3)');
+        expect(functionCopy('=SUM($1:3)', 2, 0)).toBe('SUM($1:5)');
     });
 
     test('sheet-qualified range preserves prefix on row-only and col-only', () => {
-        expect(functionCopy('=Sheet1!A1:B3', 'down', 1)).toBe('Sheet1!A2:B4');
-        expect(functionCopy('=Sheet1!1:3', 'down', 1)).toBe('Sheet1!2:4');
-        expect(functionCopy('=Sheet1!A:C', 'right', 1)).toBe('Sheet1!B:D');
+        expect(functionCopy('=Sheet1!A1:B3', 1, 0)).toBe('Sheet1!A2:B4');
+        expect(functionCopy('=Sheet1!1:3', 1, 0)).toBe('Sheet1!2:4');
+        expect(functionCopy('=Sheet1!A:C', 0, 1)).toBe('Sheet1!B:D');
     });
 });
 
 describe('engine/formula-shift — functionCopy formulas', () => {
     test('shifts refs inside arithmetic', () => {
-        expect(functionCopy('=A1+B1', 'down', 1)).toBe('A2+B2');
-        expect(functionCopy('=A1*2', 'down', 1)).toBe('A2*2');
+        expect(functionCopy('=A1+B1', 1, 0)).toBe('A2+B2');
+        expect(functionCopy('=A1*2', 1, 0)).toBe('A2*2');
     });
 
     test('shifts refs inside function calls', () => {
-        expect(functionCopy('=SUM(A1,B1,C1)', 'down', 1)).toBe('SUM(A2,B2,C2)');
-        expect(functionCopy('=SUM(A1:A3)', 'down', 1)).toBe('SUM(A2:A4)');
+        expect(functionCopy('=SUM(A1,B1,C1)', 1, 0)).toBe('SUM(A2,B2,C2)');
+        expect(functionCopy('=SUM(A1:A3)', 1, 0)).toBe('SUM(A2:A4)');
         // Note: leading whitespace inside arguments is discarded by `str.trim()` at the
         // recursion boundary — same behavior as the original state-side functionCopy.
-        expect(functionCopy('=AND(A1>0, B1>0)', 'down', 1)).toBe('AND(A2>0,B2>0)');
+        expect(functionCopy('=AND(A1>0, B1>0)', 1, 0)).toBe('AND(A2>0,B2>0)');
     });
 
     test('shifts row-only range inside SUM', () => {
-        expect(functionCopy('=SUM(1:3)', 'down', 1)).toBe('SUM(2:4)');
+        expect(functionCopy('=SUM(1:3)', 1, 0)).toBe('SUM(2:4)');
     });
 
     test('handles unary minus', () => {
-        expect(functionCopy('=-A1', 'down', 1)).toBe('-A2');
+        expect(functionCopy('=-A1', 1, 0)).toBe('-A2');
     });
 
     test('preserves quoted strings', () => {
-        expect(functionCopy('=A1&"x"', 'down', 1)).toBe('A2&"x"');
+        expect(functionCopy('=A1&"x"', 1, 0)).toBe('A2&"x"');
     });
 
     test('step=0 is a no-op', () => {
-        expect(functionCopy('=A1+B1', 'down', 0)).toBe('A1+B1');
-        expect(functionCopy('=A1:B3', 'down', 0)).toBe('A1:B3');
+        expect(functionCopy('=A1+B1', 0, 0)).toBe('A1+B1');
+        expect(functionCopy('=A1:B3', 0, 0)).toBe('A1:B3');
     });
 });
 
@@ -336,7 +352,7 @@ describe('functionStrChange — unary-minus predecessor scan', () => {
     });
 
     test('functionCopy output is unchanged on the same input (already reads i-1)', () => {
-        expect(functionCopy('CONCAT(-1:3)', 'down', 1)).toBe('CONCAT(-1:3)');
-        expect(functionCopy('CONCAT(-3:A10)', 'down', 1)).toBe('CONCAT(-3:A10)');
+        expect(functionCopy('CONCAT(-1:3)', 1, 0)).toBe('CONCAT(-1:3)');
+        expect(functionCopy('CONCAT(-3:A10)', 1, 0)).toBe('CONCAT(-3:A10)');
     });
 });

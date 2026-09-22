@@ -1960,7 +1960,8 @@ export function updateDropCell(ctx: Context) {
             const cell = applyData[step];
 
             if (cell?.f != null) {
-                const f = `=${functionCopy(cell.f, direction, step + 1)}`;
+                const offset = reverse ? -(step + 1) : step + 1;
+                const f = `=${functionCopy(cell.f, axisIsRow ? offset : 0, axisIsRow ? 0 : offset)}`;
                 const v = execfunction(ctx, f, row, col, undefined, undefined, undefined, undefined, resolver);
 
                 execFunctionGroup(ctx, row, col, v[1], undefined, d);

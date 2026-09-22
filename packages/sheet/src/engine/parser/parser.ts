@@ -12,32 +12,18 @@ import type {
 import errorParser, { ERROR, ERROR_NAME, ERROR_REF, ERROR_VALUE, valueIsError } from './error';
 import evaluateByOperator from './evaluate-by-operator/evaluate-by-operator';
 import { Parser as GrammarParser } from './grammar-parser/grammar-parser';
-import { type CellCoordinate, columnIndexToLabel, extractLabel, rowIndexToLabel, toLabel } from './helper/cell';
+import {
+    columnIndexToLabel,
+    extractLabel,
+    offsetCoordinate,
+    offsetRange,
+    rowIndexToLabel,
+    toLabel,
+} from './helper/cell';
 import { invertNumber, toNumber } from './helper/number';
 import { trimEdges } from './helper/string';
 
 type GrammarParserInstance = { parse: (expression: string) => CompiledFormula; yy: Record<string, unknown> };
-
-// Moves a relative leg by the evaluation offset, the way functionCopy shifts reference text:
-// `$` legs and a missing axis (`A:A`, `1:1`) stay put.
-function offsetCoordinate(
-    coordinate: CellCoordinate,
-    offset: number,
-    indexToLabel: (index: number) => string,
-): CellCoordinate {
-    if (offset === 0 || coordinate.isAbsolute || coordinate.index === -1) {
-        return coordinate;
-    }
-    const index = coordinate.index + offset;
-    if (index < 0) {
-        throw Error(ERROR_REF);
-    }
-    return { index, label: indexToLabel(index), isAbsolute: false };
-}
-
-function isReversed(start: CellCoordinate, end: CellCoordinate): boolean {
-    return start.index !== -1 && end.index !== -1 && start.index > end.index;
-}
 
 class Parser {
     private parser: GrammarParserInstance;
@@ -156,6 +142,9 @@ class Parser {
         const { rowOffset = 0, colOffset = 0 } = this.options;
         const cellRow = offsetCoordinate(row, rowOffset, rowIndexToLabel);
         const cellColumn = offsetCoordinate(column, colOffset, columnIndexToLabel);
+        if (cellRow == null || cellColumn == null) {
+            throw Error(ERROR_REF);
+        }
 
         let value: FormulaValue;
         const cell: CellInfo = { label: toLabel(cellRow, cellColumn), row: cellRow, column: cellColumn, sheetName };
@@ -174,24 +163,18 @@ class Parser {
             throw Error(ERROR);
         }
 
-        let [startRow, startColumn, startSheetName] = start;
-        let [endRow, endColumn, endSheetName] = end;
+        const [startRow, startColumn, startSheetName] = start;
+        const [endRow, endColumn, endSheetName] = end;
         if (endSheetName != null && startSheetName !== endSheetName) {
             throw Error(ERROR_VALUE);
         }
 
-        // functionCopy leaves a reversed range (`B2:A1`) unshifted, so the offset does too.
         const { rowOffset = 0, colOffset = 0 } = this.options;
-        if (!isReversed(startRow, endRow) && !isReversed(startColumn, endColumn)) {
-            startRow = offsetCoordinate(startRow, rowOffset, rowIndexToLabel);
-            endRow = offsetCoordinate(endRow, rowOffset, rowIndexToLabel);
-            startColumn = offsetCoordinate(startColumn, colOffset, columnIndexToLabel);
-            endColumn = offsetCoordinate(endColumn, colOffset, columnIndexToLabel);
+        const range = offsetRange([startRow, startColumn], [endRow, endColumn], rowOffset, colOffset);
+        if (range == null) {
+            throw Error(ERROR_REF);
         }
-
-        const [rowStart, rowEnd] = startRow.index <= endRow.index ? [startRow, endRow] : [endRow, startRow];
-        const [colStart, colEnd] =
-            startColumn.index <= endColumn.index ? [startColumn, endColumn] : [endColumn, startColumn];
+        const [[rowStart, colStart], [rowEnd, colEnd]] = range;
 
         const startCell: RangeCell = {
             row: rowStart,

@@ -73,10 +73,8 @@ export function sortDataRange(
             if (cell?.f) {
                 const moveOffset = rowOffsets[r - str];
                 let func = cell.f;
-                if (moveOffset > 0) {
-                    func = `=${functionCopy(func, 'down', moveOffset)}`;
-                } else if (moveOffset < 0) {
-                    func = `=${functionCopy(func, 'up', -moveOffset)}`;
+                if (moveOffset !== 0) {
+                    func = `=${functionCopy(func, moveOffset, 0)}`;
                 }
                 const funcV = execfunction(ctx, func, r, c, undefined, undefined, true, undefined, resolver);
                 [, cell!.v, cell!.f] = funcV;
