@@ -45,11 +45,10 @@ export const HOME_DATABASES: [DatabaseConfig<SchemaType>, string][] = [
     [NOTIFICATION_CENTER_DB_CONFIG, PATHS.NOTIFICATIONS.DB],
 ];
 
-// `mounts/` is walked from its paths tables instead (snapshotMountData), and the contacts avatar
-// cache is derived from the cards. Matched on the path from the home root, never on the folder
-// name: a folder deeper in the home that happens to be called `mounts` or `avatars` is somebody's
-// own and belongs in the archive.
-const SKIPPED_HOME_DIRS = new Set<string>([PATHS.DRIVE.ROOT, `${PATHS.CONTACTS.ROOT}/${PATHS.CONTACTS.AVATARS}`]);
+// `mounts/` is walked from its paths tables instead (snapshotMountData). Matched on the path from
+// the home root, never on the folder name: a folder deeper in the home that happens to be called
+// `mounts` is somebody's own and belongs in the archive.
+const SKIPPED_HOME_DIRS = new Set<string>([PATHS.DRIVE.ROOT]);
 
 // The other skip, which has no fixed path: every mailbox in the Maildir has a `tmp/` delivery spool
 // beside its `cur/` and `new/`, holding half-written deliveries only.

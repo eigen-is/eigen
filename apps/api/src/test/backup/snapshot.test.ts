@@ -18,6 +18,7 @@ import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { docUpdates } from '../../lib/collab/schema';
 import { getAvatarsDir } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
+import { avatarNameOf } from '../../lib/contacts/card-store';
 import { getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
@@ -50,8 +51,8 @@ const USER_DB_NAME = 'user-upload.db';
 // A thumbnail whose paths row is gone: nothing would ever serve it again, so it stays out.
 const ORPHAN_THUMB_ID = 'backup-orphan-thumb';
 // A folder named like one of the skipped ones but somewhere else in the home. The skips are paths.
-const LOOKALIKE_DIR = 'eigen.calendar/avatars';
-const LOOKALIKE_TEXT = 'not the contacts avatar cache';
+const LOOKALIKE_DIR = 'eigen.calendar/mounts';
+const LOOKALIKE_TEXT = 'not the drive mounts';
 // A standard mailbox nothing is ever delivered to: its `new/` is empty, and MaildirStore.watch
 // needs it on disk after a restore.
 const EMPTY_MAILBOX_DIR = 'eigen.mail/Maildir/.Archive/new';
@@ -89,6 +90,7 @@ describe('Backup snapshotHome', () => {
     let twoFactorId: string;
     let userDbBytes: ArrayBuffer;
     let keptFileId: string;
+    let avatarName: string;
 
     beforeAll(async () => {
         ctx = await getTestContext();
@@ -215,6 +217,18 @@ describe('Backup snapshotHome', () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ firstName: 'Backup', lastName: 'Contact', email: ['backup@test.eigen.is'] }),
         });
+        // A second card with a photo: its derived webp is the one thing contacts still keeps as a file.
+        const staged = await home.contacts.uploadAvatar(
+            new File([TEST_PNG_BYTES], 'avatar.png', { type: 'image/png' }),
+        );
+        const photoContactId = await home.contacts.addContact({
+            firstName: 'Photo',
+            lastName: 'Contact',
+            email: ['photo@test.eigen.is'],
+            phone: [],
+            avatar: staged,
+        });
+        avatarName = avatarNameOf((await home.contacts.getContactById(photoContactId))!.avatar);
         const calendars = await assertJson<CalendarItem[]>(
             await authedRequest(alice.sessionToken, `/calendar/${alice.id}/calendars`),
         );
@@ -310,6 +324,12 @@ describe('Backup snapshotHome', () => {
         }
     });
 
+    test('the derived contact photo rides along', () => {
+        // The cache is derived at the write alone — nothing re-derives it from the card's PHOTO on a read —
+        // so an archive without it restores a book whose photos are gone.
+        expect(files).toContain(`home/eigen.contacts/avatars/${avatarName}`);
+    });
+
     test('manifest describes the home', () => {
         const config = getServerConfig()!;
         expect(manifest.formatVersion).toBe(1);
@@ -394,7 +414,6 @@ describe('Backup snapshotHome', () => {
         // called `tmp`. `thumbs/` is not a cache: nothing regenerates a thumbnail (see below).
         expect(files.filter((f) => /^home\/mounts\/[^/]+\/(tmp|staging)\//.test(f))).toEqual([]);
         expect(files.filter((f) => f.startsWith('home/eigen.mail/Maildir') && f.includes('/tmp/'))).toEqual([]);
-        expect(files.filter((f) => f.startsWith('home/eigen.contacts/avatars/'))).toEqual([]);
     });
 
     test('thumbnails ride along, orphans do not', () => {
@@ -408,8 +427,8 @@ describe('Backup snapshotHome', () => {
     });
 
     test('a home file the archive skips by name is kept when it is somebody else', async () => {
-        // The skips are paths, not names: `mounts`, `eigen.contacts/avatars` and a Maildir `tmp/`
-        // spool. A folder deeper in the home that happens to share one of those names is a user's.
+        // The skips are paths, not names: `mounts` and a Maildir `tmp/` spool. A folder deeper in
+        // the home that happens to share one of those names is a user's.
         expect(files).toContain(`home/${LOOKALIKE_DIR}/note.txt`);
         expect(await Bun.file(join(folder, 'home', LOOKALIKE_DIR, 'note.txt')).text()).toBe(LOOKALIKE_TEXT);
     });

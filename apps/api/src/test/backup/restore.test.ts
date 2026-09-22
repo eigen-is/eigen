@@ -23,6 +23,7 @@ import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getAvatarsDir } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
+import { avatarNameOf } from '../../lib/contacts/card-store';
 import { getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
 import { paths } from '../../lib/mount/schema';
@@ -165,6 +166,8 @@ describe('Backup restoreHome', () => {
     let localRootId: string;
     let nestedFileId: string;
     let keptThumbPath: string;
+    let avatarPath: string;
+    let avatarName: string;
     let port: number;
 
     beforeAll(async () => {
@@ -237,6 +240,20 @@ describe('Backup restoreHome', () => {
         await authedRequest(target.sessionToken, `/mail/${target.id}/mailbox/`);
 
         const home = await getHome(target.id);
+        // A contact photo: the derived webp is written once, at the card write, so a restore has to
+        // bring it back the way it brings a thumbnail back.
+        const staged = await home.contacts.uploadAvatar(
+            new File([TEST_PNG_BYTES], 'avatar.png', { type: 'image/png' }),
+        );
+        const photoContactId = await home.contacts.addContact({
+            firstName: 'Photo',
+            lastName: 'Contact',
+            email: ['photo@test.eigen.is'],
+            phone: [],
+            avatar: staged,
+        });
+        avatarName = avatarNameOf((await home.contacts.getContactById(photoContactId))!.avatar);
+        avatarPath = join(TEST_DATA_DIR, 'home', target.id, 'eigen.contacts', 'avatars', avatarName);
         const settings = await home.settings.set({
             mounts: {
                 [LOCAL_MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Restore Local' },
@@ -293,8 +310,9 @@ describe('Backup restoreHome', () => {
         );
         await deliverMail(target.email, 'After the backup');
         await authedRequest(target.sessionToken, `/mail/${target.id}/mailbox/`);
-        // ...and lose the thumbnail nothing would ever generate again.
+        // ...and lose the thumbnail and the contact photo nothing would ever generate again.
         rmSync(keptThumbPath, { force: true });
+        rmSync(avatarPath, { force: true });
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual([
             'after-backup.png',
             CHATS_FOLDER,
@@ -373,6 +391,9 @@ describe('Backup restoreHome', () => {
         );
         expect(thumb.status).toBe(200);
         expect(thumb.headers.get('content-type')).toBe('image/webp');
+
+        // The contact photo cache is derived at the write alone, so the archive is the only copy left.
+        expect(await home.contacts.downloadAvatar(avatarName)).not.toBeNull();
 
         const [preRestore] = safetyCopies(target.id, PRE_RESTORE_SUFFIX);
         expect(preRestore).toBeTruthy();
