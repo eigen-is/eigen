@@ -50,14 +50,18 @@ function labelMemberIds(contacts: Contacts, labelIds: string[]): string[] {
     return [...new Set(rows.map((r) => r.contactId))];
 }
 
-// The member cards a rename or delete has to rewrite, and the byte delta the caller applies once the
-// transaction it was given has committed. One ctag for the whole fan-out: a rename is one change to the book.
+// What the caller settles once the transaction it lent has committed: the byte delta and the events.
+type FanOut = { bytes: number; contactIds: string[]; createdLabelIds: string[] };
+const NO_FAN_OUT: FanOut = { bytes: 0, contactIds: [], createdLabelIds: [] };
+
+// Rewrites every member card's CATEGORIES inside the caller's transaction, so the label row and its members
+// move together. One ctag for the whole fan-out: a rename is one change to the book.
 function rewriteCardCategories(
     contacts: Contacts,
     tx: Tx,
     contactIds: string[],
     transform: (names: string[]) => string[],
-): { bytes: number; contactIds: string[] } {
+): FanOut {
     const rewrites: { row: CardRowInput; was: number; categories: string[] }[] = [];
     for (const contactId of contactIds) {
         const row = tx
@@ -99,7 +103,7 @@ function rewriteCardCategories(
             categories,
         });
     }
-    if (rewrites.length === 0) return { bytes: 0, contactIds: [] };
+    if (rewrites.length === 0) return NO_FAN_OUT;
 
     const createdLabelIds: string[] = [];
     const ctag = contacts.bumpCtag(tx);
@@ -108,8 +112,14 @@ function rewriteCardCategories(
         bytes += row.vcard.byteLength - was;
         contacts.indexCard(tx, row, categories, ctag, createdLabelIds);
     }
-    for (const id of createdLabelIds) contacts.emitLabel(SSEventType.LABEL_CREATED, id);
-    return { bytes, contactIds: rewrites.map((r) => r.row.id) };
+    return { bytes, contactIds: rewrites.map((r) => r.row.id), createdLabelIds };
+}
+
+// Everything a fan-out owes the world once its transaction has committed.
+function settleFanOut(contacts: Contacts, fanout: FanOut): void {
+    contacts.cardsBytes += fanout.bytes;
+    for (const id of fanout.createdLabelIds) contacts.emitLabel(SSEventType.LABEL_CREATED, id);
+    for (const id of fanout.contactIds) contacts.emitContact(SSEventType.CONTACT_UPDATED, id);
 }
 
 export async function addLabel(contacts: Contacts, label: Omit<Label, 'id'>): Promise<string> {
@@ -156,7 +166,7 @@ export async function updateLabel(contacts: Contacts, id: string, label: Omit<La
         const renamed = before.name !== newName;
         const members = renamed ? labelMemberIds(contacts, [id]) : [];
 
-        let fanout = { bytes: 0, contactIds: [] as string[] };
+        let fanout = NO_FAN_OUT;
         try {
             contacts.db.transaction((tx) => {
                 tx.update(schema.labels)
@@ -175,9 +185,7 @@ export async function updateLabel(contacts: Contacts, id: string, label: Omit<La
         } catch (e) {
             rethrowDuplicateLabelName(e);
         }
-        contacts.cardsBytes += fanout.bytes;
-
-        for (const contactId of fanout.contactIds) contacts.emitContact(SSEventType.CONTACT_UPDATED, contactId);
+        settleFanOut(contacts, fanout);
         contacts.emitLabel(SSEventType.LABEL_UPDATED, id);
         // The row committed this exact name and color, so the DTO is assembled rather than read back.
         return { id, name: newName, color: label.color };
@@ -194,7 +202,7 @@ export async function deleteLabel(contacts: Contacts, id: string): Promise<void>
         if (!label) return;
         const members = labelMemberIds(contacts, [id]);
 
-        let fanout = { bytes: 0, contactIds: [] as string[] };
+        let fanout = NO_FAN_OUT;
         contacts.db.transaction((tx) => {
             fanout = rewriteCardCategories(contacts, tx, members, (names) =>
                 names.filter((n) => normalizeLabelName(n) !== label.nameKey),
@@ -202,9 +210,7 @@ export async function deleteLabel(contacts: Contacts, id: string): Promise<void>
             // The junction rows cascade with the label row (FK ON DELETE CASCADE).
             tx.delete(schema.labels).where(eq(schema.labels.id, id)).run();
         });
-        contacts.cardsBytes += fanout.bytes;
-
-        for (const contactId of fanout.contactIds) contacts.emitContact(SSEventType.CONTACT_UPDATED, contactId);
+        settleFanOut(contacts, fanout);
         contacts.emitLabel(SSEventType.LABEL_DELETED, id);
     });
 }
