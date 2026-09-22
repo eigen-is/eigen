@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQueryClient } from '@tanstack/react-query';
 import { calendarApi, getCalendarExportUrl, getCalendarImportUrl } from '@workspace/lib/api';
 import { parseOwnerId } from '@workspace/lib/types';
 import { ICS_MIME } from '@workspace/lib/types/drive';
@@ -33,14 +33,37 @@ export function useExportCalendar() {
     return { exportCalendar, isExporting: isDownloading };
 }
 
+type ImportCalendarTargetIds = { ownerId: string; calendarId: string };
+
+// One landing place for every import path: the events are in the calendar, so the open range refreshes, and the
+// counts are reported in the wording every counted import shares.
+function reportImport(queryClient: QueryClient, ownerId: string, result: ImportCountsResult): void {
+    invalidateEventList(queryClient, ownerId);
+    reportImportCounts(result, 'event');
+}
+
+// The file the user picked off their own disk, posted as the raw body the route reads as one iCalendar stream.
+export function useImportCalendarFromDevice() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({
+            file,
+            ownerId,
+            calendarId,
+        }: ImportCalendarTargetIds & { file: File }): Promise<ImportCountsResult> =>
+            postImportBytes(getCalendarImportUrl(ownerId, calendarId), ICS_MIME, file),
+        onSuccess: (result, { ownerId }) => reportImport(queryClient, ownerId, result),
+        onError: onMutationError,
+    });
+}
+
 // A mail part or chat attachment has no Drive path for the server to copy, so the browser reads its bytes and posts them.
 export function useImportCalendar() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (
-            source: FileImportSource & { ownerId: string; calendarId: string },
-        ): Promise<ImportCountsResult> => {
+        mutationFn: async (source: FileImportSource & ImportCalendarTargetIds): Promise<ImportCountsResult> => {
             const { ownerId, calendarId } = source;
             if (source.url !== undefined)
                 return postImportBytes(
@@ -55,10 +78,7 @@ export function useImportCalendar() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (result, { ownerId }) => {
-            invalidateEventList(queryClient, ownerId);
-            reportImportCounts(result, 'event');
-        },
+        onSuccess: (result, { ownerId }) => reportImport(queryClient, ownerId, result),
         onError: onMutationError,
     });
 }

@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1528 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1530 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -206,7 +206,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyGestureContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (282)
+## Hooks (283)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -268,6 +268,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useEvents` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useExportCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
 | `useImportCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
+| `useImportCalendarFromDevice` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
 | `useImportToCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
 | `useMoveEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useRsvp` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
@@ -856,7 +857,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (708)
+## Utilities & constants (709)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1244,6 +1245,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `externalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `getEigenDocInfoByMime` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `getEigenDocInfoByType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `ICS_ACCEPT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `ICS_CONTENT_TYPE` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `ICS_MIME` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `IMIP_METHODS` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |

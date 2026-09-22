@@ -5,6 +5,8 @@ import {
     getWeekRange,
     useCalendars,
     useExportCalendar,
+    useImportCalendar,
+    useImportCalendarFromDevice,
     useSharedCalendarLabel,
     useSharedCalendars,
     useUpdateCalendar,
@@ -12,12 +14,14 @@ import {
 } from '@workspace/lib/calendar';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
+import { ICS_ACCEPT, isIcsFile } from '@workspace/lib/types/drive';
 import { KebabTrigger, SidebarBody, SidebarItem, SidebarSection, TooltipButton } from '@workspace/ui';
+import { FileImportPicker } from '@workspace/ui/components/drive/file-import-picker';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { StorageUsage } from '@workspace/ui/components/home';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { cn } from '@workspace/ui/lib/utils';
-import { CalendarDays, CalendarPlus, CalendarRange, Check, Download, Pencil, Plus } from 'lucide-react';
+import { CalendarDays, CalendarPlus, CalendarRange, Check, Download, Pencil, Plus, Upload } from 'lucide-react';
 import { type MouseEvent, useMemo, useState } from 'react';
 import { CalendarConfigDialog } from './calendar-config-dialog';
 import { CreateEventDialog } from './create-event-dialog';
@@ -48,6 +52,7 @@ function CalendarCheckbox({ color, checked, onChange }: { color: string; checked
 }
 
 // No onExport means the calendar cannot be downloaded here: it lives in another user's home, or the viewer is a guest.
+// No onImport means nothing can be brought in either: the same two cases, plus a team calendar the viewer may only read.
 function CalendarRow({
     color,
     label,
@@ -55,6 +60,7 @@ function CalendarRow({
     condensed,
     onToggle,
     onEdit,
+    onImport,
     onExport,
 }: {
     color: string;
@@ -63,6 +69,7 @@ function CalendarRow({
     condensed: boolean;
     onToggle: () => void;
     onEdit: () => void;
+    onImport?: () => void;
     onExport?: () => void;
 }) {
     return (
@@ -84,6 +91,11 @@ function CalendarRow({
                                 <DropdownMenuItem onClick={onEdit}>
                                     <Pencil className="h-4 w-4 mr-2" /> Edit calendar
                                 </DropdownMenuItem>
+                                {onImport && (
+                                    <DropdownMenuItem onClick={onImport}>
+                                        <Upload className="h-4 w-4 mr-2" /> Import events…
+                                    </DropdownMenuItem>
+                                )}
                                 {onExport && (
                                     <DropdownMenuItem onClick={onExport}>
                                         <Download className="h-4 w-4 mr-2" /> Export calendar
@@ -106,6 +118,8 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
     const updateCalendar = useUpdateCalendar(ownerId);
     const updateSharedCalendar = useUpdateSharedCalendar(ownerId);
     const { exportCalendar } = useExportCalendar();
+    const importCalendar = useImportCalendar();
+    const importFromDevice = useImportCalendarFromDevice();
     const isGuest = useIsGuest();
     const navigate = useNavigate();
 
@@ -116,6 +130,8 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
     const [configSharedCalendar, setConfigSharedCalendar] = useState<SharedCalendar | null>(null);
     const [sharedConfigDialogOpen, setSharedConfigDialogOpen] = useState(false);
     const [createEventOpen, setCreateEventOpen] = useState(false);
+    // The calendar the picked file goes into; null while no import dialog is open.
+    const [importTarget, setImportTarget] = useState<{ ownerId: string; calendarId: string } | null>(null);
 
     const { personalShared, teamShared } = useMemo(() => {
         const personal: SharedCalendar[] = [];
@@ -208,6 +224,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                                 condensed={condensed}
                                 onToggle={() => updateCalendar.mutate({ id: cal.id, visible: !cal.visible })}
                                 onEdit={() => handleEditCalendar(cal)}
+                                onImport={isGuest ? undefined : () => setImportTarget({ ownerId, calendarId: cal.id })}
                                 onExport={isGuest ? undefined : () => void exportCalendar(ownerId, cal.id)}
                             />
                         ))}
@@ -247,6 +264,15 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                                             updateSharedCalendar.mutate({ id: sc.id, visible: !sc.visible })
                                         }
                                         onEdit={() => handleEditSharedCalendar(display)}
+                                        onImport={
+                                            isGuest || sc.permission !== 'write'
+                                                ? undefined
+                                                : () =>
+                                                      setImportTarget({
+                                                          ownerId: sc.ownerUserId,
+                                                          calendarId: sc.calendarId,
+                                                      })
+                                        }
                                         onExport={
                                             isGuest
                                                 ? undefined
@@ -282,6 +308,25 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
             />
 
             <CreateEventDialog open={createEventOpen} onOpenChange={setCreateEventOpen} />
+
+            {importTarget && (
+                <FileImportPicker
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setImportTarget(null);
+                    }}
+                    title="Import events"
+                    accept={ICS_ACCEPT}
+                    canPick={(item) => isIcsFile(item.mimeType, item.name)}
+                    onDeviceFile={(file) => importFromDevice.mutate({ file, ...importTarget })}
+                    onDrivePick={(item) =>
+                        importCalendar.mutate({
+                            drive: { sourceOwnerId: item.ownerId, sourceMountId: item.mountId, sourcePathId: item.id },
+                            ...importTarget,
+                        })
+                    }
+                />
+            )}
         </>
     );
 }
