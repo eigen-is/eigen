@@ -175,7 +175,7 @@ A manual pass over the DOM chrome after the `sheet-` rename. Recorded so it isn'
 
 ## Next up — kill the config-mirror bug class
 
-N1 and N2 are done. The follow-up question, whether sheets should keep its op log or become a real Yjs document with `Y.UndoManager`, is researched in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md) (2026-09-03). Its answer: fix the op log in place first (agreed order for same-key conflicts, rebase to array order on concurrent inserts, server-side compaction, the two undo fixes above), and build the Yjs version only with stable row/column ids, when the engine needs those anyway.
+N1 and N2 are done. The follow-up question, whether sheets should keep its op log or become a real Yjs document with `Y.UndoManager`, is researched in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md) (2026-09-03). Its answer: fix the op log in place first (live clients apply batches in array order, which closes same-key conflicts and concurrent inserts; server-side compaction; the two undo fixes above), and build the Yjs version only with stable row/column ids, when the engine needs those anyway.
 
 N1 landed on 2026-08-28 and N2 on 2026-08-30 (both on branch `sheets-kill-config-mirror`). N2 was **rewritten** before it was built: its stated premise did not survive contact with the code, and the real defect it was groping at turned out to be worse. **Backwards compatibility is explicitly NOT required** (Reinder, 2026-08-28): stored sheet JSON, the op wire shape and the in-memory shape are all free to change.
 
@@ -224,7 +224,7 @@ Landed 2026-08-30 on `sheets-kill-config-mirror` (`db2885bd1` + two review-fix c
 
 **Second data-loss path closed on the way, unrelated to borders:** `use-sheet.ts` used to open `createDefaultSheets()` when a snapshot failed to decode and then flush that blank workbook over `state.snapshot` on unmount, clearing the op log. `loadedRef` now gates both `flushSnapshot` and `handleOp`: a workbook that opened on the fallback can be looked at but never persisted or broadcast, until a later remote snapshot decodes.
 
-**Scope limit, probed, do not overstate:** the map does NOT make two clients editing the *same* cell converge. Each client applies its own op optimistically and never replays in Yjs's total order, so the shared cell still ends `A: blue, B: red`. Only real Yjs structures close that; see [PROPOSAL_SHEETS_YJS_CONFIG.md](proposals/PROPOSAL_SHEETS_YJS_CONFIG.md).
+**Scope limit, probed, do not overstate:** the map does NOT make two clients editing the *same* cell converge. Each client applies its own op optimistically and never replays in Yjs's total order, so the shared cell still ends `A: blue, B: red`. The op log closes that by applying batches in array order (planned, see [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md#what-to-do-first)).
 
 ## Clipboard — put sheets on the shared system
 
