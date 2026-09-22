@@ -19,6 +19,7 @@ import {
     booleanDisplay,
     functionCopy,
     iscelldata,
+    numberDisplay,
     parseA1Range,
     toA1,
     unquoteSheetName,
@@ -952,7 +953,7 @@ function resolveFormulaResult(
 ): { value?: string | number | boolean; display?: string } {
     if (result === null || result === undefined) return {};
     if (typeof result === 'number') {
-        return { value: result, display: numberDisplay(result, numFmt) };
+        return { value: result, display: maskedNumberDisplay(result, numFmt) };
     }
     if (typeof result === 'boolean') {
         return { value: result, display: booleanDisplay(result) };
@@ -986,8 +987,8 @@ function dateToSerialAndDisplay(date: Date, numFmt?: string): { value: number; d
     return { value: serial, display };
 }
 
-function numberDisplay(value: number, numFmt?: string): string {
-    if (!numFmt || numFmt === 'General') return String(value);
+function maskedNumberDisplay(value: number, numFmt?: string): string {
+    if (!numFmt || numFmt === 'General') return numberDisplay(value);
     // Same boundary guard as dateToSerialAndDisplay: a malformed format string from a
     // hostile workbook makes numfmt throw.
     try {

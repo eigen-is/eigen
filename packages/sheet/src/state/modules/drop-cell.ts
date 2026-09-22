@@ -1,7 +1,7 @@
 import dayjs from 'dayjs';
 import { cloneDeep, pick } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine/conditional-format';
-import { parseCellInput, update } from '../../engine/format';
+import { numberDisplay, parseCellInput, update } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
@@ -1972,24 +1972,7 @@ export function updateDropCell(ctx: Context) {
                         isRealNum(cell.v) &&
                         !/^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i.test(`${cell.v}`)
                     ) {
-                        if (cell.v === Infinity || cell.v === -Infinity) {
-                            cell.m = cell.v.toString();
-                        } else if (cell.v.toString().indexOf('e') > -1) {
-                            let len = cell.v.toString().split('.')[1].split('e')[0].length;
-                            if (len > 5) {
-                                len = 5;
-                            }
-
-                            cell.m = (cell.v as number).toExponential(len).toString();
-                        } else {
-                            const rounded = Math.round((cell.v as number) * 1000000000) / 1000000000;
-                            // Keep an existing number format (Excel/Google parity):
-                            // render through its mask rather than auto-detecting one.
-                            cell.m =
-                                cell.ct?.fa != null && cell.ct.fa !== 'General'
-                                    ? update(cell.ct.fa, rounded)
-                                    : parseCellInput(rounded)[0].toString();
-                        }
+                        cell.m = numberDisplay(Number(cell.v), cell.ct?.fa);
 
                         cell.ct = cell.ct || { fa: 'General', t: 'n' };
                     } else {

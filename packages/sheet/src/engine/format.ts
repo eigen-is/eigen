@@ -254,6 +254,19 @@ export function update(fmt: string, v: string | number | boolean | null | undefi
     return format(fmt, v);
 }
 
+// Display for a computed number, shared by the editor, autofill, server recalc and
+// the xlsx importer. The 9-decimal round clears float noise (0.1+0.2) that a
+// verbatim `String(v)` would show.
+export function numberDisplay(value: number, fa = 'General'): string {
+    if (!Number.isFinite(value)) return value.toString();
+    const text = value.toString();
+    if (text.includes('e')) {
+        const decimals = text.split('e')[0].split('.')[1]?.length ?? 0;
+        return value.toExponential(Math.min(decimals, 5));
+    }
+    return update(fa, Math.round(value * 1000000000) / 1000000000);
+}
+
 export function is_date(fmt: number | string): boolean {
     if (typeof fmt !== 'string') return false;
     return isDateFormat(fmt);

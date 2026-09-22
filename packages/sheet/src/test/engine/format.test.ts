@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { is_date, parseCellInput, update, valueShowEs } from '../../engine/format';
+import { is_date, numberDisplay, parseCellInput, update, valueShowEs } from '../../engine/format';
 import type { CellMatrix } from '../../engine/types';
 
 describe('engine/format — date serials', () => {
@@ -151,6 +151,23 @@ describe('engine/format — update', () => {
 
     test('formats a percentage', () => {
         expect(update('0%', 0.25)).toBe('25%');
+    });
+});
+
+describe('engine/format — numberDisplay', () => {
+    test('General clears float noise', () => {
+        expect(numberDisplay(0.1 + 0.2)).toBe('0.3');
+        expect(numberDisplay(271.21000000000004, 'General')).toBe('271.21');
+    });
+
+    test('a mask renders the rounded value', () => {
+        expect(numberDisplay(0.1 + 0.2, '0.00')).toBe('0.30');
+    });
+
+    test('infinite and exponent-form values', () => {
+        expect(numberDisplay(Infinity)).toBe('Infinity');
+        expect(numberDisplay(1e21)).toBe('1e+21');
+        expect(numberDisplay(1.23456789e-7)).toBe('1.23457e-7');
     });
 });
 
