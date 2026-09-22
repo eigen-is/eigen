@@ -165,7 +165,7 @@ function ServicesComponent() {
                                         <CopyInput
                                             key={cal.id}
                                             label={`Calendar — ${cal.name}`}
-                                            value={`${davBase}/calendars/${user?.id}/${cal.id}/`}
+                                            value={`${davBase}/calendars/${user?.id}/${encodeURIComponent(cal.id)}/`}
                                         />
                                     ))}
                                     <CopyInput label="Username" value={user?.email ?? ''} />
