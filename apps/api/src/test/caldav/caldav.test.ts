@@ -1320,6 +1320,31 @@ describe('CalDAV', () => {
         expect(propXml).toContain(`<D:getetag>${etag}</D:getetag>`);
     });
 
+    test('an accented resource name round-trips, and its decomposed spelling finds the same row', async () => {
+        // The stored name is the composed one, so the emitted Location is its percent-encoded form and the NFD
+        // spelling a macOS client sends folds onto the same row rather than creating a second resource.
+        const nfc = encodeURIComponent('café.ics');
+        const nfd = encodeURIComponent('café.ics'.normalize('NFD'));
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:caldav-accented@eigen',
+            'SUMMARY:Accented name',
+            'DTSTART:20261104T090000Z',
+            'DTEND:20261104T100000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const putRes = await putIcs(nfc, ics, { 'If-None-Match': '*' });
+        expect(putRes.status).toBe(201);
+        expect(putRes.headers.get('Location')).toBe(`/dav/calendars/${userId}/${defaultCalendarId}/${nfc}`);
+
+        expect(await getIcs(nfc)).toContain('Accented name');
+        expect(await getIcs(nfd)).toContain('Accented name');
+    });
+
     test('REPORT multiget and sync-collection resolve a %40-encoded href and emit the @ raw', async () => {
         // c%40d.ics decodes to c@d.ics: multiget must decode the inbound href before matching, and both surfaces
         // emit the @ raw (pchar-legal, RFC 3986) — never re-encoded back to the %40 form.
@@ -1425,6 +1450,30 @@ describe('CalDAV', () => {
             }),
         );
         expect(await homeRes.text()).toContain(`/dav/calendars/${userId}/${calId}/`);
+    });
+
+    test('MKCALENDAR of an accented id creates it, and the home lists it percent-encoded', async () => {
+        // A calendar id is a client-chosen name like a resource name is, so it may carry accents — and every
+        // href that names it back, Location included, carries the composed spelling percent-encoded.
+        const encoded = encodeURIComponent('café');
+        const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname>Café</D:displayname></D:prop></D:set></C:mkcalendar>`;
+        const mkRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${encoded}/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(mkRes.status).toBe(201);
+        expect(mkRes.headers.get('Location')).toBe(`/dav/calendars/${userId}/${encoded}/`);
+
+        const homeRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
+            }),
+        );
+        expect(await homeRes.text()).toContain(`/dav/calendars/${userId}/${encoded}/`);
     });
 
     test('a duplicate MKCALENDAR to the same URL is 405 and leaves the existing calendar untouched', async () => {

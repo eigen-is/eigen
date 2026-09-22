@@ -4,8 +4,9 @@ import { type PropfindRequest, selectProps } from '../dav/propfind';
 import { currentUserPrincipalProp, multistatusResponse, principalProps, propstatOk, response } from '../dav/xml';
 import { calendarCollectionProps, homeCollectionProps } from './xml-builder';
 
-// Only the client-chosen resource name needs path encoding; a calendarId is charset-restricted by sanitizeCalendarId.
-export const calendarHref = (ownerId: string, calendarId: string) => `/dav/calendars/${ownerId}/${calendarId}/`;
+// Both the calendar id and the resource name are client-chosen and may carry accents, so each is encoded.
+export const calendarHref = (ownerId: string, calendarId: string) =>
+    `${calendarHomeHref(ownerId)}${encodePathSegment(calendarId)}/`;
 export const eventHref = (ownerId: string, calendarId: string, uri: string) =>
     `${calendarHref(ownerId, calendarId)}${encodePathSegment(uri)}`;
 
