@@ -661,8 +661,6 @@ export function getCellTextInfo(
         }
 
         if (wrap || isInline) {
-            // wrap
-
             let textW_all = 0; // Total width/height after splitting
             let textH_all = 0;
             let textW_all_inner = 0;

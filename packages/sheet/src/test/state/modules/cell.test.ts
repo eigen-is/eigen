@@ -9,6 +9,7 @@ import { describe, expect, test } from 'bun:test';
 import { unescapeHtml } from '@workspace/lib/html';
 import { Window } from 'happy-dom';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
+import { evaluateConditionalFormat } from '../../../engine/conditional-format';
 import type { Context } from '../../../state/context';
 import {
     getCellValue,
@@ -167,5 +168,46 @@ describe('state/modules/cell — setCellValue typed numbers', () => {
     test("a typed number shows Excel's default-width General", () => {
         expect(typed('123456789012')).toMatchObject({ m: '1.23457E+11', ct: { fa: 'General', t: 'n' } });
         expect(typed('1234567.891234')?.m).toBe('1234567.891');
+    });
+
+    test('a typed number is stored as a number', () => {
+        expect(typed('28254')?.v).toBe(28254);
+        expect(typed('.75')?.v).toBe(0.75);
+        expect(typed('000')?.v).toBe(0);
+    });
+
+    test('a radix prefix or Infinity stays text, as in Excel', () => {
+        expect(typed('0x10')).toMatchObject({ v: '0x10', ct: { t: 'g' } });
+        expect(typed('Infinity')).toMatchObject({ v: 'Infinity', ct: { t: 'g' } });
+
+        const ctx = contextFactory({}) as Context;
+        const data: CellMatrix = [[{ ct: { fa: '0.00', t: 'n' } }]];
+        setCellValue(ctx, 0, 0, data, '0x10');
+        expect(data[0][0]?.v).toBe('0x10');
+    });
+
+    test('a number typed into a text-formatted cell stays a string', () => {
+        const ctx = contextFactory({}) as Context;
+        const data: CellMatrix = [[{ ct: { fa: '@', t: 's' } }]];
+        setCellValue(ctx, 0, 0, data, '28254');
+        expect(data[0][0]?.v).toBe('28254');
+    });
+
+    test('a typed number matches a greater-than conditional format', () => {
+        const data: CellMatrix = [[typed('50') ?? null]];
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 0] }],
+                    format: { cellColor: '#ff0000' },
+                    conditionName: 'greaterThan',
+                    conditionRange: [],
+                    conditionValue: ['10'],
+                },
+            ],
+            data,
+        );
+        expect(styles['0_0']?.cellColor).toBe('#ff0000');
     });
 });

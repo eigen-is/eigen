@@ -122,8 +122,6 @@ export class FormulaEngine {
         return this.evaluateCompiled(this.compile(formula), sheetId, resolver);
     }
 
-    // For a formula evaluated at many cells (a conditional-format rule): parse once, then
-    // evaluateCompiled per cell with its offset from the cell the formula was written for.
     compile(formula: string): CompiledFormula {
         return this.parser.compile(formula.substring(1));
     }

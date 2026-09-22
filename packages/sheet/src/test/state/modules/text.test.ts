@@ -1,6 +1,4 @@
-// Wrap text breaks words, never numbers. An imported xlsx with wrap on and a column too narrow for
-// "28254.75" painted "28254.7" on one line and "5" on the next; Excel and Google keep a number on
-// one line and let the cell clip it. A numeric cell lays out like the unwrapped path does.
+// Excel and Google wrap text only: a number too wide for its column stays on one line and clips.
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
@@ -50,6 +48,11 @@ describe('state/modules/text — getCellTextInfo wrap', () => {
     test('a formula typed into a text cell produces a number that stays on one line', () => {
         // ct.t keeps the text cell's 'g'; the value is what decides.
         const info = layout({ v: 28254.75, m: '28254.75', f: '=A2*3', ct: { fa: 'General', t: 'g' }, tb: '2' });
+        expect(info?.values.map((word) => word.content)).toEqual(['28254.75']);
+    });
+
+    test('a number stored as a string in a numeric cell stays on one line', () => {
+        const info = layout({ v: '28254.75', m: '28254.75', ct: { fa: 'General', t: 'n' }, tb: '2' });
         expect(info?.values.map((word) => word.content)).toEqual(['28254.75']);
     });
 

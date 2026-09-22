@@ -18,7 +18,7 @@ import {
     zip,
 } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine/conditional-format';
-import { numberDisplay, parseCellInput, update } from '../../engine/format';
+import { numberDisplay, parseCellInput } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, InlineStringSegment, SingleRange } from '../../engine/types';
 import { setRowHeight } from '../api';
@@ -29,7 +29,7 @@ import { FONT_INDEX_BY_NAME } from '../modules/fonts';
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
-import { COPY_ACTION_TABLE_MARKER, selectionCache } from '../modules/selection';
+import { COPY_ACTION_TABLE_MARKER, copiedNumberText, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetSelections } from '../modules/sheet';
 import { hasPartMC, isRealNum } from '../modules/validation';
 import type { SheetConfig } from '../types';
@@ -304,13 +304,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
                 }
                 if (originCell) {
                     originCell.v = value;
-                    if (typeof value === 'number') {
-                        originCell.m = numberDisplay(value, originCell.ct?.fa);
-                    } else if (originCell.ct != null && originCell.ct.fa != null) {
-                        originCell.m = update(originCell.ct.fa, value);
-                    } else {
-                        originCell.m = value;
-                    }
+                    originCell.m = numberDisplay(value, originCell.ct?.fa);
 
                     if (originCell.f != null && originCell.f.length > 0) {
                         originCell.f = '';
@@ -879,8 +873,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
 
                         [, value.v, value.f] = funcV;
 
-                        const fa = value.ct?.fa ?? 'General';
-                        value.m = typeof funcV[1] === 'number' ? numberDisplay(funcV[1], fa) : update(fa, funcV[1]);
+                        value.m = numberDisplay(funcV[1], value.ct?.fa);
                     }
 
                     x[c] = cloneDeep(value);
@@ -1003,14 +996,10 @@ function handleFormulaStringPaste(ctx: Context, formulaStr: string) {
     const d = getFlowdata(ctx);
     if (!d) return;
 
-    if (!d[r][c]) d[r][c] = {};
-    if (typeof val === 'number') {
-        d[r][c]!.m = numberDisplay(val, d[r][c]!.ct?.fa);
-    } else {
-        d[r][c]!.m = val == null ? '' : val.toString();
-    }
-    d[r][c]!.v = val;
-    d[r][c]!.f = formulaStr;
+    const cell = (d[r][c] ??= {});
+    cell.m = numberDisplay(val, cell.ct?.fa);
+    cell.v = val;
+    cell.f = formulaStr;
 }
 
 export function handlePaste(ctx: Context, e: ClipboardEvent) {
@@ -1089,9 +1078,9 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                     let v: Cell['v'] | undefined;
                     if (!isNil(cell)) {
                         if ((cell.ct?.fa?.indexOf('w') ?? -1) > -1) {
-                            v = d[r]?.[c]?.v;
+                            v = cell.v;
                         } else {
-                            v = d[r]?.[c]?.m;
+                            v = copiedNumberText(cell) ?? cell.m;
                         }
                     } else {
                         v = '';

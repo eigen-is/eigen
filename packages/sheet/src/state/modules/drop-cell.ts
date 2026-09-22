@@ -13,7 +13,7 @@ import { execFunctionGroup, execfunction } from './formula-exec';
 import { colLocation, rowLocation } from './location';
 import { jfrefreshgrid } from './refresh';
 import { normalizeSelection } from './selection';
-import { isRealNum } from './validation';
+import { ID_CARD_NUMBER, isRealNum } from './validation';
 
 function toPx(v: number) {
     return `${v}px`;
@@ -599,7 +599,7 @@ function fillDays(data: (Cell | null | undefined)[], len: number, step: number) 
 
             d.v = parseCellInput(date)[2];
             if (d.ct != null && d.ct.fa != null) {
-                d.m = update(d.ct.fa, d.v);
+                d.m = numberDisplay(d.v, d.ct.fa);
             }
 
             applyData.push(d);
@@ -622,7 +622,7 @@ function fillMonths(data: (Cell | null | undefined)[], len: number, step: number
 
             d.v = parseCellInput(date)[2];
             if (d.ct != null && d.ct.fa != null) {
-                d.m = update(d.ct.fa, d.v);
+                d.m = numberDisplay(d.v, d.ct.fa);
             }
 
             applyData.push(d);
@@ -645,7 +645,7 @@ function fillYears(data: (Cell | null | undefined)[], len: number, step: number)
 
             d.v = parseCellInput(date)[2];
             if (d.ct != null && d.ct.fa != null) {
-                d.m = update(d.ct.fa, d.v);
+                d.m = numberDisplay(d.v, d.ct.fa);
             }
         }
 
@@ -1968,10 +1968,7 @@ export function updateDropCell(ctx: Context) {
                 [, cell.v, cell.f] = v;
 
                 if (cell.v != null) {
-                    if (
-                        isRealNum(cell.v) &&
-                        !/^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i.test(`${cell.v}`)
-                    ) {
+                    if (isRealNum(cell.v) && !ID_CARD_NUMBER.test(`${cell.v}`)) {
                         cell.m = numberDisplay(Number(cell.v), cell.ct?.fa);
 
                         cell.ct = cell.ct || { fa: 'General', t: 'n' };

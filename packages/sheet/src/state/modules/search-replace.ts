@@ -79,9 +79,7 @@ function centerCellInView(ctx: Context, r: number, c: number) {
     };
 }
 
-// Cross-tab reveal: switch sheets, select + scroll — one recipe. changeSheet derives the target
-// sheet's geometry, so centerCellInView reads it, and the overlay's scrollRequest apply effect
-// performs the DOM scroll.
+// changeSheet derives the target sheet's geometry first, so centerCellInView reads the right one.
 export function revealSearchMatch(ctx: Context, cell: SearchHighlight) {
     if (cell.sheetId !== ctx.currentSheetId) {
         changeSheet(ctx, cell.sheetId);

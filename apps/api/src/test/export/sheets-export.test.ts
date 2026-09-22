@@ -163,6 +163,17 @@ describe('Sheets xlsx export', () => {
     });
 });
 
+describe('Sheets xlsx export — typed numbers', () => {
+    test('a typed number exports as a numeric cell', async () => {
+        const sheets: Sheet[] = [
+            { name: 'Sheet1', celldata: [{ r: 0, c: 0, v: { v: 28254, m: '28254', ct: { fa: 'General', t: 'n' } } }] },
+        ];
+        const cell = getSheet(await exportAndReload(sheets), 'Sheet1').getCell('A1');
+        expect(cell.type).toBe(ExcelJS.ValueType.Number);
+        expect(cell.value).toBe(28254);
+    });
+});
+
 describe('Sheets xlsx export — hidden rows/cols', () => {
     test('exports hidden rows (incl. data-less ones) and hidden columns', async () => {
         const sheets: Sheet[] = [
