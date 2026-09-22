@@ -196,7 +196,7 @@ export class Contacts {
             }
         }
 
-        // Metering starts only here: the quota lookup goes through getHome, which during init would await this very init.
+        // Metering starts only here: the quota lookup opens the Home, which during init would await this very init.
         this.meteredIngest = atHome(this.home.user.id);
 
         this.cleanupAvatarImages().catch((e) => console.warn(`contacts: avatar sweep failed: ${e}`));

@@ -9,7 +9,7 @@ const ALLOWED = new Set([
     'get-calendar.ts',
     'enforcement.ts',
     'mail.ts',
-    'contacts.ts',
+    'get-contacts.ts',
     'get-drive.ts',
     'caldav-router.ts',
     'reconciliation.ts',
