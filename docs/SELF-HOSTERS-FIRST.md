@@ -1,6 +1,6 @@
 # Self-hosters first
 
-The work list for the weeks before the open-source repository is announced. One question orders it: what does a stranger with a VPS or a NAS hit, in the order they hit it? Install, then update, then "is my data safe", then "do I have to run a mail server". Features they ask for after it runs come later. Designs live in the linked proposals; this file is the order, the scope cut, and the checkboxes. Tick a box when its "done when" holds, and delete a block when it is finished and recorded in its own doc.
+The work list for the weeks before the open-source repository is announced. One question orders it: what does a stranger with a VPS or a NAS hit, in the order they hit it? Install, then update, then "is my data safe", then "do I have to run a mail server". Features they ask for after it runs come later. Designs live in the linked proposals; this file is the order, the scope cut, and the checkboxes. Delete a line once it is done, and a block once its "done when" holds and it is recorded in its own doc.
 
 ## Ready to announce when
 
@@ -55,7 +55,7 @@ Open decision: the registry namespace and image names (`ghcr.io/eigen-is/eigen-a
 - [ ] Decide how `.env.production` survives the loss of the machine, because a restore without it does not work: in the encrypted archive, or setup makes the operator save it. The drill proves whichever it is
 - [ ] `eigen backup` runs it on demand and `eigen update` calls it; the offline `backup.sh` retires. `eigen restore <archive>` restores the new archive onto an empty install and replaces `restore.sh`
 - [ ] A restore drill: a fresh machine, the install from block 2, last night's archive, a known document and a known mailbox come back. Write down what was awkward and fix the guide
-- [ ] [BACKUP.md](BACKUP.md) says out loud what stays the operator's job (`caddy-data`, the Postfix queue, and `.env.production` if the archive does not carry it)
+- [ ] [BACKUP.md](BACKUP.md) says out loud what stays the operator's job: `caddy-data` and the Postfix queue beside the `.env.production` it already names, if the archive does not carry it
 
 Not in this block: phase ④ migration between servers, chunked artifact upload, the orphaned-bucket-object sweep. Their ROADMAP rows stand.
 
@@ -73,7 +73,7 @@ The sender address is the other half. System mail always goes out as `noreply@` 
 - [ ] `eigen setup` asks for an outbound relay in both modes, writing `SMTP_RELAY_*` for Postfix or `SMTP_*` for the API. Skipping it is allowed on a hosted-mail server. On a mail-off server, skipping it says plainly what stops working (the list above)
 - [ ] A configurable system sender (`SMTP_FROM`, address and display name), defaulting to today's `noreply@` the mail domain. `eigen setup` asks for it together with the relay, and `defaultFrom()` reads it
 - [ ] Mail sent on a user's behalf goes out from that system sender whenever the user's address is not on this server's mail domain: `From: "Alice via Eigen" <system sender>`, `Reply-To: Alice`. A mail-off server always takes this path. Calendar invitations keep Alice as `ORGANIZER`, so replies still reach her own mailbox
-- [ ] Both mail-off profile combinations join `test-deployments.sh`, with a notification delivered through a relay (Mailpit in the dev Compose)
+- [ ] The two mail-off scenarios in `test-deployments.sh` (C and D) deliver a notification through a relay (Mailpit in the dev Compose); today they probe health only
 - [ ] One audit pass over a mail-off server for anything else that assumes a mailbox. Fix what is small, document the rest
 - [ ] The setup guide's mail-off section becomes a first-class path, not an alternative deployment, and the relay moves out of "optional" into the main flow
 
@@ -85,17 +85,17 @@ Size S–M, mostly writing. Public text goes out in Reinder's voice.
 - [ ] `docker/SETUP-GUIDE.md` rewritten around `eigen`; it shrinks
 - [ ] An operating guide: updating, breaking releases and the pre-1.0 data policy in plain words, backup and restore, moving to another machine, logs, where things live on disk, resetting an admin password. Decide where it lives (repository guide or help center; the ROADMAP help-center row has left this open)
 - [ ] Requirements stated once: measured runtime memory, disk, `linux/amd64` only and why, Compose minimum, ports per profile
-- [ ] Reverse-proxy recipes beyond the generated nginx, Apache and Caddy snippets: Traefik, and a tunnel with its shared rate-limit bucket caveat
+- [ ] A Traefik recipe beside the generated nginx, Apache and Caddy snippets and the tunnel section
 - [ ] A short "what Eigen is not yet" section, so the first issue reports are not about things already known
 
 ## 6. Release hygiene
 
 Size S.
 
-- [ ] Every release has upgrade notes and the breaking flag when it applies; versions and `CHANGELOG.md` entries already exist
+- [ ] Every release has upgrade notes, and the breaking flag `CHANGELOG.md` already writes also lands in the bundle manifest
 - [ ] A secret scan over the full history and every published image layer before the announcement
-- [ ] `SECURITY.md` and the issue templates read once more with a stranger's eyes; the bug template asks for version, profile set, and install mode
-- [ ] `CONTRIBUTING.md` written; it does not exist yet. It says plainly whether pull requests are welcome and what happens to them
+- [ ] `SECURITY.md` and the issue templates read once more with a stranger's eyes; the bug template also asks for the profile set and install mode
+- [ ] `docs/CONTRIBUTING.md` says plainly whether pull requests are welcome and what happens to them
 
 ## Not now, and what would change that
 

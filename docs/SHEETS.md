@@ -520,6 +520,10 @@ DOM-free subset that satisfies stricter compiler options (`verbatimModuleSyntax`
   `DATE(...)` itself is built in local time and is right everywhere ([SHEETS-TODO.md](SHEETS-TODO.md) §
   Formula engine).
 
+### Standards work in `state/`
+
+`packages/sheet` sits under the `scripts/check-standards.ts` ratchet and `engine/` has had its Tier 2 audit. `state/` is audited opportunistically: a directory only when a feature touches it, with [SHEETS-TODO.md](SHEETS-TODO.md) as the ledger. A full pass before the row/column identity decision in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md) would be spent twice, since that proposal rewrites the model `state/` is built on.
+
 ### Not in scope
 
 Replacing the sheet engine, adding formula functions beyond formulajs, server-side UI rendering, real-time
