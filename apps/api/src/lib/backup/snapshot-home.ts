@@ -48,9 +48,7 @@ export const HOME_DATABASES: [DatabaseConfig<SchemaType>, string][] = [
 // `mounts/` is walked from its paths tables instead (snapshotMountData). Matched on the path from
 // the home root, never on the folder name: a folder deeper in the home that happens to be called
 // `mounts` is somebody's own and belongs in the archive.
-// The contacts avatar cache is not among the skips: the served webp is decoded from the pristine
-// upload and carries animation and alpha the card's Apple-safe PHOTO gave up, so it is archived
-// rather than re-derived.
+// The contacts avatar cache is archived rather than re-derived: the served webp carries what the card's Apple-safe PHOTO gave up.
 const SKIPPED_HOME_DIRS = new Set<string>([PATHS.DRIVE.ROOT]);
 
 // The other skip, which has no fixed path: every mailbox in the Maildir has a `tmp/` delivery spool

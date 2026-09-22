@@ -3,8 +3,9 @@
 
 import { Glob } from 'bun';
 
-// Pre-existing files pending refactor to receive Home as parameter.
-// Do NOT add new files here — pass Home from the route instead.
+// The `get-*.ts` resolvers are the allowed shape by design: one per domain, the single place a route turns
+// an ownerId into its domain object behind the access check. The rest are pre-existing and pending refactor.
+// Do NOT add new files here — pass Home from the route, or go through the domain's resolver.
 const ALLOWED = new Set([
     'get-calendar.ts',
     'enforcement.ts',
