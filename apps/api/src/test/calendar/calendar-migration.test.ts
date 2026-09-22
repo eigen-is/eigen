@@ -38,10 +38,11 @@ const V1_SQL = `
 function seedV1Database(dbPath: string): void {
     const raw = new BunDatabase(dbPath, { create: true });
     raw.exec(V1_SQL);
+    // Every carried column is seeded away from its default, so a migration dropping one shows up as a change.
     raw.exec(`INSERT INTO calendars (id, name, color, isDefault, ctag, shares, visible)
-                  VALUES ('work','Work','#2563eb',1,7,'[{"email":"bob@test.local","permission":"read"}]',1);
-              INSERT INTO shared_calendars (id, ownerUserId, calendarId, calendarName, calendarColor, permission)
-                  VALUES ('s1','u-other','their-cal','Theirs','#16a34a','read');
+                  VALUES ('work','Work','#2563eb',1,7,'[{"email":"bob@test.local","permission":"read"}]',0);
+              INSERT INTO shared_calendars (id, ownerUserId, calendarId, calendarName, calendarColor, permission, color, visible)
+                  VALUES ('s1','u-other','their-cal','Theirs','#16a34a','read','#f59e0b',0);
               INSERT INTO events (id, calendarId, uid, title, startTime, endTime)
                   VALUES ('e1','work','old@eigen','Old row',0,0);
               CREATE TABLE __schema_version (id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL DEFAULT 0);
@@ -80,11 +81,31 @@ describe('calendar database migrations', () => {
         expect(versionOf(mdb)).toBe(2);
 
         // The half no blob carries: a calendar's name and colors, and grants other Homes point at.
-        expect(mdb.db.all(sql`SELECT id, name, ctag, shares FROM calendars`)).toEqual([
-            { id: 'work', name: 'Work', ctag: 7, shares: '[{"email":"bob@test.local","permission":"read"}]' },
+        expect(mdb.db.all(sql`SELECT id, name, color, isDefault, visible, ctag, shares FROM calendars`)).toEqual([
+            {
+                id: 'work',
+                name: 'Work',
+                color: '#2563eb',
+                isDefault: 1,
+                visible: 0,
+                ctag: 7,
+                shares: '[{"email":"bob@test.local","permission":"read"}]',
+            },
         ]);
-        expect(mdb.db.all(sql`SELECT id, calendarId FROM shared_calendars`)).toEqual([
-            { id: 's1', calendarId: 'their-cal' },
+        expect(
+            mdb.db.all(sql`SELECT id, ownerUserId, calendarId, calendarName, calendarColor, permission, color, visible
+                           FROM shared_calendars`),
+        ).toEqual([
+            {
+                id: 's1',
+                ownerUserId: 'u-other',
+                calendarId: 'their-cal',
+                calendarName: 'Theirs',
+                calendarColor: '#16a34a',
+                permission: 'read',
+                color: '#f59e0b',
+                visible: 0,
+            },
         ]);
 
         // The carried generation is clock-seeded, so every token a client holds from before is refused.
