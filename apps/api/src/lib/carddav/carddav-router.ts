@@ -1,7 +1,7 @@
 import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
 import { CARD_MAX_BYTES, sanitizeCardUri } from '../contacts/card-store';
-import { getContacts } from '../contacts/contacts';
+import { resolveContacts } from '../contacts/get-contacts';
 import { requireSelf } from '../core/access';
 import { readBoundedBody } from '../core/http';
 import { type CollectionPath, parseCollectionPath } from '../dav/href';
@@ -46,7 +46,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         requireSelf(params.ownerId, user.id);
         const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
-        const contacts = await getContacts(user);
+        const contacts = await resolveContacts(user, params.ownerId);
         const depth = request.headers.get('Depth') || '0';
         return handleAddressbookHomePropfind(
             params.ownerId,
@@ -68,7 +68,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         if (body === null) return new Response('Payload Too Large', { status: 413 });
         const req = parsePropfind(body);
         const brief = wantsBrief(request);
-        const contacts = await getContacts(user);
+        const contacts = await resolveContacts(user, params.ownerId);
         const book = await contacts.getBook();
         const depth = request.headers.get('Depth') || '0';
 
@@ -101,7 +101,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         }
         const resolved = resolveCardUri(parsed);
         if (resolved instanceof Response) return resolved;
-        return handleGetCard(await getContacts(user), resolved.uri);
+        return handleGetCard(await resolveContacts(user, params.ownerId), resolved.uri);
     })
 
     // The If-Match / If-None-Match preconditions are evaluated inside the store's write lock.
@@ -116,7 +116,14 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         if (body === null) return davError(413, '<CARD:max-resource-size/>');
         const ifMatch = request.headers.get('If-Match');
         const ifNoneMatch = request.headers.get('If-None-Match');
-        return handlePutCard(await getContacts(user), params.ownerId, resolved.uri, body, ifMatch, ifNoneMatch);
+        return handlePutCard(
+            await resolveContacts(user, params.ownerId),
+            params.ownerId,
+            resolved.uri,
+            body,
+            ifMatch,
+            ifNoneMatch,
+        );
     })
 
     // DELETE a card resource — 404 for an unknown name (DAV DELETE is not idempotent), 403 for your own card.
@@ -127,7 +134,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         if (resolved instanceof Response) return resolved;
 
         const ifMatch = request.headers.get('If-Match');
-        return handleDeleteCard(await getContacts(user), resolved.uri, ifMatch);
+        return handleDeleteCard(await resolveContacts(user, params.ownerId), resolved.uri, ifMatch);
     })
 
     // A REPORT targets the book collection; the body cap is enforced here, before the body reaches the XML parser.
@@ -141,7 +148,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
 
         const body = await readBoundedBody(request, DAV_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
-        return handleCardReport(await getContacts(user), params.ownerId, body);
+        return handleCardReport(await resolveContacts(user, params.ownerId), params.ownerId, body);
     })
 
     .route('MKCOL', '/dav/addressbooks/:ownerId/*', forbidCollectionCreate)

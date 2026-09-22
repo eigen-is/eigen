@@ -225,7 +225,7 @@ async function main(): Promise<void> {
     const { updateServerSettings } = await import('../lib/config/server-settings');
     const { getHome, getTeamHome, shutdownAllHomes } = await import('../lib/home');
     const { getUserByEmail } = await import('../lib/user');
-    const { getContacts } = await import('../lib/contacts/contacts');
+    const { resolveContacts } = await import('../lib/contacts/get-contacts');
     const { drainACLFanOuts } = await import('../lib/drive/acl-propagation');
     const { convertToDocument } = await import('../lib/import/import-document');
     const { writeEigendocToYjs } = await import('../lib/document/doc');
@@ -270,7 +270,7 @@ async function main(): Promise<void> {
             console.warn(`avatar fixture missing, skipping: ${fixtureFile}`);
             return;
         }
-        const contacts = await getContacts(user);
+        const contacts = await resolveContacts(user, user.id);
         const me = await contacts.getMe();
         if (!me) return;
         const uploadedPath = await contacts.uploadAvatar(
@@ -904,7 +904,7 @@ async function main(): Promise<void> {
     // --- Contacts: the external ecosystem in a few leads' address books. ---
     for (const contact of CONTACTS) {
         const owner = userForRole(contact.owner);
-        const contacts = await getContacts(owner);
+        const contacts = await resolveContacts(owner, owner.id);
         await contacts.addContact(contactInput(contact));
     }
 

@@ -19,9 +19,8 @@ import {
     PATHS,
 } from '../core';
 import type { Home } from '../home';
-import { atHome, getHome } from '../home';
+import { atHome } from '../home';
 import { pushUserProfile } from '../home/home-relay';
-import type { User } from '../user';
 import { getOrgOwner } from '../user/';
 import { createVCard, mergeVCard, normalizeBirthday, parseVCard } from '../vcard';
 import type { CardEdits } from '../vcard/types';
@@ -45,11 +44,6 @@ import * as labels from './labels';
 import * as schema from './schema';
 import { buildContactEvent, buildContactsChangedEvent, buildLabelEvent } from './sse-events';
 import * as transfer from './transfer';
-
-export async function getContacts(user: User): Promise<Contacts> {
-    const home = await getHome(user.id);
-    return home.contacts;
-}
 
 async function getContactsDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
     return home.getLocalDatabase(CONTACTS_DB_CONFIG, PATHS.CONTACTS.DB);
