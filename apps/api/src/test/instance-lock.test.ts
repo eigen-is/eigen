@@ -1,32 +1,29 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, rmSync } from 'node:fs';
+import { describe, expect, test } from 'bun:test';
+import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { TEST_DATA_DIR } from './setup';
 
-const DATA_ROOT = join(import.meta.dir, `../../../../../data-test/test-instance-lock-${Date.now()}`);
-const LOCK_MODULE = resolve(import.meta.dir, '../../lib/core/instance-lock.ts');
+const DATA_ROOT = join(TEST_DATA_DIR, 'instance-lock');
+const LOCK_MODULE = resolve(import.meta.dir, '../instance-lock.ts');
 
 // What index.ts runs first, in a process of its own: the lock is per process, so only a second process can contend.
 const HOLDER_SCRIPT = `
-import { holdInstanceLock } from ${JSON.stringify(LOCK_MODULE)};
-const lock = holdInstanceLock(process.env.DATA_ROOT);
+import ${JSON.stringify(LOCK_MODULE)};
 console.log('held');
-if (process.env.HOLD) setInterval(() => lock, 1000);
+if (process.env.HOLD) setInterval(() => {}, 1000);
 `;
 
 function spawnHolder(hold: boolean, dataRoot = DATA_ROOT) {
     return Bun.spawn([process.execPath, '-e', HOLDER_SCRIPT], {
-        env: { ...process.env, DATA_ROOT: dataRoot, ...(hold ? { HOLD: '1' } : {}) },
+        env: { ...process.env, EIGEN_DATA_ROOT: dataRoot, ...(hold ? { HOLD: '1' } : {}) },
         stdout: 'pipe',
         stderr: 'pipe',
     });
 }
 
-afterAll(() => rmSync(DATA_ROOT, { recursive: true, force: true }));
-
 describe('instance lock', () => {
     test('a second process on the same data dir is refused until the first one dies', async () => {
-        mkdirSync(DATA_ROOT, { recursive: true });
         const first = spawnHolder(true);
         try {
             const reader = first.stdout.getReader();
@@ -48,7 +45,8 @@ describe('instance lock', () => {
 
     // Two APIs starting together both read the empty lock file (a SHARED lock) before either escalates.
     // BEGIN EXCLUSIVE needs every other SHARED lock gone, so both got SQLITE_BUSY and both exited;
-    // BEGIN IMMEDIATE only needs the RESERVED lock, which exactly one of them gets.
+    // BEGIN IMMEDIATE only needs the RESERVED lock, which exactly one of them gets. Staggered test spawns
+    // rarely hit that window, so this holds the SHARED lock a racing peer would.
     test('a process that is only reading the lock file does not keep the lock from being taken', async () => {
         const dataRoot = join(DATA_ROOT, 'reader');
         mkdirSync(join(dataRoot, 'server'), { recursive: true });
@@ -67,7 +65,6 @@ describe('instance lock', () => {
     test('two processes started at the same moment leave exactly one holder', async () => {
         const pairs = Array.from({ length: 16 }, async (_, i) => {
             const dataRoot = join(DATA_ROOT, `race-${i}`);
-            mkdirSync(dataRoot, { recursive: true });
             const racers = [spawnHolder(true, dataRoot), spawnHolder(true, dataRoot)];
             try {
                 const outcomes = await Promise.all(
