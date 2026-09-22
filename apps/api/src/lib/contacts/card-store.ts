@@ -1,7 +1,8 @@
 import { Database } from 'bun:sqlite';
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { computeResourceEtag, type Tx as DatabaseTx, PATHS, sanitizeResourceUri } from '../core';
 import type { LocalFilesystem } from '../core/local-filesystem';
 import type { ParsedCard } from '../vcard/types';
@@ -141,6 +142,54 @@ export function cardUpdateSet(row: CardRowInput, ctag: number) {
         cardCtag: ctag,
         updatedAt: sql`unixepoch()`,
     };
+}
+
+// A missing label is minted with its deterministic color, and its id rides back out so the caller emits LABEL_CREATED after the transaction.
+export function syncCardLabels(tx: Tx, contactId: string, categories: string[], createdLabelIds: string[]): void {
+    const labelIds = new Set<string>();
+    for (const name of categories) {
+        const nameKey = normalizeLabelName(name);
+        if (!nameKey) continue;
+        const existing = tx
+            .select({ id: schema.labels.id })
+            .from(schema.labels)
+            .where(eq(schema.labels.nameKey, nameKey))
+            .get();
+        if (existing) {
+            labelIds.add(existing.id);
+        } else {
+            const id = randomUUID();
+            tx.insert(schema.labels)
+                .values({ id, name: name.trim(), nameKey, color: labelColorFor(nameKey) })
+                .run();
+            createdLabelIds.push(id);
+            labelIds.add(id);
+        }
+    }
+
+    tx.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, contactId)).run();
+    for (const labelId of labelIds) {
+        tx.insert(schema.contactsToLabels).values({ contactId, labelId }).run();
+    }
+}
+
+// Runs inside the transaction that bumped the ctag, so a card write and a label fan-out leave one shape behind.
+export function indexCard(
+    tx: Tx,
+    row: CardRowInput,
+    categories: string[],
+    ctag: number,
+    createdLabelIds: string[],
+): void {
+    tx.insert(schema.contacts)
+        .values({ ...row, cardCtag: ctag })
+        .onConflictDoUpdate({ target: schema.contacts.id, set: cardUpdateSet(row, ctag) })
+        .run();
+
+    syncCardLabels(tx, row.id, categories, createdLabelIds);
+
+    // A card at this uri is alive, so one written over a deleted name drops its stale removal.
+    tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uri, row.uri)).run();
 }
 
 // The pure half of a card write: bytes in, the projection they decide out. `avatar` is the cache URL the

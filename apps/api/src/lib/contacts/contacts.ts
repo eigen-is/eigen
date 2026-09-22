@@ -32,11 +32,11 @@ import {
     avatarNameOf,
     CARD_MAX_BYTES,
     cardBytes,
-    cardUpdateSet,
+    indexCard,
     isCardPhotoCacheOf,
-    labelColorFor,
     normalizeLabelName,
     prepareCard,
+    syncCardLabels,
 } from './card-store';
 import type { CardBook, CardRow, DeleteCardResult } from './dav-store';
 import * as davStore from './dav-store';
@@ -246,50 +246,6 @@ export class Contacts {
             .run();
     }
 
-    // A missing label is minted with its deterministic color, and its id rides back out so the caller emits LABEL_CREATED after the transaction.
-    // internal — used by contacts/*.ts
-    syncCardLabels(tx: Tx, contactId: string, categories: string[], createdLabelIds: string[]): void {
-        const labelIds = new Set<string>();
-        for (const name of categories) {
-            const nameKey = normalizeLabelName(name);
-            if (!nameKey) continue;
-            const existing = tx
-                .select({ id: schema.labels.id })
-                .from(schema.labels)
-                .where(eq(schema.labels.nameKey, nameKey))
-                .get();
-            if (existing) {
-                labelIds.add(existing.id);
-            } else {
-                const id = randomUUID();
-                tx.insert(schema.labels)
-                    .values({ id, name: name.trim(), nameKey, color: labelColorFor(nameKey) })
-                    .run();
-                createdLabelIds.push(id);
-                labelIds.add(id);
-            }
-        }
-
-        tx.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, contactId)).run();
-        for (const labelId of labelIds) {
-            tx.insert(schema.contactsToLabels).values({ contactId, labelId }).run();
-        }
-    }
-
-    // The row half of a card commit, so the label fan-out can rewrite many cards under one ctag and one transaction.
-    // internal — used by contacts/*.ts
-    indexCard(tx: Tx, row: CardRowInput, categories: string[], ctag: number, createdLabelIds: string[]): void {
-        tx.insert(schema.contacts)
-            .values({ ...row, cardCtag: ctag })
-            .onConflictDoUpdate({ target: schema.contacts.id, set: cardUpdateSet(row, ctag) })
-            .run();
-
-        this.syncCardLabels(tx, row.id, categories, createdLabelIds);
-
-        // A card at this uri is alive, so one written over a deleted name drops its stale removal.
-        tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uri, row.uri)).run();
-    }
-
     // One transaction, so the ctag bump, the blob, the label junction and the tombstone clear settle together.
     private commitCard(opts: { row: CardRowInput; categories: string[] }): void {
         const createdLabelIds: string[] = [];
@@ -302,7 +258,7 @@ export class Contacts {
                 .where(eq(schema.contacts.id, opts.row.id))
                 .get();
             delta = opts.row.vcard.byteLength - (previous?.size ?? 0);
-            this.indexCard(tx, opts.row, opts.categories, this.bumpCtag(tx), createdLabelIds);
+            indexCard(tx, opts.row, opts.categories, this.bumpCtag(tx), createdLabelIds);
         });
         this.cardsBytes += delta;
 
@@ -338,7 +294,7 @@ export class Contacts {
                     })
                     .where(eq(schema.contacts.id, row.id))
                     .run();
-                this.syncCardLabels(tx, row.id, categories, createdLabelIds);
+                syncCardLabels(tx, row.id, categories, createdLabelIds);
             }
         });
 

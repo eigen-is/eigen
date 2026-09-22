@@ -6,7 +6,7 @@ import { ApiError, computeResourceEtag } from '../core';
 import { mergeVCard, parseVCard } from '../vcard';
 import type { ParsedCard } from '../vcard/types';
 import type { CardRowInput, Tx } from './card-store';
-import { normalizeLabelName } from './card-store';
+import { indexCard, normalizeLabelName } from './card-store';
 import type { Contacts } from './contacts';
 import * as schema from './schema';
 
@@ -110,7 +110,7 @@ function rewriteCardCategories(
     let bytes = 0;
     for (const { row, was, categories } of rewrites) {
         bytes += row.vcard.byteLength - was;
-        contacts.indexCard(tx, row, categories, ctag, createdLabelIds);
+        indexCard(tx, row, categories, ctag, createdLabelIds);
     }
     return { bytes, contactIds: rewrites.map((r) => r.row.id), createdLabelIds };
 }
