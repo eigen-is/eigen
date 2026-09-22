@@ -1,5 +1,14 @@
-import { describe, expect, test } from 'bun:test';
-import { computeResourceEtag, newSyncGen, normalizeResourceUri, sanitizeResourceUri } from '../../lib/core/blob-store';
+import { Database } from 'bun:sqlite';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+    computeResourceEtag,
+    newSyncGen,
+    normalizeResourceUri,
+    readBlobTableSize,
+    sanitizeResourceUri,
+} from '../../lib/core/blob-store';
 
 const SUFFIX = '.vcf';
 
@@ -65,5 +74,48 @@ describe('newSyncGen', () => {
         const gen = newSyncGen();
         expect(gen).toBeGreaterThanOrEqual(before);
         expect(gen).toBeLessThanOrEqual(Math.floor(Date.now() / 1000));
+    });
+});
+
+describe('readBlobTableSize', () => {
+    const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-blob-size-${Date.now()}`);
+    let counter = 0;
+
+    // A database stamped `version`, or none at all when it is null, holding one two-byte blob.
+    function makeDb(version: number | null): string {
+        const dbPath = join(TEST_DIR, `blobs-${counter++}.db`);
+        const db = new Database(dbPath, { create: true });
+        if (version !== null) {
+            db.run('CREATE TABLE __schema_version (id INTEGER PRIMARY KEY, version INTEGER NOT NULL)');
+            db.run('INSERT INTO __schema_version (id, version) VALUES (1, ?)', [version]);
+        }
+        db.run('CREATE TABLE resources (ics BLOB NOT NULL)');
+        db.run("INSERT INTO resources (ics) VALUES (x'0102')");
+        db.close();
+        return dbPath;
+    }
+
+    beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));
+    afterAll(() => {
+        try {
+            rmSync(TEST_DIR, { recursive: true, force: true });
+        } catch {}
+    });
+
+    test('sums the blob column of a database this build recognises', () => {
+        expect(readBlobTableSize(makeDb(5), 'resources', 'ics', 5)).toBe(2);
+    });
+
+    test('is 0 for a database nobody wrote', () => {
+        expect(readBlobTableSize(join(TEST_DIR, 'absent.db'), 'resources', 'ics', 5)).toBe(0);
+    });
+
+    test('is 0 at any stamp but the current one: the column may mean other bytes, or none yet', () => {
+        expect(readBlobTableSize(makeDb(4), 'resources', 'ics', 5)).toBe(0);
+        expect(readBlobTableSize(makeDb(6), 'resources', 'ics', 5)).toBe(0);
+    });
+
+    test('is 0 when the stamp table is missing, rather than throwing on the read', () => {
+        expect(readBlobTableSize(makeDb(null), 'resources', 'ics', 5)).toBe(0);
     });
 });

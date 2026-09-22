@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import { ApiError } from './errors';
 
 // The one rule for a client-chosen name that becomes a path segment: no `/`, no `..`, no leading dot, no
-// space, no control character. Unicode letters, marks and digits are in — the callers fold to NFC first,
+// space, no control character. Unicode letters, marks and numbers are in — the callers fold to NFC first,
 // so one spelling reaches the filesystem.
 const SAFE_PATH_SEGMENT = /^[\p{L}\p{N}][\p{L}\p{M}\p{N}._@-]*$/u;
 

@@ -51,7 +51,7 @@ Regression nets, under `apps/api/src/test/`: `contacts/contacts-store.test.ts` (
 
 ## CardDAV surface
 
-`apps/api/src/lib/carddav/` mirrors `caldav/` file-for-file, mounted in `app.ts` next to `caldavRouter`. Every route is `authenticateBasic` (app password → primary-password fallback, shared `protocol-auth.ts`), and the owner check rides on `resolveContacts`, which every handler that opens the book calls. The two that answer without opening one — the `MKCOL`/`MKADDRESSBOOK` refusal and the GET collection stub — call `requireSelf` themselves, which is the whole of its use here (the CalDAV twin still calls it per route).
+`apps/api/src/lib/carddav/` mirrors `caldav/` file-for-file, mounted in `app.ts` next to `caldavRouter`. Every route is `authenticateBasic` (app password → primary-password fallback, shared `protocol-auth.ts`), and the owner check rides on `resolveContacts`, which every handler calls first — before the body is read and before anything is parsed, the way the CalDAV twin calls `requireSelf` first. The one handler that answers without a book — the `MKCOL`/`MKADDRESSBOOK` refusal — calls `requireSelf` itself, which is the whole of its use here.
 
 ```
 PROPFIND /dav/addressbooks/:ownerId              addressbook home collection

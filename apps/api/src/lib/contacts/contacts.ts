@@ -299,8 +299,14 @@ export class Contacts {
             const created: string[] = [];
             for (const row of rows) {
                 const parsed = parseVCard(new TextDecoder().decode(row.vcard));
-                // The avatar cache is derived asynchronously from the PHOTO, so the stored URL is carried over.
-                const projection = prepareCard(row.vcard, parsed, row.data?.avatar ?? '', row.uid);
+                // The avatar cache is derived asynchronously from the PHOTO, so the stored URL is carried over,
+                // and the blob the rest is rebuilt from is left alone rather than rewritten to its own value.
+                const { vcard: _bytes, ...projection } = prepareCard(
+                    row.vcard,
+                    parsed,
+                    row.data?.avatar ?? '',
+                    row.uid,
+                );
                 tx.update(schema.contacts).set(projection).where(eq(schema.contacts.id, row.id)).run();
                 created.push(...syncCardLabels(tx, row.id, parsed.categories));
             }

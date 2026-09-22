@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { rmSync } from 'node:fs';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, getTableColumns, sql } from 'drizzle-orm';
 import type { Calendar } from '../../lib/calendar/calendar';
 import * as schema from '../../lib/calendar/schema';
 import { CALENDAR_TEST_ROOT, makeCalendar, resourceTextOf } from '../calendar-test-helpers';
@@ -31,6 +31,13 @@ const rowOf = (calendar: Calendar, calendarId: string, uri: string) =>
         .from(schema.resources)
         .where(and(eq(schema.resources.calendarId, calendarId), eq(schema.resources.uri, uri)))
         .get()!;
+
+// Every column a blob decides. reindexEvents re-stamps createdAt/updatedAt on a row whose file carries no
+// stamp of its own (an exclusion), so a rebuild is compared on what the bytes really own.
+const projectedEvents = (calendar: Calendar) => {
+    const { createdAt: _created, updatedAt: _updated, ...columns } = getTableColumns(schema.events);
+    return calendar.db.select(columns).from(schema.events).all();
+};
 
 const storedBytes = (calendar: Calendar): number =>
     calendar.db
@@ -301,7 +308,7 @@ describe('rebuildProjection', () => {
         await calendar.deleteResource(calendarId, 'deleted.ics', { ifMatch: null });
 
         const resourcesBefore = calendar.db.select().from(schema.resources).all();
-        const eventsBefore = calendar.db.select().from(schema.events).all();
+        const eventsBefore = projectedEvents(calendar);
         const tombstonesBefore = calendar.db.select().from(schema.resourceTombstones).all();
         expect(tombstonesBefore).toHaveLength(1);
         const ctagBefore = (await calendar.getCollection(calendarId))!.ctag;
@@ -318,7 +325,7 @@ describe('rebuildProjection', () => {
         calendar.rebuildProjection();
 
         expect(calendar.db.select().from(schema.resources).all()).toEqual(resourcesBefore);
-        expect(calendar.db.select().from(schema.events).all()).toEqual(eventsBefore);
+        expect(projectedEvents(calendar)).toEqual(eventsBefore);
         // No blob carries a deletion, so a rebuild leaves the tombstone a syncing client still needs.
         expect(calendar.db.select().from(schema.resourceTombstones).all()).toEqual(tombstonesBefore);
         // A rebuild is not a change: no ctag moves, so no client is told to resync.

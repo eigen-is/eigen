@@ -28,9 +28,17 @@ export function readBlobTableSize(dbPath: string, table: string, column: string,
     const db = new Database(dbPath, { readwrite: true, create: false });
     try {
         db.run('PRAGMA busy_timeout = 5000;');
-        const stamp = db.query<{ version: number }, []>('SELECT version FROM __schema_version WHERE id = 1').get();
-        // The pending migration drops these bytes, and the column it would read may not exist yet either.
-        if (!stamp || stamp.version < currentVersion) return 0;
+        // A database this build does not recognise is sized by the build that does: the column may not exist
+        // yet, or may no longer mean the same bytes. A missing stamp table is one of those.
+        let stamp: number | null = null;
+        try {
+            stamp =
+                db.query<{ version: number }, []>('SELECT version FROM __schema_version WHERE id = 1').get()?.version ??
+                null;
+        } catch {
+            stamp = null;
+        }
+        if (stamp !== currentVersion) return 0;
         const row = db
             .query<{ total: number }, []>(`SELECT COALESCE(SUM(length(${column})), 0) AS total FROM ${table}`)
             .get();

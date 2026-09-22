@@ -60,10 +60,12 @@ function isValidMailboxPath(mailbox: string): boolean {
         );
 }
 
-// Refused, never mapped onto a safe name: two mapped ids would collide on one file.
+// Refused, never mapped onto a safe name: two mapped ids would collide on one file. The NFC fold is the
+// one `isSafePathSegment` assumes, so an accented id names one sidecar and not two.
 function safeFileId(id: string): string {
-    if (!isSafePathSegment(id)) throw new ApiError(400, `Invalid mail id: ${id}`);
-    return id;
+    const name = id.normalize('NFC');
+    if (!isSafePathSegment(name)) throw new ApiError(400, `Invalid mail id: ${id}`);
+    return name;
 }
 
 export class MaildirStore implements MailStore {

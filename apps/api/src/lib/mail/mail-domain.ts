@@ -41,8 +41,9 @@ import { welcomeMail } from './welcome';
 const FULL_SAVE_INTERVAL_MS = 5 * 60 * 1000;
 
 // A blank id normalizes to undefined, so `?? createUniqueMessageId()` bakes a `Message-ID: <@domain>` into the EML.
+// Folded to NFC first, the rule `isSafePathSegment` is written for: one spelling reaches the filesystem.
 function draftIdOf(email: NewDraft | EmailDraft): string | undefined {
-    const id = email.id?.trim() || undefined;
+    const id = email.id?.trim().normalize('NFC') || undefined;
     if (id && !isSafePathSegment(id)) throw new ApiError(400, `Invalid draft id: ${id}`);
     return id;
 }
