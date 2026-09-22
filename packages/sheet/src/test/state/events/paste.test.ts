@@ -134,6 +134,22 @@ describe('plain-text paste (tab/newline matrix)', () => {
         // stays a string; not parseFloat'd to 123
         expect(d[0][0]?.v).toBe('00123');
     });
+
+    it('parses pasted text the way typed entry does', () => {
+        const ctx = makeCtx(4, 4, (d) => {
+            d[0][1] = { v: 1, m: '1.00', ct: { fa: '0.00', t: 'n' } };
+            d[0][2] = { v: 45000, m: '15/03/2023', ct: { fa: 'dd/mm/yyyy', t: 'd' } };
+            d[0][3] = { f: '=A1', v: 5, m: '5' };
+        });
+        handlePasteByClick(ctx, '0x10\t0x10\t2024-05-06\t1,234.5');
+
+        const d = ctx.sheets[0].data!;
+        expect(d[0][0]?.v).toBe('0x10');
+        expect(d[0][1]?.v).toBe('0x10');
+        expect(d[0][2]).toMatchObject({ v: 45418, m: '06/05/2024', ct: { fa: 'dd/mm/yyyy', t: 'd' } });
+        expect(d[0][3]?.v).toBe(1234.5);
+        expect(d[0][3]?.f).toBeUndefined();
+    });
 });
 
 describe('formula paste — relative refs shift, absolute refs stay (C5 tokenizer contract)', () => {
