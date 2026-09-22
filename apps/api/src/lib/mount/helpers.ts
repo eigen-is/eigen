@@ -140,11 +140,13 @@ export function readMountTotalSize(metadataPath: string): number {
 // (plus any unsynced writes), never a fraction of it. Refuse it if it isn't a valid SQLite, or if it
 // has collapsed far below the last-known stored size (a tiny fresh-init db where a multi-MB doc was) —
 // either signals corrupt/empty bytes that must not be adopted and re-uploaded over the good object.
+// The -wal counts toward the size: a crash leaves every write since the last checkpoint only there.
 const RECOVERY_COLLAPSE_FLOOR_BYTES = 64 * 1024;
 const RECOVERY_COLLAPSE_RATIO = 0.5;
 export function isViableRecoveryTemp(tempPath: string, knownSize: number): boolean {
     if (!isSqliteFile(tempPath)) return false;
-    const tempSize = fs.statSync(tempPath).size;
+    const walPath = `${tempPath}-wal`;
+    const tempSize = fs.statSync(tempPath).size + (fs.existsSync(walPath) ? fs.statSync(walPath).size : 0);
     return !(knownSize >= RECOVERY_COLLAPSE_FLOOR_BYTES && tempSize < knownSize * RECOVERY_COLLAPSE_RATIO);
 }
 

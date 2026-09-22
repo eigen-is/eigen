@@ -606,6 +606,42 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(500); // not collapsed to empty
     });
 
+    test('a crash temp whose rows are still in its -wal is recovered, not discarded as collapsed', async () => {
+        const { mount } = createS3Mount('wal-held-recovery');
+        await mount.init();
+        const { dataDbId } = await provisionDoc(mount);
+        const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        for (let i = 0; i < 500; i++) {
+            managed.db
+                .insert(docSchema.items)
+                .values({ id: i, data: 'x'.repeat(1000) })
+                .run();
+        }
+        await mount.closeDatabase(dataDbId);
+        await mount.drainPendingUploads({ flushNow: true });
+
+        // The crash image: a small main file, and every row plus one unsynced edit only in the -wal.
+        const tempPath = mount.getTempPath(dataDbId);
+        const fresh = new ManagedDatabase(docConfigNoSnap, tempPath);
+        await fresh.open(0);
+        await fresh.close({ skipFinalSnapshot: true });
+        const crashed = new Database(tempPath);
+        crashed.run('PRAGMA journal_mode = WAL;');
+        crashed.run('PRAGMA wal_autocheckpoint = 0;');
+        const insert = crashed.prepare('INSERT INTO items (id, data) VALUES (?, ?)');
+        for (let i = 0; i <= 500; i++) insert.run(i, 'x'.repeat(1000));
+        insert.finalize();
+        const imagePath = join(TEST_DIR, `crash-image-${randomUUID()}`);
+        copyFileSync(tempPath, imagePath);
+        copyFileSync(`${tempPath}-wal`, `${imagePath}-wal`);
+        crashed.close();
+        renameSync(imagePath, tempPath);
+        renameSync(`${imagePath}-wal`, `${tempPath}-wal`);
+
+        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
+        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(501);
+    });
+
     // A WAL an older session of the doc left beside its temp. SQLite replays a -wal into whatever main
     // file sits at that path, so a re-fetched object silently reverts to the stale rows, integrity ok.
     async function plantStaleWal(tempPath: string): Promise<void> {
