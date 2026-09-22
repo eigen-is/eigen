@@ -132,7 +132,7 @@ Calendar null guards in `reconciliation.ts` (`if (targetHome.hasCalendar)`) and
 **Login page** (`packages/ui/src/components/layout/pages/login-page.tsx`) — two tabs: "Sign in" (password) and
 "Guest" (OTP). Guest tab: email input → send code → 6-digit input → verify → reload.
 
-**Topbar** — guest app switcher limited to Drive, Docs, Stickies, Slides, Sheets, Chat. Simplified user
+**Topbar** — guest app switcher limited to Drive, Docs, Stickies, Slides, Vector, Sheets, Chat. Simplified user
 dropdown (logout only, no settings/profile/theme).
 
 **Notification link resolution** — `resolveAccessRequestLink()` parses the notification tag and returns a

@@ -41,7 +41,7 @@ type TopbarProps = {
     };
 };
 
-const GUEST_APPS = new Set(['Drive', 'Docs', 'Stickies', 'Slides', 'Sheets', 'Chat']);
+const GUEST_APPS = new Set(['Drive', 'Docs', 'Stickies', 'Slides', 'Vector', 'Sheets', 'Chat']);
 
 function LogoutDialog({
     open,
