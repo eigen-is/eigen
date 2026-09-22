@@ -7,7 +7,6 @@ export {
     PRODID,
     patchEvent,
     putOverride,
-    remintEventIds,
     removeExclusion,
     restampResource,
     serializeEventForImip,
