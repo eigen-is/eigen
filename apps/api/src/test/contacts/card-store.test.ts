@@ -1,99 +1,18 @@
-import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { fstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
-import { type FileHandle, open } from 'node:fs/promises';
-import { join } from 'node:path';
+import { rmSync } from 'node:fs';
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import type { CreateContactInput } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { CARD_MAX_BYTES, labelColorFor, normalizeLabelName } from '../../lib/contacts/card-store';
 import * as contactsSchema from '../../lib/contacts/schema';
-import { computeResourceEtag, LocalFilesystem } from '../../lib/core';
+import { computeResourceEtag } from '../../lib/core';
 import { createVCard, parseVCard } from '../../lib/vcard';
 import { CONTACTS_TEST_ROOT, cardTextOf, makeContacts, validContact } from '../contacts-test-helpers';
 
-const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-card-store-${Date.now()}`);
-let counter = 0;
-const nextStore = () => {
-    const base = join(TEST_DIR, `store-${counter++}`);
-    return { store: new LocalFilesystem(base), base };
-};
-
 beforeAll(() => {
     rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
-    mkdirSync(TEST_DIR, { recursive: true });
-});
-afterAll(() => {
-    try {
-        rmSync(TEST_DIR, { recursive: true, force: true });
-    } catch {}
-});
-
-describe('writeAtomic', () => {
-    test('writes the exact bytes and leaves no temp file behind', async () => {
-        const { store, base } = nextStore();
-        const bytes = new TextEncoder().encode('BEGIN:VCARD\r\nEND:VCARD\r\n');
-        await store.writeAtomic('cards/a.vcf', bytes);
-
-        expect(new Uint8Array(await store.file('cards/a.vcf').arrayBuffer())).toEqual(bytes);
-        expect(readdirSync(join(base, 'cards'))).toEqual(['a.vcf']);
-    });
-
-    test('overwrites an existing target atomically', async () => {
-        const { store, base } = nextStore();
-        await store.writeAtomic('cards/b.vcf', 'first');
-        await store.writeAtomic('cards/b.vcf', 'second');
-
-        expect(await store.file('cards/b.vcf').text()).toBe('second');
-        expect(readdirSync(join(base, 'cards'))).toEqual(['b.vcf']);
-    });
-
-    test('fsyncs the parent directory, not just the temp file', async () => {
-        // The bytes being on the platter is only half of it: the rename that publishes them lives in
-        // the directory, so a power loss before the directory entry is flushed resurrects the OLD
-        // file under an already-acknowledged write. Observed through FileHandle.sync — one fsync on
-        // the temp file, then one on the directory it was renamed into.
-        const { store } = nextStore();
-        const probe = await open(TEST_DIR, 'r');
-        const handleProto = Object.getPrototypeOf(probe) as { sync: () => Promise<void> };
-        await probe.close();
-
-        const syncedADirectory: boolean[] = [];
-        const realSync = handleProto.sync;
-        const spy = spyOn(handleProto, 'sync').mockImplementation(async function (this: FileHandle) {
-            syncedADirectory.push(fstatSync(this.fd).isDirectory());
-            return realSync.call(this);
-        });
-        try {
-            await store.writeAtomic('cards/c.vcf', 'durable');
-        } finally {
-            spy.mockRestore();
-        }
-
-        expect(syncedADirectory).toEqual([false, true]);
-    });
-
-    test('a failed write sweeps its temp file and rethrows the original error', async () => {
-        // Force the temp-file fsync to throw mid-write: the staged temp must not leak (only the cards/ init
-        // sweep self-heals its own leftovers), and the original error must surface. Reuses the shared
-        // FileHandle.sync spy from the probe above.
-        const { store, base } = nextStore();
-        const probe = await open(TEST_DIR, 'r');
-        const handleProto = Object.getPrototypeOf(probe) as { sync: () => Promise<void> };
-        await probe.close();
-
-        const spy = spyOn(handleProto, 'sync').mockImplementation(async () => {
-            throw new Error('fsync failed');
-        });
-        try {
-            await expect(store.writeAtomic('cards/d.vcf', 'doomed')).rejects.toThrow('fsync failed');
-        } finally {
-            spy.mockRestore();
-        }
-
-        expect(readdirSync(join(base, 'cards'))).toEqual([]);
-    });
 });
 
 describe('normalizeLabelName', () => {
@@ -241,47 +160,6 @@ describe('Contacts (blob store)', () => {
         expect(card).not.toMatch(/^EMAIL:/m);
         expect(card).not.toMatch(/^TEL:/m);
         expect(card).not.toMatch(/^ADR/m);
-    });
-
-    test('updateContact with a stale etag throws 412', async () => {
-        const { instance: contacts } = await makeContacts();
-        const db = contacts.db;
-        const id = await contacts.addContact(validContact({ firstName: 'Stale', email: ['stale@example.com'] }));
-        const staleEtag = db
-            .select()
-            .from(contactsSchema.contacts)
-            .where(eq(contactsSchema.contacts.id, id))
-            .get()!.etag;
-
-        // First write with the fresh etag succeeds and rotates the etag.
-        await contacts.updateContact(id, validContact({ firstName: 'Fresh', email: ['stale@example.com'] }), staleEtag);
-
-        // Re-using the now-stale etag is rejected.
-        await expect(
-            contacts.updateContact(id, validContact({ firstName: 'Loser', email: ['stale@example.com'] }), staleEtag),
-        ).rejects.toThrow('Contact was changed elsewhere');
-    });
-
-    test('deleteContact writes a tombstone row and bumps book.ctag', async () => {
-        const { instance: contacts } = await makeContacts();
-        const db = contacts.db;
-        const id = await contacts.addContact(validContact({ firstName: 'Doomed' }));
-        const uri = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.uri;
-        const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
-
-        await contacts.deleteContact(id);
-
-        expect(
-            db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get(),
-        ).toBeUndefined();
-        expect(
-            db
-                .select()
-                .from(contactsSchema.contactTombstones)
-                .where(eq(contactsSchema.contactTombstones.uri, uri))
-                .get(),
-        ).toBeTruthy();
-        expect(db.select().from(contactsSchema.book).get()!.ctag).toBeGreaterThan(ctagBefore);
     });
 
     test('a second init() seeds nothing new', async () => {

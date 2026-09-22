@@ -136,10 +136,12 @@ describe('deleting a contact', () => {
         const id = await contacts.addContact(validContact({ firstName: 'Doomed', email: ['doomed@example.com'] }));
         const row = rowOf(db, id);
         const bytesBefore = await contacts.size();
+        const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
 
         await contacts.deleteContact(id);
 
         expect(await contacts.getCard(row.uri)).toBeNull();
+        expect(db.select().from(contactsSchema.book).get()!.ctag).toBeGreaterThan(ctagBefore);
         expect(
             db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get(),
         ).toBeUndefined();
