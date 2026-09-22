@@ -246,7 +246,8 @@ export class Mount {
                   )
                 : null;
             for (const entry of fs.readdirSync(dir)) {
-                if (liveIds?.has(entry)) continue;
+                // A crash temp's journals hold its unsynced tail, so they live and die with it.
+                if (liveIds?.has(entry.replace(/-(wal|shm|journal)$/, ''))) continue;
                 const filePath = path.join(dir, entry);
                 try {
                     if (fs.statSync(filePath).mtimeMs < cutoff) fs.unlinkSync(filePath);

@@ -523,6 +523,45 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         expect(existsSync(recoveryTemp)).toBe(true); // recovery temp survives for reopen to adopt
         expect(existsSync(orphanTemp)).toBe(false); // transient temp still swept
     });
+
+    test("a delayed restart keeps a crash temp's -wal, so its unsynced rows are recovered", async () => {
+        const { mount } = createS3Mount('tmp-sweep-wal');
+        await mount.init();
+        const { dataDbId } = await provisionDoc(mount);
+        const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        for (let i = 0; i < 600; i++) {
+            managed.db
+                .insert(docSchema.items)
+                .values({ id: i, data: 'x'.repeat(100) })
+                .run();
+        }
+        await mount.closeDatabase(dataDbId);
+        await mount.drainPendingUploads({ flushNow: true });
+
+        // The crash image: the synced main file, and 100 unsynced rows only in the -wal.
+        const tempPath = mount.getTempPath(dataDbId);
+        await Bun.write(tempPath, mount.storage.read(await mount.getStorageKey(dataDbId)));
+        const crashed = new Database(tempPath);
+        crashed.run('PRAGMA journal_mode = WAL;');
+        crashed.run('PRAGMA wal_autocheckpoint = 0;');
+        const insert = crashed.prepare('INSERT INTO items (id, data) VALUES (?, ?)');
+        for (let i = 600; i < 700; i++) insert.run(i, 'x'.repeat(100));
+        insert.finalize();
+        const imagePath = join(TEST_DIR, `crash-image-${randomUUID()}`);
+        copyFileSync(tempPath, imagePath);
+        copyFileSync(`${tempPath}-wal`, `${imagePath}-wal`);
+        crashed.close();
+        renameSync(imagePath, tempPath);
+        renameSync(`${imagePath}-wal`, `${tempPath}-wal`);
+        const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        utimesSync(tempPath, old, old);
+        utimesSync(`${tempPath}-wal`, old, old);
+
+        const m2 = createS3Mount('tmp-sweep-wal');
+        await m2.mount.init();
+        const reopened = await m2.mount.openDatabase(docConfigNoSnap, dataDbId);
+        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(700);
+    });
 });
 
 describe('per-destination upload concurrency', () => {
