@@ -111,12 +111,14 @@ function resolveSelfLinkOnPut(
     return { eigenId, bytes, merged: false };
 }
 
+export type PutCardOptions = { ifMatch: string | null; ifNoneMatch: string | null };
+
 // Preconditions, UID rules, quota and the self-link are decided inside the lock, against the state the write overwrites.
 export async function putCard(
     contacts: Contacts,
     uri: string,
     body: string,
-    pre: { ifMatch: string | null; ifNoneMatch: string | null },
+    options: PutCardOptions,
 ): Promise<PutResourceResult> {
     if (sanitizeCardUri(uri) !== uri) return { ok: false, error: 'invalid' };
     return contacts.writeLock.run(async (): Promise<PutResourceResult> => {
@@ -146,10 +148,10 @@ export async function putCard(
             .where(atUri(uri))
             .get();
         const currentEtag = existing ? `"${existing.etag}"` : null;
-        if (pre.ifNoneMatch !== null && matchesIfNoneMatch(pre.ifNoneMatch, currentEtag)) {
+        if (options.ifNoneMatch !== null && matchesIfNoneMatch(options.ifNoneMatch, currentEtag)) {
             return { ok: false, error: 'precondition' };
         }
-        if (pre.ifMatch !== null && !matchesIfMatch(pre.ifMatch, currentEtag)) {
+        if (options.ifMatch !== null && !matchesIfMatch(options.ifMatch, currentEtag)) {
             return { ok: false, error: 'precondition' };
         }
 

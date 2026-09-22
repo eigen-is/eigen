@@ -38,7 +38,7 @@ import {
     prepareCard,
     syncCardLabels,
 } from './card-store';
-import type { CardBook, CardRow, DeleteCardResult } from './dav-store';
+import type { CardBook, CardRow, DeleteCardResult, PutCardOptions } from './dav-store';
 import * as davStore from './dav-store';
 import { CONTACTS_DB_CONFIG } from './db-config';
 import * as labels from './labels';
@@ -690,12 +690,8 @@ export class Contacts {
         return davStore.getCardMeta(this, uri);
     }
 
-    public async putCard(
-        uri: string,
-        body: string,
-        pre: { ifMatch: string | null; ifNoneMatch: string | null },
-    ): Promise<PutResourceResult> {
-        return davStore.putCard(this, uri, body, pre);
+    public async putCard(uri: string, body: string, options: PutCardOptions): Promise<PutResourceResult> {
+        return davStore.putCard(this, uri, body, options);
     }
 
     public async deleteCard(uri: string, pre: { ifMatch: string | null }): Promise<DeleteCardResult> {
