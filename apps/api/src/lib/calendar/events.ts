@@ -23,7 +23,7 @@ import { resourceBytes } from './resource-store';
 import * as schema from './schema';
 import type { CreateEventArgs } from './types';
 
-// Event mutation over the Calendar facade. See docs/CALENDAR.md § Event writes.
+// Event mutation over the Calendar facade. See docs/CALENDAR.md § The write path.
 
 // Where an edit writes and what it credits against the quota; the bytes are the one column no caller needs by default.
 const STORED_RESOURCE = {
