@@ -1,8 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { getSupportUrl } from '@workspace/lib/api';
 import { apps } from '@workspace/lib/apps';
-import { Column, ColumnLayout, EigenCyclingLogo } from '@workspace/ui';
-import { Card, CardContent } from '@workspace/ui/components/card';
+import { Column, ColumnLayout, EigenCyclingLogo, KetTile } from '@workspace/ui';
 import { LifeBuoy } from 'lucide-react';
 
 export const Route = createFileRoute('/_auth/')({
@@ -29,54 +28,26 @@ function HomeComponent() {
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                                 {apps.map((app) => {
                                     if (app.name === 'Space') return null;
-                                    const Icon = app.icon;
                                     return (
-                                        <Card
+                                        <KetTile
                                             key={app.name}
-                                            className="overflow-hidden hover:shadow-md transition-shadow"
+                                            icon={app.icon}
+                                            title={app.name}
+                                            description={app.description}
+                                            color={app.color}
                                         >
-                                            <CardContent className="p-0">
-                                                <a href={app.href || '#'} className="block p-3 md:p-4">
-                                                    <div className="flex items-center gap-2 md:gap-3">
-                                                        <div className="p-2 rounded-md" style={{ color: app.color }}>
-                                                            <Icon className="w-5 h-5 md:w-6 md:h-6" />
-                                                        </div>
-                                                        <div>
-                                                            <h3
-                                                                className="font-medium text-sm md:text-base"
-                                                                style={{ color: app.color }}
-                                                            >
-                                                                {app.name}
-                                                            </h3>
-                                                            <p className="text-xs text-muted-foreground hidden md:block">
-                                                                {app.description}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                </a>
-                                            </CardContent>
-                                        </Card>
+                                            <a href={app.href || '#'} />
+                                        </KetTile>
                                     );
                                 })}
-                                <Card className="overflow-hidden hover:shadow-md transition-shadow">
-                                    <CardContent className="p-0">
-                                        <a href={getSupportUrl()} className="block p-3 md:p-4">
-                                            <div className="flex items-center gap-2 md:gap-3">
-                                                <div className="p-2 rounded-md text-muted-foreground">
-                                                    <LifeBuoy className="w-5 h-5 md:w-6 md:h-6" />
-                                                </div>
-                                                <div>
-                                                    <h3 className="font-medium text-sm md:text-base text-muted-foreground">
-                                                        Help and support
-                                                    </h3>
-                                                    <p className="text-xs text-muted-foreground hidden md:block">
-                                                        Find answers and guides
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </a>
-                                    </CardContent>
-                                </Card>
+                                <KetTile
+                                    icon={LifeBuoy}
+                                    title="Help and support"
+                                    description="Find answers and guides"
+                                    color="var(--muted-foreground)"
+                                >
+                                    <a href={getSupportUrl()} />
+                                </KetTile>
                             </div>
                         </div>
                     </div>

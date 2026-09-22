@@ -212,6 +212,7 @@ Defined in `packages/ui/src/styles/globals.css`:
 | `eigen-list-item-cursor`   | Keyboard cursor: the 2px stripe WITHOUT the wash (mail list)           |
 | `eigen-list-item-selected` | Multi-selected: app-color wash                                         |
 | `eigen-tile` (+ `-active`, `-selected`) | Grid-view tile: full app-color border instead of stripe + wash |
+| `eigen-ket-tile`           | Launcher tile (`KetTile`): straight left edge with the 2px stripe, right edge is the logo's ket; hover = the row wash |
 | `drag-badge`               | Off-screen badge for multi-drag image                                  |
 
 The wash is `--app-current-color-soft` and the stripe `--app-current-color`, so every list picks up

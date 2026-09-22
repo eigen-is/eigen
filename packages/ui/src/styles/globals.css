@@ -503,6 +503,46 @@
         border-color: var(--app-current-color);
     }
 
+    /* Launcher tile shaped like the wordmark's |name>: the body carries the top/bottom/left
+       border and the 2px stripe, the SVG ket carries the slanted right edge. The ket keeps the
+       logo's 4:15 proportions, so the tile height is fixed and the ket width derives from it.
+       Hover is the row wash (.eigen-list-item), mixed here from the tile's own color. */
+    .eigen-ket-tile {
+        --ket-tile-height: 3.5rem;
+        --ket-tile-width: calc(var(--ket-tile-height) * 4 / 15);
+        --ket-tile-color-soft: color-mix(in oklab, var(--ket-tile-color) 14%, var(--background));
+        --ket-tile-bg: var(--background);
+        height: var(--ket-tile-height);
+        padding-right: var(--ket-tile-width);
+        -webkit-touch-callout: none;
+    }
+
+    @media (width >= 48rem) {
+        .eigen-ket-tile {
+            --ket-tile-height: 4rem;
+        }
+    }
+
+    .eigen-ket-tile:hover {
+        --ket-tile-bg: var(--ket-tile-color-soft);
+    }
+
+    .eigen-ket-tile-body {
+        background-color: var(--ket-tile-bg);
+        border-color: var(--border);
+        box-shadow: inset 2px 0 0 0 var(--ket-tile-color);
+    }
+
+    /* Half a pixel in so the 1px stroke sits on the body's border, not beside it. */
+    .eigen-ket-tile-ket {
+        top: 0.5px;
+        height: calc(100% - 1px);
+        width: var(--ket-tile-width);
+        fill: var(--ket-tile-bg);
+        stroke: var(--border);
+        stroke-width: 1px;
+    }
+
     /* In-document search highlight — the single source of truth all four editors
        (docs/sheets/slides/stickies) paint through; prosemirror-search's own class
        names (docs) alias the same rules here. A warm amber wash derived from the
