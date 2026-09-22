@@ -2,7 +2,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
 import { cloneDeep, every, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
-import { booleanDisplay, numberDisplay, parseCellInput, update } from '../../engine/format';
+import { booleanDisplay, cellWrapsText, numberDisplay, parseCellInput, update } from '../../engine/format';
 import { isFormula } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
@@ -23,7 +23,7 @@ import {
     type UnderlineHints,
 } from './inline-string';
 import { getCellTextInfo } from './text';
-import { isRealNull, isRealNum, valueIsError } from './validation';
+import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
 
 // TODO put these in context ref
 // let rangestart = false;
@@ -129,8 +129,7 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
     }
     if (!d) return;
 
-    // If deep copy is used, cell properties during initialization are lost
-    // let cell = $.extend(true, {}, d[r][c]);
+    // A deep copy would lose the cell properties set at initialization.
     let cell = d[r][c];
 
     // biome-ignore lint/suspicious/noExplicitAny: tracks v's shape (scalar or cell.v from a patch)
@@ -210,7 +209,6 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         cell.m = vupdate;
     } else if (valueIsError(vupdate)) {
         cell.m = vupdateStr;
-        // cell.ct = { "fa": "General", "t": "e" };
         if (!isNil(cell.ct)) {
             cell.ct.t = 'e';
         } else {
@@ -218,11 +216,7 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         }
         cell.v = vupdate;
     } else {
-        if (
-            !isNil(cell.f) &&
-            isRealNum(vupdate) &&
-            !/^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i.test(vupdate)
-        ) {
+        if (!isNil(cell.f) && isRealNum(vupdate) && !ID_CARD_NUMBER.test(vupdate)) {
             cell.v = parseFloat(vupdate);
             if (isNil(cell.ct)) {
                 cell.ct = { fa: 'General', t: 'n' };
@@ -241,8 +235,8 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
                 cell.m = update(cell.ct.fa!, cell.v);
             }
         } else if (!isNil(cell.ct) && !isNil(cell.ct.fa) && cell.ct.fa !== 'General') {
-            if (isRealNum(vupdate)) {
-                vupdate = parseFloat(vupdate);
+            if (isPlainNumber(vupdate)) {
+                vupdate = Number(vupdate);
             }
 
             const mask = update(cell.ct.fa, vupdate);
@@ -255,47 +249,15 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
                 cell.v = vupdate;
             }
         } else {
-            if (
-                isRealNum(vupdate) &&
-                !/^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i.test(vupdate)
-            ) {
-                if (typeof vupdate === 'string') {
-                    const flag = vupdate.split('').every((ele) => ele === '0' || ele === '.');
-                    if (flag) {
-                        vupdate = parseFloat(vupdate);
-                    }
-                }
-                cell.v =
-                    vupdate; /* Note: If using parseFloat, 1.1111111111111111 will be converted to 1.1111111111111112 ? */
+            if (isPlainNumber(vupdate) && !ID_CARD_NUMBER.test(vupdateStr)) {
+                cell.v = Number(vupdate);
                 cell.ct = { fa: 'General', t: 'n' };
-                cell.m = numberDisplay(Number(cell.v));
+                cell.m = numberDisplay(cell.v);
             } else {
                 [cell.m, cell.ct, cell.v] = parseCellInput(vupdate);
             }
         }
     }
-
-    // if (!server.allowUpdate && !configSettings.pointEdit) {
-    //   if (
-    //     !isNil(cell.ct) &&
-    //     /^(w|W)((0?)|(0\.0+))$/.test(cell.ct.fa) === false &&
-    //     cell.ct.t === "n" &&
-    //     !isNil(cell.v) &&
-    //     parseInt(cell.v, 10).toString().length > 4
-    //   ) {
-    //     const autoFormatw = configSettings.autoFormatw
-    //       .toString()
-    //       .toUpperCase();
-    //     const { accuracy } = configSettings;
-
-    //     const sfmt = setAccuracy(autoFormatw, accuracy);
-
-    //     if (sfmt !== "General") {
-    //       cell.ct.fa = sfmt;
-    //       cell.m = update(sfmt, cell.v);
-    //     }
-    //   }
-    // }
 
     d[r][c] = cell;
 }
@@ -756,8 +718,8 @@ export function updateCell(
     setCellValue(ctx, r, c, d, value);
     cancelNormalSelected(ctx);
 
-    if ((curv?.tb === '2' && curv.v) || isInlineStringCell(d[r][c])) {
-        // Word wrap
+    const written = d[r][c];
+    if (written && ((cellWrapsText(written) && written.v) || isInlineStringCell(written))) {
         const { defaultrowlen } = ctx;
 
         const cfg = (ctx.sheets[index].config ??= {});
@@ -765,7 +727,7 @@ export function updateCell(
             const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
 
             const textInfo = canvas
-                ? getCellTextInfo(d[r][c] as Cell, canvas, ctx, {
+                ? getCellTextInfo(written, canvas, ctx, {
                       r,
                       c,
                       cellWidth,

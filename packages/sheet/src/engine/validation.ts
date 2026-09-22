@@ -41,6 +41,15 @@ export function isRealNum(val: unknown): boolean {
     return !Number.isNaN(Number(val));
 }
 
+// Number() also reads "Infinity" and the radix prefixes parseFloat stops at ("0x10" → 0); Excel keeps both as text.
+export function isPlainNumber(val: unknown): boolean {
+    const parsed = parseFloat(String(val));
+    return isRealNum(val) && Number.isFinite(parsed) && parsed === Number(val);
+}
+
+// A Chinese resident ID number stays text, however numeric it reads.
+export const ID_CARD_NUMBER = /^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i;
+
 function checkDateTime(str: string, format: '12' | '24'): boolean {
     const reg1 =
         format === '24'

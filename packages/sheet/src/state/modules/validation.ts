@@ -3,7 +3,15 @@ import { forEach } from 'es-toolkit/compat';
 import { type Context, getSheetConfig } from '../context';
 import { hasChinaword } from './text';
 
-export { error, isdatetime, isRealNull, isRealNum, valueIsError } from '../../engine/validation';
+export {
+    error,
+    ID_CARD_NUMBER,
+    isdatetime,
+    isPlainNumber,
+    isRealNull,
+    isRealNum,
+    valueIsError,
+} from '../../engine/validation';
 
 export function diff(now: dayjs.ConfigType, then: dayjs.ConfigType) {
     return dayjs(now).diff(dayjs(then));

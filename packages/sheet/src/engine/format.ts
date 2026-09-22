@@ -2,7 +2,7 @@ import numeral from 'numeral';
 import { format, isDateFormat } from 'numfmt';
 import { dateToSerial } from './parser/helper/number';
 import type { Cell, CellMatrix, CellType } from './types';
-import { isdatetime, isRealNum, valueIsError } from './validation';
+import { ID_CARD_NUMBER, isdatetime, isPlainNumber, isRealNum, valueIsError } from './validation';
 
 // Canonical display for a boolean cell — Excel's uppercase TRUE/FALSE. The xlsx
 // importer shares it so literal booleans read the same as the formula-produced
@@ -11,9 +11,9 @@ export function booleanDisplay(value: boolean): string {
     return value ? 'TRUE' : 'FALSE';
 }
 
-// Wrap breaks text only; keyed on the value, since a formula typed into a text cell keeps its ct.t.
+// Wrap breaks text only; the value decides too, since a formula typed into a text cell keeps its ct.t.
 export function cellWrapsText(cell: Cell): boolean {
-    return cell.tb === '2' && typeof cell.v !== 'number' && cell.ct?.t !== 'd';
+    return cell.tb === '2' && typeof cell.v !== 'number' && cell.ct?.t !== 'n' && cell.ct?.t !== 'd';
 }
 
 export function parseCellInput(value: string | number | boolean): [string, CellType, string | number | boolean] {
@@ -48,7 +48,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
     } else if (valueIsError(text)) {
         m = text;
         ct = { fa: 'General', t: 'e' };
-    } else if (/^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i.test(text)) {
+    } else if (ID_CARD_NUMBER.test(text)) {
         m = text;
         ct = { fa: '@', t: 's' };
     } else if (
@@ -194,13 +194,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
             m = text;
             ct = { fa: '@', t: 's' };
         }
-    } else if (
-        // isRealNum tests with Number(), which reads "Infinity" and the radix prefixes parseFloat
-        // stops at ("0x10" → 0); Excel keeps both as text, so require the two to agree.
-        isRealNum(value) &&
-        Number.isFinite(parseFloat(text)) &&
-        parseFloat(text) === Number(value)
-    ) {
+    } else if (isPlainNumber(value)) {
         v = parseFloat(text);
         m = numberDisplay(v);
         ct = { fa: 'General', t: 'n' };
