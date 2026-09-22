@@ -111,7 +111,7 @@ fix (Phase 1a) · §2 upload pipeline (Phase 1b) · §3 staging + consistent ver
 ## Teardown
 
 - **Idle teardown** — the queue stops; leftover pending rows + staged copies replay on the next open.
-- **Process shutdown** — `index.ts` sets a deadline before `shutdownAllHomes`; each mount flushes its queue
+- **Process shutdown** — `server.ts` sets a deadline before `shutdownAllHomes`; each mount flushes its queue
   (bounded by `SHUTDOWN_DRAIN_BUDGET_MS`) after the final close-time enqueues, then closes. Anything
   undrained replays on boot.
 
