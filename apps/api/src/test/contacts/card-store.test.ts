@@ -20,11 +20,13 @@ const nextStore = () => {
     return { store: new LocalFilesystem(base), base };
 };
 
-beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));
+beforeAll(() => {
+    rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
+    mkdirSync(TEST_DIR, { recursive: true });
+});
 afterAll(() => {
     try {
         rmSync(TEST_DIR, { recursive: true, force: true });
-        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
     } catch {}
 });
 

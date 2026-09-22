@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, spyOn, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomFillSync, randomUUID } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -18,12 +18,6 @@ import {
     validContact,
 } from '../contacts-test-helpers';
 
-afterAll(() => {
-    try {
-        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
-    } catch {}
-});
-
 // What the avatar cache actually occupies on disk — the half of size() that is still files.
 const avatarBytesOf = (dir: string) =>
     (existsSync(avatarsDirOf(dir)) ? readdirSync(avatarsDirOf(dir)) : [])
@@ -40,6 +34,10 @@ const cardBytesOf = (db: Contacts['db']) =>
 const photoBlock = (raw: string) => raw.match(/PHOTO[^\r\n]*(?:\r\n[ \t][^\r\n]*)*/)?.[0] ?? '';
 
 describe('Contacts inline PHOTO / derived avatar cache', () => {
+    beforeAll(() => {
+        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
+    });
+
     test('addContact embeds a JPEG PHOTO and derives a hash-named webp cache', async () => {
         const { instance: contacts, user, dir } = await makeContacts();
         const staged = await stageAvatar(contacts);

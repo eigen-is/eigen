@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -10,12 +10,6 @@ import { getHome } from '../../lib/home';
 import { parseVCard, splitVCards } from '../../lib/vcard';
 import { CONTACTS_TEST_ROOT, makeContacts, stageAvatar, validContact } from '../contacts-test-helpers';
 import { createTestUser, getTestContext } from '../setup';
-
-afterAll(() => {
-    try {
-        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
-    } catch {}
-});
 
 // The fixtures are built as text, LF-terminated, the way every desktop client writes an export — the
 // importer's own transcode/normalization is what the tests are pinning. The domain takes the file's
@@ -49,6 +43,10 @@ const card40 = (fn: string, email: string, uid: string) =>
     ].join('\n')}\n`;
 
 describe('Contacts export', () => {
+    beforeAll(() => {
+        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
+    });
+
     test('export of two ids returns two cards in id order, FN and PHOTO preserved', async () => {
         const { instance: contacts } = await makeContacts();
         const staged = await stageAvatar(contacts);

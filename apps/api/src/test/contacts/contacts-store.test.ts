@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -10,16 +10,14 @@ import { CONTACTS_TEST_ROOT, cardTextOf, makeContacts, stageAvatar, validContact
 import { breakTransaction } from '../db-test-helpers';
 import { ensureServer } from '../setup';
 
-afterAll(() => {
-    try {
-        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
-    } catch {}
-});
-
 const rowOf = (db: Contacts['db'], id: string) =>
     db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
 
 describe('a write that does not commit', () => {
+    beforeAll(() => {
+        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
+    });
+
     test('an update whose transaction throws leaves the previous bytes, etag and byte count', async () => {
         const { instance: contacts } = await makeContacts();
         const db = contacts.db;

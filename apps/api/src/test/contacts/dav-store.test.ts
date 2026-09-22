@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, spyOn, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { eq } from 'drizzle-orm';
@@ -7,12 +7,6 @@ import type { Contacts } from '../../lib/contacts/contacts';
 import * as contactsSchema from '../../lib/contacts/schema';
 import { computeResourceEtag, normalizeResourceUri } from '../../lib/core';
 import { CONTACTS_TEST_ROOT, makeContacts } from '../contacts-test-helpers';
-
-afterAll(() => {
-    try {
-        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
-    } catch {}
-});
 
 // Minimal well-formed vCard 3.0 body — the bytes a DAV client PUTs, kept as CRLF text so the store writes
 // them verbatim.
@@ -45,6 +39,10 @@ const put = (
 ) => contacts.putCard(uri, body, { ifMatch: pre?.ifMatch ?? null, ifNoneMatch: pre?.ifNoneMatch ?? null });
 
 describe('putCard — create and read', () => {
+    beforeAll(() => {
+        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
+    });
+
     test('a create returns created:true and an etag hashing the stored bytes', async () => {
         const { instance: contacts } = await makeContacts();
         const uid = randomUUID();
