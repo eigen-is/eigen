@@ -22,8 +22,6 @@ export type TestHome<T> = {
     database: <S extends SchemaType>(relativePath: string) => Promise<ManagedDatabase<S>>;
     // A restart: a fresh instance over the same directory and user, carrying none of this one's memory.
     reopen: () => Promise<TestHome<T>>;
-    // Close at most one harness per home dir: the second close unlinks a -shm another handle still maps, and
-    // sqlite answers SQLITE_IOERR_VNODE. A restart test closes the reopened half and leaves the first open.
     close: () => Promise<void>;
 };
 

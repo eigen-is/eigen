@@ -58,7 +58,7 @@ type DatabaseConfig<S extends SchemaType> = {
    dirty watermark is captured before `onSync` runs and advanced only after it returns, so a throwing `onSync` leaves
    the db dirty: the next tick retries, `flush()` propagates the error, and `close()` still tears down and passes
    `syncFailed` to `onClose`
-3. `close()` — syncs, `PRAGMA wal_checkpoint(TRUNCATE)`, closes DB, deletes WAL/SHM journal files. The close is strict: drizzle's statements are finalized as they run (`withAutoFinalize`), because a lazy close leaves `-shm` mapped and unlinking it under that zombie makes the next open of the same file fail with `SQLITE_IOERR_VNODE`
+3. `close()` — syncs, `PRAGMA wal_checkpoint(TRUNCATE)`, closes DB. The close is strict: drizzle's statements are finalized as they run (`withAutoFinalize`), so the file is released before the next open of the same path. The `-wal` and `-shm` files are SQLite's: the last connection to close removes them, after an exclusive lock proves no other connection (in any process) still has the file. Never unlink them by hand — a connection in another process keeps writing into the unlinked WAL, and its writes are lost or corrupt the file. `openCold` sets `SQLITE_FCNTL_PERSIST_WAL` to 0, because macOS's system SQLite otherwise keeps both files after the last close
 
 ### Migrations
 

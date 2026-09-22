@@ -2,7 +2,7 @@ import { Database as BunDatabase } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { sql } from 'drizzle-orm';
+import { like, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase, withAutoFinalize } from '../../lib/core';
@@ -360,10 +360,8 @@ describe('ManagedDatabase statement finalization', () => {
 
 describe('ManagedDatabase close releases the file (no zombie close)', () => {
     test('close → reopen of the SAME path works', async () => {
-        // A lazy close keeps the file + -shm mapped; deleteJournalFiles then unlinks -shm under
-        // that zombie, poisoning the inode's shm node — the next open of the same file fails with
-        // SQLITE_IOERR_VNODE (macOS; Linux tolerates the unlink). Every local-key reopen takes
-        // exactly this path, so close() must be strict (statements finalized, see above).
+        // Every local-key reopen takes exactly this path, so close() must be strict (statements
+        // finalized, see above) and release the file before the next open.
         const dbPath = nextDbPath();
         const db = new ManagedDatabase(makeConfig(1000), dbPath, { onSync: async () => {} });
         await db.open(0);
@@ -437,3 +435,104 @@ describe('ManagedDatabase dirty tracking', () => {
         await db.close({ skipFinalSnapshot: true });
     });
 });
+
+describe('ManagedDatabase leaves its journals to SQLite', () => {
+    test('a clean last close leaves no -wal or -shm behind', async () => {
+        const dbPath = nextDbPath();
+        const db = new ManagedDatabase(makeConfig(1000), dbPath);
+        await db.open(0);
+        db.db.insert(items).values({ v: 'x' }).run();
+        await db.close({ skipFinalSnapshot: true });
+
+        expect(existsSync(dbPath)).toBe(true);
+        expect(existsSync(`${dbPath}-wal`)).toBe(false);
+        expect(existsSync(`${dbPath}-shm`)).toBe(false);
+    });
+
+    test("a close while another process holds the file keeps that process's writes", async () => {
+        // Unlinking the journals by hand after close left a second connection writing into a WAL
+        // nobody else could see: its writes vanished for the next opener and its later checkpoint
+        // corrupted the file (the 2026-09-22 metadata.db).
+        const dbPath = nextDbPath();
+        const first = new ManagedDatabase(makeConfig(1000), dbPath);
+        await first.open(0);
+        first.db.insert(items).values({ v: 'first' }).run();
+
+        const other = spawnHolder(dbPath);
+        try {
+            await other.send('read');
+            await first.close({ skipFinalSnapshot: true });
+            await other.send('write 20');
+
+            const next = new ManagedDatabase(makeConfig(1000), dbPath);
+            await next.open(0);
+            expect(countLike(next, 'other-%')).toBe(20);
+            next.db.insert(items).values({ v: 'next' }).run();
+            await other.send('write 20');
+            await other.send('exit');
+            await next.close({ skipFinalSnapshot: true });
+        } finally {
+            other.proc.kill();
+        }
+
+        const check = new BunDatabase(dbPath, { readwrite: true, create: false });
+        try {
+            expect(check.query<{ integrity_check: string }, []>('PRAGMA integrity_check').get()).toEqual({
+                integrity_check: 'ok',
+            });
+            expect(countLikeRaw(check, 'other-%')).toBe(40);
+            expect(countLikeRaw(check, 'next')).toBe(1);
+        } finally {
+            check.close();
+        }
+    });
+});
+
+function countLike(db: ManagedDatabase<Schema>, pattern: string): number | undefined {
+    return db.db.select({ n: sql<number>`count(*)` }).from(items).where(like(items.v, pattern)).get()?.n;
+}
+
+function countLikeRaw(db: BunDatabase, pattern: string): number | undefined {
+    return db.query<{ n: number }, [string]>('SELECT count(*) AS n FROM items WHERE v LIKE ?').get(pattern)?.n;
+}
+
+// A second process on the same file: each stdin line is one command, answered by one stdout line.
+const HOLDER_SCRIPT = `
+import { Database } from 'bun:sqlite';
+const db = new Database(process.env.DB_PATH);
+db.run('PRAGMA busy_timeout = 5000');
+let written = 0;
+for await (const line of console) {
+    const [command, count] = line.split(' ');
+    if (command === 'read') db.query('SELECT count(*) FROM items').get();
+    if (command === 'write') {
+        for (let i = 0; i < Number(count); i++) db.run('INSERT INTO items (v) VALUES (?)', ['other-' + written++]);
+    }
+    if (command === 'exit') db.close(true);
+    console.log('done');
+    if (command === 'exit') process.exit(0);
+}
+`;
+
+function spawnHolder(dbPath: string) {
+    const proc = Bun.spawn([process.execPath, '-e', HOLDER_SCRIPT], {
+        env: { ...process.env, DB_PATH: dbPath },
+        stdin: 'pipe',
+        stdout: 'pipe',
+        stderr: 'inherit',
+    });
+    const reader = proc.stdout.getReader();
+    const decoder = new TextDecoder();
+    let buffered = '';
+    const send = async (command: string): Promise<void> => {
+        proc.stdin.write(`${command}\n`);
+        proc.stdin.flush();
+        while (!buffered.includes('\n')) {
+            const { value, done } = await reader.read();
+            if (done) throw new Error(`the holder process exited before answering ${command}`);
+            buffered += decoder.decode(value);
+        }
+        buffered = buffered.slice(buffered.indexOf('\n') + 1);
+    };
+    return { proc, send };
+}
