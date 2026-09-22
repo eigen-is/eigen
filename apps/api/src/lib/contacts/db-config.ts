@@ -170,8 +170,8 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     data TEXT,
                     etag TEXT NOT NULL,
                     cardCtag INTEGER NOT NULL,
-                    createdAt INTEGER DEFAULT (unixepoch()),
-                    updatedAt INTEGER DEFAULT (unixepoch())
+                    createdAt INTEGER NOT NULL DEFAULT (unixepoch()),
+                    updatedAt INTEGER NOT NULL DEFAULT (unixepoch())
                 );
 
                 CREATE TABLE book (
@@ -191,8 +191,8 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     name TEXT NOT NULL,
                     nameKey TEXT NOT NULL,
                     color TEXT NOT NULL,
-                    createdAt INTEGER DEFAULT (unixepoch()),
-                    updatedAt INTEGER DEFAULT (unixepoch())
+                    createdAt INTEGER NOT NULL DEFAULT (unixepoch()),
+                    updatedAt INTEGER NOT NULL DEFAULT (unixepoch())
                 );
 
                 CREATE TABLE contacts_to_labels (

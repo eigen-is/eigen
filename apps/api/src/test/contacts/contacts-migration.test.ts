@@ -2,8 +2,10 @@ import { Database as BunDatabase } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { sql } from 'drizzle-orm';
+import { is, sql } from 'drizzle-orm';
+import { getTableConfig, SQLiteTable } from 'drizzle-orm/sqlite-core';
 import { CONTACTS_DB_CONFIG } from '../../lib/contacts/db-config';
+import * as schema from '../../lib/contacts/schema';
 import { ManagedDatabase } from '../../lib/core';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-contacts-mig-${Date.now()}`);
@@ -170,6 +172,27 @@ describe('Contacts index-schema migrations', () => {
         // The book row is init's to mint, under a clock-seeded generation.
         expect(mdb.db.all(sql`SELECT * FROM book`)).toEqual([]);
 
+        await mdb.close();
+    });
+
+    // The DDL creates the indexes and the drizzle schema is what a query plan is read against, so a query
+    // can only be proven to seek if the two name the same set.
+    test('the migration and the schema name the same indexes', async () => {
+        const mdb = new ManagedDatabase(CONTACTS_DB_CONFIG, nextDbPath());
+        await mdb.open(0);
+
+        const declared = Object.values(schema)
+            .filter((table) => is(table, SQLiteTable))
+            .flatMap((table) => getTableConfig(table).indexes.map((index) => index.config.name))
+            .sort();
+        const created = mdb.db
+            .all<{
+                name: string;
+            }>(sql.raw("SELECT name FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'"))
+            .map((row) => row.name)
+            .sort();
+
+        expect(created).toEqual(declared);
         await mdb.close();
     });
 
