@@ -23,7 +23,7 @@ const NUMONLY = /^(?:[0-9]+$)/;
 
 // The actions compile rather than evaluate: every expression reduces to a thunk, so one parse
 // serves any number of evaluations (Parser.compile). A thunk runs its operands left to right,
-// the order the reductions used to evaluate them in. Terminals and literal pieces stay plain values.
+// the order the parser reduces them in. Terminals and literal pieces stay plain values.
 const run = (value: any): any => (typeof value === "function" ? value() : value);
 const operator = (yy: any, op: string, left: any, right: any) => () =>
     yy.evaluateByOperator(op, [run(left), run(right)]);

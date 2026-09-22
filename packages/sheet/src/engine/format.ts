@@ -201,9 +201,9 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
         Number.isFinite(parseFloat(text)) &&
         parseFloat(text) === Number(value)
     ) {
-        m = parseFloat(text).toString();
-        ct = { fa: 'General', t: 'n' };
         v = parseFloat(text);
+        m = numberDisplay(v);
+        ct = { fa: 'General', t: 'n' };
     } else if (isdatetime(value, '24') && (text.indexOf('.') > -1 || text.indexOf(':') > -1 || text.length < 16)) {
         v = dateToSerial(new Date(text.replace(/-/g, '/')));
 
@@ -259,18 +259,13 @@ export function update(fmt: string, v: string | number | boolean | null | undefi
     return format(fmt, v);
 }
 
-// Display for a computed number, shared by the editor, autofill, server recalc and
-// the xlsx importer. A mask renders the exact value; General rounds to 9 decimals to
-// clear float noise (0.1+0.2) that a verbatim `String(v)` would show.
+// The one rule for a number's display string `m`, shared by every writer (typed entry,
+// paste, sort, autofill, recalc, the xlsx importer). A mask renders the exact value;
+// General is Excel's default-width General: 11 characters, float noise (0.1+0.2) hidden,
+// large and tiny values in scientific form (1.23457E+11, 1.5E-10).
 export function numberDisplay(value: number, fa = 'General'): string {
     if (!Number.isFinite(value)) return value.toString();
-    if (fa !== 'General') return update(fa, value);
-    const text = value.toString();
-    if (text.includes('e')) {
-        const decimals = text.split('e')[0].split('.')[1]?.length ?? 0;
-        return value.toExponential(Math.min(decimals, 5));
-    }
-    return update(fa, Math.round(value * 1000000000) / 1000000000);
+    return update(fa, value);
 }
 
 export function is_date(fmt: number | string): boolean {

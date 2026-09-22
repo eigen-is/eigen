@@ -528,7 +528,7 @@ function fillSeries(data: (Cell | null | undefined)[], len: number, direction: s
 
                 d.v = num;
                 if (d.ct != null && d.ct.fa != null) {
-                    d.m = update(d.ct.fa, num);
+                    d.m = numberDisplay(num, d.ct.fa);
                 }
                 applyData.push(d);
             }
@@ -548,8 +548,8 @@ function fillSeries(data: (Cell | null | undefined)[], len: number, direction: s
                 }
 
                 d.v = y;
-                if (d.ct != null && d.ct.fa != null) {
-                    d.m = update(d.ct.fa, y);
+                if (d.ct != null && d.ct.fa != null && y != null) {
+                    d.m = numberDisplay(y, d.ct.fa);
                 }
                 applyData.push(d);
             }

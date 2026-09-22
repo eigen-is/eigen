@@ -669,6 +669,17 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('0:3')?.m).toBe('€180');
     });
 
+    test("convert shows General numbers as Excel's default-width General", async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('General');
+        const values = [123456789012, 1234567.891234, 1.5e-10, 1e21, -0.1 - 0.2];
+        for (const [i, value] of values.entries()) ws.getCell(i + 1, 1).value = value;
+        const sheets = await parseWorkbook(workbook);
+        const byRow = new Map((sheets[0].celldata ?? []).map((c) => [c.r, c.v?.m] as const));
+
+        expect(values.map((_, i) => byRow.get(i))).toEqual(['1.23457E+11', '1234567.891', '1.5E-10', '1E+21', '-0.3']);
+    });
+
     test("convert displays literal booleans in the engine's uppercase TRUE/FALSE", async () => {
         // extractValueAndDisplay used to cache m = String(raw), so a literal Excel
         // boolean showed lowercase "false" while a formula-produced one showed

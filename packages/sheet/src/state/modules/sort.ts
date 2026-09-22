@@ -2,7 +2,7 @@ import { clone, findIndex } from 'es-toolkit/compat';
 import numeral from 'numeral';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, diff, getFlowdata, isdatetime, isRealNull, isRealNum } from '..';
-import { createContextResolver, execfunction, functionCopy, update } from '.';
+import { createContextResolver, execfunction, functionCopy, numberDisplay, update } from '.';
 import { jfrefreshgrid } from './refresh';
 
 export function orderbydata(isAsc: boolean, index: number, data: (Cell | null)[][]) {
@@ -80,7 +80,8 @@ export function sortDataRange(
                 }
                 const funcV = execfunction(ctx, func, r, c, undefined, undefined, true, undefined, resolver);
                 [, cell!.v, cell!.f] = funcV;
-                cell.m = update(cell.ct?.fa || 'General', cell.v);
+                const fa = cell.ct?.fa || 'General';
+                cell.m = typeof cell.v === 'number' ? numberDisplay(cell.v, fa) : update(fa, cell.v);
             }
             sheetData[r][c] = cell;
         }

@@ -379,8 +379,7 @@ order via `getCalculationOrder`; evaluate through the shared `FormulaEngine`, re
 `execFunctionGlobalData` so a downstream cell reads its upstream result; **freeze volatiles**
 (`NOW`/`TODAY`/`RAND`/`RANDBETWEEN` keep their cached value, matching Excel/Sheets "read a closed file"
 semantics — a passive export stays deterministic); and write back `v` plus a pragmatic `m`
-(numbers through `numberDisplay(v, ct.fa)` in `engine/format.ts`, the one number-display rule the editor,
-autofill, formula paste and the xlsx importer share, so General float noise like `0.1+0.2` shows `0.3`;
+(numbers through `numberDisplay(v, ct.fa)` in `engine/format.ts`, the one number-display rule every writer of a numeric `m` shares: typed entry, paste, sort, autofill, recalc and the xlsx importer. A mask renders the exact value; General is Excel's default-width General (numfmt's `General`), so float noise hides (`0.1+0.2` shows `0.3`), long values cut to 11 characters (`1234567.891234` shows `1234567.891`) and large or tiny values go scientific (`1.23457E+11`, `1.5E-10`, `1E+21`);
 error sentinels as `v = m = '#…'` with `ct.t = 'e'`; `String(v)` otherwise). An engine error never overwrites a non-error cached value: a
 function this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER, …) evaluates to `#NAME?`, so rather than
 destroy Excel's correct cached result at import the cached `v`/`m` is kept and the

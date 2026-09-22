@@ -268,11 +268,7 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
                 cell.v =
                     vupdate; /* Note: If using parseFloat, 1.1111111111111111 will be converted to 1.1111111111111112 ? */
                 cell.ct = { fa: 'General', t: 'n' };
-                if (cell.v === Infinity || cell.v === -Infinity) {
-                    cell.m = cell.v.toString();
-                } else if (cell.v != null) {
-                    [cell.m] = parseCellInput(cell.v as string);
-                }
+                cell.m = numberDisplay(Number(cell.v));
             } else {
                 [cell.m, cell.ct, cell.v] = parseCellInput(vupdate);
             }

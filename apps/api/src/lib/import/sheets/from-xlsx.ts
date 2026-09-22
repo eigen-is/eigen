@@ -988,13 +988,12 @@ function dateToSerialAndDisplay(date: Date, numFmt?: string): { value: number; d
 }
 
 function maskedNumberDisplay(value: number, numFmt?: string): string {
-    if (!numFmt || numFmt === 'General') return numberDisplay(value);
     // Same boundary guard as dateToSerialAndDisplay: a malformed format string from a
     // hostile workbook makes numfmt throw.
     try {
-        return update(numFmt, value);
+        return numberDisplay(value, numFmt);
     } catch {
-        return String(value);
+        return numberDisplay(value);
     }
 }
 
