@@ -5,7 +5,9 @@ import type { Context } from '../context';
 import {
     delFunctionGroup,
     dropCellCache,
+    fillTouchesMerge,
     getTypeItemHide,
+    normalizeSelection,
     setCellValue as setCellValueInternal,
     updateCell,
     updateDropCell,
@@ -202,6 +204,7 @@ export function autoFillCell(
     applyRange: SingleRange,
     direction: 'up' | 'down' | 'left' | 'right',
 ) {
+    if (fillTouchesMerge(ctx, copyRange, applyRange)) return;
     dropCellCache.copyRange = copyRange;
     dropCellCache.applyRange = applyRange;
     dropCellCache.direction = direction;
@@ -219,5 +222,14 @@ export function autoFillCell(
     } else {
         dropCellCache.applyType = '1';
     }
+    ctx.selections = normalizeSelection(ctx, [
+        {
+            row: [Math.min(copyRange.row[0], applyRange.row[0]), Math.max(copyRange.row[1], applyRange.row[1])],
+            column: [
+                Math.min(copyRange.column[0], applyRange.column[0]),
+                Math.max(copyRange.column[1], applyRange.column[1]),
+            ],
+        },
+    ]);
     updateDropCell(ctx);
 }
