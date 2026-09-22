@@ -11,7 +11,7 @@ import type { Sheet } from '../types';
 import { generateRandomSheetName, getSheetIndex } from '../utils';
 import { cancelNormalSelected } from './cell';
 import { applySheetFilter } from './filter';
-import { setFormulaCellInfo } from './formula-cache';
+import { registerSheetFormulas, setFormulaCellInfo } from './formula-cache';
 
 export function storeSheetSelections(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
@@ -205,7 +205,6 @@ export function updateSheet(ctx: Context, newData: Sheet[]) {
             for (let i = 0; i < data.length; i += 1) {
                 for (let j = 0; j < data[i].length; j += 1) {
                     expandedData[i][j] = data[i][j];
-                    setFormulaCellInfo(ctx, { r: i, c: j, id: newDatum.id! }, data, newDatum.id);
                 }
             }
             newDatum.data = expandedData;
@@ -214,6 +213,7 @@ export function updateSheet(ctx: Context, newData: Sheet[]) {
             } else {
                 ctx.sheets[index] = newDatum;
             }
+            registerSheetFormulas(ctx, newDatum.id!, expandedData);
         } else if (newDatum.celldata != null) {
             initSheetData(ctx, index, newDatum);
             const _index = getSheetIndex(ctx, newDatum.id!) as number;

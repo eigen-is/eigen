@@ -21,6 +21,7 @@ import {
     opToPatch,
     type Presence,
     type Range,
+    registerSheetFormulas,
     removeActiveImage,
     removeImageByMediaName,
     replaceAllMatches,
@@ -69,9 +70,10 @@ export function generateAPIs(
                             if (specialOp.value.id) {
                                 addSheet(ctx_, settings, specialOp.value.id, false, undefined, specialOp.value, true);
                             }
-                            const fileIndex = getSheetIndex(ctx_, specialOp.value.id);
+                            const { id } = specialOp.value;
+                            const fileIndex = getSheetIndex(ctx_, id);
                             if (fileIndex == null) continue;
-                            api.initSheetData(ctx_, fileIndex, specialOp.value);
+                            registerSheetFormulas(ctx_, id, api.initSheetData(ctx_, fileIndex, specialOp.value));
                         } else if (specialOp.op === 'deleteSheet') {
                             deleteSheet(ctx_, specialOp.value.id, true);
                             patches.length = 0;

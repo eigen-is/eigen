@@ -4,11 +4,9 @@
 import { describe, expect, it } from 'bun:test';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
-import { handlePasteByClick } from '../../../state/events/paste';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
-import { copy } from '../../../state/modules/selection';
 import { contextFactory } from '../factories/context';
-import { edit, redo, sel, typed, undo } from '../factories/edit-cycle';
+import { edit, pasteInternal, redo, sel, typed, undo } from '../factories/edit-cycle';
 
 // copy() writes the plain-text clipboard through document and sessionStorage.
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
@@ -28,14 +26,6 @@ function makeCtx(): Context {
         sheets: [{ name: 'sheet', id: 'id_1', order: 0, data, calcChain: [{ r: 0, c: 1, id: 'id_1' }] }],
     }) as Context;
 }
-
-const pasteInternal = (from: [number, number], to: [number, number]) => (d: Context) => {
-    d.selections = sel(from[0], from[0], from[1], from[1]);
-    copy(d);
-    d.pasteIsCut = false;
-    d.selections = sel(to[0], to[0], to[1], to[1]);
-    handlePasteByClick(d, 'internal');
-};
 
 const cell = (ctx: Context, r: number, c: number) => ctx.sheets[0].data![r][c];
 
@@ -72,5 +62,34 @@ describe('updateFormulaCache — whole-cell patches', () => {
         [ctx] = edit(ctx, typed(0, 0, '9'));
 
         expect(cell(ctx, 0, 1)?.v).toBe(18);
+    });
+});
+
+// A paste past the last row appends whole rows, and their undo shrinks the matrix.
+describe('updateFormulaCache — a paste that grows the grid', () => {
+    it('undoing it drops the new rows from the map', () => {
+        const base = makeCtx();
+        warmFormulaCellInfoMap(base);
+        const [pasted, history] = edit(base, pasteInternal([0, 1], [6, 1]));
+        expect(cell(pasted, 6, 1)?.f).toBe('=A7*2');
+
+        let ctx = undo(pasted, history);
+        expect(ctx.formulaCache.formulaCellInfoMap?.r6c1iid_1).toBeUndefined();
+        [ctx] = edit(ctx, typed(0, 0, '9'));
+
+        expect(cell(ctx, 0, 1)?.v).toBe(18);
+        expect(ctx.sheets[0].data).toHaveLength(6);
+    });
+
+    it("redoing it tracks the new rows' formulas", () => {
+        const [pasted, history] = edit(makeCtx(), pasteInternal([0, 1], [6, 1]));
+        let ctx = undo(pasted, history);
+        ctx.formulaCache.formulaCellInfoMap = null;
+        warmFormulaCellInfoMap(ctx);
+
+        ctx = redo(ctx, history);
+        [ctx] = edit(ctx, typed(6, 0, '4'));
+
+        expect(cell(ctx, 6, 1)?.v).toBe(8);
     });
 });

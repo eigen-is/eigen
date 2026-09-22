@@ -2017,16 +2017,13 @@ export function updateDropCell(ctx: Context) {
 
 // Excel refuses a fill that would split or overwrite a merge.
 export function fillTouchesMerge(ctx: Context, copyRange: SingleRange, applyRange: SingleRange): boolean {
-    const d = getFlowdata(ctx);
-    if (d == null || getSheetConfig(ctx)?.merge == null) return false;
-    return [copyRange, applyRange].some(({ row, column }) => {
-        for (let r = row[0]; r <= row[1]; r += 1) {
-            for (let c = column[0]; c <= column[1]; c += 1) {
-                if (d[r]?.[c]?.mc != null) return true;
-            }
-        }
-        return false;
-    });
+    const merge = getSheetConfig(ctx)?.merge;
+    if (merge == null) return false;
+    return Object.values(merge).some(({ r, c, rs, cs }) =>
+        [copyRange, applyRange].some(
+            ({ row, column }) => r <= row[1] && r + rs > row[0] && c <= column[1] && c + cs > column[0],
+        ),
+    );
 }
 
 // Ctrl+D / Ctrl+R: copy the top row (or left column) of the range over the rest of it.
