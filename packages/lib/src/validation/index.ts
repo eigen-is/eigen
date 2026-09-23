@@ -6,7 +6,6 @@ export {
     BACKUP_OWNER_ID,
     BACKUP_STAMP_PATTERN,
     buildBackupStamp,
-    buildSnapshotName,
     parseBackupArtifactName,
     parseBackupAuthRows,
     parseBackupManifest,
@@ -14,7 +13,6 @@ export {
     parseBackupSidecar,
     parseBackupStamp,
     parseHomeMountSettings,
-    SNAPSHOT_NAME,
 } from './backup';
 export type { CommandValidationResult } from './command';
 export { validateCommand } from './command';

@@ -20,9 +20,24 @@ export type Ui = {
 };
 
 const CANCELLED = 'Cancelled. Nothing was changed.';
-// Foreground and background colors only: bold, dim and the inverse text cursor are not color.
-// biome-ignore lint/suspicious/noControlCharactersInRegex: matching escape sequences is the point
-const SGR_COLOR = /\x1b\[(?:3\d|4\d|9[0-7]|10[0-7])m/g;
+const GLYPHS = {
+    ok: ['green', '◇'],
+    warn: ['yellow', '▲'],
+    bad: ['red', '■'],
+    active: ['cyan', '◆'],
+    bar: ['gray', '│'],
+    end: ['gray', '└'],
+} as const;
+
+export type Glyph = keyof typeof GLYPHS;
+
+// The launcher's say(): the glyph always, its color only on a terminal without NO_COLOR, which Bun's styleText
+// ignores.
+export function glyphLine(glyph: Glyph, text: string): string {
+    const [color, mark] = GLYPHS[glyph];
+    const shown = process.stdout.isTTY && !process.env['NO_COLOR'] ? styleText(color, mark) : mark;
+    return text ? `${shown}  ${text}` : shown;
+}
 
 // Word-wraps each paragraph, since clack's log keeps its guide bar only on the lines it is given.
 function wrap(text: string, width: number): string[] {
@@ -42,19 +57,11 @@ function wrap(text: string, width: number): string[] {
     return lines;
 }
 
-// The one place that decides between clack and plain lines: clack only on a terminal and without flags,
-// so a scripted or piped run never loads it.
+// The one place that decides between clack and plain lines: clack only on a terminal, without flags and without
+// NO_COLOR (clack colors through Bun's styleText, which ignores it), so a scripted or piped run never loads it.
 export async function createUi(flagsGiven: boolean): Promise<Ui> {
-    if (process.stdin.isTTY && process.stdout.isTTY && !flagsGiven) {
-        // Bun's styleText, which clack colors through, ignores NO_COLOR.
-        if (process.env['NO_COLOR']) {
-            const write = process.stdout.write.bind(process.stdout);
-            process.stdout.write = (chunk: string | Uint8Array, ...rest: unknown[]) =>
-                Reflect.apply(write, undefined, [
-                    typeof chunk === 'string' ? chunk.replace(SGR_COLOR, '') : chunk,
-                    ...rest,
-                ]);
-        }
+    const interactive = process.stdin.isTTY && process.stdout.isTTY && !flagsGiven;
+    if (interactive && !process.env['NO_COLOR']) {
         const clack = await import('@clack/prompts');
         const answered = <T>(value: T | typeof clack.CANCEL_SYMBOL): T => {
             if (clack.isCancel(value)) {
@@ -108,56 +115,71 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
     // Created on the first question, so a run that asks nothing never holds stdin open.
     let reader: Interface | undefined;
     let stdinLines: AsyncIterator<string> | undefined;
+    // The launcher's die(), so an error reads the same whoever prints it.
     const fail = (message: string, next: string): never => {
-        console.error(`\nError: ${message}\n${next}`);
+        const [first = '', ...rest] = message.split('\n');
+        console.error(
+            [glyphLine('bad', first), ...rest.map((line) => glyphLine('bar', line)), glyphLine('end', next)].join('\n'),
+        );
         process.exit(1);
     };
-    const read = async (message: string, hint: string, flag: string, echo: boolean): Promise<string> => {
-        process.stdout.write(`${message}${hint}: `);
+    // A person at a terminal with NO_COLOR gets the help clack would show, under the question.
+    const read = async ({ message, help, flag }: Question, hint: string, echo: boolean): Promise<string> => {
+        const lines = interactive && help ? wrap(help, 76).map((line) => `  ${line}`) : [];
+        process.stdout.write(lines.length ? `${message}\n${lines.join('\n')}\n>${hint}: ` : `${message}${hint}: `);
         reader ??= createInterface({ input: process.stdin });
         stdinLines ??= reader[Symbol.asyncIterator]();
         const line = await stdinLines.next();
-        if (line.done) return fail(`No answer for "${message}".`, `Pass ${flag}.`);
+        if (line.done) {
+            process.stdout.write('\n');
+            return fail(`No answer for "${message}".`, `Pass ${flag}.`);
+        }
         // Piped input is not echoed; without a newline every question would run onto one line.
         if (!process.stdin.isTTY) process.stdout.write(`${echo ? line.value : ''}\n`);
         return line.value;
     };
     return {
         intro: (title) => console.log(title),
-        explain: () => {},
-        ask: async ({ message, initial, validate, flag }) => {
+        explain: (text) => {
+            if (interactive) console.log(wrap(text, 80).join('\n'));
+        },
+        ask: async ({ initial, validate, ...question }) => {
+            const { flag } = question;
             // An empty line keeps the default, so "-" is how an optional answer is cleared.
             const hint = initial ? ` [${initial}${validate('') ? '' : ', - for none'}]` : '';
-            const line = (await read(message, hint, flag, true)).trim();
+            const line = (await read(question, hint, true)).trim();
             const answer = line === '-' ? '' : line || initial;
             const error = validate(answer);
             return error ? fail(error, `Pass ${flag}.`) : answer;
         },
-        confirm: async ({ message, initial, flag }) => {
-            const answer = (await read(message, initial ? ' [Y/n]' : ' [y/N]', flag, true)).trim().toLowerCase();
+        confirm: async ({ initial, ...question }) => {
+            const { message, flag } = question;
+            const answer = (await read(question, initial ? ' [Y/n]' : ' [y/N]', true)).trim().toLowerCase();
             if (!answer) return initial;
             if (answer === 'y' || answer === 'yes') return true;
             if (answer === 'n' || answer === 'no') return false;
             return fail(`Answer y or n to "${message}".`, `Pass ${flag}.`);
         },
-        select: async ({ message, options, initial, flag }) => {
+        select: async ({ options, initial, ...question }) => {
+            const { message, flag } = question;
             const list = options.map(({ label }, index) => ` (${index + 1}) ${label}`).join('');
             const current = options.findIndex(({ value }) => value === initial) + 1;
-            const answer = (await read(message, `${list} [${current}]`, flag, true)).trim();
+            const answer = (await read(question, `${list} [${current}]`, true)).trim();
             if (!answer) return initial;
             const chosen = options[Number(answer) - 1];
             return chosen ? chosen.value : fail(`Answer 1 to ${options.length} to "${message}".`, `Pass ${flag}.`);
         },
-        password: async ({ message, validate, flag }) => {
+        password: async ({ validate, ...question }) => {
+            const { flag } = question;
             if (process.stdin.isTTY) return fail('A password typed here would show on screen.', `Pass ${flag}.`);
-            const answer = await read(message, '', flag, false);
+            const answer = await read(question, '', false);
             const error = validate(answer);
             return error ? fail(error, `Pass ${flag}.`) : answer;
         },
         note: (title, lines) => console.log(`\n${title}\n${lines.map((line) => `  ${line}`).join('\n')}`),
         outro: (message) => {
             reader?.close();
-            console.log(message);
+            console.log(glyphLine('end', message));
         },
         fail,
     };

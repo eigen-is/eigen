@@ -1,12 +1,10 @@
 import { X509Certificate } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { parseBackupStamp, SNAPSHOT_NAME } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { apikey } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../auth/auth';
-import { backupsDirPath } from '../backup/paths';
 import { isMailEnabled } from '../config/env';
 import { getControlSocketPath, getDataRoot } from '../config/paths';
 import { getDomain, getPublicConfig, isSetupRequired } from '../config/server-config';
@@ -23,7 +21,6 @@ export type ControlStatus = {
     domain: string;
     diskFree: number;
     diskTotal: number;
-    lastSnapshot: { name: string; createdAt: string } | null;
     certExpiresAt: string | null;
 };
 
@@ -46,13 +43,6 @@ export const controlApp = new Elysia({ name: 'control' })
     .get('/status', (): ControlStatus => {
         const config = getPublicConfig();
         const disk = fs.statfsSync(getDataRoot());
-        const backups = backupsDirPath();
-        let lastSnapshot: ControlStatus['lastSnapshot'] = null;
-        for (const name of fs.existsSync(backups) ? fs.readdirSync(backups) : []) {
-            const groups = SNAPSHOT_NAME.exec(name)?.groups;
-            const createdAt = groups ? parseBackupStamp(groups)?.toISOString() : undefined;
-            if (createdAt && (!lastSnapshot || createdAt > lastSnapshot.createdAt)) lastSnapshot = { name, createdAt };
-        }
         // Caddy's export-certs.sh copies the certificate here; a server behind its own web server has none.
         let certExpiresAt: string | null = null;
         try {
@@ -67,10 +57,9 @@ export const controlApp = new Elysia({ name: 'control' })
             builtAt: config.builtAt?.toISOString() ?? null,
             setupRequired: isSetupRequired(),
             mailEnabled: isMailEnabled(),
-            domain: config.domain,
+            domain: getDomain(),
             diskFree: disk.bavail * disk.bsize,
             diskTotal: disk.blocks * disk.bsize,
-            lastSnapshot,
             certExpiresAt,
         };
     })

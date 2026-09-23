@@ -7,8 +7,8 @@ export async function callControl(path: string, fail: Ui['fail'], init?: Request
         return await fetch(`http://eigen${path}`, { ...init, unix: getControlSocketPath() });
     } catch {
         return fail(
-            'The Eigen API is not answering.',
-            'If it just started, wait a moment and try again. ./eigen logs eigen-api shows what it is doing.',
+            'Eigen is not answering.',
+            'Wait a moment and try again, or run ./eigen logs eigen-api to see what it is doing.',
         );
     }
 }

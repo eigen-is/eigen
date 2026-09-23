@@ -1,43 +1,21 @@
 import { randomBytes } from 'node:crypto';
-import { parseArgs } from 'node:util';
 import { callControl } from './control-socket';
 import { createUi } from './ui';
 
 // better-auth's default minimum; the API checks its own configured one again.
 const MIN_PASSWORD_LENGTH = 8;
-const USAGE = `Usage: reset-password <email> [--generate]
+export const RESET_PASSWORD_OPTIONS = { generate: { type: 'boolean' } } as const;
+export const RESET_PASSWORD_USAGE = `Usage: ./eigen reset-password <email> [--generate]
 
-Sets a new password for the account with this address, signs it out everywhere and revokes
-its app passwords.
+Sets a new password for the account with this address and signs it out everywhere. Its app
+passwords, for mail, calendar and file apps, stop working too.
 It asks for the password, or reads one line from stdin when that is not a terminal.
 
   --generate   Make up a strong password and print it once`;
 
-export async function resetPassword(args: string[]): Promise<void> {
-    let parsed: { values: { generate?: boolean; help?: boolean }; positionals: string[] };
-    try {
-        parsed = parseArgs({
-            args,
-            options: { generate: { type: 'boolean' }, help: { type: 'boolean', short: 'h' } },
-            allowPositionals: true,
-        });
-    } catch (error) {
-        console.error(`${error instanceof Error ? error.message : String(error)}\n\n${USAGE}`);
-        process.exit(2);
-    }
-    const { values: flags, positionals } = parsed;
-    if (flags.help) {
-        console.log(USAGE);
-        return;
-    }
-    const [email, ...extra] = positionals;
-    if (!email || extra.length) {
-        console.error(USAGE);
-        process.exit(2);
-    }
-
+export async function resetPassword(email: string | undefined, flags: { generate?: boolean }): Promise<void> {
     const ui = await createUi(flags.generate === true);
-    ui.intro('Reset a password');
+    if (!email) return ui.fail('Name the account.', 'Run ./eigen reset-password <email>.');
     let password = randomBytes(12).toString('base64url');
     if (!flags.generate) {
         password = await ui.password({
@@ -66,10 +44,12 @@ export async function resetPassword(args: string[]): Promise<void> {
     if (!res.ok) {
         ui.fail(
             await res.text(),
-            res.status === 404 ? 'Check the address and run the command again.' : 'Nothing was changed.',
+            res.status === 404
+                ? 'Check the address, then run ./eigen reset-password again.'
+                : 'Run ./eigen reset-password again with another address or password.',
         );
     }
     const changed: { email: string } = await res.json();
     if (flags.generate) console.log(`New password: ${password}`);
-    ui.outro(`Password changed for ${changed.email}. Its sessions and app passwords are revoked.`);
+    ui.outro(`Password changed for ${changed.email}. Signed out everywhere.`);
 }

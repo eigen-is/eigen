@@ -1,6 +1,5 @@
 import { chmodSync, chownSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { parseArgs } from 'node:util';
 import { writeEnvFile } from './env-file';
 import { createUi } from './ui';
 
@@ -9,21 +8,15 @@ const ROOT = join(import.meta.dir, '../../../..');
 const BUNDLE_FILES = ['eigen', 'docker-compose.yml', 'docker-compose.host-certs.yml', '.env.example'];
 const BUNDLE_DIR = 'docker/fail2ban';
 const ENV_PATH = '.env.production';
-const USAGE = `Usage: bootstrap [--out <dir>] [--force]
+export const BOOTSTRAP_OPTIONS = { out: { type: 'string' }, force: { type: 'boolean' } } as const;
+export const BOOTSTRAP_USAGE = `Usage: bootstrap [--out <dir>] [--force]
 
 Writes the launcher, the Compose files and a starter ${ENV_PATH} into <dir> (default /out).
 
   --out <dir>   Where to write, mounted as: docker run --rm -v "$PWD:/out" <image> bootstrap
   --force       Rewrite the bundle files of an existing install; ${ENV_PATH} is left alone`;
 
-export async function bootstrap(args: string[]): Promise<void> {
-    let flags: { out?: string; force?: boolean };
-    try {
-        flags = parseArgs({ args, options: { out: { type: 'string' }, force: { type: 'boolean' } } }).values;
-    } catch (error) {
-        console.error(`${error instanceof Error ? error.message : String(error)}\n\n${USAGE}`);
-        process.exit(2);
-    }
+export async function bootstrap(flags: { out?: string; force?: boolean }): Promise<void> {
     const ui = await createUi(true);
     const out = flags.out ?? '/out';
     if (!existsSync(out)) ui.fail(`${out} does not exist.`, 'Mount the install folder: docker run -v "$PWD:/out" …');

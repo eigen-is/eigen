@@ -6,7 +6,6 @@ import pkg from '../../../../../package.json' with { type: 'json' };
 import { account as accountSchema, user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { verifyProtocolAuth } from '../../lib/auth/protocol-auth';
-import { backupsDirPath } from '../../lib/backup/paths';
 import { getDataRoot } from '../../lib/config/paths';
 import { type ControlStatus, controlApp, startControlSocket } from '../../lib/control/control';
 import { createTestUser, ensureServer, TEST_DATA_DIR } from '../setup';
@@ -156,36 +155,17 @@ describe('GET /status', () => {
         expect(status.diskFree).toBeLessThanOrEqual(status.diskTotal);
     });
 
-    test('has no snapshot and no certificate when there are none', async () => {
-        const status = await getStatus();
-        expect(status.lastSnapshot).toBeNull();
-        expect(status.certExpiresAt).toBeNull();
+    test('has no certificate when there is none', async () => {
+        expect((await getStatus()).certExpiresAt).toBeNull();
     });
 
-    test('names the newest snapshot of either kind and the certificate expiry', async () => {
-        const backups = backupsDirPath();
+    test('reads the certificate expiry', async () => {
         const certs = join(getDataRoot(), 'certs');
-        mkdirSync(backups, { recursive: true });
         mkdirSync(certs, { recursive: true });
-        const files = [
-            'eigen-20260101-120000.tar.gz',
-            'eigen-pre-update-20260301-080000.tar.gz',
-            'eigen-20260201-000000.tar.gz',
-            // Neither is a snapshot: a per-home backup artifact and a half-written archive.
-            'home-team_x-20270101-000000.eigenbackup',
-            'eigen-20270101-000000.tar.gz.tmp',
-        ].map((name) => join(backups, name));
-        for (const file of files) writeFileSync(file, '');
         copyFileSync(FIXTURE_CERT, join(certs, 'cert.pem'));
         try {
-            const status = await getStatus();
-            expect(status.lastSnapshot).toEqual({
-                name: 'eigen-pre-update-20260301-080000.tar.gz',
-                createdAt: '2026-03-01T08:00:00.000Z',
-            });
-            expect(status.certExpiresAt).toBe('2036-12-31T23:59:59.000Z');
+            expect((await getStatus()).certExpiresAt).toBe('2036-12-31T23:59:59.000Z');
         } finally {
-            for (const file of files) rmSync(file);
             rmSync(certs, { recursive: true });
         }
     });
@@ -259,25 +239,31 @@ describe('POST /reset-password', () => {
 describe('eigen status', () => {
     const SERVICES = ['eigen-api\trunning\thealthy', 'caddy\trunning\t', 'postfix\texited\t'].join('\n');
 
-    test('prints one plain report of what the API and the launcher know', async () => {
+    test('prints one report of what the API and the launcher know, glyphs without color off a terminal', async () => {
         const { stdout, stderr, code } = await runCli(['status'], undefined, {
             EIGEN_STATUS_SERVICES: SERVICES,
             EIGEN_STATUS_UPDATE: 'available 3',
             EIGEN_STATUS_MAIL_QUEUE: '-- 2 Kbytes in 2 Requests.',
+            EIGEN_STATUS_SNAPSHOT: 'eigen-pre-update-20260301-080000.tar.gz',
         });
         expect(stderr).toBe('');
         expect(code).toBe(0);
-        expect(stdout).toContain(pkg.version);
-        expect(stdout).toMatch(/eigen-api +running, healthy/);
+        expect(stdout).toContain(`◇  Version        ${pkg.version}`);
+        expect(stdout).toMatch(/◇ {2}eigen-api +running, healthy/);
         expect(stdout).toMatch(/caddy +running\n/);
-        expect(stdout).toMatch(/postfix +exited/);
+        expect(stdout).toMatch(/■ {2}postfix +exited/);
         expect(stdout).toContain('./eigen update');
         expect(stdout).toMatch(/Disk +\d+\.\d [KMGT]B free of \d+\.\d [KMGT]B\n/);
-        expect(stdout).toMatch(/Last snapshot +none yet/);
+        expect(stdout).toMatch(/Last snapshot +eigen-pre-update-20260301-080000\.tar\.gz, .+ ago\n/);
         expect(stdout).toMatch(/Mail queue +2 messages waiting/);
-        // Plain text: no color, no glyphs.
+        expect(stdout).toContain('\n│\n');
         expect(stdout).not.toContain('\x1b[');
-        expect(stdout).not.toContain('◇');
+    });
+
+    test('says when there is no snapshot yet', async () => {
+        const { stdout, code } = await runCli(['status'], undefined, { EIGEN_STATUS_SERVICES: SERVICES });
+        expect(code).toBe(0);
+        expect(stdout).toMatch(/▲ {2}Last snapshot +none yet; \.\/eigen backup makes one/);
     });
 
     test('leaves out an update check that could not run, and tells an unreadable queue from a stopped postfix', async () => {
@@ -291,7 +277,7 @@ describe('eigen status', () => {
         expect(stdout).toMatch(/Mail queue +could not be read; \.\/eigen logs postfix shows why/);
     });
 
-    test('marks each line with a colored glyph on a terminal, and not with NO_COLOR', async () => {
+    test('colors the glyphs on a terminal, and not with NO_COLOR', async () => {
         const env = { EIGEN_STATUS_SERVICES: SERVICES, EIGEN_STATUS_UPDATE: 'current' };
         const colored = await runInTerminal(['status'], { ...env, NO_COLOR: undefined });
         expect(colored.code).toBe(0);
@@ -303,15 +289,31 @@ describe('eigen status', () => {
         const plain = await runInTerminal(['status'], { ...env, NO_COLOR: '1' });
         expect(plain.code).toBe(0);
         expect(plain.output).not.toContain('\x1b[3');
-        expect(plain.output).not.toContain('◇');
+        expect(plain.output).toContain('◇');
     });
 
-    test('says what to do when the API does not answer', async () => {
-        const { stderr, code } = await runCli(['status'], undefined, {
+    test('with Eigen stopped, reports what the launcher knows and says where to look', async () => {
+        const { stdout, stderr, code } = await runCli(['status'], undefined, {
             EIGEN_CONTROL_SOCKET: join(TEST_DATA_DIR, 'none.sock'),
+            EIGEN_STATUS_SERVICES: 'eigen-api\texited\t\ncaddy\trunning\t',
+            EIGEN_STATUS_SNAPSHOT: 'eigen-20260101-120000.tar.gz',
         });
         expect(code).toBe(1);
-        expect(stderr).toContain('./eigen logs eigen-api');
+        expect(stdout).toMatch(/■ {2}eigen-api +exited\n/);
+        expect(stdout).toMatch(/◇ {2}caddy +running\n/);
+        expect(stdout).toMatch(/Last snapshot +eigen-20260101-120000\.tar\.gz/);
+        expect(stdout).not.toContain('Version');
+        expect(stderr).toBe('■  Eigen is not running.\n└  Run ./eigen logs eigen-api to see why.\n');
+    });
+
+    test('with Eigen running but not answering, says to wait', async () => {
+        const { stdout, stderr, code } = await runCli(['status'], undefined, {
+            EIGEN_CONTROL_SOCKET: join(TEST_DATA_DIR, 'none.sock'),
+            EIGEN_STATUS_SERVICES: 'eigen-api\trunning\tstarting',
+        });
+        expect(code).toBe(1);
+        expect(stdout).toMatch(/▲ {2}eigen-api +running, starting/);
+        expect(stderr).toContain('■  Eigen is not answering.\n└  Wait a moment and try again');
     });
 });
 
@@ -337,20 +339,32 @@ describe('eigen reset-password', () => {
 
     test('asks twice on a terminal', async () => {
         const ivy = await createTestUser('ivy-reset@test.eigen.is', OLD_PASSWORD, 'Ivy Reset');
-        const { output, code } = await runInTerminal(['reset-password', ivy.email], {}, [
+        const { output, code } = await runInTerminal(['reset-password', ivy.email], { NO_COLOR: undefined }, [
             { when: 'New password', keys: 'typed-password-1\r' },
             { when: 'Again', keys: 'typed-password-1\r' },
         ]);
         expect(code).toBe(0);
-        expect(output).toContain('Password changed');
+        expect(output).toContain(`Password changed for ${ivy.email}. Signed out everywhere.`);
+        expect(output).not.toContain('Reset a password');
         expect(await signsIn(ivy.email, 'typed-password-1')).toBe(true);
+    });
+
+    test('with NO_COLOR on a terminal it takes the plain path, which will not echo a password', async () => {
+        const kim = await createTestUser('kim-reset@test.eigen.is', OLD_PASSWORD, 'Kim Reset');
+        const { output, code } = await runInTerminal(['reset-password', kim.email], { NO_COLOR: '1' });
+        expect(code).toBe(1);
+        expect(output).toContain('A password typed here would show on screen.');
+        expect(output).toContain('--generate');
+        expect(output).not.toContain('\x1b[3');
+        expect(await signsIn(kim.email, OLD_PASSWORD)).toBe(true);
     });
 
     test('an unknown address fails with what to do next', async () => {
         const { stderr, code } = await runCli(['reset-password', 'nobody@test.eigen.is'], 'piped-password-1\n');
         expect(code).toBe(1);
-        expect(stderr).toContain('nobody@test.eigen.is');
-        expect(stderr).toContain('Check the address');
+        expect(stderr).toBe(
+            '■  No account uses nobody@test.eigen.is.\n└  Check the address, then run ./eigen reset-password again.\n',
+        );
     });
 
     test('a short piped password is refused before anything changes', async () => {
@@ -361,9 +375,9 @@ describe('eigen reset-password', () => {
         expect(await signsIn(jo.email, OLD_PASSWORD)).toBe(true);
     });
 
-    test('without an address it prints the usage', async () => {
+    test('without an address it says how to name one', async () => {
         const { stderr, code } = await runCli(['reset-password']);
-        expect(code).toBe(2);
-        expect(stderr).toContain('Usage: reset-password <email>');
+        expect(code).toBe(1);
+        expect(stderr).toBe('■  Name the account.\n└  Run ./eigen reset-password <email>.\n');
     });
 });

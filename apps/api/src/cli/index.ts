@@ -1,18 +1,61 @@
-import { bootstrap } from './bootstrap';
+import { type ParseArgsConfig, parseArgs } from 'node:util';
+import { BOOTSTRAP_OPTIONS, BOOTSTRAP_USAGE, bootstrap } from './bootstrap';
 import { configure } from './configure';
-import { resetPassword } from './reset-password';
+import { RESET_PASSWORD_OPTIONS, RESET_PASSWORD_USAGE, resetPassword } from './reset-password';
 import { setupLink } from './setup-link';
-import { restore, snapshot } from './snapshot';
+import { RESTORE_OPTIONS, RESTORE_USAGE, restore, SNAPSHOT_OPTIONS, SNAPSHOT_USAGE, snapshot } from './snapshot';
 import { status } from './status';
 
-const COMMANDS = new Map([
-    ['bootstrap', bootstrap],
+// --help prints the usage; a flag the command does not know, or one argument more than it takes, is refused with it.
+function parseFlags<T extends NonNullable<ParseArgsConfig['options']>>(
+    args: string[],
+    options: T,
+    usage: string,
+    positionals = 0,
+) {
+    const refuse = (message: string): never => {
+        console.error(`${message}\n\n${usage}`);
+        process.exit(2);
+    };
+    if (args.includes('--help') || args.includes('-h')) {
+        console.log(usage);
+        process.exit(0);
+    }
+    const parse = () => parseArgs({ args, options, allowPositionals: true });
+    let parsed: ReturnType<typeof parse>;
+    try {
+        parsed = parse();
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const unknown = /^Unknown option '([^']+)'/.exec(message)?.[1];
+        return refuse(unknown ? `Unknown argument "${unknown}".` : message);
+    }
+    const extra = parsed.positionals[positionals];
+    if (extra !== undefined) refuse(`Unknown argument "${extra}".`);
+    return parsed;
+}
+
+// status and setup-link are run by the launcher alone, which passes them nothing.
+const COMMANDS = new Map<string, (args: string[]) => Promise<void>>([
+    ['bootstrap', (args) => bootstrap(parseFlags(args, BOOTSTRAP_OPTIONS, BOOTSTRAP_USAGE).values)],
     ['configure', configure],
     ['status', status],
-    ['reset-password', resetPassword],
+    [
+        'reset-password',
+        (args) => {
+            const { values, positionals } = parseFlags(args, RESET_PASSWORD_OPTIONS, RESET_PASSWORD_USAGE, 1);
+            return resetPassword(positionals[0], values);
+        },
+    ],
     ['setup-link', setupLink],
-    ['snapshot', snapshot],
-    ['restore', restore],
+    ['snapshot', (args) => snapshot(parseFlags(args, SNAPSHOT_OPTIONS, SNAPSHOT_USAGE).values)],
+    [
+        'restore',
+        (args) => {
+            const { values, positionals } = parseFlags(args, RESTORE_OPTIONS, RESTORE_USAGE, 1);
+            return restore(positionals[0], values);
+        },
+    ],
 ]);
 
 const USAGE = `Usage: eigen <command> [flags]
@@ -23,7 +66,7 @@ Commands:
   status           Report on the running server (run by ./eigen status)
   reset-password   Set a new password for an account and sign it out everywhere
   setup-link       Print a fresh one-time setup link, or where to sign in once set up
-  snapshot         Write data/ and .env.production into backups/ (run by ./eigen backup)
+  snapshot         Write data/ and .env.production into snapshots/ (run by ./eigen backup)
   restore          Put data/ and .env.production back from a snapshot (run by ./eigen restore)`;
 
 const [command = '', ...args] = process.argv.slice(2);

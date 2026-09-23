@@ -15,7 +15,8 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { parseBackupStamp, SNAPSHOT_NAME } from '@workspace/lib/validation';
+import { parseBackupStamp } from '@workspace/lib/validation';
+import { SNAPSHOT_NAME } from '../../cli/snapshot';
 
 const CLI = join(import.meta.dir, '../../cli/index.ts');
 const ROOT = join(import.meta.dir, '../../../../..');
@@ -27,23 +28,23 @@ afterAll(() => {
     for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
 });
 
-// A small install: .env.production, data/ with a nested file, and an empty backups/.
+// A small install: .env.production, data/ with a nested file, and an empty snapshots/.
 function install(): string {
     const dir = mkdtempSync(join(tmpdir(), 'eigen-snapshot-'));
     dirs.push(dir);
     writeFileSync(join(dir, '.env.production'), ENV, { mode: 0o600 });
     mkdirSync(join(dir, 'data/home/alice'), { recursive: true });
     writeFileSync(join(dir, 'data/home/alice/notes.txt'), 'original\n');
-    mkdirSync(join(dir, 'backups'));
+    mkdirSync(join(dir, 'snapshots'), { mode: 0o700 });
     return dir;
 }
 
-async function run(cmd: string[], cwd: string) {
+async function run(cmd: string[], cwd: string, input?: string) {
     const proc = Bun.spawn(cmd, {
         cwd,
         // macOS tar would add AppleDouble members for extended attributes.
         env: { ...process.env, COPYFILE_DISABLE: '1', NO_COLOR: '1' },
-        stdin: 'ignore',
+        stdin: input === undefined ? 'ignore' : new Blob([input]),
         stdout: 'pipe',
         stderr: 'pipe',
     });
@@ -61,14 +62,14 @@ async function snapshot(dir: string, ...args: string[]): Promise<string> {
     const result = await eigen(dir, 'snapshot', ...args);
     expect(result.stderr).toBe('');
     expect(result.code).toBe(0);
-    const name = /backups\/(\S+)/.exec(result.stdout)?.[1];
+    const name = /snapshots\/(\S+)/.exec(result.stdout)?.[1];
     if (!name) throw new Error(`no snapshot named in: ${result.stdout}`);
     expect(name).toMatch(SNAPSHOT_NAME);
-    expect(existsSync(join(dir, 'backups', name))).toBe(true);
+    expect(existsSync(join(dir, 'snapshots', name))).toBe(true);
     return name;
 }
 
-// An archive in backups/ made by hand, for the refusals: everything staged, after what craft adds.
+// An archive in snapshots/ made by hand, for the refusals: everything staged, after what craft adds.
 async function handMade(
     dir: string,
     name: string,
@@ -82,11 +83,11 @@ async function handMade(
     mkdirSync(join(stage, 'data'));
     writeFileSync(join(stage, 'data/other.txt'), 'other\n');
     craft(stage);
-    const tar = await run(['tar', '-czf', join(dir, 'backups', name), ...readdirSync(stage)], stage);
+    const tar = await run(['tar', '-czf', join(dir, 'snapshots', name), ...readdirSync(stage)], stage);
     expect(tar.code).toBe(0);
 }
 
-// A raw ustar entry, for what no tar run by an unprivileged user writes: a device, a path through a link.
+// A raw ustar entry, for what no tar run by an unprivileged user writes: a device, a hard link to outside.
 function tarEntry(name: string, type: string, target = ''): Buffer {
     const header = Buffer.alloc(512);
     header.write(name, 0);
@@ -131,17 +132,18 @@ function rawArchive(dir: string, name: string, entries: Buffer[]): void {
         ...entries,
         Buffer.alloc(1024),
     ]);
-    writeFileSync(join(dir, 'backups', name), gzipSync(tar));
+    writeFileSync(join(dir, 'snapshots', name), gzipSync(tar));
 }
 
 function untouched(dir: string): void {
     expect(readFileSync(join(dir, 'data/home/alice/notes.txt'), 'utf8')).toBe('original\n');
     expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(ENV);
     expect(readdirSync(dir).filter((file) => file.includes('pre-restore'))).toEqual([]);
+    expect(existsSync(join(dir, '.eigen/restore'))).toBe(false);
 }
 
 describe('snapshot', () => {
-    test('writes backups/eigen-<UTC stamp>.tar.gz, mode 0600, stamped when it ran', async () => {
+    test('writes snapshots/eigen-<UTC stamp>.tar.gz, mode 0600, stamped when it ran', async () => {
         const dir = install();
         const before = Math.floor(Date.now() / 1000) * 1000;
         const name = await snapshot(dir);
@@ -151,14 +153,34 @@ describe('snapshot', () => {
         const at = (groups && parseBackupStamp(groups)?.getTime()) ?? 0;
         expect(at).toBeGreaterThanOrEqual(before);
         expect(at).toBeLessThanOrEqual(after);
-        expect(statSync(join(dir, 'backups', name)).mode & 0o777).toBe(0o600);
-        expect(readdirSync(join(dir, 'backups'))).toEqual([name]);
+        expect(statSync(join(dir, 'snapshots', name)).mode & 0o777).toBe(0o600);
+        expect(readdirSync(join(dir, 'snapshots'))).toEqual([name]);
+    });
+
+    test('makes snapshots/ when there is none, readable by its owner only', async () => {
+        const dir = install();
+        rmSync(join(dir, 'snapshots'), { recursive: true });
+        await snapshot(dir);
+        expect(statSync(join(dir, 'snapshots')).mode & 0o777).toBe(0o700);
+    });
+
+    test('keeps a sparse file sparse', async () => {
+        const dir = install();
+        const truncate = await run(['truncate', '-s', '1G', 'data/home/alice/sparse.img'], dir);
+        expect(truncate.code).toBe(0);
+        const name = await snapshot(dir);
+        // gzip alone packs a GiB of zeros into about 1 MB.
+        expect(statSync(join(dir, 'snapshots', name)).size).toBeLessThan(64 * 1024);
+        rmSync(join(dir, 'data/home/alice/sparse.img'));
+        const result = await eigen(dir, 'restore', name, '--yes');
+        expect(result.code).toBe(0);
+        expect(statSync(join(dir, 'data/home/alice/sparse.img')).size).toBe(1024 ** 3);
     });
 
     test('holds eigen-snapshot.json, then .env.production, then data/', async () => {
         const dir = install();
         const name = await snapshot(dir);
-        const archive = join(dir, 'backups', name);
+        const archive = join(dir, 'snapshots', name);
         const list = await run(['tar', '-tzf', archive], dir);
         expect(list.stdout.split('\n').filter(Boolean)).toEqual([
             'eigen-snapshot.json',
@@ -185,10 +207,10 @@ describe('snapshot', () => {
             'eigen-pre-update-20220101-000000.tar.gz',
         ];
         const manual = 'eigen-20190101-000000.tar.gz';
-        for (const file of [...older, manual, 'notes.txt']) writeFileSync(join(dir, 'backups', file), 'x');
+        for (const file of [...older, manual, 'notes.txt']) writeFileSync(join(dir, 'snapshots', file), 'x');
         const name = await snapshot(dir, '--pre-update');
         expect(SNAPSHOT_NAME.exec(name)?.groups?.['preUpdate']).toBe('pre-update-');
-        expect(readdirSync(join(dir, 'backups')).sort()).toEqual(
+        expect(readdirSync(join(dir, 'snapshots')).sort()).toEqual(
             [manual, 'eigen-pre-update-20220101-000000.tar.gz', name, 'notes.txt'].sort(),
         );
     });
@@ -197,10 +219,10 @@ describe('snapshot', () => {
         const dir = install();
         const older = ['eigen-pre-update-20200101-000000.tar.gz', 'eigen-pre-update-20210101-000000.tar.gz'];
         for (const file of [...older, 'eigen-pre-update-20220101-000000.tar.gz']) {
-            writeFileSync(join(dir, 'backups', file), 'x');
+            writeFileSync(join(dir, 'snapshots', file), 'x');
         }
         await snapshot(dir);
-        expect(readdirSync(join(dir, 'backups'))).toHaveLength(4);
+        expect(readdirSync(join(dir, 'snapshots'))).toHaveLength(4);
     });
 });
 
@@ -212,7 +234,7 @@ describe('restore', () => {
         writeFileSync(join(dir, 'data/home/alice/new.txt'), 'new\n');
         writeFileSync(join(dir, '.env.production'), 'DOMAIN=changed.example.org\n', { mode: 0o644 });
 
-        const result = await eigen(dir, 'restore', `backups/${name}`, '--yes');
+        const result = await eigen(dir, 'restore', `snapshots/${name}`, '--yes');
         expect(result.stderr).toBe('');
         expect(result.code).toBe(0);
         expect(readFileSync(join(dir, 'data/home/alice/notes.txt'), 'utf8')).toBe('original\n');
@@ -264,8 +286,8 @@ describe('restore', () => {
         const name = await snapshot(dir);
         writeFileSync(join(dir, 'data/home/alice/noise.bin'), randomBytes(256 * 1024));
         const whole = await snapshot(dir);
-        const bytes = readFileSync(join(dir, 'backups', whole));
-        writeFileSync(join(dir, 'backups', name), bytes.subarray(0, bytes.length / 2));
+        const bytes = readFileSync(join(dir, 'snapshots', whole));
+        writeFileSync(join(dir, 'snapshots', name), bytes.subarray(0, bytes.length / 2));
         rmSync(join(dir, 'data/home/alice/noise.bin'));
 
         const result = await eigen(dir, 'restore', name, '--yes');
@@ -275,7 +297,7 @@ describe('restore', () => {
         expect(existsSync(join(dir, 'data/home/alice/noise.bin'))).toBe(false);
     });
 
-    test('an interrupt while it unpacks puts the current data back', async () => {
+    test('an interrupt while it unpacks leaves the live data as it was', async () => {
         const dir = install();
         const name = await snapshot(dir);
         writeFileSync(join(dir, 'data/home/alice/notes.txt'), 'changed\n');
@@ -302,6 +324,19 @@ describe('restore', () => {
         expect(readFileSync(join(dir, 'data/home/alice/notes.txt'), 'utf8')).toBe('changed\n');
         expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(ENV);
         expect(readdirSync(dir).filter((file) => file.includes('pre-restore'))).toEqual([]);
+        expect(existsSync(join(dir, '.eigen/restore'))).toBe(false);
+    });
+
+    test('unpacks only .env.production and data/', async () => {
+        const dir = install();
+        await handMade(dir, 'eigen-20200101-000000.tar.gz', { version, createdAt: new Date().toISOString() }, (stage) =>
+            writeFileSync(join(stage, 'docker-compose.yml'), 'planted\n'),
+        );
+        const result = await eigen(dir, 'restore', 'eigen-20200101-000000.tar.gz', '--yes');
+        expect(result.code).toBe(0);
+        expect(readFileSync(join(dir, 'data/other.txt'), 'utf8')).toBe('other\n');
+        expect(existsSync(join(dir, 'docker-compose.yml'))).toBe(false);
+        expect(existsSync(join(dir, 'eigen-snapshot.json'))).toBe(false);
     });
 
     test.each([
@@ -327,26 +362,35 @@ describe('restore', () => {
                 Bun.spawnSync(['chmod', '2755', join(stage, 'data/shared')]);
                 expect(statSync(join(stage, 'data/shared')).mode & 0o2000).toBe(0o2000);
             },
-            'data/shared/ is setuid or setgid',
+            'data/shared is setuid or setgid',
         ],
-        ['a fifo', (stage: string) => Bun.spawnSync(['mkfifo', join(stage, 'data/pipe')]), 'data/pipe is a fifo'],
+        [
+            'a fifo',
+            (stage: string) => Bun.spawnSync(['mkfifo', join(stage, 'data/pipe')]),
+            'data/pipe is a device, fifo or socket',
+        ],
         [
             'a link to an absolute path',
             (stage: string) => symlinkSync('/etc/passwd', join(stage, 'data/passwd')),
-            'data/passwd points outside data/',
+            'data/passwd is a link that leads out of data/',
         ],
         [
             'a link out of data/',
-            (stage: string) => symlinkSync('../eigen', join(stage, 'data/eigen')),
-            'data/eigen points outside data/',
+            (stage: string) => symlinkSync('../../../eigen', join(stage, 'data/eigen')),
+            'data/eigen is a link that leads out of data/',
         ],
         [
             'a link that leaves data/ through another link',
             (stage: string) => {
                 symlinkSync('.', join(stage, 'data/here'));
-                symlinkSync('here/../eigen', join(stage, 'data/eigen'));
+                symlinkSync('here/../.env.production', join(stage, 'data/env'));
             },
-            'data/eigen points through the link data/here',
+            'data/env is a link that leads out of data/',
+        ],
+        [
+            'a link to nothing',
+            (stage: string) => symlinkSync('missing', join(stage, 'data/later')),
+            'data/later is a link that leads out of data/',
         ],
         [
             '.env.production as a link',
@@ -356,36 +400,37 @@ describe('restore', () => {
             },
             '.env.production is not a file',
         ],
-        [
-            'a file outside data/',
-            (stage: string) => writeFileSync(join(stage, 'docker-compose.yml'), ''),
-            'docker-compose.yml is not in data/',
-        ],
     ])('refuses a snapshot holding %s and changes nothing', async (_, craft, reason) => {
         const dir = install();
         await handMade(dir, 'eigen-20200101-000000.tar.gz', { version, createdAt: new Date().toISOString() }, craft);
         const result = await eigen(dir, 'restore', 'eigen-20200101-000000.tar.gz', '--yes');
         expect(result.code).toBe(1);
         expect(result.stderr).toContain('eigen-20200101-000000.tar.gz cannot be restored: ');
-        // Which of two hard-linked files tar stores as the link depends on the directory order.
+        // Which of two hard-linked files find names first depends on the directory order.
         expect(result.stderr).toContain(reason);
         untouched(dir);
     });
 
+    test('a link inside data/ is restored', async () => {
+        const dir = install();
+        await handMade(dir, 'eigen-20200101-000000.tar.gz', { version, createdAt: new Date().toISOString() }, (stage) =>
+            symlinkSync('other.txt', join(stage, 'data/alias')),
+        );
+        const result = await eigen(dir, 'restore', 'eigen-20200101-000000.tar.gz', '--yes');
+        expect(result.code).toBe(0);
+        expect(readFileSync(join(dir, 'data/alias'), 'utf8')).toBe('other\n');
+    });
+
+    // An unprivileged tar cannot make a device, and nothing links to what it does not unpack: tar itself fails.
     test.each([
-        ['a device', [tarEntry('data/null', '3')], 'data/null is a device'],
-        [
-            'a path through a link',
-            [tarEntry('data/here', '2', '.'), tarEntry('data/here/x/', '5')],
-            'data/here/x/ goes through the link data/here',
-        ],
-        ['a hard link to the launcher', [tarEntry('data/eigen', '1', 'eigen')], 'data/eigen is a hard link'],
-    ])('refuses a snapshot holding %s and changes nothing', async (_, entries, reason) => {
+        ['a device', [tarEntry('data/null', '3')]],
+        ['a hard link to the launcher', [tarEntry('data/eigen', '1', 'eigen')]],
+    ])('refuses a snapshot holding %s and changes nothing', async (_, entries) => {
         const dir = install();
         rawArchive(dir, 'eigen-20200101-000000.tar.gz', entries);
         const result = await eigen(dir, 'restore', 'eigen-20200101-000000.tar.gz', '--yes');
         expect(result.code).toBe(1);
-        expect(result.stderr).toContain(`eigen-20200101-000000.tar.gz cannot be restored: ${reason}`);
+        expect(result.stderr).toContain('eigen-20200101-000000.tar.gz cannot be restored: ');
         untouched(dir);
     });
 
@@ -414,14 +459,14 @@ describe('restore', () => {
     test.each([
         ['../eigen-20200101-000000.tar.gz'],
         ['/etc/passwd'],
-        ['backups/../backups/eigen-20200101-000000.tar.gz'],
-        ['backups/notes.txt'],
+        ['snapshots/../snapshots/eigen-20200101-000000.tar.gz'],
+        ['snapshots/notes.txt'],
         ['eigen-20200101-000001.tar.gz'],
         [''],
     ])('refuses %p', async (archive) => {
         const dir = install();
         await handMade(dir, 'eigen-20200101-000000.tar.gz', { version, createdAt: new Date().toISOString() });
-        writeFileSync(join(dir, 'backups/notes.txt'), 'x');
+        writeFileSync(join(dir, 'snapshots/notes.txt'), 'x');
         const result = await eigen(dir, 'restore', archive, '--yes');
         expect(result.code).toBe(1);
         expect(result.stderr).toContain('eigen-20200101-000000.tar.gz');
@@ -435,6 +480,30 @@ describe('restore', () => {
         expect(result.code).toBe(1);
         expect(result.stderr).toContain('--yes');
         untouched(dir);
+    });
+
+    test('a no to the question changes nothing, says so and exits 3 for the launcher', async () => {
+        const dir = install();
+        const name = await snapshot(dir);
+        const result = await run([process.execPath, CLI, 'restore', name], dir, 'n\n');
+        expect(result.code).toBe(3);
+        expect(result.stdout).toContain('Nothing was changed.');
+        untouched(dir);
+    });
+
+    test('names the newest snapshots by their time, pre-update ones included', async () => {
+        const dir = install();
+        for (const file of ['eigen-pre-update-20200101-000000.tar.gz', 'eigen-20210101-000000.tar.gz']) {
+            writeFileSync(join(dir, 'snapshots', file), 'x');
+        }
+        const result = await eigen(dir, 'restore', '--yes');
+        expect(result.code).toBe(1);
+        expect(result.stderr).toBe(
+            [
+                '■  Name the snapshot to restore.',
+                '└  Pick one of the newest: eigen-20210101-000000.tar.gz, eigen-pre-update-20200101-000000.tar.gz\n',
+            ].join('\n'),
+        );
     });
 
     test('--check checks the archive and changes nothing', async () => {

@@ -33,13 +33,6 @@ export function buildBackupStamp(at: Date): string {
     return `${at.getUTCFullYear()}${pad(at.getUTCMonth() + 1)}${pad(at.getUTCDate())}-${pad(at.getUTCHours())}${pad(at.getUTCMinutes())}${pad(at.getUTCSeconds())}`;
 }
 
-// Whole-server snapshots in the backups folder: `eigen backup` writes one, an update a pre-update one.
-export const SNAPSHOT_NAME = new RegExp(`^eigen-(?<preUpdate>pre-update-)?${BACKUP_STAMP_PATTERN}\\.tar\\.gz$`);
-
-export function buildSnapshotName(at: Date, preUpdate: boolean): string {
-    return `eigen-${preUpdate ? 'pre-update-' : ''}${buildBackupStamp(at)}.tar.gz`;
-}
-
 // Owner ids contain dashes, so the stamp is matched from the end and the owner id is what is left.
 const ARTIFACT_EXTENSION_PATTERN = BACKUP_ARTIFACT_EXTENSION.replaceAll('.', String.raw`\.`);
 const ARTIFACT_NAME = new RegExp(
