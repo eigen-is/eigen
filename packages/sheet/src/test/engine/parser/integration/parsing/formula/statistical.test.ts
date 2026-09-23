@@ -344,8 +344,8 @@ describe('.parse() statistical formulas', () => {
             result: NaN,
         });
         expect(parser!.parse('CONFIDENCE(0.5, 1)')).toMatchObject({
-            error: null,
-            result: Infinity,
+            error: '#NUM!',
+            result: null,
         });
         expect(parser!.parse('CONFIDENCE(0.5, 1, 5)')).toBeMatchCloseTo({
             error: null,
@@ -553,8 +553,8 @@ describe('.parse() statistical formulas', () => {
 
     it('FDIST', () => {
         expect(parser!.parse('FDIST()')).toMatchObject({
-            error: null,
-            result: Infinity,
+            error: '#NUM!',
+            result: null,
         });
         expect(parser!.parse('FDIST(15)')).toMatchObject({
             error: null,
@@ -657,8 +657,8 @@ describe('.parse() statistical formulas', () => {
             result: 0.10033534773107562,
         });
         expect(parser!.parse('FISHER(1)')).toMatchObject({
-            error: null,
-            result: Infinity,
+            error: '#NUM!',
+            result: null,
         });
     });
 
@@ -760,8 +760,8 @@ describe('.parse() statistical formulas', () => {
 
     it('GAMMALN', () => {
         expect(parser!.parse('GAMMALN()')).toMatchObject({
-            error: null,
-            result: Infinity,
+            error: '#NUM!',
+            result: null,
         });
         expect(parser!.parse('GAMMALN(4)')).toMatchObject({
             error: null,
@@ -1564,12 +1564,12 @@ describe('.parse() statistical formulas', () => {
             result: NaN,
         });
         expect(parser!.parse('STANDARDIZE(1)')).toMatchObject({
-            error: null,
-            result: Infinity,
+            error: '#NUM!',
+            result: null,
         });
         expect(parser!.parse('STANDARDIZE(1, 3)')).toMatchObject({
-            error: null,
-            result: -Infinity,
+            error: '#NUM!',
+            result: null,
         });
         expect(parser!.parse('STANDARDIZE(1, 3, 5)')).toMatchObject({
             error: null,

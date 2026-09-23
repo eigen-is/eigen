@@ -372,8 +372,8 @@ describe('.parse() financial formulas', () => {
             result: NaN,
         });
         expect(parser!.parse('PDURATION(0.1, 200)')).toMatchObject({
-            error: null,
-            result: -Infinity,
+            error: '#NUM!',
+            result: null,
         });
         expect(parser!.parse('PDURATION(0.1, 200, 400)')).toMatchObject({
             error: null,
