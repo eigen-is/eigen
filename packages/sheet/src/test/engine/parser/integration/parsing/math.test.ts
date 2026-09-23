@@ -96,6 +96,17 @@ describe('.parse() math', () => {
         });
     });
 
+    test('an overflowing result is #NUM!, not Infinity', () => {
+        expect(parser!.parse('1E308 + 1E308')).toMatchObject({ error: '#NUM!', result: null });
+        expect(parser!.parse('-1E308 - 1E308')).toMatchObject({ error: '#NUM!', result: null });
+        expect(parser!.parse('1E308 * 10')).toMatchObject({ error: '#NUM!', result: null });
+        expect(parser!.parse('1E308 / 0.1')).toMatchObject({ error: '#NUM!', result: null });
+        expect(parser!.parse('2 ^ 10000')).toMatchObject({ error: '#NUM!', result: null });
+        expect(parser!.parse('-(2 ^ 10000)')).toMatchObject({ error: '#NUM!', result: null });
+        expect(parser!.parse('0 ^ -1')).toMatchObject({ error: '#DIV/0!', result: null });
+        expect(parser!.parse('1 / 0')).toMatchObject({ error: '#DIV/0!', result: null });
+    });
+
     // Excel binds negation tighter than `^`, so `-2^2` is (-2)^2 = 4, not -(2^2).
     test('unary sign binds tighter than ^', () => {
         expect(parser!.parse('-2 ^ 2')).toMatchObject({ error: null, result: 4 });
