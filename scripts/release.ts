@@ -95,7 +95,8 @@ Next steps:
        git commit -m "chore: release v${next}"
        git tag -a v${next} -m "v${next}"
        git push --follow-tags
-  4. Publish the GitHub Release (draft for review) from the new CHANGELOG section:
+     The tag push runs the Publish workflow: the release gate, then the four images to GHCR, :latest last.
+  4. Once it is green, publish the GitHub Release (draft for review) from the new CHANGELOG section:
        bun run release publish
      Review it on GitHub and click Publish, or publish directly with:
        bun run release publish --publish
