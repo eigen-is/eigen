@@ -8,13 +8,11 @@ order: 100
 updated: 2026-09-23
 ---
 
-You can import a `.docx` file into an open document. The import replaces everything in the document with the
-content from the Word file, including text formatting, headings, lists, tables, and embedded images.
+You can import a `.docx` file into an open document. The import replaces everything in the document with the content from the Word file, including text formatting, headings, lists, tables, and embedded images.
 
 <div class="eigen-callout">
 
-Importing replaces the entire document. The previous content is gone after the import completes. If you want
-to keep it, make a copy of the document first.
+Importing replaces the entire document. The previous content is gone after the import completes. If you want to keep it, make a copy of the document first.
 
 </div>
 
@@ -23,19 +21,15 @@ to keep it, make a copy of the document first.
 1. Open the document in Docs.
 2. Click **File** in the toolbar.
 3. Click **Import docx file…**.
-4. In the **Import docx file** dialog, browse your Drive and select the `.docx` file you want to use, then
-   click **Select**. To use a file from your computer instead, click **Upload from device** and pick the file
-   from the file chooser.
+4. In the **Import docx file** dialog, browse your Drive and select the `.docx` file you want to use, then click **Select**. To use a file from your computer instead, click **Upload from device** and pick the file from the file chooser.
 
 An **Importing docx file** dialog shows while the file imports. When it closes, the document content is replaced. Images from the Word file are carried across and stored with the document.
 
 ## Convert a Word file in Drive
 
-If the `.docx` file is already in Drive and you want to turn it into a new document rather than overwrite an
-existing one:
+If the `.docx` file is already in Drive and you want to turn it into a new document rather than overwrite an existing one:
 
 1. Right-click the `.docx` file in Drive (or open its **⋮** menu).
 2. Click **Convert to Document**.
 
-Eigen creates a new document in the same folder, with the same name as the Word file. The original `.docx`
-file stays in place.
+Eigen creates a new document in the same folder, with the same name as the Word file. The original `.docx` file stays in place.

@@ -28,7 +28,7 @@ function resolveApiHost(): string {
         // URL validator) don't reject it. The browser bundle re-resolves at runtime.
         return `http://localhost${raw.startsWith('/') ? raw : raw ? `/${raw}` : ''}`;
     }
-    return `${window.location.origin}${raw.startsWith('/') ? raw : `/${raw}`}`;
+    return `${window.location.origin}${raw.startsWith('/') ? raw : raw ? `/${raw}` : ''}`;
 }
 
 export const API_HOST = resolveApiHost();

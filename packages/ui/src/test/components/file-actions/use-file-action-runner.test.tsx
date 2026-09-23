@@ -3,6 +3,7 @@
 // pinned here is that the runner acts on the subject the row was run for, not on whatever the host holds
 // when the dialog is confirmed.
 import { expect, mock, test } from 'bun:test';
+import { getMailAttachmentUrl } from '@workspace/lib/api';
 import { fileActionsFor } from '@workspace/lib/file-actions';
 import { subjectFromMailAttachment } from '@workspace/lib/file-subject';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
@@ -116,7 +117,7 @@ test('the calendar picker imports the subject its row was run for, not the hostâ
         {
             ownerId: 'owner-1',
             calendarId: 'cal-home',
-            url: 'http://localhost/mail/owner-1/message/message-1/attachment/0/Autumn%20market.ics',
+            url: getMailAttachmentUrl('owner-1', 'message-1', 0, 'Autumn market.ics'),
         },
     ]);
     await cleanup();

@@ -31,8 +31,8 @@ describe('startLoadingHeartbeat', () => {
         const stop = startLoadingHeartbeat(conn, 20);
         expect(conn.sent.length).toBe(1);
 
-        await Bun.sleep(70);
-        expect(conn.sent.length).toBeGreaterThanOrEqual(3);
+        // Wait on the frames, not a clock: a stalled loop fires missed interval ticks once.
+        while (conn.sent.length < 3) await Bun.sleep(5);
 
         stop();
         const after = conn.sent.length;

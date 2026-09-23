@@ -33,6 +33,7 @@ new version writes a **new file** instead of overwriting one — which is what l
   `preview-cache.ts`, currently `f5`); bumping it invalidates cached bodies whose `updatedAt` didn't change
 - Typed-payload previews: the same shape under the format's own tag (`VCARD_FORMAT`, `EML_FORMAT`, `ICS_FORMAT`), so no artifact resolves another as its stale predecessor. `dropped` means one thing in all three — what the parser could not read — and what a payload merely does not list is the consumer's own `total - dropped - listed`. Each is bumped on every change to its payload type — `EML_FORMAT` **on every DOMPurify upgrade** too, because a cached body is html a previous sanitizer filtered. The tag is part of every Drive preview route's ETag, so a bump reaches a browser that already holds a body: its revalidation does not match and gets the new body rather than a 304
 - Cache hit = serve directly, no regeneration
+- Every cache write goes through a dot-prefixed temp file and a rename (`writeCacheFile`): a text read deletes a file it can't parse, so a reader that caught a half-written current version would unlink the regeneration that just landed and force a second, foreground one
 - Prior versions are pruned fire-and-forget after each write (`pruneOldVersions`); cleanup of files older than
   7 days runs at `mount.init()`
 
@@ -108,13 +109,7 @@ document. The cap keeps the cached preview body small. Each type compacts by its
 
 Each capped preview render module slices its own input (`renderSheetsPreviewHtml` for sheets, the render modules themselves for slides/eigendoc), leaving the full-document export renderers untouched. The two canvas types cap on elements through one shared budget (`capPreviewElements` in `preview/preview-scene.ts`, kept in reading order — frame by frame, then z-order inside a frame), and a deck caps on frames first. When content is actually dropped, each render module appends a shared `renderPreviewTruncatedMarker()` (`apps/api/src/lib/preview/preview-marker.ts`) — inline-styled because preview HTML is embedded without the document `<head>`.
 
-The sheet window bounds *declared* spans too, not just emitted cells — one legal merge or conditional-format
-range can name millions of cells. Merge `colspan`/`rowspan` clip to the window edge (sets the truncated
-marker); CF rules evaluate only over the window, so aggregate rules (data bars, color scales, top-10,
-above-average, duplicates) compute their extremes over the visible slice rather than the full declared range —
-the editor canvas remains the fidelity reference. Formula rules clip the same way: `withCfRanges` re-expresses the
-formula when the clip moves the rule's first corner, so each visible cell reads what it reads in the editor.
-Exports render declarations in full.
+The sheet window bounds *declared* spans too, not just emitted cells — one legal merge or conditional-format range can name millions of cells. Merge `colspan`/`rowspan` clip to the window edge (sets the truncated marker); CF rules evaluate only over the window, so aggregate rules (data bars, color scales, top-10, above-average, duplicates) compute their extremes over the visible slice rather than the full declared range — the editor canvas remains the fidelity reference. Formula rules clip the same way: `withCfRanges` re-expresses the formula when the clip moves the rule's first corner, so each visible cell reads what it reads in the editor. Exports render declarations in full.
 
 All four then run their body through `applyPreviewByteGuard()` from that same module: the caps count blocks, slides, elements and cells, so one enormous block sails through all of them. A body over 8MB is replaced by the truncated marker — never a partially sliced string — and surfaces a `byte-guard-truncated` warning.
 

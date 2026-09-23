@@ -37,12 +37,15 @@ afterEach(async () => {
 afterAll(() => rmSync(TEST_DIR, { recursive: true, force: true }));
 
 // Grow the file with rows, then delete them: the live db keeps the freed pages while a
-// VACUUM INTO copy drops them, so the two sizes must differ.
+// VACUUM INTO copy drops them, so the two sizes must differ. One transaction: under Linux's
+// synchronous=FULL each of 2 000 commits fsyncs, which took this to 4 s of its 5 s on CI.
 function bloatThenEmpty(db: BunSQLiteDatabase<typeof docSchema>): void {
     const padding = 'x'.repeat(400);
-    for (let id = 1; id <= 2_000; id++) {
-        db.insert(docSchema.items).values({ id, data: padding }).run();
-    }
+    db.transaction((tx) => {
+        for (let id = 1; id <= 2_000; id++) {
+            tx.insert(docSchema.items).values({ id, data: padding }).run();
+        }
+    });
     db.delete(docSchema.items).run();
 }
 

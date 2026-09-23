@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getBytesTextPreviewMode, TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants';
@@ -82,6 +83,19 @@ export async function pruneOldVersions(previewsDir: string, pathId: string, keep
     );
 }
 
+// Temp + rename: readCachedText deletes a file it can't parse, so a reader catching a half-written one
+// would unlink the landed regeneration. Dot-prefixed so pruneOldVersions and stale reads never see it.
+async function writeCacheFile(cacheFile: string, data: string | Buffer): Promise<void> {
+    const tempFile = path.join(path.dirname(cacheFile), `.${path.basename(cacheFile)}.tmp-${randomUUID()}`);
+    try {
+        await Bun.write(tempFile, data);
+        await fs.promises.rename(tempFile, cacheFile);
+    } catch (err) {
+        await fs.promises.unlink(tempFile).catch(() => {});
+        throw err;
+    }
+}
+
 // In-flight generations keyed by cache filename, so a folder grid of N tiles for one just-added
 // image triggers a single generate() instead of N (mirrors inFlightText below).
 const inFlightImage = new Map<string, Promise<ImagePreview | null>>();
@@ -109,7 +123,7 @@ async function getOrCacheImage(
     const task = (async (): Promise<ImagePreview | null> => {
         const data = await generate();
         if (!data) return null;
-        await Bun.write(cacheFile, data);
+        await writeCacheFile(cacheFile, data);
         pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
         return { type: 'image', data, contentType };
     })();
@@ -149,7 +163,7 @@ type CachedText = { body: string };
 // it reads back, so a body the parser rejects counts as a corrupt cache file.
 type CachedTextParser<T> = (body: string) => T;
 
-// The cached current version, or null when the file is missing, mid-write, corrupt or of a shape the
+// The cached current version, or null when the file is missing, corrupt or of a shape the
 // parser refuses. An unusable file is deleted rather than left behind: it is the CURRENT version, so it
 // would be read again on every request, and regenerateTextInBackground skips a cache name that exists.
 async function readCachedText<T>(cacheFile: string, parse: CachedTextParser<T>): Promise<T | null> {
@@ -203,7 +217,7 @@ async function getOrCacheText<T>(
             const body = await generate('foreground');
             if (!body) return null;
             const result: CachedText = { body };
-            await Bun.write(cacheFile, JSON.stringify(result));
+            await writeCacheFile(cacheFile, JSON.stringify(result));
             pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
             return body;
         } catch (err) {
@@ -284,12 +298,10 @@ function regenerateTextInBackground(
             const body = await generate('background');
             if (!body) return;
             const result: CachedText = { body };
-            await Bun.write(cacheFile, JSON.stringify(result));
+            await writeCacheFile(cacheFile, JSON.stringify(result));
             pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
         } catch (err) {
             console.error(`[preview] Background regeneration failed for ${format} preview ${pathId}:`, err);
-            // A partial file would pass the existence check above and pin the stale version.
-            await fs.promises.unlink(cacheFile).catch(() => {});
         } finally {
             inFlightText.delete(cacheName);
         }

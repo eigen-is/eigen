@@ -406,14 +406,14 @@ function mapCfRule(rule: XlsxCfRule, ranges: SingleRange[], theme: ThemePalette)
             ];
         }
         // Ref/function operand — the engine's comparison rules only hold literals, so
-        // express the comparison as a formula rule anchored at the range's top-left.
+        // express the comparison as a formula rule anchored at the first range's top-left.
         const tl = toA1(ranges[0].row[0], ranges[0].column[0]);
         if (rule.operator === 'between' || rule.operator === 'notBetween') {
             if (operands.length < 2) return [];
             const within = `AND(${tl}>=${operands[0]},${tl}<=${operands[1]})`;
-            return cfFormulaRules(rule.operator === 'between' ? within : `NOT(${within})`, ranges, format);
+            return [cfFormulaRule(rule.operator === 'between' ? within : `NOT(${within})`, ranges, format)];
         }
-        return cfFormulaRules(`${tl}${CELL_IS_FORMULA_OP[rule.operator]}${operands[0]}`, ranges, format);
+        return [cfFormulaRule(`${tl}${CELL_IS_FORMULA_OP[rule.operator]}${operands[0]}`, ranges, format)];
     }
 
     if (rule.type === 'containsText' && rule.operator === 'containsText') {
@@ -434,7 +434,7 @@ function mapCfRule(rule: XlsxCfRule, ranges: SingleRange[], theme: ThemePalette)
 
     if (rule.type === 'expression' || FORMULA_BACKED_CF_TYPES.has(rule.type)) {
         const formula = rule.formulae?.[0];
-        return formula == null ? [] : cfFormulaRules(String(formula), ranges, format);
+        return formula == null ? [] : [cfFormulaRule(String(formula), ranges, format)];
     }
 
     if (rule.type === 'top10') {
@@ -491,21 +491,19 @@ function mapCfRule(rule: XlsxCfRule, ranges: SingleRange[], theme: ThemePalette)
 }
 
 // Excel anchors a CF formula's relative refs at the first range's top-left, and so does the engine.
-function cfFormulaRules(
+function cfFormulaRule(
     formula: string,
     ranges: SingleRange[],
     format: DefaultConditionalFormatRule['format'],
-): DefaultConditionalFormatRule[] {
-    return [
-        {
-            type: 'default',
-            cellrange: ranges,
-            format,
-            conditionName: 'formula',
-            conditionRange: [],
-            conditionValue: [`=${formula}`],
-        },
-    ];
+): DefaultConditionalFormatRule {
+    return {
+        type: 'default',
+        cellrange: ranges,
+        format,
+        conditionName: 'formula',
+        conditionRange: [],
+        conditionValue: [`=${formula}`],
+    };
 }
 
 function convertDxfFormat(style: XlsxCfRule['style'], theme: ThemePalette): DefaultConditionalFormatRule['format'] {

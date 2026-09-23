@@ -256,14 +256,24 @@ export async function countBackingRows(mount: Mount, id: string, tmpDir: string)
     return countRowsInFile(mount.storage.read(await mount.getStorageKey(id)), tmpDir);
 }
 
-export function shrinkPutTimeout(mount: Mount, ms: number): void {
-    (mount.uploadQueue as unknown as { putTimeoutMs: number }).putTimeoutMs = ms;
+type QueueTestFields = { putTimeoutMs: number; backoffMs: (attempt: number) => number };
+
+function queueFields(mount: Mount): QueueTestFields {
+    return mount.uploadQueue as unknown as QueueTestFields;
 }
 
-// Restores the production PUT deadline after a shrink. A shrink is a device to make a specific PUT
-// orphan fast; a later healthy retry must not inherit that tiny deadline, or a loaded CPU orphans it too.
+// Shrinks the PUT deadline so a parked PUT orphans fast, and holds the queue's jittered backoff
+// retries: the test drives every retry with drain({flushNow}). A retry the queue fires on its own
+// inside the orphan window would take the shrunk deadline, park, and time out behind the test's back.
+export function shrinkPutTimeout(mount: Mount, ms: number): void {
+    queueFields(mount).putTimeoutMs = ms;
+    queueFields(mount).backoffMs = () => 60_000;
+}
+
+// Restores the production PUT deadline once the PUT meant to orphan has armed its timer (it is
+// parked), so no later healthy PUT inherits the tiny deadline and orphans under a loaded CPU.
 export function restorePutTimeout(mount: Mount): void {
-    shrinkPutTimeout(mount, UPLOAD_PUT_TIMEOUT_MS);
+    queueFields(mount).putTimeoutMs = UPLOAD_PUT_TIMEOUT_MS;
 }
 
 export async function waitFor(cond: () => boolean | Promise<boolean>, timeoutMs = 2_000): Promise<void> {

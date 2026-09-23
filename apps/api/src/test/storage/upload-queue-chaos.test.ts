@@ -114,10 +114,10 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
         await managed.flush();
         await parkedWithRows(fault, 2);
+        restorePutTimeout(mount); // the parked PUT keeps its armed 50ms deadline; later PUTs get the real one
         await Bun.sleep(120); // let the 50ms PUT deadline fire → timeout, inFlight cleared, row backed off
 
-        // Write {3}: a newer sync supersedes the row. Land its PUT immediately (well inside the
-        // timeout) → it acks, the row is cleared, the queue believes everything is synced.
+        // Write {3}: a newer sync supersedes the row. Land its PUT → it acks, the row is cleared, the queue believes everything is synced.
         managed.db.insert(docSchema.items).values({ id: 3, data: 'c' }).run();
         await managed.flush();
         const newest = await parkedWithRows(fault, 3);
@@ -159,12 +159,11 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush();
         await parkedWithRows(fault, 1);
+        restorePutTimeout(mount);
         await Bun.sleep(120); // orphan the PUT
 
-        // Retry with a healthy backend: same staged bytes re-PUT and ack. Restore the real PUT deadline
-        // first — the 50ms shrink only existed to orphan the first PUT; a loaded CPU can exceed it here too.
+        // Retry with a healthy backend: same staged bytes re-PUT and ack.
         fault.parkWrites = false;
-        restorePutTimeout(mount);
         await mount.drainPendingUploads({ flushNow: true });
         expect(mount.pendingUploadCount).toBe(0);
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
@@ -173,8 +172,9 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         // benign half the code comment relies on; it only holds when nothing newer was written.
         // Settlement still re-asserts the retained ack (it can't know the bytes matched), so wait for
         // that repair PUT to finish before reading — otherwise the read races its overwrite.
+        const writesBefore = fault.writeCount;
         await fault.landAllRemaining();
-        await waitFor(() => mount.pendingUploadCount === 0);
+        await waitFor(() => fault.writeCount > writesBefore && mount.pendingUploadCount === 0);
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
     });
 
@@ -227,9 +227,10 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
         await managed.flush();
         await parkedWithRows(fault, 2);
+        restorePutTimeout(mount); // {3}'s PUT below parks mid-flight and must not time out
         await mount.drainPendingUploads(); // returns once the ceiling fired and the row backed off
 
-        // Write {3}: supersedes the row; its PUT parks mid-flight (well inside its own ceiling).
+        // Write {3}: supersedes the row; its PUT parks mid-flight.
         managed.db.insert(docSchema.items).values({ id: 3, data: 'c' }).run();
         await managed.flush();
         const newest = await parkedWithRows(fault, 3);

@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { SSEventDrive } from '@workspace/lib/types/sse';
+import { drainACLFanOuts } from '../../lib/drive/acl-propagation';
 import { authedRequest, collectSSE, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -148,7 +149,8 @@ describe('SSE', () => {
                     ],
                 });
 
-            await new Promise((r) => setTimeout(r, 50));
+            // Bob's copy arrives through the async ACL fan-out, not inside the PUT.
+            await drainACLFanOuts();
             bobSSE.stop();
 
             // Bob should receive DRIVE_ACL_UPDATED (not just SHARED/UNSHARED) since the path was already shared

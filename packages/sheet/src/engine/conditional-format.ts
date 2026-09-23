@@ -439,13 +439,13 @@ export function evaluateConditionalFormat(
                 } else if (conditionName === 'formula' && options?.evaluateFormula) {
                     const { evaluateFormula } = options;
                     // Excel's anchor: every range reads relative to the first range's top-left, even where the scan clamps it.
-                    const str = cellrange[0].row[0];
-                    const stc = cellrange[0].column[0];
+                    const anchorRow = cellrange[0].row[0];
+                    const anchorCol = cellrange[0].column[0];
 
                     const formulaSrc = String(conditionValue0);
                     const formulaTxt = formulaSrc.startsWith('=') ? formulaSrc : `=${formulaSrc}`;
                     forEachCellInRanges(data, [range], (r, c) => {
-                        const raw = evaluateFormula(formulaTxt, str, stc, r, c);
+                        const raw = evaluateFormula(formulaTxt, anchorRow, anchorCol, r, c);
                         const v = typeof raw === 'boolean' ? raw : !!Number(raw);
                         if (v) {
                             applyCellStyle(computeMap, r, c, { textColor, cellColor });

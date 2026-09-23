@@ -372,9 +372,7 @@ What the function does, in order: materialize each sheet's dense `data` from `ce
 
 ## Headless Conditional Formatting
 
-`engine/conditional-format.ts` exposes a pure `evaluateConditionalFormat(rules, data, options?)` that
-returns a `ComputeMap` of `"r_c" → { textColor?, cellColor?, dataBar? }` style entries — the same map the
-canvas painter uses on the client.
+`engine/conditional-format.ts` exposes a pure `evaluateConditionalFormat(rules, data, options?)` that returns a `ComputeMap` of `"r_c" → { textColor?, cellColor?, dataBar? }` style entries — the same map the canvas painter uses on the client.
 
 ```ts
 import { evaluateConditionalFormat } from '@workspace/sheet/engine';
@@ -386,20 +384,13 @@ const styles = evaluateConditionalFormat(
 // styles["3_4"] === { cellColor: "#ff8888" }
 ```
 
-Formula-based rules require an `evaluateFormula` callback; when omitted, formula rules are skipped. The
-remaining rule types — `dataBar`, `colorGradation`, the comparison set
-(`greaterThan`/`lessThan` and their `OrEqual` variants, `equal`/`notEqual`, `between`/`notBetween`),
-`textContains`, `occurrenceDate`, `duplicateValue`, `top10`, `aboveAverage`, etc. — evaluate without
-any context.
+Formula-based rules require an `evaluateFormula` callback; when omitted, formula rules are skipped. The remaining rule types — `dataBar`, `colorGradation`, the comparison set (`greaterThan`/`lessThan` and their `OrEqual` variants, `equal`/`notEqual`, `between`/`notBetween`), `textContains`, `occurrenceDate`, `duplicateValue`, `top10`, `aboveAverage`, etc. — evaluate without any context.
 
-Every rule scans only the materialized matrix (Excel writes a whole-column rule as `A1:A1048576`; holes
-inside the matrix are still visited). Overlapping rules layer per style property in rule order, so a later
-rule's fill never erases an earlier rule's text color. `textContains` ignores case, and `duplicateValue`
-never counts or styles a blank cell, both as in Excel.
+Every rule scans only the materialized matrix (Excel writes a whole-column rule as `A1:A1048576`; holes inside the matrix are still visited). Overlapping rules layer per style property in rule order, so a later rule's fill never erases an earlier rule's text color. `textContains` ignores case, and `duplicateValue` never counts or styles a blank cell, both as in Excel.
 
 Both state (`state/modules/condition-format.ts::getComputeMap`) and the server-side HTML/PDF export pass the same callback, `createCfFormulaEvaluator` (in `engine/conditional-format.ts`). It parses each rule formula once (`FormulaEngine.compile`) and evaluates it per cell with `evaluateCompiled` at the offset `(targetRow - anchorRow, targetCol - anchorCol)`: the parser moves every relative reference leg by that offset at lookup time. It shares `offsetCoordinate` / `offsetRange` (`engine/parser/helper/cell.ts`) with the `functionCopy` text shifter that paste, autofill, sort and `withCfRanges` use, so shifted text and the compiled offset read the same cells: both axes move at once, `$` legs and a missing axis in `A:A` or `1:1` stay put, legs sort per axis before and after the move the way Excel does (`A1:$B$2` moved by (2, 3) is `$B$2:D3`, and a reversed `A$3:A1` moved down one is `A2:A$3`), and a leg moved off the sheet or past Excel's grid (row 1048576, column XFD) is `#REF!`. The grammar actions compile to closures, so `Parser.parse` is `compile` followed by `evaluate`, and a formula that has both a syntax error and an earlier evaluation error reports the syntax error.
 
-A formula rule reads relative to the top-left of its FIRST range, Excel's anchor: every cell of every range in `cellrange` evaluates at its offset from that one corner. The xlsx importer keeps an xlsx rule as one rule with all its `sqref` ranges and the formula as written, and the exporter writes it back as one multi-range `sqref`. Every rewrite of a rule's ranges (cut, copy, paste format, drag-move, row/column delete, the preview's window clip) goes through `withCfRanges` (`engine/conditional-format.ts`): when the new first range starts somewhere else, it re-expresses the formula from the new corner with `functionCopy`, so every cell keeps the relative formula it had. A cut or moved cell therefore reads relative to where it lands, the way a copy does. Autofill only appends a range and an insert moves the corner and the formula's references together, so neither needs re-anchoring. One edge stays: a formula that reads above or left of its corner (`=A4>0` on A5:A10) cannot be re-expressed from a corner too close to the sheet edge, because A1 text has no row 0, so `functionCopy` writes `#REF!` and the whole rule stops matching. Aggregate rules (`duplicateValue`, the top/bottom family, above/below average) still scope each range on its own.
+A formula rule reads relative to the top-left of its FIRST range, Excel's anchor: every cell of every range in `cellrange` evaluates at its offset from that one corner. The xlsx importer keeps an xlsx rule as one rule with all its `sqref` ranges and the formula as written, and the exporter writes it back as one multi-range `sqref`. Every rewrite of a rule's ranges (cut, copy, paste format, drag-move, row/column delete, the preview's window clip) goes through `withCfRanges` (`engine/conditional-format.ts`): when the new first range starts somewhere else, it re-expresses the formula from the new corner with `functionCopy`, so every cell keeps the relative formula it had. A cut or moved cell therefore reads relative to where it lands, the way a copy does. Autofill only appends a range and an insert moves the corner and the formula's references together, so neither needs re-anchoring. One edge stays: a formula that reads above or left of its corner (`=A4>0` on A5:A10) cannot be re-expressed from a corner closer to the sheet edge than the formula reaches, because A1 text has no row 0, so `functionCopy` writes `#REF!` and the whole rule stops matching. Aggregate rules (`duplicateValue`, the top/bottom family, above/below average) still scope each range on its own.
 
 ### HTML/PDF export
 
