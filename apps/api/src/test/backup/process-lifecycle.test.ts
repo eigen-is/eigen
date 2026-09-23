@@ -120,11 +120,15 @@ async function json<T>(res: Response): Promise<T> {
     return (await res.json()) as T;
 }
 
+// A development boot logs the one-time setup link, as `bun run dev` does.
 async function completeSetup(api: ApiProcess): Promise<void> {
+    const setupToken = api.log().match(/\?setup=([\w-]+)/)?.[1];
+    if (!setupToken) throw new Error(`the API logged no setup link:\n${api.log()}`);
     const res = await fetch(`${api.base}/setup/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+            setupToken,
             domain: 'test.eigen.is',
             orgName: 'Test Organization',
             storageType: 'local-id',

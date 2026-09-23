@@ -7,8 +7,9 @@ import { auth } from '../auth/auth';
 import { backupsDirPath } from '../backup/paths';
 import { isMailEnabled } from '../config/env';
 import { getControlSocketPath, getDataRoot } from '../config/paths';
-import { getPublicConfig, isSetupRequired } from '../config/server-config';
+import { getDomain, getPublicConfig, isSetupRequired } from '../config/server-config';
 import { ApiError } from '../core/errors';
+import { createSetupToken } from '../setup/setup-token';
 import { getUserByEmail } from '../user';
 
 export type ControlStatus = {
@@ -23,6 +24,9 @@ export type ControlStatus = {
     lastSnapshot: { name: string; createdAt: string } | null;
     certExpiresAt: string | null;
 };
+
+// setupUrl is null once setup is done.
+export type SetupLink = { setupUrl: string | null; signInUrl: string };
 
 const SNAPSHOT_NAME = new RegExp(`^eigen-(?:pre-update-)?${BACKUP_STAMP_PATTERN}\\.tar\\.gz$`);
 
@@ -65,6 +69,11 @@ export const controlApp = new Elysia({ name: 'control' })
                 ? new Date(new X509Certificate(fs.readFileSync(certPath)).validTo).toISOString()
                 : null,
         };
+    })
+    // Each call replaces the previous link, so a rerun of ./eigen setup is how an operator gets a fresh one.
+    .post('/setup-link', (): SetupLink => {
+        const signInUrl = `https://${getDomain()}/admin`;
+        return { setupUrl: isSetupRequired() ? `${signInUrl}?setup=${createSetupToken()}` : null, signInUrl };
     })
     .post(
         '/reset-password',

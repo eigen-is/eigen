@@ -10,6 +10,7 @@ import { app } from '../app';
 import { auth } from '../lib/auth/auth';
 import { drainACLFanOuts } from '../lib/drive/acl-propagation';
 import { getHome } from '../lib/home';
+import { createSetupToken } from '../lib/setup/setup-token';
 import { TEST_DATA_DIR } from './test-env';
 
 type App = typeof app;
@@ -28,6 +29,7 @@ async function bootServer(): Promise<void> {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                setupToken: createSetupToken(),
                 domain: 'test.eigen.is',
                 orgName: 'Test Organization',
                 storageType: 'local-id',

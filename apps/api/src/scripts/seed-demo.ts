@@ -202,12 +202,14 @@ function writeCommentCard(doc: Y.Doc, card: CommentCard): void {
 
 async function main(): Promise<void> {
     const { app } = await import('../app');
+    const { createSetupToken } = await import('../lib/setup/setup-token');
 
     const setupRes = await app.handle(
         new Request('http://localhost/setup/complete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                setupToken: createSetupToken(),
                 domain: DOMAIN,
                 orgName: ORG_NAME,
                 storageType: 'local-id',

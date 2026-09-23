@@ -43,7 +43,7 @@ export async function status(): Promise<void> {
         });
     } else if (update) build.push({ level: 'warn', label: 'Update', value: 'could not check' });
     if (api.setupRequired) {
-        build.push({ level: 'warn', label: 'Setup', value: `not finished; open https://${api.domain}/admin` });
+        build.push({ level: 'warn', label: 'Setup', value: 'not finished; ./eigen setup prints the setup link' });
     }
 
     const running = services.map(

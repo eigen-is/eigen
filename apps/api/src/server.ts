@@ -3,12 +3,15 @@ import { app } from './app';
 import { drainBackupJobs } from './lib/backup/jobs';
 import { wipeBackupStaging } from './lib/backup/paths';
 import { recoverInterruptedRestores } from './lib/backup/recovery';
+import { isProduction } from './lib/config/env';
+import { isSetupRequired } from './lib/config/server-config';
 import { startControlSocket } from './lib/control/control';
 import { documentTransformRunner } from './lib/document/transform/runner';
 import { drainACLFanOuts } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';
 import { registerScheduledJobs } from './lib/scheduler/jobs';
 import { stopAllSchedules } from './lib/scheduler/scheduler';
+import { createSetupToken } from './lib/setup/setup-token';
 import { setShutdownDrainDeadline } from './lib/sync';
 
 // Wall-clock budget for flushing pending S3 uploads on shutdown. Must stay below
@@ -45,6 +48,12 @@ const server = app.listen({
 console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
 
 const controlSocket = startControlSocket();
+
+// `bun run dev` has no ./eigen setup to print the link.
+if (!isProduction() && isSetupRequired()) {
+    const adminUrl = process.env['VITE_APP_ADMIN_URL'] || 'http://localhost:3009/admin';
+    console.log(`Finish the setup at ${adminUrl}?setup=${createSetupToken()}`);
+}
 
 registerScheduledJobs();
 

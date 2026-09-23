@@ -1,6 +1,7 @@
 import { bootstrap } from './bootstrap';
 import { configure } from './configure';
 import { resetPassword } from './reset-password';
+import { setupLink } from './setup-link';
 import { status } from './status';
 
 const COMMANDS = new Map([
@@ -8,6 +9,7 @@ const COMMANDS = new Map([
     ['configure', configure],
     ['status', status],
     ['reset-password', resetPassword],
+    ['setup-link', setupLink],
 ]);
 
 const USAGE = `Usage: eigen <command> [flags]
@@ -16,7 +18,8 @@ Commands:
   bootstrap        Write the launcher, Compose files and a starter .env.production into /out
   configure        Ask the setup questions and write .env.production
   status           Report on the running server (run by ./eigen status)
-  reset-password   Set a new password for an account and sign it out everywhere`;
+  reset-password   Set a new password for an account and sign it out everywhere
+  setup-link       Print a fresh one-time setup link, or where to sign in once set up`;
 
 const [command = '', ...args] = process.argv.slice(2);
 const run = COMMANDS.get(command);

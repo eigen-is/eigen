@@ -28,6 +28,7 @@ mkdirSync(join(scratch, 'server'), { recursive: true });
 mkdirSync(join(scratch, 'home'), { recursive: true });
 
 const { app } = await import('../../app');
+const { createSetupToken } = await import('../../lib/setup/setup-token');
 
 const setupRes = await app.handle(
     new Request('http://localhost/setup/complete', {
@@ -35,6 +36,7 @@ const setupRes = await app.handle(
         headers: { 'Content-Type': 'application/json' },
         // local-fullnames keeps container internals as named files on disk so they are easy to copy out.
         body: JSON.stringify({
+            setupToken: createSetupToken(),
             domain: 'fixtures.test',
             orgName: 'Fixtures',
             storageType: 'local-fullnames',

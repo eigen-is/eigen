@@ -14,6 +14,7 @@ import {
 import { updateServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { checkS3Connection } from '../storage/s3-storage';
+import { clearSetupToken } from './setup-token';
 
 export const isSetupRequired = checkSetupRequired;
 
@@ -357,6 +358,7 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
         setupCompletedAt: new Date().toISOString(),
     };
     await saveServerConfig(serverConfig);
+    clearSetupToken();
 
     return { user: { id: user.user.id, email: user.user.email, name: user.user.name } };
 }
