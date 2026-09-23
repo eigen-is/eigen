@@ -5,6 +5,8 @@ type Validate = (value: string) => string | undefined;
 
 export type Ui = {
     intro(title: string): void;
+    // What a question is for; interactive only, so scripts and logs stay one line per question.
+    explain(text: string): void;
     ask(question: { message: string; initial: string; validate: Validate; flag: string }): Promise<string>;
     confirm(question: { message: string; initial: boolean; flag: string }): Promise<boolean>;
     password(question: { message: string; validate: Validate; flag: string }): Promise<string>;
@@ -17,6 +19,24 @@ const CANCELLED = 'Cancelled. Nothing was changed.';
 // Foreground and background colors only: bold, dim and the inverse text cursor are not color.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching escape sequences is the point
 const SGR_COLOR = /\x1b\[(?:3\d|4\d|9[0-7]|10[0-7])m/g;
+
+// Word-wraps each paragraph, since clack's log keeps its guide bar only on the lines it is given.
+function wrap(text: string, width: number): string[] {
+    const lines: string[] = [];
+    for (const paragraph of text.split('\n')) {
+        let line = '';
+        for (const word of paragraph.split(' ')) {
+            if (line && line.length + word.length >= width) {
+                lines.push(line);
+                line = word;
+            } else {
+                line = line ? `${line} ${word}` : word;
+            }
+        }
+        lines.push(line);
+    }
+    return lines;
+}
 
 // The one place that decides between clack and plain lines: clack only on a terminal and without flags,
 // so a scripted or piped run never loads it.
@@ -41,6 +61,10 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
         };
         return {
             intro: (title) => clack.intro(styleText(['bgCyan', 'black'], ` ${title} `)),
+            explain: (text) =>
+                clack.log.message(
+                    wrap(text, Math.min(process.stdout.columns, 80) - 4).map((line) => styleText('dim', line)),
+                ),
             ask: async ({ message, initial, validate }) =>
                 answered(
                     await clack.text({ message, initialValue: initial, validate: (value) => validate(value ?? '') }),
@@ -77,6 +101,7 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
     };
     return {
         intro: (title) => console.log(title),
+        explain: () => {},
         ask: async ({ message, initial, validate, flag }) => {
             // An empty line keeps the default, so "-" is how an optional answer is cleared.
             const hint = initial ? ` [${initial}${validate('') ? '' : ', - for none'}]` : '';

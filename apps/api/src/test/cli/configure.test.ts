@@ -225,6 +225,7 @@ describe('configure command', () => {
         const pipedRun = await runConfigure(piped, [], PIPED);
         expect(pipedRun.stderr).toBe('');
         expect(pipedRun.code).toBe(0);
+        expect(pipedRun.stdout).not.toContain('The address people type');
         const flagRun = await runConfigure(
             flagged,
             [
@@ -524,7 +525,7 @@ describe('configure command', () => {
                 'noreply@example.org',
             ],
             {},
-            { when: 'Relay password', keys: 'secret\r' },
+            { when: "relay's password", keys: 'secret\r' },
         );
         expect(run.code).toBe(1);
         expect(run.output).toContain('--relay-password-env');
@@ -532,12 +533,12 @@ describe('configure command', () => {
         expect(existsSync(join(dir, '.env.production'))).toBe(false);
     });
 
-    test('the interactive run honors NO_COLOR', async () => {
+    test('the interactive run explains its questions and honors NO_COLOR', async () => {
         const CYAN = '\x1b[36m';
-        const cancel = { when: 'Web address', keys: '\x03' };
+        const cancel = { when: 'Which web address', keys: '\x03' };
         const plain = await runInTerminal(tempDir(), [], { NO_COLOR: '1' }, cancel);
         expect(plain.code).toBe(130);
-        expect(plain.output).toContain('Web address');
+        expect(plain.output).toContain('The address people type');
         expect(plain.output).not.toContain(CYAN);
         const colored = await runInTerminal(tempDir(), [], { NO_COLOR: undefined }, { ...cancel });
         expect(colored.code).toBe(130);
