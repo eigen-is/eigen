@@ -73,8 +73,15 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
         }
     }
 
+    // A moved formula carries its old value; evaluate it where it now lives.
+    const resolver = createContextResolver(ctx);
     for (let r = target.range.row[0]; r <= target.range.row[1]; r += 1) {
         for (let c = target.range.column[0]; c <= target.range.column[1]; c += 1) {
+            const cell = target.curData[r]?.[c];
+            if (cell?.f != null) {
+                [, cell.v] = execfunction(ctx, cell.f, r, c, target.sheetId, undefined, false, false, resolver);
+                cell.m = numberDisplay(cell.v, cell.ct?.fa);
+            }
             setFormulaCellInfo(ctx, { r, c, id: target.sheetId });
             if (`${r}_${c}_${target.sheetId}` in execF_rc) {
                 continue;
