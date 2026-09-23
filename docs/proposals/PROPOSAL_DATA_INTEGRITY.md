@@ -358,10 +358,10 @@ scoped, and regenerable from a full sweep.
   the last phase; local mounts get the readdir version in the cheap tier for free, S3 listing lands
   with the optional interface method when the loss-direction checks are proven.
 - **D7 — Safe whole-server backup: keep it an offline stop-and-tar, or drive it from the API?**
-  `eigen backup` is now the offline stop-and-tar snapshot (crash-consistent via `-wal`/`-shm` capture),
-  so the live-tar problem is gone — only the verify gap remains, and per §3 the home DBs have no
+  `./eigen backup` is an offline stop-and-tar snapshot (crash-consistent via `-wal`/`-shm` capture),
+  so there is no live-tar problem; only the verify gap remains, and per §3 the home DBs have no
   other backup artifact. Superseded: [PROPOSAL_BACKUP_RESTORE.md](PROPOSAL_BACKUP_RESTORE.md) settled
-  the direction (API-driven, scheduled, verified, per-home), so the copy-then-tar sketch below no longer applies.
+  the direction (API-driven, scheduled, verified, per-home), so the copy-then-tar sketch below does not apply.
 - **D8 — Alert on semantic shrink of a live doc between sweeps?** *Recommendation:* no. Users
   legitimately delete content; version history + bucket versioning are the recovery net for that.
   Only decode/validity failures alert — alarm fatigue kills alerting systems faster than missed

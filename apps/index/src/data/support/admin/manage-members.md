@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, members, users, roles, password]
 related: [admin/teams, admin/guests]
 order: 20
-updated: 2026-09-23
+updated: 2026-09-24
 ---
 
 Members are the people with full accounts on your Eigen server. You manage them from the [**Users**](/admin/users) page in Admin. You need an admin or owner role to do any of this.
@@ -39,7 +39,7 @@ You can set a new password for any non-owner member, for example if they are loc
 
 The dialog generates a random password. The reset signs the person out on every device, and their [app passwords](/support/connect/app-passwords) stop working, so they add new ones in their mail, calendar and file apps. Share the new password with them securely. They can change it themselves from [Security settings](/space/security/password) after signing in.
 
-The owner's password can't be reset here. Whoever runs the server resets it with `./eigen reset-password` and the owner's address.
+Only the owner can reset the owner's password here. Whoever runs the server can also reset it with `./eigen reset-password` and the owner's address.
 
 ## Remove a member
 

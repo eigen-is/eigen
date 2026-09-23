@@ -139,10 +139,9 @@ BUN_VERSION=$(cat .bun-version) docker compose -f docker-compose.yml -f docker-c
     -f docker-compose.dev.yml --env-file .env.production up -d --build
 ```
 
-The API logs a one-time link, `Finish the setup at /admin/#setup=…` (`docker compose … logs eigen-api`). Open it on `https://localhost` (accept the self-signed certificate warning) to run the setup wizard.
+The API logs a one-time link, `Finish the setup at https://localhost/admin/#setup=…` (`docker compose … logs eigen-api`). Open it (accept the self-signed certificate warning) to run the setup wizard.
 
-See the [Local Testing Guide](../docker/LOCAL-TESTING.md) for detailed instructions on testing email, IMAP,
-and CalDAV with the Docker setup.
+See the [Local Testing Guide](../docker/LOCAL-TESTING.md) for detailed instructions on testing email, IMAP, and CalDAV with the Docker setup.
 
 ### Useful commands
 

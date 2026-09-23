@@ -39,10 +39,7 @@ Each app does one job. You can use as many or as few as you like.
 
 If you help run your Eigen, you'll also see **Admin**, for managing organizations, teams, and the server.
 
-Not every Eigen hosts email. If yours doesn't, Mail isn't in the app switcher and you keep using your usual mail
-app. Everything else works the same, with two differences. Email Eigen sends for you, like a share notification,
-comes from the server's own address with your name on it, and replies still reach you. And when someone outside
-answers a calendar invitation, the answer lands in your usual mailbox, so Eigen doesn't show it on the event.
+Not every Eigen hosts email. If yours doesn't, Mail isn't in the app switcher and you keep using your usual mail app. Everything else works the same, with two differences. Email Eigen sends for you, like a share notification, comes from the server's own address with your name on it, and replies still reach you. And when someone outside answers a calendar invitation, the answer lands in your usual mailbox, so Eigen doesn't show it on the event.
 
 ## Move between apps
 

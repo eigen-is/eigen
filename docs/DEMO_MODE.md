@@ -202,17 +202,14 @@ Install the hourly run with the shipped systemd units (`scripts/systemd/eigen-de
 timer}`, `OnCalendar=hourly`, `Persistent=true` to catch a run missed while the box was down), or the
 one-line cron alternative in the setup guide.
 
-`./eigen backup` / `./eigen restore` are the general offline backup/restore on the same
-stop → copy-quiesced-tree → start sequence: `backup` archives the quiesced `data/` (WAL/`-shm`
-included, so the never-checkpointed server DBs restore crash-consistent) with `.env.production` into `snapshots/`, `restore` unpacks and checks a snapshot while Eigen runs, then stops it to swap the snapshot in and keeps the replaced tree aside. Both are production-usable, independent of demo mode.
+`./eigen backup` / `./eigen restore` are the general offline backup/restore on the same stop → copy-quiesced-tree → start sequence: `backup` archives the quiesced `data/` (WAL/`-shm` included, so the never-checkpointed server DBs restore crash-consistent) with `.env.production` into `snapshots/`, `restore` unpacks and checks a snapshot while Eigen runs, then stops it to swap the snapshot in and keeps the replaced tree aside. Both are production-usable, independent of demo mode.
 
 ## Deployment shape
 
 - `COMPOSE_PROFILES=edge` (no `mail`): no postfix/dovecot/unbound, no MX — outbound and inbound mail
   are physically absent, which is why `sendMail` skips.
 - Local mounts only — an `s3` mount stores bytes outside the data root and would desync from the wipe.
-- `docker-compose.yml` passes `EIGEN_DEMO: ${EIGEN_DEMO:-0}` through to the API, so a `.env.production` without it
-  runs with demo mode off; `./eigen update` keeps every key of the file, so an update never drops it.
+- `docker-compose.yml` passes `EIGEN_DEMO: ${EIGEN_DEMO:-0}` through to the API, so a `.env.production` without it runs with demo mode off; `./eigen update` keeps every key of the file, so an update never drops it.
 - The seeder sets the server settings (signups off, quotas) each run, so they can't drift.
 
 See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator walkthrough.

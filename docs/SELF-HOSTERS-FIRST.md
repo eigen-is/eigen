@@ -51,7 +51,6 @@ Built: `./eigen setup` asks whether to host email and for a relay in both modes 
 
 Size S–M, mostly writing. Public text goes out in Reinder's voice.
 
-- [ ] `docker/SETUP-GUIDE.md` rewritten around `eigen`; it shrinks
 - [ ] An operating guide: updating, breaking releases and the pre-1.0 data policy in plain words, backup and restore, moving to another machine, logs, where things live on disk, resetting an admin password. Decide where it lives (repository guide or help center; the ROADMAP help-center row has left this open)
 - [ ] Requirements stated once: measured runtime memory, disk, `linux/amd64` only and why, Compose minimum, ports per profile
 - [ ] A Traefik recipe beside the generated nginx, Apache and Caddy snippets and the tunnel section

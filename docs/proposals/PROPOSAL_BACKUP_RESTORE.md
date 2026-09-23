@@ -20,7 +20,7 @@ Phase ② followed a signed-off implementation spec that supersedes this text wh
 
 ## Why
 
-Eigen's stated core weakness is "I would not yet trust it with data you cannot afford to lose". Today the only backup is `eigen backup`, an offline stop-and-tar of the whole `../../data` tree plus `.env.production`: it stops the stack, tars the quiesced tree with `-wal`/`-shm` intact (so the archive is crash-consistent), then restarts. That is safe but blunt — it requires a few seconds of downtime, nobody verifies the result, it is whole-server only, and there is no per-home restore. eigen.is runs on it right now.
+Eigen's stated core weakness is "I would not yet trust it with data you cannot afford to lose". The whole-server backup is `./eigen backup`, an offline stop-and-tar of the whole `../../data` tree plus `.env.production`: it stops the stack, tars the quiesced tree with `-wal`/`-shm` intact (so the archive is crash-consistent), then restarts. That is safe but blunt: Eigen is down while it archives, nobody verifies the result, and it is whole-server only, with no per-home restore.
 
 We also know from three production incidents ([PROPOSAL_DATA_INTEGRITY.md](PROPOSAL_DATA_INTEGRITY.md)) that a backup nobody has verified is not a backup: a faithful copy of a corrupt database is a faithful backup of garbage, discovered at restore time, which is the worst possible time.
 
@@ -103,7 +103,7 @@ Share-registry rows (`../../data/server/eigen.db`) where this user is the sharer
 
 ### A warning about credentials
 
-`home/settings.json` contains mount configs, and for S3 mounts that includes the access key and secret. An archive is therefore a secret: it holds every file, every mail, and live storage credentials. Artifacts live in a server-side directory outside `../../data` (default `./backups`, next to where `eigen backup` already writes), are admin-only to download, and should be treated like the `.env` file. We do not strip credentials from archives — a backup that cannot restore the mount config is not a complete backup — but the admin UI should say this plainly.
+`home/settings.json` contains mount configs, and for S3 mounts that includes the access key and secret. An archive is therefore a secret: it holds every file, every mail, and live storage credentials. Artifacts live in a server-side directory outside `../../data` (default `./backups`; `./eigen backup` writes its snapshots to `snapshots/` beside it), are admin-only to download, and should be treated like the `.env` file. We do not strip credentials from archives — a backup that cannot restore the mount config is not a complete backup — but the admin UI should say this plainly.
 
 ## Verification
 

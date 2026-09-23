@@ -6,20 +6,16 @@ category: Basics
 tags: [admin, setup, getting-started, configuration]
 related: [admin/manage-members, admin/server-settings]
 order: 10
-updated: 2026-09-23
+updated: 2026-09-24
 ---
 
-The setup wizard creates your admin account and gets the server ready for everyone else. It opens from
-the setup link that `./eigen setup` prints when it finishes. This page walks you through what to expect.
+The setup wizard creates your admin account and gets the server ready for everyone else. It opens from the setup link that `./eigen setup` prints when it finishes. This page walks you through what to expect.
 
 ## The setup wizard
 
-Open the setup link in a browser. It looks like `https://eigen.example.com/admin/#setup=…`, and you
-will see the **Welcome to Eigen** screen. Fill in the form below to get started.
+Open the setup link in a browser. It looks like `https://eigen.example.com/admin/#setup=…`, and you will see the **Welcome to Eigen** screen. Fill in the form below to get started.
 
-The link works once, so nobody who finds your server before you can claim it. Opening `/admin` without
-it shows **Open the setup link that ./eigen setup printed.** instead of the form. Lost the link? Run
-`./eigen setup` again on your server, and it prints a fresh one.
+The link works once, so nobody who finds your server before you can claim it. Opening `/admin` without it shows **Open the setup link that ./eigen setup printed.** instead of the form. Lost the link? Run `./eigen setup` again on your server, and it prints a fresh one.
 
 ### Server configuration
 
@@ -40,7 +36,7 @@ in emails sent to members.
 
 **Full Name** is the display name for your admin user account.
 
-**Username** is the first part of your admin address. The suffix next to it (for example `@example.com`) is the mail domain you picked in `./eigen setup`. You sign in with this address.
+**Username** is the first part of your admin address. The suffix next to it (for example `@example.com`) is the mail domain you picked in `./eigen setup`. You sign in with this address. Role and system names, like `admin`, `root`, `support` and `postmaster`, are reserved, so use your own name, like `jane`.
 
 **Password** must be at least eight characters.
 

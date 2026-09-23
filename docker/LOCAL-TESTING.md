@@ -51,12 +51,12 @@ DC="docker compose -f docker-compose.yml -f docker-compose.build.yml -f docker-c
 ```
 
 This starts 6 containers:
-- **caddy** — Reverse proxy at `https://localhost` (local certificate)
-- **eigen-api** — Backend API
-- **unbound** — Recursive DNS resolver for Postfix
-- **postfix** — SMTP server (submission on ports 587/465 for external clients)
-- **dovecot** — IMAP server for testing mail clients
-- **mailpit** — Catches outbound email from the Eigen web UI (port 8025)
+- **caddy**: Reverse proxy at `https://localhost` (local certificate)
+- **eigen-api**: Backend API
+- **unbound**: Recursive DNS resolver for Postfix
+- **postfix**: SMTP server (submission on ports 587/465 for external clients)
+- **dovecot**: IMAP server for testing mail clients
+- **mailpit**: Catches outbound email from the Eigen web UI (port 8025)
 
 ### 3. Finish the setup
 
@@ -66,7 +66,7 @@ On a fresh `data/`, the API logs a one-time link:
 $DC logs eigen-api | grep 'Finish the setup'
 ```
 
-It reads `Finish the setup at /admin/#setup=…`. Open it on **https://localhost**, accept the certificate warning, and create your admin account. Every restart of the API before setup is done logs a fresh link.
+It reads `Finish the setup at https://localhost/admin/#setup=…`. Open it, accept the certificate warning, and create your admin account. Every restart of the API before setup is done logs a fresh link.
 
 ## URLs
 
@@ -268,13 +268,13 @@ The operator commands on an `edge,mail` install made as uid 1001 in a folder who
 ./docker/test-deployments.sh
 ```
 
-Reruns `./eigen setup` on one install for each `COMPOSE_PROFILES` combination (`edge,mail`, `static,mail`, `edge`, `static`), plus a custom-subnet variant (`172.29.0.0/24`) to exercise the network override path. Probes per scenario: landing page, per-app SPA bundles, `/eigen/health`, WebSocket upgrade pass-through, and — when `mail` is in the profile — the SMTP and IMAPS banners. Without mail, a share notification goes through a Mailpit relay, and a document made over the API syncs over its collab WebSocket through the web server. Prints `✓ ALL OK` or the list of failures. Run before merging anything that touches `eigen`, `apps/api/src/cli/configure.ts`, `docker-compose*`, or any Caddyfile.
+Reruns `./eigen setup` on one install for each `COMPOSE_PROFILES` combination (`edge,mail`, `static,mail`, `edge`, `static`), plus a custom-subnet variant (`172.29.0.0/24`) to exercise the network override path. Probes per scenario: landing page, per-app SPA bundles, `/eigen/health`, WebSocket upgrade pass-through, and, when `mail` is in the profile, the SMTP and IMAPS banners. Without mail, a share notification goes through a Mailpit relay, and a document made over the API syncs over its collab WebSocket through the web server. Prints `✓ ALL OK` or the list of failures. Run before merging anything that touches `eigen`, `apps/api/src/cli/configure.ts`, `docker-compose*`, or any Caddyfile.
 
 ```bash
 ./docker/test-host-proxies.sh
 ```
 
-Installs `static,mail` once and runs nginx, Caddy, and Apache (each in a container, attached to the install's network) in front of `eigen-static` with the snippets `./eigen setup` writes. Probes the same SPA / API / WebSocket set through each proxy. Verifies the host-webserver path — the part `test-deployments.sh` can't cover without a real host webserver.
+Installs `static,mail` once and runs nginx, Caddy, and Apache (each in a container, attached to the install's network) in front of `eigen-static` with the snippets `./eigen setup` writes. Probes the same SPA / API / WebSocket set through each proxy. Verifies the host-webserver path, the part `test-deployments.sh` can't cover without a real host webserver.
 
 ```bash
 ./docker/test-update.sh
@@ -304,7 +304,7 @@ The questions as a person answers them in a terminal, typed by `expect` (install
 ./docker/test-mail-hardening.sh
 ```
 
-Installs `edge,mail` and checks the mail hardening described in [SETUP-GUIDE.md § Mail abuse hardening](SETUP-GUIDE.md#mail-abuse-hardening). Eleven numbered probes: a login sending as itself (250), the same login sending as another local address and as a foreign address (553 both), the same login sending with an empty envelope sender (250 — the RFC 3834 exemption), a mixed-case login sending as its own lowercase address (250), unauthenticated inbound on port 25 with a foreign sender (accepted), the queue-backlog notification, and the SASL failure limiters — probe 10 (a run of failed logins over real SMTP AUTH locks the account's password path) and probe 11 (the client address travels the whole chain: postfix `rip` → dovecot `TCPREMOTEIP` → checkpassword `ip` → the per-IP bucket). Probe 11 asks dovecot's log which address it saw for one deliberate failed login, fills that address's bucket over HTTP from inside the API container, and then has a single real SMTP AUTH with the **correct** password refused — which can only happen if the same address traveled the chain. `PROBES=2,3,4` runs a subset (probe 1 comes along whenever a login probe is named, since it is what proves the credentials), `HARNESS_KEEP=1` leaves the stack up. The full run takes about 6 minutes, mostly probe 10 pacing itself under Postfix's anvil AUTH cap and probe 8 waiting for the queue monitor.
+Installs `edge,mail` and checks the mail hardening described in [SETUP-GUIDE.md § Mail abuse hardening](SETUP-GUIDE.md#mail-abuse-hardening). Eleven numbered probes: a login sending as itself (250), the same login sending as another local address and as a foreign address (553 both), the same login sending with an empty envelope sender (250, the RFC 3834 exemption), a mixed-case login sending as its own lowercase address (250), unauthenticated inbound on port 25 with a foreign sender (accepted), the queue-backlog notification, and the SASL failure limiters: probe 10 (a run of failed logins over real SMTP AUTH locks the account's password path) and probe 11 (the client address travels the whole chain: postfix `rip` → dovecot `TCPREMOTEIP` → checkpassword `ip` → the per-IP bucket). Probe 11 asks dovecot's log which address it saw for one deliberate failed login, fills that address's bucket over HTTP from inside the API container, and then has a single real SMTP AUTH with the **correct** password refused, which can only happen if the same address traveled the chain. `PROBES=2,3,4` runs a subset (probe 1 comes along whenever a login probe is named, since it is what proves the credentials), `HARNESS_KEEP=1` leaves the stack up. The full run takes about 6 minutes, mostly probe 10 pacing itself under Postfix's anvil AUTH cap and probe 8 waiting for the queue monitor.
 
 The install is fresh, so the script makes the admin `alice@eigen.test` through the setup link and logs in as her. Nothing is ever delivered: the dialogs stop at RCPT TO.
 
@@ -341,7 +341,7 @@ The mail HTML's `<script src="…">` tag should reference `/mail/assets/…`, no
 
 To also test a real host webserver in front of `eigen-static`, use `./docker/test-host-proxies.sh`. It runs nginx, Caddy, and Apache (each in a container, attached to the install's network) with the snippets `./eigen setup` writes and probes the SPA / API / WebSocket set through each.
 
-For postfix / dovecot when Caddy is off, use the host-cert overlay so they pick up TLS certs from somewhere other than the (now-missing) Caddy export:
+For postfix / dovecot when Caddy is off, use the host-cert overlay so they pick up TLS certs from the host instead of Caddy's export:
 
 ```bash
 $DC -f docker-compose.host-certs.yml up -d
@@ -358,7 +358,7 @@ bun run setup -- --domain localhost --no-mail --relay mailpit:1025 --yes
 $DC up -d --build
 ```
 
-Outbound emails appear at `http://localhost:8025`. Inbound delivery and IMAP won't work (no postfix / dovecot in containers) — that's the scenario.
+Outbound emails appear at `http://localhost:8025`. Inbound delivery and IMAP won't work (no postfix / dovecot in containers). That's the scenario.
 
 ### Test scenario D (neither)
 
@@ -391,7 +391,7 @@ $DC up -d --build
 This means the auth endpoint isn't returning the right user ID. Check the API is healthy and the user exists.
 
 ### Port already in use
-Something else is using port 80, 443, 25, 465, 587, 993, or 8025. Stop the conflicting service or change the port mapping in `docker-compose.dev.yml`. (Port 8000 is no longer bound on the host — eigen-api lives on the docker network only.)
+Something else is using port 80, 443, 25, 465, 587, 993, or 8025. Stop the conflicting service or change the port mapping in `docker-compose.dev.yml`. (Port 8000 is not bound on the host: eigen-api lives on the docker network only.)
 
 ### Docker network subnet conflict
 If `docker compose up` fails with `pool overlaps with other one on this address space`, another network on your host already uses `172.20.0.0/24`. `./eigen setup` picks a free subnet itself; `bun run setup` does not, so override both values in `.env.production`:
@@ -399,4 +399,4 @@ If `docker compose up` fails with `pool overlaps with other one on this address 
 EIGEN_SUBNET=172.30.0.0/24
 EIGEN_UNBOUND_IP=172.30.0.254
 ```
-The two must stay consistent — unbound's IP must lie inside the subnet.
+The two must stay consistent: unbound's IP must lie inside the subnet.
