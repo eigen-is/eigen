@@ -43,7 +43,8 @@ export function columnIndexToLabel(column: number): string {
 export const SIMPLE_SHEET_NAME = '[A-Za-z0-9_\\u00C0-\\u02AF]+';
 export const QUOTED_SHEET_NAME = "'(?:(?!').|'')*'";
 export const SHEET_NAME_PREFIX = `(${SIMPLE_SHEET_NAME}|${QUOTED_SHEET_NAME})!`;
-const LABEL_EXTRACT_REGEXP = new RegExp(`^(?:${SHEET_NAME_PREFIX})?([$])?([A-Za-z]*)([$])?([0-9]*)$`);
+// The column group is optional as a whole so the `$` of a row-only leg (`$1`) binds to the row.
+const LABEL_EXTRACT_REGEXP = new RegExp(`^(?:${SHEET_NAME_PREFIX})?(?:([$])?([A-Za-z]+))?([$])?([0-9]*)$`);
 
 export function unquoteSheetName(raw: string): string {
     return raw.replace(/^'|'$/g, '').replace(/''/g, "'");
@@ -60,7 +61,7 @@ export function extractLabel(label: string): [CellCoordinate, CellCoordinate, st
     const match = label.toUpperCase().match(LABEL_EXTRACT_REGEXP);
     if (!match) return null;
 
-    const [, sheetNameStr, columnAbs, column, rowAbs, row] = match;
+    const [, sheetNameStr, columnAbs, column = '', rowAbs, row] = match;
     const sheetName = sheetNameStr == null ? null : unquoteSheetName(label.slice(0, sheetNameStr.length));
 
     return [
@@ -74,4 +75,56 @@ export function toLabel(row: CellCoordinate, column: CellCoordinate): string {
     const rowLabel = (row.isAbsolute ? '$' : '') + rowIndexToLabel(row.index);
     const columnLabel = (column.isAbsolute ? '$' : '') + columnIndexToLabel(column.index);
     return columnLabel + rowLabel;
+}
+
+// Excel's grid (A1:XFD1048576): imported workbooks carry refs this far out, past the sheet's own insert limits.
+const REFERENCE_ROW_COUNT = 1048576;
+const REFERENCE_COLUMN_COUNT = 16384;
+
+// `$` and a missing axis (`A:A`, `1:1`) stay put; null means the copy left the grid (#REF!).
+export function offsetCoordinate(
+    coordinate: CellCoordinate,
+    offset: number,
+    axis: 'row' | 'column',
+): CellCoordinate | null {
+    if (offset === 0 || coordinate.isAbsolute || coordinate.index === -1) {
+        return coordinate;
+    }
+    const index = coordinate.index + offset;
+    if (index < 0 || index >= (axis === 'row' ? REFERENCE_ROW_COUNT : REFERENCE_COLUMN_COUNT)) {
+        return null;
+    }
+    const label = axis === 'row' ? rowIndexToLabel(index) : columnIndexToLabel(index);
+    return { index, label, isAbsolute: false };
+}
+
+type CellLeg = [row: CellCoordinate, column: CellCoordinate];
+
+// Orders one axis of a range's two legs; a missing axis (`A:A` rows, `1:1` columns) stays as is.
+export function sortLegs(start: CellCoordinate, end: CellCoordinate): [CellCoordinate, CellCoordinate] {
+    return start.index !== -1 && end.index !== -1 && start.index > end.index ? [end, start] : [start, end];
+}
+
+// Both axes move at once and legs sort before and after, as in Excel (`A$3:A1` down 1 is `A2:A$3`, `A1:$B$2` by (2,3) is `$B$2:D3`).
+export function offsetRange(
+    start: CellLeg,
+    end: CellLeg,
+    rowOffset: number,
+    colOffset: number,
+): [CellLeg, CellLeg] | null {
+    const [row0, row1] = sortLegs(start[0], end[0]);
+    const [column0, column1] = sortLegs(start[1], end[1]);
+    const startRow = offsetCoordinate(row0, rowOffset, 'row');
+    const endRow = offsetCoordinate(row1, rowOffset, 'row');
+    const startColumn = offsetCoordinate(column0, colOffset, 'column');
+    const endColumn = offsetCoordinate(column1, colOffset, 'column');
+    if (startRow == null || endRow == null || startColumn == null || endColumn == null) {
+        return null;
+    }
+    const [rowStart, rowEnd] = sortLegs(startRow, endRow);
+    const [colStart, colEnd] = sortLegs(startColumn, endColumn);
+    return [
+        [rowStart, colStart],
+        [rowEnd, colEnd],
+    ];
 }

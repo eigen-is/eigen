@@ -1,9 +1,10 @@
-import { cloneDeep, isUndefined } from 'es-toolkit/compat';
+import { cloneDeep } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import { api, createContextResolver, execfunction, setCellValue as setCellValueInternal } from '..';
 import type { Context } from '../context';
+import { leaveCurrentSheet } from '../modules';
 import type { FormulaCell, Sheet, SingleRange } from '../types';
 import { getSheetIndex } from '../utils';
 import { celldataToData, dataToCelldata, getSheet } from './common';
@@ -40,10 +41,9 @@ export function hideSheet(ctx: Context, sheetId: string) {
     if (ctx.allowEdit === false) return;
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return;
+    if (sheetId === ctx.currentSheetId && !leaveCurrentSheet(ctx, sheetId)) return;
     ctx.sheets[index].hide = 1;
     ctx.sheets[index].status = 0;
-    const shownSheets = ctx.sheets.filter((sheet) => isUndefined(sheet.hide) || sheet?.hide !== 1);
-    ctx.currentSheetId = shownSheets[0].id as string;
 }
 
 export function showSheet(ctx: Context, sheetId: string) {

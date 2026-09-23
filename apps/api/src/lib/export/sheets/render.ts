@@ -20,12 +20,12 @@ import {
     type CellFormatStyle,
     type CellResolver,
     type ComputeMap,
-    type ConditionalFormatFormulaEvaluator,
+    cellWrapsText,
     createArrayResolver,
+    createCfFormulaEvaluator,
     type DataBar,
     evaluateConditionalFormat,
     FormulaEngine,
-    functionCopy,
 } from '@workspace/sheet/engine';
 import { FONT_STACK_SANS } from '../font-stacks';
 import { getFontCSS } from '../fonts';
@@ -188,25 +188,6 @@ export function renderSheetsPreviewHtml(sheets: Sheet[], mediaUrls: MediaUrls): 
     return { html: first.html, truncated: first.truncated || sheets.length > 1 };
 }
 
-// Builds the `evaluateFormula` callback for a single sheet's CF formula rules. The
-// engine evaluates the rule's formula at each target cell with refs shifted by the
-// offset from the rule's anchor — same shape as the state-side wiring in
-// state/modules/condition-format.ts::getComputeMap.
-function buildCfFormulaEvaluator(
-    engine: FormulaEngine,
-    resolver: CellResolver,
-    sheetId: string,
-): ConditionalFormatFormulaEvaluator {
-    return (formula, anchorRow, anchorCol, targetRow, targetCol) => {
-        const offsetRow = targetRow - anchorRow;
-        const offsetCol = targetCol - anchorCol;
-        let shifted = formula;
-        if (offsetRow > 0) shifted = `=${functionCopy(shifted, 'down', offsetRow)}`;
-        if (offsetCol > 0) shifted = `=${functionCopy(shifted, 'right', offsetCol)}`;
-        return engine.evaluate(shifted, sheetId, resolver).value;
-    };
-}
-
 // A formula rule keeps its range start: the anchor is the range's top-left, and the
 // engine shifts relative refs by target-minus-anchor — moving the start would
 // re-anchor the rule and recolor the visible cells. Targets evaluate independently,
@@ -367,7 +348,7 @@ function renderSheet(
     const cfMap: ComputeMap | null =
         rules && sheet.data
             ? evaluateConditionalFormat(rules, sheet.data, {
-                  evaluateFormula: buildCfFormulaEvaluator(engine, resolver, sheet.id ?? sheet.name),
+                  evaluateFormula: createCfFormulaEvaluator(engine, resolver, sheet.id ?? sheet.name),
               })
             : null;
 
@@ -593,7 +574,7 @@ function buildCellStyle(
             const valign = v.vt != null && v.vt in VERTICAL_ALIGN ? VERTICAL_ALIGN[v.vt] : 'middle';
             parts.push(`vertical-align:${valign}`);
         }
-        if (v.tb === '2') parts.push('white-space:pre-wrap;word-wrap:break-word');
+        if (cellWrapsText(v)) parts.push('white-space:pre-wrap;word-wrap:break-word');
         if (v.un === 1 && v.cl === 1) {
             parts.push('text-decoration:underline line-through');
         } else if (v.un === 1) {

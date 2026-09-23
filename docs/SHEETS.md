@@ -42,6 +42,8 @@ Container-resize contract (app code may rely on it): `Sheet` keeps a `ResizeObse
 placeholder and skips 0×0 boxes, so a hidden workbook re-measures its canvas when it is shown
 again — `apps/sheets` hides the workbook rather than unmounting it for the mobile comments pane.
 
+Every sheet switch goes through `changeSheet(ctx, id, force?)` (`state/modules/sheet.ts`): tab clicks, the sheet list, search, hyperlinks, the API, and `leaveCurrentSheet` when the current sheet goes away: hidden or deleted here or by a peer, or removed or hidden by an undo or redo (`settleCurrentSheet`). `force` skips the `beforeActivateSheet` veto when the current sheet is going away; a hidden target is refused. A switch closes the cell editor and any formula range selection, so Enter can never commit into the sheet a peer switched you to. `leaveCurrentSheet` lands on `firstVisibleSheetId` (`state/context.ts`), the first sheet in tab order that is not hidden; `initSheetIndex` uses it at mount when no visible sheet is marked active, and hiding the last visible sheet is refused. The switch derives what the grid paints in its own recipe (`applySheetView`: the sheet's default row height and column width first, then row/column geometry, images, grid lines, and the filter through `applySheetFilter`), plus the scroll and selection restore, so geometry is computed once per switch. The first frame after the commit paints before any effect runs, so anything a switch left for an effect would paint the new sheet on the old sheet's layout for one frame. The effects stay out of it: the `Workbook` effect applies the view only on load or when it creates the current sheet's data, and the `Sheet` effect re-derives geometry when the config dimensions change (peer ops) but skips a changed sheet id.
+
 ## Yjs Sync
 
 | Key     | Type    | Purpose                                   |
@@ -80,14 +82,14 @@ mouseup measure from different elements (the header vs the overlay container), s
 fudge factor to bridge them — there used to be a hand-tuned `3` doing exactly that. No movement is a click, any
 movement is a resize.
 
-**Flow**: Local edit → `onOp` callback → push to Y.Array → Yjs WebSocket → remote `applyOp()` (no React re-render).
+**Flow**: Local edit → `onOp` callback → push to Y.Array → Yjs WebSocket → remote `applyOp()` (no React re-render). `applyOp` is not atomic: when a patch fails it keeps what it already applied, where `replaySheetsOps` rolls the whole batch back and skips it, so a live client and a joiner can disagree until the next reload (filed in [SHEETS-TODO.md](SHEETS-TODO.md)).
 
 **Snapshot**: Saved on unmount, and on `beforeunload` only while the socket is connected (`use-sheet.ts` `flushSnapshot`), so a tab closed during a blip writes none and the ops array grows until a connected tab flushes. New joiners
 load from the snapshot, then replay any pending ops that arrived during initial sync via the shared
 `replaySheetsOps(sheets, opBatches)` from `@workspace/sheet/engine` — the same function the BE document
 reader uses, so every consumer agrees on what "snapshot + ops → `Sheet[]`" means.
 
-**Undo** is the engine's own stack (`GlobalCache.undoList`/`redoList`, inverse immer patches per recipe, no depth limit, per tab). `handleUndo`/`handleRedo` (`Workbook/index.tsx`) apply the inverse and broadcast it as an ordinary op batch, so peers see an undo as an edit; a peer's batch applies with `noHistory` and is never undoable locally. The stack's paths are absolute row/column numbers and `reduceUndoList` corrects them only for sheet deletions, so an undo after a peer's row insert lands one row off (filed in [SHEETS-TODO.md](SHEETS-TODO.md)). Whether sheets should move to Yjs structures and `Y.UndoManager` is answered in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md): possible only with stable row/column ids, and not the first thing to do.
+**Undo** is the engine's own stack (`GlobalCache.undoList`/`redoList`, inverse immer patches per recipe, no depth limit, per tab). `handleUndo`/`handleRedo` (`Workbook/index.tsx`) apply the inverse and broadcast it as an ordinary op batch, so peers see an undo as an edit; a peer's batch applies with `noHistory` and is never undoable locally. The stack's paths are absolute row/column numbers and nothing corrects them for a peer's changes, so an undo after a peer's row insert lands one row off. Nothing shifts the stack for a peer's sheet deletion either, so an entry's `['sheets', i]` path can land on the wrong sheet. Undoing your own row or column insert applies the whole-sheet inverse locally but ships a `deleteRowCol` marker, so a peer's edits on that sheet since the insert vanish on your side only. All three are filed in [SHEETS-TODO.md](SHEETS-TODO.md). Whether sheets should move to Yjs structures and `Y.UndoManager` is answered in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md): possible only with stable row/column ids, and not the first thing to do.
 
 **`selections` never persists**: it's a per-client cursor — the ops path drops it (`filterPatch`) and the
 snapshot encoder strips it (`snapshot-codec.ts`; a persisted cursor once resurfaced on open as phantom
@@ -147,13 +149,7 @@ On first mount, the Workbook (`packages/sheet/src/components/Workbook/index.tsx`
 incoming `Sheet[]` before rendering:
 
 1. **Materialize `data`** — expand sparse `celldata` into a 2D `data` matrix (`api.initSheetData`).
-2. **Seed the calc chain, don't recompute** — `api.seedCalcChain(draftCtx)` records each sheet's formula
-   cells in `sheet.calcChain` without evaluating them. Displayed values come straight from the incoming
-   `Sheet[]`: xlsx-imported sheets carry Excel's last computed values (and the importer now recomputes them
-   through our own engine at import — see § Server-side recalc), persisted sheets were saved post-recompute,
-   and a later edit lazily kicks the engine for just the affected sub-graph (`execFunctionGroup`) — recalc
-   is proportional to the edit, not the workbook. `ctx.formulaCache.formulaCellInfoMap` lazy-primes on the
-   first edit, so no eager priming or full-workbook sweep happens at mount.
+2. **Seed the calc chain, don't recompute** — `api.seedCalcChain(draftCtx)` records each sheet's formula cells in `sheet.calcChain` without evaluating them. Displayed values come straight from the incoming `Sheet[]`: xlsx-imported sheets carry Excel's last computed values (and the importer now recomputes them through our own engine at import — see § Server-side recalc), persisted sheets were saved post-recompute, and a later edit lazily kicks the engine for just the affected sub-graph (`execFunctionGroup`) — recalc is proportional to the edit, not the workbook. `ctx.formulaCache.formulaCellInfoMap` (and its reverse `dependencyIndex`) is built after mount from an idle callback (`warmFormulaCellInfoMap`), not in the mount itself. The map is all-or-nothing: whichever comes first, the idle build, an edit's `execFunctionGroup` or a paste's `setFormulaCellInfo`, builds the whole of it, and it reads a plain `current()` snapshot rather than the edit's immer draft (a 125k-formula workbook: ~0.8 s from the snapshot, ~6 s through the draft). Once built, it is kept current cell by cell. A local edit registers or drops the cells it writes through `setFormulaCellInfo` (typed entry, `setCellValue`, `clearCell`, pasted formula text, fills, cross-sheet cuts). Undo, redo and a peer's ops in `applyOp` go through `updateFormulaCache`, which reads only `data` patches, because every formula change carries one: a cell patch re-registers that cell, a whole-row patch (a paste that grew the grid) re-registers its row (an appended row only its formula cells, since it has no entries yet), and a whole matrix, a shrunk row or matrix, or a sheet-level patch sets the map to `null` for a lazy rebuild, as a row or column insert or delete does. The `calcChain` patch that rides along is ignored: re-registering from it cost a whole sheet per edit. A peer's `addSheet` and a local `updateSheet` go through `registerSheetFormulas`, which drops the sheet's old entries and registers the formula cells of its new data. Two gaps remain: a deleted sheet's entries stay in the map (harmless, since `groupValuesRefresh` skips a missing sheet), and a sheet copied locally is not tracked until the next mount ([SHEETS-TODO.md](SHEETS-TODO.md#bugs)).
 
 This lets importers (xlsx, seed data, migrations) emit `Sheet[]` with as little as `celldata + f` — the
 Workbook handles the rest. The xlsx importer goes well beyond that minimum: it also emits `config`
@@ -370,22 +366,9 @@ stale-but-valid `Sheet[]` — an export must never 500 because recalc hiccuped. 
 with `computed: true`, so the read gate never fires for imported docs (a recalc-failed import encodes
 `computed: false` and exports recompute).
 
-What the function does, in order: materialize each sheet's dense `data` from `celldata` (a resolver over
-null `data` would recompute everything to blanks); discover formula cells by scanning `data` for `f`
-(never trusting `calcChain`); build the dependency graph by porting the state layer's
-`setFormulaCellInfo`/`getcellrange`/`isFunctionRange` into the engine (the engine has zero state imports,
-so the logic is duplicated rather than shared — the INDIRECT/OFFSET/INDEX special-casing is preserved);
-order via `getCalculationOrder`; evaluate through the shared `FormulaEngine`, results flowing through
-`execFunctionGlobalData` so a downstream cell reads its upstream result; **freeze volatiles**
-(`NOW`/`TODAY`/`RAND`/`RANDBETWEEN` keep their cached value, matching Excel/Sheets "read a closed file"
-semantics — a passive export stays deterministic); and write back `v` plus a pragmatic `m`
-(`update(ct.fa, v)` when the cell carries a format mask, error sentinels as `v = m = '#…'` with
-`ct.t = 'e'`, `String(v)` otherwise). An engine error never overwrites a non-error cached value: a
-function this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER, …) evaluates to `#NAME?`, so rather than
-destroy Excel's correct cached result at import the cached `v`/`m` is kept and the
-`execFunctionGlobalData` seed is skipped, so downstream cells read the cached value through the resolver
-(same freeze-is-safe direction as volatiles); only a cell with no cached value gets the error sentinel.
-Every cell is guarded, so one poisoned formula never aborts the pass.
+What the function does, in order: materialize each sheet's dense `data` from `celldata` (a resolver over null `data` would recompute everything to blanks); discover formula cells by scanning `data` for `f` (never trusting `calcChain`); build the dependency graph by porting the state layer's `setFormulaCellInfo`/`isFunctionRange` into the engine (the engine has zero state imports, so the logic is duplicated rather than shared — the INDIRECT/OFFSET/INDEX special-casing is preserved), resolving each ref through `resolveCellRange` (`engine/formula-utils.ts`), which the state layer's `getcellrange` wraps too and which reads a reversed range (`A3:A1`) as its sorted twin; order via `getCalculationOrder`; evaluate through the shared `FormulaEngine`, results flowing through `execFunctionGlobalData` so a downstream cell reads its upstream result; **freeze volatiles** (`NOW`/`TODAY`/`RAND`/`RANDBETWEEN` keep their cached value, matching Excel/Sheets "read a closed file" semantics — a passive export stays deterministic); and write back `v` plus a pragmatic `m` (numbers through `numberDisplay(v, ct.fa)`, see the number-display paragraph below; error sentinels as `v = m = '#…'` with `ct.t = 'e'`; `String(v)` otherwise). An engine error never overwrites a non-error cached value: a function this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER, …) evaluates to `#NAME?`, so rather than destroy Excel's correct cached result at import the cached `v`/`m` is kept and the `execFunctionGlobalData` seed is skipped, so downstream cells read the cached value through the resolver (same freeze-is-safe direction as volatiles); only a cell with no cached value gets the error sentinel. Every cell is guarded, so one poisoned formula never aborts the pass.
+
+**Number display.** `numberDisplay(value, fa)` (`engine/format.ts`) is the one seam every writer of a numeric `m` goes through: typed entry, paste, sort, autofill, a number-format change from the toolbar, the format painter (`selection.ts`), `setCellFormat`, recalc and the xlsx importer. A mask renders the exact value. General is Excel's default-width General (numfmt's `General`), so float noise hides (`0.1+0.2` shows `0.3`), long values cut to 11 characters (`1234567.891234` shows `1234567.891`) and large or tiny values go scientific (`1.23457E+11`, `1.5E-10`, `1E+21`). A non-finite number displays as its `toString()`, and a malformed format (an xlsx numFmt can carry one into `ct.fa`) falls back to General. A typed number is stored as a number in `v`, never as its string, and pasted text goes through the same `setCellValue` parse as typing (`0x10` stays text, `1,234.5` is a number, a date into a date-formatted cell becomes a serial in that format). A formula's text result stays text (`=TEXT(5,"000")` is `"005"`), in `setCellValue` and in recalc alike. Copying a General number writes its value at 15 significant digits (`copiedNumberText`, `state/modules/selection.ts`) rather than the 11-character display, so a paste elsewhere keeps the precision.
 
 ## Headless Conditional Formatting
 
@@ -411,13 +394,10 @@ any context.
 
 Every rule scans only the materialized matrix (Excel writes a whole-column rule as `A1:A1048576`; holes
 inside the matrix are still visited). Overlapping rules layer per style property in rule order, so a later
-rule's fill never erases an earlier rule's text colour. `textContains` ignores case, and `duplicateValue`
+rule's fill never erases an earlier rule's text color. `textContains` ignores case, and `duplicateValue`
 never counts or styles a blank cell, both as in Excel.
 
-The callback shifts the rule's formula by `(targetRow - anchorRow, targetCol - anchorCol)` via the
-shared `functionCopy` ref shifter (in `engine/formula-shift.ts`), then evaluates against a
-`CellResolver`. Both state (`state/modules/condition-format.ts::getComputeMap`) and the server-side
-HTML/PDF export use this same shape — see § HTML/PDF export below.
+Both state (`state/modules/condition-format.ts::getComputeMap`) and the server-side HTML/PDF export pass the same callback, `createCfFormulaEvaluator` (in `engine/conditional-format.ts`). It parses each rule formula once (`FormulaEngine.compile`) and evaluates it per cell with `evaluateCompiled` at the offset `(targetRow - anchorRow, targetCol - anchorCol)`: the parser moves every relative reference leg by that offset at lookup time. It shares `offsetCoordinate` / `offsetRange` (`engine/parser/helper/cell.ts`) with the `functionCopy` text shifter that paste, autofill, sort and the xlsx importer use, so shifted text and the compiled offset read the same cells: both axes move at once, `$` legs and a missing axis in `A:A` or `1:1` stay put, legs sort per axis before and after the move the way Excel does (`A1:$B$2` moved by (2, 3) is `$B$2:D3`, and a reversed `A$3:A1` moved down one is `A2:A$3`), and a leg moved off the sheet or past Excel's grid (row 1048576, column XFD) is `#REF!`. The grammar actions compile to closures, so `Parser.parse` is `compile` followed by `evaluate`, and a formula that has both a syntax error and an earlier evaluation error reports the syntax error.
 
 ### HTML/PDF export
 
@@ -457,7 +437,7 @@ The sanitizer applies the data-URI-only `url()` rule to style-element text as we
 
 Formula-based CF rules are wired too: `renderSheetsHtml` builds a single `FormulaEngine` plus a
 `createArrayResolver` over all loaded sheets (so cross-sheet refs like `=Sheet2!A1>10` resolve),
-threads them to `renderSheet`, and the per-sheet `buildCfFormulaEvaluator` produces the
+threads them to `renderSheet`, and the per-sheet `createCfFormulaEvaluator` produces the
 `evaluateFormula` callback. This CF pass reads `cell.v` — it doesn't recompute the sheet's own
 formulas, only the CF rule's formula against existing values. The cell values it reads are already
 engine-fresh, though: `readSheetsFromDoc` runs the gated `recalcSheets` (see § Server-side recalc)
@@ -518,6 +498,10 @@ DOM-free subset that satisfies stricter compiler options (`verbatimModuleSyntax`
   inside `DAY`/`MONTH`/`YEAR`), so those are off by the zone offset in a browser west or east of Greenwich;
   `DATE(...)` itself is built in local time and is right everywhere ([SHEETS-TODO.md](SHEETS-TODO.md) §
   Formula engine).
+
+### Standards work in `state/`
+
+`packages/sheet` sits under the `scripts/check-standards.ts` ratchet and `engine/` has had its Tier 2 audit. `state/` is audited opportunistically: a directory only when a feature touches it, with [SHEETS-TODO.md](SHEETS-TODO.md) as the ledger. A full pass before the row/column identity decision in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md) would be spent twice, since that proposal rewrites the model `state/` is built on.
 
 ### Not in scope
 

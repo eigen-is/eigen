@@ -14,6 +14,7 @@ import {
     api,
     cancelActiveImgItem,
     cancelNormalSelected,
+    changeSheet,
     deleteSheet,
     editSheetName,
     getSheetIndex,
@@ -36,22 +37,6 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
     const editable = useRef<HTMLSpanElement>(null);
     const [dragOver, setDragOver] = useState(false);
     const { showAlert, hideAlert } = useAlert();
-
-    useEffect(() => {
-        setContext((draftCtx) => {
-            const r = context.sheetScrollRecord[draftCtx?.currentSheetId];
-            if (r) {
-                draftCtx.scrollRequest = { left: r.scrollLeft ?? 0, top: r.scrollTop ?? 0 };
-                draftCtx.selectionActive = r.selectionActive ?? false;
-                draftCtx.selections = r.selections ?? undefined;
-            } else {
-                draftCtx.scrollRequest = { left: 0, top: 0 };
-                draftCtx.selectionActive = false;
-                draftCtx.selections = undefined;
-            }
-            draftCtx.formulaRangeSelections = [];
-        });
-    }, [context.sheetScrollRecord, setContext]);
 
     useEffect(() => {
         if (!editable.current) return;
@@ -252,15 +237,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
     const selectSheet = useCallback(() => {
         if (isDropPlaceholder) return;
         setContext((draftCtx) => {
-            draftCtx.sheetScrollRecord[draftCtx.currentSheetId] = {
-                scrollLeft: draftCtx.scrollLeft,
-                scrollTop: draftCtx.scrollTop,
-                selectionActive: draftCtx.selectionActive,
-                selections: draftCtx.selections,
-                formulaRangeSelections: draftCtx.formulaRangeSelections,
-            };
-            draftCtx.dataVerificationDropDownList = false;
-            draftCtx.currentSheetId = sheet.id!;
+            changeSheet(draftCtx, sheet.id!);
             cancelActiveImgItem(draftCtx, refs.globalCache);
             cancelNormalSelected(draftCtx);
         });
@@ -285,6 +262,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
     return (
         <div
             role="button"
+            aria-current={isActive || undefined}
             onDragOver={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -307,7 +285,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             key={sheet.id}
             className={cn(
                 'relative flex shrink-0 items-center outline-hidden',
-                isDropPlaceholder ? 'w-8' : 'cursor-pointer px-2 text-xs transition-colors',
+                isDropPlaceholder ? 'w-8' : 'cursor-pointer px-2 text-xs',
                 !isDropPlaceholder &&
                     (isActive
                         ? 'bg-background text-foreground'

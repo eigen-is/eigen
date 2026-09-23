@@ -17,8 +17,10 @@ import type {
 import { BORDER_STYLES, SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import {
     booleanDisplay,
+    cellWrapsText,
     functionCopy,
     iscelldata,
+    numberDisplay,
     parseA1Range,
     toA1,
     unquoteSheetName,
@@ -212,7 +214,7 @@ function worksheetToSheet(
             if (!mergeAnchor && isEmptyCell(converted)) return;
             celldata.push({ r, c, v: converted });
 
-            maxCellHeight = Math.max(maxCellHeight, estimateCellHeight(cell, c, r, merge, colWidthPx));
+            maxCellHeight = Math.max(maxCellHeight, estimateCellHeight(cell, converted, c, r, merge, colWidthPx));
         });
 
         const isDefaultHeight = row.height === DEFAULT_ROW_HEIGHT_PT;
@@ -501,11 +503,9 @@ function cfFormulaRules(
     const anchorRow = ranges[0].row[0];
     const anchorCol = ranges[0].column[0];
     return ranges.map((range) => {
-        let shifted = formula;
         const dr = range.row[0] - anchorRow;
         const dc = range.column[0] - anchorCol;
-        if (dr !== 0) shifted = functionCopy(shifted, 'down', dr);
-        if (dc !== 0) shifted = functionCopy(shifted, 'right', dc);
+        const shifted = dr !== 0 || dc !== 0 ? functionCopy(formula, dr, dc) : formula;
         return {
             type: 'default',
             cellrange: [range],
@@ -763,6 +763,7 @@ const LINE_HEIGHT_FACTOR = 1.35;
 
 function estimateCellHeight(
     cell: XlsxCell,
+    converted: FortuneCell,
     c: number,
     r: number,
     merge: NonNullable<SheetConfig['merge']>,
@@ -770,13 +771,11 @@ function estimateCellHeight(
 ): number {
     const fontSize = cell.style?.font?.size ?? DEFAULT_FONT_SIZE;
     const lineHeightPx = fontSize * PT_TO_PX * LINE_HEIGHT_FACTOR;
-    const wrapText = cell.style?.alignment?.wrapText === true;
-
-    if (!wrapText) {
+    if (!cellWrapsText(converted)) {
         return fontSize > DEFAULT_FONT_SIZE ? lineHeightPx + 6 : 0;
     }
 
-    const text = getCellTextContent(cell);
+    const text = String(converted.m ?? '');
     if (!text) return lineHeightPx + 6;
 
     let cellWidth = colWidthPx[c] ?? SHEET_DEFAULT_COL_WIDTH;
@@ -795,21 +794,6 @@ function estimateCellHeight(
         totalLines += Math.max(1, Math.ceil(line.length / charsPerLine));
     }
     return totalLines * lineHeightPx + 6;
-}
-
-function getCellTextContent(cell: XlsxCell): string | null {
-    const raw = cell.value;
-    if (raw === null || raw === undefined) return null;
-    if (typeof raw === 'string') return raw;
-    if (typeof raw === 'number' || typeof raw === 'boolean') return String(raw);
-    if (isRichText(raw)) return raw.richText.map((r) => r.text).join('');
-    if (isHyperlink(raw)) return hyperlinkText(raw);
-    if (isFormulaValue(raw) || isSharedFormula(raw)) {
-        const result = raw.result;
-        if (typeof result === 'string') return result;
-        if (typeof result === 'number') return String(result);
-    }
-    return null;
 }
 
 function convertCell(cell: XlsxCell, theme: ThemePalette): FortuneCell {
@@ -984,17 +968,6 @@ function dateToSerialAndDisplay(date: Date, numFmt?: string): { value: number; d
         display = update('yyyy-mm-dd', serial);
     }
     return { value: serial, display };
-}
-
-function numberDisplay(value: number, numFmt?: string): string {
-    if (!numFmt || numFmt === 'General') return String(value);
-    // Same boundary guard as dateToSerialAndDisplay: a malformed format string from a
-    // hostile workbook makes numfmt throw.
-    try {
-        return update(numFmt, value);
-    } catch {
-        return String(value);
-    }
 }
 
 // Excel/ECMA-376 uses one format code (`m`/`M`, case-insensitively) for BOTH month and

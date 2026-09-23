@@ -1,8 +1,7 @@
-import { columnIndexToLabel, columnLabelToIndex, unquoteSheetName } from './a1-notation';
+import { extractLabel, toLabel, unquoteSheetName } from './a1-notation';
 import { iscelldata, operatorjson } from './formula-utils';
+import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
-
-export type FormulaShiftMode = 'up' | 'down' | 'left' | 'right';
 
 // Returns [rowAbsolute, colAbsolute] for a single ref like "$A$1" → [true, true].
 export function detectAbsolute(txt: string): [boolean, boolean] {
@@ -14,95 +13,25 @@ export function detectAbsolute(txt: string): [boolean, boolean] {
     ];
 }
 
-// Shift a single cell or range ref by `step` in `orient` direction
-// ('d'/'u' = ±row, 'r'/'l' = ±col). $-prefixed parts stay put. Returns
-// the original text if it isn't a recognizable ref, '#REF!' if a ref (or a
-// range endpoint) shifts off the sheet.
-//
-// NOTE: this and `functionStrChange_range` parse+reformat refs with the same
-// per-leg idiom but are deliberately NOT merged. They differ in row convention
-// (this keeps rows 1-based; the other works 0-based and +1s on output) and in
-// their single-cell fallback (post-shift `rowValid`/`colValid` here, explicit
-// missing flags there), so a merge means rewriting one's shift math onto the
-// other's convention — high risk on the package's most formula-corruption-
-// sensitive code for a few lines saved.
-function shiftRef(orient: 'd' | 'u' | 'l' | 'r', txt: string, step: number): string {
-    const sheetSplit = txt.split('!');
-    let rangetxt: string;
-    let prefix = '';
-    if (sheetSplit.length > 1) {
-        [, rangetxt] = sheetSplit;
-        prefix = `${sheetSplit[0]}!`;
-    } else {
-        [rangetxt] = sheetSplit;
+// Same rules as the compiled formula's offset, so pasted text and a conditional format agree.
+function shiftRef(txt: string, rowOffset: number, colOffset: number): string {
+    const sheetEnd = txt.lastIndexOf('!') + 1;
+    const prefix = txt.slice(0, sheetEnd);
+    const [startTxt, endTxt] = txt.slice(sheetEnd).split(':');
+    // walkFormulaRefs only hands over tokens `iscelldata` accepts, which extractLabel parses.
+    const [startRow, startColumn] = extractLabel(startTxt)!;
+
+    if (endTxt == null) {
+        const row = offsetCoordinate(startRow, rowOffset, 'row');
+        const column = offsetCoordinate(startColumn, colOffset, 'column');
+        return row == null || column == null ? error['r'] : prefix + toLabel(row, column);
     }
 
-    if (!rangetxt.includes(':')) {
-        // A single ref always carries both axes: walkFormulaRefs only hands over tokens
-        // `iscelldata` accepts, and its single-ref regex demands a column and a row.
-        let row = parseInt(rangetxt.replace(/[^0-9]/g, ''), 10);
-        let col = columnLabelToIndex(rangetxt.replace(/[^A-Za-z]/g, ''));
-        const [rowFrozen, colFrozen] = detectAbsolute(rangetxt);
-        const $row = rowFrozen ? '$' : '';
-        const $col = colFrozen ? '$' : '';
-
-        if (orient === 'u' && !rowFrozen) row -= step;
-        else if (orient === 'r' && !colFrozen) col += step;
-        else if (orient === 'l' && !colFrozen) col -= step;
-        else if (orient === 'd' && !rowFrozen) row += step;
-
-        if (row < 1 || col < 0) return error['r'];
-        return prefix + $col + columnIndexToLabel(col) + $row + row;
-    }
-
-    const [startTxt, endTxt] = rangetxt.split(':');
-    // Track presence per leg from the source string so column-only (`A:C`) and row-only
-    // (`1:3`) ranges round-trip correctly. columnLabelToIndex('') returns -1 (a valid
-    // sentinel for "missing"), but parseInt('') is NaN — we need a single source of truth
-    // for both axes.
-    const startRowStr = startTxt.replace(/[^0-9]/g, '');
-    const endRowStr = endTxt.replace(/[^0-9]/g, '');
-    const startColStr = startTxt.replace(/[^A-Za-z]/g, '');
-    const endColStr = endTxt.replace(/[^A-Za-z]/g, '');
-    const rowsMissing = startRowStr.length === 0 && endRowStr.length === 0;
-    const colsMissing = startColStr.length === 0 && endColStr.length === 0;
-
-    const row = [parseInt(startRowStr, 10), parseInt(endRowStr, 10)];
-    if (!rowsMissing && row[0] > row[1]) return txt;
-
-    const col = [columnLabelToIndex(startColStr), columnLabelToIndex(endColStr)];
-    if (!colsMissing && col[0] > col[1]) return txt;
-
-    const [row0Frozen, col0Frozen] = detectAbsolute(startTxt);
-    const [row1Frozen, col1Frozen] = detectAbsolute(endTxt);
-    const $row0 = row0Frozen ? '$' : '';
-    const $col0 = col0Frozen ? '$' : '';
-    const $row1 = row1Frozen ? '$' : '';
-    const $col1 = col1Frozen ? '$' : '';
-
-    if (orient === 'u') {
-        if (!row0Frozen) row[0] -= step;
-        if (!row1Frozen) row[1] -= step;
-    } else if (orient === 'r') {
-        if (!col0Frozen) col[0] += step;
-        if (!col1Frozen) col[1] += step;
-    } else if (orient === 'l') {
-        if (!col0Frozen) col[0] -= step;
-        if (!col1Frozen) col[1] -= step;
-    } else if (orient === 'd') {
-        if (!row0Frozen) row[0] += step;
-        if (!row1Frozen) row[1] += step;
-    }
-
-    // For col-only ranges (`A:C`), col[0] starts at a valid 0+ index — only flag #REF!
-    // when the axis was actually present and shifted off the sheet. Rows are 1-based
-    // here, columns 0-based. Both legs are checked: a frozen leg holds while the other
-    // one walks off the edge.
-    if ((!rowsMissing && (row[0] < 1 || row[1] < 1)) || (!colsMissing && (col[0] < 0 || col[1] < 0))) return error['r'];
-
-    if (colsMissing) return `${prefix + $row0 + row[0]}:${$row1}${row[1]}`;
-    if (rowsMissing) return `${prefix + $col0 + columnIndexToLabel(col[0])}:${$col1}${columnIndexToLabel(col[1])}`;
-    return `${prefix + $col0 + columnIndexToLabel(col[0]) + $row0 + row[0]}:${$col1}${columnIndexToLabel(col[1])}${$row1}${row[1]}`;
+    const [endRow, endColumn] = extractLabel(endTxt)!;
+    const range = offsetRange([startRow, startColumn], [endRow, endColumn], rowOffset, colOffset);
+    if (range == null) return error['r'];
+    const [[rowStart, colStart], [rowEnd, colEnd]] = range;
+    return `${prefix + toLabel(rowStart, colStart)}:${toLabel(rowEnd, colEnd)}`;
 }
 
 // Shared formula char-walker. Strips a single leading `=`, then splits the text into
@@ -208,13 +137,10 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
     return result;
 }
 
-// Walks a formula string, finding cell-data refs and shifting them in the given
-// direction. A leading `=` is stripped before processing; the returned text never
-// carries one. Pure — no Context, no DOM. Negative `step` is allowed and reverses
-// the direction.
-export function functionCopy(txt: string, mode: FormulaShiftMode = 'down', step = 1): string {
-    const orient = mode[0] as 'd' | 'u' | 'l' | 'r';
-    return walkFormulaRefs(txt, (ref) => shiftRef(orient, ref, step));
+// Shifts every cell-data ref in a formula by (rowOffset, colOffset), both axes at once.
+// A leading `=` is stripped before processing; the returned text never carries one.
+export function functionCopy(txt: string, rowOffset: number, colOffset: number): string {
+    return walkFormulaRefs(txt, (ref) => shiftRef(ref, rowOffset, colOffset));
 }
 
 // Shifts formula-text refs in response to an insert ('add') or delete ('del') row/col
@@ -244,7 +170,6 @@ export function functionStrChange(
 
 // Shifts a single cell or range ref string in response to an insert/delete row/col op.
 // Invoked (via walkFormulaRefs) by functionStrChange for each ref token it finds.
-// See shiftRef's NOTE for why the two ref-parsers are not merged.
 function functionStrChange_range(
     txt: string,
     type: 'add' | 'del',
@@ -255,95 +180,30 @@ function functionStrChange_range(
     targetSheet: string,
     onTargetSheet: boolean,
 ): string {
-    const sheetSplit = txt.split('!');
-    let rangetxt: string;
-    let prefix = '';
-    if (sheetSplit.length > 1) {
-        [, rangetxt] = sheetSplit;
-        prefix = `${sheetSplit[0]}!`;
-        if (unquoteSheetName(sheetSplit[0]) !== targetSheet) return txt;
-    } else {
-        [rangetxt] = sheetSplit;
-        if (!onTargetSheet) return txt;
-    }
+    const sheetEnd = txt.lastIndexOf('!') + 1;
+    const prefix = txt.slice(0, sheetEnd);
+    if (sheetEnd > 0 ? unquoteSheetName(prefix.slice(0, -1)) !== targetSheet : !onTargetSheet) return txt;
 
-    const parts = rangetxt.split(':');
-    const isRange = parts.length > 1;
+    const [startTxt, endTxt = startTxt] = txt.slice(sheetEnd).split(':');
+    const [startRow, startColumn] = extractLabel(startTxt)!;
+    const [endRow, endColumn] = extractLabel(endTxt)!;
+    const [row0, row1] = sortLegs(startRow, endRow);
+    const [column0, column1] = sortLegs(startColumn, endColumn);
 
-    let r1: number;
-    let r2: number;
-    let c1: number;
-    let c2: number;
-    let $row0: string;
-    let $col0: string;
-    let $row1: string;
-    let $col1: string;
-    let rowsMissing: boolean;
-    let colsMissing: boolean;
-
-    if (!isRange) {
-        const rowPart = parts[0].replace(/[^0-9]/g, '');
-        const colPart = parts[0].replace(/[^A-Za-z]/g, '');
-
-        // Both axes are always present here — see shiftRef's single-ref note.
-        rowsMissing = false;
-        colsMissing = false;
-
-        r1 = Number.parseInt(rowPart, 10) - 1;
-        r2 = r1;
-
-        c1 = columnLabelToIndex(colPart);
-        c2 = c1;
-
-        const freezonFuc = detectAbsolute(parts[0]);
-        $row0 = freezonFuc[0] ? '$' : '';
-        $col0 = freezonFuc[1] ? '$' : '';
-        $row1 = $row0;
-        $col1 = $col0;
-    } else {
-        const rowPart0 = parts[0].replace(/[^0-9]/g, '');
-        const rowPart1 = parts[1].replace(/[^0-9]/g, '');
-        const colPart0 = parts[0].replace(/[^A-Za-z]/g, '');
-        const colPart1 = parts[1].replace(/[^A-Za-z]/g, '');
-
-        rowsMissing = rowPart0.length === 0 && rowPart1.length === 0;
-        colsMissing = colPart0.length === 0 && colPart1.length === 0;
-
-        r1 = rowsMissing ? -1 : Number.parseInt(rowPart0, 10) - 1;
-        r2 = rowsMissing ? -1 : Number.parseInt(rowPart1, 10) - 1;
-        if (!rowsMissing && r1 > r2) {
-            return txt;
-        }
-
-        c1 = colsMissing ? -1 : columnLabelToIndex(colPart0);
-        c2 = colsMissing ? -1 : columnLabelToIndex(colPart1);
-        if (!colsMissing && c1 > c2) {
-            return txt;
-        }
-
-        const freezonFuc0 = detectAbsolute(parts[0]);
-        $row0 = freezonFuc0[0] ? '$' : '';
-        $col0 = freezonFuc0[1] ? '$' : '';
-
-        const freezonFuc1 = detectAbsolute(parts[1]);
-        $row1 = freezonFuc1[0] ? '$' : '';
-        $col1 = freezonFuc1[1] ? '$' : '';
-    }
+    let r1 = row0.index;
+    let r2 = row1.index;
+    let c1 = column0.index;
+    let c2 = column1.index;
+    const rowsMissing = r1 === -1 && r2 === -1;
+    const colsMissing = c1 === -1 && c2 === -1;
 
     const formatRange = () => {
-        // A range collapses to a single label only when both axes were present in the
-        // source text: a whole-column (`A:A`) or whole-row (`1:1`) range also satisfies
-        // r1 === r2 && c1 === c2 through its -1 sentinels, and must keep both legs.
+        const start = prefix + toLabel({ ...row0, index: r1 }, { ...column0, index: c1 });
+        // A whole-column (`A:A`) or whole-row (`1:1`) range also meets this through its -1 sentinels, and keeps both legs.
         if (!rowsMissing && !colsMissing && r1 === r2 && c1 === c2) {
-            return prefix + $col0 + columnIndexToLabel(c1) + $row0 + (r1 + 1);
+            return start;
         }
-        if (colsMissing) {
-            return `${prefix + $row0 + (r1 + 1)}:${$row1}${r2 + 1}`;
-        }
-        if (rowsMissing) {
-            return `${prefix + $col0 + columnIndexToLabel(c1)}:${$col1}${columnIndexToLabel(c2)}`;
-        }
-        return `${prefix + $col0 + columnIndexToLabel(c1) + $row0 + (r1 + 1)}:${$col1}${columnIndexToLabel(c2)}${$row1}${r2 + 1}`;
+        return `${start}:${toLabel({ ...row1, index: r2 }, { ...column1, index: c2 })}`;
     };
 
     if (type === 'del') {

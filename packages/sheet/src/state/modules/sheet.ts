@@ -1,14 +1,17 @@
-import { cloneDeep, isNil, sortBy, times } from 'es-toolkit/compat';
+import { SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import { isNil, times } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
 import { initSheetData } from '../api/sheet';
-import type { Context } from '../context';
+import { type Context, firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Settings } from '../settings';
 import type { Sheet } from '../types';
 import { generateRandomSheetName, getSheetIndex } from '../utils';
-import { setFormulaCellInfo } from './formula-cache';
+import { cancelNormalSelected } from './cell';
+import { applySheetFilter } from './filter';
+import { registerSheetFormulas, setFormulaCellInfo } from './formula-cache';
 
 export function storeSheetSelections(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
@@ -17,7 +20,12 @@ export function storeSheetSelections(ctx: Context) {
     file.selections = ctx.selections;
 }
 
-export function changeSheet(ctx: Context, id: string) {
+export function changeSheet(
+    ctx: Context,
+    id: string,
+    // The current sheet is going away (deleted, hidden, undone): no veto.
+    force = false,
+) {
     if (id === ctx.currentSheetId) {
         return;
     }
@@ -25,21 +33,64 @@ export function changeSheet(ctx: Context, id: string) {
     const idx = getSheetIndex(ctx, id);
     if (idx == null) return;
     const file = ctx.sheets[idx];
+    if (file.hide === 1) return;
 
-    if (ctx.hooks.beforeActivateSheet?.(id) === false) {
+    if (!force && ctx.hooks.beforeActivateSheet?.(id) === false) {
         return;
     }
 
     storeSheetSelections(ctx);
+    ctx.sheetScrollRecord[ctx.currentSheetId] = {
+        scrollLeft: ctx.scrollLeft,
+        scrollTop: ctx.scrollTop,
+        selectionActive: ctx.selectionActive,
+    };
 
+    cancelNormalSelected(ctx);
+    ctx.dataVerificationDropDownList = false;
     ctx.currentSheetId = id;
     ctx.currentSheetIsPivot = !!file.isPivotTable;
+    const record = ctx.sheetScrollRecord[id];
+    ctx.scrollRequest = { left: record?.scrollLeft ?? 0, top: record?.scrollTop ?? 0 };
+    ctx.selectionActive = record?.selectionActive ?? false;
+    ctx.selections = file.selections;
+    ctx.formulaRangeSelections = [];
+    applySheetView(ctx);
 
     if (ctx.hooks.afterActivateSheet) {
         setTimeout(() => {
             ctx.hooks.afterActivateSheet?.(id);
         });
     }
+}
+
+// False when no other visible sheet is left to land on.
+export function leaveCurrentSheet(ctx: Context, excludeId?: string) {
+    const next = firstVisibleSheetId(ctx, excludeId);
+    if (next == null) return false;
+    changeSheet(ctx, next, true);
+    return true;
+}
+
+// Undo and redo can remove or hide the sheet on screen.
+export function settleCurrentSheet(ctx: Context) {
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null || ctx.sheets[index].hide === 1) leaveCurrentSheet(ctx);
+}
+
+// Everything the grid paints per sheet, derived in the recipe that makes the sheet current: the
+// first frame after a switch must not draw the new cells on the previous sheet's geometry.
+export function applySheetView(ctx: Context) {
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null) return;
+    const sheet = ctx.sheets[index];
+    ctx.defaultrowlen = sheet.defaultRowHeight ?? SHEET_DEFAULT_ROW_HEIGHT;
+    ctx.defaultcollen = sheet.defaultColWidth ?? SHEET_DEFAULT_COL_WIDTH;
+    ctx.showGridLines = sheet.showGridLines !== 0 && sheet.showGridLines !== false;
+    ctx.insertedImgs = sheet.images;
+    // A sheet added this recipe has no data until the Workbook effect initializes it.
+    if (sheet.data) updateContextWithSheetData(ctx, sheet.data);
+    applySheetFilter(ctx);
 }
 
 export function addSheet(
@@ -49,8 +100,10 @@ export function addSheet(
     isPivotTable = false,
     sheetName: string | undefined = undefined,
     sheetData: Sheet | undefined = undefined,
+    // Remote mirror (applyOp): a peer's sheet lands for a read-only viewer too.
+    force = false,
 ) {
-    if (ctx.allowEdit === false) {
+    if (!force && ctx.allowEdit === false) {
         return;
     }
     const order = ctx.sheets.length;
@@ -95,8 +148,13 @@ export function addSheet(
     }
 }
 
-export function deleteSheet(ctx: Context, id: string) {
-    if (ctx.allowEdit === false) {
+export function deleteSheet(
+    ctx: Context,
+    id: string,
+    // Remote mirror (applyOp): a peer's deletion lands for a read-only viewer too.
+    force = false,
+) {
+    if (!force && ctx.allowEdit === false) {
         return;
     }
 
@@ -119,13 +177,7 @@ export function deleteSheet(ctx: Context, id: string) {
     });
 
     ctx.sheets.splice(arrIndex, 1);
-    if (id === ctx.currentSheetId) {
-        const shownSheets = cloneDeep(ctx.sheets).filter(
-            (singleSheet) => singleSheet.hide === undefined || singleSheet.hide !== 1,
-        );
-        const orderSheets = sortBy(shownSheets, (sheet) => sheet.order);
-        ctx.currentSheetId = orderSheets?.[0]?.id as string;
-    }
+    if (id === ctx.currentSheetId) leaveCurrentSheet(ctx);
 
     if (ctx.hooks.afterDeleteSheet) {
         setTimeout(() => {
@@ -153,7 +205,6 @@ export function updateSheet(ctx: Context, newData: Sheet[]) {
             for (let i = 0; i < data.length; i += 1) {
                 for (let j = 0; j < data[i].length; j += 1) {
                     expandedData[i][j] = data[i][j];
-                    setFormulaCellInfo(ctx, { r: i, c: j, id: newDatum.id! }, data, newDatum.id);
                 }
             }
             newDatum.data = expandedData;
@@ -162,6 +213,7 @@ export function updateSheet(ctx: Context, newData: Sheet[]) {
             } else {
                 ctx.sheets[index] = newDatum;
             }
+            registerSheetFormulas(ctx, newDatum.id!, expandedData);
         } else if (newDatum.celldata != null) {
             initSheetData(ctx, index, newDatum);
             const _index = getSheetIndex(ctx, newDatum.id!) as number;

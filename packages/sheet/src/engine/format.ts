@@ -1,14 +1,19 @@
 import numeral from 'numeral';
 import { format, isDateFormat } from 'numfmt';
 import { dateToSerial } from './parser/helper/number';
-import type { CellMatrix, CellType } from './types';
-import { isdatetime, isRealNum, valueIsError } from './validation';
+import type { Cell, CellMatrix, CellType } from './types';
+import { ID_CARD_NUMBER, isdatetime, isPlainNumber, isRealNum, valueIsError } from './validation';
 
 // Canonical display for a boolean cell — Excel's uppercase TRUE/FALSE. The xlsx
 // importer shares it so literal booleans read the same as the formula-produced
 // ones recalc pushes back through `update()`.
 export function booleanDisplay(value: boolean): string {
     return value ? 'TRUE' : 'FALSE';
+}
+
+// Wrap breaks text only; the value decides too, since a formula typed into a text cell keeps its ct.t.
+export function cellWrapsText(cell: Cell): boolean {
+    return cell.tb === '2' && typeof cell.v !== 'number' && cell.ct?.t !== 'n' && cell.ct?.t !== 'd';
 }
 
 export function parseCellInput(value: string | number | boolean): [string, CellType, string | number | boolean] {
@@ -43,7 +48,7 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
     } else if (valueIsError(text)) {
         m = text;
         ct = { fa: 'General', t: 'e' };
-    } else if (/^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i.test(text)) {
+    } else if (ID_CARD_NUMBER.test(text)) {
         m = text;
         ct = { fa: '@', t: 's' };
     } else if (
@@ -189,16 +194,10 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
             m = text;
             ct = { fa: '@', t: 's' };
         }
-    } else if (
-        // isRealNum tests with Number(), which reads "Infinity" and the radix prefixes parseFloat
-        // stops at ("0x10" → 0); Excel keeps both as text, so require the two to agree.
-        isRealNum(value) &&
-        Number.isFinite(parseFloat(text)) &&
-        parseFloat(text) === Number(value)
-    ) {
-        m = parseFloat(text).toString();
-        ct = { fa: 'General', t: 'n' };
+    } else if (isPlainNumber(value)) {
         v = parseFloat(text);
+        m = numberDisplay(v);
+        ct = { fa: 'General', t: 'n' };
     } else if (isdatetime(value, '24') && (text.indexOf('.') > -1 || text.indexOf(':') > -1 || text.length < 16)) {
         v = dateToSerial(new Date(text.replace(/-/g, '/')));
 
@@ -252,6 +251,17 @@ export function parseCellInput(value: string | number | boolean): [string, CellT
 
 export function update(fmt: string, v: string | number | boolean | null | undefined): string {
     return format(fmt, v);
+}
+
+// Every writer's display string for a cell value; General is Excel's default-width General (1.23457E+11).
+export function numberDisplay(value: Cell['v'] | null, fa = 'General'): string {
+    if (typeof value === 'number' && !Number.isFinite(value)) return value.toString();
+    try {
+        return update(fa, value);
+    } catch {
+        // numfmt throws on a malformed format, which an xlsx numFmt can carry into ct.fa.
+        return update('General', value);
+    }
 }
 
 export function is_date(fmt: number | string): boolean {

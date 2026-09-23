@@ -17,7 +17,7 @@ describe('state/formula-editor — functionHTMLGenerate', () => {
         expect(html).not.toContain('<img');
     });
 
-    test('still colours a plain formula', () => {
+    test('still colors a plain formula', () => {
         const html = functionHTMLGenerate('=SUM(A1:A3)');
         expect(html).toContain('sheet-formula-text-func');
         expect(html).toContain('SUM');
@@ -50,4 +50,14 @@ describe('state/formula-editor — generated HTML measures like its rendered tex
             expect(segments.join('')).toBe(formula);
         });
     }
+});
+
+describe('state/formula-editor — reference colors', () => {
+    test('every reference in a long formula gets a color', () => {
+        const refs = Array.from({ length: 50 }, (_, i) => `A${i + 1}`);
+        const html = functionHTMLGenerate(`=SUM(${refs.join(',')})`);
+        const colors = [...html.matchAll(/rangeindex="\d+" dir="auto" style="color:([^;]*);"/g)].map((m) => m[1]);
+        expect(colors).toHaveLength(50);
+        expect(colors.every((c) => c?.startsWith('#'))).toBe(true);
+    });
 });

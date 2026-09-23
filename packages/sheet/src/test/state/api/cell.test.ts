@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import { clearCell, getCellValue, setCellFormat, setCellValue } from '../../../state/api/cell';
 import type { Context } from '../../../state/context';
+import { updateCell } from '../../../state/modules/cell';
+import { groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import type { Cell } from '../../../state/types';
 import { contextFactory, selectionFactory } from '../factories/context';
 
@@ -71,6 +73,68 @@ describe('sheet/core/api/cell', () => {
         });
     });
 
+    test('setCellValue over a formula replaces it with the typed-entry value', () => {
+        const ctx = getContext();
+        ctx.sheets[0].data![0][0] = { v: 5, m: '5' };
+        ctx.sheets[0].calcChain = [{ r: 1, c: 0, id: 'id_1' }];
+        warmFormulaCellInfoMap(ctx);
+
+        setCellValue(ctx, 1, 0, '123', null, { id: 'id_1' });
+        expect(ctx.sheets[0].data![1][0]).toMatchObject({ v: 123, m: '123' });
+        expect(ctx.sheets[0].data![1][0]?.f).toBeUndefined();
+
+        updateCell(ctx, 0, 0, null, '7');
+        groupValuesRefresh(ctx);
+        expect(ctx.sheets[0].data![1][0]?.v).toBe(123);
+    });
+
+    // B2 = SUM(A1:B1): overwritten, it must not recompute when A1 changes.
+    const overFormula = (write: (ctx: Context) => void) => {
+        const ctx = getContext();
+        ctx.sheets[0].data![0][0] = { v: 5, m: '5' };
+        ctx.sheets[0].calcChain = [{ r: 1, c: 0, id: 'id_1' }];
+        warmFormulaCellInfoMap(ctx);
+        write(ctx);
+        updateCell(ctx, 0, 0, null, '7');
+        groupValuesRefresh(ctx);
+        return ctx.sheets[0].data![1][0];
+    };
+
+    test('setCellValue with a cell object over a formula drops it from the map', () => {
+        const cell = overFormula((ctx) => setCellValue(ctx, 1, 0, { v: 'x' }, null, { id: 'id_1' }));
+        expect(cell?.f).toBeUndefined();
+        expect(cell?.v).toBe('x');
+    });
+
+    test('setCellValue with a formula object over a formula registers the new formula', () => {
+        const ctx = getContext();
+        ctx.sheets[0].data![0][0] = { v: 5, m: '5' };
+        ctx.sheets[0].data![0][2] = { v: 3, m: '3' };
+        ctx.sheets[0].calcChain = [{ r: 1, c: 0, id: 'id_1' }];
+        warmFormulaCellInfoMap(ctx);
+        setCellValue(ctx, 1, 0, { f: '=C1*2', v: 6 }, null, { id: 'id_1' });
+
+        updateCell(ctx, 0, 0, null, '7');
+        groupValuesRefresh(ctx);
+        expect(ctx.sheets[0].data![1][0]?.v).toBe(6);
+
+        updateCell(ctx, 0, 2, null, '4');
+        groupValuesRefresh(ctx);
+        expect(ctx.sheets[0].data![1][0]?.v).toBe(8);
+    });
+
+    test('setCellValue with null over a formula drops it from the map', () => {
+        const cell = overFormula((ctx) => setCellValue(ctx, 1, 0, null, null, { id: 'id_1' }));
+        expect(cell?.f).toBeUndefined();
+        expect(cell?.v).toBeUndefined();
+    });
+
+    test('clearCell over a formula drops it from the map', () => {
+        const cell = overFormula((ctx) => clearCell(ctx, 1, 0, { id: 'id_1' }));
+        expect(cell?.f).toBeUndefined();
+        expect(cell?.v).toBeUndefined();
+    });
+
     test('clearCell', async () => {
         const ctx = getContext();
         clearCell(ctx, 1, 0, { id: 'id_1' });
@@ -87,5 +151,15 @@ describe('sheet/core/api/cell', () => {
             bl: 1,
             ct: { fa: 'General', t: 'n' },
         });
+    });
+
+    test('setCellFormat renders the display the way every cell writer does', () => {
+        const ctx = getContext();
+        ctx.sheets[0].data![0][0] = { v: 1234.5 };
+        ctx.sheets[0].data![0][1] = { v: Infinity };
+        setCellFormat(ctx, 0, 0, 'ct', { fa: '#,##0;;;;;', t: 'n' }, { id: 'id_1' });
+        setCellFormat(ctx, 0, 1, 'ct', { fa: '0.00', t: 'n' }, { id: 'id_1' });
+        expect(ctx.sheets[0].data![0][0]?.m).toBe('1234.5');
+        expect(ctx.sheets[0].data![0][1]?.m).toBe('Infinity');
     });
 });

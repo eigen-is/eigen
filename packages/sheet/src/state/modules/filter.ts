@@ -120,6 +120,16 @@ export function getFilterButtonAtPosition(ctx: Context, x: number, y: number) {
     return options.items.findLast((item) => x >= item.left && x < item.left + FILTER_BUTTON_WIDTH);
 }
 
+// The current sheet's filter, and the button geometry the canvas draws for it.
+export function applySheetFilter(ctx: Context) {
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null) return;
+    const sheet = ctx.sheets[index];
+    ctx.filterRange = sheet.filterRange;
+    ctx.filter = sheet.filter || {};
+    createFilterOptions(ctx, ctx.filterRange, undefined);
+}
+
 // Create filter options
 export function createFilterOptions(
     ctx: Context,
@@ -132,9 +142,11 @@ export function createFilterOptions(
     sheetId: string | undefined,
     saveData?: boolean,
 ) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
     if (sheetId != null && sheetId !== ctx.currentSheetId) return;
+    if (!isAllowEdit(ctx)) {
+        delete ctx.filterOptions;
+        return;
+    }
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (sheetIndex == null) return;
     if (filterRange == null || size(filterRange) === 0) {

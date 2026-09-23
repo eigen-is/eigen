@@ -1,7 +1,7 @@
 import { isNil } from 'es-toolkit/compat';
 import { current, isDraft } from 'immer';
 import type { DependencyIndex } from '../../engine/dependency-index';
-import { FormulaEngine, isFormula } from '../../engine/formula-engine';
+import { FormulaEngine } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type {
     CalcChainEntry,
@@ -17,7 +17,7 @@ import { getFlowdata } from '../context';
 import type { FormulaCell, History, Selection } from '../types';
 import { getSheetIdByName } from '../utils';
 import { getcellFormula } from './cell';
-import { execfunction, getcellrange, isFunctionRange } from './formula-exec';
+import { execfunction, getcellrange, isFunctionRange, warmFormulaCellInfoMap } from './formula-exec';
 
 // Shared mutable state accessed by formula-editor.ts and formula-range.ts.
 // Wrapped in an object so mutations are visible across module boundaries.
@@ -174,34 +174,32 @@ export class FormulaCache {
         this.engine = new FormulaEngine();
     }
 
-    updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo', data?: CellMatrix) {
-        function requestUpdate(value: unknown) {
-            if (value instanceof Object) {
-                const v = value as { r?: number; c?: number; id?: string };
-                if (!isNil(v.r) && !isNil(v.c)) {
-                    setFormulaCellInfo(
-                        ctx,
-                        {
-                            r: v.r,
-                            c: v.c,
-                            id: v.id || history.options?.id || ctx.currentSheetId,
-                        },
-                        data,
-                    );
-                }
-            }
-        }
+    updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo') {
+        // An unbuilt map reads the patched cells when it builds.
+        const map = this.formulaCellInfoMap;
+        if (map == null) return;
 
-        const changesHistory = type === 'undo' ? history.inversePatches : history.patches;
-        for (const patch of changesHistory) {
-            if (isFormula(patch.value?.f) || patch.value === null || patch.path[5] === 'f') {
-                requestUpdate({ r: patch.path[3], c: patch.path[4] });
-            } else if (Array.isArray(patch.value)) {
-                for (const value of patch.value) {
-                    requestUpdate(value);
+        // Every formula change carries a `data` patch, so the map follows those alone.
+        for (const patch of type === 'undo' ? history.inversePatches : history.patches) {
+            const [root, sheetIndex, field, r, c, cellField] = patch.path;
+            if (root !== 'sheets' || (field != null && field !== 'data')) continue;
+            const id = ctx.sheets[sheetIndex as number]?.id;
+            if (typeof r === 'number' && typeof c === 'number') {
+                if (id != null && (cellField == null || cellField === 'f')) setFormulaCellInfo(ctx, { r, c, id });
+                continue;
+            }
+            // A sheet added or dropped, a whole matrix, or a shrunk row or matrix: rebuild on next use.
+            if (id == null || typeof r !== 'number' || c != null || patch.op === 'remove') {
+                this.formulaCellInfoMap = null;
+                return;
+            }
+            const row: (Cell | null)[] = patch.value;
+            // An appended row has no map entries: every shrink above resets the map.
+            const added = patch.op === 'add';
+            for (let col = 0; col < row.length; col += 1) {
+                if (row[col]?.f != null || (!added && map[`r${r}c${col}i${id}`] != null)) {
+                    setFormulaCellInfo(ctx, { r, c: col, id });
                 }
-            } else {
-                requestUpdate(patch.value);
             }
         }
     }
@@ -214,11 +212,14 @@ export class FormulaCache {
 // getcellFormula would read the wrong sheet's cell, dropping or mis-parsing
 // the formula (stale cross-sheet recalc).
 export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?: CellMatrix, dataSheetId?: string) {
+    const dataSheet = dataSheetId ?? ctx.currentSheetId;
+    // An entry written into an unbuilt map would pass for the whole map, and the build would never run.
+    const formulaCellInfoMap = warmFormulaCellInfoMap(ctx, dataSheet === ctx.currentSheetId ? data : undefined);
     const key = `r${formulaCell.r}c${formulaCell.c}i${formulaCell.id}`;
-    const cellData = formulaCell.id === (dataSheetId ?? ctx.currentSheetId) ? data : undefined;
+    const cellData = formulaCell.id === dataSheet ? data : undefined;
     const calc_funcStr = getcellFormula(ctx, formulaCell.r, formulaCell.c, formulaCell.id, cellData);
     if (isNil(calc_funcStr)) {
-        delete ctx.formulaCache.formulaCellInfoMap?.[key];
+        delete formulaCellInfoMap[key];
         ctx.formulaCache.dependencyIndex.delete(key);
         return;
     }
@@ -336,9 +337,24 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
         color: 'w',
     };
 
-    if (!ctx.formulaCache.formulaCellInfoMap) ctx.formulaCache.formulaCellInfoMap = {};
-    ctx.formulaCache.formulaCellInfoMap[key] = item;
+    formulaCellInfoMap[key] = item;
     ctx.formulaCache.dependencyIndex.set(key, formulaDependency);
+}
+
+// A sheet arriving whole carries no cell patches; an unbuilt map reads it when it builds.
+export function registerSheetFormulas(ctx: Context, id: string, data: CellMatrix) {
+    const map = ctx.formulaCache.formulaCellInfoMap;
+    if (map == null) return;
+    for (const key of Object.keys(map)) {
+        if (map[key].id !== id) continue;
+        delete map[key];
+        ctx.formulaCache.dependencyIndex.delete(key);
+    }
+    for (let r = 0; r < data.length; r += 1) {
+        for (let c = 0; c < data[r].length; c += 1) {
+            if (data[r][c]?.f != null) setFormulaCellInfo(ctx, { r, c, id }, data, id);
+        }
+    }
 }
 
 export function executeAffectedFormulas(

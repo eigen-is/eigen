@@ -151,8 +151,14 @@ export type ParseResult = {
 
 export type ParserOptions = {
     sheetId?: string;
+    // How far the evaluated cell sits from the cell the formula was written for; relative refs move by it.
+    rowOffset?: number;
+    colOffset?: number;
     [key: string]: unknown;
 };
+
+// A parsed formula; only the Parser that compiled it can evaluate it.
+export type CompiledFormula = () => unknown;
 
 // biome-ignore lint/suspicious/noExplicitAny: event-emitter boundary — per-event args are typed at call sites
 export type ParserEventListener = (...args: any[]) => void;

@@ -1,4 +1,4 @@
-export const colors = [
+const colors = [
     '#c1232b',
     '#27727b',
     '#fcce10',
@@ -29,3 +29,8 @@ export const colors = [
     '#c4ebad',
     '#96dee8',
 ];
+
+// Color of the formula reference at `rangeIndex`; cycles past the palette's end.
+export function rangeColor(rangeIndex: number): string {
+    return colors[rangeIndex % colors.length];
+}

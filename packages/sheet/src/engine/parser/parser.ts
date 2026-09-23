@@ -1,6 +1,7 @@
 import { TinyEmitter } from 'tiny-emitter';
 import type {
     CellInfo,
+    CompiledFormula,
     FormulaArg,
     FormulaValue,
     ParseResult,
@@ -8,14 +9,14 @@ import type {
     ParserOptions,
     RangeCell,
 } from '../types';
-import errorParser, { ERROR, ERROR_NAME, ERROR_VALUE, valueIsError } from './error';
+import errorParser, { ERROR, ERROR_NAME, ERROR_REF, ERROR_VALUE, valueIsError } from './error';
 import evaluateByOperator from './evaluate-by-operator/evaluate-by-operator';
 import { Parser as GrammarParser } from './grammar-parser/grammar-parser';
-import { extractLabel, toLabel } from './helper/cell';
+import { extractLabel, offsetCoordinate, offsetRange, toLabel } from './helper/cell';
 import { invertNumber, toNumber } from './helper/number';
 import { trimEdges } from './helper/string';
 
-type GrammarParserInstance = { parse: (expression: string) => unknown; yy: Record<string, unknown> };
+type GrammarParserInstance = { parse: (expression: string) => CompiledFormula; yy: Record<string, unknown> };
 
 class Parser {
     private parser: GrammarParserInstance;
@@ -48,16 +49,30 @@ class Parser {
     }
 
     parse(expression: string, options: ParserOptions = {}): ParseResult {
+        return this.evaluate(this.compile(expression), options);
+    }
+
+    // A syntax error is deferred to evaluation, where it surfaces like any other error.
+    compile(expression: string): CompiledFormula {
+        if (expression === '') {
+            return () => '';
+        }
+        try {
+            return this.parser.parse(expression);
+        } catch (ex) {
+            return () => {
+                throw ex;
+            };
+        }
+    }
+
+    evaluate(compiled: CompiledFormula, options: ParserOptions = {}): ParseResult {
         let result: unknown = null;
         let error: string | null = null;
         this.options = options;
 
         try {
-            if (expression === '') {
-                result = '';
-            } else {
-                result = this.parser.parse(expression);
-            }
+            result = compiled();
         } catch (ex) {
             const message = ex instanceof Error ? errorParser(ex.message) : null;
             error = message ?? errorParser(ERROR);
@@ -117,8 +132,15 @@ class Parser {
             return this._callVariable(label);
         }
 
+        const { rowOffset = 0, colOffset = 0 } = this.options;
+        const cellRow = offsetCoordinate(row, rowOffset, 'row');
+        const cellColumn = offsetCoordinate(column, colOffset, 'column');
+        if (cellRow == null || cellColumn == null) {
+            throw Error(ERROR_REF);
+        }
+
         let value: FormulaValue;
-        const cell: CellInfo = { label: toLabel(row, column), row, column, sheetName };
+        const cell: CellInfo = { label: toLabel(cellRow, cellColumn), row: cellRow, column: cellColumn, sheetName };
         this.emit('callCellValue', cell, this.options, (_value: FormulaValue) => {
             value = _value;
         });
@@ -140,9 +162,12 @@ class Parser {
             throw Error(ERROR_VALUE);
         }
 
-        const [rowStart, rowEnd] = startRow.index <= endRow.index ? [startRow, endRow] : [endRow, startRow];
-        const [colStart, colEnd] =
-            startColumn.index <= endColumn.index ? [startColumn, endColumn] : [endColumn, startColumn];
+        const { rowOffset = 0, colOffset = 0 } = this.options;
+        const range = offsetRange([startRow, startColumn], [endRow, endColumn], rowOffset, colOffset);
+        if (range == null) {
+            throw Error(ERROR_REF);
+        }
+        const [[rowStart, colStart], [rowEnd, colEnd]] = range;
 
         const startCell: RangeCell = {
             row: rowStart,

@@ -21,8 +21,10 @@ import { describe, expect, it } from 'bun:test';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { handlePasteByClick } from '../../../state/events/paste';
+import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { copy } from '../../../state/modules/selection';
 import { contextFactory } from '../factories/context';
+import { edit, typed } from '../factories/edit-cycle';
 
 // Explicit selection builders. selectionFactory takes (row, column, ...) as
 // [start, end] pairs; hand-writing those inline is error-prone, so name the two
@@ -134,6 +136,22 @@ describe('plain-text paste (tab/newline matrix)', () => {
         // stays a string; not parseFloat'd to 123
         expect(d[0][0]?.v).toBe('00123');
     });
+
+    it('parses pasted text the way typed entry does', () => {
+        const ctx = makeCtx(4, 4, (d) => {
+            d[0][1] = { v: 1, m: '1.00', ct: { fa: '0.00', t: 'n' } };
+            d[0][2] = { v: 45000, m: '15/03/2023', ct: { fa: 'dd/mm/yyyy', t: 'd' } };
+            d[0][3] = { f: '=A1', v: 5, m: '5' };
+        });
+        handlePasteByClick(ctx, '0x10\t0x10\t2024-05-06\t1,234.5');
+
+        const d = ctx.sheets[0].data!;
+        expect(d[0][0]?.v).toBe('0x10');
+        expect(d[0][1]?.v).toBe('0x10');
+        expect(d[0][2]).toMatchObject({ v: 45418, m: '06/05/2024', ct: { fa: 'dd/mm/yyyy', t: 'd' } });
+        expect(d[0][3]?.v).toBe(1234.5);
+        expect(d[0][3]?.f).toBeUndefined();
+    });
 });
 
 describe('formula paste — relative refs shift, absolute refs stay (C5 tokenizer contract)', () => {
@@ -184,6 +202,18 @@ describe('formula paste — relative refs shift, absolute refs stay (C5 tokenize
         copyThenPaste(ctx, single(2, 2), single(1, 1));
 
         expect(ctx.sheets[0].data![1][1]?.f).toBe('=C3');
+    });
+
+    it('shifts both axes of a range at once, re-sorting legs that cross', () => {
+        const ctx = makeCtx(8, 8, (d) => {
+            d[1][1] = { f: '=SUM(A1:A$1)', v: 0, m: '0' };
+            d[1][2] = { f: '=SUM(A1:$B$2)', v: 0, m: '0' };
+        });
+        copyThenPaste(ctx, single(1, 1), single(4, 2));
+        copyThenPaste(ctx, single(1, 2), single(3, 5));
+
+        expect(ctx.sheets[0].data![4][2]?.f).toBe('=SUM(B$1:B4)');
+        expect(ctx.sheets[0].data![3][5]?.f).toBe('=SUM($B$2:D3)');
     });
 });
 
@@ -405,5 +435,100 @@ describe('copy/paste round-trip (item 6)', () => {
         expect(pick(d[6][7])).toEqual(pick(d[1][2]));
         expect(pick(d[7][6])).toEqual(pick(d[2][1]));
         expect(pick(d[7][7])).toEqual(pick(d[2][2]));
+    });
+});
+
+describe('pasted formulas and the dependency map', () => {
+    const pasteText = (text: string, r: number, c: number) => (d: Context) => {
+        d.selections = single(r, c);
+        handlePasteByClick(d, text);
+    };
+
+    for (const warm of [false, true]) {
+        it(`a pasted formula string recalcs when its precedent changes (${warm ? 'warm' : 'cold'} map)`, () => {
+            let ctx = makeCtx(6, 6, (d) => {
+                d[0][0] = { v: 5, m: '5' };
+            });
+            if (warm) warmFormulaCellInfoMap(ctx);
+
+            [ctx] = edit(ctx, pasteText('=A1*3', 0, 2));
+            expect(ctx.sheets[0].data![0][2]?.v).toBe(15);
+            [ctx] = edit(ctx, typed(0, 0, '2'));
+
+            expect(ctx.sheets[0].data![0][2]?.v).toBe(6);
+        });
+    }
+
+    // One!A1 = 5, One!B1 = =A1*2, Two!A1 = 100; B1 is cut from One and pasted at Two!D1.
+    function cutAcrossSheets(): Context {
+        const one = grid(6, 6);
+        one[0][0] = { v: 5, m: '5' };
+        one[0][1] = { f: '=A1*2', v: 10, m: '10' };
+        const two = grid(6, 6);
+        two[0][0] = { v: 100, m: '100' };
+        const base = contextFactory({
+            currentSheetId: 'id_1',
+            selections: single(0, 0),
+            sheets: [
+                { name: 'One', id: 'id_1', order: 0, data: one, calcChain: [{ r: 0, c: 1, id: 'id_1' }] },
+                { name: 'Two', id: 'id_2', order: 1, data: two, calcChain: [] },
+            ],
+        }) as Context;
+        warmFormulaCellInfoMap(base);
+        const [ctx] = edit(base, (d) => {
+            d.selections = single(0, 1);
+            copy(d);
+            d.pasteIsCut = true;
+            d.currentSheetId = 'id_2';
+            d.selections = single(0, 3);
+            handlePasteByClick(d, 'internal');
+        });
+        return ctx;
+    }
+
+    it('a formula cut to another sheet is not resurrected by its old precedent', () => {
+        let ctx = cutAcrossSheets();
+        expect(ctx.sheets[0].data![0][1]).toBeNull();
+
+        [ctx] = edit(ctx, (d) => {
+            d.currentSheetId = 'id_1';
+            typed(0, 0, '7')(d);
+        });
+
+        expect(ctx.sheets[0].data![0][1]).toBeNull();
+    });
+
+    it('a formula cut to another sheet evaluates against its new sheet at once', () => {
+        const ctx = cutAcrossSheets();
+
+        expect(ctx.sheets[1].data![0][3]?.v).toBe(200);
+        expect(ctx.sheets[1].data![0][3]?.m).toBe('200');
+    });
+
+    it('a same-sheet cut keeps the formula value and recalcs the vacated cell dependents', () => {
+        const base = makeCtx(6, 6, (d) => {
+            d[0][0] = { v: 5, m: '5' };
+            d[0][1] = { f: '=A1*2', v: 10, m: '10' };
+            d[0][2] = { f: '=B1+1', v: 11, m: '11' };
+        });
+        base.sheets[0].calcChain = [
+            { r: 0, c: 1, id: 'id_1' },
+            { r: 0, c: 2, id: 'id_1' },
+        ];
+        warmFormulaCellInfoMap(base);
+        const [ctx] = edit(base, (d) => copyThenPaste(d, single(0, 1), single(3, 3), { cut: true }));
+
+        const data = ctx.sheets[0].data!;
+        expect(data[3][3]?.v).toBe(10);
+        expect(data[0][2]?.v).toBe(1);
+    });
+
+    it('a formula cut to another sheet recalcs there', () => {
+        let ctx = cutAcrossSheets();
+        expect(ctx.sheets[1].data![0][3]?.f).toBe('=A1*2');
+
+        [ctx] = edit(ctx, typed(0, 0, '3'));
+
+        expect(ctx.sheets[1].data![0][3]?.v).toBe(6);
     });
 });

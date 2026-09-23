@@ -118,12 +118,13 @@ describe('engine/formula-utils — iscelldata', () => {
         expect(iscelldata('')).toBe(false);
     });
 
-    test('rejects reversed range B1:A1 (col reversed)', () => {
-        expect(iscelldata('B1:A1')).toBe(false);
-    });
-
-    test('rejects reversed range A3:A1 (row reversed)', () => {
-        expect(iscelldata('A3:A1')).toBe(false);
+    // Excel reads a reversed range as its sorted twin, so it is a ref the shifters must see.
+    test('accepts reversed ranges', () => {
+        expect(iscelldata('B1:A1')).toBe(true);
+        expect(iscelldata('A3:A1')).toBe(true);
+        expect(iscelldata('A$3:A1')).toBe(true);
+        expect(iscelldata('C:A')).toBe(true);
+        expect(iscelldata('3:1')).toBe(true);
     });
 
     test('rejects number-only string', () => {

@@ -1,5 +1,6 @@
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { isEmpty, isNil, isPlainObject } from 'es-toolkit/compat';
+import { cellWrapsText } from '../../engine/format';
 import type { Cell, CellStyle } from '../../engine/types';
 import type { Context } from '../context';
 import { isdatatypemulti } from '.';
@@ -369,7 +370,7 @@ export function getCellTextInfo(
     // Vertical alignment
     const verticalAlign = normalizedCellAttr(cell, 'vt');
 
-    const tb = normalizedCellAttr(cell, 'tb'); // wrap overflow
+    const wrap = cellWrapsText(cell);
     // rt: signed degrees in [-90, 90] (positive = CCW / "up", negative = CW / "down"),
     // or 'vertical' for stacked text. The two branches that follow (vertical-stack vs.
     // diagonal/horizontal) stay separate; only the diagonal branch needs the magnitude
@@ -503,7 +504,7 @@ export function getCellTextInfo(
 
                 textH_all_cache += textH;
 
-                if (tb === '2' && !shareCell.wrap) {
+                if (wrap && !shareCell.wrap) {
                     if (textH_all_cache > cellHeight && !isNil(textH_all_Column[colIndex])) {
                         textH_all_ColumnHeight.push(textH_all_cache - textH);
                         textH_all_cache = textH;
@@ -555,7 +556,7 @@ export function getCellTextInfo(
 
                 textH_all_cache += textH;
 
-                if (tb === '2') {
+                if (wrap) {
                     if (textH_all_cache > cellHeight && !isNil(textH_all_Column[colIndex])) {
                         textH_all_ColumnHeight.push(textH_all_cache - textH);
                         textH_all_cache = textH;
@@ -659,9 +660,7 @@ export function getCellTextInfo(
             renderCtx.textBaseline = 'bottom';
         }
 
-        if (tb === '2' || isInline) {
-            // wrap
-
+        if (wrap || isInline) {
             let textW_all = 0; // Total width/height after splitting
             let textH_all = 0;
             let textW_all_inner = 0;
@@ -787,7 +786,7 @@ export function getCellTextInfo(
 
                     if (rt !== 0) {
                         // rotate
-                        if (height + space_height > cellHeight && !isNil(text_all_split[splitIndex]) && tb === '2') {
+                        if (height + space_height > cellHeight && !isNil(text_all_split[splitIndex]) && wrap) {
                             if (!isNil(spaceOrTwoByteIndex) && spaceOrTwoByteIndex < i) {
                                 for (let s = 0; s < spaceOrTwoByteIndex - anchor; s += 1) {
                                     text_all_split[splitIndex].push(buildItem(shareCells[s]));
@@ -824,7 +823,7 @@ export function getCellTextInfo(
                         }
                     } else {
                         // plain
-                        if (width + space_width > cellWidth && !isNil(text_all_split[splitIndex]) && tb === '2') {
+                        if (width + space_width > cellWidth && !isNil(text_all_split[splitIndex]) && wrap) {
                             if (!isNil(spaceOrTwoByteIndex) && spaceOrTwoByteIndex < i) {
                                 for (let s = 0; s < spaceOrTwoByteIndex - anchor; s += 1) {
                                     text_all_split[splitIndex].push(buildItem(shareCells[s]));

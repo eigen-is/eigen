@@ -554,6 +554,40 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('1:1')?.mc).toEqual({ r: 0, c: 0 });
     });
 
+    test('wrapped numbers and dates in a narrow column count as one line for the row height', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Wrap');
+        ws.getColumn(1).width = 4;
+        ws.getCell('A1').value = 282547512345.75;
+        ws.getCell('A2').value = { formula: '1/3', result: 0.333333333333333 };
+        ws.getCell('A3').value = new Date(Date.UTC(2023, 2, 15));
+        ws.getCell('A3').numFmt = 'yyyy-mm-dd';
+        ws.getCell('A4').value = 'wrapped text long enough to need lines';
+        for (const a1 of ['A1', 'A2', 'A3', 'A4']) ws.getCell(a1).alignment = { wrapText: true };
+        const sheets = await parseWorkbook(workbook);
+        const rowlen = sheets[0].config?.rowlen ?? {};
+        expect(rowlen['0']).toBeUndefined();
+        expect(rowlen['1']).toBeUndefined();
+        expect(rowlen['2']).toBeUndefined();
+        expect(rowlen['3']).toBeGreaterThan(100);
+    });
+
+    test('wrapped text sizes its row the same whether plain, rich, hyperlinked or a formula result', async () => {
+        const text = 'wrapped text long enough to need lines';
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Wrap');
+        ws.getColumn(1).width = 4;
+        ws.getCell('A1').value = text;
+        ws.getCell('A2').value = { richText: [{ text: 'wrapped text ' }, { text: 'long enough to need lines' }] };
+        ws.getCell('A3').value = { text, hyperlink: 'https://example.com' };
+        ws.getCell('A4').value = { formula: 'LOWER(B4)', result: text };
+        ws.getCell('A5').value = 'one\ntwo\nthree';
+        ws.getCell('A6').value = true;
+        for (let row = 1; row <= 6; row++) ws.getCell(row, 1).alignment = { wrapText: true };
+        const rowlen = (await parseWorkbook(workbook))[0].config?.rowlen ?? {};
+        expect(rowlen).toEqual({ '0': 164, '1': 164, '2': 164, '3': 164, '4': 85, '5': 26 });
+    });
+
     test('convert preserves formulas in celldata', async () => {
         const buffer = await buildXlsxBuffer([
             { a1: 'A1', value: 1 },
@@ -615,7 +649,8 @@ describe('Sheets xlsx conversion fidelity', () => {
             cell.value = value;
             cell.numFmt = numFmt;
         }
-        ws.getCell('B1').value = 100.5; // General/missing format stays the raw string
+        ws.getCell('B1').value = 100.5; // General/missing format
+        ws.getCell('B2').value = 0.1 + 0.2; // float noise General hides, as in Excel
         const text = ws.getCell('C1');
         text.value = 'hello';
         text.numFmt = '"€"#,##0.00'; // a string cell with a currency numFmt stays the string
@@ -638,6 +673,8 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('5:0')?.m).toBe(' € 145.20 ');
 
         expect(byCoord.get('0:1')?.m).toBe('100.5');
+        expect(byCoord.get('1:1')?.v).toBe(0.30000000000000004);
+        expect(byCoord.get('1:1')?.m).toBe('0.3');
         expect(byCoord.get('0:2')?.m).toBe('hello');
 
         // Import-time recalc recomputes formula cells through our engine, so the
@@ -646,6 +683,26 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('0:3')?.f).toBe('=A3*2');
         expect(byCoord.get('0:3')?.v).toBe(180);
         expect(byCoord.get('0:3')?.m).toBe('€180');
+    });
+
+    test('a malformed numFmt shows the number as General', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const cell = workbook.addWorksheet('Numbers').getCell('A1');
+        cell.value = 1234.5;
+        cell.numFmt = '#,##0;;;;;';
+        const sheets = await parseWorkbook(workbook);
+        expect(sheets[0].celldata?.[0]?.v).toMatchObject({ v: 1234.5, m: '1234.5' });
+    });
+
+    test("convert shows General numbers as Excel's default-width General", async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('General');
+        const values = [123456789012, 1234567.891234, 1.5e-10, 1e21, -0.1 - 0.2];
+        for (const [i, value] of values.entries()) ws.getCell(i + 1, 1).value = value;
+        const sheets = await parseWorkbook(workbook);
+        const byRow = new Map((sheets[0].celldata ?? []).map((c) => [c.r, c.v?.m] as const));
+
+        expect(values.map((_, i) => byRow.get(i))).toEqual(['1.23457E+11', '1234567.891', '1.5E-10', '1E+21', '-0.3']);
     });
 
     test("convert displays literal booleans in the engine's uppercase TRUE/FALSE", async () => {
@@ -1040,6 +1097,28 @@ describe('Sheets xlsx conversion fidelity', () => {
                 conditionRange: [],
                 conditionValue: ['=LEN(D2)>2'],
             },
+        ]);
+    });
+
+    test('convert pre-shifts a sub-range formula on both axes at once', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Expr');
+        ws.addConditionalFormatting({
+            ref: 'A1:A2 D3:D4',
+            rules: [
+                {
+                    type: 'expression',
+                    formulae: ['SUM(A1:$B$2)>0'],
+                    priority: 1,
+                    style: { font: { color: { argb: 'FF0000FF' } } },
+                },
+            ],
+        });
+        const sheets = await parseWorkbook(workbook);
+
+        expect(sheets[0].conditionalFormatRules).toMatchObject([
+            { cellrange: [{ row: [0, 1], column: [0, 0] }], conditionValue: ['=SUM(A1:$B$2)>0'] },
+            { cellrange: [{ row: [2, 3], column: [3, 3] }], conditionValue: ['=SUM($B$2:D3)>0'] },
         ]);
     });
 

@@ -3,11 +3,11 @@
 // the index rewrite must preserve: cross-sheet transitive recompute, index
 // updates when formulas change, and rebuild-after-reset.
 
-import { describe, expect, it } from 'bun:test';
-import { enablePatches, produceWithPatches } from 'immer';
+import { describe, expect, it, spyOn } from 'bun:test';
+import { enablePatches, isDraft, produceWithPatches } from 'immer';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
-import { setCellValue } from '../../../state/modules/cell';
+import * as cellModule from '../../../state/modules/cell';
 import { setFormulaCellInfo } from '../../../state/modules/formula-cache';
 import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { contextFactory } from '../factories/context';
@@ -40,7 +40,7 @@ function editCell(ctx: Context, r: number, c: number, value: number, id: string)
     // then the cell itself is written, then refresh applies dependent results.
     execFunctionGroup(ctx, r, c, value, id);
     const data = ctx.sheets[ctx.sheets.findIndex((s) => s.id === id)].data!;
-    setCellValue(ctx, r, c, data, value);
+    cellModule.setCellValue(ctx, r, c, data, value);
     groupValuesRefresh(ctx);
 }
 
@@ -71,6 +71,58 @@ describe('execFunctionGroup — index-driven recalc', () => {
 
         expect(ctx.sheets[0].data![0][1]?.v).toBe(6);
         expect(ctx.sheets[1].data![0][0]?.v).toBe(7);
+    });
+
+    it('builds the whole map when a paste or delete registers its own cells first', () => {
+        const ctx = makeCtx();
+        ctx.sheets[0].data![3][3] = { f: '=1+1', v: 2, m: '2' };
+        setFormulaCellInfo(ctx, { r: 3, c: 3, id: 'id_1' });
+
+        editCell(ctx, 0, 0, 7, 'id_1');
+
+        expect(ctx.sheets[0].data![0][1]?.v).toBe(14);
+        expect(ctx.sheets[1].data![0][0]?.v).toBe(15);
+    });
+
+    it('builds the whole map right when the first recalc runs on another tab', () => {
+        const ctx = makeCtx();
+
+        // Search-and-replace recalcs a cell on Two while One is on screen.
+        execFunctionGroup(ctx, 3, 3, 1, 'id_2', ctx.sheets[1].data);
+        editCell(ctx, 0, 0, 7, 'id_1');
+
+        expect(ctx.sheets[0].data![0][1]?.v).toBe(14);
+    });
+
+    it('builds the map from a plain snapshot, not through the edit draft', () => {
+        const base = makeCtx();
+        const reads = spyOn(cellModule, 'getcellFormula');
+        let allReads = 0;
+        let draftReads = 0;
+
+        produceWithPatches(base, (draft) => {
+            execFunctionGroup(draft as Context, 0, 0, 7, 'id_1');
+            allReads = reads.mock.calls.length;
+            draftReads = reads.mock.calls.filter(([ctx]) => isDraft(ctx)).length;
+        });
+        reads.mockRestore();
+
+        expect(allReads).toBeGreaterThanOrEqual(2);
+        expect(draftReads).toBe(0);
+    });
+
+    it("builds the map from a plain matrix when handed the edit draft's", () => {
+        const base = makeCtx();
+        const reads = spyOn(cellModule, 'getcellFormula');
+        let draftReads = -1;
+
+        produceWithPatches(base, (draft) => {
+            warmFormulaCellInfoMap(draft as Context, draft.sheets[0].data);
+            draftReads = reads.mock.calls.filter(([, , , , data]) => data != null && isDraft(data)).length;
+        });
+        reads.mockRestore();
+
+        expect(draftReads).toBe(0);
     });
 
     it('stops recomputing against a formula after it is rewritten to other deps', () => {
@@ -144,5 +196,19 @@ describe('execFunctionGroup — index-driven recalc', () => {
         expect(next.sheets[1].data![0][0]?.v).toBe(15);
         // base untouched
         expect(base.sheets[0].data![0][1]?.v).toBe(10);
+    });
+
+    it('recomputes a formula over a reversed range when a cell inside it changes', () => {
+        const ctx = makeCtx();
+        ctx.sheets[0].data![0][2] = { f: '=SUM(A3:A1)', v: 5, m: '5' };
+        ctx.sheets[0].data![1][3] = { f: '=SUM(B$3:A1)', v: 15, m: '15' };
+        ctx.sheets[0].calcChain!.push({ r: 0, c: 2, id: 'id_1' }, { r: 1, c: 3, id: 'id_1' });
+        warmFormulaCellInfoMap(ctx);
+
+        cellModule.updateCell(ctx, 1, 0, null, 7);
+        groupValuesRefresh(ctx);
+
+        expect(ctx.sheets[0].data![0][2]?.v).toBe(12);
+        expect(ctx.sheets[0].data![1][3]?.v).toBe(22);
     });
 });

@@ -1,13 +1,13 @@
-import { type BorderType, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import type { BorderType } from '@workspace/lib/sheets';
 import { forEach, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
-import { is_date, parseCellInput, update } from '../../engine/format';
+import { is_date, numberDisplay, parseCellInput } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { GlobalCache } from '../types';
 import { clipToUsedExtent, getSheetIndex, isAllowEdit } from '../utils';
 import { applyBorder, clearSides } from './border';
 import { getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue } from './cell';
-import { colors } from './color';
+import { rangeColor } from './color';
 import { setFormulaCellInfo } from './formula-cache';
 import { israngeseleciton } from './formula-editor';
 import { execFunctionGroup, execfunction } from './formula-exec';
@@ -69,7 +69,7 @@ export function updateFormatCell(
                     value = Number(value!);
                 }
 
-                const mask = update(String(foucsStatus), value);
+                const mask = numberDisplay(value, String(foucsStatus));
                 let type = 'n';
 
                 if (
@@ -148,7 +148,7 @@ export function updateFormatCell(
                 if (value && isPlainObject(value)) {
                     updateInlineStringFormatOutside(value, attr, foucsStatus);
                     (value as Record<string, unknown>)[attr as string] = foucsStatus;
-                    const cellWidth = cfg.columnlen?.[c] || ctx.sheets[sheetIndex].defaultColWidth;
+                    const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
                     if (attr === 'fs' && canvas) {
                         const textInfo = getCellTextInfo(d[r][c]!, canvas, ctx, {
                             r,
@@ -157,8 +157,7 @@ export function updateFormatCell(
                         });
                         if (textInfo?.textHeightAll == null) continue;
                         const rowHeight = round(textInfo.textHeightAll);
-                        const currentRowHeight =
-                            cfg.rowlen?.[r] || ctx.sheets[sheetIndex].defaultRowHeight || SHEET_DEFAULT_ROW_HEIGHT;
+                        const currentRowHeight = cfg.rowlen?.[r] || ctx.defaultrowlen;
                         if (rowHeight > currentRowHeight && cfg.customHeight?.[r] !== 1) {
                             (cfg.rowlen ??= {})[r] = rowHeight;
                         }
@@ -327,9 +326,9 @@ function activeFormulaInput(
     const col_pre = colLocationByIndex(columnh[0], ctx.visibledatacolumn)[0];
     const col = colLocationByIndex(columnh[1], ctx.visibledatacolumn)[1];
 
-    const formulaTxt = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span class="sheet-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${
-        colors[0]
-    };">${getRangetxt(
+    const formulaTxt = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span class="sheet-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${rangeColor(
+        0,
+    )};">${getRangetxt(
         ctx,
         ctx.currentSheetId,
         { row: rowh, column: columnh },

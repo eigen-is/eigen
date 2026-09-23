@@ -8,10 +8,10 @@
 // off for them via `sheetsNeedRecalc`.
 //
 // The dependency-graph builder is a faithful PORT of the state layer's
-// `setFormulaCellInfo`/`getcellrange`/`isFunctionRange` (state/modules/
-// formula-cache.ts + formula-exec.ts). The engine has zero state imports (hard
-// boundary), so the logic is duplicated here over a plain `Sheet[]` instead of
-// a `Context`. The INDIRECT/OFFSET/INDEX special-casing is preserved — a
+// `setFormulaCellInfo`/`isFunctionRange` (state/modules/formula-cache.ts +
+// formula-exec.ts); both resolve refs through the shared `resolveCellRange`.
+// The engine has zero state imports (hard boundary), so the logic is
+// duplicated here over a plain `Sheet[]` instead of a `Context`. The INDIRECT/OFFSET/INDEX special-casing is preserved — a
 // from-scratch extractor would mis-order those.
 
 import type { Cell, CellMatrix, Sheet } from '@workspace/lib/sheets';
@@ -20,10 +20,9 @@ import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
 import { DependencyIndex } from './dependency-index';
-import { booleanDisplay, update } from './format';
+import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
-import { calPostfixExpression, iscelldata, operatorjson, operatorPriority } from './formula-utils';
-import { SHEET_NAME_PREFIX } from './parser/helper/cell';
+import { calPostfixExpression, iscelldata, operatorjson, operatorPriority, resolveCellRange } from './formula-utils';
 import type {
     CalcChainEntry,
     EvaluationResult,
@@ -47,27 +46,6 @@ function isVolatileFormula(formula: string): boolean {
     return VOLATILE_RE.test(formula);
 }
 
-// Ported from state's columnCharToIndex (state/utils). NOT engine's
-// columnLabelToIndex: that returns -1 for '' where this returns NaN, and the
-// range parser below distinguishes "no column part" (NaN → whole row) from
-// "column A" via the NaN sentinel.
-function columnCharToIndex(a: string): number {
-    if (a == null || a.length === 0) {
-        return NaN;
-    }
-    const str = a.toLowerCase().split('');
-    const al = str.length;
-    let numout = 0;
-    for (let i = 0; i < al; i += 1) {
-        const charnum = str[i].charCodeAt(0) - 96;
-        numout += charnum * 26 ** (al - i - 1);
-    }
-    if (numout === 0) {
-        return NaN;
-    }
-    return numout - 1;
-}
-
 // Materialized, id-keyed view the ported graph builder reads instead of a
 // Context. `data` is always the dense matrix (never celldata).
 type WorkingSheet = { sheet: Sheet; id: string; name: string; data: CellMatrix };
@@ -80,121 +58,6 @@ type GraphCtx = {
     // or `${text}_${sheetId}` (same-sheet).
     cellTextToIndexList: Record<string, FormulaDependency>;
 };
-
-// ── Ported dependency extraction (state/modules/formula-exec.ts) ───────────────
-
-const rowColumnRegexp = '[$]?[A-Za-z]+[$]?[0-9]+';
-const rowColumnWithSheetName = `(?:${SHEET_NAME_PREFIX})?(${rowColumnRegexp})`;
-const LABEL_EXTRACT_REGEXP = new RegExp(`^${rowColumnWithSheetName}(?:[:]${rowColumnWithSheetName})?$`);
-
-function addToCellIndexList(g: GraphCtx, txt: string, infoObj: FormulaDependency | null): void {
-    if (txt == null || txt.length === 0 || infoObj == null) {
-        return;
-    }
-    if (txt.indexOf('!') > -1) {
-        txt = txt.replace(/\\'/g, "'").replace(/''/g, "'");
-        g.cellTextToIndexList[txt] = infoObj;
-    } else {
-        g.cellTextToIndexList[`${txt}_${infoObj.sheetId}`] = infoObj;
-    }
-}
-
-// Port of getcellrange: resolve a single cell / range reference into a
-// FormulaDependency. `formulaId` is always the formula cell's sheet id (state
-// passes formulaCell.id in every call), so the ctx.currentSheetId fallback is
-// dropped. `data` is that sheet's matrix, consulted for same-sheet whole-range
-// bounds.
-function getcellrange(g: GraphCtx, txt: string, formulaId: string, data: CellMatrix): FormulaDependency | null {
-    if (txt == null || txt.length === 0) {
-        return null;
-    }
-
-    let rangetxt = '';
-    let sheetId: string | undefined;
-    let sheetdata: CellMatrix | null | undefined = null;
-
-    if (txt.indexOf('!') > -1) {
-        if (txt in g.cellTextToIndexList) {
-            return g.cellTextToIndexList[txt];
-        }
-
-        const matchRes = txt.match(LABEL_EXTRACT_REGEXP);
-        if (matchRes == null) {
-            return null;
-        }
-        const [, sheettxt1, starttxt1, sheettxt2, starttxt2] = matchRes;
-        if (sheettxt2 != null && sheettxt1 !== sheettxt2) {
-            return null;
-        }
-        rangetxt = starttxt2 ? `${starttxt1}:${starttxt2}` : starttxt1;
-        const sheettxt = sheettxt1.replace(/^'|'$/g, '').replace(/\\'/g, "'").replace(/''/g, "'");
-
-        for (const w of g.sheets) {
-            if (sheettxt === w.name) {
-                sheetId = w.id;
-                sheetdata = w.data;
-                break;
-            }
-        }
-    } else {
-        if (`${txt}_${formulaId}` in g.cellTextToIndexList) {
-            return g.cellTextToIndexList[`${txt}_${formulaId}`];
-        }
-        const index = g.indexById.get(formulaId);
-        if (index == null) {
-            return null;
-        }
-        sheetId = g.sheets[index].id;
-        sheetdata = data;
-        rangetxt = txt;
-    }
-
-    if (sheetdata == null) {
-        return null;
-    }
-
-    if (rangetxt.indexOf(':') === -1) {
-        const row = parseInt(rangetxt.replace(/[^0-9]/g, ''), 10) - 1;
-        const col = columnCharToIndex(rangetxt.replace(/[^A-Za-z]/g, ''));
-
-        if (!Number.isNaN(row) && !Number.isNaN(col)) {
-            const item: FormulaDependency = { row: [row, row], column: [col, col], sheetId };
-            addToCellIndexList(g, txt, item);
-            return item;
-        }
-        return null;
-    }
-
-    const rangetxtArr = rangetxt.split(':');
-    const row: [number, number] = [-1, -1];
-    const col: [number, number] = [-1, -1];
-    row[0] = parseInt(rangetxtArr[0].replace(/[^0-9]/g, ''), 10) - 1;
-    row[1] = parseInt(rangetxtArr[1].replace(/[^0-9]/g, ''), 10) - 1;
-    if (Number.isNaN(row[0])) {
-        row[0] = 0;
-    }
-    if (Number.isNaN(row[1])) {
-        row[1] = sheetdata.length - 1;
-    }
-    if (row[0] > row[1]) {
-        return null;
-    }
-    col[0] = columnCharToIndex(rangetxtArr[0].replace(/[^A-Za-z]/g, ''));
-    col[1] = columnCharToIndex(rangetxtArr[1].replace(/[^A-Za-z]/g, ''));
-    if (Number.isNaN(col[0])) {
-        col[0] = 0;
-    }
-    if (Number.isNaN(col[1])) {
-        col[1] = sheetdata[0].length - 1;
-    }
-    if (col[0] > col[1]) {
-        return null;
-    }
-
-    const item: FormulaDependency = { row, column: col, sheetId };
-    addToCellIndexList(g, txt, item);
-    return item;
-}
 
 // Port of checkSpecialFunctionRange: fires the range callback for the quoted
 // range argument of an INDIRECT/OFFSET/INDEX call once isFunctionRange has
@@ -481,7 +344,7 @@ function extractDependencies(
     const formulaDependency: FormulaDependency[] = [];
     if (isOffsetFunc) {
         isFunctionRange(calc_funcStr, (str_nb: string) => {
-            const range = getcellrange(g, str_nb.trim(), sheetId, data);
+            const range = resolveCellRange(g.sheets, g.cellTextToIndexList, str_nb.trim(), sheetId, data);
             if (range != null) {
                 formulaDependency.push(range);
             }
@@ -556,7 +419,7 @@ function extractDependencies(
                 continue;
             }
 
-            const range = getcellrange(g, t.trim(), sheetId, data);
+            const range = resolveCellRange(g.sheets, g.cellTextToIndexList, t.trim(), sheetId, data);
             if (range == null) {
                 continue;
             }
@@ -570,12 +433,7 @@ function extractDependencies(
 
 // ── Write-back ─────────────────────────────────────────────────────────────────
 
-// Derive `m` (display) + `v` from an evaluation result, mirroring the client's
-// setCellValue where it is cheap to: error sentinels become `v = m = '#…'` with
-// `ct.t = 'e'`; booleans render TRUE/FALSE; a cell carrying a usable format mask
-// gets `m = update(ct.fa, v)`; everything else falls back to `String(v)`. The
-// mask-less numeric/date inference the client does via `parseCellInput` is accepted
-// as small drift rather than re-coupling the format decision tree.
+// Mirrors the client's setCellValue where cheap: error sentinels carry ct.t 'e', the rest display like the editor.
 function writeCellValue(cell: Cell, result: EvaluationResult): void {
     if (result.type === 'error') {
         const sentinel = String(result.value);
@@ -592,11 +450,8 @@ function writeCellValue(cell: Cell, result: EvaluationResult): void {
         return;
     }
 
-    // A numeric result whose cell carries a real format mask renders through it
-    // (currency/percent/date/custom). numfmt always yields a display string.
-    const fa = cell.ct?.fa;
-    if (fa != null && fa !== 'General' && typeof result.value === 'number') {
-        cell.m = update(fa, result.value);
+    if (typeof result.value === 'number') {
+        cell.m = numberDisplay(result.value, cell.ct?.fa);
         return;
     }
 

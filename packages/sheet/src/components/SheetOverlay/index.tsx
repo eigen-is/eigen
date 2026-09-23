@@ -10,9 +10,9 @@ import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
 import {
     api,
+    applySheetFilter,
     type Context,
     computeOverlayRegions,
-    createFilterOptions,
     type GlobalCache,
     getCellHyperlink,
     getCellRowColumn,
@@ -289,19 +289,20 @@ export const SheetOverlay: React.FC = () => {
 
     // Keep ctx.filter/filterRange in sync with the current sheet and recompute the
     // filter-button geometry (ctx.filterOptions) the canvas draws every frame —
-    // row/col metric changes, sheet switches and filter-range edits all re-derive.
+    // row/col metric changes, sheet switches, edit-right changes and filter-range edits all re-derive.
     const sheetIndex = getSheetIndex(context, context.currentSheetId);
     const sheetFilterRange = sheetIndex == null ? undefined : context.sheets[sheetIndex].filterRange;
     // biome-ignore lint/correctness/useExhaustiveDependencies: deps are intentional triggers — body reads `draftCtx` so biome can't see the connection
     useEffect(() => {
-        setContext((draftCtx) => {
-            const sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
-            if (sheetIdx == null) return;
-            draftCtx.filterRange = draftCtx.sheets[sheetIdx].filterRange;
-            draftCtx.filter = draftCtx.sheets[sheetIdx].filter || {};
-            createFilterOptions(draftCtx, draftCtx.filterRange, undefined);
-        });
-    }, [context.visibledatarow, context.visibledatacolumn, setContext, context.currentSheetId, sheetFilterRange]);
+        setContext((draftCtx) => applySheetFilter(draftCtx));
+    }, [
+        context.visibledatarow,
+        context.visibledatacolumn,
+        setContext,
+        context.currentSheetId,
+        context.allowEdit,
+        sheetFilterRange,
+    ]);
 
     // The filter dropdown is position:fixed, positioned once from globalCache scroll
     // offsets, so it detaches from its column icon once the grid scrolls. Close it on

@@ -12,11 +12,12 @@
 // never assert on internal call sequences.
 
 import { describe, expect, it, spyOn } from 'bun:test';
+import { SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
 import { Window } from 'happy-dom';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { handlePaste } from '../../../state/events/paste';
-import { selectionCache } from '../../../state/modules/selection';
+import { copy, rangeValueToHtml, selectionCache } from '../../../state/modules/selection';
 import { contextFactory } from '../factories/context';
 import { pastedHtmlFactory } from '../factories/pasted-html';
 
@@ -338,6 +339,15 @@ describe('HTML-table paste — merges, borders, row height', () => {
         expect(ctx.sheets[0].data![2][1]?.v).toBe('a');
     });
 
+    it('writes no rowlen for a tr at the default row height', () => {
+        const ctx = makeCtx();
+        ctx.defaultrowlen = SHEET_DEFAULT_ROW_HEIGHT;
+        ctx.selections = single(2, 1);
+        pasteHtml(ctx, `<table><tr height=${SHEET_DEFAULT_ROW_HEIGHT}><td>a</td></tr></table>`);
+
+        expect(ctx.sheets[0].config?.rowlen?.[2]).toBeUndefined();
+    });
+
     it('leaves cfg.rowlen untouched for a tr with no height attribute', () => {
         const ctx = makeCtx();
         ctx.selections = single(2, 1);
@@ -392,5 +402,41 @@ describe('HTML-table paste — inert parsing (no live image load)', () => {
         // assigns to a live <div>, whose innerHTML would load the image in a browser.
         expect((g as { __pwned?: boolean }).__pwned).toBeUndefined();
         expect(madeDiv).toBe(false);
+    });
+});
+
+describe('Copy HTML — numeric cells carry their full value', () => {
+    function copiedHtml(cell: Cell): string {
+        const ctx = makeCtx();
+        ctx.sheets[0].data![0][0] = cell;
+        return rangeValueToHtml(ctx, 'id_1', [{ row: [0, 0], column: [0, 0] }]) ?? '';
+    }
+
+    it('a General number too long for General pastes back whole', () => {
+        const html = copiedHtml({ v: 123456789012, m: '1.23457E+11', ct: { fa: 'General', t: 'n' } });
+        expect(html).toContain('>123456789012<');
+
+        const target = makeCtx();
+        pasteHtml(target, html);
+        expect(target.sheets[0].data![0][0]?.v).toBe(123456789012);
+    });
+
+    it('float noise stays hidden at 15 significant digits', () => {
+        expect(copiedHtml({ v: 0.1 + 0.2, m: '0.3', ct: { fa: 'General', t: 'n' } })).toContain('>0.3<');
+    });
+
+    it('a masked number copies its display', () => {
+        expect(copiedHtml({ v: 0.4072, m: '40.72%', ct: { fa: '0.00%', t: 'n' } })).toContain('>40.72%<');
+    });
+
+    it('a copy pasted back into its own sheet still takes the internal path', () => {
+        const ctx = makeCtx();
+        ctx.sheets[0].data![0][0] = { v: 123456789012, m: '1.23457E+11', f: '=A2', ct: { fa: 'General', t: 'n' } };
+        ctx.selections = single(0, 0);
+        copy(ctx);
+        const html = rangeValueToHtml(ctx, 'id_1', ctx.selections) ?? '';
+        ctx.selections = single(0, 1);
+        pasteHtml(ctx, html);
+        expect(ctx.sheets[0].data![0][1]?.f).toBe('=B2');
     });
 });

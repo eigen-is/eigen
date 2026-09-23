@@ -1,12 +1,15 @@
 import { forEach, isNil, isNumber, isPlainObject } from 'es-toolkit/compat';
-import { format } from 'numfmt';
-import type { Cell, CellStyle } from '../../engine/types';
+import { numberDisplay } from '../../engine/format';
+import type { Cell, CellMatrix, CellStyle } from '../../engine/types';
 import type { Context } from '../context';
 import {
     delFunctionGroup,
     dropCellCache,
+    fillTouchesMerge,
     getTypeItemHide,
+    normalizeSelection,
     setCellValue as setCellValueInternal,
+    setFormulaCellInfo,
     updateCell,
     updateDropCell,
     updateFormatCell,
@@ -87,7 +90,7 @@ export function setCellValue(
     const { data } = sheet;
 
     if (value == null || value.toString().length === 0) {
-        delFunctionGroup(ctx, row, column, sheet.id);
+        dropFormula(ctx, sheet.id!, data, row, column);
         setCellValueInternal(ctx, row, column, data, value);
     } else if (value instanceof Object) {
         if (!data) throw sheetNotFound();
@@ -117,8 +120,10 @@ export function setCellValue(
             if (value.m != null) {
                 curv.m = value.m;
             }
-            delFunctionGroup(ctx, row, column, sheet.id);
+            if (value.f == null) dropFormula(ctx, sheet.id!, data, row, column);
+            else delFunctionGroup(ctx, row, column, sheet.id);
             setCellValueInternal(ctx, row, column, data, curv); // update text value
+            if (value.f != null) setFormulaCellInfo(ctx, { r: row, c: column, id: sheet.id! }, data, sheet.id);
         }
         forEach(value, (v, attr) => {
             if (FORMAT_KEYS.has(attr)) {
@@ -134,10 +139,19 @@ export function setCellValue(
         if (value.toString().substr(0, 1) === '=' || value.toString().substr(0, 5) === '<span') {
             updateCell(ctx, row, column, cellInput, value); // update formula value or convert inline string html to object
         } else {
-            delFunctionGroup(ctx, row, column, sheet.id);
+            dropFormula(ctx, sheet.id!, data, row, column);
             setCellValueInternal(ctx, row, column, data, value);
         }
     }
+}
+
+// A kept `f` would store the value as the formula's text result; typed entry drops it too.
+function dropFormula(ctx: Context, sheetId: string, data: CellMatrix | undefined, row: number, column: number) {
+    delFunctionGroup(ctx, row, column, sheetId);
+    const cell = data?.[row]?.[column];
+    if (cell?.f == null) return;
+    delete cell.f;
+    setFormulaCellInfo(ctx, { r: row, c: column, id: sheetId }, data, sheetId);
 }
 
 export function clearCell(ctx: Context, row: number, column: number, options: CommonOptions = {}) {
@@ -153,10 +167,7 @@ export function clearCell(ctx: Context, row: number, column: number, options: Co
         delete cell.m;
         delete cell.v;
 
-        if (cell.f != null) {
-            delete cell.f;
-            delFunctionGroup(ctx, row, column, sheet.id);
-        }
+        if (cell.f != null) dropFormula(ctx, sheet.id!, sheet.data, row, column);
     }
 }
 
@@ -188,7 +199,7 @@ export function setCellFormat(
     if (attr === 'ct' && (!ctValue || ctValue.fa == null || ctValue.t == null)) {
         throw new Error("'fa' and 't' should be present in value when attr is 'ct'");
     } else if (attr === 'ct' && !isNil(cellData.v)) {
-        cellData.m = format(ctValue!.fa!, cellData.v); // auto generate mask
+        cellData.m = numberDisplay(cellData.v, ctValue!.fa);
     }
 
     (cellData as Record<string, unknown>)[attr] = value;
@@ -202,6 +213,7 @@ export function autoFillCell(
     applyRange: SingleRange,
     direction: 'up' | 'down' | 'left' | 'right',
 ) {
+    if (fillTouchesMerge(ctx, copyRange, applyRange)) return;
     dropCellCache.copyRange = copyRange;
     dropCellCache.applyRange = applyRange;
     dropCellCache.direction = direction;
@@ -219,5 +231,14 @@ export function autoFillCell(
     } else {
         dropCellCache.applyType = '1';
     }
+    ctx.selections = normalizeSelection(ctx, [
+        {
+            row: [Math.min(copyRange.row[0], applyRange.row[0]), Math.max(copyRange.row[1], applyRange.row[1])],
+            column: [
+                Math.min(copyRange.column[0], applyRange.column[0]),
+                Math.max(copyRange.column[1], applyRange.column[1]),
+            ],
+        },
+    ]);
     updateDropCell(ctx);
 }

@@ -176,9 +176,7 @@ export function LinkEditCard({
                     type="button"
                     className="mr-1.5 cursor-pointer whitespace-nowrap hover:text-primary"
                     onClick={() => {
-                        setContext((draftCtx) =>
-                            goToLink(draftCtx, r, c, linkType, linkAddress, refs.cellArea.current!),
-                        );
+                        setContext((draftCtx) => goToLink(draftCtx, r, c, linkType, linkAddress));
                     }}
                 >
                     {linkType === 'webpage' ? 'Open link' : replaceHtml(GO_TO_FRAME, { linkAddress })}

@@ -16,10 +16,12 @@ import {
     type Image,
     insertImage,
     insertRowCol,
+    leaveCurrentSheet,
     type Op,
     opToPatch,
     type Presence,
     type Range,
+    registerSheetFormulas,
     removeActiveImage,
     removeImageByMediaName,
     replaceAllMatches,
@@ -64,31 +66,22 @@ export function generateAPIs(
                                 console.warn('[sheet] deleteRowCol op skipped:', e.code);
                             }
                         } else if (specialOp.op === 'addSheet') {
-                            // opToPatch prefixes every immer-patch path with 'sheets', so the
-                            // pre-existing `patches.filter(path[0] === 'name')` lookup was always empty.
-                            // addSheet pulls the name from `specialOp.value.name` (sheetData) directly.
-                            if (specialOp.value?.id) {
-                                addSheet(ctx_, settings, specialOp.value.id, false, undefined, specialOp.value);
+                            // The name comes from sheetData: opToPatch prefixes every patch path with 'sheets'.
+                            if (specialOp.value.id) {
+                                addSheet(ctx_, settings, specialOp.value.id, false, undefined, specialOp.value, true);
                             }
-                            const fileIndex = getSheetIndex(ctx_, specialOp.value.id) as number;
-                            api.initSheetData(ctx_, fileIndex, specialOp.value);
+                            const { id } = specialOp.value;
+                            const fileIndex = getSheetIndex(ctx_, id);
+                            if (fileIndex == null) continue;
+                            registerSheetFormulas(ctx_, id, api.initSheetData(ctx_, fileIndex, specialOp.value));
                         } else if (specialOp.op === 'deleteSheet') {
-                            deleteSheet(ctx_, specialOp.value.id);
+                            deleteSheet(ctx_, specialOp.value.id, true);
                             patches.length = 0;
                         }
                     }
                     if (ops[0]?.path?.[0] === 'filterRange') ctx_.filterRange = ops[0].value;
-                    else if (ops[0]?.path?.[0] === 'hide') {
-                        // Hide sheet
-                        if (ctx_.currentSheetId === ops[0].id) {
-                            const shownSheets = ctx_.sheets.filter(
-                                (sheet) => (sheet.hide === undefined || sheet.hide !== 1) && sheet.id !== ops[0].id,
-                            );
-                            const sorted = [...shownSheets].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-                            if (sorted.length > 0) {
-                                ctx_.currentSheetId = sorted[0].id as string;
-                            }
-                        }
+                    else if (ops[0]?.path?.[0] === 'hide' && ops[0].id === ctx_.currentSheetId) {
+                        leaveCurrentSheet(ctx_, ops[0].id);
                     }
                     createFilterOptions(ctx_, ctx_.filterRange, ops[0]?.id);
                     if (patches.length === 0) return;
@@ -97,6 +90,7 @@ export function generateAPIs(
                     } catch (e) {
                         console.error(e);
                     }
+                    ctx_.formulaCache.updateFormulaCache(ctx_, { patches, inversePatches: [] }, 'redo');
                 },
                 { noHistory: true },
             );
