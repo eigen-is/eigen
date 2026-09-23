@@ -55,8 +55,9 @@ function licLocation(prop: ICAL.Property, tzid: string): string | null {
         for (const vtimezone of root.getAllSubcomponents('vtimezone')) {
             const id = String(vtimezone.getFirstPropertyValue('tzid'));
             const location = vtimezone.getFirstPropertyValue('x-lic-location');
-            if (!locations.has(id))
+            if (!locations.has(id)) {
                 locations.set(id, typeof location === 'string' ? normalizeTimezone(location) : null);
+            }
         }
         licLocationsByRoot.set(root, locations);
     }
