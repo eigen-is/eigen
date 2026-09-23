@@ -170,15 +170,20 @@ $mailpit
 EOF
 }
 
-# in_cli_container [--user uid:gid] <command…>: runs in $INSTALL inside the no-Bun docker:cli image, with the
-# Docker socket, and the scratch folder at its own path so the bind mounts Compose creates resolve on the host.
+# in_cli_container [--stdin] [--user uid:gid] <command…>: runs in $INSTALL inside the no-Bun docker:cli image, with
+# the Docker socket, and the scratch folder at its own path so the bind mounts Compose creates resolve on the host.
+# --stdin passes this script's stdin through, for a piped answer; without it the command reads nothing.
 in_cli_container() {
-    local user=()
+    local user=() stdin=()
+    if [ "$1" = --stdin ]; then
+        stdin=(-i)
+        shift
+    fi
     if [ "$1" = --user ]; then
         user=(--user "$2" --group-add "$SOCKET_GID" -e HOME=/tmp)
         shift 2
     fi
-    docker run --rm --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
+    docker run --rm ${stdin[@]+"${stdin[@]}"} --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
         -v /var/run/docker.sock:/var/run/docker.sock -v "$SCRATCH:$SCRATCH" -w "$INSTALL" \
         -e EIGEN_API_IMAGE -e EIGEN_FRONTEND_IMAGE -e EIGEN_POSTFIX_IMAGE -e EIGEN_DOVECOT_IMAGE \
         -e EIGEN_ALLOW_ARCH -e NO_COLOR=1 ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"

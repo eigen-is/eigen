@@ -21,6 +21,11 @@ Usage: ./eigen <command>
 Commands:
   setup [flags]    Configure Eigen, get its images and start it. Without flags it asks;
                    ./eigen setup --help lists the flags.
+  status           Report on the version, the services, disk space, the last snapshot,
+                   the certificate and the mail queue.
+  reset-password <email> [--generate]
+                   Set a new password for an account and sign it out everywhere. It asks
+                   for the password; --generate makes one up and prints it.
   logs [service]   Follow the logs of every service, or of one: eigen-api, caddy,
                    eigen-static, postfix, dovecot, unbound.
   help             Show this help.
@@ -88,6 +93,12 @@ dc() {
     if [ "$MODE" = source ]; then set -- -f docker-compose.build.yml "$@"; fi
     docker compose --env-file .env.production -f docker-compose.yml "$@"
 }
+
+# The CLI inside the running API container, the only way to its control socket. exec bypasses the image
+# entrypoint, so the entry is spelled out; Compose's exec wants a terminal unless told -T.
+API_CLI=/app/apps/api/src/cli/index.ts
+EXEC_TTY=-T
+if [ -t 0 ] && [ -t 1 ]; then EXEC_TTY=''; fi
 
 # The CLI in the API image, as the operator, on this folder. RELAY_ENV names a variable it may read.
 cli() {
@@ -262,11 +273,72 @@ setup() {
     say "$GRAY" '└' "$next"
 }
 
+# Only the launcher can ask Docker, so it gathers the services, a pending update and the mail queue for the report.
+status() {
+    if [ ! -f .env.production ]; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
+    wordmark
+    preflight >/dev/null
+    tab=$(printf '\t')
+    listed=$(dc ps -a --format "{{.Service}}$tab{{.State}}$tab{{.Health}}") ||
+        die "Could not read the state of the services." "Fix what Docker Compose says above, then run ./eigen status again."
+    services=''
+    for service in $(dc config --services); do
+        line=$(printf '%s\n' "$listed" | grep "^$service$tab" | head -n 1)
+        services="$services${line:-$service${tab}missing$tab}
+"
+    done
+
+    case $services in *"eigen-api${tab}running$tab"*) ;; *)
+        printf '%s' "$services" | while IFS="$tab" read -r service state health; do
+            if [ "$state" = running ]; then color=$GREEN glyph='◇'; else color=$RED glyph='■'; fi
+            say "$color" "$glyph" "$(printf '%-14s %s' "$service" "$state${health:+, $health}")"
+        done
+        die "The API is not running, and the rest of the report comes from it." "./eigen logs eigen-api shows why it stopped."
+        ;;
+    esac
+
+    # Silent and best effort: a check that fails reads as unknown. A fetch as another user than the checkout's
+    # owner would leave objects in .git that the owner cannot write.
+    update=unknown
+    if [ "$MODE" = source ]; then
+        if [ -O .git ] && GIT_TERMINAL_PROMPT=0 git fetch --quiet >/dev/null 2>&1 &&
+            behind=$(git rev-list --count 'HEAD..@{upstream}' 2>/dev/null); then
+            if [ "$behind" = 0 ]; then update=current; else update="available $behind"; fi
+        fi
+    else
+        registry=${EIGEN_REGISTRY:-$(env_value EIGEN_REGISTRY)}
+        latest=$(docker manifest inspect -v "$registry/eigen-api:latest" 2>/dev/null |
+            sed -n 's/^ *"digest": *"\(sha256:[0-9a-f]*\)".*/\1/p' | head -n 1)
+        case $API_IMAGE in *@sha256:*)
+            if [ "${API_IMAGE#*@}" = "$latest" ]; then update=current; elif [ -n "$latest" ]; then update=available; fi
+            ;;
+        esac
+    fi
+
+    queue=''
+    case $services in *"postfix${tab}running$tab"*)
+        queue=$(dc exec -T postfix postqueue -p 2>/dev/null | tail -n 1)
+        ;;
+    esac
+
+    dc exec $EXEC_TTY -e NO_COLOR="${NO_COLOR:-}" -e EIGEN_STATUS_SERVICES="$services" -e EIGEN_STATUS_UPDATE="$update" \
+        -e EIGEN_STATUS_MAIL_QUEUE="$queue" eigen-api bun "$API_CLI" status
+}
+
 COMMAND=${1:-}
 case $COMMAND in
     setup)
         shift
         setup "$@"
+        ;;
+    status) status ;;
+    reset-password)
+        shift
+        if [ ! -f .env.production ]; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
+        if ! dc ps --status running --services 2>/dev/null | grep -qx eigen-api; then
+            die "The API is not running." "./eigen status shows the services; ./eigen logs eigen-api shows why."
+        fi
+        dc exec $EXEC_TTY -e NO_COLOR="${NO_COLOR:-}" eigen-api bun "$API_CLI" reset-password "$@"
         ;;
     logs)
         shift
