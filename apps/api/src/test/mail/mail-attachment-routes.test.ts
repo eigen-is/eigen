@@ -408,6 +408,9 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         // A .vcf reads as cards, never as raw text — the same gate the Drive route runs.
         const vcf = await authedRequest(ctx.alice.user.sessionToken, textPreviewUrl(7));
         expect(vcf.status).toBe(404);
+        // Stamped on the 404, a validator would be stored and every later 304 would resurrect it.
+        expect(vcf.headers.get('etag')).toBeNull();
+        expect(vcf.headers.get('cache-control')).toBeNull();
     });
 
     test('an out-of-range part carries no preview caching headers with its 404', async () => {
@@ -420,6 +423,7 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
     test('a part that is not a vCard is refused by the vcard preview', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, vcardPreviewUrl(5));
         expect(res.status).toBe(400);
+        expect(res.headers.get('etag')).toBeNull();
     });
 
     test('the preview routes revalidate on every use and answer If-None-Match with 304', async () => {

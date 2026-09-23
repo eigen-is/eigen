@@ -6,7 +6,7 @@ import {
     type NewDraft,
     type SentMailResult,
 } from '@workspace/lib/types/mail';
-import { Elysia, type Static, status, t } from 'elysia';
+import { Elysia, type Static, t } from 'elysia';
 import { ApiError, contentDisposition, NOT_AN_EMAIL_FILE, readBoundedBodyBytes, setCacheHeaders } from '../lib/core';
 import { requireLocalhost, requireNonGuest, requireSelf } from '../lib/core/access';
 import { readImportSourceBytes } from '../lib/drive';
@@ -19,7 +19,7 @@ import {
     saveAttachmentsToDrive,
     uploadDraftAttachment,
 } from '../lib/mail/mail';
-import { readMailPart, serveMailPart } from '../lib/mail/serve-mail-part';
+import { answerMailPart, serveMailPart } from '../lib/mail/serve-mail-part';
 import {
     assertEmlPreviewable,
     assertIcsPreviewable,
@@ -324,9 +324,9 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const att = await readMailPart(await getMailClient(user), params.id, params.index, request, set);
-            if (!att) return status(304);
-            return serveMailPart(att, params.index, 'attachment', request.headers.get('range'));
+            return answerMailPart(await getMailClient(user), params.id, params.index, request, set, (att) =>
+                serveMailPart(att, params.index, 'attachment', request.headers.get('range')),
+            );
         },
         { auth: true, params: AttachmentParamsSchema },
     )
@@ -335,9 +335,9 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const att = await readMailPart(await getMailClient(user), params.id, params.index, request, set);
-            if (!att) return status(304);
-            return serveMailPart(att, params.index, 'inline', request.headers.get('range'));
+            return answerMailPart(await getMailClient(user), params.id, params.index, request, set, (att) =>
+                serveMailPart(att, params.index, 'inline', request.headers.get('range')),
+            );
         },
         { auth: true, params: AttachmentParamsSchema },
     )
@@ -349,24 +349,21 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const att = await readMailPart(
-                await getMailClient(user),
+            const mail = await getMailClient(user);
+            return answerMailPart(
+                mail,
                 params.id,
                 params.index,
                 request,
                 set,
+                async (att) => {
+                    const name = mailAttachmentName(att, params.index);
+                    const preview = await getBytesTextPreview(att.content, name, att.contentType, att.charset);
+                    if (!preview) throw new ApiError(404, 'No preview available');
+                    return preview;
+                },
                 TEXT_FORMAT,
             );
-            if (!att) return status(304);
-
-            const preview = await getBytesTextPreview(
-                att.content,
-                mailAttachmentName(att, params.index),
-                att.contentType,
-                att.charset,
-            );
-            if (!preview) throw new ApiError(404, 'No preview available');
-            return preview;
         },
         { auth: true, params: AttachmentPreviewParamsSchema },
     )
@@ -375,19 +372,20 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const att = await readMailPart(
-                await getMailClient(user),
+            const mail = await getMailClient(user);
+            return answerMailPart(
+                mail,
                 params.id,
                 params.index,
                 request,
                 set,
+                (att) => {
+                    assertVCardPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
+                    // A copy: content is a view over the whole parsed message, and the Worker detaches the buffer it gets.
+                    return getBytesVCardPreview(new Uint8Array(att.content).buffer);
+                },
                 VCARD_FORMAT,
             );
-            if (!att) return status(304);
-
-            assertVCardPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
-            // A copy: content is a view over the whole parsed message, and the Worker detaches the buffer it gets.
-            return getBytesVCardPreview(new Uint8Array(att.content).buffer);
         },
         { auth: true, params: AttachmentPreviewParamsSchema },
     )
@@ -396,19 +394,20 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const att = await readMailPart(
-                await getMailClient(user),
+            const mail = await getMailClient(user);
+            return answerMailPart(
+                mail,
                 params.id,
                 params.index,
                 request,
                 set,
+                (att) => {
+                    assertEmlPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
+                    // A copy, for the reason the cards route copies: the Worker detaches the buffer it gets.
+                    return getBytesEmlPreview(new Uint8Array(att.content).buffer);
+                },
                 EML_FORMAT,
             );
-            if (!att) return status(304);
-
-            assertEmlPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
-            // A copy, for the reason the cards route copies: the Worker detaches the buffer it gets.
-            return getBytesEmlPreview(new Uint8Array(att.content).buffer);
         },
         { auth: true, params: AttachmentPreviewParamsSchema },
     )
@@ -417,19 +416,20 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, request, user, set }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            const att = await readMailPart(
-                await getMailClient(user),
+            const mail = await getMailClient(user);
+            return answerMailPart(
+                mail,
                 params.id,
                 params.index,
                 request,
                 set,
+                (att) => {
+                    assertIcsPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
+                    // A copy, for the reason the cards route copies: the Worker detaches the buffer it gets.
+                    return getBytesIcsPreview(new Uint8Array(att.content).buffer);
+                },
                 ICS_FORMAT,
             );
-            if (!att) return status(304);
-
-            assertIcsPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
-            // A copy, for the reason the cards route copies: the Worker detaches the buffer it gets.
-            return getBytesIcsPreview(new Uint8Array(att.content).buffer);
         },
         { auth: true, params: AttachmentPreviewParamsSchema },
     )
