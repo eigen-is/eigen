@@ -94,7 +94,7 @@ export class Mail {
             // Seeded, not delivered: the first sync indexes it without announcing new mail.
             if (welcome) await this.store.append('', welcome, { skipReconcile: true, arrival: false });
         }
-        this.store.watch();
+        await this.store.watch();
         this.store.cleanupStaleDraftTemps().catch((err) => console.error('mail: stale draft temp cleanup failed', err));
     }
 

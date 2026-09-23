@@ -15,8 +15,7 @@ export function computeEtag(path: Pick<DrivePath, 'hash' | 'id' | 'updatedAt' | 
     return `"${value}"`;
 }
 
-// Sets a Drive preview's validators and answers whether the client already holds this body. The ETag carries the
-// renderer's format tag beside the file's own, so a payload or sanitizer fix is answered with the new body, not a 304.
+// The renderer's format tag rides in the ETag, so a payload or sanitizer fix answers with the new body, not a 304.
 export function isPreviewNotModified(
     request: Request,
     set: { headers: Record<string, string | number> },
