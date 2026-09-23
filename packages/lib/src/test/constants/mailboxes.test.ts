@@ -84,6 +84,13 @@ describe('mailboxDisplayName', () => {
 
 describe('mailboxListFlags', () => {
     test('a custom folder carries no special-use flag', () => {
-        expect(mailboxListFlags('Projects')).toEqual(['\\HasNoChildren']);
+        expect(mailboxListFlags('Projects', ['Projects'])).toEqual(['\\HasNoChildren']);
+    });
+
+    test('a folder with one nested under it has children, a sibling sharing its prefix does not count', () => {
+        const all = ['Clients', 'Clients.Acme', 'ClientsOld'];
+        expect(mailboxListFlags('Clients', all)).toEqual(['\\HasChildren']);
+        expect(mailboxListFlags('Clients.Acme', all)).toEqual(['\\HasNoChildren']);
+        expect(mailboxListFlags('ClientsOld', all)).toEqual(['\\HasNoChildren']);
     });
 });

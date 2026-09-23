@@ -181,6 +181,43 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
     });
 });
 
+// Eigen nests no folders itself, but Dovecot does: `.Clients` beside `.Clients.Acme` makes Clients a parent.
+describe.skipIf(isWindows)('A folder with a folder nested under it', () => {
+    let userId: string;
+    let token: string;
+
+    beforeAll(async () => {
+        const user = await createTestUser(`nested-${Date.now()}@test.eigen.is`, 'testpassword123', 'Nested Test');
+        userId = user.id;
+        token = user.sessionToken;
+        expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
+
+        seedMaildirFolder(userId, 'Clients');
+        seedMaildirFolder(userId, 'Clients.Acme');
+        // Shares the prefix without the delimiter, so it is a sibling, not a child.
+        seedMaildirFolder(userId, 'ClientsOld');
+    });
+
+    test('the parent is listed with children, the child and the sibling without', async () => {
+        const boxes = await listMailboxes(token, userId);
+        expect(findOrFail(boxes, (box) => box.path === 'Clients').flags).toEqual(['\\HasChildren']);
+        expect(findOrFail(boxes, (box) => box.path === 'Clients.Acme').flags).toEqual(['\\HasNoChildren']);
+        expect(findOrFail(boxes, (box) => box.path === 'ClientsOld').flags).toEqual(['\\HasNoChildren']);
+        expect(findOrFail(boxes, (box) => box.path === MAILBOX_ARCHIVE).flags).toEqual([
+            '\\HasNoChildren',
+            '\\Archive',
+        ]);
+    });
+
+    test('a lookup of the parent reports its children too', async () => {
+        const exists = await assertJson<MaildirMailbox | false>(
+            await authedRequest(token, `/mail/${userId}/mailbox-exists/Clients`),
+        );
+        expect(exists).not.toBe(false);
+        expect((exists as MaildirMailbox).flags).toEqual(['\\HasChildren']);
+    });
+});
+
 // Dovecot writes a name holding `&` or anything outside printable ASCII in modified UTF-7, and leaves the
 // rest of printable ASCII alone: all of these are folder names Eigen must list, open and move into.
 describe.skipIf(isWindows)('A folder name outside the ASCII letters and digits', () => {
