@@ -110,11 +110,16 @@ export class LocalFilesystem {
         }
     }
 
-    // Unlinks rather than deletes: `delete` reaps a newly-empty parent, taking the swept directory with it.
-    async sweepAtomicTemps(dir: string): Promise<void> {
+    // Age-gated since a young temp may be a live write about to rename; unlink, since `delete` reaps the emptied parent.
+    async sweepAtomicTemps(dir: string, maxAgeMs: number): Promise<void> {
+        const now = Date.now();
         for (const name of await this.list(dir)) {
-            if (name.startsWith('.') && name.includes(ATOMIC_TEMP_INFIX)) {
-                await this.unlink(`${dir}/${name}`);
+            if (!name.startsWith('.') || !name.includes(ATOMIC_TEMP_INFIX)) continue;
+            const filePath = `${dir}/${name}`;
+            try {
+                if (now - (await this.stat(filePath)).mtimeMs > maxAgeMs) await this.unlink(filePath);
+            } catch (error) {
+                if (!isEnoent(error)) throw error;
             }
         }
     }

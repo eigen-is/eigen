@@ -2,7 +2,7 @@
 import * as formulajs from '@formulajs/formulajs';
 import { booleanDisplay, update } from '../../../format';
 import type { FormulaArg, FormulaOutput } from '../../../types';
-import { ERROR_NAME, ERROR_VALUE } from '../../error';
+import { ERROR_NAME, ERROR_NUM, ERROR_VALUE } from '../../error';
 import { toNumber } from '../../helper/number';
 import SUPPORTED_FORMULAS from '../../supported-formulas';
 
@@ -67,16 +67,20 @@ function func(symbol: string): FormulajsMethod {
     const upper = symbol.toUpperCase();
     const override = OVERRIDES[upper];
     return function __formulaFunction(...params: FormulaArg[]): FormulaOutput {
-        if (override) {
-            const result = override(params);
-            if (result !== undefined) return result;
+        let result = override?.(params);
+        if (result === undefined) {
+            const resolved = resolveFormula(upper.split('.'));
+            if (!resolved) {
+                throw Error(ERROR_NAME);
+            }
+            const [receiver, method] = resolved;
+            result = method.apply(receiver, params);
         }
-        const resolved = resolveFormula(upper.split('.'));
-        if (!resolved) {
-            throw Error(ERROR_NAME);
+        // formulajs hands an overflow back as Infinity; Excel shows #NUM!, as the operators do.
+        if (result === Infinity || result === -Infinity) {
+            throw Error(ERROR_NUM);
         }
-        const [receiver, method] = resolved;
-        return method.apply(receiver, params);
+        return result;
     };
 }
 

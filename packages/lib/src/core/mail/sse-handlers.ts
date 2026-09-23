@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { debouncePerOwner } from '../debounce-per-owner';
 import { invalidateHomeSize } from '../home';
 import { invalidateSearchOwner } from '../search';
 import {
@@ -13,6 +14,9 @@ import {
 } from './hooks/keys';
 import { consumeRecentMailMutation } from './hooks/use-emails';
 
+// Debounced for the one mail:received per message a sync broadcasts; the message-list invalidations still land at once.
+const invalidateMailboxesSoon = debouncePerOwner(invalidateMailboxes, 250);
+
 export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): boolean {
     if (!event?.type?.startsWith('mail:')) return false;
     if (!('mail' in event)) return false;
@@ -23,7 +27,7 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
     switch (event.type) {
         case SSEventType.MAIL_RECEIVED:
             invalidateMailReceived(queryClient, userId, mailbox);
-            invalidateMailboxes(queryClient, userId);
+            invalidateMailboxesSoon(queryClient, userId);
             invalidateHomeSize(queryClient, userId);
             invalidateSearchOwner(queryClient, userId);
             return true;
@@ -35,7 +39,7 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
             if (!consumeRecentMailMutation(event.type, mail.messageId)) {
                 invalidateMailDeleted(queryClient, userId, mail.messageId, mailbox);
             }
-            invalidateMailboxes(queryClient, userId);
+            invalidateMailboxesSoon(queryClient, userId);
             invalidateHomeSize(queryClient, userId);
             invalidateSearchOwner(queryClient, userId);
             return true;
@@ -46,7 +50,7 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
             if (!consumeRecentMailMutation(event.type, mail.messageId)) {
                 invalidateMailMoved(queryClient, userId, mail.messageId, mailbox, mail.toMailbox ?? null);
             }
-            invalidateMailboxes(queryClient, userId);
+            invalidateMailboxesSoon(queryClient, userId);
             invalidateSearchOwner(queryClient, userId);
             return true;
         }
@@ -55,7 +59,7 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
             if (!consumeRecentMailMutation(event.type, mail.messageId)) {
                 invalidateMailMessageChanged(queryClient, userId, mail.messageId, mailbox);
             }
-            invalidateMailboxes(queryClient, userId);
+            invalidateMailboxesSoon(queryClient, userId);
             // Palette mail rows carry isRead on the EmailSummary and bold-on-unread —
             // invalidate so the cached search response reflects the new flag.
             invalidateSearchOwner(queryClient, userId);
@@ -70,13 +74,13 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
 
         case SSEventType.MAIL_DRAFT_UPDATED:
             invalidateDraftUpdated(queryClient, userId, mail.messageId);
-            invalidateMailboxes(queryClient, userId);
+            invalidateMailboxesSoon(queryClient, userId);
             invalidateHomeSize(queryClient, userId);
             invalidateSearchOwner(queryClient, userId);
             return true;
 
         case SSEventType.MAIL_SENT:
-            invalidateMailboxes(queryClient, userId);
+            invalidateMailboxesSoon(queryClient, userId);
             invalidateHomeSize(queryClient, userId);
             invalidateSearchOwner(queryClient, userId);
             return true;

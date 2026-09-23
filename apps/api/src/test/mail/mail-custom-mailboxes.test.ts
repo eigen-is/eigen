@@ -164,8 +164,8 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
         const exists = await assertJson<MaildirMailbox | false>(
             await authedRequest(token, `/mail/${userId}/mailbox-exists/My%20Stuff`),
         );
-        expect(exists).not.toBe(false);
-        expect((exists as MaildirMailbox).path).toBe('My Stuff');
+        if (!exists) throw new Error('Expected the mailbox to exist');
+        expect(exists.path).toBe('My Stuff');
     });
 
     test('a name that case-folds onto a standard mailbox addresses that one, not a second folder', async () => {
@@ -178,6 +178,43 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
 
         const boxes = await listMailboxes(token, userId);
         expect(boxes.filter((box) => box.path.toLowerCase() === MAILBOX_ARCHIVE.toLowerCase())).toHaveLength(1);
+    });
+});
+
+// Eigen nests no folders itself, but Dovecot does: `.Clients` beside `.Clients.Acme` makes Clients a parent.
+describe.skipIf(isWindows)('A folder with a folder nested under it', () => {
+    let userId: string;
+    let token: string;
+
+    beforeAll(async () => {
+        const user = await createTestUser(`nested-${Date.now()}@test.eigen.is`, 'testpassword123', 'Nested Test');
+        userId = user.id;
+        token = user.sessionToken;
+        expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
+
+        seedMaildirFolder(userId, 'Clients');
+        seedMaildirFolder(userId, 'Clients.Acme');
+        // Shares the prefix without the delimiter, so it is a sibling, not a child.
+        seedMaildirFolder(userId, 'ClientsOld');
+    });
+
+    test('the parent is listed with children, the child and the sibling without', async () => {
+        const boxes = await listMailboxes(token, userId);
+        expect(findOrFail(boxes, (box) => box.path === 'Clients').flags).toEqual(['\\HasChildren']);
+        expect(findOrFail(boxes, (box) => box.path === 'Clients.Acme').flags).toEqual(['\\HasNoChildren']);
+        expect(findOrFail(boxes, (box) => box.path === 'ClientsOld').flags).toEqual(['\\HasNoChildren']);
+        expect(findOrFail(boxes, (box) => box.path === MAILBOX_ARCHIVE).flags).toEqual([
+            '\\HasNoChildren',
+            '\\Archive',
+        ]);
+    });
+
+    test('a lookup of the parent reports its children too', async () => {
+        const exists = await assertJson<MaildirMailbox | false>(
+            await authedRequest(token, `/mail/${userId}/mailbox-exists/Clients`),
+        );
+        if (!exists) throw new Error('Expected the mailbox to exist');
+        expect(exists.flags).toEqual(['\\HasChildren']);
     });
 });
 

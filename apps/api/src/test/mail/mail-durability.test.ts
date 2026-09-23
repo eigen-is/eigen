@@ -250,19 +250,25 @@ describe('Maildir write durability', () => {
         expect(existsSync(fresh)).toBe(true);
     });
 
-    test('an atomic temp a crash left in draft-meta/ is swept, and a real sidecar is not', async () => {
+    test('an atomic temp a crash left in draft-meta/ is swept after 24 hours, and a real sidecar is not', async () => {
         const home = await getHome(userId);
         const store = (home.mail as unknown as { store: { cleanupStaleDraftTemps: () => Promise<void> } }).store;
         const metaDir = join(mailRootOf(userId), 'draft-meta');
         mkdirSync(metaDir, { recursive: true });
-        const temp = join(metaDir, '.draft-1.json.tmp-abc');
+        const stale = join(metaDir, '.draft-1.json.tmp-abc');
+        const inFlight = join(metaDir, '.draft-2.json.tmp-def');
         const sidecar = join(metaDir, 'draft-1.json');
-        writeFileSync(temp, '{}');
+        writeFileSync(stale, '{}');
+        writeFileSync(inFlight, '{}');
         writeFileSync(sidecar, '{}');
+        const old = new Date(Date.now() - 48 * 60 * 60 * 1000);
+        utimesSync(stale, old, old);
+        utimesSync(sidecar, old, old);
 
         await store.cleanupStaleDraftTemps();
 
-        expect(existsSync(temp)).toBe(false);
+        expect(existsSync(stale)).toBe(false);
+        expect(existsSync(inFlight)).toBe(true);
         expect(existsSync(sidecar)).toBe(true);
     });
 });

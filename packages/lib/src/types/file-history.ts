@@ -34,6 +34,9 @@ export const CLIENT_FILE_EVENT_TYPES = [
     'sticky-removed',
 ] as const satisfies readonly FileEventType[];
 
+// More than the two clamped lines an activity row shows, so a clip is never visible; the client-post route caps its details at it.
+export const CARD_TITLE_MAX_LENGTH = 200;
+
 export type ClientFileEventType = (typeof CLIENT_FILE_EVENT_TYPES)[number];
 
 export function isClientFileEventType(t: string): t is ClientFileEventType {

@@ -161,14 +161,15 @@ export class MaildirStore implements MailStore {
 
     async mailboxesList(): Promise<MaildirMailbox[]> {
         const mailboxes: MaildirMailbox[] = [];
-        for (const name of await this.listMailboxPaths()) {
+        const paths = await this.listMailboxPaths();
+        for (const name of paths) {
             // Counts come from the index; a folder without a watcher reconciles here, in the background.
             if (!isStandardMailbox(name) && this.reconcileDue(name)) {
                 this.reconcileMailbox(name).catch((err) =>
                     console.error('maildir: background mailbox sync failed', err),
                 );
             }
-            mailboxes.push(this.getMailboxInfo(name));
+            mailboxes.push(this.getMailboxInfo(name, paths));
         }
         return mailboxes;
     }
@@ -182,7 +183,7 @@ export class MaildirStore implements MailStore {
 
     async mailboxExists(mailbox: string): Promise<MaildirMailbox | false> {
         if (!(await this.mailboxDirExists(mailbox))) return false;
-        return this.getMailboxInfo(mailbox);
+        return this.getMailboxInfo(mailbox, await this.listMailboxPaths());
     }
 
     async listMessages(
@@ -578,7 +579,7 @@ export class MaildirStore implements MailStore {
     async cleanupStaleDraftTemps(): Promise<void> {
         await this.cleanupStaleMaildirTemps();
         // The sidecars are written through writeAtomic, and nothing else passes that directory.
-        await this.storage.sweepAtomicTemps(this.getDraftMetaDir());
+        await this.storage.sweepAtomicTemps(this.getDraftMetaDir(), STALE_DRAFT_TEMP_MAX_AGE_MS);
         if (await this.storage.dirExists(DRAFT_ATTACHMENTS_DIR)) {
             const now = Date.now();
             for (const name of await this.storage.readdir(DRAFT_ATTACHMENTS_DIR)) {
@@ -727,10 +728,10 @@ export class MaildirStore implements MailStore {
 
     // -- Private helpers --
 
-    private getMailboxInfo(mailboxName: string): MaildirMailbox {
+    private getMailboxInfo(mailboxName: string, allMailboxes: readonly string[]): MaildirMailbox {
         return {
             path: mailboxName,
-            flags: mailboxListFlags(mailboxName),
+            flags: mailboxListFlags(mailboxName, allMailboxes),
             total: this.db.getEmailsCount(mailboxName),
             unread: this.db.getEmailsCountUnread(mailboxName),
         };

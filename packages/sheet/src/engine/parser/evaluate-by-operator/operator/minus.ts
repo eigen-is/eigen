@@ -1,5 +1,5 @@
 import type { FormulaArg } from '../../../types';
-import { ERROR_VALUE } from '../../error';
+import { ERROR_NUM, ERROR_VALUE } from '../../error';
 import { toNumber } from '../../helper/number';
 
 export const SYMBOL = '-';
@@ -9,6 +9,9 @@ function func(first: FormulaArg, ...rest: FormulaArg[]): number {
 
     if (Number.isNaN(result)) {
         throw Error(ERROR_VALUE);
+    }
+    if (!Number.isFinite(result)) {
+        throw Error(ERROR_NUM);
     }
 
     return result;

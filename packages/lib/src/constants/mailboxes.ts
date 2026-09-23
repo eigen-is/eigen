@@ -56,7 +56,8 @@ export const SIDEBAR_MAILBOXES: readonly SpecialMailbox[] = (
     [MAILBOX_INBOX, MAILBOX_DRAFTS, MAILBOX_SENT, MAILBOX_JUNK, MAILBOX_TRASH, MAILBOX_ARCHIVE] as const
 ).map((path) => SPECIAL_MAILBOXES[path]);
 
-// Every mailbox row carries this; a special one adds its special-use flag after it.
+// Every mailbox row carries one of these two; a special one adds its special-use flag after it.
+export const MAILBOX_HAS_CHILDREN_FLAG = '\\HasChildren';
 export const MAILBOX_NO_CHILDREN_FLAG = '\\HasNoChildren';
 
 const BY_FLAG = new Map<string, SpecialMailbox>(Object.values(SPECIAL_MAILBOXES).map((box) => [box.flag, box]));
@@ -127,8 +128,12 @@ export function specialMailboxFromFlags(flags: readonly string[] = []): SpecialM
     return undefined;
 }
 
-// The flags a mailbox is listed with. Eigen nests no mailboxes, so every one of them has no children.
-export function mailboxListFlags(mailbox: string): string[] {
+// Children are read off the whole enumeration: Eigen nests no mailbox itself, but a Dovecot client may.
+export function mailboxListFlags(mailbox: string, allMailboxes: readonly string[]): string[] {
+    const prefix = `${mailbox}.`;
+    const children = allMailboxes.some((path) => path.startsWith(prefix))
+        ? MAILBOX_HAS_CHILDREN_FLAG
+        : MAILBOX_NO_CHILDREN_FLAG;
     const box = Object.values(SPECIAL_MAILBOXES).find((special) => special.path === mailbox);
-    return box ? [MAILBOX_NO_CHILDREN_FLAG, box.flag] : [MAILBOX_NO_CHILDREN_FLAG];
+    return box ? [children, box.flag] : [children];
 }
