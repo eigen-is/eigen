@@ -478,6 +478,8 @@ describe.skipIf(isWindows)('A standard folder an IMAP client removes gets its wa
         await Bun.sleep(100);
         seedMaildirFolder(userId, MAILBOX_JUNK);
         await listMailboxes(token, userId);
+        // The watcher attaches on its own thread; a file dropped in the same instant is missed on macOS.
+        await Bun.sleep(200);
 
         seedMaildirFile(userId, MAILBOX_JUNK, `${Date.now()}.junk`, makeEml('Filed into the new Junk', { to: email }), {
             dir: 'new',

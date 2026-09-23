@@ -1,4 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { type ElysiaCustomStatusResponse, status } from 'elysia';
+import { ApiError } from './errors';
 
 // Default private: these bodies are per-user, and 'public' is reserved for the unauthenticated /p/ surface.
 export function setCacheHeaders(
@@ -15,18 +17,38 @@ export function computeEtag(path: Pick<DrivePath, 'hash' | 'id' | 'updatedAt' | 
     return `"${value}"`;
 }
 
+// The validator is stamped only once the body exists: an error answered with it would be stored, and every later 304 would resurrect that error.
+export async function answerRevalidated<T>(
+    request: Request,
+    set: { headers: Record<string, string | number> },
+    etag: string,
+    produce: () => Promise<T>,
+): Promise<T | ElysiaCustomStatusResponse<304>> {
+    const ifNoneMatch = request.headers.get('if-none-match');
+    const body = ifNoneMatch !== null && matchesIfNoneMatch(ifNoneMatch, etag) ? status(304) : await produce();
+    set.headers['Cache-Control'] = 'private, no-cache';
+    set.headers['ETag'] = etag;
+    return body;
+}
+
 // The renderer's format tag rides in the ETag, so a payload or sanitizer fix answers with the new body, not a 304.
-export function isPreviewNotModified(
+export async function answerPreview<T>(
     request: Request,
     set: { headers: Record<string, string | number> },
     path: Pick<DrivePath, 'hash' | 'id' | 'updatedAt' | 'size'>,
     format: string,
-): boolean {
-    const etag = `${computeEtag(path).slice(0, -1)}-${format}"`;
-    set.headers['Cache-Control'] = 'private, no-cache';
-    set.headers['ETag'] = etag;
-    const ifNoneMatch = request.headers.get('if-none-match');
-    return ifNoneMatch !== null && matchesIfNoneMatch(ifNoneMatch, etag);
+    generate: () => Promise<{ value: T; stale: boolean } | null>,
+): Promise<T | ElysiaCustomStatusResponse<304>> {
+    let stale = false;
+    const body = await answerRevalidated(request, set, `${computeEtag(path).slice(0, -1)}-${format}"`, async () => {
+        const result = await generate();
+        if (!result) throw new ApiError(404, 'No preview available');
+        stale = result.stale;
+        return result.value;
+    });
+    // Stale-while-revalidate: the previous version, served while the current one regenerates, is never stored by a browser.
+    if (stale) set.headers['Cache-Control'] = 'no-store';
+    return body;
 }
 
 // RFC 7232 §3.1 mandates STRONG comparison: the quotes are part of the tag, so a weak `W/` validator never matches.

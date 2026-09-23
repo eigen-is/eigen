@@ -876,6 +876,25 @@ describe('Drive preview routes revalidate against their format tag', () => {
             expect(bumped.status).toBe(200);
         });
     }
+
+    test('a failed generation carries no validator, so the next request generates again', async () => {
+        const file = new File(['hello'], 'flaky.txt', { type: 'text/plain' });
+        const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
+        const url = `/drive/${ownerId}/${mountId}/file/${uploaded.id}/text-preview`;
+        const { mount } = await (await getHome(ownerId)).drive.resolveFile(mountId, uploaded.id);
+        const readFile = spyOn(mount, 'readFile').mockResolvedValueOnce(null);
+
+        const failed = await authedRequest(token, url);
+        readFile.mockRestore();
+        expect(failed.status).toBe(404);
+        expect(failed.headers.get('etag')).toBeNull();
+        expect(failed.headers.get('cache-control')).toBeNull();
+
+        // A browser revalidates with whatever validator it stored, so no validator means a plain request.
+        const retried = await authedRequest(token, url);
+        expect(retried.status).toBe(200);
+        expect((await retried.json()).body).toContain('hello');
+    });
 });
 
 // A drawing previews as a compositor HTML body, not as an image: it rides the text-preview

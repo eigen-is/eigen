@@ -3,13 +3,13 @@ import { type DriveAccessCheckResult, type DrivePath, isConvertTarget } from '@w
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
-import { Elysia, type ElysiaCustomStatusResponse, status, t } from 'elysia';
+import { Elysia, type ElysiaCustomStatusResponse, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
 import {
+    answerPreview,
     contentDisposition,
-    isPreviewNotModified,
     readBoundedBodyBytes,
     readBoundedStreamBytes,
     scriptableInlineHeaders,
@@ -350,13 +350,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, request, user, set }): Promise<TextPreviewResult | ElysiaCustomStatusResponse<304>> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            if (isPreviewNotModified(request, set, path, TEXT_FORMAT)) return status(304);
-
-            const result = await getTextPreview(mount, path);
-            if (!result) throw new ApiError(404, 'No preview available');
-            // Stale-while-revalidate: the previous version, served while the current one regenerates, never pinned by a browser cache.
-            if (result.stale) set.headers['Cache-Control'] = 'no-store';
-            return result.value;
+            return answerPreview(request, set, path, TEXT_FORMAT, () => getTextPreview(mount, path));
         },
         // updatedAt is a cache-buster — browser HTTP cache and TanStack queryKey both key
         // off the URL, so a stale URL serves stale content after an inline edit.
@@ -369,13 +363,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertVCardPreviewable(path.name, path.mimeType, path.size);
-            if (isPreviewNotModified(request, set, path, VCARD_FORMAT)) return status(304);
-
-            const result = await getVCardPreview(mount, path);
-            if (!result) throw new ApiError(404, 'No preview available');
-            // Stale-while-revalidate and the revalidation work exactly as they do for a text preview.
-            if (result.stale) set.headers['Cache-Control'] = 'no-store';
-            return result.value;
+            return answerPreview(request, set, path, VCARD_FORMAT, () => getVCardPreview(mount, path));
         },
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
@@ -386,13 +374,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertEmlPreviewable(path.name, path.mimeType, path.size);
-            if (isPreviewNotModified(request, set, path, EML_FORMAT)) return status(304);
-
-            const result = await getEmlPreview(mount, path);
-            if (!result) throw new ApiError(404, 'No preview available');
-            // Stale-while-revalidate and the revalidation work exactly as they do for a text preview.
-            if (result.stale) set.headers['Cache-Control'] = 'no-store';
-            return result.value;
+            return answerPreview(request, set, path, EML_FORMAT, () => getEmlPreview(mount, path));
         },
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
@@ -403,13 +385,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             assertIcsPreviewable(path.name, path.mimeType, path.size);
-            if (isPreviewNotModified(request, set, path, ICS_FORMAT)) return status(304);
-
-            const result = await getIcsPreview(mount, path);
-            if (!result) throw new ApiError(404, 'No preview available');
-            // Stale-while-revalidate and the revalidation work exactly as they do for a text preview.
-            if (result.stale) set.headers['Cache-Control'] = 'no-store';
-            return result.value;
+            return answerPreview(request, set, path, ICS_FORMAT, () => getIcsPreview(mount, path));
         },
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
