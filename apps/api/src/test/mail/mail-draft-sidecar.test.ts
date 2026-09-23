@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MAILBOX_DRAFTS } from '@workspace/lib/constants/mailboxes';
-import type { Email, EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
+import { type Email, type EmailDraft, type EmailSummary, mailAttachmentName } from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { getHome } from '../../lib/home';
 import type { DraftMeta, MailStore } from '../../lib/mail/mail-store';
@@ -183,6 +183,66 @@ describe.skipIf(isWindows)('Mail — draft sidecar', () => {
         await store.deleteDraftMeta(draftId);
         expect(await store.readDraftMeta(draftId)).toBeNull();
         expect(readdirSync(draftMetaDir(user.id))).toEqual([]);
+    });
+
+    test('a nameless part in a draft another client wrote survives a save under its chip name', async () => {
+        const user = await createTestUser(
+            `draft-sidecar-nameless-${Date.now()}@test.eigen.is`,
+            'testpassword123',
+            'Draft Sidecar Nameless',
+        );
+        expect((await authedRequest(user.sessionToken, `/home/${user.id}/size`)).status).toBe(200);
+
+        // As an IMAP client APPENDs it: an attachment part that carries no filename.
+        const draftId = `${Date.now()}.nameless`;
+        const eml = [
+            `From: ${user.email}`,
+            'To: bob@test.eigen.is',
+            'Subject: Nameless part',
+            `Date: ${new Date().toUTCString()}`,
+            `Message-ID: <${Date.now()}.nameless@test>`,
+            'MIME-Version: 1.0',
+            'Content-Type: multipart/mixed; boundary="b1"',
+            '',
+            '--b1',
+            'Content-Type: text/plain; charset=utf-8',
+            '',
+            'body',
+            '--b1',
+            'Content-Type: application/octet-stream',
+            'Content-Disposition: attachment',
+            'Content-Transfer-Encoding: base64',
+            '',
+            Buffer.from('nameless-bytes').toString('base64'),
+            '--b1--',
+            '',
+        ].join('\r\n');
+        seedMaildirFile(user.id, MAILBOX_DRAFTS, draftId, eml, { flags: 'DS' });
+        expect((await listDrafts(user)).map((row) => row.id)).toContain(draftId);
+
+        const fetched = await assertJson<Email>(
+            await authedRequest(user.sessionToken, `/mail/${user.id}/message/${draftId}`),
+        );
+        expect(fetched.attachments.map((a) => a.filename)).toEqual([undefined]);
+
+        const saved = await putDraft(
+            user.sessionToken,
+            user.id,
+            {
+                id: draftId,
+                subject: 'Nameless part',
+                to: { value: [{ address: 'bob@test.eigen.is', name: '' }], text: 'bob@test.eigen.is' },
+                text: 'body',
+                html: '<p>body</p>',
+            },
+            { keepAttachmentIndexes: fetched.attachments.map((a) => a.index) },
+        );
+
+        const name = mailAttachmentName(fetched.attachments[0], fetched.attachments[0].index);
+        expect(saved.attachments.map((a) => a.filename)).toEqual([name]);
+        const [sidecar] = readdirSync(draftMetaDir(user.id));
+        const meta: DraftMeta = JSON.parse(readFileSync(join(draftMetaDir(user.id), sidecar), 'utf-8'));
+        expect(meta.attachments.map((a) => a.filename)).toEqual([name]);
     });
 
     test('a fast save leaves the sidecar complete and no temp debris beside it', async () => {
