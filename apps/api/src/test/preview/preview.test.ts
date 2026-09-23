@@ -9,7 +9,7 @@ import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib
 import { getHome } from '../../lib/home/get-home';
 import { Mount } from '../../lib/mount/mount';
 import { isExiftoolCandidate } from '../../lib/preview/exiftool-preview';
-import { getTextPreview } from '../../lib/preview/preview-cache';
+import { EML_FORMAT, getTextPreview, ICS_FORMAT, TEXT_FORMAT, VCARD_FORMAT } from '../../lib/preview/preview-cache';
 import { isVideoCandidate } from '../../lib/preview/video-preview';
 import { generateImagePreview, saveThumbnail } from '../../lib/shared/thumbnails';
 import {
@@ -660,8 +660,6 @@ describe('eml preview route', () => {
 
         const res = await authedRequest(token, previewUrl(uploaded.id));
         expect(res.status).toBe(200);
-        // No max-age: the URL carries only updatedAt, so a browser would hold a body a sanitizer fix
-        // has since rewritten. The server-side cache still answers the revalidation.
         expect(res.headers.get('cache-control')).toBe('private, no-cache');
         const data = await res.json();
         expect(data.subject).toBe('Engine notes');
@@ -761,7 +759,7 @@ describe('ics preview route', () => {
 
         const res = await authedRequest(token, previewUrl(uploaded.id));
         expect(res.status).toBe(200);
-        expect(res.headers.get('cache-control')).toContain('max-age=');
+        expect(res.headers.get('cache-control')).toBe('private, no-cache');
         const data = await res.json();
         expect(data.total).toBe(1);
         expect(data.dropped).toBe(0);
@@ -812,6 +810,72 @@ describe('ics preview route', () => {
         const res = await authedRequest(ctx.bob.user.sessionToken, previewUrl(uploaded.id));
         expect(res.status).toBe(403);
     });
+});
+
+// The URL carries only updatedAt, so a payload or sanitizer fix reaches a browser that holds a body
+// through the renderer's format tag in the ETag, never through a max-age.
+describe('Drive preview routes revalidate against their format tag', () => {
+    let token: string;
+    let ownerId: string;
+    const mountId = 'default';
+    let rootId: string;
+
+    beforeAll(async () => {
+        const ctx = await getTestContext();
+        token = ctx.alice.user.sessionToken;
+        ownerId = ctx.alice.user.id;
+        const root = await driveGet(token, ownerId, mountId, 'root');
+        rootId = root.id;
+    });
+
+    const cases = [
+        { route: 'text-preview', format: TEXT_FORMAT, name: 'etag.txt', mime: 'text/plain', body: 'hello' },
+        {
+            route: 'vcard-preview',
+            format: VCARD_FORMAT,
+            name: 'etag.vcf',
+            mime: 'text/vcard',
+            body: 'BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Jane Doe\r\nEND:VCARD\r\n',
+        },
+        {
+            route: 'eml-preview',
+            format: EML_FORMAT,
+            name: 'etag.eml',
+            mime: EML_MIME,
+            body: 'From: ada@external.com\r\nSubject: Notes\r\n\r\nHello\r\n',
+        },
+        {
+            route: 'ics-preview',
+            format: ICS_FORMAT,
+            name: 'etag.ics',
+            mime: ICS_MIME,
+            body: 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:a@eigen\r\nDTSTART;VALUE=DATE:20260920\r\nSUMMARY:Fair\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n',
+        },
+    ];
+
+    for (const { route, format, name, mime, body } of cases) {
+        test(`${route} answers 304 on its own ETag, and a body on the file's`, async () => {
+            const uploaded = await driveUpload(token, ownerId, mountId, rootId, new File([body], name, { type: mime }));
+            const url = `/drive/${ownerId}/${mountId}/file/${uploaded.id}/${route}`;
+
+            const first = await authedRequest(token, url);
+            expect(first.status).toBe(200);
+            expect(first.headers.get('cache-control')).toBe('private, no-cache');
+            const etag = first.headers.get('etag') ?? '';
+            expect(etag).toEndWith(`-${format}"`);
+
+            const revalidated = await authedRequest(token, url, { headers: { 'if-none-match': etag } });
+            expect(revalidated.status).toBe(304);
+            expect(revalidated.headers.get('etag')).toBe(etag);
+
+            // The file's own ETag stands for a preview under another format tag: a bump answers the new body.
+            const download = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/download`);
+            const fileEtag = download.headers.get('etag') ?? '';
+            expect(fileEtag).not.toBe('');
+            const bumped = await authedRequest(token, url, { headers: { 'if-none-match': fileEtag } });
+            expect(bumped.status).toBe(200);
+        });
+    }
 });
 
 // A drawing previews as a compositor HTML body, not as an image: it rides the text-preview

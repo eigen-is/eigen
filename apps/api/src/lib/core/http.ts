@@ -15,6 +15,21 @@ export function computeEtag(path: Pick<DrivePath, 'hash' | 'id' | 'updatedAt' | 
     return `"${value}"`;
 }
 
+// Sets a Drive preview's validators and answers whether the client already holds this body. The ETag carries the
+// renderer's format tag beside the file's own, so a payload or sanitizer fix is answered with the new body, not a 304.
+export function isPreviewNotModified(
+    request: Request,
+    set: { headers: Record<string, string | number> },
+    path: Pick<DrivePath, 'hash' | 'id' | 'updatedAt' | 'size'>,
+    format: string,
+): boolean {
+    const etag = `${computeEtag(path).slice(0, -1)}-${format}"`;
+    set.headers['Cache-Control'] = 'private, no-cache';
+    set.headers['ETag'] = etag;
+    const ifNoneMatch = request.headers.get('if-none-match');
+    return ifNoneMatch !== null && matchesIfNoneMatch(ifNoneMatch, etag);
+}
+
 // RFC 7232 §3.1 mandates STRONG comparison: the quotes are part of the tag, so a weak `W/` validator never matches.
 export function matchesIfMatch(header: string, etag: string | null): boolean {
     if (header.trim() === '*') return etag !== null;
