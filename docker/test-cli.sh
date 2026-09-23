@@ -10,9 +10,10 @@
 # refuse through the real gateway, and a rerun keeps every line of the env file; ./eigen reset-password with a
 # piped password changes it and signs the account out over HTTP; ./eigen backup and ./eigen restore round-trip a
 # folder made over HTTP with owners and modes intact, the snapshot the operator's alone in snapshots/; a no, a
-# failed snapshot, a newer snapshot, and snapshots holding a hard link, a device, a setuid file or a link out of
-# data/ are refused before anything stops; a restore interrupted while it unpacks leaves Eigen running on the data
-# it had; and status and reset-password say where to look when Eigen is stopped.
+# failed snapshot, a newer snapshot, and snapshots holding a hard link to what is not unpacked, a device, a setuid
+# file or a link out of data/ are refused before anything stops; a restore whose stop fails, or that is interrupted
+# while it unpacks, leaves Eigen running on the data it had and no unpacked copy; and status and reset-password say
+# where to look when Eigen is stopped.
 #
 # The copy is `git ls-files -co --exclude-standard` into the scratch folder, committed to a fresh repo: unlike
 # `git stash create` or a clone plus the diff, it also carries untracked files, and it never copies ignored ones
@@ -484,9 +485,10 @@ fi
 scratch_run rm "$INSTALL/snapshots/$NEWER"
 
 # Unpacked by root with GNU tar while Eigen runs, each is refused before anything stops: by what find sees in the
-# unpacked copy, or by tar itself where the file share cannot hold a device.
+# unpacked copy, or by tar itself, which links only to what it unpacked and fails where the file share cannot hold a
+# device.
 n=0
-for crafted in 'ln a b|is a hard link' 'mknod null c 1 3|null' 'chmod 4755 a|is setuid or setgid' \
+for crafted in 'ln ../eigen-snapshot.json leak|leak' 'mknod null c 1 3|null' 'chmod 4755 a|is setuid or setgid' \
     'ln -s /etc/passwd passwd|is a link that leads out of data/'; do
     name="eigen-20200101-00000$((++n)).tar.gz"
     craft "$name" "${crafted%%|*}"
@@ -498,7 +500,8 @@ for crafted in 'ln a b|is a hard link' 'mknod null c 1 3|null' 'chmod 4755 a|is 
     fi
     started=$(api_started)
     eigen restore "$name" --yes
-    if [ "$CODE" = 1 ] && says "■  $name cannot be restored: .*${crafted#*|}" && [ "$(api_started)" = "$started" ] &&
+    if [ "$CODE" = 1 ] && { says "■  $name cannot be restored: .*${crafted#*|}" ||
+        says "■  Unpacking failed: .*${crafted#*|}"; } && [ "$(api_started)" = "$started" ] &&
         [ "$(aside_count)" = "$aside" ] && [ ! -e "$INSTALL/.eigen/restore" ] &&
         ! scratch_run grep -q crafted.example.org "$INSTALL/.env.production"; then
         ok "a snapshot where data/ holds '${crafted%%|*}' is refused before anything stops"
@@ -507,6 +510,19 @@ for crafted in 'ln a b|is a hard link' 'mknod null c 1 3|null' 'chmod 4755 a|is 
         show
     fi
 done
+
+# A broken override: the check passes, Compose cannot stop Eigen, and root's unpacked copy must not stay behind.
+started=$(api_started)
+scratch_run sh -c 'cp -p "$1" "$1.bak" && printf "x-broken: [\n" >>"$1"' sh "$INSTALL/docker-compose.override.yml"
+eigen restore "$SNAPSHOT" --yes
+scratch_run mv "$INSTALL/docker-compose.override.yml.bak" "$INSTALL/docker-compose.override.yml"
+if [ "$CODE" = 1 ] && says '■  Could not stop Eigen' && [ ! -e "$INSTALL/.eigen/restore" ] &&
+    [ "$(api_started)" = "$started" ] && [ "$(aside_count)" = "$aside" ]; then
+    ok "a restore whose stop fails leaves Eigen running and removes the unpacked copy"
+else
+    fail "the restore with a failing stop: exit $CODE"
+    show
+fi
 
 # Big enough that the restore is still unpacking when the interrupt lands.
 scratch_run sh -c 'head -c 300000000 /dev/urandom >"$1"' sh "$INSTALL/data/ballast.bin"

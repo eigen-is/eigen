@@ -385,9 +385,11 @@ backup() {
     cli_as 0 snapshot
 }
 
-# While Eigen still runs, the CLI asks (a no is its exit 3), then unpacks and checks the snapshot aside: a refusal
-# stops nothing, and the downtime is the swap alone. Eigen starts again whatever happens to the swap. An interrupt
-# reaches the CLI, which says how it ended, so the launcher waits for it instead of leaving.
+# Two CLI runs as root. While Eigen still runs, restore --check asks (a no is its exit 3), unpacks and checks the
+# snapshot into .eigen/restore and names it in .eigen/restore/.snapshot; once Eigen is stopped, restore without
+# --check swaps that marked copy in. So a refusal stops nothing, and the downtime is the swap alone. Eigen starts
+# again whatever happens to the swap. An interrupt reaches the CLI, which says how it ended, so the launcher waits
+# for it instead of leaving.
 restore() {
     case ${1:-} in -h | --help)
         need_image "Run ./eigen setup first; ./eigen restore --help works after that."
@@ -403,7 +405,8 @@ restore() {
     checked=0
     cli_as 0 restore "$@" --check || checked=$?
     case $checked in 0) ;; 3) exit 0 ;; *) exit "$checked" ;; esac
-    trap restart EXIT
+    # A stop that fails or is interrupted leaves root's checked copy, a whole data/, for root to remove.
+    trap 'cli_as 0 rm -rf .eigen/restore; restart' EXIT
     trap 'exit 130' INT TERM
     if [ -f .env.production ]; then step "Stopping Eigen" "Eigen stopped" "Could not stop Eigen" dc stop; fi
     trap : INT TERM

@@ -42,7 +42,7 @@ Writes data/ and ${ENV_PATH} into ${SNAPSHOTS}/eigen-<UTC time>.tar.gz. Stop Eig
 
   --pre-update   Name it eigen-pre-update-<UTC time>.tar.gz and delete the pre-update snapshots
                  older than the previous one`;
-// --check is the launcher's: it asks, unpacks and checks while Eigen runs, and leaves the live data alone.
+// --check is the launcher's half of the seam explained at restore() in ./eigen.
 export const RESTORE_OPTIONS = { yes: { type: 'boolean' }, check: { type: 'boolean' } } as const;
 export const RESTORE_USAGE = `Usage: ./eigen restore <snapshot> [--yes]
 
@@ -51,17 +51,19 @@ The current data/ and ${ENV_PATH} are kept aside.
 
   --yes   Do not ask`;
 
-// What refusal() looks at: devices, fifos, sockets, setuid or setgid bits, hard links and links.
-const SUSPECTS =
-    '-type b -o -type c -o -type p -o -type s -o -perm -4000 -o -perm -2000 -o -type f -links +1 -o -type l';
+// What refusal() looks at: devices, fifos, sockets, setuid or setgid files, and links. Not a setgid folder: a setgid
+// install folder hands g+s down to every folder in it.
+const SUSPECTS = '-type b -o -type c -o -type p -o -type s -o -type f ( -perm -4000 -o -perm -2000 ) -o -type l';
 
 // Newest first by the time in the name, whether or not it is a pre-update one.
 const byStamp = (a: string, b: string) => b.replace('pre-update-', '').localeCompare(a.replace('pre-update-', ''));
 
 // Why the unpacked snapshot has no place in data/, or null. Root unpacked it and the server runs on it: no device,
-// fifo, socket, setuid or setgid bit, hard link, or link that leads out of data/.
+// fifo, socket, setuid or setgid file, or link that leads out of data/. A hard link in data/ is fine (Dovecot makes
+// them on an IMAP copy): tar links only to what it unpacked into STAGING, and the env file must be linked nowhere.
 async function refusal(): Promise<string | null> {
-    if (!lstatSync(join(STAGING, ENV_PATH)).isFile()) return `${ENV_PATH} is not a file`;
+    const env = lstatSync(join(STAGING, ENV_PATH));
+    if (!env.isFile() || env.nlink > 1) return `${ENV_PATH} is not a plain file`;
     if (!lstatSync(join(STAGING, 'data')).isDirectory()) return 'data is not a folder';
     const suspects = Bun.spawn(['find', STAGING, '(', ...SUSPECTS.split(' '), ')', '-print0'], {
         stdout: 'pipe',
@@ -81,8 +83,7 @@ async function refusal(): Promise<string | null> {
                 // Leads nowhere yet, so it could lead anywhere later.
             }
             if (target !== data && !target.startsWith(`${data}/`)) return `${name} is a link that leads out of data/`;
-        } else if (stat.mode & 0o6000) return `${name} is setuid or setgid`;
-        else if (stat.isFile()) return `${name} is a hard link`;
+        } else if (stat.isFile()) return `${name} is setuid or setgid`;
         else return `${name} is a device, fifo or socket`;
     }
     return null;
@@ -214,6 +215,16 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
         );
     }
 
+    // The swap is two renames next to data/: a link would move instead of the data, and a data/ on another disk cannot
+    // be renamed at all.
+    const data = lstatSync('data', { throwIfNoEntry: false });
+    if (data && (data.isSymbolicLink() || data.dev !== statSync('.').dev)) {
+        ui.fail(
+            'Restore needs data/ as a folder inside the install folder.',
+            'Move the data into data/ here, then run ./eigen restore again.',
+        );
+    }
+
     const what = `${name}, a snapshot of Eigen ${meta.version}`;
     if (!flags.yes) {
         const go = await ui.confirm({
@@ -226,9 +237,9 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
             process.exit(DECLINED);
         }
     }
-    // Unpacked and checked aside, by the launcher's --check run while Eigen still runs, so a refusal stops nothing and
-    // the downtime is the swap alone. An interrupt before the swap leaves the live data untouched; the handler also
-    // holds one during the swap, which is synchronous, until the swap is done.
+    // The --check run unpacks and checks aside and names the snapshot in the marker; the swap run takes a copy so
+    // marked as it is (the seam is explained at restore() in ./eigen). An interrupt before the swap leaves the live
+    // data untouched; the handler also holds one during the swap, which is synchronous, until the swap is done.
     let interrupted = false;
     let extract: Subprocess<'ignore', 'ignore', 'pipe'> | undefined;
     const interrupt = () => {
@@ -248,13 +259,20 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
         });
         if (interrupted) extract.kill();
         const [code, error] = await Promise.all([extract.exited, new Response(extract.stderr).text()]);
-        const reason = interrupted ? null : code !== 0 ? error.trim() : await refusal();
-        if (interrupted || reason) {
-            rmSync(STAGING, { recursive: true, force: true });
-            if (reason) cannot(reason);
+        const reason = interrupted || code !== 0 ? null : await refusal();
+        if (interrupted || code !== 0 || reason) rmSync(STAGING, { recursive: true, force: true });
+        if (interrupted) {
             ui.outro('Cancelled. Nothing was changed.');
             process.exit(130);
         }
+        // The whole archive read cleanly above: this is a full disk, most often. tar's first line names the cause.
+        if (code !== 0) {
+            ui.fail(
+                `Unpacking failed: ${error.trim().split('\n')[0]}`,
+                'Fix what it says, then run ./eigen restore again.',
+            );
+        }
+        if (reason) cannot(reason);
         if (flags.check) {
             writeFileSync(marker, name);
             return;

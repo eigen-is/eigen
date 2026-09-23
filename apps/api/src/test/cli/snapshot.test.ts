@@ -3,10 +3,12 @@ import { randomBytes } from 'node:crypto';
 import {
     existsSync,
     linkSync,
+    lstatSync,
     mkdirSync,
     mkdtempSync,
     readdirSync,
     readFileSync,
+    renameSync,
     rmSync,
     statSync,
     symlinkSync,
@@ -340,12 +342,7 @@ describe('restore', () => {
     });
 
     test.each([
-        [
-            'a hard link',
-            (stage: string) => linkSync(join(stage, 'data/other.txt'), join(stage, 'data/linked.txt')),
-            'is a hard link',
-        ],
-        // chmod(1): Bun's chmodSync drops these bits on macOS, and there a folder takes setgid only in an own group.
+        // chmod(1): Bun's chmodSync drops these bits on macOS.
         [
             'a setuid file',
             (stage: string) => {
@@ -353,16 +350,6 @@ describe('restore', () => {
                 expect(statSync(join(stage, 'data/other.txt')).mode & 0o4000).toBe(0o4000);
             },
             'data/other.txt is setuid or setgid',
-        ],
-        [
-            'a setgid folder',
-            (stage: string) => {
-                mkdirSync(join(stage, 'data/shared'));
-                Bun.spawnSync(['chgrp', String(process.getgid?.()), join(stage, 'data/shared')]);
-                Bun.spawnSync(['chmod', '2755', join(stage, 'data/shared')]);
-                expect(statSync(join(stage, 'data/shared')).mode & 0o2000).toBe(0o2000);
-            },
-            'data/shared is setuid or setgid',
         ],
         [
             'a fifo',
@@ -398,16 +385,59 @@ describe('restore', () => {
                 rmSync(join(stage, '.env.production'));
                 symlinkSync('data/other.txt', join(stage, '.env.production'));
             },
-            '.env.production is not a file',
+            '.env.production is not a plain file',
+        ],
+        [
+            '.env.production hard-linked into data/',
+            (stage: string) => linkSync(join(stage, '.env.production'), join(stage, 'data/env')),
+            '.env.production is not a plain file',
         ],
     ])('refuses a snapshot holding %s and changes nothing', async (_, craft, reason) => {
         const dir = install();
         await handMade(dir, 'eigen-20200101-000000.tar.gz', { version, createdAt: new Date().toISOString() }, craft);
         const result = await eigen(dir, 'restore', 'eigen-20200101-000000.tar.gz', '--yes');
         expect(result.code).toBe(1);
-        expect(result.stderr).toContain('eigen-20200101-000000.tar.gz cannot be restored: ');
-        // Which of two hard-linked files find names first depends on the directory order.
-        expect(result.stderr).toContain(reason);
+        expect(result.stderr).toContain(`eigen-20200101-000000.tar.gz cannot be restored: ${reason}.`);
+        untouched(dir);
+    });
+
+    // Dovecot's IMAP COPY hard-links a message, and a setgid install folder hands g+s down to every folder.
+    test('a hard-linked message and a setgid folder are restored', async () => {
+        const dir = install();
+        await handMade(
+            dir,
+            'eigen-20200101-000000.tar.gz',
+            { version, createdAt: new Date().toISOString() },
+            (stage) => {
+                mkdirSync(join(stage, 'data/mail/cur'), { recursive: true });
+                mkdirSync(join(stage, 'data/mail/.Archive/cur'), { recursive: true });
+                writeFileSync(join(stage, 'data/mail/cur/1.eml'), 'message\n');
+                linkSync(join(stage, 'data/mail/cur/1.eml'), join(stage, 'data/mail/.Archive/cur/1.eml'));
+                // A folder takes setgid on macOS only in an own group.
+                Bun.spawnSync(['chgrp', String(process.getgid?.()), join(stage, 'data/mail')]);
+                Bun.spawnSync(['chmod', '2755', join(stage, 'data/mail')]);
+                expect(statSync(join(stage, 'data/mail')).mode & 0o2000).toBe(0o2000);
+            },
+        );
+        const result = await eigen(dir, 'restore', 'eigen-20200101-000000.tar.gz', '--yes');
+        expect(result.stderr).toBe('');
+        expect(result.code).toBe(0);
+        expect(statSync(join(dir, 'data/mail/.Archive/cur/1.eml')).ino).toBe(
+            statSync(join(dir, 'data/mail/cur/1.eml')).ino,
+        );
+    });
+
+    test('refuses a data/ that is a link, and changes nothing', async () => {
+        const dir = install();
+        const name = await snapshot(dir);
+        const elsewhere = mkdtempSync(join(tmpdir(), 'eigen-snapshot-data-'));
+        dirs.push(elsewhere);
+        renameSync(join(dir, 'data'), join(elsewhere, 'data'));
+        symlinkSync(join(elsewhere, 'data'), join(dir, 'data'));
+        const result = await eigen(dir, 'restore', name, '--yes');
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain('Restore needs data/ as a folder inside the install folder.');
+        expect(lstatSync(join(dir, 'data')).isSymbolicLink()).toBe(true);
         untouched(dir);
     });
 
@@ -421,16 +451,20 @@ describe('restore', () => {
         expect(readFileSync(join(dir, 'data/alias'), 'utf8')).toBe('other\n');
     });
 
-    // An unprivileged tar cannot make a device, and nothing links to what it does not unpack: tar itself fails.
+    // An unprivileged tar cannot make a device, and a hard link reaches only what tar unpacked into the staging
+    // folder: tar itself fails.
     test.each([
         ['a device', [tarEntry('data/null', '3')]],
         ['a hard link to the launcher', [tarEntry('data/eigen', '1', 'eigen')]],
-    ])('refuses a snapshot holding %s and changes nothing', async (_, entries) => {
+        ['a hard link out of the install folder', [tarEntry('data/passwd', '1', '/etc/passwd')]],
+    ])('fails to unpack a snapshot holding %s and changes nothing', async (_, entries) => {
         const dir = install();
         rawArchive(dir, 'eigen-20200101-000000.tar.gz', entries);
         const result = await eigen(dir, 'restore', 'eigen-20200101-000000.tar.gz', '--yes');
         expect(result.code).toBe(1);
-        expect(result.stderr).toContain('eigen-20200101-000000.tar.gz cannot be restored: ');
+        expect(result.stderr).toMatch(
+            /^■ {2}Unpacking failed: .+\n└ {2}Fix what it says, then run \.\/eigen restore again\.\n$/,
+        );
         untouched(dir);
     });
 
