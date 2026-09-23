@@ -564,7 +564,7 @@ describe('engine/conditional-format edges — apply-range clamping', () => {
 });
 
 describe('engine/conditional-format edges — formula scan', () => {
-    test('evaluator runs per coordinate with a per-range anchor, missing cells included, and "=" is prefixed', () => {
+    test('evaluator runs per coordinate from the first range anchor, missing cells included, and "=" is prefixed', () => {
         // data[0][1] is a hole inside the matrix — the formula branch has no nil guard.
         const data: CellMatrix = [
             [numCell(1), null],
@@ -596,7 +596,7 @@ describe('engine/conditional-format edges — formula scan', () => {
         expect(calls).toEqual([
             ['=A1>0', 0, 0, 0, 0],
             ['=A1>0', 0, 0, 0, 1],
-            ['=A1>0', 1, 0, 1, 0],
+            ['=A1>0', 0, 0, 1, 0],
         ]);
         expect(styles).toEqual({ '0_0': RED, '0_1': RED, '1_0': RED });
     });

@@ -1059,17 +1059,17 @@ describe('Sheets xlsx conversion fidelity', () => {
         ]);
     });
 
-    test('convert imports expression rules anchored at the first range and shifted per sub-range', async () => {
+    test('convert imports an expression rule over several ranges as one rule with its formula as written', async () => {
         const workbook = new ExcelJS.Workbook();
         const ws = workbook.addWorksheet('Expr');
         ws.getCell('B2').value = 'longtext';
         ws.getCell('D2').value = 'x';
         ws.addConditionalFormatting({
-            ref: 'B2:B4 D2:D4',
+            ref: 'B2:B4 D2:D4 A7:A8',
             rules: [
                 {
                     type: 'expression',
-                    formulae: ['LEN(B2)>2'],
+                    formulae: ['SUM(B2:$C$3)>2'],
                     priority: 1,
                     style: { font: { color: { argb: 'FF0000FF' } } },
                 },
@@ -1077,48 +1077,20 @@ describe('Sheets xlsx conversion fidelity', () => {
         });
         const sheets = await parseWorkbook(workbook);
 
-        // Excel anchors the formula's relative refs at the top-left of the FIRST sqref
-        // range; the engine re-anchors per cellrange entry, so the importer emits one
-        // rule per sub-range with the formula pre-shifted (D2 range → LEN(D2)).
+        // Excel anchors the relative refs at the first range's top-left, and so does the engine.
         expect(sheets[0].conditionalFormatRules).toEqual([
             {
                 type: 'default',
-                cellrange: [{ row: [1, 3], column: [1, 1] }],
+                cellrange: [
+                    { row: [1, 3], column: [1, 1] },
+                    { row: [1, 3], column: [3, 3] },
+                    { row: [6, 7], column: [0, 0] },
+                ],
                 format: { textColor: '#0000FF', cellColor: null },
                 conditionName: 'formula',
                 conditionRange: [],
-                conditionValue: ['=LEN(B2)>2'],
+                conditionValue: ['=SUM(B2:$C$3)>2'],
             },
-            {
-                type: 'default',
-                cellrange: [{ row: [1, 3], column: [3, 3] }],
-                format: { textColor: '#0000FF', cellColor: null },
-                conditionName: 'formula',
-                conditionRange: [],
-                conditionValue: ['=LEN(D2)>2'],
-            },
-        ]);
-    });
-
-    test('convert pre-shifts a sub-range formula on both axes at once', async () => {
-        const workbook = new ExcelJS.Workbook();
-        const ws = workbook.addWorksheet('Expr');
-        ws.addConditionalFormatting({
-            ref: 'A1:A2 D3:D4',
-            rules: [
-                {
-                    type: 'expression',
-                    formulae: ['SUM(A1:$B$2)>0'],
-                    priority: 1,
-                    style: { font: { color: { argb: 'FF0000FF' } } },
-                },
-            ],
-        });
-        const sheets = await parseWorkbook(workbook);
-
-        expect(sheets[0].conditionalFormatRules).toMatchObject([
-            { cellrange: [{ row: [0, 1], column: [0, 0] }], conditionValue: ['=SUM(A1:$B$2)>0'] },
-            { cellrange: [{ row: [2, 3], column: [3, 3] }], conditionValue: ['=SUM($B$2:D3)>0'] },
         ]);
     });
 

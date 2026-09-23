@@ -18,7 +18,7 @@
 // pasteHandler plain-string branch, entered via handlePasteByClick.
 
 import { describe, expect, it } from 'bun:test';
-import type { Cell } from '../../../engine/types';
+import type { Cell, DefaultConditionalFormatRule } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { handlePasteByClick } from '../../../state/events/paste';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
@@ -399,6 +399,47 @@ describe('conditional-format migration on cut/paste (cfSplitRange contract)', ()
         // silently deleted) must fail this.
         const rule = ctx.sheets[0].conditionalFormatRules![0];
         expect(rule.cellrange).toEqual([{ row: [4, 4], column: [4, 4] }]);
+    });
+
+    // A formula rule reads relative to its first range's top-left, so a paste that moves
+    // that corner must re-express the formula for every cell to read what it read before.
+    const formulaRule = (): DefaultConditionalFormatRule => ({
+        type: 'default',
+        cellrange: [{ row: [1, 5], column: [1, 1] }],
+        format: { cellColor: '#ff0000' },
+        conditionName: 'formula',
+        conditionValue: ['=B2>1'],
+    });
+
+    it('re-expresses a formula rule whose top rows are cut away', () => {
+        const ctx = makeCtx(12, 8);
+        ctx.sheets[0].conditionalFormatRules = [formulaRule()];
+
+        copyThenPaste(ctx, rangeSel(1, 2, 1, 1), single(7, 4), { cut: true });
+
+        expect(ctx.sheets[0].conditionalFormatRules).toEqual([
+            {
+                ...formulaRule(),
+                cellrange: [
+                    { row: [3, 5], column: [1, 1] },
+                    { row: [7, 8], column: [4, 4] },
+                ],
+                conditionValue: ['=B4>1'],
+            },
+        ]);
+    });
+
+    it('re-expresses a formula rule copied from the middle of its range', () => {
+        const ctx = makeCtx(12, 8);
+        ctx.sheets[0].conditionalFormatRules = [formulaRule()];
+
+        copyThenPaste(ctx, single(2, 1), single(5, 4));
+
+        expect(ctx.sheets[0].conditionalFormatRules?.[1]).toEqual({
+            ...formulaRule(),
+            cellrange: [{ row: [5, 5], column: [4, 4] }],
+            conditionValue: ['=E6>1'],
+        });
     });
 });
 
