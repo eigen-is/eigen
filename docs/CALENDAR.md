@@ -199,7 +199,7 @@ iMIP carries invitations between Eigen users and external parties over email (RF
 ### Outbound flow (Eigen → external)
 
 - **Create with external attendees**: `invite-propagation.ts` detects attendees with no Eigen account and calls `composeInviteEmail()` → `sendMail()`. Sends `METHOD:REQUEST`.
-- **Update**: `composeUpdateEmail()` → an updated `METHOD:REQUEST`. **Cancel**: `composeCancelEmail()` → `METHOD:CANCEL`.
+- **Update**: `composeInviteEmail(…, updated = true)` → an updated `METHOD:REQUEST` with an "updated" subject and banner. **Cancel**: `composeCancelEmail()` → `METHOD:CANCEL`.
 - **Attendee RSVP**: `composeRsvpReply()` → `METHOD:REPLY`, from `rsvp()` and from `deleteEvent()` (a delete is a decline). A `scope:'this'` RSVP carries a `RECURRENCE-ID` for the original instant, so the organizer applies the PARTSTAT to that occurrence and not to the series.
 - **The body is projected, never the stored bytes.** `serializeEventForImip` builds a fresh VCALENDAR from the rows, so it carries no `X-EIGEN-*` line by construction, and `stripEigenStamps` runs over it anyway. **A series travels whole.** The invite and the update mail for a series master carry, through `buildResource`, the master with its `EXDATE`s and one override VEVENT per stored exception in one VCALENDAR with one `METHOD` (RFC 5546), so an external guest's client renders a moved occurrence at its new slot and a deleted one not at all; a message about one occurrence carries that occurrence alone, with its `RECURRENCE-ID`, and a cancel carries no exceptions. An override that states no guests of its own goes out with the organizer as its only `ATTENDEE` ([ROADMAP.md](ROADMAP.md)). **No `VALARM` ever travels with a message**: the organizer's reminders are their own, and an `email` one would ship as `ACTION:EMAIL` naming the organizer as its `ATTENDEE`, so every guest's client would mail the organizer at the trigger. The `URL` stays — guests seeing the link is the point. A REQUEST asks each guest to reply (`RSVP=TRUE`) and rides the organizer along as an accepted attendee (RFC 5546).
 
@@ -222,8 +222,7 @@ External organizers have no Eigen user id, so `organizerUserId` is `external_{or
 
 | Function | Purpose |
 |---|---|
-| `composeInviteEmail()` | `OutboundMail` for `METHOD:REQUEST` (new invite) |
-| `composeUpdateEmail()` | `OutboundMail` for `METHOD:REQUEST` (update) |
+| `composeInviteEmail()` | `OutboundMail` for `METHOD:REQUEST`; `updated = true` marks the update mail |
 | `composeCancelEmail()` | `OutboundMail` for `METHOD:CANCEL` |
 | `composeRsvpReply()` | `OutboundMail` for `METHOD:REPLY` |
 | `summarizeCalendarInvite()` | read-time `CalendarInvite` summary for the message payload |
