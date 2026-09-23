@@ -61,6 +61,12 @@ next-env.d.ts
 /caddy-data/
 # Docker deployment
 .env.production
+.env.production.pre-restore-*
+/data.pre-restore-*/
+/docker-compose.override.yml
+/eigen.Caddyfile
+/eigen.apache.conf
+/eigen.nginx.conf
 /data/certs/
 /data/dkim/
 /backups/

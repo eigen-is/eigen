@@ -35,7 +35,7 @@ snapshots/
 .worktrees/
 docs/
 # Operator files in the install dir: the override may hold inline secrets, and the proxy snippets
-# `./eigen setup` writes are for the host webserver. The image reads none of them.
+# `./eigen setup` writes are for the host web server. The image reads none of them.
 docker-compose.override.yml
 eigen.nginx.conf
 eigen.Caddyfile
