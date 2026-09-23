@@ -40,7 +40,9 @@ export function installHappyDom(): Window {
     borrow('getComputedStyle', window.getComputedStyle.bind(window));
     borrow('IS_REACT_ACT_ENVIRONMENT', true);
 
-    afterAll(() => {
+    afterAll(async () => {
+        // react-dom reads `window.event` for any update still queued; let it run while the DOM is still there.
+        await new Promise((resolve) => setTimeout(resolve, 0));
         for (const [key, value] of previous) g[key] = value;
     });
 
