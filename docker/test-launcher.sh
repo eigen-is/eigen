@@ -15,7 +15,8 @@ FIX=$(cd "$FIX" && pwd -P)
 trap 'rm -rf "$FIX"' EXIT
 
 # The stub logs every call to $STUB_LOG. STUB_INFO and STUB_COMPOSE answer info and compose version, empty for a
-# failure; STUB_FAIL names the compose subcommands and docker commands that fail; STUB_IMAGE=1 makes image inspect fail.
+# failure; STUB_FAIL names the compose subcommands and docker commands that fail; STUB_IMAGE=1 makes image inspect fail;
+# STUB_LATEST is the version the registry's manifest of api:latest names.
 mkdir "$FIX/bin"
 cat >"$FIX/bin/docker" <<'EOF'
 #!/bin/sh
@@ -39,6 +40,7 @@ case $1 in
         esac
         ;;
     image) exit "${STUB_IMAGE:-0}" ;;
+    manifest) echo "\"org.opencontainers.image.version\": \"${STUB_LATEST:-}\"" ;;
     run) shift; echo "stub run: $*" ;;
     *) fails "$1" ;;
 esac
@@ -65,7 +67,7 @@ launch() {
     local dir="$FIX/$1" vars=("STUB_LOG=$FIX/calls.log") flags=() name var
     shift
     : >"$FIX/calls.log"
-    for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE EIGEN_ALLOW_ARCH; do
+    for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST EIGEN_ALLOW_ARCH; do
         if [ -n "${!name+set}" ]; then vars+=("$name=${!name}"); fi
     done
     CODE=0
@@ -207,6 +209,24 @@ for SHELL_NAME in dash busybox host; do
         ok "$SHELL_NAME: setup in a release folder without EIGEN_VERSION says to get a release"
     else
         fail "$SHELL_NAME: release setup without a version: exit $CODE, '$ERR'"
+    fi
+
+    # A prerelease comes before its version, and its numbers compare as numbers: rc.9 before rc.10.
+    failed=''
+    for versions in '0.3.0-rc.10 0.3.0-rc.9 up' '0.3.0-rc.9 0.3.0-rc.10 behind' '0.3.0 0.3.0-rc.1 up' \
+        '0.3.0-rc.1 0.3.0 behind' '0.2.100 0.2.99 up'; do
+        read -r have latest expected <<<"$versions"
+        printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=%s\n' "$have" >"$FIX/release/.env.production"
+        STUB_LATEST=$latest launch release update --check
+        got=behind
+        if printf '%s\n' "$OUT" | grep -q "Eigen $have is up to date"; then got=up; fi
+        if [ "$CODE" != 0 ] || [ "$got" != "$expected" ]; then failed="$failed $have/$latest"; fi
+    done
+    printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=0.2.99\n' >"$FIX/release/.env.production"
+    if [ -z "$failed" ]; then
+        ok "$SHELL_NAME: update --check orders versions and prereleases"
+    else
+        fail "$SHELL_NAME: update --check misorders:$failed"
     fi
 
     STUB_FAIL=compose-config launch source restart

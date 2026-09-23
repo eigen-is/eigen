@@ -271,14 +271,21 @@ step() {
     exit 1
 }
 
-# version_at_least <have> <want>, both like 2.24.4 or 0.3.0-rc.1: a prerelease comes before its version.
+# version_at_least <have> <want>, both like 2.24.4 or 0.3.0-rc.1: a prerelease comes before its version, and its
+# numbers compare as numbers.
 version_at_least() {
     awk -v have="$1" -v want="$2" 'BEGIN {
         split(have, h, "-"); split(want, w, "-"); split(h[1], hn, "."); split(w[1], wn, ".")
         for (i = 1; i <= 3; i++) if (hn[i] + 0 != wn[i] + 0) exit !(hn[i] + 0 > wn[i] + 0)
         hp = substr(have, length(h[1]) + 2); wp = substr(want, length(w[1]) + 2)
         if (hp == "" || wp == "") exit !(hp == "")
-        exit !(hp >= wp)
+        n = split(hp, hq, "."); m = split(wp, wq, ".")
+        for (i = 1; i <= n && i <= m; i++) {
+            if (hq[i] == wq[i]) continue
+            if (hq[i] ~ /^[0-9]+$/ && wq[i] ~ /^[0-9]+$/) exit !(hq[i] + 0 > wq[i] + 0)
+            exit !(hq[i] > wq[i])
+        }
+        exit !(n >= m)
     }'
 }
 
