@@ -398,10 +398,12 @@ describe('File watch + fan-out', () => {
         const countSelects = async (): Promise<number> => {
             await drive.getWatches(bob!); // warm the folder-size cache so only the listing itself is counted
             const spies = home.drive.getMounts().map((mount) => spyOn(mount.db, 'select'));
-            await drive.getWatches(bob!);
-            const count = spies.reduce((sum, spy) => sum + spy.mock.calls.length, 0);
-            for (const spy of spies) spy.mockRestore();
-            return count;
+            try {
+                await drive.getWatches(bob!);
+                return spies.reduce((sum, spy) => sum + spy.mock.calls.length, 0);
+            } finally {
+                for (const spy of spies) spy.mockRestore();
+            }
         };
 
         const folder = await createFolder('WatchSelectCount');
