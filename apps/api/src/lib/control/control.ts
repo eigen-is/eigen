@@ -1,7 +1,7 @@
 import { X509Certificate } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { BACKUP_STAMP_PATTERN, parseBackupStamp } from '@workspace/lib/validation';
+import { parseBackupStamp, SNAPSHOT_NAME } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { auth } from '../auth/auth';
 import { backupsDirPath } from '../backup/paths';
@@ -27,8 +27,6 @@ export type ControlStatus = {
 
 // setupUrl is null once setup is done.
 export type SetupLink = { setupUrl: string | null; signInUrl: string };
-
-const SNAPSHOT_NAME = new RegExp(`^eigen-(?:pre-update-)?${BACKUP_STAMP_PATTERN}\\.tar\\.gz$`);
 
 // Served only on the Unix socket, which `docker compose exec` reaches as the API's own user: the CLI's
 // online commands, never the web.

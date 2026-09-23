@@ -2,6 +2,7 @@ import { bootstrap } from './bootstrap';
 import { configure } from './configure';
 import { resetPassword } from './reset-password';
 import { setupLink } from './setup-link';
+import { restore, snapshot } from './snapshot';
 import { status } from './status';
 
 const COMMANDS = new Map([
@@ -10,6 +11,8 @@ const COMMANDS = new Map([
     ['status', status],
     ['reset-password', resetPassword],
     ['setup-link', setupLink],
+    ['snapshot', snapshot],
+    ['restore', restore],
 ]);
 
 const USAGE = `Usage: eigen <command> [flags]
@@ -19,7 +22,9 @@ Commands:
   configure        Ask the setup questions and write .env.production
   status           Report on the running server (run by ./eigen status)
   reset-password   Set a new password for an account and sign it out everywhere
-  setup-link       Print a fresh one-time setup link, or where to sign in once set up`;
+  setup-link       Print a fresh one-time setup link, or where to sign in once set up
+  snapshot         Write data/ and .env.production into backups/ (run by ./eigen backup)
+  restore          Put data/ and .env.production back from a snapshot (run by ./eigen restore)`;
 
 const [command = '', ...args] = process.argv.slice(2);
 const run = COMMANDS.get(command);
