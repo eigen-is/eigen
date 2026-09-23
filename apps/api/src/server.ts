@@ -3,6 +3,7 @@ import { app } from './app';
 import { drainBackupJobs } from './lib/backup/jobs';
 import { wipeBackupStaging } from './lib/backup/paths';
 import { recoverInterruptedRestores } from './lib/backup/recovery';
+import { startControlSocket } from './lib/control/control';
 import { documentTransformRunner } from './lib/document/transform/runner';
 import { drainACLFanOuts } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';
@@ -43,12 +44,15 @@ const server = app.listen({
 
 console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
 
+const controlSocket = startControlSocket();
+
 registerScheduledJobs();
 
 async function gracefulShutdown(signal: string) {
     console.log(`\n${signal} received, shutting down gracefully...`);
     stopAllSchedules();
     server.stop();
+    controlSocket.stop();
     // Stop transform admission and finish/terminate the active Worker before the
     // Mount/database teardown below — jobs hold no db leases, but their results
     // must not race the cache/mount shutdown.
