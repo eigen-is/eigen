@@ -46,9 +46,12 @@ registry_images() {
     docker image ls --format "{{.Repository}}:{{.Tag}} {{.ID}}" | awk -v repo="$REGISTRY/" 'index($1, repo) == 1'
 }
 
-# What this run pushed and pulled, the registry and its volume; harness_cleanup does the rest.
+# What this run pushed and pulled, the registry and its volume; harness_cleanup does the rest. The installs go first:
+# an image in use stays.
 release_cleanup() {
-    local images
+    local images project
+    if [ "${HARNESS_KEEP:-0}" = 1 ]; then return; fi
+    for project in $HARNESS_PROJECTS; do down_project "$project"; done
     images=$(registry_images | awk '{ print $2 }' | sort -u)
     if [ -n "$images" ]; then docker image rm -f $images >/dev/null 2>&1 || true; fi
     docker rm -f "eigentest-registry-$RUN" >/dev/null 2>&1 || true
