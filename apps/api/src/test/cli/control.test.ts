@@ -1,10 +1,11 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { copyFileSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { account as accountSchema, user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
+import { verifyProtocolAuth } from '../../lib/auth/protocol-auth';
 import { backupsDirPath } from '../../lib/backup/paths';
 import { getDataRoot } from '../../lib/config/paths';
 import { type ControlStatus, controlApp, startControlSocket } from '../../lib/control/control';
@@ -117,20 +118,29 @@ describe('control socket', () => {
     test('is created with mode 0600 over a stale file, answers, and is removed when stopped', async () => {
         const path = join(TEST_DATA_DIR, 's.sock');
         writeFileSync(path, 'left over by a killed process');
-        const umask = process.umask();
         process.env['EIGEN_CONTROL_SOCKET'] = path;
         const server = startControlSocket();
         process.env['EIGEN_CONTROL_SOCKET'] = SOCKET;
         try {
             expect(statSync(path).isSocket()).toBe(true);
             expect(statSync(path).mode & 0o777).toBe(0o600);
-            expect(process.umask()).toBe(umask);
             const res = await fetch('http://eigen/status', { unix: path });
             expect(res.status).toBe(200);
         } finally {
             server.stop(true);
         }
         expect(existsSync(path)).toBe(false);
+    });
+
+    test('a folder it cannot bind in is named, with who must be able to write it', () => {
+        process.env['EIGEN_CONTROL_SOCKET'] = join(TEST_DATA_DIR, 'no-such-folder', 'c.sock');
+        try {
+            expect(() => startControlSocket()).toThrow(
+                `Could not open the control socket ${join(TEST_DATA_DIR, 'no-such-folder', 'c.sock')}: its folder must be writable by the API user (uid 1000).`,
+            );
+        } finally {
+            process.env['EIGEN_CONTROL_SOCKET'] = SOCKET;
+        }
     });
 });
 
@@ -179,18 +189,35 @@ describe('GET /status', () => {
             rmSync(certs, { recursive: true });
         }
     });
+
+    test('a certificate file that does not parse reads as none', async () => {
+        const certs = join(getDataRoot(), 'certs');
+        mkdirSync(certs, { recursive: true });
+        writeFileSync(join(certs, 'cert.pem'), readFileSync(FIXTURE_CERT, 'utf8').slice(0, 100));
+        try {
+            expect((await getStatus()).certExpiresAt).toBeNull();
+        } finally {
+            rmSync(certs, { recursive: true });
+        }
+    });
 });
 
 describe('POST /reset-password', () => {
-    test('sets the new password and signs every session out', async () => {
+    test('sets the new password and signs every session and app password out', async () => {
         const dave = await createTestUser('dave-reset@test.eigen.is', OLD_PASSWORD, 'Dave Reset');
         expect(await hasSession(dave.sessionToken)).toBe(true);
+        const appPassword = await auth.api.createApiKey({
+            body: { name: 'phone' },
+            headers: { cookie: `better-auth.session_token=${dave.sessionToken}` },
+        });
+        expect((await verifyProtocolAuth(dave.email, appPassword.key)).id).toBe(dave.id);
 
         const res = await post('/reset-password', { email: 'Dave-Reset@Test.Eigen.is', password: 'new-password-1' });
         expect(res.status).toBe(200);
         expect(await res.json()).toEqual({ email: 'dave-reset@test.eigen.is' });
 
         expect(await hasSession(dave.sessionToken)).toBe(false);
+        await expect(verifyProtocolAuth(dave.email, appPassword.key)).rejects.toThrow('Unauthorized');
         expect(await signsIn(dave.email, OLD_PASSWORD)).toBe(false);
         expect(await signsIn(dave.email, 'new-password-1')).toBe(true);
     });
@@ -245,12 +272,23 @@ describe('eigen status', () => {
         expect(stdout).toMatch(/caddy +running\n/);
         expect(stdout).toMatch(/postfix +exited/);
         expect(stdout).toContain('./eigen update');
-        expect(stdout).toMatch(/Disk +[\d.]+ [KMGT]B free of [\d.]+ [KMGT]B/);
+        expect(stdout).toMatch(/Disk +\d+\.\d [KMGT]B free of \d+\.\d [KMGT]B\n/);
         expect(stdout).toMatch(/Last snapshot +none yet/);
         expect(stdout).toMatch(/Mail queue +2 messages waiting/);
         // Plain text: no color, no glyphs.
         expect(stdout).not.toContain('\x1b[');
         expect(stdout).not.toContain('◇');
+    });
+
+    test('leaves out an update check that could not run, and tells an unreadable queue from a stopped postfix', async () => {
+        const { stdout, code } = await runCli(['status'], undefined, {
+            EIGEN_STATUS_SERVICES: 'eigen-api\trunning\thealthy\npostfix\trunning\t',
+            EIGEN_STATUS_UPDATE: '',
+            EIGEN_STATUS_MAIL_QUEUE: '',
+        });
+        expect(code).toBe(0);
+        expect(stdout).not.toContain('Update');
+        expect(stdout).toMatch(/Mail queue +could not be read; \.\/eigen logs postfix shows why/);
     });
 
     test('marks each line with a colored glyph on a terminal, and not with NO_COLOR', async () => {

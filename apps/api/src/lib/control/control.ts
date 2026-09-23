@@ -2,8 +2,10 @@ import { X509Certificate } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parseBackupStamp, SNAPSHOT_NAME } from '@workspace/lib/validation';
+import { eq } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
-import { auth } from '../auth/auth';
+import { apikey } from '../../../auth-schema';
+import { auth, getAuthDrizzleDb } from '../auth/auth';
 import { backupsDirPath } from '../backup/paths';
 import { isMailEnabled } from '../config/env';
 import { getControlSocketPath, getDataRoot } from '../config/paths';
@@ -52,7 +54,13 @@ export const controlApp = new Elysia({ name: 'control' })
             if (createdAt && (!lastSnapshot || createdAt > lastSnapshot.createdAt)) lastSnapshot = { name, createdAt };
         }
         // Caddy's export-certs.sh copies the certificate here; a server behind its own web server has none.
-        const certPath = path.join(getDataRoot(), 'certs', 'cert.pem');
+        let certExpiresAt: string | null = null;
+        try {
+            const cert = new X509Certificate(fs.readFileSync(path.join(getDataRoot(), 'certs', 'cert.pem')));
+            certExpiresAt = new Date(cert.validTo).toISOString();
+        } catch {
+            // No certificate, or a file that is not one: the report says none rather than failing whole.
+        }
         return {
             version: config.version,
             commit: config.commit ?? null,
@@ -63,9 +71,7 @@ export const controlApp = new Elysia({ name: 'control' })
             diskFree: disk.bavail * disk.bsize,
             diskTotal: disk.blocks * disk.bsize,
             lastSnapshot,
-            certExpiresAt: fs.existsSync(certPath)
-                ? new Date(new X509Certificate(fs.readFileSync(certPath)).validTo).toISOString()
-                : null,
+            certExpiresAt,
         };
     })
     // Each call replaces the previous link, so a rerun of ./eigen setup is how an operator gets a fresh one.
@@ -105,19 +111,27 @@ export const controlApp = new Elysia({ name: 'control' })
                 });
             }
             await context.internalAdapter.deleteUserSessions(user.id);
+            // App passwords open IMAP, CalDAV and WebDAV without the password, so a reset revokes them too.
+            getAuthDrizzleDb().delete(apikey).where(eq(apikey.referenceId, user.id)).run();
             return { email: user.email };
         },
         { body: t.Object({ email: t.String({ minLength: 1 }), password: t.String() }) },
     );
 
-// A socket left by a killed process would make the bind fail. Bun removes the file again on stop().
+// A socket left by a killed process would make the bind fail. Bun removes the file again on stop(). The image's
+// /run/eigen is 0700, so nobody else can reach the socket before the chmod.
 export function startControlSocket(): Bun.Server<undefined> {
     const socketPath = getControlSocketPath();
-    fs.rmSync(socketPath, { force: true });
-    // The umask closes the window between bind and chmod in which the socket would be group- or world-open.
-    const umask = process.umask(0o177);
-    const server = Bun.serve({ unix: socketPath, fetch: controlApp.fetch });
-    process.umask(umask);
+    let server: Bun.Server<undefined>;
+    try {
+        fs.rmSync(socketPath, { force: true });
+        server = Bun.serve({ unix: socketPath, fetch: controlApp.fetch });
+    } catch (error) {
+        throw new Error(
+            `Could not open the control socket ${socketPath}: its folder must be writable by the API user (uid 1000).`,
+            { cause: error },
+        );
+    }
     fs.chmodSync(socketPath, 0o600);
     return server;
 }

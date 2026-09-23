@@ -7,7 +7,8 @@ import { createUi } from './ui';
 const MIN_PASSWORD_LENGTH = 8;
 const USAGE = `Usage: reset-password <email> [--generate]
 
-Sets a new password for the account with this address and signs it out everywhere.
+Sets a new password for the account with this address, signs it out everywhere and revokes
+its app passwords.
 It asks for the password, or reads one line from stdin when that is not a terminal.
 
   --generate   Make up a strong password and print it once`;
@@ -70,5 +71,5 @@ export async function resetPassword(args: string[]): Promise<void> {
     }
     const changed: { email: string } = await res.json();
     if (flags.generate) console.log(`New password: ${password}`);
-    ui.outro(`Password changed for ${changed.email}. Every session is signed out.`);
+    ui.outro(`Password changed for ${changed.email}. Its sessions and app passwords are revoked.`);
 }

@@ -58,7 +58,7 @@ export async function status(): Promise<void> {
         {
             level: api.diskFree < api.diskTotal / 10 ? 'warn' : 'ok',
             label: 'Disk',
-            value: `${formatFileSize(api.diskFree)} free of ${formatFileSize(api.diskTotal)}`,
+            value: `${formatFileSize(api.diskFree, 1)} free of ${formatFileSize(api.diskTotal, 1)}`,
         },
         api.lastSnapshot
             ? {
@@ -94,6 +94,8 @@ export async function status(): Promise<void> {
                 ? { level: 'warn', label: 'Mail queue', value: `${waiting} message${waiting === 1 ? '' : 's'} waiting` }
                 : { level: 'ok', label: 'Mail queue', value: 'empty' },
         );
+    } else if (services.some(({ service, state }) => service === 'postfix' && state === 'running')) {
+        data.push({ level: 'warn', label: 'Mail queue', value: 'could not be read; ./eigen logs postfix shows why' });
     } else if (api.mailEnabled) {
         data.push({ level: 'warn', label: 'Mail queue', value: 'unknown; postfix is not running' });
     }

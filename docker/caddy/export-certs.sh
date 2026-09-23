@@ -1,15 +1,16 @@
 #!/bin/sh
 # Export Caddy's auto-managed Let's Encrypt certs to a shared directory.
-# Dovecot and Postfix read from /shared-certs/.
+# Dovecot and Postfix read from /shared-certs/, and so does the certificate row of ./eigen status.
 # Runs as a background loop in the Caddy container.
-ACME_DIR="/data/caddy/certificates/acme-v02.api.letsencrypt.org-directory"
+ACME_DIR="/data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${DOMAIN}"
 
 while true; do
-    if [ -f "${ACME_DIR}/${DOMAIN}/${DOMAIN}.crt" ]; then
-        cp -f "${ACME_DIR}/${DOMAIN}/${DOMAIN}.crt" /shared-certs/cert.pem
-        cp -f "${ACME_DIR}/${DOMAIN}/${DOMAIN}.key" /shared-certs/key.pem
-        chmod 644 /shared-certs/cert.pem
-        chmod 600 /shared-certs/key.pem
+    # Only a changed certificate is copied, each file through a temp file and mv so no reader sees half of one.
+    if [ -f "${ACME_DIR}/${DOMAIN}.crt" ] && ! cmp -s "${ACME_DIR}/${DOMAIN}.crt" /shared-certs/cert.pem; then
+        cp "${ACME_DIR}/${DOMAIN}.key" /shared-certs/key.pem.tmp && chmod 600 /shared-certs/key.pem.tmp &&
+            mv -f /shared-certs/key.pem.tmp /shared-certs/key.pem &&
+            cp "${ACME_DIR}/${DOMAIN}.crt" /shared-certs/cert.pem.tmp && chmod 644 /shared-certs/cert.pem.tmp &&
+            mv -f /shared-certs/cert.pem.tmp /shared-certs/cert.pem
     fi
-    sleep 43200  # 12 hours
+    sleep 600
 done

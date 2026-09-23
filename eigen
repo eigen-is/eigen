@@ -25,8 +25,9 @@ Commands:
   status           Report on the version, the services, disk space, the last snapshot,
                    the certificate and the mail queue.
   reset-password <email> [--generate]
-                   Set a new password for an account and sign it out everywhere. It asks
-                   for the password; --generate makes one up and prints it.
+                   Set a new password for an account, sign it out everywhere and revoke
+                   its app passwords. It asks for the password; --generate makes one up
+                   and prints it.
   backup           Stop Eigen, save data/ and .env.production as a snapshot in backups/,
                    and start Eigen again.
   restore <snapshot> [--yes]
@@ -101,10 +102,11 @@ dc() {
 }
 
 # The CLI inside the running API container, the only way to its control socket. exec bypasses the image
-# entrypoint, so the entry is spelled out; Compose's exec wants a terminal unless told -T.
+# entrypoint, so the entry is spelled out; Compose's exec wants a terminal unless told -T. A terminal on stdin
+# alone gets one too, or a password typed there would echo.
 API_CLI=/app/apps/api/src/cli/index.ts
 EXEC_TTY=-T
-if [ -t 0 ] && [ -t 1 ]; then EXEC_TTY=''; fi
+if [ -t 0 ]; then EXEC_TTY=''; fi
 
 # cli_as <uid:gid> <command…>: the CLI in the API image on this folder. RELAY_ENV names a variable it may read.
 cli_as() {
@@ -327,36 +329,56 @@ status() {
 "
     done
 
+    # The CLI's layout, for when the CLI cannot run: the labels in one column, glyphs only where there is color.
     case $services in *"eigen-api${tab}running$tab"*) ;; *)
+        width=$(printf '%s' "$services" | awk -F "$tab" 'length($1) > w { w = length($1) } END { print w + 2 }')
         printf '%s' "$services" | while IFS="$tab" read -r service state health; do
-            if [ "$state" = running ]; then color=$GREEN glyph='◇'; else color=$RED glyph='■'; fi
-            say "$color" "$glyph" "$(printf '%-14s %s' "$service" "$state${health:+, $health}")"
+            if [ "$state" = missing ]; then value='not created'; else value="$state${health:+, $health}"; fi
+            line=$(printf "%-${width}s%s" "$service" "$value")
+            if [ -z "$RESET" ]; then
+                printf '%s\n' "$line"
+            elif [ "$state" != running ] || [ "$health" = unhealthy ]; then
+                say "$RED" '■' "$line"
+            elif [ "$health" = starting ]; then
+                say "$YELLOW" '▲' "$line"
+            else
+                say "$GREEN" '◇' "$line"
+            fi
         done
         die "The API is not running, and the rest of the report comes from it." "./eigen logs eigen-api shows why it stopped."
         ;;
     esac
 
-    # Silent and best effort: a check that fails reads as unknown. A fetch as another user than the checkout's
-    # owner would leave objects in .git that the owner cannot write.
-    update=unknown
+    # Silent and best effort: a check that fails reads as unknown, one that cannot run leaves the row out. A fetch
+    # as another user than the checkout's owner would leave objects in .git that the owner cannot write.
+    update=''
     if [ "$MODE" = source ]; then
-        if [ -O .git ] && GIT_TERMINAL_PROMPT=0 git fetch --quiet >/dev/null 2>&1 &&
-            behind=$(git rev-list --count 'HEAD..@{upstream}' 2>/dev/null); then
-            if [ "$behind" = 0 ]; then update=current; else update="available $behind"; fi
+        if [ -O .git ] && git rev-parse --verify --quiet '@{upstream}' >/dev/null 2>&1; then
+            update=unknown
+            if GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND='ssh -o BatchMode=yes' git fetch --quiet >/dev/null 2>&1 &&
+                behind=$(git rev-list --count 'HEAD..@{upstream}' 2>/dev/null); then
+                if [ "$behind" = 0 ]; then update=current; else update="available $behind"; fi
+            fi
         fi
     else
-        registry=${EIGEN_REGISTRY:-$(env_value EIGEN_REGISTRY)}
-        latest=$(docker manifest inspect -v "$registry/eigen-api:latest" 2>/dev/null |
-            sed -n 's/^ *"digest": *"\(sha256:[0-9a-f]*\)".*/\1/p' | head -n 1)
         case $API_IMAGE in *@sha256:*)
+            update=unknown
+            registry=${EIGEN_REGISTRY:-$(env_value EIGEN_REGISTRY)}
+            latest=$(docker manifest inspect -v "$registry/eigen-api:latest" 2>/dev/null |
+                sed -n 's/^ *"digest": *"\(sha256:[0-9a-f]*\)".*/\1/p' | head -n 1)
             if [ "${API_IMAGE#*@}" = "$latest" ]; then update=current; elif [ -n "$latest" ]; then update=available; fi
             ;;
         esac
     fi
 
+    # Empty when postqueue fails; the CLI tells that from a stopped postfix by the service list.
     queue=''
     case $services in *"postfix${tab}running$tab"*)
-        queue=$(dc exec -T postfix postqueue -p 2>/dev/null | tail -n 1)
+        if queue=$(dc exec -T postfix postqueue -p 2>/dev/null); then
+            queue=$(printf '%s\n' "$queue" | tail -n 1)
+        else
+            queue=''
+        fi
         ;;
     esac
 
@@ -373,6 +395,11 @@ case $COMMAND in
     status) status ;;
     reset-password)
         shift
+        case ${1:-} in -h | --help)
+            cli reset-password --help
+            exit
+            ;;
+        esac
         if [ ! -f .env.production ]; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
         if ! dc ps --status running --services 2>/dev/null | grep -qx eigen-api; then
             die "The API is not running." "./eigen status shows the services; ./eigen logs eigen-api shows why."
