@@ -5,12 +5,14 @@ type Validate = (value: string) => string | undefined;
 
 // `help` says what a question is for, under it; interactive only, so scripts and logs stay one line per question.
 type Question = { message: string; help?: string; flag: string };
+type Choice = { value: boolean; label: string; hint: string };
 
 export type Ui = {
     intro(title: string): void;
     explain(text: string): void;
     ask(question: Question & { initial: string; placeholder?: string; validate: Validate }): Promise<string>;
     confirm(question: Question & { initial: boolean }): Promise<boolean>;
+    select(question: Question & { options: Choice[]; initial: boolean }): Promise<boolean>;
     password(question: Question & { validate: Validate }): Promise<string>;
     note(title: string, lines: string[]): void;
     outro(message: string): void;
@@ -63,7 +65,7 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
         };
         const dimLines = (text: string, width = Math.min(process.stdout.columns, 80) - 4) =>
             wrap(text, width).map((line) => styleText('dim', line));
-        // The help goes under the question. Text prompts print their message as is; confirm wraps it and adds the bar.
+        // Help goes under the question: text prints its message as is, confirm and select wrap it and add the bar.
         const textMessage = ({ message, help }: Question) =>
             [message, ...(help ? dimLines(help).map((line) => `${styleText('gray', clack.S_BAR)}  ${line}`) : [])].join(
                 '\n',
@@ -84,6 +86,8 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
                 ),
             confirm: async ({ initial, ...question }) =>
                 answered(await clack.confirm({ message: confirmMessage(question), initialValue: initial })),
+            select: async ({ options, initial, ...question }) =>
+                answered(await clack.select({ message: confirmMessage(question), options, initialValue: initial })),
             password: async ({ validate, ...question }) =>
                 answered(
                     await clack.password({
@@ -135,6 +139,14 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
             if (answer === 'y' || answer === 'yes') return true;
             if (answer === 'n' || answer === 'no') return false;
             return fail(`Answer y or n to "${message}".`, `Pass ${flag}.`);
+        },
+        select: async ({ message, options, initial, flag }) => {
+            const list = options.map(({ label }, index) => ` (${index + 1}) ${label}`).join('');
+            const current = options.findIndex(({ value }) => value === initial) + 1;
+            const answer = (await read(message, `${list} [${current}]`, flag, true)).trim();
+            if (!answer) return initial;
+            const chosen = options[Number(answer) - 1];
+            return chosen ? chosen.value : fail(`Answer 1 to ${options.length} to "${message}".`, `Pass ${flag}.`);
         },
         password: async ({ message, validate, flag }) => {
             if (process.stdin.isTTY) return fail('A password typed here would show on screen.', `Pass ${flag}.`);

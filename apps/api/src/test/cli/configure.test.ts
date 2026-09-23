@@ -73,10 +73,11 @@ async function runConfigure(dir: string, args: string[], input?: string, env: En
     return { stdout, stderr, code };
 }
 
-// Runs in a pseudo-terminal; `keys` is typed once `when` appears in the output.
-async function runInTerminal(dir: string, args: string[], env: Env, answer?: { when: string; keys: string }) {
+// Runs in a pseudo-terminal; each answer's `keys` is typed once its `when` appears after the previous answer.
+async function runInTerminal(dir: string, args: string[], env: Env, answers: { when: string; keys: string }[]) {
     let output = '';
-    let pending = answer;
+    let answered = 0;
+    const pending = [...answers];
     const decoder = new TextDecoder();
     const { promise: closed, resolve } = Promise.withResolvers<void>();
     const proc = Bun.spawn([process.execPath, CLI, 'configure', ...args], {
@@ -85,9 +86,11 @@ async function runInTerminal(dir: string, args: string[], env: Env, answer?: { w
         terminal: {
             data: (terminal, data) => {
                 output += decoder.decode(data);
-                if (pending && output.includes(pending.when)) {
-                    terminal.write(pending.keys);
-                    pending = undefined;
+                const next = pending[0];
+                if (next && output.includes(next.when, answered)) {
+                    answered = output.length;
+                    terminal.write(next.keys);
+                    pending.shift();
                 }
             },
             exit: () => resolve(),
@@ -210,9 +213,9 @@ describe('configure command', () => {
     const PIPED = [
         'eigen.example.org',
         'example.org',
-        'y',
-        'n',
+        '1',
         'admin@example.org',
+        'y',
         'smtp.relay.test:2525',
         'relayuser',
         `pa$$word 'q"`,
@@ -442,7 +445,7 @@ describe('configure command', () => {
 
     test('a piped - clears any optional answer, and a bare - is no relay host', async () => {
         const fresh = tempDir();
-        const answers = ['eigen.example.org', 'example.org', 'y', 'n', 'admin@example.org', '-', '', ''];
+        const answers = ['eigen.example.org', 'example.org', '1', 'admin@example.org', 'y', '-', '', ''];
         const run = await runConfigure(fresh, [], answers.join('\n'));
         expect(run.stderr).toBe('');
         expect(run.code).toBe(0);
@@ -484,12 +487,21 @@ describe('configure command', () => {
         expect(env.get('ACME_EMAIL')).toBe('admin@eigen.example.org');
     });
 
-    test('the mail domain comes second, suggests the web address, and stays without hosted mail', async () => {
+    test('HTTPS comes before hosted mail, then only mail questions, and the mail domain stays without it', async () => {
         const dir = tempDir();
-        const run = await runConfigure(dir, [], ['eigen.example.org', '', 'n', 'n', '', '-'].join('\n'));
+        const run = await runConfigure(dir, [], ['eigen.example.org', '', '', '', 'n', '-'].join('\n'));
         expect(run.stderr).toBe('');
         expect(run.code).toBe(0);
-        expect(run.stdout.indexOf('Which mail domain')).toBeLessThan(run.stdout.indexOf('Host email'));
+        const order = [
+            'Where will Eigen',
+            'Which mail domain',
+            'How do people reach Eigen over HTTPS? (1) Eigen handles it on ports 80 and 443 (2) My web server forwards to Eigen [1]',
+            "Let's Encrypt",
+            'Host email',
+            'mail relay',
+        ].map((question) => run.stdout.indexOf(question));
+        expect(order).not.toContain(-1);
+        expect(order).toEqual(order.toSorted((a, b) => a - b));
         const env = readEnvFile(join(dir, '.env.production'));
         expect(env.get('MAIL_DOMAIN')).toBe('eigen.example.org');
         expect(env.get('ACME_EMAIL')).toBe('admin@eigen.example.org');
@@ -510,6 +522,20 @@ describe('configure command', () => {
         expect(fine.code).toBe(0);
     });
 
+    test('a rerun behind a web server suggests that choice again, and a choice is answered by number', async () => {
+        const dir = tempDir();
+        writeFileSync(join(dir, '.env.production'), INSTALLED.replace('edge,mail', 'static,mail'));
+        const rerun = await runConfigure(dir, [], ['', '', '', '', '', '', '', ''].join('\n'));
+        expect(rerun.stderr).toBe('');
+        expect(rerun.code).toBe(0);
+        expect(rerun.stdout).toContain('My web server forwards to Eigen [2]');
+        expect(rerun.stdout).toContain('Where should Eigen listen');
+        expect(readEnvFile(join(dir, '.env.production')).get('COMPOSE_PROFILES')).toBe('static,mail');
+        const wrong = await runConfigure(tempDir(), [], ['eigen.example.org', '', 'y'].join('\n'));
+        expect(wrong.code).toBe(1);
+        expect(wrong.stderr).toContain('--proxy <host:port> or --no-proxy');
+    });
+
     test('the usage explains -', async () => {
         const run = await runConfigure(tempDir(), ['--help']);
         expect(run.stdout).toContain('- clears');
@@ -521,12 +547,9 @@ describe('configure command', () => {
             join(dir, '.env.production'),
             `${INSTALLED}SMTP_RELAY_HOST=smtp.relay.test\nSMTP_RELAY_USER=u\nSMTP_RELAY_PASSWORD=p\n`,
         );
-        const run = await runInTerminal(
-            dir,
-            ['--domain', 'eigen.example.org'],
-            {},
+        const run = await runInTerminal(dir, ['--domain', 'eigen.example.org'], {}, [
             { when: '?', keys: '\r\r\r\r\r\r' },
-        );
+        ]);
         expect(run.code).toBe(1);
         expect(run.output).toContain('--yes');
     });
@@ -552,7 +575,7 @@ describe('configure command', () => {
                 'noreply@example.org',
             ],
             {},
-            { when: "relay's password", keys: 'secret\r' },
+            [{ when: "relay's password", keys: 'secret\r' }],
         );
         expect(run.code).toBe(1);
         expect(run.output).toContain('--relay-password-env');
@@ -563,15 +586,36 @@ describe('configure command', () => {
     test('the interactive run explains its questions and honors NO_COLOR', async () => {
         const CYAN = '\x1b[36m';
         const cancel = { when: 'Where will Eigen be hosted', keys: '\x03' };
-        const plain = await runInTerminal(tempDir(), [], { NO_COLOR: '1' }, cancel);
+        const plain = await runInTerminal(tempDir(), [], { NO_COLOR: '1' }, [cancel]);
         expect(plain.code).toBe(130);
         expect(plain.output.indexOf('People open Eigen here')).toBeGreaterThan(
             plain.output.indexOf('Where will Eigen'),
         );
         expect(plain.output).toContain('igen.example.com');
         expect(plain.output).not.toContain(CYAN);
-        const colored = await runInTerminal(tempDir(), [], { NO_COLOR: undefined }, { ...cancel });
+        const colored = await runInTerminal(tempDir(), [], { NO_COLOR: undefined }, [cancel]);
         expect(colored.code).toBe(130);
         expect(colored.output).toContain(CYAN);
+    });
+
+    test('the interactive HTTPS choice starts on the current answer, else on Eigen handling it', async () => {
+        const toHttps = [
+            { when: 'Where will Eigen be hosted', keys: '\r' },
+            { when: 'Which mail domain', keys: '\r' },
+            { when: 'How do people reach Eigen over HTTPS', keys: '\x03' },
+        ];
+        const rerun = tempDir();
+        writeFileSync(join(rerun, '.env.production'), INSTALLED.replace('edge,mail', 'static,mail'));
+        const behind = await runInTerminal(rerun, [], {}, toHttps);
+        expect(behind.code).toBe(130);
+        expect(behind.output).toContain('nginx, Apache, Caddy, a NAS');
+        expect(behind.output).not.toContain('gets its own certificate');
+
+        const fresh = tempDir();
+        writeFileSync(join(fresh, '.env.production'), INSTALLED);
+        const edge = await runInTerminal(fresh, [], {}, toHttps);
+        expect(edge.code).toBe(130);
+        expect(edge.output).toContain('gets its own certificate');
+        expect(edge.output).not.toContain('nginx, Apache');
     });
 });

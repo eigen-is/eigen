@@ -79,14 +79,14 @@ const USAGE = `Usage: configure [flags]
 
 Asks the setup questions and writes ${ENV_PATH}. Any flag makes the run non-interactive:
 questions no flag answers are read from stdin, one line each. An empty line keeps the answer
-in brackets; - clears an optional answer.
+in brackets; - clears an optional answer; a choice is answered with its number.
 
   --domain <name>              Web address, like eigen.example.com
   --mail-domain <name>         The domain of every user's address, like example.com
-  --mail | --no-mail           Host email on this server
   --proxy <host:port>          Run behind your own web server, which forwards to host:port
   --no-proxy                   Let Eigen's own web server take ports 80 and 443
   --contact-email <address>    Contact address for Let's Encrypt
+  --mail | --no-mail           Host email on this server
   --relay <host:port>          Send outgoing mail through this relay
   --no-relay                   No relay
   --relay-user <name>          Relay user name
@@ -273,13 +273,13 @@ export async function configure(args: string[]): Promise<void> {
         return ui.ask({ ...question, initial, validate, flag: `--${flag}` });
     };
     const decide = async (
-        question: { message: string; help: string; flag: string },
         given: boolean | undefined,
         initial: boolean,
+        ask: (initial: boolean) => Promise<boolean>,
     ) => {
         if (given !== undefined) return given;
         if (acceptDefaults) return initial;
-        return ui.confirm({ ...question, initial });
+        return ask(initial);
     };
 
     const domain = cleanDomain(
@@ -310,28 +310,19 @@ export async function configure(args: string[]): Promise<void> {
             validateMailDomain,
         ),
     );
-    const wasMail = hostsMail(existing);
-    const mail = await decide(
-        {
-            message: 'Host email on this server?',
-            help:
-                'Yes: a mail server runs here, on ports 25, 465, 587 and 993.\n' +
-                'No: there is no Mail app, and email stays where it is.',
-            flag: '--mail or --no-mail',
-        },
-        flags.mail ? true : flags['no-mail'] ? false : undefined,
-        wasMail,
-    );
     const behindProxy = await decide(
-        {
-            message: 'Is there already a web server on this machine?',
-            help:
-                'Yes: your web server keeps ports 80 and 443 and forwards here.\n' +
-                'No: Eigen takes ports 80 and 443 and gets its own certificate.',
-            flag: '--proxy <host:port> or --no-proxy',
-        },
         flags.proxy !== undefined ? true : flags['no-proxy'] ? false : undefined,
         (existing.get('COMPOSE_PROFILES') ?? '').split(',').includes('static'),
+        (initial) =>
+            ui.select({
+                message: 'How do people reach Eigen over HTTPS?',
+                options: [
+                    { value: false, label: 'Eigen handles it on ports 80 and 443', hint: 'gets its own certificate' },
+                    { value: true, label: 'My web server forwards to Eigen', hint: 'nginx, Apache, Caddy, a NAS' },
+                ],
+                initial,
+                flag: '--proxy <host:port> or --no-proxy',
+            }),
     );
     const currentStatic = `${existing.get('EIGEN_STATIC_HOST') || '127.0.0.1'}:${existing.get('EIGEN_STATIC_PORT') || '8080'}`;
     const staticAddress = behindProxy
@@ -363,6 +354,18 @@ export async function configure(args: string[]): Promise<void> {
                   validateEmail,
               )
             : currentContact;
+
+    const wasMail = hostsMail(existing);
+    const mail = await decide(flags.mail ? true : flags['no-mail'] ? false : undefined, wasMail, (initial) =>
+        ui.confirm({
+            message: 'Host email on this server?',
+            help:
+                'Yes: a mail server runs here, on ports 25, 465, 587 and 993.\n' +
+                'No: there is no Mail app, and email stays where it is.',
+            flag: '--mail or --no-mail',
+            initial,
+        }),
+    );
 
     const [hostKey, portKey, userKey, passwordKey] = wasMail ? MAIL_RELAY_KEYS : API_RELAY_KEYS;
     const currentHost = existing.get(hostKey);
