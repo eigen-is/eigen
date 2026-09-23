@@ -102,7 +102,7 @@ A simple rule:
 
 ### Prerequisites
 
-- [Bun](https://bun.sh), the version in `.bun-version` (CI and the Docker image run the same one)
+- [Bun](https://bun.sh), the version in `.bun-version` (CI runs the same one; the API image pins its own until the roadmap's Bun row closes)
 - [Git](https://git-scm.com)
 
 ### Option 1: Direct with Bun (recommended)

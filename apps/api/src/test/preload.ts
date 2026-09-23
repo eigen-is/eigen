@@ -1,14 +1,20 @@
+// test-env sets EIGEN_DATA_ROOT before the app/auth imports below open their SQLite files. Keep it first.
+import './test-env';
 import { afterAll } from 'bun:test';
+import { clearSucroseCache } from 'elysia/sucrose';
+import { shutdownAllHomes } from '../lib/home';
 import { cleanup } from './setup';
 
-// One process runs every file. On CI a line every 5 s puts its size next to the timestamped output,
-// and a missing tick marks a stretch where the thread never got back to the loop.
-if (process.env['GITHUB_ACTIONS']) {
-    setInterval(() => {
-        console.log(`[memory] rss ${Math.round(process.memoryUsage.rss() / 1048576)}MB`);
-    }, 5000).unref();
-}
-
-afterAll(() => {
+// Every file runs in a fresh global (--isolate), so this hook runs once per file. An unref'd timer still
+// holds its callback until it fires, and two of them reach the whole module graph: each Home's idle
+// timeout (5 min) and Elysia's sucrose cache sweep (4 min 55 s, armed by the first lifecycle hook). Both
+// must go or every file's graph stays resident. On CI the worker's size lands next to each file's output.
+afterAll(async () => {
+    await shutdownAllHomes();
+    clearSucroseCache(0);
     cleanup();
+    if (process.env['GITHUB_ACTIONS']) {
+        const worker = process.env['BUN_TEST_WORKER_ID'] ?? '0';
+        console.log(`[memory] worker ${worker} rss ${Math.round(process.memoryUsage.rss() / 1048576)}MB`);
+    }
 });

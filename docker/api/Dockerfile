@@ -1,4 +1,4 @@
-# Pinned, same version as .bun-version (CI) and the host: Bun 1.4.2 blows past memory late in the API suite.
+# Pinned apart from .bun-version (CI, 1.4.2 for the isolated test suite): the roadmap's sequential-suite memory gate decides when the image follows.
 FROM oven/bun:1.3.14-slim
 
 WORKDIR /app
