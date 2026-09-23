@@ -255,7 +255,10 @@ describe('the /setup routes before setup', () => {
         expect(failed.status).toBe(400);
         const badName = await post('complete', { ...admin, adminUsername: 'ada lovelace', setupToken: newer });
         expect(badName.status).toBe(400);
-        expect(await badName.text()).toContain(`ada lovelace@${MAIL_DOMAIN}`);
+        expect(await badName.text()).toContain('Username must be lowercase alphanumeric');
+        const reserved = await post('complete', { ...admin, adminUsername: 'Admin', setupToken: newer });
+        expect(reserved.status).toBe(400);
+        expect(await reserved.text()).toBe('This username is reserved');
 
         // A domain in the body is not the server's to take: ./eigen setup set it.
         // Two parallel requests, either may arrive first; exactly one wins.

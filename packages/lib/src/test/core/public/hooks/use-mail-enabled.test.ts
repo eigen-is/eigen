@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { publicKeys } from '../../../../core/public/hooks/keys';
-import { useMailEnabled } from '../../../../core/public/hooks/use-public';
+import { useHomeDataLabel, useMailEnabled } from '../../../../core/public/hooks/use-public';
 import { installHappyDom } from '../../../happy-dom';
 
 installHappyDom();
@@ -21,6 +21,21 @@ describe('useMailEnabled', () => {
             queryClient.setQueryData(publicKeys.config, { mailEnabled });
             const { latest, unmount } = await renderHook(() => useMailEnabled(), queryClient);
             expect(latest).toBe(mailEnabled);
+            await unmount();
+        }
+    });
+});
+
+describe('useHomeDataLabel', () => {
+    test('names Mail only on a server that hosts it', async () => {
+        for (const [mailEnabled, label] of [
+            [true, 'Mail, Contacts & Calendar'],
+            [false, 'Contacts & Calendar'],
+        ] as const) {
+            const queryClient = new QueryClient();
+            queryClient.setQueryData(publicKeys.config, { mailEnabled });
+            const { latest, unmount } = await renderHook(() => useHomeDataLabel(), queryClient);
+            expect(latest).toBe(label);
             await unmount();
         }
     });

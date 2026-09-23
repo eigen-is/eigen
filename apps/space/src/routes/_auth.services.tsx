@@ -138,8 +138,9 @@ function ServicesComponent() {
                 <div className="h-full overflow-y-auto">
                     <div className="w-full max-w-3xl app-gutter">
                         <p className="text-sm text-muted-foreground mb-6">
-                            Connect your calendars, contacts, mail, and drive to external clients like Thunderbird,
-                            Apple Mail, Finder, rclone, or any app that supports CalDAV, CardDAV, IMAP, or WebDAV.
+                            {mailEnabled
+                                ? 'Connect your calendars, contacts, mail, and drive to external clients like Thunderbird, Apple Mail, Finder, rclone, or any app that supports CalDAV, CardDAV, IMAP, or WebDAV.'
+                                : 'Connect your calendars, contacts, and drive to external clients like Thunderbird, Finder, rclone, or any app that supports CalDAV, CardDAV, or WebDAV.'}
                         </p>
 
                         <div className="space-y-6">

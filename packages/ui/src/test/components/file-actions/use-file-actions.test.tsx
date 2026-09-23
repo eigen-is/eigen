@@ -8,7 +8,9 @@ import { installHappyDom } from '../../happy-dom';
 installHappyDom();
 
 const guest = { is: false };
+const mail = { enabled: true };
 mock.module('@workspace/lib/auth', () => ({ useIsGuest: () => guest.is }));
+mock.module('@workspace/lib/public', () => ({ useMailEnabled: () => mail.enabled }));
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
@@ -50,6 +52,14 @@ test('a guest gets no import row, on either format', async () => {
     guest.is = true;
     expect(await idsFor(subject)).toEqual(['quick-look', 'download', 'save-to-drive']);
     expect(await idsFor(message)).toEqual(['quick-look', 'download', 'save-to-drive']);
+});
+
+test('a server without hosted mail offers no Import to Mail, and keeps every other row', async () => {
+    guest.is = false;
+    mail.enabled = false;
+    expect(await idsFor(message)).toEqual(['quick-look', 'download', 'save-to-drive']);
+    expect(await idsFor(subject)).toEqual(['quick-look', 'download', 'save-to-drive', 'import-contacts']);
+    mail.enabled = true;
 });
 
 test('the host’s own exclusions still apply, guest or not', async () => {

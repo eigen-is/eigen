@@ -40,7 +40,7 @@ const setupRes = await app.handle(
             setupToken: createSetupToken(),
             orgName: 'Fixtures',
             storageType: 'local-fullnames',
-            adminUsername: 'admin',
+            adminUsername: 'author',
             adminPassword: 'fixtures-pw-123',
             adminName: 'Fixture Author',
         }),

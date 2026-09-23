@@ -217,3 +217,16 @@ describe('guestDenied', () => {
         }
     });
 });
+
+// The mail import routes refuse on a server without hosted mail, and the hook that knows the server drops these.
+describe('mailOnly', () => {
+    test('marks Import to Mail alone', () => {
+        const items = [
+            path({ name: 'team.vcf', type: 'file', mimeType: 'text/vcard' }),
+            path({ name: 'notes.eml', type: 'file', mimeType: EML_MIME }),
+            path({ name: 'festival.ics', type: 'file', mimeType: ICS_MIME }),
+        ];
+        const marked = items.flatMap((item) => fileActionsFor(subjectFromPath(item)).filter((a) => a.mailOnly));
+        expect(marked.map((action) => action.id)).toEqual(['import-mail']);
+    });
+});

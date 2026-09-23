@@ -165,7 +165,7 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                                         id="adminUsername"
                                         value={adminUsername}
                                         onChange={(e) => setAdminUsername(e.target.value)}
-                                        placeholder="admin"
+                                        placeholder="jane"
                                         autoComplete="off"
                                         required
                                     />

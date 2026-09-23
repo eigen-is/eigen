@@ -1,3 +1,4 @@
+import { useMailEnabled } from '@workspace/lib/public';
 import { useServerSettings, useUpdateServerSettings } from '@workspace/lib/settings';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import { LoadingState } from '@workspace/ui';
@@ -19,6 +20,7 @@ type OnboardingDraft = {
 export function OnboardingSettingsPage() {
     const { data: settings, isLoading } = useServerSettings();
     const updateSettings = useUpdateServerSettings();
+    const mailEnabled = useMailEnabled();
 
     const [draft, setDraft] = useState<OnboardingDraft>({});
     const [dirty, setDirty] = useState(false);
@@ -129,49 +131,56 @@ export function OnboardingSettingsPage() {
                 </div>
             </div>
 
-            <Separator />
+            {/* Never sent without hosted mail (welcome.ts), so there is nothing to set. */}
+            {mailEnabled && (
+                <>
+                    <Separator />
 
-            <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Welcome mail</h3>
-                <p className="text-sm text-muted-foreground">
-                    Send a welcome email to new users when their account is created.
-                </p>
+                    <div className="space-y-4">
+                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                            Welcome mail
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                            Send a welcome email to new users when their account is created.
+                        </p>
 
-                <div className="flex items-center gap-3">
-                    <Switch
-                        checked={current.welcomeMail.enabled}
-                        onCheckedChange={(enabled) => update({ welcomeMail: { enabled } })}
-                    />
-                    <Label>Send welcome email</Label>
-                </div>
-
-                {current.welcomeMail.enabled && (
-                    <>
-                        <div className="space-y-1.5">
-                            <Label>Subject</Label>
-                            <Input
-                                value={current.welcomeMail.subject}
-                                onChange={(e) => update({ welcomeMail: { subject: e.target.value } })}
+                        <div className="flex items-center gap-3">
+                            <Switch
+                                checked={current.welcomeMail.enabled}
+                                onCheckedChange={(enabled) => update({ welcomeMail: { enabled } })}
                             />
+                            <Label>Send welcome email</Label>
                         </div>
-                        <div className="space-y-1.5">
-                            <Label>Body</Label>
-                            <div className="border rounded-md p-3 min-h-[160px] bg-background">
-                                <LightEditor
-                                    key={`welcome-${editorKey}`}
-                                    content={current.welcomeMail.body}
-                                    onChange={(body) => update({ welcomeMail: { body } })}
-                                    toolbar="floating"
-                                    containerClassName="relative flex flex-col"
-                                />
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                                Available placeholders: {'{name}'}, {'{orgName}'}, {'{domain}'}
-                            </p>
-                        </div>
-                    </>
-                )}
-            </div>
+
+                        {current.welcomeMail.enabled && (
+                            <>
+                                <div className="space-y-1.5">
+                                    <Label>Subject</Label>
+                                    <Input
+                                        value={current.welcomeMail.subject}
+                                        onChange={(e) => update({ welcomeMail: { subject: e.target.value } })}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label>Body</Label>
+                                    <div className="border rounded-md p-3 min-h-[160px] bg-background">
+                                        <LightEditor
+                                            key={`welcome-${editorKey}`}
+                                            content={current.welcomeMail.body}
+                                            onChange={(body) => update({ welcomeMail: { body } })}
+                                            toolbar="floating"
+                                            containerClassName="relative flex flex-col"
+                                        />
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        Available placeholders: {'{name}'}, {'{orgName}'}, {'{domain}'}
+                                    </p>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </>
+            )}
 
             {dirty && (
                 <>

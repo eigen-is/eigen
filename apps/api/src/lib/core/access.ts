@@ -1,3 +1,4 @@
+import { isMailEnabled } from '../config/env';
 import type { User } from '../user';
 import { getMemberships, getOrgRole } from '../user';
 import { ApiError } from './errors';
@@ -71,6 +72,10 @@ export function requireNonGuest(user: Pick<User, 'role'>): void {
     if (user.role === 'guest') {
         throw new ApiError(403, 'Guests cannot access this resource');
     }
+}
+
+export function requireMailEnabled(): void {
+    if (!isMailEnabled()) throw new ApiError(403, 'Mail is turned off on this server');
 }
 
 export async function requireTeamAccess(userId: string, teamId: string): Promise<'admin' | 'member'> {

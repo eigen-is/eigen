@@ -28,6 +28,11 @@ export function useMailEnabled(): boolean {
     return data?.mailEnabled !== false;
 }
 
+// The name of the budget mail, contacts and calendar share, which leaves Mail out on a server without it.
+export function useHomeDataLabel(): string {
+    return useMailEnabled() ? 'Mail, Contacts & Calendar' : 'Contacts & Calendar';
+}
+
 export function useJoinWaitlist() {
     return useMutation({
         mutationFn: async (body: { email: string; notes: string }) => {

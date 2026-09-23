@@ -8,7 +8,7 @@ import {
 } from '@workspace/lib/types/mail';
 import { Elysia, type Static, t } from 'elysia';
 import { ApiError, contentDisposition, NOT_AN_EMAIL_FILE, readBoundedBodyBytes, setCacheHeaders } from '../lib/core';
-import { requireLocalhost, requireNonGuest, requireSelf } from '../lib/core/access';
+import { requireLocalhost, requireMailEnabled, requireNonGuest, requireSelf } from '../lib/core/access';
 import { readImportSourceBytes } from '../lib/drive';
 import {
     attachFromDrive,
@@ -438,6 +438,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, request, user, server }): Promise<ImportMailResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
+            requireMailEnabled();
             // The whole message uploads, parses and indexes before this answers — at EML_MAX_BYTES
             // that outlasts any server-wide idleTimeout, so exempt this request.
             server?.timeout(request, 0);
@@ -452,6 +453,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, body, request, user, server }): Promise<ImportMailResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
+            requireMailEnabled();
             // Same idle-timeout exemption as the raw import route: silent until the message is indexed.
             server?.timeout(request, 0);
             const bytes = await readImportSourceBytes(user, body, {

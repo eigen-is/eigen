@@ -2,6 +2,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useAddTeamMember, useMembers, useRemoveTeam, useRemoveTeamMember, useUpdateTeam } from '@workspace/lib/admin';
 import { useCalendars, useUpdateCalendar } from '@workspace/lib/calendar';
 import { STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
+import { useHomeDataLabel } from '@workspace/lib/public';
 import { useCheckS3Connection, useHardenS3Bucket, useServerSettings } from '@workspace/lib/settings';
 import {
     useAddTeamMount,
@@ -104,6 +105,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const { data: settings } = useTeamSettings(team.id);
     const updateSettings = useUpdateTeamSettings(team.id);
     const { data: serverSettings } = useServerSettings();
+    const homeDataLabel = useHomeDataLabel();
     const s3Check = useCheckS3Connection();
     const s3Harden = useHardenS3Bucket();
 
@@ -281,7 +283,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                         </p>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
-                                <Label>Mail, Contacts & Calendar (MB)</Label>
+                                <Label>{homeDataLabel} (MB)</Label>
                                 <Input
                                     type="number"
                                     min={10}
@@ -324,7 +326,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                             <span className="text-sm text-muted-foreground">Quota overrides</span>
                             <span className="text-sm">
                                 {settings?.memberOverrides?.mailAndContactsMaxMB &&
-                                    `Mail, Contacts & Calendar: ${settings.memberOverrides.mailAndContactsMaxMB} MB`}
+                                    `${homeDataLabel}: ${settings.memberOverrides.mailAndContactsMaxMB} MB`}
                                 {settings?.memberOverrides?.mailAndContactsMaxMB &&
                                     settings?.memberOverrides?.defaultMountMaxSizeMB &&
                                     ' · '}

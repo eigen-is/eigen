@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { S3Config } from '@workspace/lib/types/mount';
-import { MIN_PASSWORD_LENGTH, validateEmailAddress } from '@workspace/lib/validation';
+import { MIN_PASSWORD_LENGTH, validateEmailAddress, validateUsername } from '@workspace/lib/validation';
 import { auth } from '../auth/auth';
 import { getServerDataPath } from '../config/paths';
 import { getMailDomain, isSetupRequired, updateServerConfig } from '../config/server-config';
@@ -278,7 +278,10 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
         if (!input.adminUsername || !input.adminPassword || !input.adminName) {
             throw new ApiError(400, 'Admin username, password, and name are required');
         }
-        const adminEmail = `${input.adminUsername}@${getMailDomain()}`;
+        const username = input.adminUsername.toLowerCase();
+        const usernameErr = validateUsername(username);
+        if (usernameErr) throw new ApiError(400, usernameErr);
+        const adminEmail = `${username}@${getMailDomain()}`;
         if (!validateEmailAddress(adminEmail)) throw new ApiError(400, `${adminEmail} is not a valid email address`);
         if (input.adminPassword.length < MIN_PASSWORD_LENGTH) {
             throw new ApiError(400, `Password must be at least ${MIN_PASSWORD_LENGTH} characters long`);

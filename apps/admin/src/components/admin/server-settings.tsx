@@ -1,3 +1,4 @@
+import { useHomeDataLabel } from '@workspace/lib/public';
 import {
     useCheckS3Connection,
     useHardenS3Bucket,
@@ -29,6 +30,7 @@ export function ServerSettingsPage() {
     const updateS3Config = useUpdateServerS3Config();
     const s3Check = useCheckS3Connection();
     const s3Harden = useHardenS3Bucket();
+    const homeDataLabel = useHomeDataLabel();
 
     const [draft, setDraft] = useState<DeepPartial<ServerSettings>>({});
     const [dirty, setDirty] = useState(false);
@@ -108,7 +110,7 @@ export function ServerSettingsPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                        <Label>Mail, Contacts & Calendar (MB)</Label>
+                        <Label>{homeDataLabel} (MB)</Label>
                         <Input
                             type="number"
                             min={10}
