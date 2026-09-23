@@ -69,12 +69,12 @@ describe('.parse() math-trig formulas', () => {
             result: null,
         });
         expect(parser!.parse('ACOTH(1)')).toMatchObject({
-            error: null,
-            result: Infinity,
+            error: '#NUM!',
+            result: null,
         });
         expect(parser!.parse('ACOTH(-1)')).toMatchObject({
-            error: null,
-            result: -Infinity,
+            error: '#NUM!',
+            result: null,
         });
     });
 
@@ -214,8 +214,8 @@ describe('.parse() math-trig formulas', () => {
             result: null,
         });
         expect(parser!.parse('ATANH(1)')).toMatchObject({
-            error: null,
-            result: Infinity,
+            error: '#NUM!',
+            result: null,
         });
     });
 

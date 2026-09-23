@@ -43,8 +43,8 @@ describe('.parse() engineering formulas', () => {
 
     it('BESSELK', () => {
         expect(parser!.parse('BESSELK()')).toMatchObject({
-            error: null,
-            result: Infinity,
+            error: '#NUM!',
+            result: null,
         });
         expect(parser!.parse('BESSELK(1.4)')).toMatchObject({
             error: null,
@@ -58,8 +58,8 @@ describe('.parse() engineering formulas', () => {
 
     it('BESSELY', () => {
         expect(parser!.parse('BESSELY()')).toMatchObject({
-            error: null,
-            result: -Infinity,
+            error: '#NUM!',
+            result: null,
         });
         expect(parser!.parse('BESSELY(1.4)')).toMatchObject({
             error: null,
