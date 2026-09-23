@@ -1,12 +1,13 @@
 import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { validateEmailAddress } from '@workspace/lib/validation';
 import { auth } from '../auth/auth';
 import { getServerDataPath } from '../config/paths';
 import {
     isSetupRequired as checkSetupRequired,
+    getDomain,
     getMailDomain,
-    getServerConfig,
     updateServerConfig,
 } from '../config/server-config';
 import { updateServerSettings } from '../config/server-settings';
@@ -235,7 +236,6 @@ async function resetAuthDatabase(): Promise<void> {
 }
 
 export type SetupInput = {
-    domain: string;
     orgName: string;
     storageType: 'local-fullnames' | 'local-id' | 's3';
     s3Bucket?: string;
@@ -243,30 +243,14 @@ export type SetupInput = {
     s3AccessKeyId?: string;
     s3SecretAccessKey?: string;
     s3Endpoint?: string;
-    adminEmail: string;
+    adminUsername: string;
     adminPassword: string;
     adminName: string;
 };
 
-export async function getSetupStatus(): Promise<{
-    setupRequired: boolean;
-    domain?: string;
-    mailDomain?: string;
-}> {
-    const setupRequired = isSetupRequired();
-
-    if (!setupRequired) {
-        const config = getServerConfig();
-        return { setupRequired: false, domain: config?.domain, mailDomain: getMailDomain() };
-    }
-
-    const envDomain = process.env['DOMAIN'];
-    const envMailDomain = process.env['MAIL_DOMAIN'] || envDomain;
-    return {
-        setupRequired: true,
-        ...(envDomain ? { domain: envDomain } : {}),
-        ...(envMailDomain ? { mailDomain: envMailDomain } : {}),
-    };
+// The web address and the mail domain come from ./eigen setup; the wizard only shows the mail domain.
+export function getSetupStatus(): { setupRequired: boolean; mailDomain: string } {
+    return { setupRequired: isSetupRequired(), mailDomain: getMailDomain() };
 }
 
 // Two submits of the wizard would interleave resetAuthDatabase() with each other's admin creation.
@@ -277,7 +261,6 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
     setupRunning = true;
     try {
         if (!isSetupRequired()) throw new ApiError(400, 'Setup has already been completed');
-        if (!input.domain) throw new ApiError(400, 'Domain is required');
         if (!input.orgName) throw new ApiError(400, 'Organization name is required');
         if (!input.storageType) throw new ApiError(400, 'Storage type is required');
 
@@ -296,13 +279,11 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
             if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
         }
 
-        // Use DOMAIN env var if set to a real domain (not localhost)
-        const envDomain = process.env['DOMAIN'];
-        if (envDomain && envDomain !== 'localhost') input.domain = envDomain;
-
-        if (!input.adminEmail || !input.adminPassword || !input.adminName) {
-            throw new ApiError(400, 'Admin email, password, and name are required');
+        if (!input.adminUsername || !input.adminPassword || !input.adminName) {
+            throw new ApiError(400, 'Admin username, password, and name are required');
         }
+        const adminEmail = `${input.adminUsername}@${getMailDomain()}`;
+        if (!validateEmailAddress(adminEmail)) throw new ApiError(400, `${adminEmail} is not a valid email address`);
         if (input.adminPassword.length < 8) {
             throw new ApiError(400, 'Password must be at least 8 characters long');
         }
@@ -317,7 +298,7 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
         try {
             user = await auth.api.createUser({
                 body: {
-                    email: input.adminEmail,
+                    email: adminEmail,
                     password: input.adminPassword,
                     name: input.adminName,
                     role: 'admin',
@@ -354,7 +335,7 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
         // setup re-runnable: isSetupRequired() stays true and resetAuthDatabase() clears
         // the partial state on the next attempt.
         await updateServerConfig({
-            domain: input.domain,
+            domain: getDomain(),
             orgName: input.orgName,
             orgId: org.id,
             setupCompleted: true,

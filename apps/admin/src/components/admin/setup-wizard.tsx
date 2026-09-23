@@ -41,11 +41,6 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
 
     const [completed, setCompleted] = useState(false);
 
-    // A real DOMAIN env var is locked; the localhost default stays editable.
-    const domainFromEnv = !!status.domain && status.domain !== 'localhost';
-    const [domain, setDomain] = useState(() =>
-        status.domain ? (status.domain === 'localhost' ? 'eigen.localhost' : status.domain) : '',
-    );
     const [orgName, setOrgName] = useState('');
     const [storageType, setStorageType] = useState<ServerStorageType>('local-fullnames');
     const [s3Config, setS3Config] = useState<S3Config>(EMPTY_S3);
@@ -55,19 +50,16 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
     const [s3Verified, setS3Verified] = useState(true);
     const onS3Verified = useCallback((verified: boolean) => setS3Verified(verified), []);
 
-    // Mirrors backend getMailDomain(): MAIL_DOMAIN env → DOMAIN env → user-typed domain.
-    const effectiveMailDomain = (status.mailDomain ?? '') || domain;
-    const formReady = !!(domain && orgName && adminUsername && adminName && adminPassword.length >= 8 && s3Verified);
+    const formReady = !!(orgName && adminUsername.trim() && adminName && adminPassword.length >= 8 && s3Verified);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!formReady) return;
         try {
             await completeSetup.mutateAsync({
-                domain,
                 orgName,
                 storageType,
-                adminEmail: `${adminUsername}@${effectiveMailDomain}`,
+                adminUsername: adminUsername.trim(),
                 adminPassword,
                 adminName,
                 ...(storageType === 's3'
@@ -123,24 +115,6 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                             <h3 className="font-medium text-lg">Server Configuration</h3>
 
                             <div>
-                                <Label htmlFor="domain">Domain</Label>
-                                <Input
-                                    id="domain"
-                                    value={domain}
-                                    onChange={(e) => setDomain(e.target.value)}
-                                    placeholder="eigen.example.com"
-                                    required
-                                    readOnly={domainFromEnv}
-                                    className="mt-1.5"
-                                />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    {domainFromEnv
-                                        ? 'Set via DOMAIN environment variable'
-                                        : 'The domain where Eigen will be accessible'}
-                                </p>
-                            </div>
-
-                            <div>
                                 <Label htmlFor="orgName">Organization Name</Label>
                                 <Input
                                     id="orgName"
@@ -185,12 +159,14 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                                         value={adminUsername}
                                         onChange={(e) => setAdminUsername(e.target.value)}
                                         placeholder="admin"
+                                        autoComplete="off"
                                         required
                                     />
                                     <InputGroupAddon align="inline-end">
-                                        <InputGroupText>@{effectiveMailDomain}</InputGroupText>
+                                        <InputGroupText>@{status.mailDomain}</InputGroupText>
                                     </InputGroupAddon>
                                 </InputGroup>
+                                <p className="text-xs text-muted-foreground mt-1">You sign in with this address</p>
                             </div>
 
                             <div>
@@ -198,6 +174,7 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                                 <Input
                                     id="adminPassword"
                                     type="password"
+                                    autoComplete="new-password"
                                     value={adminPassword}
                                     onChange={(e) => setAdminPassword(e.target.value)}
                                     minLength={8}

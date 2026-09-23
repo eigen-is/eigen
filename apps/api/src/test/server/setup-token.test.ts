@@ -14,6 +14,8 @@ const RUN_DIR = join(TEST_DATA_DIR, 'setup-token');
 // Short: a Unix socket path is capped at 104 bytes on macOS.
 const SOCKET = join(TEST_DATA_DIR, 'st.sock');
 const DOMAIN = 'setup-token.test';
+const MAIL_DOMAIN = 'setup-token.example';
+const ADMIN_EMAIL = `ada@${MAIL_DOMAIN}`;
 const LISTEN_TIMEOUT_MS = 60_000;
 
 describe('setup token', () => {
@@ -83,10 +85,9 @@ describe('the /setup routes before setup', () => {
         secretAccessKey: 'secret',
     };
     const admin = {
-        domain: DOMAIN,
         orgName: 'Setup Token',
         storageType: 'local-id',
-        adminEmail: `admin@${DOMAIN}`,
+        adminUsername: 'ada',
         adminPassword: 'setup-token-1',
         adminName: 'Ada Admin',
     };
@@ -132,6 +133,7 @@ describe('the /setup routes before setup', () => {
                 EIGEN_CONTROL_SOCKET: SOCKET,
                 API_URL: base,
                 DOMAIN,
+                MAIL_DOMAIN,
             },
             stdin: 'ignore',
             stdout: logFd,
@@ -152,7 +154,8 @@ describe('the /setup routes before setup', () => {
     }
 
     let secretBeforeSetup = '';
-    const storedSecret = (): string => JSON.parse(readFileSync(join(dataRoot, 'server/config.json'), 'utf8')).secret;
+    const storedConfig = () => JSON.parse(readFileSync(join(dataRoot, 'server/config.json'), 'utf8'));
+    const storedSecret = (): string => storedConfig().secret;
 
     beforeAll(async () => {
         mkdirSync(join(dataRoot, 'server'), { recursive: true });
@@ -175,6 +178,11 @@ describe('the /setup routes before setup', () => {
         const { setupUrl, signInUrl } = await setupLink();
         expect(setupUrl).toMatch(new RegExp(`^https://${DOMAIN}/admin/#setup=[\\w-]{43}$`));
         expect(signInUrl).toBe(`https://${DOMAIN}/admin`);
+    });
+
+    test('/setup/status offers no domain to choose, only the mail domain of the admin address', async () => {
+        const res = await fetch(`${base}/setup/status`);
+        expect(await res.json()).toEqual({ setupRequired: true, mailDomain: MAIL_DOMAIN });
     });
 
     test('./eigen setup-link prints the link and what the page asks', async () => {
@@ -232,14 +240,19 @@ describe('the /setup routes before setup', () => {
 
         const failed = await post('complete', { ...admin, storageType: 's3', setupToken: newer });
         expect(failed.status).toBe(400);
+        const badName = await post('complete', { ...admin, adminUsername: 'ada lovelace', setupToken: newer });
+        expect(badName.status).toBe(400);
+        expect(await badName.text()).toContain(`ada lovelace@${MAIL_DOMAIN}`);
 
+        // A domain in the body is not the server's to take: ./eigen setup set it.
         const [done, twice] = await Promise.all([
-            post('complete', { ...admin, setupToken: newer }),
+            post('complete', { ...admin, domain: 'elsewhere.example', setupToken: newer }),
             post('complete', { ...admin, setupToken: newer }),
         ]);
         expect(done.status).toBe(200);
         expect(twice.status).toBe(409);
-        expect((await done.json()).user.email).toBe(admin.adminEmail);
+        expect((await done.json()).user.email).toBe(ADMIN_EMAIL);
+        expect(storedConfig().domain).toBe(DOMAIN);
         expect(existsSync(join(dataRoot, 'server/setup-token.json'))).toBe(false);
 
         expect((await post('complete', { ...admin, setupToken: newer })).status).toBe(403);
@@ -263,7 +276,7 @@ describe('the /setup routes before setup', () => {
             const signIn = await fetch(`${base}/auth/sign-in/email`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: admin.adminEmail, password: admin.adminPassword }),
+                body: JSON.stringify({ email: ADMIN_EMAIL, password: admin.adminPassword }),
             });
             expect(signIn.status).toBe(200);
             const cookie = (signIn.headers.get('set-cookie') ?? '').split(';')[0];
@@ -275,7 +288,7 @@ describe('the /setup routes before setup', () => {
             await startApi();
 
             const session = await fetch(`${base}/auth/get-session`, { headers: { cookie } });
-            expect((await session.json())?.user?.email).toBe(admin.adminEmail);
+            expect((await session.json())?.user?.email).toBe(ADMIN_EMAIL);
             expect(storedSecret()).toBe(secretBeforeSetup);
         },
         LISTEN_TIMEOUT_MS + 5_000,

@@ -91,8 +91,9 @@ if (!DATA_ROOT) {
 }
 process.env['API_URL'] ||= 'http://localhost';
 
-const MAIL_DOMAIN = process.env['MAIL_DOMAIN'] || 'tuimel.example';
-const DOMAIN = process.env['DOMAIN'] || MAIL_DOMAIN;
+// Setup reads both from the env, as it does after ./eigen setup.
+const MAIL_DOMAIN = (process.env['MAIL_DOMAIN'] ||= 'tuimel.example');
+const DOMAIN = (process.env['DOMAIN'] ||= MAIL_DOMAIN);
 
 // Drive-reference pills in seeded mail ("Open festival →") are built server-side by mail-template's
 // appUrl(), which reads the frontend per-app URL vars (VITE_APP_*_URL). `compose run` gets them from
@@ -210,10 +211,9 @@ async function main(): Promise<void> {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 setupToken: createSetupToken(),
-                domain: DOMAIN,
                 orgName: ORG_NAME,
                 storageType: 'local-id',
-                adminEmail: ADMIN_EMAIL,
+                adminUsername: ADMIN_LOCALPART,
                 adminPassword: ADMIN_PASSWORD,
                 adminName: ADMIN_NAME,
             }),

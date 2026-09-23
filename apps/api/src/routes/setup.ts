@@ -45,7 +45,6 @@ export const setupRouter = new Elysia({ name: 'setup' })
         {
             body: t.Object({
                 setupToken: t.Optional(t.String()),
-                domain: t.String({ minLength: 1 }),
                 orgName: t.String({ minLength: 1 }),
                 storageType: t.Union([t.Literal('local-fullnames'), t.Literal('local-id'), t.Literal('s3')]),
                 s3Bucket: t.Optional(t.String()),
@@ -53,7 +52,7 @@ export const setupRouter = new Elysia({ name: 'setup' })
                 s3AccessKeyId: t.Optional(t.String()),
                 s3SecretAccessKey: t.Optional(t.String()),
                 s3Endpoint: t.Optional(t.String()),
-                adminEmail: t.String({ minLength: 1 }),
+                adminUsername: t.String({ minLength: 1 }),
                 adminPassword: t.String({ minLength: 8 }),
                 adminName: t.String({ minLength: 1 }),
             }),

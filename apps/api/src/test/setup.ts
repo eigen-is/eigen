@@ -15,6 +15,9 @@ import { TEST_DATA_DIR } from './test-env';
 
 type App = typeof app;
 
+// ./eigen setup sets DOMAIN; setup and every address here derive from it.
+process.env['DOMAIN'] = 'test.eigen.is';
+
 // Runs the setup wizard exactly once per worker process. No top-level await: under `bun test --parallel`
 // (which implies `--isolate`), a suspended setup module is observed mid-evaluation by the importing test
 // file, so its exports must be defined synchronously and the server booted lazily behind this gate.
@@ -30,10 +33,9 @@ async function bootServer(): Promise<void> {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 setupToken: createSetupToken(),
-                domain: 'test.eigen.is',
                 orgName: 'Test Organization',
                 storageType: 'local-id',
-                adminEmail: 'alice@test.eigen.is',
+                adminUsername: 'alice',
                 adminPassword: 'testpassword123',
                 adminName: 'Alice Test',
             }),

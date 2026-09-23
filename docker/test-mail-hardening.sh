@@ -200,7 +200,7 @@ ALICE_EMAIL="alice@$MAIL_DOMAIN"
 ALICE_PASSWORD="probe-$RUN-password"
 SETUP_TOKEN=$(grep -o 'setup=[A-Za-z0-9_-]*' "$SCRATCH/setup.log" | tail -n 1 | cut -d= -f2 || true)
 code=$(curl -sk -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
-    -d "{\"setupToken\":\"$SETUP_TOKEN\",\"domain\":\"localhost\",\"orgName\":\"Probe\",\"storageType\":\"local-id\",\"adminEmail\":\"$ALICE_EMAIL\",\"adminPassword\":\"$ALICE_PASSWORD\",\"adminName\":\"Alice\"}" \
+    -d "{\"setupToken\":\"$SETUP_TOKEN\",\"orgName\":\"Probe\",\"storageType\":\"local-id\",\"adminUsername\":\"alice\",\"adminPassword\":\"$ALICE_PASSWORD\",\"adminName\":\"Alice\"}" \
     "https://localhost:$PORT_HTTPS/eigen/setup/complete" || true)
 if [ "$code" != 200 ]; then
     log "× creating $ALICE_EMAIL through /setup/complete answered $code"

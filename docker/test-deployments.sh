@@ -63,7 +63,7 @@ probe_share_mail() {
     code=$(curl -sk -o /dev/null -w '%{http_code}' "$1/$path" || echo 000)
     if [ "$code" = 200 ]; then ok "the setup link's page /$path answers 200"; else fail "the setup link's page /$path → $code, expected 200"; fi
     admin_id=$(curl -sk -X POST -H 'Content-Type: application/json' \
-        -d "{\"setupToken\":\"$token\",\"domain\":\"localhost\",\"orgName\":\"Probe Org\",\"storageType\":\"local-id\",\"adminEmail\":\"ada@eigen.test\",\"adminPassword\":\"$password\",\"adminName\":\"Ada Admin\"}" \
+        -d "{\"setupToken\":\"$token\",\"orgName\":\"Probe Org\",\"storageType\":\"local-id\",\"adminUsername\":\"ada\",\"adminPassword\":\"$password\",\"adminName\":\"Ada Admin\"}" \
         "$base/setup/complete" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4 || true)
     if [ -z "$admin_id" ]; then
         fail "creating the admin through the setup link failed"

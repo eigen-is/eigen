@@ -1,6 +1,6 @@
 ---
 title: "Set up your Eigen server"
-description: "Run the first-time setup wizard to configure your domain, storage, and admin account before anyone can sign in."
+description: "Run the first-time setup wizard to configure your organization, storage, and admin account before anyone can sign in."
 type: overview
 category: Basics
 tags: [admin, setup, getting-started, configuration]
@@ -23,10 +23,6 @@ it shows **Open the setup link that ./eigen setup printed.** instead of the form
 
 ### Server configuration
 
-**Domain** is the address where Eigen will be reachable, for example `eigen.example.com`. If your
-server has a `DOMAIN` environment variable set to a real hostname, the field is pre-filled and
-read-only.
-
 **Organization Name** is the display name for your organization. It appears in the interface and
 in emails sent to members.
 
@@ -44,8 +40,7 @@ in emails sent to members.
 
 **Full Name** is the display name for your admin user account.
 
-**Username** is the local part of the admin email address. The field shows a suffix (for example
-`@example.com`) drawn from the domain you entered above.
+**Username** is the first part of your admin address. The suffix next to it (for example `@example.com`) is the mail domain you picked in `./eigen setup`. You sign in with this address.
 
 **Password** must be at least eight characters.
 

@@ -5,8 +5,8 @@
 # link without which the /setup routes refuse through the real gateway, ./eigen reset-password with a piped
 # password changes it and signs the account out over HTTP, ./eigen backup and ./eigen restore round-trip a
 # folder made over HTTP with owners and modes intact, a failed snapshot still brings the stack back, a snapshot
-# of a newer Eigen is refused without stopping anything, and status and reset-password say where to look when
-# the API is stopped.
+# of a newer Eigen or one holding a hard link is refused without stopping anything, an interrupted restore brings
+# the stack back on the data it had, and status and reset-password say where to look when the API is stopped.
 #
 # Usage:  ./docker/test-cli.sh
 # Needs:  docker, curl, git. Builds every image in Docker (a few minutes on a cold cache).
@@ -163,7 +163,7 @@ else
 fi
 # Unroutable: a request that reached S3 would hang on it until the connect timeout.
 S3_FIELDS='"endpoint":"http://10.255.255.1","bucket":"probe","accessKeyId":"key","secretAccessKey":"secret"'
-ADMIN_FIELDS="\"domain\":\"localhost\",\"orgName\":\"Probe\",\"storageType\":\"local-id\",\"adminEmail\":\"$ADMIN_EMAIL\",\"adminPassword\":\"$OLD_PASSWORD\",\"adminName\":\"Alice\""
+ADMIN_FIELDS="\"orgName\":\"Probe\",\"storageType\":\"local-id\",\"adminUsername\":\"${ADMIN_EMAIL%@*}\",\"adminPassword\":\"$OLD_PASSWORD\",\"adminName\":\"Alice\""
 for route in s3check s3harden complete; do
     case $route in
         s3check) fields=$S3_FIELDS ;;
@@ -376,6 +376,59 @@ if [ "$(api_started)" = "$started" ] && [ "$(cd "$INSTALL" && ls -d data.pre-res
 else
     fail "the refused restore changed something"
 fi
+
+CRAFTED=eigen-20200101-000000.tar.gz
+docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c 'cd "$(mktemp -d)" && mkdir data &&
+    echo "{\"version\":\"$2\",\"createdAt\":\"2020-01-01T00:00:00.000Z\"}" >eigen-snapshot.json &&
+    echo DOMAIN=crafted.example.org >.env.production && echo x >data/a && ln data/a data/b &&
+    tar -czf "$1" eigen-snapshot.json .env.production data' sh "$INSTALL/backups/$CRAFTED" "$VERSION"
+started=$(api_started)
+eigen restore "$CRAFTED" --yes
+show
+if [ "$CODE" != 0 ] && printf '%s\n' "$OUT" | grep -q 'is a hard link' && [ "$(api_started)" = "$started" ] &&
+    ! grep -q crafted.example.org "$INSTALL/.env.production"; then
+    ok "a snapshot holding a hard link is refused before anything stops (exit $CODE)"
+else
+    fail "the crafted snapshot: exit $CODE"
+fi
+
+# Big enough that the restore is still unpacking when the interrupt lands.
+docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c 'head -c 300000000 /dev/urandom >"$1"' sh \
+    "$INSTALL/data/ballast.bin"
+eigen backup
+BIG=$(printf '%s\n' "$OUT" | grep -o 'eigen-[0-9]\{8\}-[0-9]\{6\}\.tar\.gz' | head -n 1 || true)
+docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" rm "$INSTALL/data/ballast.bin"
+drive POST "/folder/$root_id" '{"folderName":"Made before the interrupted restore"}' >/dev/null
+aside=$(cd "$INSTALL" && ls -d data.pre-restore-* | wc -l | tr -d ' ')
+(
+    eigen restore "$BIG" --yes
+    printf '%s\n' "$OUT" >"$SCRATCH/interrupted.log"
+    exit "$CODE"
+) &
+waiter=$!
+for _ in $(seq 1 600); do
+    if [ "$(cd "$INSTALL" && ls -d data.pre-restore-* | wc -l | tr -d ' ')" -gt "$aside" ]; then break; fi
+    sleep 0.1
+done
+# Ctrl-C without a terminal: the signal reaches the launcher's docker client, which passes it to the CLI.
+docker exec "$(docker ps -q --filter "label=eigen.harness.run=$RUN" --filter "ancestor=$CLI_IMAGE")" kill -INT -1 || true
+CODE=0
+wait "$waiter" || CODE=$?
+OUT=$(cat "$SCRATCH/interrupted.log")
+show
+if [ "$CODE" = 130 ] && printf '%s\n' "$OUT" | grep -q 'The restore was cancelled'; then
+    ok "an interrupted restore says it was cancelled (exit 130)"
+else
+    fail "the interrupted restore: exit $CODE"
+fi
+listing=$(drive GET "/folder/$root_id")
+if stack_up && printf '%s' "$listing" | grep -q '"Made before the interrupted restore"' &&
+    [ ! -e "$INSTALL/data/ballast.bin" ] && [ "$(cd "$INSTALL" && ls -d data.pre-restore-* | wc -l | tr -d ' ')" = "$aside" ]; then
+    ok "Eigen runs again on the data it had, and nothing is kept aside"
+else
+    fail "after the interrupted restore: $listing"
+fi
+docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" rm "$INSTALL/backups/$BIG"
 
 ##############################################################################
 header "With the API stopped"

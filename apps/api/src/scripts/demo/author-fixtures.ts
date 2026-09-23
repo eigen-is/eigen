@@ -24,6 +24,7 @@ const FIXTURES_DIR = join(import.meta.dir, 'fixtures');
 const scratch = mkdtempSync(join(tmpdir(), 'eigen-demo-authoring-'));
 process.env['EIGEN_DATA_ROOT'] = scratch;
 process.env['API_URL'] ||= 'http://localhost';
+process.env['DOMAIN'] ||= 'fixtures.test';
 mkdirSync(join(scratch, 'server'), { recursive: true });
 mkdirSync(join(scratch, 'home'), { recursive: true });
 
@@ -37,10 +38,9 @@ const setupRes = await app.handle(
         // local-fullnames keeps container internals as named files on disk so they are easy to copy out.
         body: JSON.stringify({
             setupToken: createSetupToken(),
-            domain: 'fixtures.test',
             orgName: 'Fixtures',
             storageType: 'local-fullnames',
-            adminEmail: 'admin@fixtures.test',
+            adminUsername: 'admin',
             adminPassword: 'fixtures-pw-123',
             adminName: 'Fixture Author',
         }),
