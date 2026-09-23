@@ -2,7 +2,7 @@
 
 > **TLDR**: Runtime-configurable server settings in `data/server/settings.json`, held by a `JsonStore` with typed
 > defaults. Admins edit them from the Admin app. `config.json` is the separate, setup-time identity file — it holds
-> domain, orgName, orgId and the auth secret (made at first boot, never changed), and nothing about storage. The storage type and S3 credentials are settings,
+> orgName, orgId and the auth secret (made at first boot, never changed), and nothing about storage or the web address, which is `DOMAIN` alone (`getDomain()`). The storage type and S3 credentials are settings,
 > under `defaults.mount`.
 
 ## config.json vs settings.json
@@ -11,7 +11,7 @@
 |--------------|-----------------------------------|----------------------------------------------|
 | **Path**     | `data/server/config.json`         | `data/server/settings.json`                  |
 | **Written**  | Secret at first boot, the rest during setup | By an admin at runtime                       |
-| **Contains** | domain, orgName, orgId, secret    | quotas, mount defaults, onboarding, guests, landing, notifications |
+| **Contains** | orgName, orgId, secret            | quotas, mount defaults, onboarding, guests, landing, notifications |
 | **Editable** | No (immutable after setup)        | Yes (admin settings UI)                      |
 
 `config.json` has **no** storage field (`apps/api/src/lib/config/server-config.ts`). Storage type and S3
