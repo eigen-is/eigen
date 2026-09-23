@@ -1,5 +1,5 @@
 # The site both frontend modes serve: Caddyfile (HTTPS on the domain) and Caddyfile.static (plain :8080
-# behind a host webserver) import it. {client_ip} is the peer in the first, the host proxy's X-Real-IP in the second.
+# behind a host web server) import it. {client_ip} is the peer in the first, the host proxy's X-Real-IP in the second.
 
 (app) {
     redir /{args[0]} /{args[0]}/ 308
@@ -22,9 +22,9 @@
     @static path *.js *.css *.png *.jpg *.svg *.woff2 *.ttf *.woff *.eot
     header @static Cache-Control "public, max-age=31536000, immutable"
 
-    # HTML shells revalidate so a deploy isn't masked by the browser's heuristic cache.
-    @html not path /eigen/* /dav/* /.well-known/* *.js *.css *.png *.jpg *.svg *.woff2 *.ttf *.woff *.eot
-    header @html Cache-Control "no-cache"
+    # HTML shells revalidate so a deploy isn't masked by the browser's heuristic cache; `?` keeps what @static set.
+    @html not path /eigen/* /dav/* /.well-known/*
+    header @html ?Cache-Control "no-cache"
 
     # Localhost-only API routes (mail delivery + credential verify) must not be internet-reachable;
     # their real callers (Postfix/Dovecot) hit the API directly on the bridge, so 404 them here.
