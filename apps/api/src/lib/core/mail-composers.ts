@@ -10,7 +10,7 @@ import {
     EMAIL_TEXT,
     renderEigenEmail,
 } from './mail-template';
-import type { OutboundMail } from './mailer';
+import { type OutboundMail, onBehalfOf } from './mailer';
 
 function pathAsAttachmentLink(path: DrivePath): AttachmentReference {
     return {
@@ -41,7 +41,7 @@ export function composeShareEmail(
         recipientEmail,
     });
     return {
-        from: { name: actor.name, address: actor.email },
+        ...onBehalfOf({ name: actor.name, address: actor.email }),
         to: [{ name: '', address: recipientEmail }],
         subject,
         text: `${actorDisplay} shared "${displayName}" with you.\n\n${buildAttachmentUrl(reference, recipientEmail)}`,
@@ -72,7 +72,7 @@ export function composeAccessRequestEmail(
     if (message) textParts.push(`Message: ${message}`);
     textParts.push(buildAttachmentUrl(reference));
     return {
-        from: { name: requester.name, address: requester.email },
+        ...onBehalfOf({ name: requester.name, address: requester.email }),
         to: [{ name: owner.name, address: owner.email }],
         subject,
         text: textParts.join('\n\n'),
@@ -100,7 +100,7 @@ export function composeCollaboratorsEmail(
     });
     const textBody = stripTagsServer(htmlMessage);
     return {
-        from: { name: sender.name, address: sender.email },
+        ...onBehalfOf({ name: sender.name, address: sender.email }),
         to: [{ name: '', address: recipientEmail }],
         subject: resolvedSubject,
         text: `${textBody}\n\n${buildAttachmentUrl(reference, recipientEmail)}`,
@@ -108,7 +108,7 @@ export function composeCollaboratorsEmail(
     };
 }
 
-// System emails carry no from-address, so buildMailOptions stamps `noreply@` on them.
+// System emails carry no from-address, so buildMailOptions stamps the system sender on them.
 export function composeOtpEmail(
     recipient: { name: string; email: string },
     code: string,

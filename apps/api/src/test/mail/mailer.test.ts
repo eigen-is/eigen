@@ -1,5 +1,8 @@
-import { afterEach, describe, expect, test } from 'bun:test';
-import { createTransport } from '../../lib/core/mailer';
+import { describe, expect, test } from 'bun:test';
+import MailComposer from 'nodemailer/lib/mail-composer';
+import { getOrgName } from '../../lib/config/server-config';
+import { buildMailOptions, createTransport, defaultFrom, onBehalfOf } from '../../lib/core/mailer';
+import { restoreEnvAfterEach } from '../env-test-helpers';
 
 // nodemailer's Transporter type does not surface the resolved options the factory built, so the
 // suite reads them through this one cast.
@@ -8,15 +11,7 @@ function transportOptions(transport: ReturnType<typeof createTransport>): Record
 }
 
 describe('createTransport', () => {
-    const originalEnv = { ...process.env };
-
-    afterEach(() => {
-        for (const key of ['SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASSWORD']) {
-            const original = originalEnv[key];
-            if (original === undefined) delete process.env[key];
-            else process.env[key] = original;
-        }
-    });
+    restoreEnvAfterEach(['SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASSWORD']);
 
     test('uses SMTP transport when SMTP_HOST is set', () => {
         process.env['SMTP_HOST'] = 'postfix';
@@ -69,5 +64,75 @@ describe('createTransport', () => {
         delete process.env['SMTP_HOST'];
         const opts = transportOptions(createTransport());
         expect(opts['sendmail']).toBe(true);
+    });
+});
+
+describe('defaultFrom', () => {
+    restoreEnvAfterEach(['SMTP_FROM', 'MAIL_DOMAIN']);
+
+    test('without SMTP_FROM it is the org name at noreply@ the mail domain', () => {
+        delete process.env['SMTP_FROM'];
+        process.env['MAIL_DOMAIN'] = 'example.org';
+        expect(defaultFrom()).toEqual({ name: getOrgName(), address: 'noreply@example.org' });
+    });
+
+    test('SMTP_FROM as Name <address> sets both', () => {
+        process.env['SMTP_FROM'] = 'Acme Mail <eigen@acme.nl>';
+        expect(defaultFrom()).toEqual({ name: 'Acme Mail', address: 'eigen@acme.nl' });
+    });
+
+    test('a bare SMTP_FROM address keeps the org name', () => {
+        process.env['SMTP_FROM'] = 'eigen@acme.nl';
+        expect(defaultFrom()).toEqual({ name: getOrgName(), address: 'eigen@acme.nl' });
+    });
+});
+
+describe('onBehalfOf', () => {
+    restoreEnvAfterEach(['SMTP_FROM', 'MAIL_DOMAIN', 'MAIL_ENABLED']);
+
+    const via = { from: { name: 'Alice via Acme', address: 'eigen@acme.nl' } };
+
+    const setup = (mailEnabled: boolean) => {
+        process.env['SMTP_FROM'] = 'Acme <eigen@acme.nl>';
+        process.env['MAIL_DOMAIN'] = 'acme.nl';
+        process.env['MAIL_ENABLED'] = mailEnabled ? '1' : '0';
+    };
+
+    test('an external address goes out from the system sender and replies reach the user', () => {
+        setup(true);
+        const user = { name: 'Alice', address: 'alice@gmail.com' };
+        expect(onBehalfOf(user)).toEqual({ ...via, replyTo: user });
+    });
+
+    test('with mail off a local address also goes out from the system sender', () => {
+        setup(false);
+        const user = { name: 'Alice', address: 'alice@acme.nl' };
+        expect(onBehalfOf(user)).toEqual({ ...via, replyTo: user });
+    });
+
+    test('a local address with mail on sends as the user, with no Reply-To', () => {
+        setup(true);
+        const user = { name: 'Alice', address: 'alice@acme.nl' };
+        expect(onBehalfOf(user)).toEqual({ from: user });
+    });
+
+    test('a user without a name is named by address', () => {
+        setup(true);
+        expect(onBehalfOf({ name: '', address: 'alice@gmail.com' }).from?.name).toBe('alice@gmail.com via Acme');
+    });
+
+    test('the SMTP envelope sender follows From, and Reply-To lands in the headers', async () => {
+        setup(true);
+        const options = buildMailOptions({
+            ...onBehalfOf({ name: 'Alice', address: 'alice@gmail.com' }),
+            to: [{ name: '', address: 'bob@example.com' }],
+            subject: 's',
+            text: 't',
+        });
+        const node = new MailComposer(options).compile();
+        expect(node.getEnvelope().from).toBe('eigen@acme.nl');
+        const raw = (await node.build()).toString();
+        expect(raw).toContain('From: Alice via Acme <eigen@acme.nl>');
+        expect(raw).toContain('Reply-To: Alice <alice@gmail.com>');
     });
 });

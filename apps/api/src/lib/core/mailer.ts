@@ -1,10 +1,11 @@
 import type { ImipMethod } from '@workspace/lib/types/calendar';
 import { ICS_MIME } from '@workspace/lib/types/drive';
 import nodemailer from 'nodemailer';
+import addressparser from 'nodemailer/lib/addressparser';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import type Mail from 'nodemailer/lib/mailer';
-import { isDemo, isProduction } from '../config/env';
-import { getMailDomain, getOrgName } from '../config/server-config';
+import { isDemo, isMailEnabled, isProduction } from '../config/env';
+import { getMailDomain, getOrgName, isInternalAddress } from '../config/server-config';
 
 // Outbound email types — the inbound parsing types live in packages/lib/types/mail.ts
 type OutboundAddress = {
@@ -40,8 +41,22 @@ export type OutboundMail = {
     envelope?: { from: string; to: string[] };
 };
 
-function defaultFrom(): OutboundAddress {
-    return { name: getOrgName(), address: `noreply@${getMailDomain()}` };
+// SMTP_FROM is `Name <address>` or a bare address; a bare one keeps the org name.
+export function defaultFrom(): OutboundAddress {
+    const [configured] = addressparser(process.env['SMTP_FROM'] ?? '', { flatten: true });
+    if (!configured?.address) return { name: getOrgName(), address: `noreply@${getMailDomain()}` };
+    return { name: configured.name || getOrgName(), address: configured.address };
+}
+
+// A relay only accepts senders it has verified and receivers enforce DMARC, so a user's address sends
+// itself only when this server hosts it; otherwise the system sender carries it and replies reach the user.
+export function onBehalfOf(user: OutboundAddress): Pick<OutboundMail, 'from' | 'replyTo'> {
+    if (isMailEnabled() && isInternalAddress(user.address)) return { from: user };
+    const system = defaultFrom();
+    return {
+        from: { name: `${user.name || user.address} via ${system.name}`, address: system.address },
+        replyTo: user,
+    };
 }
 
 export function createTransport(): Mail {

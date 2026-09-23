@@ -4,7 +4,7 @@ import type { Attendee, CalendarEvent, EventData, ImipMethod } from '@workspace/
 import { type AddressObject, type Attachment, type CalendarInvite, isCalendarPart } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
 import { EMAIL_MUTED, EMAIL_TEXT, renderEigenEmail } from '../core/mail-template';
-import type { OutboundICalEvent, OutboundMail } from '../core/mailer';
+import { type OutboundICalEvent, type OutboundMail, onBehalfOf } from '../core/mailer';
 import type { Home } from '../home';
 import { parseIcs, serializeEventForImip } from '../ical';
 import { computeOccurrenceTimes } from '../ical/wall-clock';
@@ -80,7 +80,7 @@ export function composeInviteEmail(
 ): OutboundMail {
     const footer = `Invitation from ${organizer.name || organizer.email}`;
     return {
-        from: { name: organizer.name ?? '', address: organizer.email },
+        ...onBehalfOf({ name: organizer.name ?? '', address: organizer.email }),
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
         subject: `${updated ? 'Updated invitation' : 'Invitation'}: ${event.title}`,
         text: buildEventSummary(event),
@@ -102,7 +102,7 @@ export function composeCancelEmail(
 ): OutboundMail {
     const footer = `Invitation from ${organizer.name || organizer.email}`;
     return {
-        from: { name: organizer.name ?? '', address: organizer.email },
+        ...onBehalfOf({ name: organizer.name ?? '', address: organizer.email }),
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
         subject: `Canceled: ${event.title}`,
         text: `This event has been canceled:\n\n${buildEventSummary(event)}`,
@@ -147,7 +147,7 @@ export function composeRsvpReply(
 
     const statusLabel = STATUS_LABELS[status].toLowerCase();
     return {
-        from: { name: attendeeName, address: attendeeEmail },
+        ...onBehalfOf({ name: attendeeName, address: attendeeEmail }),
         to: [{ name: organizer.name ?? '', address: organizer.email }],
         subject: `${STATUS_LABELS[status]}: ${event.title}`,
         text: `${attendeeName} has ${statusLabel} the invitation: ${event.title}`,

@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, ImipMethod } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment } from '@workspace/lib/types/mail';
 import { composeCancelEmail, composeInviteEmail, composeRsvpReply, processInboundImip } from '../../lib/calendar/imip';
@@ -8,6 +8,7 @@ import { getHome } from '../../lib/home/get-home';
 import { buildResource, parseIcs, serializeEventForImip, serializeResource } from '../../lib/ical';
 import { verifyImipSender } from '../../lib/mail/imip-auth';
 import { basicAuth } from '../dav-test-helpers';
+import { restoreEnvAfterEach } from '../env-test-helpers';
 import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 // Inbound iMIP acts only on a message our verifying MTA authenticated. These helpers stand in for
@@ -203,6 +204,12 @@ describe('iMIP Outbound Email Composition', () => {
     const organizer = { userId: 'alice-id', email: 'alice@eigen.example', name: 'Alice' };
     const attendee = { email: 'bob@external.com', name: 'Bob', status: 'pending' as const, role: 'required' as const };
 
+    // The organizer is local here, so the mail goes out as her.
+    restoreEnvAfterEach(['MAIL_DOMAIN']);
+    beforeEach(() => {
+        process.env['MAIL_DOMAIN'] = 'eigen.example';
+    });
+
     test('composeInviteEmail creates proper OutboundMail with icalEvent', () => {
         const mail = composeInviteEmail(MOCK_EVENT, organizer, [attendee]);
         expect(mail.from?.address).toBe('alice@eigen.example');
@@ -321,6 +328,63 @@ describe('iMIP Outbound Email Composition', () => {
         expect(unfold(composeCancelEmail(MOVED_OCCURRENCE, organizer, [attendee], RECURRING_EVENT))).toContain(
             ORIGINAL_SLOT,
         );
+    });
+});
+
+describe("iMIP mail on a user's behalf", () => {
+    const external = { userId: 'alice-id', email: 'alice@gmail.com', name: 'Alice' };
+    const local = { userId: 'alice-id', email: 'alice@eigen.example', name: 'Alice' };
+    const attendee = { email: 'bob@external.com', name: 'Bob', status: 'pending' as const, role: 'required' as const };
+    const via = { name: 'Alice via Acme', address: 'eigen@acme.nl' };
+    const unfold = (mail: { icalEvent?: { content: string } }) => mail.icalEvent!.content.replace(/\r\n[ \t]/g, '');
+    type Organizer = typeof external;
+    const composers: [string, (organizer: Organizer) => ReturnType<typeof composeInviteEmail>][] = [
+        ['invite', (organizer) => composeInviteEmail(MOCK_EVENT, organizer, [attendee])],
+        ['update', (organizer) => composeInviteEmail(MOCK_EVENT, organizer, [attendee], undefined, [], true)],
+        ['cancel', (organizer) => composeCancelEmail(MOCK_EVENT, organizer, [attendee])],
+        [
+            'RSVP reply',
+            (attendeeUser) => composeRsvpReply(MOCK_EVENT, attendeeUser.email, attendeeUser.name, 'accepted'),
+        ],
+    ];
+
+    restoreEnvAfterEach(['MAIL_DOMAIN', 'MAIL_ENABLED', 'SMTP_FROM']);
+    beforeEach(() => {
+        process.env['MAIL_DOMAIN'] = 'eigen.example';
+        process.env['SMTP_FROM'] = 'Acme <eigen@acme.nl>';
+    });
+
+    describe.each(composers)('%s', (_name, compose) => {
+        test('an external address goes out from the system sender, replying to the user', () => {
+            const mail = compose(external);
+            expect(mail.from).toEqual(via);
+            expect(mail.replyTo).toEqual({ name: 'Alice', address: 'alice@gmail.com' });
+        });
+
+        test('with mail off a local address goes out from the system sender too', () => {
+            process.env['MAIL_ENABLED'] = '0';
+            const mail = compose(local);
+            expect(mail.from).toEqual(via);
+            expect(mail.replyTo).toEqual({ name: 'Alice', address: 'alice@eigen.example' });
+        });
+
+        test('a local address with mail on sends as the user', () => {
+            const mail = compose(local);
+            expect(mail.from).toEqual({ name: 'Alice', address: 'alice@eigen.example' });
+            expect(mail.replyTo).toBeUndefined();
+        });
+    });
+
+    test('an invite from an external organizer keeps her own address as ORGANIZER', () => {
+        const ics = unfold(composeInviteEmail(MOCK_EVENT, external, [attendee]));
+        expect(ics).toMatch(/^ORGANIZER[^\r\n]*:mailto:alice@gmail\.com\r?$/m);
+        expect(ics).not.toContain('eigen@acme.nl');
+    });
+
+    test('an RSVP reply from an external attendee keeps her own address as ATTENDEE', () => {
+        const ics = unfold(composeRsvpReply(MOCK_EVENT, 'alice@gmail.com', 'Alice', 'accepted'));
+        expect(ics).toMatch(/^ATTENDEE[^\r\n]*:mailto:alice@gmail\.com\r?$/m);
+        expect(ics).not.toContain('eigen@acme.nl');
     });
 });
 
