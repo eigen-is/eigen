@@ -237,6 +237,23 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: failing compose config: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
+
+    mkdir "$FIX/source/.eigen/lock"
+    echo 999999 >"$FIX/source/.eigen/lock/pid"
+    STUB_FAIL=compose-config launch source restart
+    if [ "$CODE" = 1 ] && printf '%s\n' "$CALLS" | grep -q ' config --services$' && [ ! -e "$FIX/source/.eigen/lock" ]; then
+        ok "$SHELL_NAME: the lock of a process that is gone is taken over, and removed when the command fails"
+    else
+        fail "$SHELL_NAME: a stale lock: exit $CODE, lock $(ls "$FIX/source/.eigen/lock" 2>&1)"
+    fi
+    # A container's own PID namespace cannot see this shell.
+    if [ "$SHELL_NAME" = host ]; then
+        mkdir "$FIX/source/.eigen/lock"
+        echo $$ >"$FIX/source/.eigen/lock/pid"
+        launch source backup
+        expect_error 1 '■  Another ./eigen command is running.' "a running command's lock refuses a backup"
+        rm -r "$FIX/source/.eigen/lock"
+    fi
 done
 
 header "Result"

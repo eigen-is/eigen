@@ -181,7 +181,7 @@ describe('eigen status', () => {
         const { stdout, stderr, code } = await runCli([
             'status',
             `--services=${SERVICES}`,
-            '--update=available 3',
+            '--new-commits=3',
             '--mail-queue=-- 2 Kbytes in 2 Requests.',
             // The newest by the time in its name, not by the name.
             '--snapshots=eigen-20260101-120000.tar.gz\neigen-pre-update-20260301-080000.tar.gz\nnotes.txt',
@@ -192,7 +192,7 @@ describe('eigen status', () => {
         expect(stdout).toMatch(/◇ {2}eigen-api +running, healthy/);
         expect(stdout).toMatch(/caddy +running\n/);
         expect(stdout).toMatch(/■ {2}postfix +exited/);
-        expect(stdout).toContain('./eigen update');
+        expect(stdout).toMatch(/▲ {2}Update +3 new commits; \.\/eigen update installs them/);
         expect(stdout).toMatch(/Disk +\d+\.\d [KMGT]B free of \d+\.\d [KMGT]B\n/);
         expect(stdout).toMatch(/Last snapshot +eigen-pre-update-20260301-080000\.tar\.gz, .+ ago\n/);
         expect(stdout).toMatch(/Mail queue +2 messages waiting/);
@@ -206,26 +206,28 @@ describe('eigen status', () => {
         expect(stdout).toMatch(/▲ {2}Last snapshot +none yet; \.\/eigen backup makes one/);
     });
 
-    test('names the release a release install can update to', async () => {
-        const { stdout, code } = await runCli(['status', `--services=${SERVICES}`, '--update=available 0.3.0']);
-        expect(code).toBe(0);
-        expect(stdout).toMatch(/▲ {2}Update +Eigen 0\.3\.0 is out; \.\/eigen update installs it/);
+    test('names a newer release, and not an older one or its own', async () => {
+        const newer = await runCli(['status', `--services=${SERVICES}`, '--latest=99.0.0']);
+        expect(newer.code).toBe(0);
+        expect(newer.stdout).toMatch(/▲ {2}Update +Eigen 99\.0\.0 is out; \.\/eigen update installs it/);
+        for (const latest of [pkg.version, '0.0.1']) {
+            const { stdout } = await runCli(['status', `--services=${SERVICES}`, `--latest=${latest}`]);
+            expect(stdout).toMatch(/◇ {2}Update +up to date/);
+        }
     });
 
-    test('leaves out an update check that could not run, and tells an unreadable queue from a stopped postfix', async () => {
-        const { stdout, code } = await runCli([
-            'status',
-            '--services=eigen-api\trunning\thealthy\npostfix\trunning\t',
-            '--update=',
-            '--mail-queue=',
-        ]);
-        expect(code).toBe(0);
+    test('says when the update check failed, leaves out one that could not run, and tells an unreadable queue from a stopped postfix', async () => {
+        const services = '--services=eigen-api\trunning\thealthy\npostfix\trunning\t';
+        const failed = await runCli(['status', services, '--latest=', '--mail-queue=']);
+        expect(failed.code).toBe(0);
+        expect(failed.stdout).toMatch(/▲ {2}Update +could not check/);
+        expect(failed.stdout).toMatch(/Mail queue +could not be read; \.\/eigen logs postfix shows why/);
+        const { stdout } = await runCli(['status', services]);
         expect(stdout).not.toContain('Update');
-        expect(stdout).toMatch(/Mail queue +could not be read; \.\/eigen logs postfix shows why/);
     });
 
     test('colors the glyphs on a terminal, and not with NO_COLOR', async () => {
-        const args = ['status', `--services=${SERVICES}`, '--update=current'];
+        const args = ['status', `--services=${SERVICES}`, '--new-commits=0'];
         const colored = await runInTerminal(args, { NO_COLOR: undefined });
         expect(colored.code).toBe(0);
         expect(colored.output).toContain('◇');
