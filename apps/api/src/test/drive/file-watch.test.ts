@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
-import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
+import { CARD_TITLE_MAX_LENGTH, type FileEvent, type PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { Notification } from '@workspace/lib/types/notification';
 import type { SSEventNotificationCreated } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -585,6 +585,23 @@ describe('File events: collab edits, client posts, comments', () => {
             expect(res.status).toBe(200);
             const recorded = await history(board.id);
             expect(recorded.find((e) => e.eventType === 'sticky-removed')?.details).toEqual(details);
+        });
+
+        test('details longer than an activity row shows are rejected by the route', async () => {
+            const board = await createDoc('ClientStickyLong', 'stickies');
+            const long = 'x'.repeat(CARD_TITLE_MAX_LENGTH + 1);
+            for (const details of [
+                { ...stickyMoved.details, card: long },
+                { ...stickyMoved.details, toColumn: long },
+                { ...stickyMoved.details, cardId: long },
+            ]) {
+                const res = await postClientEvent(aliceToken, board.id, { eventType: 'sticky-moved', details });
+                expect(res.status).toBe(422);
+            }
+            const fits = { ...stickyMoved.details, card: 'x'.repeat(CARD_TITLE_MAX_LENGTH) };
+            const res = await postClientEvent(aliceToken, board.id, { eventType: 'sticky-moved', details: fits });
+            expect(res.status).toBe(200);
+            expect((await history(board.id)).filter((e) => e.eventType === 'sticky-moved')).toHaveLength(1);
         });
 
         test('deferred semantic types (slide-reordered, sheet-rows-inserted) are rejected by the route', async () => {

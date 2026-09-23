@@ -1,7 +1,7 @@
 import { S3_NONCURRENT_DAYS_MAX } from '@workspace/lib/constants/s3';
 import type { DriveImportSource, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import type { ClientFileEventInput } from '@workspace/lib/types/file-history';
+import { CARD_TITLE_MAX_LENGTH, type ClientFileEventInput } from '@workspace/lib/types/file-history';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { type Static, t } from 'elysia';
 
@@ -42,11 +42,19 @@ const _attachmentReferenceSchemaMatchesType: TypesEqual<
 void _attachmentReferenceSchemaMatchesType;
 
 // One object per event type, so the identity guard below can hold it against ClientFileEventInput.
-const stickyCardDetails = t.Object({ card: t.String(), toColumn: t.String(), cardId: t.String() });
+const CARD_TEXT = { maxLength: CARD_TITLE_MAX_LENGTH };
+const stickyCardDetails = t.Object({
+    card: t.String(CARD_TEXT),
+    toColumn: t.String(CARD_TEXT),
+    cardId: t.String(CARD_TEXT),
+});
 export const clientFileEventBody = t.Union([
     t.Object({ eventType: t.Literal('sticky-added'), details: stickyCardDetails }),
     t.Object({ eventType: t.Literal('sticky-moved'), details: stickyCardDetails }),
-    t.Object({ eventType: t.Literal('sticky-removed'), details: t.Object({ card: t.String(), cardId: t.String() }) }),
+    t.Object({
+        eventType: t.Literal('sticky-removed'),
+        details: t.Object({ card: t.String(CARD_TEXT), cardId: t.String(CARD_TEXT) }),
+    }),
 ]);
 const _clientFileEventBodyMatchesType: TypesEqual<Static<typeof clientFileEventBody>, ClientFileEventInput> = true;
 void _clientFileEventBodyMatchesType;
