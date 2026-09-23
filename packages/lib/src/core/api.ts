@@ -93,11 +93,7 @@ export const setupApi = api.setup;
 export const waitlistApi = api.waitlist;
 export const backupApi = api.admin.backup;
 
-// Read at module scope and fed to trimTrailingSlash, so a var missing from
-// .env.production used to throw before anything rendered — a blank page whose only
-// symptom was `TypeError: reading 'replace'`. A deployment generated before an app
-// existed hits exactly that until `./eigen update` backfills it. Unset now degrades to a
-// same-origin relative link, which is what production serves anyway.
+// An env file from before an app existed lacks its key: unset is a same-origin relative link, what production serves.
 export const SPACE_APP_URL = import.meta.env.VITE_APP_SPACE_URL ?? '';
 export const MAIL_APP_URL = import.meta.env.VITE_APP_MAIL_URL ?? '';
 export const CONTACTS_APP_URL = import.meta.env.VITE_APP_CONTACTS_URL ?? '';

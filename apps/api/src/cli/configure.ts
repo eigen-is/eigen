@@ -144,8 +144,7 @@ function cidrRange(cidr: string): [number, number] {
     return [start, start + 2 ** (32 - Number(prefix)) - 1];
 }
 
-// A rerun must reuse the live network's subnet: recreating it elsewhere would orphan the running containers. Undefined
-// when every candidate is taken.
+// A rerun reuses the live network's subnet, or the running containers are orphaned. Undefined when all are taken.
 export function chooseSubnet(networks: DockerNetwork[], project: string): string | undefined {
     const live = networks.find(
         (network) => network.Name === `${project}_eigen` && network.Labels?.['com.docker.compose.project'] === project,

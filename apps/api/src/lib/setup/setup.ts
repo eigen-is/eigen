@@ -280,9 +280,7 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
 
         await resetAuthDatabase();
 
-        // better-auth is the only external integration here; surface its errors as 400
-        // (e.g. duplicate email, invalid slug) so the wizard can show the real message.
-        // Subsequent config/filesystem writes are internal and bubble as 500 if they fail.
+        // better-auth's errors (a duplicate email, a bad slug) reach the wizard as 400s with their own message.
         let user: Awaited<ReturnType<typeof auth.api.createUser>>;
         let org: Awaited<ReturnType<typeof auth.api.createOrganization>>;
         try {

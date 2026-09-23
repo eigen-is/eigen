@@ -17,8 +17,7 @@ export function ownAs(path: string, owner: Owner): void {
     if (process.getuid?.() === 0) chownSync(path, owner.uid, owner.gid);
 }
 
-// The install folder's owner as the launcher sees it, else `path`'s: through Docker Desktop's file share, root in a
-// container sees root.
+// The install folder's owner as the launcher sees it, else `path`'s: via Docker Desktop's file share, root sees root.
 export function installOwner(path: string): Owner {
     const passed = /^(\d+):(\d+)$/.exec(process.env['EIGEN_OWNER'] ?? '');
     return passed ? { uid: Number(passed[1]), gid: Number(passed[2]) } : statSync(path);

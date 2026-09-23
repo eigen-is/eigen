@@ -31,8 +31,7 @@ const GLYPHS = {
 
 export type Glyph = keyof typeof GLYPHS;
 
-// The launcher's say(): the glyph always, its color only on a terminal without NO_COLOR, which Bun's styleText
-// ignores.
+// The launcher's say(): the glyph always, its color only on a terminal without NO_COLOR, which styleText ignores.
 export function glyphLine(glyph: Glyph, text: string): string {
     const [color, mark] = GLYPHS[glyph];
     const shown = process.stdout.isTTY && !process.env['NO_COLOR'] ? styleText(color, mark) : mark;
@@ -57,8 +56,7 @@ export function wrap(text: string, width: number): string[] {
     return lines;
 }
 
-// The one place that decides between clack and plain lines: clack only on a terminal, without flags and without
-// NO_COLOR (clack colors through Bun's styleText, which ignores it), so a scripted or piped run never loads it.
+// Clack only on a terminal, without flags or NO_COLOR (its styleText ignores it): a scripted run never loads it.
 export async function createUi(flagsGiven: boolean): Promise<Ui> {
     const interactive = process.stdin.isTTY && process.stdout.isTTY && !flagsGiven;
     if (interactive && !process.env['NO_COLOR']) {

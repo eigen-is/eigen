@@ -6,8 +6,7 @@ import { handleApiError } from '../lib/core/errors';
 import { createSetupLink, type SetupLink } from '../lib/setup/setup-token';
 import { type ResetPasswordResult, resetUserPassword } from '../lib/user/reset-password';
 
-// Served only on the Unix socket, which `docker compose exec` reaches as the API's own user: the CLI's
-// online commands, never the web.
+// The CLI's online commands, on the Unix socket `docker compose exec` reaches as the API's user; never the web.
 export const controlRouter = new Elysia({ name: 'control' })
     .onError(handleApiError)
     .get('/status', (): ControlStatus => getServerStatus())
@@ -21,8 +20,7 @@ export const controlRouter = new Elysia({ name: 'control' })
         { body: t.Object({ email: t.String({ minLength: 1 }), password: t.String() }) },
     );
 
-// A socket left by a killed process would make the bind fail. Bun removes the file again on stop(). The image's
-// /run/eigen is 0700, so nobody else can reach the socket before the chmod.
+// A killed process leaves its socket, which fails the bind. /run/eigen is 0700: nobody reaches it before the chmod.
 export function startControlSocket(): Bun.Server<undefined> {
     const socketPath = getControlSocketPath();
     let server: Bun.Server<undefined>;

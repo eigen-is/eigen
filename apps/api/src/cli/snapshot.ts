@@ -53,8 +53,7 @@ The current data/ and ${ENV_PATH} are kept aside.
 
   --yes   Do not ask`;
 
-// What refusal() looks at: devices, fifos, sockets, setuid or setgid files, and links. Not a setgid folder: a setgid
-// install folder hands g+s down to every folder in it.
+// What refusal() looks at; not a setgid folder, which a setgid install folder hands down to every folder in it.
 const SUSPECTS = '-type b -o -type c -o -type p -o -type s -o -type f ( -perm -4000 -o -perm -2000 ) -o -type l';
 
 // The snapshots among these file names, newest first by the time in the name, pre-update ones included.
@@ -79,8 +78,7 @@ function lockData(ui: Ui, command: string): void {
     }
 }
 
-// Why root must not swap the unpacked snapshot in, or null. A hard link is fine: Dovecot makes them on an IMAP copy.
-// Fifos and sockets hold no data and the API can make them, so they are left out rather than refused.
+// Why root must not swap the copy in, or null; drops the fifos and sockets the API can make. Dovecot makes hard links.
 async function refusal(): Promise<string | null> {
     const env = lstatSync(join(STAGING, ENV_PATH));
     if (!env.isFile() || env.nlink > 1) return `${ENV_PATH} is not a plain file`;
@@ -123,8 +121,7 @@ export async function snapshot(flags: { 'pre-update'?: boolean }): Promise<void>
     if (!existsSync(SNAPSHOTS)) mkdirSync(SNAPSHOTS, { mode: 0o700 });
     ownAs(SNAPSHOTS, owner);
 
-    // The previous pre-update snapshot stays for a rollback of the last update; the ones before go first, so the disk
-    // holds two while this one is written.
+    // The older pre-update snapshots go first, so the disk holds two while this one is written.
     if (flags['pre-update']) {
         const older = newestSnapshots(readdirSync(SNAPSHOTS))
             .filter((file) => SNAPSHOT_NAME.exec(file)?.groups?.['preUpdate'])
@@ -141,8 +138,7 @@ export async function snapshot(flags: { 'pre-update'?: boolean }): Promise<void>
     writeFileSync(join(metaDir, META), JSON.stringify({ version: pkg.version, createdAt: createdAt.toISOString() }));
     // One fixed name, so a run that died halfway leaves nothing a later run does not overwrite.
     const partial = join(SNAPSHOTS, '.eigen-snapshot.partial');
-    // Numeric owners: the ids in data/ are the containers' users, which this image may not name. -S keeps a sparse
-    // file small instead of writing out its holes.
+    // Numeric owners: data/ holds the containers' ids, which this image may not name. -S keeps a sparse file small.
     const tar = Bun.spawn(
         [
             'tar',
@@ -245,8 +241,7 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
         );
     }
 
-    // The swap is two renames next to data/: a link would move instead of the data, and a data/ on another disk cannot
-    // be renamed at all.
+    // The swap is two renames: a linked data/ would move the link, and one on another disk cannot be renamed.
     const data = lstatSync('data', { throwIfNoEntry: false });
     if (data && (data.isSymbolicLink() || data.dev !== statSync('.').dev)) {
         ui.fail(
@@ -268,8 +263,7 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
             process.exit(DECLINED);
         }
     }
-    // --check unpacks and checks aside and marks the copy; the swap run takes a copy so marked. The swap is synchronous,
-    // so an interrupt lands before it or after it.
+    // --check unpacks, checks and marks a copy, which the swap run takes. No interrupt splits the synchronous swap.
     let interrupted = false;
     let extract: Subprocess<'ignore', 'ignore', 'pipe'> | undefined;
     const interrupt = () => {
@@ -311,7 +305,7 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
     const staged = join(STAGING, ENV_PATH);
     ownAs(staged, installOwner('.'));
     chmodSync(staged, 0o600);
-    // Without it the next start draws a new collab epoch: a tab that loaded a document before reloads, not merges it back.
+    // Without it the next start draws a new collab epoch: a tab that loaded a document before reloads, not merges back.
     rmSync(join(STAGING, 'data/server', COLLAB_EPOCH_FILE), { force: true });
     const stamp = buildBackupStamp(new Date());
     const aside: string[] = [];

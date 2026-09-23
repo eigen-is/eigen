@@ -4,8 +4,7 @@ import { COLLAB_EPOCH_MESSAGE } from '@workspace/lib/constants/collab';
 import * as encoding from 'lib0/encoding';
 import { getServerDataPath } from '../config/paths';
 
-// In data/server/, so a restart keeps it and a snapshot carries it; ./eigen restore removes it from the data it puts
-// back, and a per-home restore rotates it, so every tab that loaded a document before either reloads on reconnect.
+// A restart keeps it; ./eigen restore leaves it out and a per-home restore rotates it, so every older tab reloads.
 export const COLLAB_EPOCH_FILE = 'collab-epoch';
 
 let epoch: string | undefined;

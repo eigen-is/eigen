@@ -18,8 +18,7 @@ A breaking change is asked about on a terminal and refused elsewhere (run by ./e
 
   --accept-breaking   Go ahead despite breaking changes`;
 
-// The CHANGELOG sections after `from` up to `to`, oldest first: each one's first paragraph and its lines marked
-// (breaking). [Unreleased] has no version, so it never counts.
+// The CHANGELOG sections after `from` up to `to`, oldest first, with their intro and (breaking) lines; no [Unreleased].
 export function releaseNotes(changelog: string, from: string, to: string): ReleaseNote[] {
     return changelog
         .split(/^## /m)

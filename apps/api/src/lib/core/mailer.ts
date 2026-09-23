@@ -49,8 +49,7 @@ function defaultFrom(): OutboundAddress {
     return { name: configured.name || getOrgName(), address: configured.address };
 }
 
-// A relay only accepts senders it has verified and receivers enforce DMARC, so a user's address sends
-// itself only when this server hosts it; otherwise the system sender carries it and replies reach the user.
+// Relays and DMARC take only addresses this server hosts; any other sends as the system sender, replies to the user.
 export function onBehalfOf(user: OutboundAddress): Pick<OutboundMail, 'from' | 'replyTo'> {
     if (isMailEnabled() && isInternalAddress(user.address)) return { from: user };
     const system = defaultFrom();
@@ -60,8 +59,7 @@ export function onBehalfOf(user: OutboundAddress): Pick<OutboundMail, 'from' | '
     };
 }
 
-// Hosting mail, the API hands everything to the bundled Postfix (SMTP_HOST, set by Compose), which relays
-// through SMTP_RELAY_*; without hosted mail the API sends through that relay itself.
+// With hosted mail, through the bundled Postfix (SMTP_HOST), which relays; without, through SMTP_RELAY_* itself.
 function smtpHost(): string | undefined {
     return (isMailEnabled() ? process.env['SMTP_HOST'] : process.env['SMTP_RELAY_HOST']) || undefined;
 }
@@ -94,8 +92,7 @@ export function createTransport(): Mail {
         // Port 465 is implicit TLS; anything else starts plain and upgrades with STARTTLS.
         secure: port === 465,
         auth: user && pass ? { user, pass } : undefined,
-        // Credentials only go over a connection that is encrypted and whose certificate checks out; without
-        // requireTLS nodemailer skips STARTTLS when the server does not offer it.
+        // Credentials only over verified TLS: without requireTLS, a relay offering no STARTTLS gets them in the clear.
         requireTLS: Boolean(user),
         tls: { rejectUnauthorized: Boolean(user) },
     });
