@@ -217,6 +217,25 @@ describe('snapshot', () => {
         );
     });
 
+    test('--pre-update removes the older ones before it writes, so the disk never holds three', async () => {
+        const dir = install();
+        const kept = 'eigen-pre-update-20220101-000000.tar.gz';
+        for (const file of ['eigen-pre-update-20210101-000000.tar.gz', kept]) {
+            writeFileSync(join(dir, 'snapshots', file), 'x');
+        }
+        mkdirSync(join(dir, 'snapshots/.eigen-snapshot.partial'));
+        const result = await eigen(dir, 'snapshot', '--pre-update');
+        expect(result.code).toBe(1);
+        expect(readdirSync(join(dir, 'snapshots')).sort()).toEqual(['.eigen-snapshot.partial', kept]);
+    });
+
+    test('records the version of the image that makes it', async () => {
+        const dir = install();
+        const name = await snapshot(dir, '--pre-update');
+        const meta = await run(['tar', '-xzOf', join(dir, 'snapshots', name), 'eigen-snapshot.json'], dir);
+        expect(JSON.parse(meta.stdout).version).toBe(version);
+    });
+
     test('a manual snapshot deletes nothing', async () => {
         const dir = install();
         const older = ['eigen-pre-update-20200101-000000.tar.gz', 'eigen-pre-update-20210101-000000.tar.gz'];

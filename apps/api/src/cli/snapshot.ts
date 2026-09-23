@@ -40,7 +40,7 @@ export const SNAPSHOT_USAGE = `Usage: snapshot [--pre-update]
 
 Writes data/ and ${ENV_PATH} into ${SNAPSHOTS}/eigen-<UTC time>.tar.gz. Stop Eigen first: ./eigen backup does.
 
-  --pre-update   Name it eigen-pre-update-<UTC time>.tar.gz and delete the pre-update snapshots
+  --pre-update   Name it eigen-pre-update-<UTC time>.tar.gz, after deleting the pre-update snapshots
                  older than the previous one`;
 // --check is the launcher's half of the seam explained at restore() in ./eigen.
 export const RESTORE_OPTIONS = { yes: { type: 'boolean' }, check: { type: 'boolean' } } as const;
@@ -103,6 +103,17 @@ export async function snapshot(flags: { 'pre-update'?: boolean }): Promise<void>
     if (!existsSync(SNAPSHOTS)) mkdirSync(SNAPSHOTS, { mode: 0o700 });
     if (root) chownSync(SNAPSHOTS, owner.uid, owner.gid);
 
+    // The previous pre-update snapshot stays for a rollback of the last update; the ones before go first, so the disk
+    // holds two while this one is written.
+    if (flags['pre-update']) {
+        const older = readdirSync(SNAPSHOTS)
+            .filter((file) => SNAPSHOT_NAME.exec(file)?.groups?.['preUpdate'])
+            .sort(byStamp)
+            .slice(1);
+        for (const file of older) rmSync(join(SNAPSHOTS, file));
+        if (older.length) console.log(glyphLine('ok', `Removed the older pre-update snapshots: ${older.join(', ')}`));
+    }
+
     // The archive holds every secret of the server: nothing this writes is readable by others, not even briefly.
     process.umask(0o077);
     const createdAt = new Date();
@@ -149,15 +160,6 @@ export async function snapshot(flags: { 'pre-update'?: boolean }): Promise<void>
     console.log(
         glyphLine('ok', `Saved ${SNAPSHOTS}/${name} (${formatFileSize(statSync(join(SNAPSHOTS, name)).size)})`),
     );
-
-    if (flags['pre-update']) {
-        const older = readdirSync(SNAPSHOTS)
-            .filter((file) => file !== name && SNAPSHOT_NAME.exec(file)?.groups?.['preUpdate'])
-            .sort(byStamp)
-            .slice(1);
-        for (const file of older) rmSync(join(SNAPSHOTS, file));
-        if (older.length) console.log(glyphLine('ok', `Removed the older pre-update snapshots: ${older.join(', ')}`));
-    }
 }
 
 export async function restore(archive = '', flags: { yes?: boolean; check?: boolean }): Promise<void> {

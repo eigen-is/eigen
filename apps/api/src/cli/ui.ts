@@ -40,7 +40,7 @@ export function glyphLine(glyph: Glyph, text: string): string {
 }
 
 // Word-wraps each paragraph, since clack's log keeps its guide bar only on the lines it is given.
-function wrap(text: string, width: number): string[] {
+export function wrap(text: string, width: number): string[] {
     const lines: string[] = [];
     for (const paragraph of text.split('\n')) {
         let line = '';

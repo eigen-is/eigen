@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { chownSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { parseArgs } from 'node:util';
 import { validateEmailAddress } from '@workspace/lib/validation';
@@ -449,7 +449,10 @@ export async function configure(
         ui.outro('Configuration unchanged.');
         return;
     }
+    // Run as root, the rewrite would hand the operator's file to root.
+    const envOwner = statSync(existsSync(ENV_PATH) ? ENV_PATH : '.');
     writeEnvFile(ENV_PATH, written);
+    if (process.getuid?.() === 0) chownSync(ENV_PATH, envOwner.uid, envOwner.gid);
     if (backfill) {
         ui.outro(`${ENV_PATH}: set ${changed.join(', ')}.`);
         return;

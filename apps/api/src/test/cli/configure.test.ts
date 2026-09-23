@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chownSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type ConfigureAnswers, chooseSubnet, configureEntries, type DockerNetwork } from '../../cli/configure';
@@ -362,6 +362,24 @@ describe('configure command', () => {
         expect(run.code).toBe(1);
         expect(run.stderr).toContain('DOMAIN');
         expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(original);
+    });
+
+    // Root in the container rewrites the operator's file; only root can change an owner, so this runs as root alone.
+    test.skipIf(process.getuid?.() !== 0)('run as root, it keeps the owner of the env file', async () => {
+        const dir = tempDir();
+        const env = join(dir, '.env.production');
+        writeFileSync(env, 'DOMAIN=eigen.example.org\nMAIL_DOMAIN=example.org\n', { mode: 0o600 });
+        chownSync(env, 1234, 1235);
+        expect((await runConfigure(dir, ['--backfill'])).code).toBe(0);
+        expect(readFileSync(env, 'utf8')).toContain('\nMAIL_ENABLED=1\n');
+        expect([statSync(env).uid, statSync(env).gid]).toEqual([1234, 1235]);
+
+        const fresh = tempDir();
+        chownSync(fresh, 1236, 1237);
+        const flags = ['--yes', '--domain', 'eigen.example.org', '--no-proxy', '--contact-email', 'admin@example.org'];
+        expect((await runConfigure(fresh, flags)).code).toBe(0);
+        const created = statSync(join(fresh, '.env.production'));
+        expect([created.uid, created.gid]).toEqual([1236, 1237]);
     });
 
     const INSTALLED = [

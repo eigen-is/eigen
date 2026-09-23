@@ -24,6 +24,7 @@ describe('parseFlags', () => {
         ['restore', 'Usage: ./eigen restore <snapshot> [--yes]'],
         ['snapshot', 'Usage: snapshot [--pre-update]'],
         ['bootstrap', 'Usage: bootstrap [--out <dir>] [--force]'],
+        ['update-check', 'Usage: update-check --from <version> [--accept-breaking]'],
     ])('%s --help prints its usage and exits 0', async (command, usage) => {
         for (const flag of ['--help', '-h']) {
             const { stdout, stderr, code } = await eigen(command, flag);

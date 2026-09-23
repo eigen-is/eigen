@@ -5,6 +5,7 @@ import { RESET_PASSWORD_OPTIONS, RESET_PASSWORD_USAGE, resetPassword } from './r
 import { setupLink } from './setup-link';
 import { RESTORE_OPTIONS, RESTORE_USAGE, restore, SNAPSHOT_OPTIONS, SNAPSHOT_USAGE, snapshot } from './snapshot';
 import { status } from './status';
+import { UPDATE_CHECK_OPTIONS, UPDATE_CHECK_USAGE, updateCheck } from './update-check';
 
 // --help prints the usage; a flag the command does not know, or one argument more than it takes, is refused with it.
 function parseFlags<T extends NonNullable<ParseArgsConfig['options']>>(
@@ -62,6 +63,7 @@ const COMMANDS = new Map<string, (args: string[]) => Promise<void>>([
             return restore(positionals[0], values);
         },
     ],
+    ['update-check', (args) => updateCheck(parseFlags(args, UPDATE_CHECK_OPTIONS, UPDATE_CHECK_USAGE).values)],
 ]);
 
 const USAGE = `Usage: eigen <command> [flags]
@@ -73,7 +75,8 @@ Commands:
   reset-password   Set a new password for an account and sign it out everywhere
   setup-link       Print a fresh one-time setup link, or where to sign in once set up
   snapshot         Write data/ and .env.production into snapshots/ (run by ./eigen backup)
-  restore          Put data/ and .env.production back from a snapshot (run by ./eigen restore)`;
+  restore          Put data/ and .env.production back from a snapshot (run by ./eigen restore)
+  update-check     Print what changed since a version, and ask about breaking changes (run by ./eigen update)`;
 
 const [command = '', ...args] = process.argv.slice(2);
 const run = COMMANDS.get(command);
