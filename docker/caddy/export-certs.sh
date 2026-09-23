@@ -5,8 +5,9 @@
 ACME_DIR="/data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${DOMAIN}"
 
 while true; do
-    # Only a changed certificate is copied, each file through a temp file and mv so no reader sees half of one.
-    if [ -f "${ACME_DIR}/${DOMAIN}.crt" ] && ! cmp -s "${ACME_DIR}/${DOMAIN}.crt" /shared-certs/cert.pem; then
+    # Only a changed pair is copied, each file through a temp file and mv so no reader sees half of one.
+    if [ -f "${ACME_DIR}/${DOMAIN}.crt" ] && [ -f "${ACME_DIR}/${DOMAIN}.key" ] &&
+        { ! cmp -s "${ACME_DIR}/${DOMAIN}.crt" /shared-certs/cert.pem || ! cmp -s "${ACME_DIR}/${DOMAIN}.key" /shared-certs/key.pem; }; then
         cp "${ACME_DIR}/${DOMAIN}.key" /shared-certs/key.pem.tmp && chmod 600 /shared-certs/key.pem.tmp &&
             mv -f /shared-certs/key.pem.tmp /shared-certs/key.pem &&
             cp "${ACME_DIR}/${DOMAIN}.crt" /shared-certs/cert.pem.tmp && chmod 644 /shared-certs/cert.pem.tmp &&
