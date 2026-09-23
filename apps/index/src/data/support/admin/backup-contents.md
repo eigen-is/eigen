@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/back-up-home, admin/restore-home]
 order: 92
-updated: 2026-09-11
+updated: 2026-09-23
 ---
 
 A backup made from the **Backup** section in Admin is a single archive of one user or one team. This page lists what goes into that archive, what stays out, how Eigen checks it, and where the panel's limits are. To make or restore a backup, see [Back up a user or team](/support/admin/back-up-home) and [Restore a user or team](/support/admin/restore-home).
@@ -83,6 +83,6 @@ Click **Verify** on any archive to run the checks again and update its badge.
 
 ## Whole-server backup
 
-The panel covers one user or team at a time. To back up the whole server, use the `scripts/backup.sh` script on the server. It stops Eigen, archives the whole data directory plus the production environment file into the backups folder, and starts Eigen again, so there are a few seconds of downtime and no verification.
+The panel covers one user or team at a time. To back up the whole server, run `./eigen backup` in the install folder on the server. It stops Eigen, saves the whole data directory plus the production environment file as one snapshot in the backups folder, and starts Eigen again, so there are a few seconds of downtime and no verification. `./eigen restore` puts a snapshot back and keeps the data it replaces aside.
 
-Use `scripts/backup.sh` for disaster recovery of the entire server. Use the **Backup** panel when you want a verified copy of a single user or team, or a restore that does not take the server down.
+Use `./eigen backup` for disaster recovery of the entire server. Use the **Backup** panel when you want a verified copy of a single user or team, or a restore that does not take the server down.

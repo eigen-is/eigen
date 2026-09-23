@@ -27,6 +27,11 @@ Commands:
   reset-password <email> [--generate]
                    Set a new password for an account and sign it out everywhere. It asks
                    for the password; --generate makes one up and prints it.
+  backup           Stop Eigen, save data/ and .env.production as a snapshot in backups/,
+                   and start Eigen again.
+  restore <snapshot> [--yes]
+                   Put a snapshot from backups/ back. The current data/ and .env.production
+                   are kept aside. It asks first; --yes does not.
   logs [service]   Follow the logs of every service, or of one: eigen-api, caddy,
                    eigen-static, postfix, dovecot, unbound.
   help             Show this help.
@@ -101,14 +106,19 @@ API_CLI=/app/apps/api/src/cli/index.ts
 EXEC_TTY=-T
 if [ -t 0 ] && [ -t 1 ]; then EXEC_TTY=''; fi
 
-# The CLI in the API image, as the operator, on this folder. RELAY_ENV names a variable it may read.
-cli() {
+# cli_as <uid:gid> <command…>: the CLI in the API image on this folder. RELAY_ENV names a variable it may read.
+cli_as() {
+    user=$1
+    shift
     tty=''
     if [ -t 0 ]; then tty=-t; fi
-    docker run --rm --init -i $tty -e TERM -e NO_COLOR --user "$(id -u):$(id -g)" -e HOME=/tmp \
+    docker run --rm --init -i $tty -e TERM -e NO_COLOR --user "$user" -e HOME=/tmp \
         -e EIGEN_PROJECT -e EIGEN_DOCKER_NETWORKS -e EIGEN_PINS ${RELAY_ENV:+-e "$RELAY_ENV"} \
         -v "$PWD:/install" -w /install "$API_IMAGE" "$@"
 }
+
+# The CLI as the operator, so what it writes is theirs.
+cli() { cli_as "$(id -u):$(id -g)" "$@"; }
 
 # step <while running> <when done> <on failure> <command…>: one line per step, the output in $LOG.
 step() {
@@ -266,6 +276,42 @@ setup() {
     dc exec $EXEC_TTY -e NO_COLOR="${NO_COLOR:-}" eigen-api bun "$API_CLI" setup-link
 }
 
+restart() { step "Starting Eigen" "Eigen is running" "Eigen did not start; ./eigen logs shows why" start; }
+
+# The snapshot is taken with every service stopped (dovecot and postfix write to data/ too), as root in a container
+# so the mixed owners in data/ survive. Eigen starts again whatever happens to the snapshot.
+backup() {
+    if [ ! -f .env.production ]; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
+    wordmark
+    preflight
+    mkdir -p .eigen
+    trap restart EXIT
+    trap 'exit 130' INT TERM
+    step "Stopping Eigen" "Eigen stopped" "Could not stop Eigen" dc stop
+    cli_as 0 snapshot
+}
+
+# The CLI checks the snapshot and asks before anything stops. Eigen starts again whatever happens to the restore:
+# a failed one puts the previous data back first.
+restore() {
+    case ${1:-} in -h | --help)
+        usage
+        return
+        ;;
+    esac
+    wordmark
+    preflight
+    mkdir -p .eigen
+    cli_as 0 restore "$@" --check || exit
+    trap restart EXIT
+    trap 'exit 130' INT TERM
+    if [ -f .env.production ]; then step "Stopping Eigen" "Eigen stopped" "Could not stop Eigen" dc stop; fi
+    cli_as 0 restore "$@" --yes
+    trap - EXIT
+    restart
+    say "$GRAY" '└' "Check that all is well, then delete what was kept aside."
+}
+
 # Only the launcher can ask Docker, so it gathers the services, a pending update and the mail queue for the report.
 status() {
     if [ ! -f .env.production ]; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
@@ -332,6 +378,17 @@ case $COMMAND in
             die "The API is not running." "./eigen status shows the services; ./eigen logs eigen-api shows why."
         fi
         dc exec $EXEC_TTY -e NO_COLOR="${NO_COLOR:-}" eigen-api bun "$API_CLI" reset-password "$@"
+        ;;
+    backup)
+        if [ $# -gt 1 ]; then
+            usage >&2
+            exit 2
+        fi
+        backup
+        ;;
+    restore)
+        shift
+        restore "$@"
         ;;
     logs)
         shift

@@ -206,32 +206,26 @@ Pulls latest code, rebuilds the frontend, restarts containers. Active SSE/WebSoc
 ### Backups
 
 ```bash
-./scripts/backup.sh
+./eigen backup
 ```
 
-Saves all data (mail, files, contacts, calendars, settings) to `./backups/`. It briefly stops `eigen-api`, tars the quiesced `data/` and `.env.production` (WAL/`-shm` files included, so the two never-checkpointed server databases are captured intact), then restarts it — a few seconds of downtime for a crash-consistent archive. Schedule daily:
+Saves all data (mail, files, contacts, calendars, settings, the server databases) and `.env.production` as one snapshot, `./backups/eigen-<UTC time>.tar.gz`. It stops every service, archives the quiet `data/` with its owners and modes, and starts Eigen again: a short downtime for a consistent snapshot. Only the server user (uid 1000) and root can read the snapshot. Schedule it daily:
 
 ```bash
 crontab -e
-# 0 3 * * * /opt/eigen/scripts/backup.sh
+# 0 3 * * * /opt/eigen/eigen backup
 ```
 
-Pass a path to write somewhere other than the default `./backups/eigen-<timestamp>.tar.gz`:
+Put a snapshot back with `./eigen restore`. It asks first, then stops Eigen, moves the current `data/` and `.env.production` aside to `data.pre-restore-<UTC time>` and `.env.production.pre-restore-<UTC time>` (never deleted), unpacks the snapshot and starts Eigen again. It refuses a snapshot of a newer Eigen version: update first, then restore.
 
 ```bash
-./scripts/backup.sh /path/to/backup.tar.gz      # custom output path
-```
-
-Restore an archive with `restore.sh`. It stops `eigen-api`, moves the current `data/` aside to
-`data.pre-restore-<timestamp>` (never deleted), unpacks the archive, and starts `eigen-api`:
-
-```bash
-./scripts/restore.sh ./backups/eigen-<timestamp>.tar.gz
+./eigen restore eigen-<UTC time>.tar.gz
+./eigen restore eigen-<UTC time>.tar.gz --yes   # without the question, for scripts
 ```
 
 **Per-home backups** are the other half, and they need no downtime: an admin backs up, verifies, downloads and restores one user or one team from the Backup section of the admin Users and Teams detail panes. Those archives land in the same `./backups/` folder (`EIGEN_BACKUPS_DIR=/app/backups` inside the container, bind-mounted from the host), so keep an eye on its size. An archive holds every file, every mail and the mount credentials, so treat one like `.env.production`. Full operator guide: [docs/BACKUP.md](../docs/BACKUP.md).
 
-`backup.sh` stays the whole-server backup for now: the per-home archives do not cover `users3.db`, `eigen.db`, `waitlist.db`, the server config or `.env.production`.
+`./eigen backup` is the whole-server backup: the per-home archives do not cover `users3.db`, `eigen.db`, `waitlist.db`, the server config or `.env.production`.
 
 ### Demo instance
 

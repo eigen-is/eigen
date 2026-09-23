@@ -1,6 +1,6 @@
 # Backup & Restore
 
-> **TLDR**: An admin backs up one home (one user, or one team) from the admin pane. The result is a single `.tar.zst` artifact in the server's backups folder that holds every database, every file and, for a user, their auth rows: complete, storage-independent, and verified before it counts as good. Restore replaces that home from an artifact and moves the home as it stands aside as a safety copy, which nothing ever deletes automatically. The home is offline for the length of a restore and nothing else notices. Whole-server backup is still `scripts/backup.sh`, the offline stop-and-tar script, until phase ③ lands.
+> **TLDR**: An admin backs up one home (one user, or one team) from the admin pane. The result is a single `.tar.zst` artifact in the server's backups folder that holds every database, every file and, for a user, their auth rows: complete, storage-independent, and verified before it counts as good. Restore replaces that home from an artifact and moves the home as it stands aside as a safety copy, which nothing ever deletes automatically. The home is offline for the length of a restore and nothing else notices. Whole-server backup is `eigen backup`, the offline stop-and-archive snapshot, until phase ③ lands.
 
 Design rationale, and the phases beyond this one, live in [PROPOSAL_BACKUP_RESTORE.md](proposals/PROPOSAL_BACKUP_RESTORE.md). This page is what an operator needs.
 
@@ -34,7 +34,7 @@ Each database copy is internally consistent. The archive as a whole is not one a
 
 ## Where the artifacts live, and why they are secrets
 
-The backups folder is `EIGEN_BACKUPS_DIR` if it is set, otherwise `backups` next to the data root. On a Docker install that is `EIGEN_BACKUPS_DIR=/app/backups` inside the container, bind-mounted from `./backups` on the host (`/opt/eigen/backups` on eigen.is). It sits outside `data/` on purpose: a wipe of the data directory cannot take the backups with it, and a future whole-server backup can never recursively include itself. It is the same folder `scripts/backup.sh` writes to.
+The backups folder is `EIGEN_BACKUPS_DIR` if it is set, otherwise `backups` next to the data root. On a Docker install that is `EIGEN_BACKUPS_DIR=/app/backups` inside the container, bind-mounted from `./backups` on the host (`/opt/eigen/backups` on eigen.is). It sits outside `data/` on purpose: a wipe of the data directory cannot take the backups with it, and a future whole-server backup can never recursively include itself. It is the same folder `eigen backup` writes its snapshots to.
 
 The server never creates the folder at boot, only when the first backup or upload needs it. Create the host folder yourself before the first `docker compose up`, because a bind-mount source Docker has to create comes out owned by root and the API runs as uid 1000:
 
@@ -163,7 +163,7 @@ An `s3` mount additionally needs a `metadata.db` that carries the `pending_uploa
 
 ## The whole-server stopgap
 
-Per-home backup does not cover the server as a whole: `users3.db`, `eigen.db`, `waitlist.db`, the server config and settings folder, and `.env.production` are all outside a home. Until phase ③ ships, the whole-server backup is still `scripts/backup.sh`, which stops `eigen-api`, tars the quiesced `data/` tree plus `.env.production` (WAL files included, so the never-checkpointed server databases come out crash-consistent), and starts the API again. A few seconds of downtime, no verification, no per-home restore, and its counterpart `scripts/restore.sh` puts a whole tree back. Keep running it on a schedule; [the setup guide](../docker/SETUP-GUIDE.md) has the cron line.
+Per-home backup does not cover the server as a whole: `users3.db`, `eigen.db`, `waitlist.db`, the server config and settings folder, and `.env.production` are all outside a home. Until phase ③ ships, the whole-server backup is `eigen backup`, which stops every service, archives the quiet `data/` tree plus `.env.production` as root in a container (WAL files included, so the never-checkpointed server databases come out crash-consistent; owners and modes kept), and starts Eigen again. A few seconds of downtime, no verification, no per-home restore, and its counterpart `eigen restore` puts a whole tree back and keeps the replaced one aside. It refuses a snapshot of a newer Eigen. Keep running it on a schedule; [the setup guide](../docker/SETUP-GUIDE.md) has the cron line.
 
 Use per-home backup for what the script cannot do: an archive of one user before a risky change, a verified copy of one home, and a restore that does not take the server down.
 

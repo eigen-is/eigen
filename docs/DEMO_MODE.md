@@ -202,9 +202,9 @@ Install the hourly run with the shipped systemd units (`scripts/systemd/eigen-de
 timer}`, `OnCalendar=hourly`, `Persistent=true` to catch a run missed while the box was down), or the
 one-line cron alternative in the setup guide.
 
-`scripts/backup.sh` / `scripts/restore.sh` are the general offline backup/restore that fall out of
-the same stop → copy-quiesced-tree → start sequence: `backup.sh` tars the quiesced `data/` (WAL/`-shm`
-included, so the never-checkpointed server DBs restore crash-consistent), `restore.sh` moves the current
+`eigen backup` / `eigen restore` are the general offline backup/restore on the same
+stop → copy-quiesced-tree → start sequence: `backup` archives the quiesced `data/` (WAL/`-shm`
+included, so the never-checkpointed server DBs restore crash-consistent) with `.env.production`, `restore` moves the current
 tree aside before unpacking. Both are production-usable, independent of demo mode.
 
 ## Deployment shape
@@ -248,7 +248,7 @@ See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator wa
 | `apps/api/src/scripts/demo/excalifont-metrics.ts` | Generated Excalifont advance/kerning table the builder sizes text with |
 | `apps/api/src/scripts/demo/fixtures/` | Byte-copied `.eigensheets` / `.eigenstickies` containers + `images/` site photos + `branding/` logo + `avatars/` portraits (`images/` and `avatars/` carry their own `CREDITS.md`) |
 | `scripts/demo-reset.sh` | Hourly wipe + reseed (hard `EIGEN_DEMO=1` gate) |
-| `scripts/backup.sh` / `scripts/restore.sh` | General offline backup/restore |
+| `apps/api/src/cli/snapshot.ts` | `eigen backup` / `eigen restore`: general offline backup/restore |
 | `scripts/systemd/eigen-demo-reset.{service,timer}` | Hourly timer units |
 | `packages/ui/.../app/demo-banner.tsx` | Workspace banner |
 | `packages/ui/.../pages/login-page.tsx` | Enter-demo entry (app login card) |

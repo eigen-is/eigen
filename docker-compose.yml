@@ -31,7 +31,7 @@ services:
     volumes:
       - ./data:/app/data
       # Backup artifacts live outside data/ so a wipe of the data directory cannot take them with
-      # it — the same ./backups the offline scripts/backup.sh writes to. The API creates the folder
+      # it — the same ./backups `eigen backup` writes its snapshots to. The API creates the folder
       # only when the first backup runs; Docker creates the mount point itself.
       - ./backups:/app/backups
     # Lets the API reach a host-side mail server via SMTP_HOST=host.docker.internal in

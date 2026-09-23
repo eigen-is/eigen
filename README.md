@@ -45,7 +45,7 @@ the aim is to make Eigen reliable enough for mid-to-large organizations as well.
 Eigen is **pre-1.0 and actively developed**. The core works, but be deliberate about what you put on it:
 
 - **Breaking changes** are likely between minor versions until 1.0; expect occasional manual migration.
-- **You own your data, including the backups.** Use `scripts/backup.sh` (or your own routine) and verify
+- **You own your data, including the backups.** Use `./eigen backup` (or your own routine) and verify
   it restores. Eigen does not back up your data for you.
 - **You own your server's security.** Keep the host patched, lock down SSH, use strong passwords, and
   watch your logs. A self-hosted server is your responsibility end-to-end.

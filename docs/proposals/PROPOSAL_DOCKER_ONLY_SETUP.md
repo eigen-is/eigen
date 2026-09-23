@@ -57,7 +57,7 @@ The launcher is plain `sh`, tested under `dash` and BusyBox `sh`: no Bash, no GN
 
 **Source mode.** A Git checkout with the build overlay present (`.git` plus `docker-compose.build.yml`) is a source install. There the launcher and Compose files come from the checkout, not from the image, and the images are built through the overlay with no host Bun. eigen.is runs this way and deploys from `main`.
 
-**Snapshots.** Until whole-server backup lands ([SELF-HOSTERS-FIRST.md](../SELF-HOSTERS-FIRST.md) block 3), `eigen backup`, the update snapshot and `eigen restore` are the offline stop-and-archive of today's `backup.sh` and `restore.sh`: `data/` plus `.env.production`. They run inside a container, so file ownership never depends on the host user. The archive records the Eigen version, and a restore refuses an archive newer than the install. Block 3 swaps the engine without changing the command.
+**Snapshots.** Until whole-server backup lands ([SELF-HOSTERS-FIRST.md](../SELF-HOSTERS-FIRST.md) block 3), `eigen backup`, the update snapshot and `eigen restore` are an offline stop-and-archive of `data/` plus `.env.production`. They run inside a container, so file ownership never depends on the host user. The archive records the Eigen version, and a restore refuses an archive newer than the install. Block 3 swaps the engine without changing the command.
 
 `eigen setup` runs these steps:
 
