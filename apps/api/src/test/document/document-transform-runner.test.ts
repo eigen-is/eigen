@@ -111,8 +111,8 @@ describe('DocumentTransformRunner', () => {
 
     test('waiting foreground work runs before queued background work', async () => {
         const runner = makeRunner();
+        // run() starts the first job synchronously; a wait here could outlast it on a loaded runner.
         const first = runner.run(makeRequest({ behavior: 'sleep', ms: 100 }), PREVIEW_OPTIONS);
-        await Bun.sleep(10); // let the first job occupy the worker slot
         const background = runner.run(makeRequest(), BACKGROUND_OPTIONS);
         const foreground = runner.run(makeRequest(), PREVIEW_OPTIONS);
 
@@ -124,7 +124,6 @@ describe('DocumentTransformRunner', () => {
     test('rejects foreground work with 503 when the queue is full', async () => {
         const runner = makeRunner({ maxQueued: 1 });
         const active = runner.run(makeRequest({ behavior: 'sleep', ms: 150 }), PREVIEW_OPTIONS);
-        await Bun.sleep(10);
         const queued = runner.run(makeRequest(), PREVIEW_OPTIONS);
 
         expect(() => runner.run(makeRequest(), PREVIEW_OPTIONS)).toThrow(ApiError);
@@ -144,7 +143,6 @@ describe('DocumentTransformRunner', () => {
     test('logs every refused admission with the queue state', async () => {
         const runner = makeRunner({ maxQueued: 1 });
         const active = runner.run(makeRequest({ behavior: 'sleep', ms: 100 }), PREVIEW_OPTIONS);
-        await Bun.sleep(10);
         const queued = runner.run(makeRequest(), PREVIEW_OPTIONS);
 
         const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
@@ -180,7 +178,6 @@ describe('DocumentTransformRunner', () => {
         // Long kill deadlines, small admission costs: the bound is spent on cost alone.
         const options = { priority: 'foreground' as const, deadlineMs: 5000, admissionCostMs: 100 };
         const jobs = [runner.run(makeRequest({ behavior: 'sleep', ms: 30 }), options)];
-        await Bun.sleep(10);
         // active (100ms) + one queued (100ms) = 200 ≤ 250 → admitted…
         jobs.push(runner.run(makeRequest(), options));
         jobs.push(runner.run(makeRequest(), options));
@@ -220,7 +217,6 @@ describe('DocumentTransformRunner', () => {
     test('drops queued background work on overflow without running it', async () => {
         const runner = makeRunner({ maxQueued: 1 });
         const active = runner.run(makeRequest({ behavior: 'sleep', ms: 150 }), PREVIEW_OPTIONS);
-        await Bun.sleep(10);
         const queued = runner.run(makeRequest(), BACKGROUND_OPTIONS);
         expect(() => runner.run(makeRequest(), BACKGROUND_OPTIONS)).toThrow(ApiError);
         await Promise.all([active, queued]);
@@ -230,7 +226,6 @@ describe('DocumentTransformRunner', () => {
     test('background work stops at its queue share while foreground still admits', async () => {
         const runner = makeRunner({ maxQueuedBackground: 1 });
         const active = runner.run(makeRequest({ behavior: 'sleep', ms: 150 }), PREVIEW_OPTIONS);
-        await Bun.sleep(10); // let the first job occupy the worker slot
         const queued = runner.run(makeRequest(), BACKGROUND_OPTIONS);
 
         expect(() => runner.run(makeRequest(), BACKGROUND_OPTIONS)).toThrow(ApiError);
@@ -414,7 +409,6 @@ describe('DocumentTransformRunner', () => {
     test('aborting a queued job removes it before any worker runs it', async () => {
         const runner = makeRunner();
         const active = runner.run(makeRequest({ behavior: 'sleep', ms: 150 }), PREVIEW_OPTIONS);
-        await Bun.sleep(10);
         const controller = new AbortController();
         const queued = runner.run(makeRequest(), { ...PREVIEW_OPTIONS, signal: controller.signal });
         controller.abort();
@@ -448,7 +442,6 @@ describe('DocumentTransformRunner', () => {
     test('close() rejects queued work, stops admission, and terminates active workers after grace', async () => {
         const runner = makeRunner({ closeGraceMs: 50 });
         const active = runner.run(makeRequest({ behavior: 'sleep', ms: 2000 }), PREVIEW_OPTIONS);
-        await Bun.sleep(10);
         const queued = runner.run(makeRequest(), PREVIEW_OPTIONS);
 
         await runner.close();

@@ -33,6 +33,7 @@ new version writes a **new file** instead of overwriting one — which is what l
   `preview-cache.ts`, currently `f5`); bumping it invalidates cached bodies whose `updatedAt` didn't change
 - Typed-payload previews: the same shape under the format's own tag (`VCARD_FORMAT`, `EML_FORMAT`, `ICS_FORMAT`), so no artifact resolves another as its stale predecessor. `dropped` means one thing in all three — what the parser could not read — and what a payload merely does not list is the consumer's own `total - dropped - listed`. Each is bumped on every change to its payload type — `EML_FORMAT` **on every DOMPurify upgrade** too, because a cached body is html a previous sanitizer filtered; the `.eml` Drive route answers `private, no-cache` instead of a long `max-age`, so a bump reaches a browser that already holds a body
 - Cache hit = serve directly, no regeneration
+- Every cache write goes through a dot-prefixed temp file and a rename (`writeCacheFile`): a text read deletes a file it can't parse, so a reader that caught a half-written current version would unlink the regeneration that just landed and force a second, foreground one
 - Prior versions are pruned fire-and-forget after each write (`pruneOldVersions`); cleanup of files older than
   7 days runs at `mount.init()`
 
