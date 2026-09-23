@@ -532,8 +532,9 @@ status() {
 SOURCE_LABEL=org.opencontainers.image.source=https://github.com/eigen-is/eigen
 
 # The images an update left behind. Release: every version tag of this registry's four images but the new version and
-# the one a rollback returns to. Both: dangling images of Eigen, which a source install narrows to its own project,
-# and a source install's build cache older than a week. Best effort: a failure here breaks nothing.
+# the one a rollback returns to. Source: the name the old API image kept for its snapshot. Both: dangling images of
+# Eigen, which a source install narrows to its own project, and a source install's build cache older than a week.
+# Best effort: a failure here breaks nothing.
 prune_images() {
     if [ "$MODE" = release ]; then
         for name in api frontend postfix dovecot; do
@@ -546,6 +547,7 @@ prune_images() {
         done
         docker image prune -f --filter "label=$SOURCE_LABEL" || :
     else
+        case $4 in *-pre-update) docker image rm "$4" || : ;; esac
         docker image prune -f --filter "label=$SOURCE_LABEL" --filter "label=com.docker.compose.project=$EIGEN_PROJECT" || :
         docker builder prune -f --filter until=168h || :
     fi
@@ -648,6 +650,11 @@ update() {
             say "$GRAY" '└' "Eigen $new is up to date and running at https://$domain/"
             exit 0
         fi
+        # The build moves the tag, and an image store may drop an image without a name, so the running one keeps one.
+        if [ -n "$old_image" ]; then
+            docker tag "$old_image" "$API_IMAGE-pre-update"
+            old_image=$API_IMAGE-pre-update
+        fi
         step "Building Eigen $new" "Eigen $new built" "Could not build Eigen $new; Eigen runs on as it was" dc build
         old=${old:+$old ($old_commit)}
         old_image=${old_image:-$API_IMAGE}
@@ -743,7 +750,7 @@ update() {
 
     refresh_fail2ban
     step "Removing old images" "Old images removed" "Could not remove the old images" \
-        prune_images "${registry:-}" "$new" "$old"
+        prune_images "${registry:-}" "$new" "$old" "$old_image"
     say "$GREEN" '◇' "Eigen ${old:+$old → }$new is running at https://$domain/"
     say "$GRAY" '│' "Saved before the update: snapshots/$archive"
     if [ "$MODE" = source ]; then
