@@ -31,9 +31,13 @@ const STORED_RESOURCE = {
     calendarId: schema.resources.calendarId,
     uri: schema.resources.uri,
     uid: schema.resources.uid,
+    etag: schema.resources.etag,
     size: resourceBytes,
 };
-export type StoredResource = Pick<typeof schema.resources.$inferSelect, 'id' | 'calendarId' | 'uri' | 'uid'> & {
+export type StoredResource = Pick<
+    typeof schema.resources.$inferSelect,
+    'id' | 'calendarId' | 'uri' | 'uid' | 'etag'
+> & {
     size: number;
 };
 
@@ -240,9 +244,10 @@ export async function updateEvent(
     id: string,
     input: EventPatch,
     user?: User,
+    expectedEtag?: string,
 ): Promise<CalendarEvent> {
     const { updated, oldAttendees } = await calendar.writeLock.run(() =>
-        patchStoredEvent(calendar, calendarId, id, input, user),
+        patchStoredEvent(calendar, calendarId, id, input, user, expectedEtag),
     );
     calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, calendarId);
 
@@ -257,6 +262,7 @@ async function patchStoredEvent(
     id: string,
     input: EventPatch,
     user?: User,
+    expectedEtag?: string,
 ): Promise<{ updated: CalendarEvent; oldAttendees: Attendee[] }> {
     const existing = eventById(calendar, id);
     // 404 (not 403) on calendar mismatch so a share on one calendar can't oracle event ids in another.
@@ -299,6 +305,9 @@ async function patchStoredEvent(
 
     const resource = resourceOf(calendar, id);
     if (!resource) throw new ApiError(404, 'Event not found');
+    if (expectedEtag !== undefined && expectedEtag !== resource.etag) {
+        throw new ApiError(412, 'Event was changed elsewhere');
+    }
 
     // A save form restates the times on every edit, so only the bounds that really moved reach the patch.
     const startMoved = input.startTime !== undefined && input.startTime.getTime() !== existing.startTime.getTime();
