@@ -135,19 +135,21 @@ export class MaildirStore implements MailStore {
             const dir = path.join(this.mailboxDir(mailbox), subdir);
             if (this.watchers.has(dir)) continue;
             // Read before the watch attaches, so a dir replaced in between costs a spare re-attach, never a dead watcher.
-            const inode = await this.dirInode(dir);
+            const identity = await this.dirIdentity(dir);
             // A listing still in flight during teardown would re-attach what unwatch() just closed.
-            if (inode === null || this.home.destructing || this.watchers.has(dir)) continue;
+            if (identity === null || this.home.destructing || this.watchers.has(dir)) continue;
             try {
                 const watcher = this.storage.watch(dir, () => {
                     this.reconcileMailbox(mailbox).catch((err) => console.error('maildir: mailbox sync failed', err));
-                    // inotify leaves a removed dir's handle dead without an error, and a dir recreated since holds a new inode.
-                    this.dirInode(dir)
+                    // inotify leaves a removed dir's handle dead without an error, and a dir recreated since is another dir.
+                    this.dirIdentity(dir)
                         .then(async (current) => {
-                            if (current === inode || this.watchers.get(dir) !== watcher) return;
+                            if (current === identity || this.watchers.get(dir) !== watcher) return;
                             this.dropWatcher(dir, watcher);
                             if (current === null) return;
                             await this.watchMailbox(mailbox);
+                            // A sync already running may have read the dir before the new watch attached.
+                            await this.reconcilingMailboxes.get(mailbox)?.catch(() => undefined);
                             await this.reconcileMailbox(mailbox);
                         })
                         .catch((err) => console.error('maildir: watcher check failed', err));
@@ -165,9 +167,10 @@ export class MaildirStore implements MailStore {
         if (this.watchers.get(dir) === watcher) this.watchers.delete(dir);
     }
 
-    private dirInode(dir: string): Promise<number | null> {
+    // Linux hands a removed dir's inode number to the next dir created, so the birth time tells the two apart.
+    private dirIdentity(dir: string): Promise<string | null> {
         return this.storage.stat(dir).then(
-            (stats) => stats.ino,
+            (stats) => `${stats.ino}:${stats.birthtimeMs}`,
             () => null,
         );
     }
