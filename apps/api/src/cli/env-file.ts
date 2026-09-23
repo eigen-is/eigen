@@ -3,17 +3,11 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 type EnvLine = { raw: string; key: string | null; value: string };
 
 const KEY_LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_.]*)\s*=\s*(.*)$/;
-const INTERPOLATION = /\$\$|\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g;
 const BARE_SAFE = /^[\w.,:/@+=%-]*$/;
 
-// Compose's dotenv rules: single quotes are literal; double quotes and bare values take `$$` as `$` and
-// expand `$NAME` from earlier lines (unset = empty); a bare value ends at ` #`; the last duplicate wins.
+// Compose's dotenv rules, but for `$NAME`, which configure never writes and reads literally: single quotes are
+// literal; double quotes and bare values take `$$` as `$`; a bare value ends at ` #`; the last duplicate wins.
 function parseEnvLines(text: string): EnvLine[] {
-    const seen = new Map<string, string>();
-    const interpolate = (value: string) =>
-        value.replace(INTERPOLATION, (match, braced?: string, plain?: string) =>
-            match === '$$' ? '$' : (seen.get(braced ?? plain ?? '') ?? ''),
-        );
     return text.split('\n').map((raw) => {
         const match = raw.replace(/\r$/, '').match(KEY_LINE);
         if (!match) return { raw, key: null, value: '' };
@@ -33,11 +27,13 @@ function parseEnvLines(text: string): EnvLine[] {
                 inner += escaped === 'n' ? '\n' : escaped === '\\' || escaped === '"' ? escaped : `\\${escaped}`;
                 i++;
             }
-            value = interpolate(inner);
+            value = inner.replaceAll('$$', '$');
         } else {
-            value = interpolate(rest.replace(/\s+#.*$/, '').trim());
+            value = rest
+                .replace(/\s+#.*$/, '')
+                .trim()
+                .replaceAll('$$', '$');
         }
-        seen.set(key, value);
         return { raw, key, value };
     });
 }

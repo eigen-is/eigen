@@ -29,7 +29,7 @@ describe('env file', () => {
         expect([...readEnvFile(path).values()]).toEqual(COMPOSE_VERIFIED.map(([value]) => value));
     });
 
-    test('reads hand-written lines the way Compose does', () => {
+    test('reads hand-written lines the way Compose does, but $NAME literally', () => {
         const path = join(DIR, 'hand.env');
         writeFileSync(
             path,
@@ -37,6 +37,7 @@ describe('env file', () => {
                 '# a comment',
                 'PW=pa$$word',
                 'U=un$dollar',
+                'UDQ="un$dollar"',
                 "S='single $dollar'",
                 'DQ="it\'s $$ \\"q\\" \\\\ end"',
                 'BARE_HASH=a # b',
@@ -52,13 +53,14 @@ describe('env file', () => {
         );
         expect(Object.fromEntries(readEnvFile(path))).toEqual({
             PW: 'pa$word',
-            U: 'un',
+            U: 'un$dollar',
+            UDQ: 'un$dollar',
             S: 'single $dollar',
             DQ: `it's $ "q" \\ end`,
             BARE_HASH: 'a',
             EMPTY_SQ: '',
             EMPTY: '',
-            REF: 'single $dollarx',
+            REF: `\${S}x`,
             EXP: '2',
             DUP: 'second',
         });
