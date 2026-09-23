@@ -5,7 +5,6 @@ import { wipeBackupStaging } from './lib/backup/paths';
 import { recoverInterruptedRestores } from './lib/backup/recovery';
 import { isProduction } from './lib/config/env';
 import { isSetupRequired } from './lib/config/server-config';
-import { startControlSocket } from './lib/control/control';
 import { documentTransformRunner } from './lib/document/transform/runner';
 import { drainACLFanOuts } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';
@@ -13,6 +12,7 @@ import { registerScheduledJobs } from './lib/scheduler/jobs';
 import { stopAllSchedules } from './lib/scheduler/scheduler';
 import { createSetupToken } from './lib/setup/setup-token';
 import { setShutdownDrainDeadline } from './lib/sync';
+import { startControlSocket } from './routes/control';
 
 // Wall-clock budget for flushing pending S3 uploads on shutdown. Must stay below
 // docker-compose's stop_grace_period so the drain finishes before SIGKILL; anything

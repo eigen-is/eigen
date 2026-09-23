@@ -3,7 +3,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, wri
 import { join } from 'node:path';
 import { getServerDataPath } from '../../lib/config/paths';
 import { getDomain } from '../../lib/config/server-config';
-import type { SetupLink } from '../../lib/control/control';
+import type { SetupLink } from '../../lib/setup/setup-token';
 import { clearSetupToken, createSetupToken, verifySetupToken } from '../../lib/setup/setup-token';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 import { TEST_DATA_DIR } from '../setup';

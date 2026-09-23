@@ -93,7 +93,7 @@ Test -> Eden Treaty / authedRequest() -> app.handle() -> Real business logic -> 
 ## Test Files
 
 Every API test lives in a feature folder under `apps/api/src/test/` — `acl/`, `auth/`, `backup/`, `caldav/`,
-`calendar/`, `carddav/`, `chat/`, `collab/`, `comments/`, `contacts/`, `core/`, `dav/`, `document/`, `drive/`,
+`calendar/`, `carddav/`, `chat/`, `cli/`, `collab/`, `comments/`, `contacts/`, `core/`, `dav/`, `document/`, `drive/`,
 `export/`, `home/`, `ical/`, `import/`, `mail/`, `mount/`, `preview/`, `search/`, `server/`, `storage/`,
 `vcard/`, `webdav/` — one `<subject>.test.ts` per subject. Coverage spans CalDAV, WebDAV, mail, drive, collab, file history,
 search, import/export, demo mode, upload-queue chaos and more — grep the tree rather than assuming an

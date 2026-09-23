@@ -8,7 +8,7 @@ import { caldavRouter } from './lib/caldav/caldav-router';
 import { carddavRouter } from './lib/carddav/carddav-router';
 import { isProduction } from './lib/config/env';
 import { clientIpKey } from './lib/core/access';
-import { ApiError } from './lib/core/errors';
+import { handleApiError } from './lib/core/errors';
 import { webdavRouter } from './lib/webdav/webdav-router';
 import { betterAuth } from './routes/auth';
 import { backupRouter } from './routes/backup';
@@ -135,24 +135,7 @@ export const app = new Elysia({
     .use(carddavRouter)
     .use(webdavRouter)
 
-    .onError(({ error, set, code, request }) => {
-        if (code === 'VALIDATION') return;
-        if (error instanceof ApiError) {
-            set.status = error.status;
-            if (error.status === 401) {
-                const pathname = new URL(request.url).pathname;
-                if (pathname.startsWith('/dav')) {
-                    set.headers['WWW-Authenticate'] = 'Basic realm="Eigen DAV"';
-                } else if (pathname.startsWith('/webdav')) {
-                    set.headers['WWW-Authenticate'] = 'Basic realm="Eigen Drive"';
-                }
-            }
-            return error.message;
-        }
-        console.error('API Error:', error);
-        set.status = 500;
-        return 'Internal server error';
-    })
+    .onError(handleApiError)
     .get('/', () => 'eigen|api>')
     .get('/health', () => 'OK');
 

@@ -1,8 +1,11 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import * as fs from 'node:fs';
 import { getServerDataPath } from '../config/paths';
+import { getDomain, isSetupRequired } from '../config/server-config';
 
 type SetupTokenFile = { hash: string; createdAt: string };
+
+export type SetupLink = { setupUrl: string | null; signInUrl: string };
 
 const TOKEN_FILE = 'setup-token.json';
 
@@ -35,4 +38,11 @@ export function verifySetupToken(token: string): boolean {
 
 export function clearSetupToken(): void {
     fs.rmSync(getServerDataPath(TOKEN_FILE), { force: true });
+}
+
+// Each call replaces the previous link, so a rerun of ./eigen setup is how an operator gets a fresh one.
+export function createSetupLink(): SetupLink {
+    const signInUrl = `https://${getDomain()}/admin`;
+    // The slash skips the gateway's /admin redirect; a fragment never leaves the browser, so no log holds it.
+    return { setupUrl: isSetupRequired() ? `${signInUrl}/#setup=${createSetupToken()}` : null, signInUrl };
 }

@@ -1,7 +1,7 @@
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import { parseBackupStamp } from '@workspace/lib/validation';
-import type { ControlStatus } from '../lib/control/control';
+import type { ControlStatus } from '../lib/config/server-status';
 import { callControl } from './control-socket';
 import { SNAPSHOT_NAME } from './snapshot';
 import { createUi, type Glyph, glyphLine } from './ui';

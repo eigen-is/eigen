@@ -1,4 +1,4 @@
-import type { SetupLink } from '../lib/control/control';
+import type { SetupLink } from '../lib/setup/setup-token';
 import { callControl } from './control-socket';
 import { createUi, glyphLine } from './ui';
 

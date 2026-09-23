@@ -7,7 +7,8 @@ import { account as accountSchema, user as userSchema } from '../../../auth-sche
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { verifyProtocolAuth } from '../../lib/auth/protocol-auth';
 import { getDataRoot } from '../../lib/config/paths';
-import { type ControlStatus, controlApp, startControlSocket } from '../../lib/control/control';
+import type { ControlStatus } from '../../lib/config/server-status';
+import { controlRouter, startControlSocket } from '../../routes/control';
 import { createTestUser, ensureServer, TEST_DATA_DIR } from '../setup';
 
 const CLI = join(import.meta.dir, '../../cli/index.ts');
@@ -19,7 +20,7 @@ const OLD_PASSWORD = 'old-password-1';
 type Env = Record<string, string | undefined>;
 
 function post(path: string, body: unknown): Promise<Response> {
-    return controlApp.handle(
+    return controlRouter.handle(
         new Request(`http://eigen${path}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -29,7 +30,7 @@ function post(path: string, body: unknown): Promise<Response> {
 }
 
 async function getStatus(): Promise<ControlStatus> {
-    const res = await controlApp.handle(new Request('http://eigen/status'));
+    const res = await controlRouter.handle(new Request('http://eigen/status'));
     expect(res.status).toBe(200);
     return res.json();
 }
