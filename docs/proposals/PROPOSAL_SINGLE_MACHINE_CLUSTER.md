@@ -239,6 +239,8 @@ This overlay:
 
 All instances mount the same `./data:/app/data` volume (shared filesystem on one machine).
 
+The instance lock blocks this: a second API on the same data dir exits at boot ([DATABASE.md § Instance lock](../DATABASE.md#instance-lock)), so the cluster has to replace it with a per-home lock first.
+
 **Each of the three services needs its own `ulimits: nofile:` block.** The pin currently lives on the
 single `eigen-api` service; the anchor that clones the three cluster services must carry it, or each
 process inherits the Docker default and hits the fd wall described below. See

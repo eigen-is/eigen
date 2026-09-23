@@ -41,8 +41,8 @@ A sync no longer awaits the PUT. It writes a **frozen, WAL-complete** `VACUUM IN
   re-wiped on every later redeploy). The open-vs-create intent is threaded `Drive.openDatabase` vs
   `createDatabase` → Mount `mode` → `ManagedDatabase.mustExist`: a `mustExist` open uses `{ create: false }`
   and **refuses a missing or 0-byte working copy** in `openCold`, and `buildDocumentDb` (`lib/mount/document-db.ts`) adopts a
-  surviving temp only if it's a valid, non-collapsed SQLite (else it discards it and re-fetches the
-  authoritative object). **Invariant: an empty/invalid working copy can never overwrite a non-trivial
+  surviving temp only if it's a valid, non-collapsed SQLite, its `-wal` counted toward the size (else it discards it through `Mount.cleanupTemp`, journals included, and re-fetches the authoritative object; a `-wal` left beside the re-fetched file would be replayed into it).
+  **Invariant: an empty/invalid working copy can never overwrite a non-trivial
   stored object — worst case a transient 503, never a wipe.**
 - **Freshest-first reads** — `Mount.readFile` serves a pending staged copy before the storage object, so
   reopen, copy/duplicate, and copy-across all read the newest bytes during an outage, never a stale/absent
@@ -111,7 +111,7 @@ fix (Phase 1a) · §2 upload pipeline (Phase 1b) · §3 staging + consistent ver
 ## Teardown
 
 - **Idle teardown** — the queue stops; leftover pending rows + staged copies replay on the next open.
-- **Process shutdown** — `index.ts` sets a deadline before `shutdownAllHomes`; each mount flushes its queue
+- **Process shutdown** — `server.ts` sets a deadline before `shutdownAllHomes`; each mount flushes its queue
   (bounded by `SHUTDOWN_DRAIN_BUDGET_MS`) after the final close-time enqueues, then closes. Anything
   undrained replays on boot.
 

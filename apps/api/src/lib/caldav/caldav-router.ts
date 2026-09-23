@@ -109,7 +109,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         }
 
         const home = await getHome(params.ownerId);
-        // Bound the body before buffering so a hostile PUT can't park up to index.ts's 1 GB server cap on the heap.
+        // Bound the body before buffering so a hostile PUT can't park up to server.ts's 1 GB server cap on the heap.
         const body = await readBoundedBody(request, EVENT_MAX_BYTES);
         if (body === null) return davError(413, '<C:max-resource-size/>');
         const ifMatch = request.headers.get('If-Match');

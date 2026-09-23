@@ -1,4 +1,4 @@
-import { Database, type Statement } from 'bun:sqlite';
+import { constants, Database, type Statement } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
@@ -105,6 +105,9 @@ export class ManagedDatabase<S extends SchemaType> {
         // A failed open — corrupt bytes tripping the first PRAGMA (SQLITE_NOTADB on a partial
         // download) or a throwing migration — must not leak the raw handle (fd + mapped journals).
         try {
+            // macOS's system SQLite keeps -wal and -shm after the last close; turn that off so the
+            // last connection removes them, once its exclusive lock proves no other process has the file.
+            this.rawDb.fileControl(constants.SQLITE_FCNTL_PERSIST_WAL, 0);
             this.rawDb.run('PRAGMA journal_mode = WAL;');
             // Per connection, so it is re-applied on every open, not stored in the file.
             if (this.config.synchronous === 'FULL') this.rawDb.run('PRAGMA synchronous = FULL;');
@@ -301,39 +304,22 @@ export class ManagedDatabase<S extends SchemaType> {
                     );
                 }
                 // Strict close. Statements are finalized as they run (withAutoFinalize), so this
-                // succeeds; should one still be live, keep the journals — a lazy close keeps the
-                // file + -shm mapped, and unlinking -shm under that zombie poisons sqlite's per-inode
-                // shm node so the next open of the SAME file (every local-key reopen) fails with
-                // SQLITE_IOERR_VNODE.
-                let cleanClose = true;
+                // succeeds; should one still be live, sqlite keeps the connection as a zombie that
+                // closes when the statement is finalized. The journals are sqlite's to remove.
                 if (this.rawDb) {
                     try {
                         this.rawDb.close(true);
                     } catch (err) {
-                        cleanClose = false;
-                        console.warn(`[${this.config.name}] lazy close, keeping journals:`, err);
+                        console.warn(`[${this.config.name}] lazy close:`, err);
                         this.rawDb.close();
                     }
                 }
                 this.rawDb = null;
                 this.drizzleDb = null;
 
-                if (cleanClose) this.deleteJournalFiles();
-
                 await this.callbacks.onClose?.(syncFailed);
             }
         });
-    }
-
-    private deleteJournalFiles(): void {
-        const shmPath = `${this.localPath}-shm`;
-        const walPath = `${this.localPath}-wal`;
-        try {
-            if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
-            if (fs.existsSync(walPath)) fs.unlinkSync(walPath);
-        } catch (error) {
-            console.warn(`Failed to delete journal files for ${this.localPath}:`, error);
-        }
     }
 
     get db(): BunSQLiteDatabase<S> {

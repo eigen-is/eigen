@@ -58,7 +58,7 @@ type DatabaseConfig<S extends SchemaType> = {
    dirty watermark is captured before `onSync` runs and advanced only after it returns, so a throwing `onSync` leaves
    the db dirty: the next tick retries, `flush()` propagates the error, and `close()` still tears down and passes
    `syncFailed` to `onClose`
-3. `close()` — syncs, `PRAGMA wal_checkpoint(TRUNCATE)`, closes DB, deletes WAL/SHM journal files. The close is strict: drizzle's statements are finalized as they run (`withAutoFinalize`), because a lazy close leaves `-shm` mapped and unlinking it under that zombie makes the next open of the same file fail with `SQLITE_IOERR_VNODE`
+3. `close()` — syncs, `PRAGMA wal_checkpoint(TRUNCATE)`, closes DB. The close is strict: drizzle's statements are finalized as they run (`withAutoFinalize`), so the file is released before the next open of the same path. The `-wal` and `-shm` files are SQLite's: the last connection to close removes them, after an exclusive lock proves no other connection (in any process) still has the file. Never unlink them by hand — a connection in another process keeps writing into the unlinked WAL, and its writes are lost or corrupt the file. `openCold` sets `SQLITE_FCNTL_PERSIST_WAL` to 0, because macOS's system SQLite otherwise keeps both files after the last close. The one exception is a temp with no connection on it that is being thrown away or replaced: its `-wal` and `-shm` go with it (`Mount.cleanupTemp`, which a download or a staged-copy recovery also runs before writing the fresh main file), because SQLite replays a leftover `-wal` into whatever main file next appears at that path. The mount's startup tmp sweep keeps a crash temp's journals along with the temp, since they hold its unsynced tail
 
 ### Migrations
 
@@ -100,6 +100,12 @@ Each domain defines its schema and migrations in `db-config.ts`:
 | `COMMENT_INDEX_DB_CONFIG`       | `apps/api/src/lib/chat/comment-db-config.ts`         |
 | `CALENDAR_DB_CONFIG`            | `apps/api/src/lib/calendar/db-config.ts`             |
 | `NOTIFICATION_CENTER_DB_CONFIG` | `apps/api/src/lib/notification-center/db-config.ts`  |
+
+### Instance lock
+
+One API process owns a data dir. `index.ts` imports `src/instance-lock.ts` and only then loads the server (`src/server.ts`) with `await import`, whose modules open server databases as they load. The import is dynamic because a static one guarantees no order in the `buildfordocker` bundle: `--splitting` hoists `auth.ts` and its top-level `users3.db` open into a shared chunk that evaluates before the entry's own code. `instance-lock.ts` opens `{server}/instance.lock` (`getServerDataPath`) as a SQLite database, runs `PRAGMA locking_mode = EXCLUSIVE; BEGIN IMMEDIATE;` and keeps the connection for the life of the process. `IMMEDIATE`, not `EXCLUSIVE`: two processes starting together both read the empty file first, and `BEGIN EXCLUSIVE` then fails them both, while `BEGIN IMMEDIATE` lets exactly one through. A second API on the same data dir gets `SQLITE_BUSY` and exits with code 1, naming the data dir. The lock is a POSIX file lock, so the OS drops it however the holder ends, SIGKILL included, and a `bun --watch` reload takes it again. The open transaction keeps an `instance.lock-journal` beside it, 512 bytes and no pages, which a SIGKILL leaves behind; the next holder rolls it back as a no-op, so it is harmless. Tests that boot `app` in-process never take the lock; `test/backup/process-lifecycle.test.ts` spawns `src/index.ts`, so each child takes it on its own data root. Scripts (seeding, migrations) don't take it.
+
+The lock only reaches as far as the file system carries POSIX locks. A Docker Desktop bind mount does not pass them between a container and the host, so an API in the container and one on the host over the same folder both start.
 
 ## Access Patterns
 

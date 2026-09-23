@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, unlinkSync, utimesSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, unlinkSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase } from '../../lib/core';
@@ -523,6 +523,45 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         expect(existsSync(recoveryTemp)).toBe(true); // recovery temp survives for reopen to adopt
         expect(existsSync(orphanTemp)).toBe(false); // transient temp still swept
     });
+
+    test("a delayed restart keeps a crash temp's -wal, so its unsynced rows are recovered", async () => {
+        const { mount } = createS3Mount('tmp-sweep-wal');
+        await mount.init();
+        const { dataDbId } = await provisionDoc(mount);
+        const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        for (let i = 0; i < 600; i++) {
+            managed.db
+                .insert(docSchema.items)
+                .values({ id: i, data: 'x'.repeat(100) })
+                .run();
+        }
+        await mount.closeDatabase(dataDbId);
+        await mount.drainPendingUploads({ flushNow: true });
+
+        // The crash image: the synced main file, and 100 unsynced rows only in the -wal.
+        const tempPath = mount.getTempPath(dataDbId);
+        await Bun.write(tempPath, mount.storage.read(await mount.getStorageKey(dataDbId)));
+        const crashed = new Database(tempPath);
+        crashed.run('PRAGMA journal_mode = WAL;');
+        crashed.run('PRAGMA wal_autocheckpoint = 0;');
+        const insert = crashed.prepare('INSERT INTO items (id, data) VALUES (?, ?)');
+        for (let i = 600; i < 700; i++) insert.run(i, 'x'.repeat(100));
+        insert.finalize();
+        const imagePath = join(TEST_DIR, `crash-image-${randomUUID()}`);
+        copyFileSync(tempPath, imagePath);
+        copyFileSync(`${tempPath}-wal`, `${imagePath}-wal`);
+        crashed.close();
+        renameSync(imagePath, tempPath);
+        renameSync(`${imagePath}-wal`, `${tempPath}-wal`);
+        const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        utimesSync(tempPath, old, old);
+        utimesSync(`${tempPath}-wal`, old, old);
+
+        const m2 = createS3Mount('tmp-sweep-wal');
+        await m2.mount.init();
+        const reopened = await m2.mount.openDatabase(docConfigNoSnap, dataDbId);
+        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(700);
+    });
 });
 
 describe('per-destination upload concurrency', () => {
@@ -604,6 +643,162 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         await mount.closeDatabase(dataDbId);
         await mount.drainPendingUploads({ flushNow: true });
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(500); // not collapsed to empty
+    });
+
+    test('a crash temp whose rows are still in its -wal is recovered, not discarded as collapsed', async () => {
+        const { mount } = createS3Mount('wal-held-recovery');
+        await mount.init();
+        const { dataDbId } = await provisionDoc(mount);
+        const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        for (let i = 0; i < 500; i++) {
+            managed.db
+                .insert(docSchema.items)
+                .values({ id: i, data: 'x'.repeat(1000) })
+                .run();
+        }
+        await mount.closeDatabase(dataDbId);
+        await mount.drainPendingUploads({ flushNow: true });
+
+        // The crash image: a small main file, and every row plus one unsynced edit only in the -wal.
+        const tempPath = mount.getTempPath(dataDbId);
+        const fresh = new ManagedDatabase(docConfigNoSnap, tempPath);
+        await fresh.open(0);
+        await fresh.close({ skipFinalSnapshot: true });
+        const crashed = new Database(tempPath);
+        crashed.run('PRAGMA journal_mode = WAL;');
+        crashed.run('PRAGMA wal_autocheckpoint = 0;');
+        const insert = crashed.prepare('INSERT INTO items (id, data) VALUES (?, ?)');
+        for (let i = 0; i <= 500; i++) insert.run(i, 'x'.repeat(1000));
+        insert.finalize();
+        const imagePath = join(TEST_DIR, `crash-image-${randomUUID()}`);
+        copyFileSync(tempPath, imagePath);
+        copyFileSync(`${tempPath}-wal`, `${imagePath}-wal`);
+        crashed.close();
+        renameSync(imagePath, tempPath);
+        renameSync(`${imagePath}-wal`, `${tempPath}-wal`);
+
+        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
+        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(501);
+    });
+
+    // A WAL an older session of the doc left beside its temp. SQLite replays a -wal into whatever main
+    // file sits at that path, so a re-fetched object silently reverts to the stale rows, integrity ok.
+    async function plantStaleWal(tempPath: string): Promise<void> {
+        const sourcePath = join(TEST_DIR, `stale-wal-${randomUUID()}.db`);
+        const fresh = new ManagedDatabase(docConfigNoSnap, sourcePath);
+        await fresh.open(0);
+        await fresh.close({ skipFinalSnapshot: true });
+        const source = new Database(sourcePath);
+        source.run('PRAGMA journal_mode = WAL;');
+        source.run('PRAGMA wal_autocheckpoint = 0;');
+        source.run("INSERT INTO items (id, data) VALUES (1, 'stale')");
+        copyFileSync(`${sourcePath}-wal`, `${tempPath}-wal`);
+        source.close();
+    }
+
+    async function provisionStoredAbc(mount: Mount): Promise<string> {
+        const { dataDbId } = await provisionDoc(mount);
+        const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
+        managed.db
+            .insert(docSchema.items)
+            .values([
+                { id: 1, data: 'a' },
+                { id: 2, data: 'b' },
+                { id: 3, data: 'c' },
+            ])
+            .run();
+        await mount.closeDatabase(dataDbId);
+        await mount.drainPendingUploads({ flushNow: true });
+        return dataDbId;
+    }
+
+    test('a discarded crash temp takes its -wal with it, so the re-fetched object is not reverted', async () => {
+        const { mount } = createS3Mount('stale-wal-discard');
+        await mount.init();
+        const dataDbId = await provisionStoredAbc(mount);
+
+        const tempPath = mount.getTempPath(dataDbId);
+        await Bun.write(tempPath, new Uint8Array(0));
+        await plantStaleWal(tempPath);
+
+        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
+        expect(
+            reopened.db
+                .select()
+                .from(docSchema.items)
+                .all()
+                .map((row) => row.data),
+        ).toEqual(['a', 'b', 'c']);
+    });
+
+    test('a failed download takes the -wal beside its temp with it', async () => {
+        const { mount, fault } = createS3Mount('stale-wal-failed-download');
+        await mount.init();
+        const dataDbId = await provisionStoredAbc(mount);
+
+        const tempPath = mount.getTempPath(dataDbId);
+        await plantStaleWal(tempPath);
+        const storageKey = await mount.getStorageKey(dataDbId);
+        fault.failReadKeys.add(storageKey);
+        await expect(mount.openDatabase(docConfigNoSnap, dataDbId)).rejects.toThrow('injected read failure');
+        fault.failReadKeys.delete(storageKey);
+
+        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
+        expect(
+            reopened.db
+                .select()
+                .from(docSchema.items)
+                .all()
+                .map((row) => row.data),
+        ).toEqual(['a', 'b', 'c']);
+    });
+
+    test('a download over an orphan -wal beside the temp path yields the stored object', async () => {
+        const { mount } = createS3Mount('orphan-wal-download');
+        await mount.init();
+        const dataDbId = await provisionStoredAbc(mount);
+        await plantStaleWal(mount.getTempPath(dataDbId));
+
+        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
+        expect(
+            reopened.db
+                .select()
+                .from(docSchema.items)
+                .all()
+                .map((row) => row.data),
+        ).toEqual(['a', 'b', 'c']);
+    });
+
+    test('a download refuses to write when an orphan -wal beside the temp path cannot be removed', async () => {
+        const { mount } = createS3Mount('stuck-wal-download');
+        await mount.init();
+        const dataDbId = await provisionStoredAbc(mount);
+        mkdirSync(`${mount.getTempPath(dataDbId)}-wal`, { recursive: true });
+
+        await expect(mount.downloadToTemp(dataDbId, dataDbId)).rejects.toThrow('-wal');
+    });
+
+    test('a staged-copy recovery over an orphan -wal beside the temp path yields the staged bytes', async () => {
+        const { mount, fault } = createS3Mount('orphan-wal-staged');
+        await mount.init();
+        const dataDbId = await provisionStoredAbc(mount);
+        fault.failNextWrites = 9999;
+        const managed = await mount.openDatabase(docConfigNoSnap, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 4, data: 'd' }).run();
+        await mount.closeDatabase(dataDbId);
+        await mount.drainPendingUploads({ flushNow: true });
+        expect(mount.pendingUploadCount).toBeGreaterThan(0);
+        await plantStaleWal(mount.getTempPath(dataDbId));
+
+        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
+        expect(
+            reopened.db
+                .select()
+                .from(docSchema.items)
+                .all()
+                .map((row) => row.data),
+        ).toEqual(['a', 'b', 'c', 'd']);
+        fault.failNextWrites = 0;
     });
 });
 

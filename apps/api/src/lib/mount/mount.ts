@@ -246,7 +246,8 @@ export class Mount {
                   )
                 : null;
             for (const entry of fs.readdirSync(dir)) {
-                if (liveIds?.has(entry)) continue;
+                // A crash temp's journals hold its unsynced tail, so they live and die with it.
+                if (liveIds?.has(entry.replace(/-(wal|shm|journal)$/, ''))) continue;
                 const filePath = path.join(dir, entry);
                 try {
                     if (fs.statSync(filePath).mtimeMs < cutoff) fs.unlinkSync(filePath);
@@ -954,13 +955,16 @@ export class Mount {
     async downloadKeyToTemp(storageKey: string, tempId: string): Promise<string> {
         const start = Bun.nanoseconds();
         const tempPath = this.getTempPath(tempId);
-        const file = this.storage.read(storageKey);
+        await this.cleanupTemp(tempId);
+        // A -wal that survived cleanup would be replayed into the fresh main file.
+        if (fs.existsSync(`${tempPath}-wal`))
+            throw new Error(`[Mount] download ${storageKey}: stale ${tempPath}-wal could not be removed`);
         try {
-            await Bun.write(tempPath, file);
+            await Bun.write(tempPath, this.storage.read(storageKey));
         } catch (err) {
             // A failed/partial GET can leave a truncated or 0-byte temp behind. Remove it so a later
             // crash-recovery open can't adopt those bytes as a fresh empty doc.
-            fs.rmSync(tempPath, { force: true });
+            await this.cleanupTemp(tempId);
             throw err;
         }
         const ms = (Bun.nanoseconds() - start) / 1_000_000;
@@ -986,15 +990,15 @@ export class Mount {
     }
 
     async cleanupTemp(tempId: string): Promise<void> {
+        const tempPath = this.getTempPath(tempId);
+        // The journals too: SQLite replays a leftover -wal into whatever main file next lands at this path.
         try {
-            const tempPath = this.getTempPath(tempId);
-            const file = Bun.file(tempPath);
-            if (await file.exists()) await file.delete();
-            // A lazily-closed (zombie) connection keeps its journals on disk; a stale WAL next
-            // to a later re-download of the same path would be replayed into foreign bytes.
             fs.rmSync(`${tempPath}-wal`, { force: true });
             fs.rmSync(`${tempPath}-shm`, { force: true });
-        } catch {}
+            fs.rmSync(tempPath, { force: true });
+        } catch (e) {
+            console.error(`[Mount] Failed to remove temp ${tempId}:`, e);
+        }
     }
 
     // internal — used by mount/*.ts + versioning/snapshot.ts

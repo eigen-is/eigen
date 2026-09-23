@@ -206,14 +206,7 @@ Mount configs (S3 credentials) come from the home's `settings.json`, same as `Dr
 A home directory with no matching auth row is itself a finding (orphan home).
 
 **A second connection on a live home's database is NOT safe here — the `atHome()` skip is
-mandatory, not an optimization.** `ManagedDatabase.close()` runs `wal_checkpoint(TRUNCATE)` →
-`close()` → `deleteJournalFiles()` (post-audit-item-4: only after a genuinely clean close — a
-lazy/zombie close keeps the journals, which strengthens this argument). With a sweep connection also open: the
-checkpoint silently can't complete, SQLite doesn't auto-remove the WAL (close isn't the last
-connection), and the unlink then deletes a WAL still holding committed-but-uncheckpointed frames
-under the sweep's handle — a crash in that window loses them, and a fresh open racing the unlink
-creates a new WAL while the old inode is still mapped (the documented SQLite corruption scenario).
-`Mount.cleanupTemp` at close gives live container temps the same shape. So disk-level opens are for
+mandatory, not an optimization.** `ManagedDatabase.close()` leaves `-wal` and `-shm` to SQLite ([DATABASE.md](../DATABASE.md)), but `Mount.cleanupTemp` at close still unlinks a container temp and its journals by hand. With a sweep connection also open on that temp: the close's `wal_checkpoint(TRUNCATE)` silently can't complete, and the unlink then deletes a WAL still holding committed-but-uncheckpointed frames under the sweep's handle — a crash in that window loses them, and a fresh open racing the unlink creates a new WAL while the old inode is still mapped (the documented SQLite corruption scenario). So disk-level opens are for
 **cold homes only**: check `atHome()` before opening *and again after* — if the home went live
 mid-check, discard the result and move on. A live home's databases are instead checked through the
 home's own cached handles: `ManagedDatabase.stageCopy` a frozen `VACUUM INTO` copy and probe that

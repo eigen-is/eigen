@@ -7,7 +7,7 @@ import { TEST_DATA_DIR } from '../setup';
 
 // What the server does before it serves its first request: clear the staging folder a killed job
 // left behind, and put back the home folder of a restore that died between the move-aside and the
-// install. Both run at module scope in index.ts, so neither may throw and neither may create a
+// install. Both run at module scope in server.ts, so neither may throw and neither may create a
 // folder the deployment did not ask for — in the container the backups path is a bind mount the
 // API runs as an unprivileged user next to.
 describe('Backup boot', () => {

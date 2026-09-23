@@ -62,7 +62,7 @@ export async function getHome(ownerId: string): Promise<Home> {
             }
             // The cached home is tearing down. Await its teardown to completion (the same shutdown()
             // path evictHome uses) BEFORE dropping it, so the replacement can't open the same DB files
-            // while close() is still checkpointing + unlinking the -wal/-shm journals. shutdown() is
+            // while close() is still checkpointing and closing them. shutdown() is
             // idempotent with the in-flight destruct(), so this just awaits the outgoing teardown.
             await home.shutdown();
             // Evict only if it is still the current entry — a concurrent caller may already have

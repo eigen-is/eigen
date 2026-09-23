@@ -25,8 +25,7 @@ describe('getHome teardown race', () => {
         // must await (shutdown) behind a gate, then prove it parks on that call. The gated shutdown
         // runs the REAL teardown once released, so home1's DB handles are closed before getHome opens
         // the replacement — the same non-overlap production relies on. Skipping the real teardown here
-        // would leave home1's connections open alongside home2's on the same files, and closing both
-        // at cleanup unlinks the shared WAL/-shm out from under a live handle (SQLITE_IOERR_VNODE).
+        // would leave home1's connections open alongside home2's on the same files.
         Object.defineProperty(home1, 'destructing', { configurable: true, get: () => true });
         let releaseShutdown!: () => void;
         const gate = new Promise<void>((resolve) => {
