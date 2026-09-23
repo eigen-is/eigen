@@ -373,6 +373,7 @@ describe('Guest Auth', () => {
             expect(res.status).toBe(200);
         });
 
+        // Eleven full sign-ins, each a handful of password hashes: ~3.4 s on CI, too close to the 5 s default.
         test('a successful sign-in does not count toward the request limit', async () => {
             const email = `regular-${randomUUID()}@external.com`;
             for (let i = 0; i < MAX_OTP_REQUESTS_PER_EMAIL + 1; i++) {
@@ -380,7 +381,7 @@ describe('Guest Auth', () => {
                 const res = await verifyOtp(email, otp);
                 expect(res.status).toBe(200);
             }
-        });
+        }, 20_000);
 
         test('one code cannot mint two sessions', async () => {
             const email = `double-${randomUUID()}@external.com`;
