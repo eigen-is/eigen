@@ -11,11 +11,33 @@ function transportOptions(transport: ReturnType<typeof createTransport>): Record
 }
 
 describe('createTransport', () => {
-    restoreEnvAfterEach(['SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_USER', 'SMTP_PASSWORD']);
+    restoreEnvAfterEach([
+        'MAIL_ENABLED',
+        'SMTP_HOST',
+        'SMTP_PORT',
+        'SMTP_RELAY_HOST',
+        'SMTP_RELAY_PORT',
+        'SMTP_RELAY_USER',
+        'SMTP_RELAY_PASSWORD',
+    ]);
 
-    test('uses SMTP transport when SMTP_HOST is set', () => {
+    const relay = (port: string, user?: string, password?: string) => {
+        process.env['MAIL_ENABLED'] = '0';
+        process.env['SMTP_RELAY_HOST'] = 'smtp-relay.brevo.com';
+        process.env['SMTP_RELAY_PORT'] = port;
+        if (user === undefined) delete process.env['SMTP_RELAY_USER'];
+        else process.env['SMTP_RELAY_USER'] = user;
+        if (password === undefined) delete process.env['SMTP_RELAY_PASSWORD'];
+        else process.env['SMTP_RELAY_PASSWORD'] = password;
+    };
+
+    test('hosting mail, it hands mail to postfix anonymously, whatever relay Postfix itself uses', () => {
+        process.env['MAIL_ENABLED'] = '1';
         process.env['SMTP_HOST'] = 'postfix';
         process.env['SMTP_PORT'] = '25';
+        process.env['SMTP_RELAY_HOST'] = 'smtp-relay.brevo.com';
+        process.env['SMTP_RELAY_USER'] = 'relay-user';
+        process.env['SMTP_RELAY_PASSWORD'] = 'relay-secret';
         const opts = transportOptions(createTransport());
         expect(opts['host']).toBe('postfix');
         expect(opts['port']).toBe(25);
@@ -25,45 +47,40 @@ describe('createTransport', () => {
         expect(opts['tls']).toEqual({ rejectUnauthorized: false });
     });
 
-    test('authenticates and verifies the certificate when relay credentials are set', () => {
-        process.env['SMTP_HOST'] = 'smtp-relay.brevo.com';
-        process.env['SMTP_PORT'] = '587';
-        process.env['SMTP_USER'] = 'relay-user';
-        process.env['SMTP_PASSWORD'] = 'relay-secret';
+    test('without hosted mail it sends through the relay, and verifies the certificate once it authenticates', () => {
+        relay('587', 'relay-user', 'relay-secret');
         const opts = transportOptions(createTransport());
+        expect(opts['host']).toBe('smtp-relay.brevo.com');
+        expect(opts['port']).toBe(587);
         expect(opts['auth']).toEqual({ user: 'relay-user', pass: 'relay-secret' });
         expect(opts['secure']).toBe(false);
         expect(opts['requireTLS']).toBe(true);
         expect(opts['tls']).toEqual({ rejectUnauthorized: true });
     });
 
+    test('an anonymous relay keeps opportunistic TLS', () => {
+        relay('1025');
+        const opts = transportOptions(createTransport());
+        expect(opts['auth']).toBeUndefined();
+        expect(opts['requireTLS']).toBe(false);
+        expect(opts['tls']).toEqual({ rejectUnauthorized: false });
+    });
+
     test('refuses a relay user without a password', () => {
-        process.env['SMTP_HOST'] = 'smtp-relay.brevo.com';
-        process.env['SMTP_PORT'] = '587';
-        process.env['SMTP_USER'] = 'relay-user';
-        delete process.env['SMTP_PASSWORD'];
-        expect(() => createTransport()).toThrow('SMTP_USER is set without SMTP_PASSWORD');
+        relay('587', 'relay-user');
+        expect(() => createTransport()).toThrow('SMTP_RELAY_USER is set without SMTP_RELAY_PASSWORD');
     });
 
     test('uses implicit TLS on port 465', () => {
-        process.env['SMTP_HOST'] = 'smtp-relay.brevo.com';
-        process.env['SMTP_PORT'] = '465';
-        const opts = transportOptions(createTransport());
-        expect(opts['secure']).toBe(true);
+        relay('465');
+        expect(transportOptions(createTransport())['secure']).toBe(true);
     });
 
-    test('SMTP_SECURE overrides the port-derived TLS mode', () => {
-        process.env['SMTP_HOST'] = 'smtp-relay.brevo.com';
-        process.env['SMTP_PORT'] = '2525';
-        process.env['SMTP_SECURE'] = '1';
-        const opts = transportOptions(createTransport());
-        expect(opts['secure']).toBe(true);
-    });
-
-    test('uses sendmail transport when SMTP_HOST is not set', () => {
-        delete process.env['SMTP_HOST'];
-        const opts = transportOptions(createTransport());
-        expect(opts['sendmail']).toBe(true);
+    test('uses sendmail when there is no server to hand mail to', () => {
+        process.env['MAIL_ENABLED'] = '0';
+        delete process.env['SMTP_RELAY_HOST'];
+        process.env['SMTP_HOST'] = 'postfix';
+        expect(transportOptions(createTransport())['sendmail']).toBe(true);
     });
 });
 

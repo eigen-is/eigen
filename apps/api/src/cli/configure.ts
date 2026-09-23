@@ -27,11 +27,7 @@ export type DockerNetwork = {
 const ENV_PATH = '.env.production';
 const DEFAULT_SUBNET = '172.20.0.0/24';
 const SUBNET_CANDIDATES = [DEFAULT_SUBNET, '172.30.0.0/24', '172.31.0.0/24', '10.20.0.0/24'];
-// Postfix relays when Eigen hosts mail; the API relays itself when it does not. Ports are Compose's defaults.
-const MAIL_RELAY_KEYS = ['SMTP_RELAY_HOST', 'SMTP_RELAY_PORT', 'SMTP_RELAY_USER', 'SMTP_RELAY_PASSWORD'] as const;
-const API_RELAY_KEYS = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD'] as const;
-const MAIL_RELAY_PORT = '587';
-const API_RELAY_PORT = '25';
+const RELAY_PORT = '587';
 // Digests the launcher resolved on the host (no socket in here), passed as KEY=VALUE words in EIGEN_PINS.
 const RELEASE_PINS = new Set([
     'EIGEN_REGISTRY',
@@ -107,8 +103,6 @@ const cleanDomain = (value: string) =>
 
 const isPort = (value: string) => /^\d{1,5}$/.test(value) && +value > 0 && +value < 65536;
 
-const hostsMail = (env: Map<string, string>) => env.get('MAIL_ENABLED') !== '0';
-
 function validateDomain(value: string): string | undefined {
     const domain = cleanDomain(value);
     if (domain !== 'localhost' && !/^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/.test(domain)) {
@@ -143,7 +137,7 @@ function validateAddress(value: string): string | undefined {
 
 function validateRelay(value: string): string | undefined {
     if (value === '') return;
-    const [host = '', port = '587', extra] = value.split(':');
+    const [host = '', port = RELAY_PORT, extra] = value.split(':');
     if (!/^[a-z0-9][a-z0-9.-]*$/i.test(host) || !isPort(port) || extra !== undefined) {
         return 'Enter the relay as host:port, like smtp-relay.brevo.com:587.';
     }
@@ -197,23 +191,16 @@ export function configureEntries(existing: Map<string, string>, answers: Configu
         }
     }
 
-    // A mode switch moves the relay: API relay keys left behind with mail on would bypass postfix.
-    const [relayKeys, otherKeys] = answers.mail ? [MAIL_RELAY_KEYS, API_RELAY_KEYS] : [API_RELAY_KEYS, MAIL_RELAY_KEYS];
-    if (hostsMail(existing) !== answers.mail) {
-        for (const key of otherKeys) entries.delete(key);
-    }
-    const [hostKey, portKey, userKey, passwordKey] = relayKeys;
-    if (answers.relay) {
-        entries.set(hostKey, answers.relay.host);
-        entries.set(portKey, answers.relay.port);
-        for (const [key, value] of [
-            [userKey, answers.relay.user],
-            [passwordKey, answers.relay.password],
-        ] as const) {
-            if (value || entries.has(key)) entries.set(key, value);
-        }
-    } else if (entries.has(hostKey)) {
-        entries.set(hostKey, '');
+    // Postfix relays through these with hosted mail, the API without it.
+    const relay = answers.relay ?? { host: '', port: '', user: '', password: '' };
+    for (const [key, value] of [
+        ['SMTP_RELAY_HOST', relay.host],
+        ['SMTP_RELAY_PORT', relay.port],
+        ['SMTP_RELAY_USER', relay.user],
+        ['SMTP_RELAY_PASSWORD', relay.password],
+    ] as const) {
+        if (value) entries.set(key, value);
+        else entries.delete(key);
     }
     // Unset or empty, the sender follows MAIL_DOMAIN; writing the default would pin it.
     if (answers.from !== `noreply@${answers.mailDomain}` || existing.get('SMTP_FROM')) {
@@ -355,20 +342,21 @@ export async function configure(args: string[]): Promise<void> {
               )
             : currentContact;
 
-    const wasMail = hostsMail(existing);
-    const mail = await decide(flags.mail ? true : flags['no-mail'] ? false : undefined, wasMail, (initial) =>
-        ui.confirm({
-            message: 'Host email on this server?',
-            help:
-                'Yes: Eigen hosts the mailboxes, on ports 25, 465, 587 and 993.\n' +
-                'No: Eigen hosts no mailboxes. There is no Mail app, and email stays where it is.',
-            flag: '--mail or --no-mail',
-            initial,
-        }),
+    const mail = await decide(
+        flags.mail ? true : flags['no-mail'] ? false : undefined,
+        existing.get('MAIL_ENABLED') !== '0',
+        (initial) =>
+            ui.confirm({
+                message: 'Host email on this server?',
+                help:
+                    'Yes: Eigen hosts the mailboxes, on ports 25, 465, 587 and 993.\n' +
+                    'No: Eigen hosts no mailboxes. There is no Mail app, and email stays where it is.',
+                flag: '--mail or --no-mail',
+                initial,
+            }),
     );
 
-    const [hostKey, portKey, userKey, passwordKey] = wasMail ? MAIL_RELAY_KEYS : API_RELAY_KEYS;
-    const currentHost = existing.get(hostKey);
+    const currentHost = existing.get('SMTP_RELAY_HOST');
     const relayAnswer = await answer(
         {
             message: 'Which mail relay should Eigen send through, as host:port? (optional)',
@@ -378,12 +366,12 @@ export async function configure(args: string[]): Promise<void> {
             flag: 'relay',
         },
         flags['no-relay'] ? '' : flags.relay,
-        currentHost ? `${currentHost}:${existing.get(portKey) || (wasMail ? MAIL_RELAY_PORT : API_RELAY_PORT)}` : '',
+        currentHost ? `${currentHost}:${existing.get('SMTP_RELAY_PORT') || RELAY_PORT}` : '',
         validateRelay,
     );
     let relay: ConfigureAnswers['relay'] = null;
     if (relayAnswer) {
-        const [host = '', port = mail ? MAIL_RELAY_PORT : API_RELAY_PORT] = relayAnswer.split(':');
+        const [host = '', port = RELAY_PORT] = relayAnswer.split(':');
         const user = await answer(
             {
                 message: "What is the relay's user name? (optional)",
@@ -391,10 +379,10 @@ export async function configure(args: string[]): Promise<void> {
                 flag: 'relay-user',
             },
             flags['relay-user'],
-            existing.get(userKey) ?? '',
+            existing.get('SMTP_RELAY_USER') ?? '',
             validateText,
         );
-        const current = existing.get(passwordKey) ?? '';
+        const current = existing.get('SMTP_RELAY_PASSWORD') ?? '';
         const passwordEnv = flags['relay-password-env'];
         let password = user ? current : '';
         if (user && passwordEnv !== undefined) {

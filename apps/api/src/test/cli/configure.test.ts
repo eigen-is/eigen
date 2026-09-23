@@ -117,7 +117,7 @@ describe('configure entries', () => {
         expect(entries.has('SMTP_FROM')).toBe(false);
     });
 
-    test('mail off writes MAIL_ENABLED=0, the API relay keys and no mail profile', () => {
+    test('mail off writes MAIL_ENABLED=0, the same relay keys and no mail profile', () => {
         const existing = new Map([
             ['COMPOSE_PROFILES', 'static,mail'],
             ['SMTP_RELAY_HOST', 'old.relay.test'],
@@ -133,26 +133,29 @@ describe('configure entries', () => {
         });
         expect(entries.get('COMPOSE_PROFILES')).toBe('static');
         expect(entries.get('MAIL_ENABLED')).toBe('0');
-        expect(entries.get('SMTP_HOST')).toBe('smtp.relay.test');
-        expect(entries.get('SMTP_PORT')).toBe('587');
-        expect(entries.get('SMTP_USER')).toBe('u');
-        expect(entries.get('SMTP_PASSWORD')).toBe('p$w');
+        expect(entries.get('SMTP_RELAY_HOST')).toBe('smtp.relay.test');
+        expect(entries.get('SMTP_RELAY_PORT')).toBe('587');
+        expect(entries.get('SMTP_RELAY_USER')).toBe('u');
+        expect(entries.get('SMTP_RELAY_PASSWORD')).toBe('p$w');
         expect(entries.get('EIGEN_STATIC_PORT')).toBe('18080');
         expect(entries.get('SMTP_FROM')).toBe('Eigen <noreply@example.org>');
-        expect([...entries.keys()].some((key) => key.startsWith('SMTP_RELAY_'))).toBe(false);
+        expect(entries.has('SMTP_HOST')).toBe(false);
         expect(entries.get('MAIL_DOMAIN')).toBe('example.org');
     });
 
-    test('turning mail back on drops the API relay keys so mail goes through postfix again', () => {
+    test('switching mail on or off leaves the relay lines as they are', () => {
         const existing = new Map([
             ['MAIL_ENABLED', '0'],
-            ['SMTP_HOST', 'smtp.relay.test'],
-            ['SMTP_PORT', '587'],
+            ['SMTP_RELAY_HOST', 'smtp.relay.test'],
+            ['SMTP_RELAY_PORT', '587'],
         ]);
-        const entries = configureEntries(existing, ANSWERS);
+        const entries = configureEntries(existing, {
+            ...ANSWERS,
+            relay: { host: 'smtp.relay.test', port: '587', user: '', password: '' },
+        });
         expect(entries.get('MAIL_ENABLED')).toBe('1');
-        expect(entries.has('SMTP_HOST')).toBe(false);
-        expect(entries.has('SMTP_PORT')).toBe(false);
+        expect(entries.get('SMTP_RELAY_HOST')).toBe('smtp.relay.test');
+        expect(entries.get('SMTP_RELAY_PORT')).toBe('587');
     });
 
     test('keeps every key it does not own, and a chosen subnet pins the unbound address', () => {
@@ -168,29 +171,26 @@ describe('configure entries', () => {
         expect(entries.get('EIGEN_UNBOUND_IP')).toBe('172.31.0.254');
     });
 
-    test('removing the relay blanks only its host', () => {
+    test('removing the relay drops its lines, password included', () => {
         const existing = new Map([
             ['SMTP_RELAY_HOST', 'smtp.relay.test'],
+            ['SMTP_RELAY_PORT', '587'],
             ['SMTP_RELAY_USER', 'u'],
             ['SMTP_RELAY_PASSWORD', 'p'],
         ]);
         const entries = configureEntries(existing, ANSWERS);
-        expect(entries.get('SMTP_RELAY_HOST')).toBe('');
-        expect(entries.get('SMTP_RELAY_USER')).toBe('u');
-        expect(entries.get('SMTP_RELAY_PASSWORD')).toBe('p');
+        expect([...entries.keys()].filter((key) => key.startsWith('SMTP_RELAY_'))).toEqual([]);
     });
 
-    test('a relay without a user adds no user or password lines', () => {
-        const entries = configureEntries(
-            new Map([
-                ['MAIL_ENABLED', '0'],
-                ['SMTP_PASSWORD', 'old'],
-            ]),
-            { ...ANSWERS, mail: false, relay: { host: 'smtp.relay.test', port: '25', user: '', password: '' } },
-        );
-        expect(entries.get('SMTP_HOST')).toBe('smtp.relay.test');
-        expect(entries.has('SMTP_USER')).toBe(false);
-        expect(entries.get('SMTP_PASSWORD')).toBe('');
+    test('a relay without a user keeps no user or password lines', () => {
+        const entries = configureEntries(new Map([['SMTP_RELAY_PASSWORD', 'old']]), {
+            ...ANSWERS,
+            mail: false,
+            relay: { host: 'smtp.relay.test', port: '25', user: '', password: '' },
+        });
+        expect(entries.get('SMTP_RELAY_HOST')).toBe('smtp.relay.test');
+        expect(entries.has('SMTP_RELAY_USER')).toBe(false);
+        expect(entries.has('SMTP_RELAY_PASSWORD')).toBe(false);
     });
 
     test('the default sender leaves an empty SMTP_FROM alone', () => {
@@ -440,7 +440,7 @@ describe('configure command', () => {
         expect(run.stderr).toBe('');
         expect(run.code).toBe(0);
         expect(run.stdout).toContain('[smtp.relay.test:587, - for none]');
-        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toContain('\nSMTP_RELAY_HOST=\n');
+        expect(readFileSync(join(dir, '.env.production'), 'utf8')).not.toContain('SMTP_RELAY_HOST');
     });
 
     test('a piped - clears any optional answer, and a bare - is no relay host', async () => {
@@ -459,7 +459,10 @@ describe('configure command', () => {
         const cleared = await runConfigure(user, [], ['', '', '', '', '', '', '-', '', ''].join('\n'));
         expect(cleared.stderr).toBe('');
         expect(cleared.code).toBe(0);
-        expect(readFileSync(join(user, '.env.production'), 'utf8')).toContain('\nSMTP_RELAY_USER=\n');
+        const env = readFileSync(join(user, '.env.production'), 'utf8');
+        expect(env).toContain('\nSMTP_RELAY_HOST=smtp.relay.test\n');
+        expect(env).not.toContain('SMTP_RELAY_USER');
+        expect(env).not.toContain('SMTP_RELAY_PASSWORD');
 
         const flag = await runConfigure(tempDir(), [
             '--yes',

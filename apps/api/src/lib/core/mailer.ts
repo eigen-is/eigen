@@ -59,38 +59,44 @@ export function onBehalfOf(user: OutboundAddress): Pick<OutboundMail, 'from' | '
     };
 }
 
+// Hosting mail, the API hands everything to the bundled Postfix (SMTP_HOST, set by Compose), which relays
+// through SMTP_RELAY_*; without hosted mail the API sends through that relay itself.
+function smtpHost(): string | undefined {
+    return (isMailEnabled() ? process.env['SMTP_HOST'] : process.env['SMTP_RELAY_HOST']) || undefined;
+}
+
 export function createTransport(): Mail {
-    const host = process.env['SMTP_HOST'];
-    if (host) {
-        const port = Number(process.env['SMTP_PORT'] || 25);
-        const user = process.env['SMTP_USER'];
-        const pass = process.env['SMTP_PASSWORD'];
-        if (user && !pass) {
-            throw new Error(
-                'SMTP_USER is set without SMTP_PASSWORD. ' +
-                    'Set both to authenticate to the relay, or neither for an anonymous hop.',
-            );
-        }
-        // Port 465 is implicit TLS; anything else starts plain and upgrades with STARTTLS.
-        const secureEnv = process.env['SMTP_SECURE'];
-        const secure = secureEnv ? secureEnv === '1' : port === 465;
+    const host = smtpHost();
+    if (!host) return nodemailer.createTransport({ sendmail: true, newline: 'unix', path: '/usr/sbin/sendmail' });
+    if (isMailEnabled()) {
+        // Postfix owns TLS toward the internet; its own certificate is self-signed or missing.
         return nodemailer.createTransport({
             host,
-            port,
-            secure,
-            auth: user && pass ? { user, pass } : undefined,
-            // An unauthenticated hop is the bundled postfix or a host-local relay (self-signed/no
-            // cert) and postfix owns TLS toward the internet, but credentials only go over a
-            // connection that is encrypted and whose certificate checks out — without
-            // requireTLS nodemailer skips STARTTLS when the server doesn't advertise it.
-            requireTLS: Boolean(user),
-            tls: { rejectUnauthorized: Boolean(user) },
+            port: Number(process.env['SMTP_PORT'] || 25),
+            secure: false,
+            requireTLS: false,
+            tls: { rejectUnauthorized: false },
         });
     }
+    const port = Number(process.env['SMTP_RELAY_PORT'] || 587);
+    const user = process.env['SMTP_RELAY_USER'];
+    const pass = process.env['SMTP_RELAY_PASSWORD'];
+    if (user && !pass) {
+        throw new Error(
+            'SMTP_RELAY_USER is set without SMTP_RELAY_PASSWORD. ' +
+                'Set both to authenticate to the relay, or neither for an anonymous one.',
+        );
+    }
     return nodemailer.createTransport({
-        sendmail: true,
-        newline: 'unix',
-        path: '/usr/sbin/sendmail',
+        host,
+        port,
+        // Port 465 is implicit TLS; anything else starts plain and upgrades with STARTTLS.
+        secure: port === 465,
+        auth: user && pass ? { user, pass } : undefined,
+        // Credentials only go over a connection that is encrypted and whose certificate checks out; without
+        // requireTLS nodemailer skips STARTTLS when the server does not offer it.
+        requireTLS: Boolean(user),
+        tls: { rejectUnauthorized: Boolean(user) },
     });
 }
 
@@ -131,7 +137,7 @@ export function buildMailOptions(message: OutboundMail): Mail.Options {
 export async function sendMail(message: OutboundMail): Promise<boolean> {
     // Skip outbound delivery in dev/test unless an SMTP host is explicitly configured, and always
     // in demo mode (a demo box has no MTA — a real send would throw on every share/invite/iMIP).
-    if ((!isProduction() && !process.env['SMTP_HOST']) || isDemo()) {
+    if ((!isProduction() && !smtpHost()) || isDemo()) {
         console.log('[DEV] Skipping email:', {
             from: message.from ?? defaultFrom(),
             to: message.to,

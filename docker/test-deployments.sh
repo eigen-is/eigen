@@ -37,11 +37,11 @@ tear_down() {
 # The API relays through Mailpit when Eigen hosts no mail.
 probe_relay() {
     local host
-    host=$(dc exec -T eigen-api printenv SMTP_HOST | tr -d '\r' || true)
+    host=$(dc exec -T eigen-api printenv SMTP_RELAY_HOST | tr -d '\r' || true)
     if [ "$host" = mailpit ]; then
         ok "eigen-api relays through mailpit"
     else
-        fail "eigen-api SMTP_HOST is '$host', expected mailpit"
+        fail "eigen-api SMTP_RELAY_HOST is '$host', expected mailpit"
     fi
 }
 
