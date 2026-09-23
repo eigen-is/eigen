@@ -26,6 +26,8 @@ import {
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
 const DOC_PROBE = 'pack-verify-probe';
+// Snapshot, pack and extract do real SQLite, tar and zstd work, which a loaded full-suite run slows well past bun's 5 s default.
+const PACK_TIMEOUT_MS = 30_000;
 const EMPTY_DIR = 'home/eigen.mail/Maildir/.Empty/cur';
 
 // Evaluated at registration time, so a machine without these tools skips the tests outright rather
@@ -190,7 +192,7 @@ describe('Backup pack and verify', () => {
 
         artifact = join(mkdtempSync(join(TEST_DATA_DIR, 'artifacts-')), buildArtifactName(ownerId, new Date()));
         await packFolder(folder, artifact);
-    });
+    }, PACK_TIMEOUT_MS);
 
     async function extractFresh(prefix: string, glob?: string): Promise<string> {
         const dir = mkdtempSync(join(TEST_DATA_DIR, prefix));
@@ -198,187 +200,245 @@ describe('Backup pack and verify', () => {
         return dir;
     }
 
-    test('packs into a .tar.zst and verifies a fresh extract', async () => {
-        expect(Bun.file(artifact).size).toBeGreaterThan(0);
-        const dir = await extractFresh('extract-ok-');
-        const record = await verifyFolder(join(dir, folderName));
-        expect(record.failures).toEqual([]);
-        expect(record.status).toBe('verified');
-        expect(record.checkedAt).toBeTruthy();
-    }, 30_000);
+    test(
+        'packs into a .tar.zst and verifies a fresh extract',
+        async () => {
+            expect(Bun.file(artifact).size).toBeGreaterThan(0);
+            const dir = await extractFresh('extract-ok-');
+            const record = await verifyFolder(join(dir, folderName));
+            expect(record.failures).toEqual([]);
+            expect(record.status).toBe('verified');
+            expect(record.checkedAt).toBeTruthy();
+        },
+        PACK_TIMEOUT_MS,
+    );
 
-    test('an empty directory survives pack and extract', async () => {
-        const dir = await extractFresh('extract-dirs-');
-        expect(existsSync(join(dir, folderName, EMPTY_DIR))).toBe(true);
-    }, 30_000);
+    test(
+        'an empty directory survives pack and extract',
+        async () => {
+            const dir = await extractFresh('extract-dirs-');
+            expect(existsSync(join(dir, folderName, EMPTY_DIR))).toBe(true);
+        },
+        PACK_TIMEOUT_MS,
+    );
 
-    test('verifying a folder does not change a byte of it', async () => {
-        const dir = await extractFresh('extract-stable-');
-        const folder = join(dir, folderName);
-        const before = await hashTree(folder);
-        const record = await verifyFolder(folder);
-        expect(record.status).toBe('verified');
-        // A read-write open of a container data.db would leave a journal beside it and change the
-        // very hashes stage 1 just checked. hashTree covers both: it walks the folder and folds
-        // every path and its bytes in, so a stray -wal file moves the hash too.
-        expect(await hashTree(folder)).toBe(before);
-    }, 30_000);
+    test(
+        'verifying a folder does not change a byte of it',
+        async () => {
+            const dir = await extractFresh('extract-stable-');
+            const folder = join(dir, folderName);
+            const before = await hashTree(folder);
+            const record = await verifyFolder(folder);
+            expect(record.status).toBe('verified');
+            // A read-write open of a container data.db would leave a journal beside it and change the
+            // very hashes stage 1 just checked. hashTree covers both: it walks the folder and folds
+            // every path and its bytes in, so a stray -wal file moves the hash too.
+            expect(await hashTree(folder)).toBe(before);
+        },
+        PACK_TIMEOUT_MS,
+    );
 
-    test('the extracted folder holds the same bytes as the snapshot', async () => {
-        const dir = await extractFresh('extract-bytes-');
-        const files = await listFiles(join(dir, folderName));
-        expect(files).toEqual([...manifest.entries.map((e) => e.path), 'manifest.json'].sort());
-        for (const entry of manifest.entries) {
-            expect(await sha256Of(join(dir, folderName, entry.path))).toBe(entry.sha256);
-        }
-    }, 30_000);
+    test(
+        'the extracted folder holds the same bytes as the snapshot',
+        async () => {
+            const dir = await extractFresh('extract-bytes-');
+            const files = await listFiles(join(dir, folderName));
+            expect(files).toEqual([...manifest.entries.map((e) => e.path), 'manifest.json'].sort());
+            for (const entry of manifest.entries) {
+                expect(await sha256Of(join(dir, folderName, entry.path))).toBe(entry.sha256);
+            }
+        },
+        PACK_TIMEOUT_MS,
+    );
 
-    test('a flipped byte in a database fails stage 1, naming the entry', async () => {
-        const dir = await extractFresh('extract-flip-');
-        const target = join(dir, folderName, sheetDataDb);
-        const bytes = readFileSync(target);
-        const offset = Math.floor(bytes.length / 2);
-        bytes[offset] = bytes[offset] ^ 0xff;
-        writeFileSync(target, bytes);
+    test(
+        'a flipped byte in a database fails stage 1, naming the entry',
+        async () => {
+            const dir = await extractFresh('extract-flip-');
+            const target = join(dir, folderName, sheetDataDb);
+            const bytes = readFileSync(target);
+            const offset = Math.floor(bytes.length / 2);
+            bytes[offset] = bytes[offset] ^ 0xff;
+            writeFileSync(target, bytes);
 
-        const record = await verifyFolder(join(dir, folderName));
-        expect(record.status).toBe('failed');
-        expect(record.failures.some((f) => f.includes(sheetDataDb) && f.includes('sha256'))).toBe(true);
-    }, 30_000);
+            const record = await verifyFolder(join(dir, folderName));
+            expect(record.status).toBe('failed');
+            expect(record.failures.some((f) => f.includes(sheetDataDb) && f.includes('sha256'))).toBe(true);
+        },
+        PACK_TIMEOUT_MS,
+    );
 
-    test('a file the manifest does not list fails stage 1', async () => {
-        const dir = await extractFresh('extract-extra-');
-        const folder = join(dir, folderName);
-        writeFileSync(join(folder, 'home/stowaway.txt'), 'not in the manifest');
+    test(
+        'a file the manifest does not list fails stage 1',
+        async () => {
+            const dir = await extractFresh('extract-extra-');
+            const folder = join(dir, folderName);
+            writeFileSync(join(folder, 'home/stowaway.txt'), 'not in the manifest');
 
-        const record = await verifyFolder(folder);
-        expect(record.status).toBe('failed');
-        expect(record.failures).toContain('home/stowaway.txt: not in the manifest');
-    }, 30_000);
-
-    test('a structurally broken database fails stage 2', async () => {
-        const dir = await extractFresh('extract-corrupt-');
-        const folder = join(dir, folderName);
-        const relPath = `home/mounts/${mountId}/metadata.db`;
-        const target = join(folder, relPath);
-        // Wreck the pages after the header, then re-state the manifest entry so stage 1 is happy and
-        // only SQLite's own verdict is left to fail.
-        const bytes = readFileSync(target);
-        bytes.fill(0xff, 4096, Math.min(bytes.length, 12288));
-        writeFileSync(target, bytes);
-        await restateManifestEntry(folder, relPath);
-
-        const record = await verifyFolder(folder);
-        expect(record.status).toBe('failed');
-        expect(record.failures.some((f) => f.startsWith(`${relPath}: quick_check`))).toBe(true);
-    }, 30_000);
-
-    test('a manifest entry pointing outside the folder fails stage 1 and is never read', async () => {
-        const dir = await extractFresh('extract-escape-');
-        const folder = join(dir, folderName);
-        const outside = join(dir, 'outside.txt');
-        writeFileSync(outside, 'must not be read');
-
-        const manifestPath = join(folder, 'manifest.json');
-        const patched: BackupManifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-        patched.entries.push({ path: '../outside.txt', bytes: 16, sha256: 'x'.repeat(64) });
-        patched.entries.push({ path: '/etc/hosts', bytes: 1, sha256: 'y'.repeat(64) });
-        writeFileSync(manifestPath, JSON.stringify(patched, null, 2));
-
-        const record = await verifyFolder(folder);
-        expect(record.status).toBe('failed');
-        expect(record.failures).toContain('../outside.txt: leaves the backup folder');
-        expect(record.failures).toContain('/etc/hosts: leaves the backup folder');
-        expect(record.failures.some((f) => f.includes('sha256'))).toBe(false);
-    }, 30_000);
-
-    test('a symlink in the folder fails stage 1 and its target is never read', async () => {
-        const dir = await extractFresh('extract-symlink-');
-        const folder = join(dir, folderName);
-        // What a hostile archive would carry: a link out of the folder, and a manifest entry that
-        // reads through it. packFolder never writes one.
-        symlinkSync('/etc', join(folder, 'home/escape'));
-
-        const manifestPath = join(folder, 'manifest.json');
-        const patched: BackupManifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-        patched.entries.push({ path: 'home/escape/hosts', bytes: 1, sha256: 'z'.repeat(64) });
-        writeFileSync(manifestPath, JSON.stringify(patched, null, 2));
-
-        const record = await verifyFolder(folder);
-        expect(record.status).toBe('failed');
-        expect(record.failures).toContain('home/escape: is a symbolic link');
-        expect(record.failures).toContain('home/escape/hosts: leaves the backup folder');
-        expect(record.failures.some((f) => f.includes('sha256'))).toBe(false);
-    }, 30_000);
-
-    test('a manifest that is not a version 1 manifest fails the whole verify', async () => {
-        const dir = await extractFresh('extract-badmanifest-');
-        const folder = join(dir, folderName);
-        const manifestPath = join(folder, 'manifest.json');
-        const valid: BackupManifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-
-        for (const broken of [
-            'not json at all',
-            JSON.stringify({ ...valid, entries: undefined }),
-            JSON.stringify({ ...valid, formatVersion: 2 }),
-        ]) {
-            writeFileSync(manifestPath, broken);
             const record = await verifyFolder(folder);
             expect(record.status).toBe('failed');
-            expect(record.failures).toEqual(['manifest.json is not a version 1 backup manifest']);
-        }
-    }, 30_000);
+            expect(record.failures).toContain('home/stowaway.txt: not in the manifest');
+        },
+        PACK_TIMEOUT_MS,
+    );
 
-    test('a valid but empty data.db fails stage 3', async () => {
-        const dir = await extractFresh('extract-empty-');
-        const folder = join(dir, folderName);
-        const target = join(folder, docDataDb);
-        const empty = new Database(target, { create: true, readwrite: true });
-        empty.run('PRAGMA journal_mode = DELETE');
-        empty.run('DROP TABLE IF EXISTS doc_updates');
-        empty.run('DROP TABLE IF EXISTS doc_snapshots');
-        padPastEveryDataDb(empty, manifest);
-        empty.run('VACUUM');
-        empty.close();
+    test(
+        'a structurally broken database fails stage 2',
+        async () => {
+            const dir = await extractFresh('extract-corrupt-');
+            const folder = join(dir, folderName);
+            const relPath = `home/mounts/${mountId}/metadata.db`;
+            const target = join(folder, relPath);
+            // Wreck the pages after the header, then re-state the manifest entry so stage 1 is happy and
+            // only SQLite's own verdict is left to fail.
+            const bytes = readFileSync(target);
+            bytes.fill(0xff, 4096, Math.min(bytes.length, 12288));
+            writeFileSync(target, bytes);
+            await restateManifestEntry(folder, relPath);
 
-        // Stage 1 must pass, so the manifest entry is re-stated for the replacement bytes.
-        await restateManifestEntry(folder, docDataDb);
+            const record = await verifyFolder(folder);
+            expect(record.status).toBe('failed');
+            expect(record.failures.some((f) => f.startsWith(`${relPath}: quick_check`))).toBe(true);
+        },
+        PACK_TIMEOUT_MS,
+    );
 
-        const record = await verifyFolder(folder);
-        expect(record.status).toBe('failed');
-        expect(record.failures).toContain(`${docDataDb}: the Yjs state could not be read (no such table: doc_updates)`);
-        expect(record.failures.some((f) => f.includes('sha256') || f.includes('missing'))).toBe(false);
-    }, 30_000);
+    test(
+        'a manifest entry pointing outside the folder fails stage 1 and is never read',
+        async () => {
+            const dir = await extractFresh('extract-escape-');
+            const folder = join(dir, folderName);
+            const outside = join(dir, 'outside.txt');
+            writeFileSync(outside, 'must not be read');
 
-    test('blobs that decode to a document with no content fail stage 3', async () => {
-        const dir = await extractFresh('extract-hollow-');
-        const folder = join(dir, folderName);
-        const target = join(folder, sheetDataDb);
-        // One update row holding the encoding of an empty Y.Doc: the blobs decode fine, and there is
-        // nothing in the document they describe.
-        const hollow = new Database(target, { readwrite: true });
-        hollow.run('DELETE FROM doc_updates');
-        hollow.run('DELETE FROM doc_snapshots');
-        hollow.query('INSERT INTO doc_updates (updateData) VALUES (?)').run(Y.encodeStateAsUpdate(new Y.Doc()));
-        padPastEveryDataDb(hollow, manifest);
-        hollow.close();
-        await restateManifestEntry(folder, sheetDataDb);
+            const manifestPath = join(folder, 'manifest.json');
+            const patched: BackupManifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+            patched.entries.push({ path: '../outside.txt', bytes: 16, sha256: 'x'.repeat(64) });
+            patched.entries.push({ path: '/etc/hosts', bytes: 1, sha256: 'y'.repeat(64) });
+            writeFileSync(manifestPath, JSON.stringify(patched, null, 2));
 
-        const record = await verifyFolder(folder);
-        expect(record.status).toBe('failed');
-        expect(record.failures).toContain(`${sheetDataDb}: its Yjs blobs decode to an empty document`);
-    }, 30_000);
+            const record = await verifyFolder(folder);
+            expect(record.status).toBe('failed');
+            expect(record.failures).toContain('../outside.txt: leaves the backup folder');
+            expect(record.failures).toContain('/etc/hosts: leaves the backup folder');
+            expect(record.failures.some((f) => f.includes('sha256'))).toBe(false);
+        },
+        PACK_TIMEOUT_MS,
+    );
 
-    test('a non-ASCII file name survives pack and extract', async () => {
-        const dir = await extractFresh('utf8-');
-        const files = await listFiles(join(dir, folderName));
-        expect(files.some((f) => f.endsWith('café ünïcode.png'))).toBe(true);
-    }, 30_000);
+    test(
+        'a symlink in the folder fails stage 1 and its target is never read',
+        async () => {
+            const dir = await extractFresh('extract-symlink-');
+            const folder = join(dir, folderName);
+            // What a hostile archive would carry: a link out of the folder, and a manifest entry that
+            // reads through it. packFolder never writes one.
+            symlinkSync('/etc', join(folder, 'home/escape'));
 
-    test('readArtifactManifest reads the manifest without a full extract', async () => {
-        const read = await readArtifactManifest(artifact);
-        expect(read).toEqual(JSON.parse(JSON.stringify(manifest)));
-    }, 30_000);
+            const manifestPath = join(folder, 'manifest.json');
+            const patched: BackupManifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+            patched.entries.push({ path: 'home/escape/hosts', bytes: 1, sha256: 'z'.repeat(64) });
+            writeFileSync(manifestPath, JSON.stringify(patched, null, 2));
+
+            const record = await verifyFolder(folder);
+            expect(record.status).toBe('failed');
+            expect(record.failures).toContain('home/escape: is a symbolic link');
+            expect(record.failures).toContain('home/escape/hosts: leaves the backup folder');
+            expect(record.failures.some((f) => f.includes('sha256'))).toBe(false);
+        },
+        PACK_TIMEOUT_MS,
+    );
+
+    test(
+        'a manifest that is not a version 1 manifest fails the whole verify',
+        async () => {
+            const dir = await extractFresh('extract-badmanifest-');
+            const folder = join(dir, folderName);
+            const manifestPath = join(folder, 'manifest.json');
+            const valid: BackupManifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+
+            for (const broken of [
+                'not json at all',
+                JSON.stringify({ ...valid, entries: undefined }),
+                JSON.stringify({ ...valid, formatVersion: 2 }),
+            ]) {
+                writeFileSync(manifestPath, broken);
+                const record = await verifyFolder(folder);
+                expect(record.status).toBe('failed');
+                expect(record.failures).toEqual(['manifest.json is not a version 1 backup manifest']);
+            }
+        },
+        PACK_TIMEOUT_MS,
+    );
+
+    test(
+        'a valid but empty data.db fails stage 3',
+        async () => {
+            const dir = await extractFresh('extract-empty-');
+            const folder = join(dir, folderName);
+            const target = join(folder, docDataDb);
+            const empty = new Database(target, { create: true, readwrite: true });
+            empty.run('PRAGMA journal_mode = DELETE');
+            empty.run('DROP TABLE IF EXISTS doc_updates');
+            empty.run('DROP TABLE IF EXISTS doc_snapshots');
+            padPastEveryDataDb(empty, manifest);
+            empty.run('VACUUM');
+            empty.close();
+
+            // Stage 1 must pass, so the manifest entry is re-stated for the replacement bytes.
+            await restateManifestEntry(folder, docDataDb);
+
+            const record = await verifyFolder(folder);
+            expect(record.status).toBe('failed');
+            expect(record.failures).toContain(
+                `${docDataDb}: the Yjs state could not be read (no such table: doc_updates)`,
+            );
+            expect(record.failures.some((f) => f.includes('sha256') || f.includes('missing'))).toBe(false);
+        },
+        PACK_TIMEOUT_MS,
+    );
+
+    test(
+        'blobs that decode to a document with no content fail stage 3',
+        async () => {
+            const dir = await extractFresh('extract-hollow-');
+            const folder = join(dir, folderName);
+            const target = join(folder, sheetDataDb);
+            // One update row holding the encoding of an empty Y.Doc: the blobs decode fine, and there is
+            // nothing in the document they describe.
+            const hollow = new Database(target, { readwrite: true });
+            hollow.run('DELETE FROM doc_updates');
+            hollow.run('DELETE FROM doc_snapshots');
+            hollow.query('INSERT INTO doc_updates (updateData) VALUES (?)').run(Y.encodeStateAsUpdate(new Y.Doc()));
+            padPastEveryDataDb(hollow, manifest);
+            hollow.close();
+            await restateManifestEntry(folder, sheetDataDb);
+
+            const record = await verifyFolder(folder);
+            expect(record.status).toBe('failed');
+            expect(record.failures).toContain(`${sheetDataDb}: its Yjs blobs decode to an empty document`);
+        },
+        PACK_TIMEOUT_MS,
+    );
+
+    test(
+        'a non-ASCII file name survives pack and extract',
+        async () => {
+            const dir = await extractFresh('utf8-');
+            const files = await listFiles(join(dir, folderName));
+            expect(files.some((f) => f.endsWith('café ünïcode.png'))).toBe(true);
+        },
+        PACK_TIMEOUT_MS,
+    );
+
+    test(
+        'readArtifactManifest reads the manifest without a full extract',
+        async () => {
+            const read = await readArtifactManifest(artifact);
+            expect(read).toEqual(JSON.parse(JSON.stringify(manifest)));
+        },
+        PACK_TIMEOUT_MS,
+    );
 
     test('the sidecar round-trips and is null when missing', async () => {
         expect(await readSidecar(artifact)).toBeNull();
@@ -391,19 +451,23 @@ describe('Backup pack and verify', () => {
         expect(read?.manifest).toEqual(JSON.parse(JSON.stringify(manifest)));
     });
 
-    test('a sidecar that is not one is an error, an artifact that is not one too', async () => {
-        const dir = mkdtempSync(join(TEST_DATA_DIR, 'bad-sidecar-'));
-        const fake = join(dir, buildArtifactName(ownerId, new Date()));
-        writeFileSync(`${fake}.manifest.json`, '{"manifest": {"formatVersion": 2}, "verify": {}}');
-        await expect(readSidecar(fake)).rejects.toThrow('is not a backup manifest sidecar');
+    test(
+        'a sidecar that is not one is an error, an artifact that is not one too',
+        async () => {
+            const dir = mkdtempSync(join(TEST_DATA_DIR, 'bad-sidecar-'));
+            const fake = join(dir, buildArtifactName(ownerId, new Date()));
+            writeFileSync(`${fake}.manifest.json`, '{"manifest": {"formatVersion": 2}, "verify": {}}');
+            await expect(readSidecar(fake)).rejects.toThrow('is not a backup manifest sidecar');
 
-        const folder = join(dir, buildHomeFolderName('bogus'));
-        mkdirSync(folder, { recursive: true });
-        writeFileSync(join(folder, 'manifest.json'), 'not json at all');
-        const bogus = join(dir, buildArtifactName('bogus', new Date()));
-        await packFolder(folder, bogus);
-        await expect(readArtifactManifest(bogus)).rejects.toThrow('is not an Eigen backup archive');
-    }, 30_000);
+            const folder = join(dir, buildHomeFolderName('bogus'));
+            mkdirSync(folder, { recursive: true });
+            writeFileSync(join(folder, 'manifest.json'), 'not json at all');
+            const bogus = join(dir, buildArtifactName('bogus', new Date()));
+            await packFolder(folder, bogus);
+            await expect(readArtifactManifest(bogus)).rejects.toThrow('is not an Eigen backup archive');
+        },
+        PACK_TIMEOUT_MS,
+    );
 
     test.skipIf(!HAS_ZSTD)('the artifact is a standard zstd frame', () => {
         // `zstd -t` decodes the whole frame and checks its checksums. Spawned straight, rather than
@@ -428,12 +492,16 @@ describe('Backup pack and verify', () => {
         expect(paths.every((p) => p.startsWith(`${folderName}/`))).toBe(true);
     });
 
-    test('extractArtifact with a glob extracts only the matching subtree', async () => {
-        const dir = await extractFresh('extract-glob-', `${folderName}/home/mounts/${mountId}/**`);
-        const files = await listFiles(dir);
-        expect(files.length).toBeGreaterThan(0);
-        expect(files.every((f) => f.startsWith(`${folderName}/home/mounts/${mountId}/`))).toBe(true);
-    }, 30_000);
+    test(
+        'extractArtifact with a glob extracts only the matching subtree',
+        async () => {
+            const dir = await extractFresh('extract-glob-', `${folderName}/home/mounts/${mountId}/**`);
+            const files = await listFiles(dir);
+            expect(files.length).toBeGreaterThan(0);
+            expect(files.every((f) => f.startsWith(`${folderName}/home/mounts/${mountId}/`))).toBe(true);
+        },
+        PACK_TIMEOUT_MS,
+    );
 });
 
 describe('Backup verify stage 3 samples deterministically', () => {
@@ -479,17 +547,21 @@ describe('Backup verify stage 3 samples deterministically', () => {
             }
             await restateManifestEntry(folder, rel);
         }
-    });
+    }, PACK_TIMEOUT_MS);
 
-    test('two verifies of one folder judge the same documents', async () => {
-        const first = await verifyFolder(folder);
-        const second = await verifyFolder(folder);
+    test(
+        'two verifies of one folder judge the same documents',
+        async () => {
+            const first = await verifyFolder(folder);
+            const second = await verifyFolder(folder);
 
-        expect(first.status).toBe('failed');
-        const decodeFailures = (record: typeof first) =>
-            record.failures.filter((failure) => failure.includes('Yjs state could not be read')).sort();
-        // A sample, not the whole set: fewer failures than documents, and the same ones twice.
-        expect(decodeFailures(first).length).toBe(SAMPLED);
-        expect(decodeFailures(second)).toEqual(decodeFailures(first));
-    }, 30_000);
+            expect(first.status).toBe('failed');
+            const decodeFailures = (record: typeof first) =>
+                record.failures.filter((failure) => failure.includes('Yjs state could not be read')).sort();
+            // A sample, not the whole set: fewer failures than documents, and the same ones twice.
+            expect(decodeFailures(first).length).toBe(SAMPLED);
+            expect(decodeFailures(second)).toEqual(decodeFailures(first));
+        },
+        PACK_TIMEOUT_MS,
+    );
 });
