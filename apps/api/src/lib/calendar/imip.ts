@@ -76,37 +76,15 @@ export function composeInviteEmail(
     attendees: Attendee[],
     series?: CalendarEvent,
     exceptions: CalendarEvent[] = [],
+    updated = false,
 ): OutboundMail {
     const footer = `Invitation from ${organizer.name || organizer.email}`;
     return {
         from: { name: organizer.name ?? '', address: organizer.email },
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
-        subject: `Invitation: ${event.title}`,
+        subject: `${updated ? 'Updated invitation' : 'Invitation'}: ${event.title}`,
         text: buildEventSummary(event),
-        html: buildEventHtml(event, footer),
-        icalEvent: icalEvent(
-            withOrganizer(event, organizer),
-            'REQUEST',
-            series,
-            exceptions.map((e) => withOrganizer(e, organizer)),
-        ),
-    };
-}
-
-export function composeUpdateEmail(
-    event: CalendarEvent,
-    organizer: Organizer,
-    attendees: Attendee[],
-    series?: CalendarEvent,
-    exceptions: CalendarEvent[] = [],
-): OutboundMail {
-    const footer = `Invitation from ${organizer.name || organizer.email}`;
-    return {
-        from: { name: organizer.name ?? '', address: organizer.email },
-        to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
-        subject: `Updated invitation: ${event.title}`,
-        text: buildEventSummary(event),
-        html: buildEventHtml(event, footer, 'This event has been updated'),
+        html: buildEventHtml(event, footer, updated ? 'This event has been updated' : undefined),
         icalEvent: icalEvent(
             withOrganizer(event, organizer),
             'REQUEST',

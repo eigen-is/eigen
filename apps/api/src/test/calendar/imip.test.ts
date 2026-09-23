@@ -1,13 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, ImipMethod } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment } from '@workspace/lib/types/mail';
-import {
-    composeCancelEmail,
-    composeInviteEmail,
-    composeRsvpReply,
-    composeUpdateEmail,
-    processInboundImip,
-} from '../../lib/calendar/imip';
+import { composeCancelEmail, composeInviteEmail, composeRsvpReply, processInboundImip } from '../../lib/calendar/imip';
 import { getMailDomain } from '../../lib/config/server-config';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
@@ -215,6 +209,7 @@ describe('iMIP Outbound Email Composition', () => {
         expect(mail.from?.name).toBe('Alice');
         expect(mail.to[0].address).toBe('bob@external.com');
         expect(mail.subject).toBe('Invitation: Team Standup');
+        expect(mail.html).not.toContain('This event has been updated');
         expect(mail.text).toContain('Team Standup');
         expect(mail.text).toContain('Room 42');
         expect(mail.icalEvent?.method).toBe('REQUEST');
@@ -234,10 +229,11 @@ describe('iMIP Outbound Email Composition', () => {
         expect(mail.text).not.toContain('(UTC)');
     });
 
-    test('composeUpdateEmail uses correct subject and method', () => {
+    test('an updated invitation uses the updated subject and method', () => {
         const updatedEvent = { ...MOCK_EVENT, sequence: 1 };
-        const mail = composeUpdateEmail(updatedEvent, organizer, [attendee]);
+        const mail = composeInviteEmail(updatedEvent, organizer, [attendee], undefined, [], true);
         expect(mail.subject).toBe('Updated invitation: Team Standup');
+        expect(mail.html).toContain('This event has been updated');
         expect(mail.icalEvent?.method).toBe('REQUEST');
         expect(mail.icalEvent?.content).toContain('SEQUENCE:1');
     });
@@ -319,9 +315,9 @@ describe('iMIP Outbound Email Composition', () => {
     });
 
     test('an occurrence update and an occurrence cancel carry the same RECURRENCE-ID', () => {
-        expect(unfold(composeUpdateEmail(MOVED_OCCURRENCE, organizer, [attendee], RECURRING_EVENT))).toContain(
-            ORIGINAL_SLOT,
-        );
+        expect(
+            unfold(composeInviteEmail(MOVED_OCCURRENCE, organizer, [attendee], RECURRING_EVENT, [], true)),
+        ).toContain(ORIGINAL_SLOT);
         expect(unfold(composeCancelEmail(MOVED_OCCURRENCE, organizer, [attendee], RECURRING_EVENT))).toContain(
             ORIGINAL_SLOT,
         );

@@ -149,7 +149,7 @@ async function propagateWrite(
         await propagateCancellation(calendar.home, event, held, series);
         return;
     }
-    // A guest added to the series is new to its exceptions too; an occurrence write states them through the series it names.
+    // A series message restates its exceptions or a guest's copy shows a moved occurrence at its original slot; an occurrence write is one of them.
     const exceptions = series ? [] : exceptionsOf(calendar, event.id);
     await propagateInvitation(calendar.home, event, user, held, attendees, series ?? undefined, exceptions);
 }
