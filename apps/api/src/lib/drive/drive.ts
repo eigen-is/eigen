@@ -1104,14 +1104,16 @@ export default class Drive {
     }
 
     async getWatches(user: User): Promise<DrivePath[]> {
-        const paths: DrivePath[] = [];
+        return (await this.getWatchedBreadcrumbs(user)).flatMap((crumbs) => crumbs.slice(-1));
+    }
+
+    // The breadcrumb of every watched path (the path itself last, [] for a vanished row), one query per mount.
+    async getWatchedBreadcrumbs(user: User): Promise<DrivePath[][]> {
+        const crumbs: DrivePath[][] = [];
         for (const mount of this.mounts.values()) {
-            for (const pathId of mount.history.listWatchedPathIds(user.id)) {
-                const path = await mount.getPath(pathId);
-                if (path) paths.push(path);
-            }
+            crumbs.push(...(await mount.getBreadcrumbs(mount.history.listWatchedPathIds(user.id))));
         }
-        return paths;
+        return crumbs;
     }
 
     async openDatabase<S extends SchemaType>(
