@@ -362,8 +362,7 @@ export class Mount {
     // vs ASCII k.txt) still clobbers; pairs JS can't fold either way (ſ/s) likewise. Both are
     // single-codepoint oddities far rarer than the é/É class this closes.
     private async findCaseFoldedChild(parentId: string, name: string): Promise<{ id: string } | null> {
-        // biome-ignore lint/suspicious/noControlCharactersInRegex: \x00-\x7F is the ASCII range, not a control-char match
-        if (!this.isPathBased || !/[^\x00-\x7F]/.test(name)) return null;
+        if (!this.isPathBased || !/\P{ASCII}/u.test(name)) return null;
         const folded = name.toLowerCase();
         const siblings = await this.db
             .select({ id: paths.id, name: paths.name })
