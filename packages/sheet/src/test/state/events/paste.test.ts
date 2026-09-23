@@ -498,6 +498,31 @@ describe('pasted formulas and the dependency map', () => {
         expect(ctx.sheets[0].data![0][1]).toBeNull();
     });
 
+    it('a formula cut to another sheet evaluates against its new sheet at once', () => {
+        const ctx = cutAcrossSheets();
+
+        expect(ctx.sheets[1].data![0][3]?.v).toBe(200);
+        expect(ctx.sheets[1].data![0][3]?.m).toBe('200');
+    });
+
+    it('a same-sheet cut keeps the formula value and recalcs the vacated cell dependents', () => {
+        const base = makeCtx(6, 6, (d) => {
+            d[0][0] = { v: 5, m: '5' };
+            d[0][1] = { f: '=A1*2', v: 10, m: '10' };
+            d[0][2] = { f: '=B1+1', v: 11, m: '11' };
+        });
+        base.sheets[0].calcChain = [
+            { r: 0, c: 1, id: 'id_1' },
+            { r: 0, c: 2, id: 'id_1' },
+        ];
+        warmFormulaCellInfoMap(base);
+        const [ctx] = edit(base, (d) => copyThenPaste(d, single(0, 1), single(3, 3), { cut: true }));
+
+        const data = ctx.sheets[0].data!;
+        expect(data[3][3]?.v).toBe(10);
+        expect(data[0][2]?.v).toBe(1);
+    });
+
     it('a formula cut to another sheet recalcs there', () => {
         let ctx = cutAcrossSheets();
         expect(ctx.sheets[1].data![0][3]?.f).toBe('=A1*2');
