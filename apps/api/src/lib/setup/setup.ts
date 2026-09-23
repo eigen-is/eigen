@@ -1,5 +1,4 @@
 import { Database } from 'bun:sqlite';
-import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { auth } from '../auth/auth';
@@ -8,8 +7,7 @@ import {
     isSetupRequired as checkSetupRequired,
     getMailDomain,
     getServerConfig,
-    type ServerConfig,
-    saveServerConfig,
+    updateServerConfig,
 } from '../config/server-config';
 import { updateServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
@@ -355,15 +353,13 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
         // setupCompleted flips here — written last so a failure in any step above leaves
         // setup re-runnable: isSetupRequired() stays true and resetAuthDatabase() clears
         // the partial state on the next attempt.
-        const serverConfig: ServerConfig = {
+        await updateServerConfig({
             domain: input.domain,
             orgName: input.orgName,
             orgId: org.id,
-            secret: randomBytes(32).toString('base64'),
             setupCompleted: true,
             setupCompletedAt: new Date().toISOString(),
-        };
-        await saveServerConfig(serverConfig);
+        });
         clearSetupToken();
 
         return { user: { id: user.user.id, email: user.user.email, name: user.user.name } };

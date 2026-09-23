@@ -21,7 +21,7 @@ import {
 } from '../../../auth-schema';
 import { isTest } from '../config/env';
 import { getServerDataPath } from '../config/paths';
-import { getDomain, getOrgName, getServerConfig, isRoleAddress } from '../config/server-config';
+import { getAuthSecret, getDomain, getOrgName, getServerConfig, isRoleAddress } from '../config/server-config';
 import { ApiError } from '../core';
 import { composeOtpEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
@@ -260,9 +260,7 @@ export const auth = betterAuth({
     baseURL: process.env['API_URL'],
     basePath: '/auth',
     logger: { disabled: isTest() },
-    // Falls back to random UUID before setup is completed — intentional since sessions don't
-    // need to persist across restarts during the pre-setup phase.
-    secret: getServerConfig()?.secret || crypto.randomUUID(),
+    secret: getAuthSecret(),
 });
 
 // Joins the default org (config.orgId, pinned at setup — not "the first org row", whose order is

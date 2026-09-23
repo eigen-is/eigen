@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { ROLE_MAILBOX_LOCAL_PARTS } from '@workspace/lib/validation';
 import pkg from '../../../../../package.json' with { type: 'json' };
@@ -9,8 +10,8 @@ const VERSION: string = pkg.version;
 const COMMIT: string | undefined = process.env['EIGEN_COMMIT'] || undefined;
 const BUILT_AT: Date | undefined = process.env['EIGEN_BUILT_AT'] ? new Date(process.env['EIGEN_BUILT_AT']) : undefined;
 
-// Identity + secrets for the deployment. Set once during setup and never via API
-// thereafter. Runtime-tunable defaults — including the storage backend — live in
+// Identity + secrets for the deployment. The secret is made at first boot, the rest set once during
+// setup; never changed via API thereafter. Runtime-tunable defaults — including the storage backend — live in
 // ServerSettings (settings.json), not here.
 export type ServerConfig = {
     domain: string;
@@ -35,6 +36,8 @@ let loaded = false;
 async function ensureLoaded() {
     if (!loaded) {
         await store.load();
+        // Made at first boot and never changed, so a session signed in right after setup outlives the next restart.
+        if (!store.get().secret) await store.set({ secret: randomBytes(32).toString('base64') });
         loaded = true;
     }
 }
@@ -45,12 +48,12 @@ export function getServerConfig(): ServerConfig | null {
     return data;
 }
 
-export async function saveServerConfig(config: ServerConfig): Promise<void> {
-    await store.set(config);
-}
-
 export async function updateServerConfig(update: DeepPartial<ServerConfig>): Promise<void> {
     await store.set(update);
+}
+
+export function getAuthSecret(): string {
+    return store.get().secret;
 }
 
 export function isSetupCompleted(): boolean {

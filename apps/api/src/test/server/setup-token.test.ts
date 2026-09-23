@@ -151,6 +151,9 @@ describe('the /setup routes before setup', () => {
         throw new Error(`the API did not listen:\n${readFileSync(logPath, 'utf8')}`);
     }
 
+    let secretBeforeSetup = '';
+    const storedSecret = (): string => JSON.parse(readFileSync(join(dataRoot, 'server/config.json'), 'utf8')).secret;
+
     beforeAll(async () => {
         mkdirSync(join(dataRoot, 'server'), { recursive: true });
         mkdirSync(join(dataRoot, 'home'), { recursive: true });
@@ -222,6 +225,7 @@ describe('the /setup routes before setup', () => {
     });
 
     test('a newer link replaces the older one, survives a failed attempt, and works once', async () => {
+        secretBeforeSetup = storedSecret();
         const older = await freshToken();
         const newer = await freshToken();
         expect((await post('complete', { ...admin, setupToken: older })).status).toBe(403);
@@ -252,4 +256,28 @@ describe('the /setup routes before setup', () => {
         expect(stdout).toContain(`https://${DOMAIN}/admin`);
         expect(stdout).not.toContain('setup=');
     });
+
+    test(
+        'a session from right after setup outlives a restart',
+        async () => {
+            const signIn = await fetch(`${base}/auth/sign-in/email`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: admin.adminEmail, password: admin.adminPassword }),
+            });
+            expect(signIn.status).toBe(200);
+            const cookie = (signIn.headers.get('set-cookie') ?? '').split(';')[0];
+            expect(secretBeforeSetup).toMatch(/^[\w+/=]{44}$/);
+            expect(storedSecret()).toBe(secretBeforeSetup);
+
+            proc.kill('SIGTERM');
+            await proc.exited;
+            await startApi();
+
+            const session = await fetch(`${base}/auth/get-session`, { headers: { cookie } });
+            expect((await session.json())?.user?.email).toBe(admin.adminEmail);
+            expect(storedSecret()).toBe(secretBeforeSetup);
+        },
+        LISTEN_TIMEOUT_MS + 5_000,
+    );
 });
