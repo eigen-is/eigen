@@ -20,6 +20,7 @@ import { gzipSync } from 'node:zlib';
 import { parseBackupStamp } from '@workspace/lib/validation';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { SNAPSHOT_NAME } from '../../cli/snapshot';
+import { COLLAB_EPOCH_FILE } from '../../lib/collab/epoch';
 
 const CLI = join(import.meta.dir, '../../cli/index.ts');
 const { version } = pkg;
@@ -286,6 +287,17 @@ describe('restore', () => {
         expect(readFileSync(join(dir, envAside), 'utf8')).toBe('DOMAIN=changed.example.org\n');
         expect(result.stdout).toContain(dataAside);
         expect(result.stdout).toContain(envAside);
+    });
+
+    test('leaves out the collab epoch of the snapshot, so a tab that loaded a document before reloads', async () => {
+        const dir = install();
+        mkdirSync(join(dir, 'data/server'));
+        writeFileSync(join(dir, 'data/server', COLLAB_EPOCH_FILE), 'before');
+        const name = await snapshot(dir);
+        const result = await eigen(dir, 'restore', name, '--yes');
+        expect(result.code).toBe(0);
+        expect(existsSync(join(dir, 'data/server', COLLAB_EPOCH_FILE))).toBe(false);
+        expect(existsSync(join(dir, 'data/home/alice/notes.txt'))).toBe(true);
     });
 
     test('takes a bare name too, and gives the env file the install folder owner when there was none', async () => {

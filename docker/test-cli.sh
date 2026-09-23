@@ -70,6 +70,68 @@ craft() {
         tar -czf "$1" eigen-snapshot.json .env.production data' sh "$INSTALL/snapshots/$1" "$2" "$3"
 }
 
+# collab_tab <kept> <edit>: a browser tab on $COLLAB_DOC over its collab WebSocket through Caddy, from Bun in the API
+# image. <kept> is what an open tab holds, its epoch:Y.Doc, or empty for a fresh tab; <edit> is typed before it
+# connects, as while offline. Prints "synced <kept> <text>" once the server has its state, or "closed <code> <reason>".
+collab_tab() {
+    local cookie
+    cookie=$(awk -F'\t' 'NF >= 7 && ($1 !~ /^#/ || $1 ~ /^#HttpOnly_/) { printf "%s=%s; ", $6, $7 }' "$JAR")
+    docker run --rm --network "container:$(dc ps -q caddy)" --entrypoint bun -e COOKIE="$cookie" -e KEPT="$1" \
+        -e EDIT="$2" -e URL="wss://localhost/eigen/ws/collab/$admin_id/default/$COLLAB_DOC" "$EIGEN_API_IMAGE" -e '
+            const Y = require("yjs");
+            const encoding = require("lib0/encoding");
+            const decoding = require("lib0/decoding");
+            const sync = require("y-protocols/sync");
+            const doc = new Y.Doc();
+            const text = doc.getText("probe");
+            let epoch = "";
+            if (process.env.KEPT) {
+                const [kept, state] = process.env.KEPT.split(":");
+                epoch = kept;
+                Y.applyUpdate(doc, Buffer.from(state, "base64"));
+            }
+            if (process.env.EDIT) text.insert(text.length, process.env.EDIT);
+            const ws = new WebSocket(process.env.URL + (epoch ? `?epoch=${epoch}` : ""), {
+                headers: { Cookie: process.env.COOKIE, Origin: "https://localhost" },
+                tls: { rejectUnauthorized: false },
+            });
+            ws.binaryType = "arraybuffer";
+            const step1 = () => {
+                const encoder = encoding.createEncoder();
+                encoding.writeVarUint(encoder, 0);
+                sync.writeSyncStep1(encoder, doc);
+                ws.send(encoding.toUint8Array(encoder));
+            };
+            ws.onopen = step1;
+            let answers = 0;
+            ws.onmessage = ({ data }) => {
+                const decoder = decoding.createDecoder(new Uint8Array(data));
+                const type = decoding.readVarUint(decoder);
+                if (type === 100) epoch = decoding.readVarString(decoder);
+                if (type !== 0) return;
+                const encoder = encoding.createEncoder();
+                encoding.writeVarUint(encoder, 0);
+                // Answers sync step 1 of the server with what this tab has and the server lacks, as y-websocket does.
+                const kind = sync.readSyncMessage(decoder, encoder, doc, null);
+                if (encoding.length(encoder) > 1) ws.send(encoding.toUint8Array(encoder));
+                if (kind !== 1) return;
+                // The second answer comes after the server read the state this tab sent.
+                if (++answers === 1) return step1();
+                const state = Buffer.from(Y.encodeStateAsUpdate(doc)).toString("base64");
+                console.log(`synced ${epoch}:${state} ${text.toString()}`);
+                process.exit(0);
+            };
+            ws.onclose = ({ code, reason }) => {
+                console.log(`closed ${code} ${reason}`);
+                process.exit(0);
+            };
+            setTimeout(() => {
+                console.log("no sync in 15s");
+                process.exit(1);
+            }, 15000);
+        ' 2>&1 || true
+}
+
 SETUP_FLAGS=(--yes --domain localhost --mail --mail-domain eigen.test --contact-email admin@eigen.test --no-proxy
     --no-relay)
 
@@ -264,10 +326,14 @@ if [ "$code" = 200 ] && drive GET "/folder/$root_id" | grep -q '"Kept by the sna
 else
     fail "could not make a folder to back up (sign-in $code, admin '$admin_id', root '$root_id')"
 fi
-# Docker Desktop shows a file the operator's container wrote as theirs to one container and as root's to another
-# until it is chowned; on Linux this changes nothing.
-scratch_run chown "$OPERATOR" "$INSTALL/.env.production"
-ENV_OWNER=$(owner_mode "$INSTALL/.env.production")
+COLLAB_DOC=$(drive POST "/folder/$root_id/create/doc" '{"fileName":"Collab probe"}' | grep -o '"id":"[^"]*"' |
+    head -n 1 | cut -d'"' -f4 || true)
+read -r status TAB text <<<"$(collab_tab '' before)"
+if [ "$status" = synced ] && [ "$text" = before ]; then
+    ok "a tab typed 'before' into a document over its collab WebSocket"
+else
+    fail "the tab on the document (doc '$COLLAB_DOC'): $status $text"
+fi
 OWNERS=$(data_owners)
 
 started=$SECONDS
@@ -280,6 +346,15 @@ else
     fail "./eigen backup exited $CODE"
 fi
 if stack_up; then ok "the stack is back up after the backup"; else fail "the stack is not up after the backup"; fi
+# Typed while the backup had Eigen stopped: the restart keeps the epoch, so the tab's reconnect keeps the edit.
+read -r status kept text <<<"$(collab_tab "$TAB" ' after')"
+read -r _ fresh after <<<"$(collab_tab '' '')"
+if [ "$status" = synced ] && [ "$after" = 'before after' ] && [ "${fresh%%:*}" = "${TAB%%:*}" ]; then
+    ok "the tab's edit made while Eigen was stopped syncs when it reconnects"
+    TAB=$kept
+else
+    fail "the tab's reconnect after the backup: $status $text, the server has '$after'"
+fi
 got="$(owner_mode "$INSTALL/snapshots") / $(owner_mode "$INSTALL/snapshots/$SNAPSHOT")"
 if [ "$got" = "$OPERATOR 700 / $OPERATOR 600" ]; then
     ok "snapshots/ is the operator's, mode 700, and so is the snapshot, mode 600"
@@ -348,7 +423,22 @@ else
     fail "the drive after the restore: $listing"
 fi
 got=$(owner_mode "$INSTALL/.env.production")
-if [ "$got" = "$ENV_OWNER" ]; then ok ".env.production kept its owner and mode ($got)"; else fail ".env.production is '$got', was '$ENV_OWNER'"; fi
+if [ "$got" = "$OPERATOR 600" ]; then ok ".env.production is the operator's, mode 600"; else fail ".env.production is '$got', expected '$OPERATOR 600'"; fi
+eigen status
+if [ "$CODE" = 0 ]; then ok "the operator runs ./eigen on the restored .env.production"; else fail "status after the restore: exit $CODE"; show; fi
+# The tab still holds 'before after' from before the restore.
+read -r status code reason <<<"$(collab_tab "$TAB" '')"
+if [ "$status $code $reason" = 'closed 1012 home-replaced' ]; then
+    ok "the tab that loaded the document before the restore is closed 1012 when it reconnects, so it reloads"
+else
+    fail "the tab's reconnect after the restore: $status $code $reason"
+fi
+read -r status fresh text <<<"$(collab_tab '' '')"
+if [ "$status" = synced ] && [ "$text" = before ] && [ "${fresh%%:*}" != "${TAB%%:*}" ]; then
+    ok "the document is as it was at the snapshot, under a new epoch"
+else
+    fail "the document after the restore: $status '$text' (epoch ${fresh%%:*}, was ${TAB%%:*})"
+fi
 got=$(data_owners)
 if [ "$got" = "$OWNERS" ] && [ "$(printf '%s' "$OWNERS" | wc -w)" -gt 1 ]; then
     ok "data/ has the same mixed owners as before ($got)"

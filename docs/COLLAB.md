@@ -39,6 +39,8 @@ The walker handles every Y subtype an Eigen container uses — `Y.Map`, `Y.Array
 
 `closeCollabConnectionsForHome` (`apps/api/src/lib/collab/connections.ts`) closes every socket belonging to one home with `COLLAB_HOME_REPLACED_CLOSE` (`packages/lib/src/constants/collab.ts`) when a backup restore replaces that home's folder, so a tab reloads instead of syncing the document it still holds in memory back over the restored copy. See [BACKUP.md](BACKUP.md).
 
+`./eigen restore` and `./eigen rollback` replace every home while the API is stopped, so no socket is open to close, and a tab that was offline would not hear it anyway. The data epoch covers them: a random id in `data/server/collab-epoch` (`apps/api/src/lib/collab/epoch.ts`), drawn on first use. Every open sends it in a `COLLAB_EPOCH_MESSAGE` frame before the sync, `useCollabDoc` reconnects with `?epoch=`, and the route closes a reconnect that names another epoch with `COLLAB_HOME_REPLACED_CLOSE` before it syncs anything, so the tab reloads. The restore deletes the file from the data it puts back, so the next start draws a new epoch; a restart or an update keeps it, so an offline edit still syncs. The hook keeps BroadcastChannel off until the first epoch arrives and then joins a channel named after it: a reloaded tab never takes state from a sibling tab still holding the document from before the restore.
+
 ## See also
 
 - [CANVAS.md](CANVAS.md) — `useCollabDoc`, the `loaded` gate, offline/unsynced-edits surfaces, the typed Yjs root accessors, sealing discipline

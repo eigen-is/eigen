@@ -21,7 +21,8 @@ import { formatFileSize } from '@workspace/lib/format';
 import { BACKUP_STAMP_PATTERN, buildBackupStamp } from '@workspace/lib/validation';
 import type { Subprocess } from 'bun';
 import pkg from '../../../../package.json' with { type: 'json' };
-import { DECLINED, ENV_PATH, ownAs, VERSION_PATTERN } from './install';
+import { COLLAB_EPOCH_FILE } from '../lib/collab/epoch';
+import { DECLINED, ENV_PATH, installOwner, ownAs, VERSION_PATTERN } from './install';
 import { createUi, glyphLine } from './ui';
 
 // Both commands run as root in a container on the install folder (-w /install), so data/ keeps its mixed owners.
@@ -98,7 +99,7 @@ export async function snapshot(flags: { 'pre-update'?: boolean }): Promise<void>
             'Run ./eigen backup in the install folder.',
         );
     }
-    const owner = statSync('.');
+    const owner = installOwner();
     if (!existsSync(SNAPSHOTS)) mkdirSync(SNAPSHOTS, { mode: 0o700 });
     ownAs(SNAPSHOTS, owner);
 
@@ -284,8 +285,10 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
     }
 
     const staged = join(STAGING, ENV_PATH);
-    ownAs(staged, statSync(existsSync(ENV_PATH) ? ENV_PATH : '.'));
+    ownAs(staged, installOwner());
     chmodSync(staged, 0o600);
+    // Without it the next start draws a new collab epoch: a tab that loaded a document before reloads, not merges it back.
+    rmSync(join(STAGING, 'data/server', COLLAB_EPOCH_FILE), { force: true });
     const stamp = buildBackupStamp(new Date());
     const aside: string[] = [];
     for (const current of ['data', ENV_PATH]) {

@@ -1,4 +1,4 @@
-import { chownSync, type Stats } from 'node:fs';
+import { chownSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 // The repo root in a checkout, /app in the image.
@@ -9,7 +9,15 @@ export const DECLINED = 3;
 export const VERSION_PATTERN = String.raw`\d+\.\d+\.\d+(?:-[\w.-]+)?`;
 export const IMAGE_NAMES = ['api', 'frontend', 'postfix', 'dovecot'] as const;
 
+type Owner = { uid: number; gid: number };
+
 // Root in a container writes files the operator must own; a run as the operator already owns them.
-export function ownAs(path: string, owner: Stats): void {
+export function ownAs(path: string, owner: Owner): void {
     if (process.getuid?.() === 0) chownSync(path, owner.uid, owner.gid);
+}
+
+// The install folder's owner as the launcher sees it: through Docker Desktop's file share, root in a container sees root.
+export function installOwner(): Owner {
+    const passed = /^(\d+):(\d+)$/.exec(process.env['EIGEN_OWNER'] ?? '');
+    return passed ? { uid: Number(passed[1]), gid: Number(passed[2]) } : statSync('.');
 }

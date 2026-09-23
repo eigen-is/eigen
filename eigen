@@ -194,6 +194,10 @@ dc() {
     docker compose --env-file .env.production -f docker-compose.yml "$@"
 }
 
+# Whom a root run of the CLI gives what it writes: through Docker Desktop's file share, root in a container sees root.
+EIGEN_OWNER=$(ls -ldn . | awk '{ print $3 ":" $4 }')
+export EIGEN_OWNER
+
 # cli_as <uid:gid> <command…>: the CLI in the API image on this folder, with the variables CLI_ENV names.
 CLI_ENV=''
 cli_as() {
@@ -201,7 +205,7 @@ cli_as() {
     shift
     env=''
     for name in $CLI_ENV; do env="$env -e $name"; done
-    docker run --rm --init -i $RUN_TTY -e TERM -e NO_COLOR $env --user "$user" -e HOME=/tmp \
+    docker run --rm --init -i $RUN_TTY -e TERM -e NO_COLOR -e EIGEN_OWNER $env --user "$user" -e HOME=/tmp \
         -v "$PWD:/install" -w /install "$API_IMAGE" "$@"
 }
 

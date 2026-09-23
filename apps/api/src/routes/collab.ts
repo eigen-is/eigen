@@ -12,6 +12,7 @@ import { getCommentIndex } from '../lib/chat/comment-index';
 import { broadcastCommentIndexUpdated } from '../lib/chat/sse-events';
 import type CollabDocument from '../lib/collab/collabDocument';
 import { registerCollabConnection, unregisterCollabConnection } from '../lib/collab/connections';
+import { collabEpochMessage, getCollabEpoch } from '../lib/collab/epoch';
 import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
@@ -184,6 +185,7 @@ export const collabRouter = new Elysia({
             mountId: t.String(),
             pathId: t.String(),
         }),
+        query: t.Object({ epoch: t.Optional(t.String()) }),
 
         async open(ws) {
             const { promise, resolve } = Promise.withResolvers<void>();
@@ -204,6 +206,13 @@ export const collabRouter = new Elysia({
                 const loadStart = performance.now();
 
                 const { ownerId, mountId, pathId } = ws.data.params;
+                // The tab loaded its document before ./eigen restore put other data back: its sync would merge
+                // what the restore undid.
+                const { epoch } = ws.data.query;
+                if (epoch !== undefined && epoch !== getCollabEpoch()) {
+                    ws.close(COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON);
+                    return;
+                }
                 // Registered before the awaits below, not after them: a socket still resolving its
                 // document when a restore starts must be in the sweep too. cleanupSession drops it
                 // again on close, whichever way this open ends.
@@ -215,6 +224,7 @@ export const collabRouter = new Elysia({
                 }
 
                 const document = await drive.getCollabDocument(mountId, pathId);
+                rawWs.send(collabEpochMessage());
                 document.subscribe(user, rawWs);
                 console.log(
                     `[collab] open path=${pathId} loadMs=${(performance.now() - loadStart).toFixed(0)} ` +

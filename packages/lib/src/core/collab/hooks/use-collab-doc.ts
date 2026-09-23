@@ -1,11 +1,17 @@
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
-import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_STORAGE_UNAVAILABLE_CLOSE } from '@workspace/lib/constants/collab';
+import {
+    COLLAB_EPOCH_MESSAGE,
+    COLLAB_HOME_REPLACED_CLOSE,
+    COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+} from '@workspace/lib/constants/collab';
+import * as decoding from 'lib0/decoding';
 import { type RefObject, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 
-// All five hosts want the same provider behavior, so the options live here rather than per app.
-const WS_PROVIDER_OPTIONS = { resyncInterval: 5000 } as const;
+// All five hosts want the same provider behavior, so the options live here rather than per app. Sibling tabs sync over
+// BroadcastChannel only once the server named its data epoch, on a channel of that epoch (see the epoch handler).
+const WS_PROVIDER_OPTIONS = { resyncInterval: 5000, disableBc: true } as const;
 
 // How long to stay disconnected after a storage-unavailable close before trying again.
 const STORAGE_RETRY_MS = 5_000;
@@ -98,6 +104,18 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
 
         const wsUrl = getCollabWebSocketUrl(ownerId, mountId, pathId);
         const nextProvider = new WebsocketProvider(wsUrl, '', nextDoc, WS_PROVIDER_OPTIONS);
+
+        // Every reconnect names the epoch this doc loaded under; the server closes one that names another with
+        // COLLAB_HOME_REPLACED_CLOSE, so a tab that outlived a whole-server restore reloads instead of merging back.
+        // A tab from before the restore must not hand its state to a reloaded one either, so the channel carries it.
+        nextProvider.messageHandlers[COLLAB_EPOCH_MESSAGE] = (_encoder, decoder) => {
+            if (nextProvider.params['epoch']) return;
+            const epoch = decoding.readVarString(decoder);
+            nextProvider.params = { epoch };
+            nextProvider.bcChannel = `${nextProvider.bcChannel}#${epoch}`;
+            nextProvider.disableBc = false;
+            nextProvider.connectBc();
+        };
 
         const ctx: CollabDocContext = { doc: nextDoc, provider: nextProvider, undoManager: nextUndoManager };
         const cleanupInit = onInitRef.current?.(ctx);
