@@ -2,16 +2,19 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
 import {
     existsSync,
+    linkSync,
     mkdirSync,
     mkdtempSync,
     readdirSync,
     readFileSync,
     rmSync,
     statSync,
+    symlinkSync,
     writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { parseBackupStamp, SNAPSHOT_NAME } from '@workspace/lib/validation';
 
 const CLI = join(import.meta.dir, '../../cli/index.ts');
@@ -65,20 +68,70 @@ async function snapshot(dir: string, ...args: string[]): Promise<string> {
     return name;
 }
 
-// An archive in backups/ made by hand, with these members, for the refusals.
-async function handMade(dir: string, name: string, meta: object | null): Promise<void> {
+// An archive in backups/ made by hand, for the refusals: everything staged, after what craft adds.
+async function handMade(
+    dir: string,
+    name: string,
+    meta: object | null,
+    craft: (stage: string) => unknown = () => {},
+): Promise<void> {
     const stage = mkdtempSync(join(tmpdir(), 'eigen-snapshot-stage-'));
     dirs.push(stage);
+    if (meta) writeFileSync(join(stage, 'eigen-snapshot.json'), JSON.stringify(meta));
     writeFileSync(join(stage, '.env.production'), 'DOMAIN=other.example.org\n');
     mkdirSync(join(stage, 'data'));
     writeFileSync(join(stage, 'data/other.txt'), 'other\n');
-    const members = ['.env.production', 'data'];
-    if (meta) {
-        writeFileSync(join(stage, 'eigen-snapshot.json'), JSON.stringify(meta));
-        members.unshift('eigen-snapshot.json');
-    }
-    const tar = await run(['tar', '-czf', join(dir, 'backups', name), ...members], stage);
+    craft(stage);
+    const tar = await run(['tar', '-czf', join(dir, 'backups', name), ...readdirSync(stage)], stage);
     expect(tar.code).toBe(0);
+}
+
+// A raw ustar entry, for what no tar run by an unprivileged user writes: a device, a path through a link.
+function tarEntry(name: string, type: string, target = ''): Buffer {
+    const header = Buffer.alloc(512);
+    header.write(name, 0);
+    header.write('0000755\0', 100);
+    header.write('0000000\0', 108);
+    header.write('0000000\0', 116);
+    header.write('00000000000\0', 124);
+    header.write('00000000000\0', 136);
+    header.write('        ', 148);
+    header.write(type, 156);
+    header.write(target, 157);
+    header.write('ustar\x0000', 257);
+    header.write(
+        `${header
+            .reduce((sum, byte) => sum + byte, 0)
+            .toString(8)
+            .padStart(6, '0')}\0 `,
+        148,
+    );
+    return header;
+}
+
+function rawArchive(dir: string, name: string, entries: Buffer[]): void {
+    const meta = Buffer.from(JSON.stringify({ version, createdAt: new Date().toISOString() }));
+    const file = tarEntry('eigen-snapshot.json', '0');
+    file.write(`${meta.length.toString(8).padStart(11, '0')}\0`, 124);
+    file.write('        ', 148);
+    file.write(
+        `${file
+            .reduce((sum, byte) => sum + byte, 0)
+            .toString(8)
+            .padStart(6, '0')}\0 `,
+        148,
+    );
+    const body = Buffer.alloc(512);
+    meta.copy(body);
+    const tar = Buffer.concat([
+        file,
+        body,
+        tarEntry('.env.production', '0'),
+        tarEntry('data/', '5'),
+        ...entries,
+        Buffer.alloc(1024),
+    ]);
+    writeFileSync(join(dir, 'backups', name), gzipSync(tar));
 }
 
 function untouched(dir: string): void {
@@ -206,7 +259,7 @@ describe('restore', () => {
         untouched(dir);
     });
 
-    test('a snapshot that breaks off halfway puts the current data back', async () => {
+    test('a snapshot that breaks off halfway is refused before anything changes', async () => {
         const dir = install();
         const name = await snapshot(dir);
         writeFileSync(join(dir, 'data/home/alice/noise.bin'), randomBytes(256 * 1024));
@@ -217,9 +270,136 @@ describe('restore', () => {
 
         const result = await eigen(dir, 'restore', name, '--yes');
         expect(result.code).toBe(1);
-        expect(result.stderr).toContain(`Could not unpack ${name}`);
+        expect(result.stderr).toContain(`${name} cannot be restored`);
         untouched(dir);
         expect(existsSync(join(dir, 'data/home/alice/noise.bin'))).toBe(false);
+    });
+
+    test('an interrupt while it unpacks puts the current data back', async () => {
+        const dir = install();
+        const name = await snapshot(dir);
+        writeFileSync(join(dir, 'data/home/alice/notes.txt'), 'changed\n');
+        // A tar that unpacks everything and then hangs, so the interrupt lands mid-extract every time.
+        const bin = mkdtempSync(join(tmpdir(), 'eigen-snapshot-bin-'));
+        dirs.push(bin);
+        writeFileSync(
+            join(bin, 'tar'),
+            `#!/bin/sh\ncase " $* " in *" -xzpf "*) "${Bun.which('tar')}" "$@" && touch "${bin}/unpacked" && exec sleep 30 ;; esac\nexec "${Bun.which('tar')}" "$@"\n`,
+            { mode: 0o755 },
+        );
+        const proc = Bun.spawn([process.execPath, CLI, 'restore', name, '--yes'], {
+            cwd: dir,
+            env: { ...process.env, PATH: `${bin}:${process.env['PATH']}`, NO_COLOR: '1' },
+            stdin: 'ignore',
+            stdout: 'pipe',
+            stderr: 'pipe',
+        });
+        while (!existsSync(join(bin, 'unpacked'))) await Bun.sleep(10);
+        proc.kill('SIGINT');
+        const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+        expect(code).toBe(130);
+        expect(stdout).toContain('Cancelled. Nothing was changed.');
+        expect(readFileSync(join(dir, 'data/home/alice/notes.txt'), 'utf8')).toBe('changed\n');
+        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(ENV);
+        expect(readdirSync(dir).filter((file) => file.includes('pre-restore'))).toEqual([]);
+    });
+
+    test.each([
+        [
+            'a hard link',
+            (stage: string) => linkSync(join(stage, 'data/other.txt'), join(stage, 'data/linked.txt')),
+            'is a hard link',
+        ],
+        // chmod(1): Bun's chmodSync drops these bits on macOS, and there a folder takes setgid only in an own group.
+        [
+            'a setuid file',
+            (stage: string) => {
+                Bun.spawnSync(['chmod', '4755', join(stage, 'data/other.txt')]);
+                expect(statSync(join(stage, 'data/other.txt')).mode & 0o4000).toBe(0o4000);
+            },
+            'data/other.txt is setuid or setgid',
+        ],
+        [
+            'a setgid folder',
+            (stage: string) => {
+                mkdirSync(join(stage, 'data/shared'));
+                Bun.spawnSync(['chgrp', String(process.getgid?.()), join(stage, 'data/shared')]);
+                Bun.spawnSync(['chmod', '2755', join(stage, 'data/shared')]);
+                expect(statSync(join(stage, 'data/shared')).mode & 0o2000).toBe(0o2000);
+            },
+            'data/shared/ is setuid or setgid',
+        ],
+        ['a fifo', (stage: string) => Bun.spawnSync(['mkfifo', join(stage, 'data/pipe')]), 'data/pipe is a fifo'],
+        [
+            'a link to an absolute path',
+            (stage: string) => symlinkSync('/etc/passwd', join(stage, 'data/passwd')),
+            'data/passwd points outside data/',
+        ],
+        [
+            'a link out of data/',
+            (stage: string) => symlinkSync('../eigen', join(stage, 'data/eigen')),
+            'data/eigen points outside data/',
+        ],
+        [
+            'a link that leaves data/ through another link',
+            (stage: string) => {
+                symlinkSync('.', join(stage, 'data/here'));
+                symlinkSync('here/../eigen', join(stage, 'data/eigen'));
+            },
+            'data/eigen points through the link data/here',
+        ],
+        [
+            '.env.production as a link',
+            (stage: string) => {
+                rmSync(join(stage, '.env.production'));
+                symlinkSync('data/other.txt', join(stage, '.env.production'));
+            },
+            '.env.production is not a file',
+        ],
+        [
+            'a file outside data/',
+            (stage: string) => writeFileSync(join(stage, 'docker-compose.yml'), ''),
+            'docker-compose.yml is not in data/',
+        ],
+    ])('refuses a snapshot holding %s and changes nothing', async (_, craft, reason) => {
+        const dir = install();
+        await handMade(dir, 'eigen-20200101-000000.tar.gz', { version, createdAt: new Date().toISOString() }, craft);
+        const result = await eigen(dir, 'restore', 'eigen-20200101-000000.tar.gz', '--yes');
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain('eigen-20200101-000000.tar.gz cannot be restored: ');
+        // Which of two hard-linked files tar stores as the link depends on the directory order.
+        expect(result.stderr).toContain(reason);
+        untouched(dir);
+    });
+
+    test.each([
+        ['a device', [tarEntry('data/null', '3')], 'data/null is a device'],
+        [
+            'a path through a link',
+            [tarEntry('data/here', '2', '.'), tarEntry('data/here/x/', '5')],
+            'data/here/x/ goes through the link data/here',
+        ],
+        ['a hard link to the launcher', [tarEntry('data/eigen', '1', 'eigen')], 'data/eigen is a hard link'],
+    ])('refuses a snapshot holding %s and changes nothing', async (_, entries, reason) => {
+        const dir = install();
+        rawArchive(dir, 'eigen-20200101-000000.tar.gz', entries);
+        const result = await eigen(dir, 'restore', 'eigen-20200101-000000.tar.gz', '--yes');
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain(`eigen-20200101-000000.tar.gz cannot be restored: ${reason}`);
+        untouched(dir);
+    });
+
+    test.each([
+        ['a garbled version', { version: 'garbage', createdAt: new Date().toISOString() }],
+        ['a garbled date', { version, createdAt: 'yesterday' }],
+    ])('refuses a snapshot with %s as not an Eigen snapshot', async (_, meta) => {
+        const dir = install();
+        await handMade(dir, 'eigen-20200101-000000.tar.gz', meta);
+        const result = await eigen(dir, 'restore', 'eigen-20200101-000000.tar.gz', '--yes');
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain('not an Eigen snapshot');
+        expect(result.stderr).not.toContain('    at ');
+        untouched(dir);
     });
 
     test('refuses an archive without eigen-snapshot.json', async () => {
