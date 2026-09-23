@@ -363,13 +363,13 @@ function buildVEvent(event: CalendarEvent, options: BuildOptions = {}): ICAL.Com
         vevent.addProperty(exdateProperty(event, key, tzid));
     }
 
-    // RECURRENCE-ID names the ORIGINAL occurrence in the master's TZID form (RFC 5545): echoing a moved startTime back matches no occurrence and clients render the original slot too.
+    // RECURRENCE-ID names the ORIGINAL occurrence in the master's DTSTART form, value type included (RFC 5545 §3.8.4.4): echoing a moved startTime or the override's own all-day toggle matches no occurrence.
     if (event.recurrenceDate) {
         const key = storedRecurrenceKey(event.recurrenceDate);
         const master = options.master ?? event;
         // An unkeyable value falls back to the exception's own startTime: a possibly-orphaned override beats 500ing the whole resource.
         const when = key ? occurrenceInstant(master, key) : event.startTime;
-        vevent.addProperty(timeProperty('recurrence-id', when, normalizeTimezone(master.timezone), event.allDay));
+        vevent.addProperty(timeProperty('recurrence-id', when, normalizeTimezone(master.timezone), master.allDay));
     }
 
     if (event.data?.url) vevent.addProperty(rawProperty('url', event.data.url));

@@ -880,6 +880,85 @@ describe('CalDAV round-trip fidelity', () => {
         });
     });
 
+    // "Edit this occurrence" + All day: RECURRENCE-ID keeps the master's value type, or the override is
+    // orphaned and the original occurrence renders beside it.
+    describe('an override toggled across all-day', () => {
+        test('an all-day override of a timed series names the master DATE-TIME', async () => {
+            const calendar = (await getHome(userId)).calendar;
+            const master = await calendar.createEvent(calendarId, {
+                title: 'Late series',
+                startTime: new Date('2026-09-27T22:30:00Z'), // Mon 28 Sep 00:30 Amsterdam
+                endTime: new Date('2026-09-27T23:30:00Z'),
+                allDay: false,
+                rrule: 'FREQ=WEEKLY;COUNT=4',
+                timezone: 'Europe/Amsterdam',
+                uid: 'rt-rid-allday@eigen',
+                createByUserId: userId,
+            });
+            await calendar.createEvent(calendarId, {
+                title: 'Late series (all day)',
+                startTime: new Date('2026-10-05T00:00:00Z'),
+                endTime: new Date('2026-10-06T00:00:00Z'),
+                allDay: true,
+                timezone: 'Europe/Amsterdam',
+                parentEventId: master.id,
+                recurrenceDate: '2026-10-05',
+                uid: master.uid,
+                createByUserId: userId,
+            });
+
+            const ics = await getIcs(master.uri);
+            expect(ics).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20261005T003000');
+            const override = parseIcs(ics).events.find((e) => e.recurrenceDate);
+            expect(override?.recurrenceDate).toBe('2026-10-05');
+            expect(override?.allDay).toBe(true);
+
+            const week = (await getOccurrences('2026-10-04T00:00:00Z', '2026-10-07T00:00:00Z')).filter(
+                (o) => o.uid === master.uid,
+            );
+            expect(week).toHaveLength(1);
+            expect(week[0].allDay).toBe(true);
+        });
+
+        test('a timed override of an all-day series names the master DATE', async () => {
+            const calendar = (await getHome(userId)).calendar;
+            const master = await calendar.createEvent(calendarId, {
+                title: 'Day series',
+                startTime: new Date('2026-09-28T00:00:00Z'),
+                endTime: new Date('2026-09-29T00:00:00Z'),
+                allDay: true,
+                rrule: 'FREQ=WEEKLY;COUNT=4',
+                timezone: 'Europe/Amsterdam',
+                uid: 'rt-rid-timed@eigen',
+                createByUserId: userId,
+            });
+            await calendar.createEvent(calendarId, {
+                title: 'Day series (timed)',
+                startTime: new Date('2026-10-05T08:00:00Z'),
+                endTime: new Date('2026-10-05T09:00:00Z'),
+                allDay: false,
+                timezone: 'Europe/Amsterdam',
+                parentEventId: master.id,
+                recurrenceDate: '2026-10-05',
+                uid: master.uid,
+                createByUserId: userId,
+            });
+
+            const ics = await getIcs(master.uri);
+            expect(ics).toContain('RECURRENCE-ID;VALUE=DATE:20261005');
+            const override = parseIcs(ics).events.find((e) => e.recurrenceDate);
+            expect(override?.recurrenceDate).toBe('2026-10-05');
+            expect(override?.allDay).toBe(false);
+            expect(override?.startTime.toISOString()).toBe('2026-10-05T08:00:00.000Z');
+
+            const week = (await getOccurrences('2026-10-04T00:00:00Z', '2026-10-07T00:00:00Z')).filter(
+                (o) => o.uid === master.uid,
+            );
+            expect(week).toHaveLength(1);
+            expect(week[0].allDay).toBe(false);
+        });
+    });
+
     // Apple Calendar and Thunderbird write ORGANIZER:mailto:<the account's own address> on every event
     // they create with guests. That is an organizer-side event, not an invitation from someone else, so
     // the linked-copy guard must leave it editable — by its own client and by the web app.
