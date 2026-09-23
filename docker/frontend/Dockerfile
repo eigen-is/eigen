@@ -17,22 +17,6 @@ RUN bun install --frozen-lockfile --ignore-scripts
 
 COPY . .
 
-# Relative on purpose: the bundle resolves them against window.location.origin, so one build
-# serves the public domain, a LAN IP or a tunnel alike.
-ARG VITE_API_HOST=/eigen
-ARG VITE_APP_SPACE_URL=/space
-ARG VITE_APP_MAIL_URL=/mail
-ARG VITE_APP_CALENDAR_URL=/calendar
-ARG VITE_APP_CONTACTS_URL=/contacts
-ARG VITE_APP_DRIVE_URL=/drive
-ARG VITE_APP_DOCS_URL=/docs
-ARG VITE_APP_STICKIES_URL=/stickies
-ARG VITE_APP_CHAT_URL=/chat
-ARG VITE_APP_ADMIN_URL=/admin
-ARG VITE_APP_SLIDES_URL=/slides
-ARG VITE_APP_SHEETS_URL=/sheets
-ARG VITE_APP_VECTOR_URL=/vector
-ARG VITE_APP_INDEX_URL=/
 # The index prerender writes canonical URLs and sitemap.xml only when DOMAIN is set.
 ARG DOMAIN=
 
