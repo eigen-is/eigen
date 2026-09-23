@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1538 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1545 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (165)
+## Components (166)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -139,6 +139,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `LabelFilterHeader` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-filter-header.tsx |
 | `LabelManager` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-manager.tsx |
 | `LoginPage` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/login-page.tsx |
+| `MailOffState` | `@workspace/ui/components/mail` | packages/ui/src/components/mail/mail-off-state.tsx |
 | `MessageView` | `@workspace/ui/components/mail` | packages/ui/src/components/mail/message-view.tsx |
 | `ColorPicker` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
 | `ColorPickerButton` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-button.tsx |
@@ -207,7 +208,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyGestureContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (284)
+## Hooks (285)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -419,6 +420,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useMarkNotificationRead` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
 | `useNotifications` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
 | `useUnreadNotificationCount` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
+| `useEnabledApps` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `useHomeDataLabel` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `useJoinWaitlist` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `useMailEnabled` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
@@ -496,7 +498,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (358)
+## Types (360)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -686,6 +688,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SentMailResult` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `ServerSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `ServerStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `SetupResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `SetupStatus` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SharedCalendar` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `SSEvent` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventBackup` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
@@ -859,7 +863,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (715)
+## Utilities & constants (718)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1054,6 +1058,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `COLLAB_STORAGE_UNAVAILABLE_CLOSE` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
 | `commentIndicatorColor` | `@workspace/lib/constants` | packages/lib/src/constants/comment-indicator.ts |
 | `DEFAULT_CALENDAR_COLOR` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
+| `DEFAULT_RELAY_PORT` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
+| `defaultSenderAddress` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `EIGEN_ACCENT_COLOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_ACCENT_COLORS` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
@@ -1104,6 +1110,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `S3_LIFECYCLE_RULE_ID` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `S3_NONCURRENT_DAYS_DEFAULT` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `S3_NONCURRENT_DAYS_MAX` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
+| `SETUP_LINK_PARAM` | `@workspace/lib/constants` | packages/lib/src/constants/setup.ts |
 | `SIDEBAR_MAILBOXES` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `SPECIAL_MAILBOXES` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `specialMailboxFromFlags` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
