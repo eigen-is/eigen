@@ -2,7 +2,7 @@ import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { getIdArray, getIdArrayRoot, getItemMapRoot } from '@workspace/lib/collab';
 import type { CreateCommentCardInput } from '@workspace/lib/comments';
 import type { CommentCard } from '@workspace/lib/types/comments';
-import { CARD_TITLE_MAX_LENGTH, type FileEventDetailsMap } from '@workspace/lib/types/file-history';
+import type { FileEventDetailsMap } from '@workspace/lib/types/file-history';
 import { useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { normalizeBoard } from '../normalize-board';
@@ -135,11 +135,8 @@ export const useDragAndDrop = ({
                             onRecordEvent?.({
                                 eventType: 'sticky-added',
                                 details: {
-                                    card: source.title.slice(0, CARD_TITLE_MAX_LENGTH),
-                                    toColumn: (board.columns[destColumnId]?.title ?? '').slice(
-                                        0,
-                                        CARD_TITLE_MAX_LENGTH,
-                                    ),
+                                    card: source.title,
+                                    toColumn: board.columns[destColumnId]?.title ?? '',
                                     cardId: created.id,
                                 },
                             });
@@ -198,8 +195,8 @@ export const useDragAndDrop = ({
             onRecordEvent?.({
                 eventType: 'sticky-moved',
                 details: {
-                    card: (cards[activeId]?.title ?? '').slice(0, CARD_TITLE_MAX_LENGTH),
-                    toColumn: (board.columns[movedColumns.newColumn]?.title ?? '').slice(0, CARD_TITLE_MAX_LENGTH),
+                    card: cards[activeId]?.title ?? '',
+                    toColumn: board.columns[movedColumns.newColumn]?.title ?? '',
                     cardId: activeId,
                 },
             });

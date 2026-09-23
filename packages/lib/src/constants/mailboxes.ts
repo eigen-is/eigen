@@ -128,8 +128,7 @@ export function specialMailboxFromFlags(flags: readonly string[] = []): SpecialM
     return undefined;
 }
 
-// The flags a mailbox is listed with. Eigen nests none itself, but a Dovecot client may, so whether one has
-// children is read off the whole enumeration.
+// Children are read off the whole enumeration: Eigen nests no mailbox itself, but a Dovecot client may.
 export function mailboxListFlags(mailbox: string, allMailboxes: readonly string[]): string[] {
     const prefix = `${mailbox}.`;
     const children = allMailboxes.some((path) => path.startsWith(prefix))
