@@ -39,11 +39,10 @@ export function ResetPasswordDialog({ open, onOpenChange, userId, userName }: Re
         if (open) setPassword(generatePassword());
     }, [open]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (password.length < MIN_PASSWORD_LENGTH) return;
-        await resetPassword.mutateAsync({ userId, password });
-        onOpenChange(false);
+        resetPassword.mutate({ userId, password }, { onSuccess: () => onOpenChange(false) });
     };
 
     return (

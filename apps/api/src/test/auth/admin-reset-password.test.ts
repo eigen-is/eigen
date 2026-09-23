@@ -1,8 +1,9 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { eq } from 'drizzle-orm';
-import { user as userSchema } from '../../../auth-schema';
+import { and, eq } from 'drizzle-orm';
+import { member as memberSchema, user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { verifyProtocolAuth } from '../../lib/auth/protocol-auth';
+import { getServerConfig } from '../../lib/config/server-config';
 import { authedRequest, createTestUser, getTestContext, hasSession, signsIn } from '../setup';
 
 const OLD_PASSWORD = 'old-password-1';
@@ -48,9 +49,26 @@ describe('PUT /settings/user/:userId/password', () => {
         expect(await hasSession(guest.sessionToken)).toBe(true);
     });
 
-    test("the owner's password is not an admin's to reset", async () => {
-        const res = await resetAs(ctx.alice.user.sessionToken, ctx.alice.user.id, 'testpassword123');
-        expect(res.status).toBe(403);
+    test("the owner's password is not another admin's to reset", async () => {
+        const gil = await createTestUser('gil-admin-reset@test.eigen.is', OLD_PASSWORD, 'Gil Reset');
+        const orgId = getServerConfig()?.orgId ?? '';
+        const membership = and(eq(memberSchema.userId, gil.id), eq(memberSchema.organizationId, orgId));
+        // The auth database is the whole suite's: the role goes back to 'member' at the end.
+        await getAuthDrizzleDb().update(memberSchema).set({ role: 'admin' }).where(membership);
+        try {
+            const res = await resetAs(gil.sessionToken, ctx.alice.user.id, 'testpassword123');
+            expect(res.status).toBe(403);
+            expect(await hasSession(ctx.alice.user.sessionToken)).toBe(true);
+        } finally {
+            await getAuthDrizzleDb().update(memberSchema).set({ role: 'member' }).where(membership);
+        }
+    });
+
+    // Too short, so the reset is refused past the owner check and the suite's owner keeps her sessions.
+    test('the owner may reset her own', async () => {
+        const res = await resetAs(ctx.alice.user.sessionToken, ctx.alice.user.id, 'short');
+        expect(res.status).toBe(400);
+        expect(await res.text()).toContain('characters');
         expect(await hasSession(ctx.alice.user.sessionToken)).toBe(true);
     });
 

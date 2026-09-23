@@ -269,7 +269,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             await requireAdmin(user.id);
             const target = await getUserById(params.userId);
             if (!target) throw new ApiError(404, 'User not found');
-            if ((await getOrgRole(target.id)) === 'owner') {
+            if (target.id !== user.id && (await getOrgRole(target.id)) === 'owner') {
                 throw new ApiError(403, "Only the owner can change the owner's password");
             }
             await resetUserPassword(target.email, body.password);
