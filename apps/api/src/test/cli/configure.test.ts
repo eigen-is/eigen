@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { afterAll, describe, expect, test } from 'bun:test';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type ConfigureAnswers, chooseSubnet, configureEntries, type DockerNetwork } from '../../cli/configure';
@@ -32,16 +32,33 @@ const ANSWERS: ConfigureAnswers = {
     subnet: null,
 };
 
+const dirs: string[] = [];
+afterAll(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+});
+
 function tempDir(): string {
-    return mkdtempSync(join(tmpdir(), 'eigen-configure-'));
+    const dir = mkdtempSync(join(tmpdir(), 'eigen-configure-'));
+    dirs.push(dir);
+    return dir;
 }
 
-async function runConfigure(dir: string, args: string[], input?: string, env: Record<string, string> = {}) {
-    const networks = join(dir, 'networks.json');
-    writeFileSync(networks, JSON.stringify(NETWORKS));
+type Env = Record<string, string | undefined>;
+
+// An undefined value removes the variable, so a test can drop EIGEN_PROJECT or NO_COLOR.
+function spawnEnv(dir: string, env: Env, networks: DockerNetwork[]): Record<string, string> {
+    const networksFile = join(dir, 'networks.json');
+    writeFileSync(networksFile, JSON.stringify(networks));
+    const merged: Env = { ...process.env, EIGEN_DOCKER_NETWORKS: networksFile, EIGEN_PROJECT: 'my-eigen', ...env };
+    return Object.fromEntries(
+        Object.entries(merged).flatMap(([key, value]) => (value === undefined ? [] : [[key, value]])),
+    );
+}
+
+async function runConfigure(dir: string, args: string[], input?: string, env: Env = {}, networks = NETWORKS) {
     const proc = Bun.spawn([process.execPath, CLI, 'configure', ...args], {
         cwd: dir,
-        env: { ...process.env, EIGEN_DOCKER_NETWORKS: networks, EIGEN_PROJECT: 'my-eigen', ...env },
+        env: spawnEnv(dir, env, networks),
         stdin: input === undefined ? 'ignore' : new Blob([input]),
         stdout: 'pipe',
         stderr: 'pipe',
@@ -54,12 +71,38 @@ async function runConfigure(dir: string, args: string[], input?: string, env: Re
     return { stdout, stderr, code };
 }
 
+// Runs in a pseudo-terminal; `keys` is typed once `when` appears in the output.
+async function runInTerminal(dir: string, args: string[], env: Env, answer?: { when: string; keys: string }) {
+    let output = '';
+    let pending = answer;
+    const decoder = new TextDecoder();
+    const { promise: closed, resolve } = Promise.withResolvers<void>();
+    const proc = Bun.spawn([process.execPath, CLI, 'configure', ...args], {
+        cwd: dir,
+        env: spawnEnv(dir, env, NETWORKS),
+        terminal: {
+            data: (terminal, data) => {
+                output += decoder.decode(data);
+                if (pending && output.includes(pending.when)) {
+                    terminal.write(pending.keys);
+                    pending = undefined;
+                }
+            },
+            exit: () => resolve(),
+        },
+    });
+    const [code] = await Promise.all([proc.exited, closed]);
+    proc.terminal?.close();
+    return { output, code };
+}
+
 describe('configure entries', () => {
     test('hosting mail on the bundled Caddy writes the mail profile and the relay for postfix', () => {
-        const entries = configureEntries(new Map(), {
-            ...ANSWERS,
-            relay: { host: 'smtp.relay.test', port: '2525', user: 'u', password: 'p' },
-        });
+        const entries = configureEntries(
+            new Map(),
+            { ...ANSWERS, relay: { host: 'smtp.relay.test', port: '2525', user: 'u', password: 'p' } },
+            true,
+        );
         expect(entries.get('COMPOSE_PROFILES')).toBe('edge,mail');
         expect(entries.get('MAIL_ENABLED')).toBe('1');
         expect(entries.get('SMTP_RELAY_HOST')).toBe('smtp.relay.test');
@@ -76,13 +119,17 @@ describe('configure entries', () => {
             ['SMTP_RELAY_HOST', 'old.relay.test'],
             ['SMTP_RELAY_PASSWORD', 'old'],
         ]);
-        const entries = configureEntries(existing, {
-            ...ANSWERS,
-            mail: false,
-            proxy: '127.0.0.1:18080',
-            relay: { host: 'smtp.relay.test', port: '587', user: 'u', password: 'p$w' },
-            from: 'Eigen <noreply@example.org>',
-        });
+        const entries = configureEntries(
+            existing,
+            {
+                ...ANSWERS,
+                mail: false,
+                proxy: '127.0.0.1:18080',
+                relay: { host: 'smtp.relay.test', port: '587', user: 'u', password: 'p$w' },
+                from: 'Eigen <noreply@example.org>',
+            },
+            true,
+        );
         expect(entries.get('COMPOSE_PROFILES')).toBe('static');
         expect(entries.get('MAIL_ENABLED')).toBe('0');
         expect(entries.get('SMTP_HOST')).toBe('smtp.relay.test');
@@ -100,7 +147,7 @@ describe('configure entries', () => {
             ['SMTP_HOST', 'smtp.relay.test'],
             ['SMTP_PORT', '587'],
         ]);
-        const entries = configureEntries(existing, ANSWERS);
+        const entries = configureEntries(existing, ANSWERS, false);
         expect(entries.get('MAIL_ENABLED')).toBe('1');
         expect(entries.has('SMTP_HOST')).toBe(false);
         expect(entries.has('SMTP_PORT')).toBe(false);
@@ -113,10 +160,37 @@ describe('configure entries', () => {
             ['EIGEN_API_IMAGE', 'ghcr.io/eigen-is/eigen-api@sha256:abc'],
             ['SMTP_SECURE', '1'],
         ]);
-        const entries = configureEntries(existing, { ...ANSWERS, subnet: '172.31.0.0/24' });
+        const entries = configureEntries(existing, { ...ANSWERS, subnet: '172.31.0.0/24' }, true);
         for (const [key, value] of existing) expect(entries.get(key)).toBe(value);
         expect(entries.get('EIGEN_SUBNET')).toBe('172.31.0.0/24');
         expect(entries.get('EIGEN_UNBOUND_IP')).toBe('172.31.0.254');
+    });
+
+    test('removing the relay blanks only its host', () => {
+        const existing = new Map([
+            ['SMTP_RELAY_HOST', 'smtp.relay.test'],
+            ['SMTP_RELAY_USER', 'u'],
+            ['SMTP_RELAY_PASSWORD', 'p'],
+        ]);
+        const entries = configureEntries(existing, ANSWERS, true);
+        expect(entries.get('SMTP_RELAY_HOST')).toBe('');
+        expect(entries.get('SMTP_RELAY_USER')).toBe('u');
+        expect(entries.get('SMTP_RELAY_PASSWORD')).toBe('p');
+    });
+
+    test('a relay without a user adds no user or password lines', () => {
+        const entries = configureEntries(
+            new Map([['SMTP_PASSWORD', 'old']]),
+            { ...ANSWERS, mail: false, relay: { host: 'smtp.relay.test', port: '25', user: '', password: '' } },
+            false,
+        );
+        expect(entries.get('SMTP_HOST')).toBe('smtp.relay.test');
+        expect(entries.has('SMTP_USER')).toBe(false);
+        expect(entries.get('SMTP_PASSWORD')).toBe('');
+    });
+
+    test('the default sender leaves an empty SMTP_FROM alone', () => {
+        expect(configureEntries(new Map([['SMTP_FROM', '']]), ANSWERS, true).get('SMTP_FROM')).toBe('');
     });
 });
 
@@ -218,8 +292,7 @@ describe('configure command', () => {
     });
 
     test('a backfill keeps a hand-edited file byte-for-byte and adds the keys it lacks', async () => {
-        const dir = tempDir();
-        const original = [
+        const eigenIs = [
             'PRODUCTION=1',
             '',
             'DOMAIN=eigen.example.org',
@@ -242,19 +315,152 @@ describe('configure command', () => {
             "CUSTOM='keep $me'",
             '',
         ].join('\n');
+        // Mail off from before MAIL_ENABLED existed: only COMPOSE_PROFILES says so.
+        const mailOff = [
+            'DOMAIN=eigen.example.org',
+            'MAIL_DOMAIN=example.org',
+            'ACME_EMAIL=admin@example.org',
+            'COMPOSE_PROFILES=edge',
+            'SMTP_HOST=host.docker.internal',
+            'SMTP_RELAY_HOST=smtp-relay.brevo.com',
+            'SMTP_RELAY_PORT=587',
+            '',
+        ].join('\n');
+        for (const [original, added] of [
+            [eigenIs, ['MAIL_ENABLED=1', 'VITE_APP_DOCS_URL=/docs']],
+            [mailOff, ['MAIL_ENABLED=0', 'SMTP_PORT=25', 'VITE_APP_DOCS_URL=/docs']],
+        ] as const) {
+            const dir = tempDir();
+            writeFileSync(join(dir, '.env.production'), original);
+            const run = await runConfigure(dir, ['--backfill']);
+            expect(run.stderr).toBe('');
+            expect(run.code).toBe(0);
+            expect(run.stdout.trim().split('\n')).toHaveLength(1);
+            const written = readFileSync(join(dir, '.env.production'), 'utf8');
+            expect(written.startsWith(original)).toBe(true);
+            for (const line of added) expect(written).toContain(`\n${line}\n`);
+            expect(written.slice(original.length)).not.toContain('SMTP_USER');
+            expect(written).not.toContain('EIGEN_SUBNET');
+
+            const again = await runConfigure(dir, ['--backfill']);
+            expect(again.code).toBe(0);
+            expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(written);
+        }
+    });
+
+    test('a backfill refuses a placeholder domain and writes nothing', async () => {
+        const dir = tempDir();
+        const original = 'DOMAIN=eigen.example.com\nMAIL_DOMAIN=eigen.example.com\nCOMPOSE_PROFILES=edge,mail\n';
         writeFileSync(join(dir, '.env.production'), original);
         const run = await runConfigure(dir, ['--backfill']);
+        expect(run.code).toBe(1);
+        expect(run.stderr).toContain('DOMAIN');
+        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(original);
+    });
+
+    const INSTALLED = [
+        'DOMAIN=eigen.example.org',
+        'MAIL_DOMAIN=example.org',
+        'ACME_EMAIL=admin@example.org',
+        'COMPOSE_PROFILES=edge,mail',
+        '',
+    ].join('\n');
+
+    test('--yes keeps an empty SMTP_FROM as it is', async () => {
+        const dir = tempDir();
+        writeFileSync(join(dir, '.env.production'), `${INSTALLED}SMTP_FROM=\n`);
+        const run = await runConfigure(dir, ['--yes']);
         expect(run.stderr).toBe('');
         expect(run.code).toBe(0);
-        expect(run.stdout.trim().split('\n')).toHaveLength(1);
-        const written = readFileSync(join(dir, '.env.production'), 'utf8');
-        expect(written.startsWith(original)).toBe(true);
-        expect(written).toContain('\nMAIL_ENABLED=1\n');
-        expect(written).toContain('\nVITE_APP_DOCS_URL=/docs\n');
-        expect(written).not.toContain('EIGEN_SUBNET');
+        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toContain('\nSMTP_FROM=\n');
+    });
 
-        const again = await runConfigure(dir, ['--backfill']);
-        expect(again.code).toBe(0);
-        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(written);
+    test('--from is checked by the parser the mailer uses', async () => {
+        const base = ['--yes', '--domain', 'eigen.example.org', '--no-proxy', '--contact-email', 'admin@example.org'];
+        const dir = tempDir();
+        const comment = await runConfigure(dir, [...base, '--from', 'noreply@example.org (Eigen)']);
+        expect(comment.code).toBe(0);
+        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toContain("SMTP_FROM='noreply@example.org (Eigen)'");
+        const two = await runConfigure(tempDir(), [...base, '--from', 'Eigen <a@example.org>, b@example.org']);
+        expect(two.code).toBe(1);
+        expect(two.stderr).toContain('--from');
+    });
+
+    test('a rerun keeps the live network of the Compose project, however the project is named', async () => {
+        const live: DockerNetwork[] = [
+            {
+                Name: 'eigen_eigen',
+                Labels: { 'com.docker.compose.project': 'eigen', 'com.docker.compose.network': 'eigen' },
+                IPAM: { Config: [{ Subnet: '172.20.0.0/24' }] },
+            },
+        ];
+        const byEnv = tempDir();
+        writeFileSync(join(byEnv, '.env.production'), INSTALLED);
+        expect((await runConfigure(byEnv, ['--yes'], undefined, { EIGEN_PROJECT: 'eigen' }, live)).code).toBe(0);
+        expect(readFileSync(join(byEnv, '.env.production'), 'utf8')).not.toContain('EIGEN_SUBNET');
+
+        const byFile = tempDir();
+        writeFileSync(join(byFile, '.env.production'), `${INSTALLED}COMPOSE_PROJECT_NAME=eigen\n`);
+        expect((await runConfigure(byFile, ['--yes'], undefined, { EIGEN_PROJECT: undefined }, live)).code).toBe(0);
+        expect(readFileSync(join(byFile, '.env.production'), 'utf8')).not.toContain('EIGEN_SUBNET');
+
+        const unnamed = tempDir();
+        writeFileSync(join(unnamed, '.env.production'), INSTALLED);
+        const run = await runConfigure(unnamed, ['--yes'], undefined, { EIGEN_PROJECT: undefined }, live);
+        expect(run.code).toBe(1);
+        expect(run.stderr).toContain('EIGEN_PROJECT');
+        expect(readFileSync(join(unnamed, '.env.production'), 'utf8')).toBe(INSTALLED);
+    });
+
+    test('a piped answer of - clears an answer that has a default', async () => {
+        const dir = tempDir();
+        writeFileSync(join(dir, '.env.production'), `${INSTALLED}SMTP_RELAY_HOST=smtp.relay.test\n`);
+        const run = await runConfigure(dir, [], ['', '', '', '', '', '-', '', ''].join('\n'));
+        expect(run.stderr).toBe('');
+        expect(run.code).toBe(0);
+        expect(run.stdout).toContain('[smtp.relay.test:587, - for none]');
+        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toContain('\nSMTP_RELAY_HOST=\n');
+    });
+
+    test('a plain run on a terminal refuses to ask for a password it would echo', async () => {
+        const dir = tempDir();
+        const run = await runInTerminal(
+            dir,
+            [
+                '--domain',
+                'eigen.example.org',
+                '--mail',
+                '--mail-domain',
+                'example.org',
+                '--no-proxy',
+                '--contact-email',
+                'admin@example.org',
+                '--relay',
+                'smtp.relay.test:2525',
+                '--relay-user',
+                'relayuser',
+                '--from',
+                'noreply@example.org',
+            ],
+            {},
+            { when: 'Relay password', keys: 'secret\r' },
+        );
+        expect(run.code).toBe(1);
+        expect(run.output).toContain('--relay-password-env');
+        expect(run.output).not.toContain('secret');
+        expect(existsSync(join(dir, '.env.production'))).toBe(false);
+    });
+
+    test('the interactive run honors NO_COLOR', async () => {
+        // biome-ignore lint/suspicious/noControlCharactersInRegex: matching escape sequences is the point
+        const COLOR = /\x1b\[(?:3\d|4\d|9[0-7]|10[0-7])m/;
+        const cancel = { when: 'Web address', keys: '\x03' };
+        const plain = await runInTerminal(tempDir(), [], { NO_COLOR: '1' }, cancel);
+        expect(plain.code).toBe(130);
+        expect(plain.output).toContain('Web address');
+        expect(plain.output).not.toMatch(COLOR);
+        const colored = await runInTerminal(tempDir(), [], { NO_COLOR: undefined }, { ...cancel });
+        expect(colored.code).toBe(130);
+        expect(colored.output).toMatch(COLOR);
     });
 });

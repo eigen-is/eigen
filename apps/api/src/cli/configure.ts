@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import { parseArgs } from 'node:util';
 import { validateEmailAddress } from '@workspace/lib/validation';
+import addressparser from 'nodemailer/lib/addressparser';
 import { readEnvFile, writeEnvFile } from './env-file';
 import { createUi, type Ui } from './ui';
 
@@ -26,9 +27,11 @@ const ENV_PATH = '.env.production';
 const DEFAULT_SUBNET = '172.20.0.0/24';
 const SUBNET_CANDIDATES = [DEFAULT_SUBNET, '172.30.0.0/24', '172.31.0.0/24', '10.20.0.0/24'];
 const PLACEHOLDER_DOMAINS = new Set(['eigen.example.com', 'example.com']);
-// Postfix relays when Eigen hosts mail; the API relays itself when it does not.
+// Postfix relays when Eigen hosts mail; the API relays itself when it does not. Ports are Compose's defaults.
 const MAIL_RELAY_KEYS = ['SMTP_RELAY_HOST', 'SMTP_RELAY_PORT', 'SMTP_RELAY_USER', 'SMTP_RELAY_PASSWORD'] as const;
 const API_RELAY_KEYS = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD'] as const;
+const MAIL_RELAY_PORT = '587';
+const API_RELAY_PORT = '25';
 // Relative, so the same bundle serves any hostname; the API prefixes API_URL when it builds links in mail.
 const APP_URLS = {
     VITE_API_HOST: '/eigen',
@@ -123,9 +126,10 @@ function validateRelay(value: string): string | undefined {
     }
 }
 
+// The mailer's own parser, so what passes here is what it sends from.
 function validateFrom(value: string): string | undefined {
-    const address = value.match(/^[^<>]+<([^<>]+)>$/)?.[1] ?? value;
-    if (!validateEmailAddress(address) || !NO_CONTROL.test(value)) {
+    const parsed = addressparser(value, { flatten: true });
+    if (parsed.length !== 1 || !validateEmailAddress(parsed[0]?.address ?? '') || !NO_CONTROL.test(value)) {
         return 'Enter an address, or a name and address like Eigen <noreply@example.com>.';
     }
 }
@@ -153,7 +157,11 @@ export function chooseSubnet(networks: DockerNetwork[], project: string): string
     return free ?? DEFAULT_SUBNET;
 }
 
-export function configureEntries(existing: Map<string, string>, answers: ConfigureAnswers): Map<string, string> {
+export function configureEntries(
+    existing: Map<string, string>,
+    answers: ConfigureAnswers,
+    wasMail: boolean,
+): Map<string, string> {
     const entries = new Map(existing);
     const staticAddress = `${existing.get('EIGEN_STATIC_HOST') || '127.0.0.1'}:${existing.get('EIGEN_STATIC_PORT') || '8080'}`;
     const [staticHost = '', staticPort = ''] = (answers.proxy ?? staticAddress).split(':');
@@ -173,20 +181,24 @@ export function configureEntries(existing: Map<string, string>, answers: Configu
 
     // Switching modes moves the relay: API relay keys left behind with mail on would bypass postfix.
     const [relayKeys, otherKeys] = answers.mail ? [MAIL_RELAY_KEYS, API_RELAY_KEYS] : [API_RELAY_KEYS, MAIL_RELAY_KEYS];
-    if ((existing.get('MAIL_ENABLED') !== '0') !== answers.mail) {
+    if (wasMail !== answers.mail) {
         for (const key of otherKeys) entries.delete(key);
     }
     const [hostKey, portKey, userKey, passwordKey] = relayKeys;
     if (answers.relay) {
         entries.set(hostKey, answers.relay.host);
         entries.set(portKey, answers.relay.port);
-        entries.set(userKey, answers.relay.user);
-        entries.set(passwordKey, answers.relay.password);
-    } else {
-        for (const key of [hostKey, userKey, passwordKey]) if (entries.has(key)) entries.set(key, '');
+        for (const [key, value] of [
+            [userKey, answers.relay.user],
+            [passwordKey, answers.relay.password],
+        ] as const) {
+            if (value || entries.has(key)) entries.set(key, value);
+        }
+    } else if (entries.has(hostKey)) {
+        entries.set(hostKey, '');
     }
-    // Unset, the API sends as "<organization name> <noreply@MAIL_DOMAIN>", which a bare address would lose.
-    if (answers.from !== `noreply@${answers.mailDomain}` || existing.has('SMTP_FROM')) {
+    // Unset or empty, the sender follows MAIL_DOMAIN; writing the default would pin it.
+    if (answers.from !== `noreply@${answers.mailDomain}` || existing.get('SMTP_FROM')) {
         entries.set('SMTP_FROM', answers.from);
     }
 
@@ -213,7 +225,10 @@ export async function configure(args: string[]): Promise<void> {
     const acceptDefaults = backfill || flags.yes === true;
     const ui: Ui = await createUi(args.length > 0);
     const existing = readEnvFile(ENV_PATH);
-    if (backfill && !existing.get('DOMAIN')) ui.fail(`${ENV_PATH} has no DOMAIN to keep.`, 'Run eigen setup first.');
+    const existingDomain = existing.get('DOMAIN') ?? '';
+    if (backfill && (!existingDomain || PLACEHOLDER_DOMAINS.has(existingDomain))) {
+        ui.fail(`${ENV_PATH} has no DOMAIN of your own to keep.`, 'Run eigen setup first.');
+    }
     if (!backfill) ui.intro('Configure Eigen');
 
     const answer = async (
@@ -238,7 +253,6 @@ export async function configure(args: string[]): Promise<void> {
         return ui.confirm({ message, initial, flag });
     };
 
-    const existingDomain = existing.get('DOMAIN') ?? '';
     const domain = cleanDomain(
         await answer(
             'Web address, like eigen.example.com',
@@ -249,11 +263,13 @@ export async function configure(args: string[]): Promise<void> {
         ),
     );
     const profiles = existing.get('COMPOSE_PROFILES')?.split(',');
+    // A file from before MAIL_ENABLED says mail is off only through its profiles.
+    const wasMail = existing.get('MAIL_ENABLED') !== '0' && (profiles?.includes('mail') ?? true);
     const mail = await decide(
         'Host email on this server?',
         '--mail or --no-mail',
         flags.mail ? true : flags['no-mail'] ? false : undefined,
-        existing.get('MAIL_ENABLED') !== '0' && (profiles?.includes('mail') ?? true),
+        wasMail,
     );
     // Only a guess: a web address with three or more labels usually wants mail on its parent domain.
     const labels = domain.split('.');
@@ -296,21 +312,20 @@ export async function configure(args: string[]): Promise<void> {
               )
             : contactEmailDefault;
 
-    const wasMail = existing.get('MAIL_ENABLED') !== '0';
     const [hostKey, portKey, userKey, passwordKey] = wasMail ? MAIL_RELAY_KEYS : API_RELAY_KEYS;
     const previousHost = existing.get(hostKey);
     const relayAnswer = await answer(
-        'Outgoing mail relay, host:port (leave empty for none)',
+        'Outgoing mail relay, host:port (optional)',
         'relay',
         flags['no-relay'] ? '' : flags.relay,
-        previousHost ? `${previousHost}:${existing.get(portKey) || '587'}` : '',
+        previousHost ? `${previousHost}:${existing.get(portKey) || (wasMail ? MAIL_RELAY_PORT : API_RELAY_PORT)}` : '',
         validateRelay,
     );
     let relay: ConfigureAnswers['relay'] = null;
     if (relayAnswer && relayAnswer !== 'none') {
-        const [host = '', port = '587'] = relayAnswer.split(':');
+        const [host = '', port = mail ? MAIL_RELAY_PORT : API_RELAY_PORT] = relayAnswer.split(':');
         const user = await answer(
-            'Relay user name (leave empty for none)',
+            'Relay user name (optional)',
             'relay-user',
             flags['relay-user'],
             existing.get(userKey) ?? '',
@@ -357,7 +372,7 @@ export async function configure(args: string[]): Promise<void> {
             'Rerun the setup to add a relay later.',
         ]);
     }
-    const defaultFrom = existing.get('SMTP_FROM') ?? `noreply@${mailDomain}`;
+    const defaultFrom = existing.get('SMTP_FROM') || `noreply@${mailDomain}`;
     const from =
         mail || relay
             ? await answer('System sender, an address or Name <address>', 'from', flags.from, defaultFrom, validateFrom)
@@ -400,17 +415,26 @@ export async function configure(args: string[]): Promise<void> {
         if (!Array.isArray(networks)) {
             if (networksFile) ui.fail('The Docker network list is not a JSON array.', 'Run the setup again.');
         } else {
+            // Compose takes COMPOSE_PROJECT_NAME from the env file over the folder name; in the container the
+            // folder is /install, so only the launcher knows the project.
             const project =
+                existing.get('COMPOSE_PROJECT_NAME') ||
                 process.env['EIGEN_PROJECT'] ||
-                basename(process.cwd())
-                    .toLowerCase()
-                    .replace(/[^a-z0-9_-]/g, '')
-                    .replace(/^[^a-z0-9]+/, '');
+                (networksFile
+                    ? ui.fail('EIGEN_PROJECT is not set.', 'Run configure through ./eigen setup.')
+                    : basename(process.cwd())
+                          .toLowerCase()
+                          .replace(/[^a-z0-9_-]/g, '')
+                          .replace(/^[^a-z0-9]+/, ''));
             subnet = chooseSubnet(networks, project);
         }
     }
 
-    const entries = configureEntries(existing, { domain, mail, mailDomain, proxy, contactEmail, relay, from, subnet });
+    const entries = configureEntries(
+        existing,
+        { domain, mail, mailDomain, proxy, contactEmail, relay, from, subnet },
+        wasMail,
+    );
     writeEnvFile(ENV_PATH, entries);
     if (backfill) {
         const added = [...entries.keys()].filter((key) => !existing.has(key));

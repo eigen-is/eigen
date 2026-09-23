@@ -1,10 +1,11 @@
-import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { afterAll, describe, expect, test } from 'bun:test';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readEnvFile, writeEnvFile } from '../../cli/env-file';
 
 const DIR = mkdtempSync(join(tmpdir(), 'eigen-env-file-'));
+afterAll(() => rmSync(DIR, { recursive: true, force: true }));
 
 // Each line below was read back by `docker compose --env-file` interpolation AND by `env_file:` in a running
 // alpine container (Compose 2.32), and both yielded exactly the value on the left.
@@ -101,7 +102,8 @@ describe('env file', () => {
     });
 
     test('replaces the file through a rename with mode 0600', () => {
-        const dir = mkdtempSync(join(tmpdir(), 'eigen-env-mode-'));
+        const dir = join(DIR, 'mode');
+        mkdirSync(dir);
         const path = join(dir, '.env.production');
         writeFileSync(path, 'A=1\n');
         chmodSync(path, 0o644);

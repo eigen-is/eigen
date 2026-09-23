@@ -15,11 +15,23 @@ export type Ui = {
 };
 
 const CANCELLED = 'Setup cancelled. Nothing was written.';
+// Foreground and background colors only: bold, dim and the inverse text cursor are not color.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching escape sequences is the point
+const SGR_COLOR = /\x1b\[(?:3\d|4\d|9[0-7]|10[0-7])m/g;
 
 // The one place that decides between clack and plain lines: clack only on a terminal and without flags,
 // so a scripted or piped run never loads it.
 export async function createUi(flagsGiven: boolean): Promise<Ui> {
     if (process.stdin.isTTY && process.stdout.isTTY && !flagsGiven) {
+        // Bun's styleText, which clack colors through, ignores NO_COLOR.
+        if (process.env['NO_COLOR']) {
+            const write = process.stdout.write.bind(process.stdout);
+            process.stdout.write = (chunk: string | Uint8Array, ...rest: unknown[]) =>
+                Reflect.apply(write, undefined, [
+                    typeof chunk === 'string' ? chunk.replace(SGR_COLOR, '') : chunk,
+                    ...rest,
+                ]);
+        }
         const clack = await import('@clack/prompts');
         const answered = <T>(value: T | typeof clack.CANCEL_SYMBOL): T => {
             if (clack.isCancel(value)) {
@@ -91,7 +103,11 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
     return {
         intro: (title) => console.log(title),
         ask: async ({ message, initial, validate, flag }) => {
-            const answer = (await read(message, initial ? ` [${initial}]` : '', flag, true)).trim() || initial;
+            // An empty line keeps the default, so an optional answer that has one is cleared with "-".
+            const clearable = initial !== '' && !validate('');
+            const hint = clearable ? ` [${initial}, - for none]` : initial ? ` [${initial}]` : '';
+            const line = (await read(message, hint, flag, true)).trim();
+            const answer = clearable && line === '-' ? '' : line || initial;
             const error = validate(answer);
             return error ? fail(error, `Pass ${flag}.`) : answer;
         },
@@ -102,7 +118,10 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
             if (answer === 'n' || answer === 'no') return false;
             return fail(`Answer y or n to "${message}".`, `Pass ${flag}.`);
         },
-        password: ({ message, flag }) => read(message, '', flag, false),
+        password: ({ message, flag }) =>
+            process.stdin.isTTY
+                ? fail('A password typed here would show on screen.', `Pass ${flag}.`)
+                : read(message, '', flag, false),
         note: (title, lines) => console.log(`\n${title}\n${lines.map((line) => `  ${line}`).join('\n')}`),
         spinner: () => ({ stop: (message) => console.log(message) }),
         outro: (message) => {

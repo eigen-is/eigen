@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 
 type EnvLine = { raw: string; key: string | null; value: string };
 
@@ -83,6 +83,5 @@ export function writeEnvFile(path: string, entries: Map<string, string>): void {
     }
     const temp = `${path}.${process.pid}.tmp`;
     writeFileSync(temp, `${out.join('\n')}\n`, { mode: 0o600 });
-    chmodSync(temp, 0o600);
     renameSync(temp, path);
 }
