@@ -301,7 +301,7 @@ export async function configure(args: string[]): Promise<void> {
             {
                 message: 'Which mail domain will you use?',
                 help:
-                    `Everyone's sign-in address ends in it, like admin@${currentMailDomain}.\n` +
+                    'Everyone signs in with an address on it, like admin@example.com.\n' +
                     'Mailboxes live on this server or wherever its email is hosted now.',
                 flag: 'mail-domain',
             },
