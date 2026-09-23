@@ -48,7 +48,7 @@ probe_relay() {
 # A share notification sent through the Mailpit relay: From "<admin> via <organization>" <system sender>, Reply-To
 # the admin. The admin comes from the link the last ./eigen setup printed, the second user from the admin API.
 probe_share_mail() {
-    local base="$1/eigen" token admin_id folder_id code id message=''
+    local base="$1/eigen" token link path admin_id folder_id code id message=''
     local jar="$SCRATCH/share-session" password="probe-share-$$"
     rm -f "$jar"
     token=$(grep -o 'setup=[A-Za-z0-9_-]*' "$SCRATCH/setup.log" | tail -n 1 | cut -d= -f2 || true)
@@ -56,6 +56,12 @@ probe_share_mail() {
         fail "./eigen setup printed no setup link"
         return
     fi
+    # The browser asks for the link without its fragment; the web server must serve it, not redirect it.
+    link=$(grep -o 'https://[^ ]*#setup=[A-Za-z0-9_-]*' "$SCRATCH/setup.log" | tail -n 1 || true)
+    path=${link#https://*/}
+    path=${path%%#*}
+    code=$(curl -sk -o /dev/null -w '%{http_code}' "$1/$path" || echo 000)
+    if [ "$code" = 200 ]; then ok "the setup link's page /$path answers 200"; else fail "the setup link's page /$path → $code, expected 200"; fi
     admin_id=$(curl -sk -X POST -H 'Content-Type: application/json' \
         -d "{\"setupToken\":\"$token\",\"domain\":\"localhost\",\"orgName\":\"Probe Org\",\"storageType\":\"local-id\",\"adminEmail\":\"ada@eigen.test\",\"adminPassword\":\"$password\",\"adminName\":\"Ada Admin\"}" \
         "$base/setup/complete" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4 || true)

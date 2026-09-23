@@ -89,6 +89,11 @@ fi
 ##############################################################################
 header "./eigen status"
 ##############################################################################
+# Postfix has no healthcheck, so up --wait returns before its queue can be read.
+for _ in $(seq 1 30); do
+    if dc exec -T postfix postqueue -p >/dev/null 2>&1; then break; fi
+    sleep 1
+done
 eigen status
 show
 if [ "$CODE" = 0 ]; then ok "status exits 0"; else fail "status exited $CODE"; fi
@@ -104,9 +109,15 @@ for service in $(dc config --services); do
         fail "status does not list $service as running"
     fi
 done
-for row in 'Setup  *not finished' 'Disk  *[0-9.]* [KMGT]B free of' 'Last snapshot  *none yet' 'Mail queue  *empty'; do
+for row in 'Setup  *not finished' 'Disk  *[0-9]*\.[0-9] [KMGT]B free of [0-9]*\.[0-9] [KMGT]B$' 'Last snapshot  *none yet' 'Mail queue  *empty'; do
     if printf '%s\n' "$OUT" | grep -q "^$row"; then ok "status: $row"; else fail "status lacks: $row"; fi
 done
+# The scratch checkout has no upstream to compare with.
+if printf '%s\n' "$OUT" | grep -q '^Update'; then
+    fail "status has an Update row without an upstream"
+else
+    ok "status leaves out the update check it cannot make"
+fi
 if printf '%s' "$OUT" | grep -q "$(printf '\033')"; then
     fail "status prints escape codes without a terminal"
 else
@@ -139,6 +150,16 @@ if [ "${#FIRST_TOKEN}" = 43 ]; then
     ok "./eigen setup ends with a setup link"
 else
     fail "./eigen setup printed no setup link"
+fi
+# The browser asks for the link without its fragment; the gateway must serve it, not redirect it.
+link=$(grep -o 'https://[^ ]*#setup=[A-Za-z0-9_-]*' "$SCRATCH/setup.log" | tail -n 1 || true)
+path=${link#https://*/}
+path=${path%%#*}
+code=$(curl -sk -o /dev/null -w '%{http_code}' "https://localhost:$PORT_HTTPS/$path" || echo 000)
+if [ "$link" = "https://localhost/admin/#setup=$FIRST_TOKEN" ] && [ "$code" = 200 ]; then
+    ok "the link is https://localhost/admin/#setup=…, and the gateway serves /$path (200)"
+else
+    fail "the link '$link': /$path → $code, expected 200"
 fi
 # Unroutable: a request that reached S3 would hang on it until the connect timeout.
 S3_FIELDS='"endpoint":"http://10.255.255.1","bucket":"probe","accessKeyId":"key","secretAccessKey":"secret"'
@@ -295,8 +316,11 @@ eigen restore "backups/$SNAPSHOT" --yes
 show
 if [ "$CODE" = 0 ]; then ok "./eigen restore --yes finished in $((SECONDS - started))s"; else fail "./eigen restore exited $CODE"; fi
 if stack_up; then ok "the stack is up after the restore"; else fail "the stack is not up after the restore"; fi
-# A session made before the API's first restart does not outlive it (the secret before setup is a throwaway).
-sign_in "$NEW_PASSWORD" "$JAR" >/dev/null
+if curl -sk -b "$JAR" "$BASE/auth/get-session" | grep -q "\"$ADMIN_EMAIL\""; then
+    ok "the session from before the backup outlives the restarts"
+else
+    fail "the session from before the backup was signed out by the restarts"
+fi
 listing=$(drive GET "/folder/$root_id")
 if printf '%s' "$listing" | grep -q '"Kept by the snapshot"' && ! printf '%s' "$listing" | grep -q '"Made after the snapshot"'; then
     ok "the drive is as it was at the snapshot"
@@ -364,10 +388,16 @@ if [ "$CODE" != 0 ] && printf '%s\n' "$OUT" | grep -q './eigen logs eigen-api'; 
 else
     fail "status with the API stopped: exit $CODE"
 fi
-if printf '%s\n' "$OUT" | grep -q 'eigen-api  *exited'; then
-    ok "status still lists the services"
+if printf '%s\n' "$OUT" | grep -q '^eigen-api  *exited'; then
+    ok "status still lists the services, without glyphs off a terminal"
 else
     fail "status does not list eigen-api as exited"
+fi
+eigen reset-password --help
+if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q '^Usage: reset-password <email>'; then
+    ok "reset-password --help works with the API stopped"
+else
+    fail "reset-password --help with the API stopped: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
 fi
 eigen_piped "$NEW_PASSWORD" reset-password "$ADMIN_EMAIL"
 if [ "$CODE" != 0 ] && printf '%s\n' "$OUT" | grep -q 'The API is not running'; then
