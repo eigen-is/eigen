@@ -223,6 +223,7 @@ export function EigenLoader({ className }: EigenLoaderProps) {
             className={cn('inline text-muted-foreground', className)}
             height="1em"
             viewBox="0 -8 28 22"
+            overflow="visible"
             fill="none"
             stroke="currentColor"
             strokeWidth="1.25"
