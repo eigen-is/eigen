@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
 # MAIL_DOMAIN defaults to DOMAIN when not split. Used for envelope sender, virtual mailbox
@@ -36,10 +36,11 @@ fi
 # The keys and rules the API follows when Eigen hosts no mail: port 465 is implicit TLS, any other port
 # STARTTLS, and credentials only go over TLS.
 if [ -n "${SMTP_RELAY_HOST}" ]; then
-    relay="[${SMTP_RELAY_HOST}]:${SMTP_RELAY_PORT:-587}"
+    port=${SMTP_RELAY_PORT:-587}
+    relay="[${SMTP_RELAY_HOST}]:${port}"
     echo "Configuring SMTP relay: ${relay}"
     postconf -e "relayhost = ${relay}"
-    if [ "${SMTP_RELAY_PORT:-587}" = 465 ]; then
+    if [ "$port" = 465 ]; then
         postconf -e smtp_tls_wrappermode=yes smtp_tls_security_level=encrypt
     fi
     if [ -n "${SMTP_RELAY_USER}" ]; then

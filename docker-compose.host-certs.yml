@@ -1,5 +1,5 @@
 # Reuse the host's Let's Encrypt certs for postfix and dovecot when COMPOSE_PROFILES omits
-# 'edge' (i.e. the bundled Caddy is off and your host webserver issues the certs). The
+# 'edge' (i.e. the bundled Caddy is off and your host web server issues the certs). The
 # bundled cert exporter only runs inside the Caddy container, so without this overlay the
 # `./data/certs/` mount stays empty and IMAPS / SMTPS can't start.
 #

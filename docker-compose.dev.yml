@@ -13,8 +13,6 @@ services:
     environment:
       <<: *dev-domains
       CADDY_ACME_EMAIL: ""
-    ports:
-      - "80:80"
     command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
 
   eigen-api:
@@ -33,16 +31,13 @@ services:
 
   postfix:
     volumes:
-      - ./data/dkim:/data/dkim
       - ./data/certs/dev:/certs:ro
-      - postfix-queue:/var/spool/postfix
     environment:
       <<: *dev-domains
       SMTP_RELAY_HOST: ""
 
   dovecot:
     volumes:
-      - ./data:/data
       - ./data/certs/dev:/certs
     environment: *dev-domains
 
