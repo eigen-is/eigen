@@ -13,7 +13,7 @@ export type Ui = {
     fail(message: string, next: string): never;
 };
 
-const CANCELLED = 'Setup cancelled. Nothing was written.';
+const CANCELLED = 'Cancelled. Nothing was changed.';
 // Foreground and background colors only: bold, dim and the inverse text cursor are not color.
 // biome-ignore lint/suspicious/noControlCharactersInRegex: matching escape sequences is the point
 const SGR_COLOR = /\x1b\[(?:3\d|4\d|9[0-7]|10[0-7])m/g;
