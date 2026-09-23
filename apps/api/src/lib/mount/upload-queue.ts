@@ -64,6 +64,8 @@ export class UploadQueue {
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
     // Per-PUT client-side deadline (see UPLOAD_PUT_TIMEOUT_MS). A field so tests can shrink it.
     private putTimeoutMs = UPLOAD_PUT_TIMEOUT_MS;
+    // Backoff before a failed row is retried. A field so tests can hold the jittered retry timer.
+    private backoffMs = uploadBackoffMs;
 
     constructor(deps: UploadQueueDeps) {
         this.db = deps.db;
@@ -293,6 +295,7 @@ export class UploadQueue {
             // unsettled is re-asserted once it settles (see trackOrphan), instead of being silently
             // regressed or resurrected.
             const write = this.storage.write(storageKey, file);
+            const timeoutMs = this.putTimeoutMs;
             await Promise.race([
                 write,
                 new Promise<never>((_, reject) => {
@@ -305,8 +308,8 @@ export class UploadQueue {
                         if (!this.closing && this.getPendingStagingPath(storageKey) === null) {
                             orphan.cancelled = true;
                         }
-                        reject(new Error(`PUT exceeded ${this.putTimeoutMs}ms`));
-                    }, this.putTimeoutMs);
+                        reject(new Error(`PUT exceeded ${timeoutMs}ms`));
+                    }, timeoutMs);
                 }),
             ]);
             putOk = true;
@@ -341,7 +344,7 @@ export class UploadQueue {
             const next = attempt + 1;
             this.db
                 .update(pendingUploads)
-                .set({ attempt: next, nextAttemptAt: Date.now() + uploadBackoffMs(next) })
+                .set({ attempt: next, nextAttemptAt: Date.now() + this.backoffMs(next) })
                 .where(eq(pendingUploads.storageKey, storageKey))
                 .run();
             return;

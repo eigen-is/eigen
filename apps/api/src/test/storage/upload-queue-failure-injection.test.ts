@@ -11,6 +11,7 @@ import {
     createFaultMount,
     type FaultStorage,
     provisionDoc,
+    restorePutTimeout,
     shrinkPutTimeout,
     waitFor,
 } from '../fault-storage-helpers';
@@ -186,7 +187,6 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
     test('an orphan landing after a newer acked PUT is repaired: the acked bytes are re-uploaded', async () => {
         const m1 = createS3Mount('orphan-regression');
         await m1.mount.init();
-        shrinkPutTimeout(m1.mount, 50);
         const { dataDbId } = await provisionDoc(m1.mount);
 
         // Ack the create-time schema PUT so the one orphan below is exactly the {1} upload.
@@ -195,10 +195,12 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         expect(m1.mount.pendingUploadCount).toBe(0);
 
         // Sync {1}: its PUT parks (stalled) and the 50ms ceiling fails the attempt into backoff.
+        shrinkPutTimeout(m1.mount, 50);
         m1.fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush(); // stages {1}, kicks the drain, parks in storage.write
         await waitFor(() => m1.fault.parkedCount === 1);
+        restorePutTimeout(m1.mount); // the parked PUT keeps its armed 50ms deadline
         await m1.mount.drainPendingUploads(); // returns once the timeout fired and the row backed off
         expect(m1.mount.pendingUploadCount).toBe(1);
 
@@ -246,6 +248,7 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         writeFileSync(first, 'v1');
         queue.enqueueStaged(key, first, false);
         await waitFor(() => fault.parkedCount === 1);
+        restorePutTimeout(mount);
         await mount.drainPendingUploads();
         expect(mount.pendingUploadCount).toBe(1);
 
@@ -273,12 +276,12 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
     test('cancel during a timed-out orphaned PUT: the late landing must not leave deleted bytes in storage', async () => {
         const { mount, fault } = createS3Mount('orphan-cancel');
         await mount.init();
-        shrinkPutTimeout(mount, 50);
         const { containerId, dataDbId } = await provisionDoc(mount);
         const key = buildStorageKey(dataDbId, 'data.db');
 
         const managed = await mount.createDatabase(docConfig, dataDbId);
         await mount.drainPendingUploads({ flushNow: true }); // ack the create-time schema PUT
+        shrinkPutTimeout(mount, 50);
         fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mount.closeDatabase(dataDbId); // enqueues; drain parks in storage.write
@@ -306,12 +309,12 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
     test('cancel during the flight, before the timeout fires: the late landing is still deleted', async () => {
         const { mount, fault } = createS3Mount('orphan-cancel-early');
         await mount.init();
-        shrinkPutTimeout(mount, 250);
         const { containerId, dataDbId } = await provisionDoc(mount);
         const key = buildStorageKey(dataDbId, 'data.db');
 
         const managed = await mount.createDatabase(docConfig, dataDbId);
         await mount.drainPendingUploads({ flushNow: true }); // ack the create-time schema PUT
+        shrinkPutTimeout(mount, 250);
         fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mount.closeDatabase(dataDbId); // enqueues; drain parks in storage.write
