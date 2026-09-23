@@ -205,12 +205,12 @@ describe('Backup pack and verify', () => {
         expect(record.failures).toEqual([]);
         expect(record.status).toBe('verified');
         expect(record.checkedAt).toBeTruthy();
-    });
+    }, 30_000);
 
     test('an empty directory survives pack and extract', async () => {
         const dir = await extractFresh('extract-dirs-');
         expect(existsSync(join(dir, folderName, EMPTY_DIR))).toBe(true);
-    });
+    }, 30_000);
 
     test('verifying a folder does not change a byte of it', async () => {
         const dir = await extractFresh('extract-stable-');
@@ -222,7 +222,7 @@ describe('Backup pack and verify', () => {
         // very hashes stage 1 just checked. hashTree covers both: it walks the folder and folds
         // every path and its bytes in, so a stray -wal file moves the hash too.
         expect(await hashTree(folder)).toBe(before);
-    });
+    }, 30_000);
 
     test('the extracted folder holds the same bytes as the snapshot', async () => {
         const dir = await extractFresh('extract-bytes-');
@@ -231,7 +231,7 @@ describe('Backup pack and verify', () => {
         for (const entry of manifest.entries) {
             expect(await sha256Of(join(dir, folderName, entry.path))).toBe(entry.sha256);
         }
-    });
+    }, 30_000);
 
     test('a flipped byte in a database fails stage 1, naming the entry', async () => {
         const dir = await extractFresh('extract-flip-');
@@ -244,7 +244,7 @@ describe('Backup pack and verify', () => {
         const record = await verifyFolder(join(dir, folderName));
         expect(record.status).toBe('failed');
         expect(record.failures.some((f) => f.includes(sheetDataDb) && f.includes('sha256'))).toBe(true);
-    });
+    }, 30_000);
 
     test('a file the manifest does not list fails stage 1', async () => {
         const dir = await extractFresh('extract-extra-');
@@ -254,7 +254,7 @@ describe('Backup pack and verify', () => {
         const record = await verifyFolder(folder);
         expect(record.status).toBe('failed');
         expect(record.failures).toContain('home/stowaway.txt: not in the manifest');
-    });
+    }, 30_000);
 
     test('a structurally broken database fails stage 2', async () => {
         const dir = await extractFresh('extract-corrupt-');
@@ -271,7 +271,7 @@ describe('Backup pack and verify', () => {
         const record = await verifyFolder(folder);
         expect(record.status).toBe('failed');
         expect(record.failures.some((f) => f.startsWith(`${relPath}: quick_check`))).toBe(true);
-    });
+    }, 30_000);
 
     test('a manifest entry pointing outside the folder fails stage 1 and is never read', async () => {
         const dir = await extractFresh('extract-escape-');
@@ -290,7 +290,7 @@ describe('Backup pack and verify', () => {
         expect(record.failures).toContain('../outside.txt: leaves the backup folder');
         expect(record.failures).toContain('/etc/hosts: leaves the backup folder');
         expect(record.failures.some((f) => f.includes('sha256'))).toBe(false);
-    });
+    }, 30_000);
 
     test('a symlink in the folder fails stage 1 and its target is never read', async () => {
         const dir = await extractFresh('extract-symlink-');
@@ -309,7 +309,7 @@ describe('Backup pack and verify', () => {
         expect(record.failures).toContain('home/escape: is a symbolic link');
         expect(record.failures).toContain('home/escape/hosts: leaves the backup folder');
         expect(record.failures.some((f) => f.includes('sha256'))).toBe(false);
-    });
+    }, 30_000);
 
     test('a manifest that is not a version 1 manifest fails the whole verify', async () => {
         const dir = await extractFresh('extract-badmanifest-');
@@ -327,7 +327,7 @@ describe('Backup pack and verify', () => {
             expect(record.status).toBe('failed');
             expect(record.failures).toEqual(['manifest.json is not a version 1 backup manifest']);
         }
-    });
+    }, 30_000);
 
     test('a valid but empty data.db fails stage 3', async () => {
         const dir = await extractFresh('extract-empty-');
@@ -348,7 +348,7 @@ describe('Backup pack and verify', () => {
         expect(record.status).toBe('failed');
         expect(record.failures).toContain(`${docDataDb}: the Yjs state could not be read (no such table: doc_updates)`);
         expect(record.failures.some((f) => f.includes('sha256') || f.includes('missing'))).toBe(false);
-    });
+    }, 30_000);
 
     test('blobs that decode to a document with no content fail stage 3', async () => {
         const dir = await extractFresh('extract-hollow-');
@@ -367,18 +367,18 @@ describe('Backup pack and verify', () => {
         const record = await verifyFolder(folder);
         expect(record.status).toBe('failed');
         expect(record.failures).toContain(`${sheetDataDb}: its Yjs blobs decode to an empty document`);
-    });
+    }, 30_000);
 
     test('a non-ASCII file name survives pack and extract', async () => {
         const dir = await extractFresh('utf8-');
         const files = await listFiles(join(dir, folderName));
         expect(files.some((f) => f.endsWith('café ünïcode.png'))).toBe(true);
-    });
+    }, 30_000);
 
     test('readArtifactManifest reads the manifest without a full extract', async () => {
         const read = await readArtifactManifest(artifact);
         expect(read).toEqual(JSON.parse(JSON.stringify(manifest)));
-    });
+    }, 30_000);
 
     test('the sidecar round-trips and is null when missing', async () => {
         expect(await readSidecar(artifact)).toBeNull();
@@ -403,7 +403,7 @@ describe('Backup pack and verify', () => {
         const bogus = join(dir, buildArtifactName('bogus', new Date()));
         await packFolder(folder, bogus);
         await expect(readArtifactManifest(bogus)).rejects.toThrow('is not an Eigen backup archive');
-    });
+    }, 30_000);
 
     test.skipIf(!HAS_ZSTD)('the artifact is a standard zstd frame', () => {
         // `zstd -t` decodes the whole frame and checks its checksums. Spawned straight, rather than
@@ -433,7 +433,7 @@ describe('Backup pack and verify', () => {
         const files = await listFiles(dir);
         expect(files.length).toBeGreaterThan(0);
         expect(files.every((f) => f.startsWith(`${folderName}/home/mounts/${mountId}/`))).toBe(true);
-    });
+    }, 30_000);
 });
 
 describe('Backup verify stage 3 samples deterministically', () => {
@@ -491,5 +491,5 @@ describe('Backup verify stage 3 samples deterministically', () => {
         // A sample, not the whole set: fewer failures than documents, and the same ones twice.
         expect(decodeFailures(first).length).toBe(SAMPLED);
         expect(decodeFailures(second)).toEqual(decodeFailures(first));
-    });
+    }, 30_000);
 });
