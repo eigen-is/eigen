@@ -1,14 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import pkg from '../../../../package.json' with { type: 'json' };
-import { DECLINED, ROOT, VERSION_PATTERN } from './install';
+import { DECLINED, ROOT, VERSION, VERSION_PATTERN } from './install';
 import { createUi, glyphLine, wrap } from './ui';
 
-export type ReleaseNote = { version: string; intro: string; breaking: string[] };
+type ReleaseNote = { version: string; intro: string; breaking: string[] };
 
 // This image's own changelog, which knows every version up to it.
 const CHANGELOG = join(ROOT, 'CHANGELOG.md');
-const VERSION = new RegExp(`^${VERSION_PATTERN}$`);
 const HEADING = new RegExp(`^\\[(${VERSION_PATTERN})\\]`);
 
 export const UPDATE_CHECK_OPTIONS = { from: { type: 'string' }, 'accept-breaking': { type: 'boolean' } } as const;

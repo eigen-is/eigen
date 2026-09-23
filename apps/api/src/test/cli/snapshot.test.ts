@@ -21,6 +21,7 @@ import { parseBackupStamp } from '@workspace/lib/validation';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { SNAPSHOT_NAME } from '../../cli/snapshot';
 import { COLLAB_EPOCH_FILE } from '../../lib/collab/epoch';
+import { DATA_LOCK_FILE, lockDataDir } from '../../lib/config/data-lock';
 
 const CLI = join(import.meta.dir, '../../cli/index.ts');
 const { version } = pkg;
@@ -227,7 +228,8 @@ describe('snapshot', () => {
         mkdirSync(join(dir, 'snapshots/.eigen-snapshot.partial'));
         const result = await eigen(dir, 'snapshot', '--pre-update');
         expect(result.code).toBe(1);
-        expect(readdirSync(join(dir, 'snapshots')).sort()).toEqual(['.eigen-snapshot.partial', kept]);
+        expect(result.stderr).toContain('Could not write the snapshot');
+        expect(readdirSync(join(dir, 'snapshots'))).toEqual([kept]);
     });
 
     test('records the version of the image that makes it', async () => {
@@ -394,11 +396,6 @@ describe('restore', () => {
             'data/other.txt is setuid or setgid',
         ],
         [
-            'a fifo',
-            (stage: string) => Bun.spawnSync(['mkfifo', join(stage, 'data/pipe')]),
-            'data/pipe is a device, fifo or socket',
-        ],
-        [
             'a link to an absolute path',
             (stage: string) => symlinkSync('/etc/passwd', join(stage, 'data/passwd')),
             'data/passwd is a link that leads out of data/',
@@ -441,6 +438,18 @@ describe('restore', () => {
         expect(result.code).toBe(1);
         expect(result.stderr).toContain(`eigen-20200101-000000.tar.gz cannot be restored: ${reason}.`);
         untouched(dir);
+    });
+
+    // The API can make one, and it holds no data: refusing it would refuse every later snapshot.
+    test('a fifo is left out rather than refused', async () => {
+        const dir = install();
+        await handMade(dir, 'eigen-20200101-000000.tar.gz', { version, createdAt: new Date().toISOString() }, (stage) =>
+            Bun.spawnSync(['mkfifo', join(stage, 'data/pipe')]),
+        );
+        const result = await eigen(dir, 'restore', 'eigen-20200101-000000.tar.gz', '--yes');
+        expect(result.stderr).toBe('');
+        expect(result.code).toBe(0);
+        expect(readdirSync(join(dir, 'data'))).toEqual(['other.txt']);
     });
 
     // Dovecot's IMAP COPY hard-links a message, and a setgid install folder hands g+s down to every folder.
@@ -599,6 +608,40 @@ describe('restore', () => {
         expect(swap.code).toBe(0);
         expect(readFileSync(join(dir, 'data/home/alice/notes.txt'), 'utf8')).toBe('checked\n');
         expect(existsSync(join(dir, '.eigen/restore'))).toBe(false);
+    });
+
+    test('the swap takes what the archive holds from the --check run instead of reading it again', async () => {
+        const dir = install();
+        const name = await snapshot(dir);
+        expect((await eigen(dir, 'restore', name, '--check', '--yes')).code).toBe(0);
+        // A second read of the archive would refuse it now.
+        writeFileSync(join(dir, 'snapshots', name), 'damaged');
+        const swap = await eigen(dir, 'restore', name, '--yes');
+        expect(swap.stderr).toBe('');
+        expect(swap.code).toBe(0);
+        expect(swap.stdout).toContain(`Restored ${name}, a snapshot of Eigen ${version}`);
+    });
+
+    test('while another process holds data/, a backup and a swap are refused, and a check goes ahead', async () => {
+        const dir = install();
+        const name = await snapshot(dir);
+        writeFileSync(join(dir, 'data/home/alice/notes.txt'), 'changed\n');
+        mkdirSync(join(dir, 'data/server'));
+        const lock = lockDataDir(join(dir, 'data/server', DATA_LOCK_FILE));
+        try {
+            const backup = await eigen(dir, 'snapshot');
+            expect(backup.code).toBe(1);
+            expect(backup.stderr).toContain('data/ is in use by Eigen or by another backup or restore.');
+            expect(readdirSync(join(dir, 'snapshots'))).toEqual([name]);
+            expect((await eigen(dir, 'restore', name, '--check', '--yes')).code).toBe(0);
+            const swap = await eigen(dir, 'restore', name, '--yes');
+            expect(swap.code).toBe(1);
+            expect(swap.stderr).toContain('run ./eigen restore again');
+        } finally {
+            lock?.close();
+        }
+        expect(readFileSync(join(dir, 'data/home/alice/notes.txt'), 'utf8')).toBe('changed\n');
+        expect(readdirSync(dir).filter((file) => file.includes('pre-restore'))).toEqual([]);
     });
 
     test('an unpacked copy of another snapshot is not swapped in', async () => {

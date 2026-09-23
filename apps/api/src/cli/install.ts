@@ -7,6 +7,7 @@ export const ENV_PATH = '.env.production';
 // The exit code of a question the operator said no to, which the launcher ends as a plain exit.
 export const DECLINED = 3;
 export const VERSION_PATTERN = String.raw`\d+\.\d+\.\d+(?:-[\w.-]+)?`;
+export const VERSION = new RegExp(`^${VERSION_PATTERN}$`);
 export const IMAGE_NAMES = ['api', 'frontend', 'postfix', 'dovecot'] as const;
 
 type Owner = { uid: number; gid: number };

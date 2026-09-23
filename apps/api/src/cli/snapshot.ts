@@ -1,11 +1,10 @@
+import type { Database } from 'bun:sqlite';
 import {
     chmodSync,
-    closeSync,
     existsSync,
     lstatSync,
     mkdirSync,
     mkdtempSync,
-    openSync,
     readdirSync,
     readFileSync,
     realpathSync,
@@ -22,8 +21,9 @@ import { BACKUP_STAMP_PATTERN, buildBackupStamp } from '@workspace/lib/validatio
 import type { Subprocess } from 'bun';
 import pkg from '../../../../package.json' with { type: 'json' };
 import { COLLAB_EPOCH_FILE } from '../lib/collab/epoch';
-import { DECLINED, ENV_PATH, installOwner, ownAs, VERSION_PATTERN } from './install';
-import { createUi, glyphLine } from './ui';
+import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
+import { DECLINED, ENV_PATH, installOwner, ownAs, VERSION } from './install';
+import { createUi, glyphLine, type Ui } from './ui';
 
 // Both commands run as root in a container on the install folder (-w /install), so data/ keeps its mixed owners.
 const SNAPSHOTS = 'snapshots';
@@ -32,7 +32,8 @@ const META = 'eigen-snapshot.json';
 const STAGING = '.eigen/restore';
 // What ./eigen rollback goes back to: the pre-update snapshot, and the version and commit that made it.
 const LAST_UPDATE = '.eigen/last-update';
-const VERSION = new RegExp(`^${VERSION_PATTERN}$`);
+
+type SnapshotMeta = { version: string; createdAt: string };
 
 export const SNAPSHOT_NAME = new RegExp(`^eigen-(?<preUpdate>pre-update-)?${BACKUP_STAMP_PATTERN}\\.tar\\.gz$`);
 
@@ -62,7 +63,24 @@ export function newestSnapshots(names: string[]): string[] {
     return names.filter((name) => SNAPSHOT_NAME.test(name)).sort((a, b) => stamp(b).localeCompare(stamp(a)));
 }
 
+// Held until exit, like the API holds it while it runs: neither reads or replaces data/ while the other does.
+let dataLock: Database | null = null;
+
+function lockData(ui: Ui, command: string): void {
+    const file = join('data/server', DATA_LOCK_FILE);
+    // Root must not make one the API could not open; without one, no API ever ran on this data/.
+    if (!existsSync(file)) return;
+    dataLock = lockDataDir(file);
+    if (!dataLock) {
+        ui.fail(
+            'data/ is in use by Eigen or by another backup or restore.',
+            `Wait for it to finish, then run ./eigen ${command} again.`,
+        );
+    }
+}
+
 // Why root must not swap the unpacked snapshot in, or null. A hard link is fine: Dovecot makes them on an IMAP copy.
+// Fifos and sockets hold no data and the API can make them, so they are left out rather than refused.
 async function refusal(): Promise<string | null> {
     const env = lstatSync(join(STAGING, ENV_PATH));
     if (!env.isFile() || env.nlink > 1) return `${ENV_PATH} is not a plain file`;
@@ -86,7 +104,8 @@ async function refusal(): Promise<string | null> {
             }
             if (target !== data && !target.startsWith(`${data}/`)) return `${name} is a link that leads out of data/`;
         } else if (stat.isFile()) return `${name} is setuid or setgid`;
-        else return `${name} is a device, fifo or socket`;
+        else if (stat.isFIFO() || stat.isSocket()) rmSync(path);
+        else return `${name} is a device`;
     }
     return null;
 }
@@ -99,6 +118,7 @@ export async function snapshot(flags: { 'pre-update'?: boolean }): Promise<void>
             'Run ./eigen backup in the install folder.',
         );
     }
+    lockData(ui, 'backup');
     const owner = installOwner();
     if (!existsSync(SNAPSHOTS)) mkdirSync(SNAPSHOTS, { mode: 0o700 });
     ownAs(SNAPSHOTS, owner);
@@ -121,37 +141,31 @@ export async function snapshot(flags: { 'pre-update'?: boolean }): Promise<void>
     writeFileSync(join(metaDir, META), JSON.stringify({ version: pkg.version, createdAt: createdAt.toISOString() }));
     // One fixed name, so a run that died halfway leaves nothing a later run does not overwrite.
     const partial = join(SNAPSHOTS, '.eigen-snapshot.partial');
-    let out: number;
-    try {
-        out = openSync(partial, 'w', 0o600);
-    } catch (error) {
-        rmSync(metaDir, { recursive: true });
-        return ui.fail(
-            `Could not write to ${SNAPSHOTS}/: ${error instanceof Error ? error.message : String(error)}`,
-            `Make ${SNAPSHOTS}/ a writable folder, then run ./eigen backup again.`,
-        );
-    }
     // Numeric owners: the ids in data/ are the containers' users, which this image may not name. -S keeps a sparse
     // file small instead of writing out its holes.
     const tar = Bun.spawn(
-        ['tar', '-cf', '-', '-S', '--numeric-owner', '-C', metaDir, META, '-C', process.cwd(), ENV_PATH, 'data'],
-        { stdout: 'pipe', stderr: 'pipe' },
+        [
+            'tar',
+            '--use-compress-program=gzip -1',
+            '-cf',
+            partial,
+            '-S',
+            '--numeric-owner',
+            '-C',
+            metaDir,
+            META,
+            '-C',
+            process.cwd(),
+            ENV_PATH,
+            'data',
+        ],
+        { stdout: 'ignore', stderr: 'pipe' },
     );
-    const gzip = Bun.spawn(['gzip', '-1'], { stdin: tar.stdout, stdout: out, stderr: 'pipe' });
-    const [tarCode, gzipCode, tarError, gzipError] = await Promise.all([
-        tar.exited,
-        gzip.exited,
-        new Response(tar.stderr).text(),
-        new Response(gzip.stderr).text(),
-    ]);
-    closeSync(out);
+    const [code, error] = await Promise.all([tar.exited, new Response(tar.stderr).text()]);
     rmSync(metaDir, { recursive: true });
-    if (tarCode !== 0 || gzipCode !== 0) {
-        rmSync(partial, { force: true });
-        ui.fail(
-            `Could not write the snapshot:\n${tarError}${gzipError}`.trim(),
-            'Fix what it says, then run ./eigen backup again.',
-        );
+    if (code !== 0) {
+        rmSync(partial, { recursive: true, force: true });
+        ui.fail(`Could not write the snapshot:\n${error}`.trim(), 'Fix what it says, then run ./eigen backup again.');
     }
     chmodSync(partial, 0o600);
     ownAs(partial, owner);
@@ -184,36 +198,46 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
     const cannot = (reason: string): never =>
         ui.fail(`${name} cannot be restored: ${reason}.`, 'Restore a snapshot made by ./eigen backup.');
 
-    // Reads the whole archive, so a damaged one is refused before the question.
-    const read = Bun.spawn(['tar', '-xzOf', path, META], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
-    const [text, readError, readCode] = await Promise.all([
-        new Response(read.stdout).text(),
-        new Response(read.stderr).text(),
-        read.exited,
-    ]);
-    let meta: unknown = null;
-    try {
-        meta = JSON.parse(text);
-    } catch {
-        // Refused below.
+    // A --check run read the whole archive and left what it holds beside the copy it unpacked.
+    const marker = join(STAGING, '.snapshot');
+    const marked: (SnapshotMeta & { name: string }) | null =
+        !flags.check && existsSync(marker) ? JSON.parse(readFileSync(marker, 'utf8')) : null;
+    let meta: SnapshotMeta;
+    if (marked?.name === name) {
+        meta = marked;
+    } else {
+        // Reads the whole archive, so a damaged one is refused before the question.
+        const read = Bun.spawn(['tar', '-xzOf', path, META], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
+        const [text, readError, readCode] = await Promise.all([
+            new Response(read.stdout).text(),
+            new Response(read.stderr).text(),
+            read.exited,
+        ]);
+        let parsed: unknown = null;
+        try {
+            parsed = JSON.parse(text);
+        } catch {
+            // Refused below.
+        }
+        if (
+            typeof parsed !== 'object' ||
+            parsed === null ||
+            !('version' in parsed) ||
+            typeof parsed.version !== 'string' ||
+            // Bun.semver.order throws on what is not a version.
+            !VERSION.test(parsed.version) ||
+            !('createdAt' in parsed) ||
+            typeof parsed.createdAt !== 'string' ||
+            Number.isNaN(Date.parse(parsed.createdAt))
+        ) {
+            return ui.fail(
+                `${name} is not an Eigen snapshot: it has no readable ${META}.`,
+                'Restore a snapshot made by ./eigen backup.',
+            );
+        }
+        if (readCode !== 0) cannot(readError.trim());
+        meta = { version: parsed.version, createdAt: parsed.createdAt };
     }
-    if (
-        typeof meta !== 'object' ||
-        meta === null ||
-        !('version' in meta) ||
-        typeof meta.version !== 'string' ||
-        // Bun.semver.order throws on what is not a version.
-        !VERSION.test(meta.version) ||
-        !('createdAt' in meta) ||
-        typeof meta.createdAt !== 'string' ||
-        Number.isNaN(Date.parse(meta.createdAt))
-    ) {
-        return ui.fail(
-            `${name} is not an Eigen snapshot: it has no readable ${META}.`,
-            'Restore a snapshot made by ./eigen backup.',
-        );
-    }
-    if (readCode !== 0) cannot(readError.trim());
     if (Bun.semver.order(meta.version, pkg.version) > 0) {
         ui.fail(
             `${name} is a snapshot of Eigen ${meta.version}; this install runs ${pkg.version}.`,
@@ -230,6 +254,7 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
             'Move the data into data/ here, then run ./eigen restore again.',
         );
     }
+    if (!flags.check) lockData(ui, 'restore');
 
     const what = `${name}, a snapshot of Eigen ${meta.version}`;
     if (!flags.yes) {
@@ -253,8 +278,7 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
     };
     process.on('SIGINT', interrupt);
     process.on('SIGTERM', interrupt);
-    const marker = join(STAGING, '.snapshot');
-    if (flags.check || !existsSync(marker) || readFileSync(marker, 'utf8') !== name) {
+    if (marked?.name !== name) {
         rmSync(STAGING, { recursive: true, force: true });
         mkdirSync(STAGING, { recursive: true, mode: 0o700 });
         extract = Bun.spawn(['tar', '--numeric-owner', '-xzpf', path, '-C', STAGING, ENV_PATH, 'data'], {
@@ -279,7 +303,7 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
         }
         if (reason) cannot(reason);
         if (flags.check) {
-            writeFileSync(marker, name);
+            writeFileSync(marker, JSON.stringify({ name, ...meta }));
             return;
         }
     }
