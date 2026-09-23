@@ -60,13 +60,14 @@ function withOrganizer(event: CalendarEvent, organizer: Organizer): CalendarEven
     return { ...event, data: { ...event.data, organizer } };
 }
 
-// `series` lets the body name the occurrence it replaces (RECURRENCE-ID) instead of reading as a message about the whole series.
+// `series` lets the body name the occurrence it replaces (RECURRENCE-ID) instead of reading as a message about the whole series; a master's `exceptions` ride beside it.
 function icalEvent(
     event: CalendarEvent,
     method: 'REQUEST' | 'REPLY' | 'CANCEL',
     series?: CalendarEvent,
+    exceptions?: CalendarEvent[],
 ): OutboundICalEvent {
-    return { method, content: serializeEventForImip(event, method, series) };
+    return { method, content: serializeEventForImip(event, method, series, exceptions) };
 }
 
 export function composeInviteEmail(
@@ -74,6 +75,7 @@ export function composeInviteEmail(
     organizer: Organizer,
     attendees: Attendee[],
     series?: CalendarEvent,
+    exceptions: CalendarEvent[] = [],
 ): OutboundMail {
     const footer = `Invitation from ${organizer.name || organizer.email}`;
     return {
@@ -82,7 +84,12 @@ export function composeInviteEmail(
         subject: `Invitation: ${event.title}`,
         text: buildEventSummary(event),
         html: buildEventHtml(event, footer),
-        icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST', series),
+        icalEvent: icalEvent(
+            withOrganizer(event, organizer),
+            'REQUEST',
+            series,
+            exceptions.map((e) => withOrganizer(e, organizer)),
+        ),
     };
 }
 
@@ -91,6 +98,7 @@ export function composeUpdateEmail(
     organizer: Organizer,
     attendees: Attendee[],
     series?: CalendarEvent,
+    exceptions: CalendarEvent[] = [],
 ): OutboundMail {
     const footer = `Invitation from ${organizer.name || organizer.email}`;
     return {
@@ -99,7 +107,12 @@ export function composeUpdateEmail(
         subject: `Updated invitation: ${event.title}`,
         text: buildEventSummary(event),
         html: buildEventHtml(event, footer, 'This event has been updated'),
-        icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST', series),
+        icalEvent: icalEvent(
+            withOrganizer(event, organizer),
+            'REQUEST',
+            series,
+            exceptions.map((e) => withOrganizer(e, organizer)),
+        ),
     };
 }
 

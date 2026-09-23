@@ -91,7 +91,7 @@ export async function propagateInvitation(
                 await addRegistryEntry(organizerHome.user.id, attendee.email);
                 // Send iMIP invite email to external attendee
                 const organizer = { userId: user.id, email: user.email, name: user.name };
-                const mail = composeInviteEmail(event, organizer, [attendee], series);
+                const mail = composeInviteEmail(event, organizer, [attendee], series, exceptions);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP invite:', err));
                 continue;
             }
@@ -162,7 +162,7 @@ export async function propagateInvitation(
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
                 const organizer = { userId: user.id, email: user.email, name: user.name };
-                const mail = composeUpdateEmail(event, organizer, [attendee], series);
+                const mail = composeUpdateEmail(event, organizer, [attendee], series, exceptions);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP update:', err));
                 continue;
             }
