@@ -42,8 +42,7 @@ describe('env file', () => {
                 'BARE_HASH=a # b',
                 "EMPTY_SQ=''",
                 'EMPTY=',
-                // biome-ignore lint/suspicious/noTemplateCurlyInString: a Compose reference, not a JS placeholder
-                'REF=${S}x',
+                `REF=\${S}x`,
                 'export EXP=2',
                 'DUP=first',
                 'DUP=second',

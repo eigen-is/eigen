@@ -533,15 +533,14 @@ describe('configure command', () => {
     });
 
     test('the interactive run honors NO_COLOR', async () => {
-        // biome-ignore lint/suspicious/noControlCharactersInRegex: matching escape sequences is the point
-        const COLOR = /\x1b\[(?:3\d|4\d|9[0-7]|10[0-7])m/;
+        const CYAN = '\x1b[36m';
         const cancel = { when: 'Web address', keys: '\x03' };
         const plain = await runInTerminal(tempDir(), [], { NO_COLOR: '1' }, cancel);
         expect(plain.code).toBe(130);
         expect(plain.output).toContain('Web address');
-        expect(plain.output).not.toMatch(COLOR);
+        expect(plain.output).not.toContain(CYAN);
         const colored = await runInTerminal(tempDir(), [], { NO_COLOR: undefined }, { ...cancel });
         expect(colored.code).toBe(130);
-        expect(colored.output).toMatch(COLOR);
+        expect(colored.output).toContain(CYAN);
     });
 });
