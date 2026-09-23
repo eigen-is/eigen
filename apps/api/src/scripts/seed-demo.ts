@@ -95,9 +95,8 @@ const MAIL_DOMAIN = process.env['MAIL_DOMAIN'] || 'tuimel.example';
 const DOMAIN = process.env['DOMAIN'] || MAIL_DOMAIN;
 
 // Drive-reference pills in seeded mail ("Open festival →") are built server-side by mail-template's
-// appUrl(), which reads the frontend per-app URL vars (VITE_APP_*_URL). The live API gets them from
-// `.env.production` via its CMD's --env-file, but the offline seeder runs through `compose run …
-// seed-demo.ts`, which replaces that CMD — so without setting them here the links fall back to dev
+// appUrl(), which reads the frontend per-app URL vars (VITE_APP_*_URL). `compose run` gets them from
+// `.env.production` through the service's env_file; without them the links would fall back to dev
 // localhost URLs and get baked into the stored mail. Point them at the deploy host (same-origin under
 // each app name), which is exactly what the live API resolves for a real user's outbound mail.
 const WEB_ORIGIN = DOMAIN === 'localhost' ? 'http://localhost' : `https://${DOMAIN}`;

@@ -1,0 +1,41 @@
+# Source installs: layer on docker-compose.yml to build the four images from this checkout instead of
+# pulling them. BUN_VERSION comes from .bun-version: BUN_VERSION=$(cat .bun-version).
+x-labels: &labels
+  EIGEN_VERSION: ${EIGEN_VERSION:-}
+  EIGEN_COMMIT: ${EIGEN_COMMIT:-}
+
+# caddy and eigen-static run the same image; both carry the build so either profile alone builds it,
+# and with both active the second build is a cache hit.
+x-frontend-build: &frontend-build
+  context: .
+  dockerfile: docker/frontend/Dockerfile
+  args:
+    <<: *labels
+    BUN_VERSION: ${BUN_VERSION:?set BUN_VERSION to the contents of .bun-version}
+    DOMAIN: ${DOMAIN:-}
+
+services:
+  eigen-api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+      args:
+        <<: *labels
+        BUN_VERSION: ${BUN_VERSION:?set BUN_VERSION to the contents of .bun-version}
+        EIGEN_BUILT_AT: ${EIGEN_BUILT_AT:-}
+
+  caddy:
+    build: *frontend-build
+
+  eigen-static:
+    build: *frontend-build
+
+  postfix:
+    build:
+      context: docker/postfix
+      args: *labels
+
+  dovecot:
+    build:
+      context: docker/dovecot
+      args: *labels

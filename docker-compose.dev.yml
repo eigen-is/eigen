@@ -27,7 +27,6 @@ services:
       MAIL_DOMAIN: ${MAIL_DOMAIN:-localhost}
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
-      COOKIE_DOMAIN: localhost
       TRUSTED_NETWORKS: "127.0.0.0/8,::1,${EIGEN_SUBNET:-172.20.0.0/24}"
 
   eigen-static:

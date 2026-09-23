@@ -1,15 +1,11 @@
 services:
   caddy:
     profiles: ["edge"]
-    image: caddy:2-alpine
+    image: ${EIGEN_FRONTEND_IMAGE:-eigen-frontend:local}
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./docker/caddy/export-certs.sh:/usr/local/bin/export-certs.sh:ro
-      - ./docker/caddy/autoconfig.xml:/etc/caddy/autoconfig.xml:ro
-      - ./dist:/www:ro
       - ./caddy-data:/data
       - ./data/certs:/shared-certs
     env_file: .env.production
@@ -25,10 +21,10 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
   eigen-api:
-    build:
-      context: .
-      dockerfile: docker/api/Dockerfile
+    image: ${EIGEN_API_IMAGE:-eigen-api:local}
     user: "1000:1000"
+    # A real PID 1: forwards SIGTERM to bun and reaps its ffmpeg/weasyprint children.
+    init: true
     # No host port binding — caddy / eigen-static / postfix / dovecot all reach the API via
     # the docker network as `eigen-api:8000`. For host-side debug access, layer the
     # docker-compose.host-api.yml overlay (binds 127.0.0.1:${EIGEN_API_BIND_PORT:-8000}).
@@ -42,6 +38,7 @@ services:
     # scenarios where the bundled postfix is off. Harmless when bundled postfix is on.
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    env_file: .env.production
     environment:
       PRODUCTION: 1
       # Conventional production signal for third-party libs that gate on it (e.g. better-auth
@@ -63,12 +60,9 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_SECURE: ${SMTP_SECURE:-}
-      COOKIE_DOMAIN: .${DOMAIN}
       # Loopback plus the docker bridge subnet (same EIGEN_SUBNET the network and postfix use), so
       # Postfix/Dovecot bridge callers are trusted without the whole 172.16/12 range.
       TRUSTED_NETWORKS: "127.0.0.0/8,::1,${EIGEN_SUBNET:-172.20.0.0/24}"
-      EIGEN_COMMIT: ${EIGEN_COMMIT:-}
-      EIGEN_BUILT_AT: ${EIGEN_BUILT_AT:-}
     restart: unless-stopped
     # On SIGTERM the API drains pending S3 uploads before exit (SHUTDOWN_DRAIN_BUDGET_MS=20s,
     # index.ts). Give it more than Docker's 10s default so a healthy drain completes; anything
@@ -94,9 +88,8 @@ services:
 
   eigen-static:
     profiles: ["static"]
-    build:
-      context: .
-      dockerfile: docker/static/Dockerfile
+    image: ${EIGEN_FRONTEND_IMAGE:-eigen-frontend:local}
+    command: caddy run --config /etc/caddy/Caddyfile.static --adapter caddyfile
     # Long-form bind so EIGEN_STATIC_HOST/PORT substitute cleanly. Avoid the short-form
     # `${IP}:${PORT}:8080` shape — the colon between vars confuses some Compose versions.
     ports:
@@ -118,7 +111,8 @@ services:
 
   unbound:
     profiles: ["mail"]
-    image: mvance/unbound:latest
+    # mvance/unbound:latest as resolved on 2026-09-23 (linux/amd64 only).
+    image: mvance/unbound@sha256:76906da36d1806f3387338f15dcf8b357c51ce6897fb6450d6ce010460927e90
     restart: unless-stopped
     networks:
       eigen:
@@ -135,8 +129,7 @@ services:
 
   postfix:
     profiles: ["mail"]
-    build:
-      context: docker/postfix
+    image: ${EIGEN_POSTFIX_IMAGE:-eigen-postfix:local}
     ports:
       - "25:25"
       - "465:465"
@@ -180,8 +173,7 @@ services:
 
   dovecot:
     profiles: ["mail"]
-    build:
-      context: docker/dovecot
+    image: ${EIGEN_DOVECOT_IMAGE:-eigen-dovecot:local}
     ports:
       - "993:993"
     volumes:

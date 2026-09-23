@@ -18,6 +18,12 @@ RUN chmod +x /usr/local/bin/eigen-checkpassword /entrypoint.sh
 # Create vmail user with UID 1000 to match API container
 RUN groupadd -g 1000 vmail && useradd -u 1000 -g 1000 -d /data/home -s /usr/sbin/nologin vmail
 
+ARG EIGEN_VERSION
+ARG EIGEN_COMMIT
+LABEL org.opencontainers.image.source="https://github.com/eigen-is/eigen" \
+      org.opencontainers.image.version="${EIGEN_VERSION}" \
+      org.opencontainers.image.revision="${EIGEN_COMMIT}"
+
 EXPOSE 993
 
 ENTRYPOINT ["/entrypoint.sh"]
