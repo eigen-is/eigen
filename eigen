@@ -21,29 +21,56 @@ usage() {
 Usage: ./eigen <command>
 
 Commands:
-  setup [flags]    Configure Eigen, get its images, start it and print the link that
-                   finishes the setup. Without flags it asks; ./eigen setup --help lists
-                   the flags.
-  status           Report on the version, the services, disk space, the last snapshot,
-                   the certificate and the mail queue.
-  reset-password <email> [--generate]
-                   Set a new password for an account, sign it out everywhere and revoke
-                   its app passwords. It asks for the password; --generate makes one up
-                   and prints it.
-  backup           Stop Eigen, save data/ and .env.production as a snapshot in backups/,
-                   and start Eigen again.
-  restore <snapshot> [--yes]
-                   Put a snapshot from backups/ back. The current data/ and .env.production
-                   are kept aside. It asks first; --yes does not.
-  logs [service]   Follow the logs of every service, or of one: eigen-api, caddy,
-                   eigen-static, postfix, dovecot, unbound.
-  help             Show this help.
+  setup            Configure Eigen, start it and print the link that finishes the setup
+  status           Report on Eigen, its services, disk space, snapshots and certificate
+  reset-password   Set a new password for an account
+  backup           Save Eigen as a snapshot in snapshots/
+  restore          Put a snapshot back
+  logs             Follow the logs
+  help             Show this help
+
+./eigen <command> --help tells more about one.
 
 Environment:
   NO_COLOR=1           Plain output without color.
   EIGEN_ALLOW_ARCH=1   Run on a server that is not x86_64. Unsupported: Eigen's images are
                        built for x86_64 only.
 EOF
+}
+
+# The usage of the commands the launcher runs alone; the CLI prints its own for the others.
+command_usage() {
+    case $1 in
+        status) printf '%s\n' 'Usage: ./eigen status' '' \
+            'Reports on the version, a pending update, the services, disk space, the last snapshot,' \
+            'the certificate and the mail queue.' ;;
+        backup) printf '%s\n' 'Usage: ./eigen backup' '' \
+            'Stops Eigen, saves data/ and .env.production as a snapshot in snapshots/, and starts' \
+            'Eigen again. Only the owner of this folder can read the snapshot.' ;;
+        logs) printf '%s\n' 'Usage: ./eigen logs [service]' '' \
+            'Follows the logs of every service, or of one: eigen-api, caddy, eigen-static, postfix,' \
+            'dovecot, unbound.' ;;
+    esac
+}
+
+# arguments <command> <how many it takes> <argument…>: --help prints its usage; one argument too many is refused
+# with it.
+arguments() {
+    command=$1 takes=$2
+    shift 2
+    for arg in "$@"; do
+        case $arg in -h | --help)
+            command_usage "$command"
+            exit 0
+            ;;
+        esac
+    done
+    if [ $# -gt "$takes" ]; then
+        shift "$takes"
+        printf 'Unknown argument "%s".\n\n' "$1" >&2
+        command_usage "$command" >&2
+        exit 2
+    fi
 }
 
 say() { printf '%s%s%s  %s\n' "$1" "$2" "$RESET" "$3"; }
@@ -114,14 +141,16 @@ API_CLI=/app/apps/api/src/cli/index.ts
 EXEC_TTY=-T
 if [ -t 0 ]; then EXEC_TTY=''; fi
 
-# cli_as <uid:gid> <command…>: the CLI in the API image on this folder. RELAY_ENV names a variable it may read.
+# cli_as <uid:gid> <command…>: the CLI in the API image on this folder, with the variables CLI_ENV names.
+CLI_ENV=''
 cli_as() {
     user=$1
     shift
     tty=''
     if [ -t 0 ]; then tty=-t; fi
-    docker run --rm --init -i $tty -e TERM -e NO_COLOR --user "$user" -e HOME=/tmp \
-        -e EIGEN_PROJECT -e EIGEN_DOCKER_NETWORKS -e EIGEN_PINS ${RELAY_ENV:+-e "$RELAY_ENV"} \
+    env=''
+    for name in $CLI_ENV; do env="$env -e $name"; done
+    docker run --rm --init -i $tty -e TERM -e NO_COLOR $env --user "$user" -e HOME=/tmp \
         -v "$PWD:/install" -w /install "$API_IMAGE" "$@"
 }
 
@@ -183,6 +212,13 @@ step() {
 }
 
 wordmark() { printf '\n%seigen|%s>%s\n\n' "$ACCENT" "$1" "$RESET"; }
+
+# The CLI comes with the API image, which a source install builds in ./eigen setup.
+need_image() {
+    if [ "$MODE" = source ] && ! docker image inspect "$API_IMAGE" >/dev/null 2>&1; then
+        die "Eigen is not built yet." "$1"
+    fi
+}
 
 preflight() {
     if [ -e .env.production ] && [ ! -r .env.production ]; then
@@ -246,7 +282,7 @@ prepare_data() {
     done
     docker run --rm --user 1000:1000 --entrypoint sh -v "$PWD/data:/data" -v "$PWD/backups:/backups" "$API_IMAGE" \
         -c 'for dir in /data /backups; do touch "$dir/.eigen-write-test" && rm "$dir/.eigen-write-test" || exit 1; done' || {
-        echo "The server (uid 1000) cannot write here. Give it the folders: sudo chown 1000:1000 data backups"
+        echo "Eigen runs as uid 1000 and cannot write here. Give it the folders: sudo chown 1000:1000 data backups"
         return 1
     }
 }
@@ -254,37 +290,35 @@ prepare_data() {
 setup() {
     case ${1:-} in
         -h | --help)
-            if [ "$MODE" = source ] && ! docker image inspect "$API_IMAGE" >/dev/null 2>&1; then
-                die "The setup flags come with the API image, which is not built yet." "Run ./eigen setup; ./eigen setup --help works after that."
-            fi
+            need_image "Run ./eigen setup; ./eigen setup --help works after that."
             cli configure --help
             return
             ;;
     esac
-    RELAY_ENV=''
+    relay=''
     previous=''
     for arg in "$@"; do
-        case $previous in --relay-password-env) RELAY_ENV=$arg ;; esac
-        case $arg in --relay-password-env=*) RELAY_ENV=${arg#*=} ;; esac
+        case $previous in --relay-password-env) relay=$arg ;; esac
+        case $arg in --relay-password-env=*) relay=${arg#*=} ;; esac
         previous=$arg
     done
-    case $RELAY_ENV in [0-9]* | *[!A-Za-z0-9_]*)
+    case $relay in [0-9]* | *[!A-Za-z0-9_]*)
         die "--relay-password-env takes a variable name, like RELAY_PASSWORD." "Export the password in a variable and pass its name."
         ;;
     esac
+    CLI_ENV="EIGEN_PROJECT EIGEN_DOCKER_NETWORKS $relay"
 
     wordmark setup
     preflight
     mkdir -p .eigen
 
-    EIGEN_PINS=''
     if [ "$MODE" = source ]; then
         # Compose loads env_file: even to build, so a first run needs the file before configure writes it. Left
         # empty by a setup that ends before that, it would read as an install.
         if [ ! -e .env.production ]; then (umask 077 && : >.env.production); fi
         trap '[ -s .env.production ] || rm -f .env.production' EXIT
         trap 'exit 130' INT TERM
-        step "Building the API image" "API image built" "Could not build the API image" dc build eigen-api
+        step "Building Eigen" "Eigen built" "Could not build Eigen" dc build eigen-api
     else
         registry=${EIGEN_REGISTRY:-$(env_value EIGEN_REGISTRY)}
         version=${EIGEN_VERSION:-$(env_value EIGEN_VERSION)}
@@ -293,14 +327,19 @@ setup() {
         fi
         step "Downloading Eigen $version" "Eigen $version downloaded" "Could not download Eigen $version" \
             pull_images "$registry" "$version"
-        EIGEN_PINS="EIGEN_REGISTRY=$registry EIGEN_VERSION=$version"
+        # The release pins configure writes; Compose reads them from here too, over the file.
+        EIGEN_REGISTRY=$registry EIGEN_VERSION=$version
+        export EIGEN_REGISTRY EIGEN_VERSION
+        CLI_ENV="$CLI_ENV EIGEN_REGISTRY EIGEN_VERSION"
         for name in api frontend postfix dovecot; do
             digest=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' \
                 "$registry/eigen-$name:$version" | grep -F "$registry/eigen-$name@" | head -n 1)
             if [ -z "$digest" ]; then
                 die "$registry/eigen-$name:$version has no registry digest." "Remove the local image (docker image rm $registry/eigen-$name:$version) and run ./eigen setup again."
             fi
-            EIGEN_PINS="$EIGEN_PINS EIGEN_$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_IMAGE=$digest"
+            pin=EIGEN_$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_IMAGE
+            export "$pin=$digest"
+            CLI_ENV="$CLI_ENV $pin"
             if [ "$name" = api ]; then API_IMAGE=$digest; fi
         done
     fi
@@ -309,7 +348,7 @@ setup() {
     docker network inspect $(docker network ls -q) >.eigen/networks.json ||
         die "Could not list the Docker networks." "Check that Docker is running, then run ./eigen setup again."
     EIGEN_DOCKER_NETWORKS=/install/.eigen/networks.json
-    export EIGEN_DOCKER_NETWORKS EIGEN_PINS
+    export EIGEN_DOCKER_NETWORKS
     cli configure "$@" || exit
     trap - EXIT
 
@@ -331,51 +370,61 @@ restart() {
 }
 
 # The snapshot is taken with every service stopped (dovecot and postfix write to data/ too), as root in a container
-# so the mixed owners in data/ survive. Eigen starts again whatever happens to the snapshot.
+# so the mixed owners in data/ survive. snapshots/ is the operator's alone, and no service of Eigen mounts it. Eigen
+# starts again whatever happens to the snapshot.
 backup() {
+    arguments backup 0 "$@"
     if ! installed; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
     wordmark backup
     preflight
     mkdir -p .eigen
+    (umask 077 && mkdir -p snapshots)
     trap restart EXIT
     trap 'exit 130' INT TERM
     step "Stopping Eigen" "Eigen stopped" "Could not stop Eigen" dc stop
     cli_as 0 snapshot
 }
 
-# The CLI checks the snapshot and asks before anything stops. Eigen starts again whatever happens to the restore:
-# a failed or interrupted one puts the previous data back first. An interrupt reaches the CLI, which says how it
-# ended, so the launcher waits for it instead of leaving.
+# The CLI checks the snapshot and asks before anything stops; a no is its exit 3. Eigen starts again whatever happens
+# to the restore: the CLI unpacks and checks the snapshot aside, and only then swaps it in. An interrupt reaches the
+# CLI, which says how it ended, so the launcher waits for it instead of leaving.
 restore() {
     case ${1:-} in -h | --help)
-        usage
+        need_image "Run ./eigen setup first; ./eigen restore --help works after that."
+        cli restore --help
         return
         ;;
     esac
     wordmark restore
     preflight
+    need_image "Run ./eigen setup first, then ./eigen restore <snapshot>."
     mkdir -p .eigen
-    cli_as 0 restore "$@" --check || exit
+    checked=0
+    cli_as 0 restore "$@" --check || checked=$?
+    case $checked in 0) ;; 3) exit 0 ;; *) exit "$checked" ;; esac
     trap restart EXIT
     trap 'exit 130' INT TERM
     if [ -f .env.production ]; then step "Stopping Eigen" "Eigen stopped" "Could not stop Eigen" dc stop; fi
     trap : INT TERM
-    code=0
-    cli_as 0 restore "$@" --yes || code=$?
+    # Not $code: restart's step sets that.
+    restored=0
+    cli_as 0 restore "$@" --yes || restored=$?
     trap - EXIT INT TERM
     restart
-    case $code in
+    case $restored in
         0) say "$GRAY" '└' "Check that all is well, then delete what was kept aside." ;;
         130)
             say "$GRAY" '└' "The restore was cancelled. Eigen runs on the data it had."
             exit 130
             ;;
-        *) exit "$code" ;;
+        *) exit "$restored" ;;
     esac
 }
 
-# Only the launcher can ask Docker, so it gathers the services, a pending update and the mail queue for the report.
+# Only the launcher can ask Docker and read snapshots/, so it gathers the services, a pending update, the mail queue
+# and the newest snapshot for the report. With Eigen down there is no socket to reach, and the CLI runs on its own.
 status() {
+    arguments status 0 "$@"
     if ! installed; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
     wordmark status
     preflight >/dev/null
@@ -388,26 +437,6 @@ status() {
         services="$services${line:-$service${tab}missing$tab}
 "
     done
-
-    # The CLI's layout, for when the CLI cannot run: the labels in one column, glyphs only where there is color.
-    case $services in *"eigen-api${tab}running$tab"*) ;; *)
-        width=$(printf '%s' "$services" | awk -F "$tab" 'length($1) > w { w = length($1) } END { print w + 2 }')
-        printf '%s' "$services" | while IFS="$tab" read -r service state health; do
-            if [ "$state" = missing ]; then value='not created'; else value="$state${health:+, $health}"; fi
-            line=$(printf "%-${width}s%s" "$service" "$value")
-            if [ -z "$RESET" ]; then
-                printf '%s\n' "$line"
-            elif [ "$state" != running ] || [ "$health" = unhealthy ]; then
-                say "$RED" '■' "$line"
-            elif [ "$health" = starting ]; then
-                say "$YELLOW" '▲' "$line"
-            else
-                say "$GREEN" '◇' "$line"
-            fi
-        done
-        die "The API is not running, and the rest of the report comes from it." "./eigen logs eigen-api shows why it stopped."
-        ;;
-    esac
 
     # Silent and best effort: a check that fails reads as unknown, one that cannot run leaves the row out. A fetch
     # as another user than the checkout's owner would leave objects in .git that the owner cannot write.
@@ -442,44 +471,52 @@ status() {
         ;;
     esac
 
-    dc exec $EXEC_TTY -e NO_COLOR="${NO_COLOR:-}" -e EIGEN_STATUS_SERVICES="$services" -e EIGEN_STATUS_UPDATE="$update" \
-        -e EIGEN_STATUS_MAIL_QUEUE="$queue" eigen-api bun "$API_CLI" status
+    # Sorted by the time in the name, or every pre-update snapshot would sort after the manual ones.
+    snapshot=$(ls snapshots 2>/dev/null |
+        sed -n 's/^eigen-\(pre-update-\)\{0,1\}\([0-9]\{8\}-[0-9]\{6\}\)\.tar\.gz$/\2 &/p' | sort | tail -n 1)
+
+    EIGEN_STATUS_SERVICES=$services EIGEN_STATUS_UPDATE=$update EIGEN_STATUS_MAIL_QUEUE=$queue
+    EIGEN_STATUS_SNAPSHOT=${snapshot#* }
+    export EIGEN_STATUS_SERVICES EIGEN_STATUS_UPDATE EIGEN_STATUS_MAIL_QUEUE EIGEN_STATUS_SNAPSHOT
+    case $services in
+        *"eigen-api${tab}running$tab"*)
+            dc exec $EXEC_TTY -e NO_COLOR="${NO_COLOR:-}" -e EIGEN_STATUS_SERVICES="$services" \
+                -e EIGEN_STATUS_UPDATE="$update" -e EIGEN_STATUS_MAIL_QUEUE="$queue" \
+                -e EIGEN_STATUS_SNAPSHOT="$EIGEN_STATUS_SNAPSHOT" eigen-api bun "$API_CLI" status
+            ;;
+        *)
+            CLI_ENV='EIGEN_STATUS_SERVICES EIGEN_STATUS_UPDATE EIGEN_STATUS_MAIL_QUEUE EIGEN_STATUS_SNAPSHOT'
+            cli status
+            ;;
+    esac
 }
 
 COMMAND=${1:-}
+if [ $# -gt 0 ]; then shift; fi
 case $COMMAND in
-    setup)
-        shift
-        setup "$@"
-        ;;
-    status) status ;;
+    setup) setup "$@" ;;
+    status) status "$@" ;;
     reset-password)
-        shift
         case ${1:-} in -h | --help)
             cli reset-password --help
             exit
             ;;
         esac
         if ! installed; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
+        wordmark reset-password
         if ! dc ps --status running --services 2>/dev/null | grep -qx eigen-api; then
-            die "The API is not running." "./eigen status shows the services; ./eigen logs eigen-api shows why."
+            die "Eigen is not running." "Run ./eigen logs eigen-api to see why."
         fi
         dc exec $EXEC_TTY -e NO_COLOR="${NO_COLOR:-}" eigen-api bun "$API_CLI" reset-password "$@"
         ;;
-    backup)
-        if [ $# -gt 1 ]; then
-            usage >&2
-            exit 2
-        fi
-        backup
-        ;;
-    restore)
-        shift
-        restore "$@"
-        ;;
+    backup) backup "$@" ;;
+    restore) restore "$@" ;;
     logs)
-        shift
+        arguments logs 1 "$@"
         if ! installed; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
+        if [ $# = 1 ] && ! dc config --services | grep -qx -- "$1"; then
+            die "Eigen has no service \"$1\"." "Pick one of: $(dc config --services | paste -s -d , - | sed 's/,/, /g')."
+        fi
         dc logs -f --tail 200 "$@"
         ;;
     help | -h | --help) usage ;;

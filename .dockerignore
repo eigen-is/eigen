@@ -25,9 +25,10 @@ caddy-data/
 # The image runs the API from source; never ship a stale local bundle.
 apps/api/build
 apps/index/src/content/.generated/
-# Local-only trees the image never reads: backup archives, launcher state, agent state, worktrees
+# Local-only trees the image never reads: backup archives, snapshots, launcher state, agent state, worktrees
 # and the docs' screenshots (well over a gigabyte together, all shipped to the daemon on every build).
 backups/
+snapshots/
 .eigen/
 .claude/
 .superpowers/

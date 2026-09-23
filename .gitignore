@@ -64,6 +64,7 @@ next-env.d.ts
 /data/certs/
 /data/dkim/
 /backups/
+/snapshots/
 /.eigen/
 /.superpowers/
 .worktrees/
