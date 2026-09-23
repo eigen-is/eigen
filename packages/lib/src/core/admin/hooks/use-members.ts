@@ -91,12 +91,10 @@ export function useDeleteUser(organizationId?: string) {
 
 export function useResetUserPassword() {
     return useMutation({
-        mutationFn: async ({ userId, newPassword }: { userId: string; newPassword: string }) => {
-            const { error } = await authClient.admin.setUserPassword({
-                userId,
-                newPassword,
-            });
-            if (error) throw new Error(error.message ?? 'Failed to reset password');
+        mutationFn: async ({ userId, password }: { userId: string; password: string }) => {
+            const response = await settingsApi.user({ userId }).password.put({ password });
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         onSuccess: () => {
             toast.success('Password has been reset');

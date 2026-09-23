@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useInviteRegister, useValidateInviteToken } from '@workspace/lib/auth';
-import { validateUsername } from '@workspace/lib/validation';
+import { MIN_PASSWORD_LENGTH, validateUsername } from '@workspace/lib/validation';
 import { Bar, ErrorState, Ket, LoadingState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
@@ -44,8 +44,8 @@ function SignupPage() {
             return;
         }
 
-        if (password.length < 8) {
-            setError('Password must be at least 8 characters');
+        if (password.length < MIN_PASSWORD_LENGTH) {
+            setError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
             return;
         }
 
@@ -125,7 +125,7 @@ function SignupPage() {
                                         type="password"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
-                                        minLength={8}
+                                        minLength={MIN_PASSWORD_LENGTH}
                                         required
                                     />
                                 </FieldContent>
@@ -139,7 +139,7 @@ function SignupPage() {
                                         type="password"
                                         value={confirmPassword}
                                         onChange={(e) => setConfirmPassword(e.target.value)}
-                                        minLength={8}
+                                        minLength={MIN_PASSWORD_LENGTH}
                                         required
                                     />
                                 </FieldContent>

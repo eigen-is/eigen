@@ -2,6 +2,7 @@ import { useCheckSetupS3, useCompleteSetup, useHardenSetupS3, type useSetupStatu
 import { EMPTY_S3 } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerStorageType } from '@workspace/lib/types/settings';
+import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import { EigenLoader, EmptyState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
@@ -50,7 +51,13 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
     const [s3Verified, setS3Verified] = useState(true);
     const onS3Verified = useCallback((verified: boolean) => setS3Verified(verified), []);
 
-    const formReady = !!(orgName && adminUsername.trim() && adminName && adminPassword.length >= 8 && s3Verified);
+    const formReady = !!(
+        orgName &&
+        adminUsername.trim() &&
+        adminName &&
+        adminPassword.length >= MIN_PASSWORD_LENGTH &&
+        s3Verified
+    );
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -177,11 +184,13 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                                     autoComplete="new-password"
                                     value={adminPassword}
                                     onChange={(e) => setAdminPassword(e.target.value)}
-                                    minLength={8}
+                                    minLength={MIN_PASSWORD_LENGTH}
                                     required
                                     className="mt-1.5"
                                 />
-                                <p className="text-xs text-muted-foreground mt-1">At least 8 characters</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    At least {MIN_PASSWORD_LENGTH} characters
+                                </p>
                             </div>
                         </div>
 

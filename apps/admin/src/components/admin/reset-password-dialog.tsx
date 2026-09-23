@@ -1,4 +1,5 @@
 import { useResetUserPassword } from '@workspace/lib/admin';
+import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
@@ -40,8 +41,8 @@ export function ResetPasswordDialog({ open, onOpenChange, userId, userName }: Re
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!password || password.length < 8) return;
-        await resetPassword.mutateAsync({ userId, newPassword: password });
+        if (password.length < MIN_PASSWORD_LENGTH) return;
+        await resetPassword.mutateAsync({ userId, password });
         onOpenChange(false);
     };
 
@@ -51,7 +52,7 @@ export function ResetPasswordDialog({ open, onOpenChange, userId, userName }: Re
                 <DialogHeader>
                     <DialogTitle>Reset password for {userName}</DialogTitle>
                     <DialogDescription>
-                        Share the new password with the user securely. They can change it after logging in.
+                        They are signed out everywhere. Share the new password with them securely.
                     </DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="grid gap-4">
@@ -63,7 +64,7 @@ export function ResetPasswordDialog({ open, onOpenChange, userId, userName }: Re
                                     id="new-password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    minLength={8}
+                                    minLength={MIN_PASSWORD_LENGTH}
                                     required
                                 />
                             </FieldContent>

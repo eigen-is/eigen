@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { apiKey } from '@better-auth/api-key';
+import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { APIError } from 'better-auth/api';
@@ -189,6 +190,7 @@ export const auth = betterAuth({
     },
     emailAndPassword: {
         enabled: true,
+        minPasswordLength: MIN_PASSWORD_LENGTH,
     },
     advanced: {
         // Same X-Real-IP → X-Forwarded-For precedence as clientIpKey (lib/core/access); better-auth
@@ -259,6 +261,8 @@ export const auth = betterAuth({
     appName: 'eigen',
     baseURL: process.env['API_URL'],
     basePath: '/auth',
+    // Revokes no sessions or app passwords; admins reset through PUT /settings/user/:userId/password.
+    disabledPaths: ['/admin/set-user-password'],
     logger: { disabled: isTest() },
     secret: getAuthSecret(),
 });

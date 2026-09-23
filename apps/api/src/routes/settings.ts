@@ -10,8 +10,10 @@ import { getS3Config, getServerSettings, updateServerSettings } from '../lib/con
 import { ApiError } from '../lib/core';
 import { requireAdmin } from '../lib/core/access';
 import { checkS3Connection, hardenS3Bucket } from '../lib/storage/s3-storage';
+import { getOrgRole, getUserById } from '../lib/user';
 import { getAllUsersUsage } from '../lib/user/admin-usage';
 import { deleteUserCompletely } from '../lib/user/delete-user';
+import { resetUserPassword } from '../lib/user/reset-password';
 import { betterAuth } from './auth';
 import { s3ConfigBody, s3HardenBody, toS3Config } from './shared-schemas';
 
@@ -259,6 +261,21 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             return { success: true };
         },
         { auth: true },
+    )
+
+    .put(
+        '/settings/user/:userId/password',
+        async ({ params, body, user }): Promise<{ success: boolean }> => {
+            await requireAdmin(user.id);
+            const target = await getUserById(params.userId);
+            if (!target) throw new ApiError(404, 'User not found');
+            if ((await getOrgRole(target.id)) === 'owner') {
+                throw new ApiError(403, "Only the owner can change the owner's password");
+            }
+            await resetUserPassword(target.email, body.password);
+            return { success: true };
+        },
+        { body: t.Object({ password: t.String() }), auth: true },
     )
 
     .post(

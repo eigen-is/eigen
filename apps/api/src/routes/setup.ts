@@ -1,7 +1,9 @@
 import type { S3HardenResult } from '@workspace/lib/types/settings';
+import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
+import { isSetupRequired } from '../lib/config/server-config';
 import { ApiError } from '../lib/core/errors';
-import { completeSetup, getSetupStatus, isSetupRequired } from '../lib/setup/setup';
+import { completeSetup, getSetupStatus } from '../lib/setup/setup';
 import { verifySetupToken } from '../lib/setup/setup-token';
 import { checkS3Connection, hardenS3Bucket } from '../lib/storage/s3-storage';
 import { s3ConfigBody, s3HardenBody, toS3Config } from './shared-schemas';
@@ -53,7 +55,7 @@ export const setupRouter = new Elysia({ name: 'setup' })
                 s3SecretAccessKey: t.Optional(t.String()),
                 s3Endpoint: t.Optional(t.String()),
                 adminUsername: t.String({ minLength: 1 }),
-                adminPassword: t.String({ minLength: 8 }),
+                adminPassword: t.String({ minLength: MIN_PASSWORD_LENGTH }),
                 adminName: t.String({ minLength: 1 }),
             }),
         },

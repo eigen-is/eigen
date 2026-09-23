@@ -1,6 +1,6 @@
 import { useCreateUser } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
-import { validateUsername } from '@workspace/lib/validation';
+import { MIN_PASSWORD_LENGTH, validateUsername } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
@@ -105,7 +105,7 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    minLength={8}
+                                    minLength={MIN_PASSWORD_LENGTH}
                                     required
                                 />
                             </FieldContent>

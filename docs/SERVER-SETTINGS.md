@@ -100,6 +100,7 @@ All endpoints require the org role `admin` or `owner`. Defined in `apps/api/src/
 | GET    | `/settings/users/usage`   | `Record<userId, HomeSizeResponse>` — per-user disk usage via the `pullHomeSize` home-relay read, which sizes a home from its own databases (the mount `metadata.db`, `mail.db`, `contacts.db` and `calendar.db` totals, plus the avatars walk) rather than booting it (concurrency 4, 5-min in-memory cache) |
 | GET    | `/settings/users/guests`  | Guest accounts only, for the admin Guests page                 |
 | DELETE | `/settings/user/:userId`  | Delete a user account (cannot delete self)                     |
+| PUT    | `/settings/user/:userId/password` | Set a user's password via `resetUserPassword()`, the CLI's `./eigen reset-password` path: signs them out everywhere and revokes their app passwords; refuses guests and the owner. better-auth's own `/auth/admin/set-user-password`, which revokes nothing, is in `disabledPaths` |
 
 Both S3 paths refuse a configuration that does not connect: `PUT /settings/s3config` runs `checkS3Connection`
 before saving, and `PUT /settings/server` refuses `storageType: 's3'` unless a saved S3 config exists **and** still

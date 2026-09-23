@@ -191,6 +191,7 @@ build the segment with `teamOwnerId(teamId)`.
 | `/team/:ownerId/mount/:mountId`  | PUT        | Update mount settings                     |
 | `/team/:ownerId/avatar`          | POST / DELETE | Set / remove the team avatar           |
 | `/settings/user/:userId`         | DELETE     | Delete user completely                    |
+| `/settings/user/:userId/password` | PUT      | Reset a user's password                   |
 | `/settings/users`                | GET        | Org members + orphans (`AdminUserRow[]`)  |
 | `/settings/users/usage`          | GET        | Per-user disk usage                       |
 | `/settings/users/guests`         | GET        | Guest accounts only                       |

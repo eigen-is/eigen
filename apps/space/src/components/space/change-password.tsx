@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { validatePasswordStrength } from '@workspace/lib/validation';
+import { MIN_PASSWORD_LENGTH, validatePasswordStrength } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
@@ -26,8 +26,10 @@ const getPasswordStrengthLabel = (strength: number): string => {
 const formSchema = z
     .object({
         currentPassword: z.string().min(1, 'Current password is required'),
-        newPassword: z.string().min(8, 'Password must be at least 8 characters'),
-        confirmPassword: z.string().min(8, 'Password must be at least 8 characters'),
+        newPassword: z.string().min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`),
+        confirmPassword: z
+            .string()
+            .min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters`),
         revokeOtherSessions: z.boolean(),
     })
     .refine((data) => data.newPassword === data.confirmPassword, {

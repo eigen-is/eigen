@@ -1,16 +1,15 @@
 import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { validateEmailAddress } from '@workspace/lib/validation';
+import type { S3Config } from '@workspace/lib/types/mount';
+import { MIN_PASSWORD_LENGTH, validateEmailAddress } from '@workspace/lib/validation';
 import { auth } from '../auth/auth';
 import { getServerDataPath } from '../config/paths';
-import { isSetupRequired as checkSetupRequired, getMailDomain, updateServerConfig } from '../config/server-config';
+import { getMailDomain, isSetupRequired, updateServerConfig } from '../config/server-config';
 import { updateServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { checkS3Connection } from '../storage/s3-storage';
 import { clearSetupToken } from './setup-token';
-
-export const isSetupRequired = checkSetupRequired;
 
 async function resetAuthDatabase(): Promise<void> {
     const dbPath = getServerDataPath('users3.db');
@@ -259,18 +258,20 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
         if (!input.orgName) throw new ApiError(400, 'Organization name is required');
         if (!input.storageType) throw new ApiError(400, 'Storage type is required');
 
+        let s3Config: S3Config | undefined;
         if (input.storageType === 's3') {
             if (!input.s3Bucket || !input.s3AccessKeyId || !input.s3SecretAccessKey) {
                 throw new ApiError(400, 'S3 configuration requires bucket, access key, and secret key');
             }
-            const s3Result = await checkS3Connection({
+            s3Config = {
                 endpoint: input.s3Endpoint ?? '',
                 bucket: input.s3Bucket,
                 prefix: '',
                 accessKeyId: input.s3AccessKeyId,
                 secretAccessKey: input.s3SecretAccessKey,
                 region: input.s3Region,
-            });
+            };
+            const s3Result = await checkS3Connection(s3Config);
             if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
         }
 
@@ -279,8 +280,8 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
         }
         const adminEmail = `${input.adminUsername}@${getMailDomain()}`;
         if (!validateEmailAddress(adminEmail)) throw new ApiError(400, `${adminEmail} is not a valid email address`);
-        if (input.adminPassword.length < 8) {
-            throw new ApiError(400, 'Password must be at least 8 characters long');
+        if (input.adminPassword.length < MIN_PASSWORD_LENGTH) {
+            throw new ApiError(400, `Password must be at least ${MIN_PASSWORD_LENGTH} characters long`);
         }
 
         await resetAuthDatabase();
@@ -313,17 +314,6 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
         }
         if (!org) throw new Error('Failed to create default organization');
 
-        const s3Config =
-            input.storageType === 's3'
-                ? {
-                      bucket: input.s3Bucket!,
-                      region: input.s3Region!,
-                      accessKeyId: input.s3AccessKeyId!,
-                      secretAccessKey: input.s3SecretAccessKey!,
-                      endpoint: input.s3Endpoint ?? '',
-                      prefix: '',
-                  }
-                : undefined;
         await updateServerSettings({ defaults: { mount: { storageType: input.storageType, s3Config } } });
 
         // setupCompleted flips here — written last so a failure in any step above leaves
