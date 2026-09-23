@@ -579,7 +579,7 @@ export class MaildirStore implements MailStore {
     async cleanupStaleDraftTemps(): Promise<void> {
         await this.cleanupStaleMaildirTemps();
         // The sidecars are written through writeAtomic, and nothing else passes that directory.
-        await this.storage.sweepAtomicTemps(this.getDraftMetaDir());
+        await this.storage.sweepAtomicTemps(this.getDraftMetaDir(), STALE_DRAFT_TEMP_MAX_AGE_MS);
         if (await this.storage.dirExists(DRAFT_ATTACHMENTS_DIR)) {
             const now = Date.now();
             for (const name of await this.storage.readdir(DRAFT_ATTACHMENTS_DIR)) {

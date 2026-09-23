@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import { open } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -12,6 +12,11 @@ import { LocalFilesystem } from '../../lib/core';
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-local-filesystem-${Date.now()}`);
 let counter = 0;
 const nextStore = () => new LocalFilesystem(join(TEST_DIR, `store-${counter++}`));
+const SWEEP_AGE_MS = 60_000;
+const backdate = (filePath: string) => {
+    const past = new Date(Date.now() - 2 * SWEEP_AGE_MS);
+    utimesSync(filePath, past, past);
+};
 
 beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));
 afterAll(() => {
@@ -69,12 +74,15 @@ describe('sweepAtomicTemps', () => {
         await store.mkdir('cards');
         writeFileSync(join(base, 'real.vcf'), 'x');
         writeFileSync(join(base, '.real.vcf.tmp-abc'), 'x');
+        backdate(join(base, '.real.vcf.tmp-abc'));
         // A stray file is not temp debris — it survives and is warn-skipped by the domain's listing instead of
         // being silently deleted. A hand-placed dotfile without the `.tmp-` infix is not debris either.
         writeFileSync(join(base, 'stray.txt'), 'x');
         writeFileSync(join(base, '.backup.vcf'), 'x');
+        backdate(join(base, 'stray.txt'));
+        backdate(join(base, '.backup.vcf'));
 
-        await store.sweepAtomicTemps('cards');
+        await store.sweepAtomicTemps('cards', SWEEP_AGE_MS);
 
         expect(readdirSync(base).sort()).toEqual(['.backup.vcf', 'real.vcf', 'stray.txt']);
     });
@@ -84,8 +92,9 @@ describe('sweepAtomicTemps', () => {
         const base = join(TEST_DIR, `store-${counter - 1}`, 'cards');
         await store.mkdir('cards');
         writeFileSync(join(base, '.x.vcf.tmp-abc'), 'x');
+        backdate(join(base, '.x.vcf.tmp-abc'));
 
-        await store.sweepAtomicTemps('cards');
+        await store.sweepAtomicTemps('cards', SWEEP_AGE_MS);
 
         // Emptying the directory must not take it with it: the very same init enumerates it next.
         expect(existsSync(base)).toBe(true);
@@ -109,10 +118,22 @@ describe('sweepAtomicTemps', () => {
             unlinkSpy.mockRestore();
         }
         expect(readdirSync(base)).toHaveLength(1);
+        backdate(join(base, readdirSync(base)[0] as string));
 
-        await store.sweepAtomicTemps('meta');
+        await store.sweepAtomicTemps('meta', SWEEP_AGE_MS);
 
         expect(readdirSync(base)).toEqual([]);
+    });
+
+    test('a temp younger than the age is a write in flight and survives the sweep', async () => {
+        const store = nextStore();
+        const base = join(TEST_DIR, `store-${counter - 1}`, 'meta');
+        await store.mkdir('meta');
+        writeFileSync(join(base, '.draft.json.tmp-abc'), '{}');
+
+        await store.sweepAtomicTemps('meta', SWEEP_AGE_MS);
+
+        expect(readdirSync(base)).toEqual(['.draft.json.tmp-abc']);
     });
 });
 
