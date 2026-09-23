@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, import, excel, xlsx, spreadsheet]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 110
-updated: 2026-09-13
+updated: 2026-09-23
 ---
 
 You can bring an Excel workbook into Sheets in two ways: import it into an existing spreadsheet to replace its
@@ -22,8 +22,7 @@ This replaces the current spreadsheet's content with the data from the Excel fil
    - Browse your Drive to pick an `.xlsx` file you have already uploaded, then click **Select**.
    - Click **Upload from device** to open a file chooser and pick an `.xlsx` file from your computer.
 
-Sheets loads all the sheets from the workbook and replaces the spreadsheet's content straight away. The
-change is saved automatically.
+An **Importing xlsx file** dialog shows while Sheets loads all the sheets from the workbook. When it closes, the spreadsheet's content is replaced. The change is saved automatically.
 
 ## Convert an Excel file in Drive to a new spreadsheet
 
