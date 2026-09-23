@@ -435,29 +435,35 @@ export function serializeResource(resource: ICAL.Component): string {
 }
 
 // RFC 5546 shape: the organizer rides as an ACCEPTED attendee and a REQUEST asks for replies; no VALARM ever, or an `email` reminder would mail the organizer from every guest's client.
-function shapeForImip(vevent: ICAL.Component, event: CalendarEvent, method: ImipMethod): void {
+function shapeForImip(vevent: ICAL.Component, method: ImipMethod): void {
     vevent.removeAllSubcomponents('valarm');
     if (method !== 'REQUEST') return;
 
-    for (const prop of vevent.getAllProperties('attendee')) prop.setParameter('rsvp', 'TRUE');
-    const organizer = event.data?.organizer;
-    if (!organizer || event.data?.attendees?.some((a) => a.email === organizer.email)) return;
+    const attendees = vevent.getAllProperties('attendee');
+    for (const prop of attendees) prop.setParameter('rsvp', 'TRUE');
+    const organizer = vevent.getFirstProperty('organizer');
+    const email = calAddress(organizer?.getFirstValue());
+    if (!email || attendees.some((prop) => calAddress(prop.getFirstValue()) === email)) return;
     vevent.addProperty(
-        attendeeProperty({ email: organizer.email, name: organizer.name, status: 'accepted', role: 'required' }),
+        attendeeProperty({ email, name: organizer?.getFirstParameter('cn'), status: 'accepted', role: 'required' }),
     );
 }
 
-// `series` is the master: RECURRENCE-ID names the ORIGINAL instant, which only the series' recurrence knows once the override has moved.
-export function serializeEventForImip(event: CalendarEvent, method: ImipMethod, series?: CalendarEvent): string {
-    const vcalendar = newVCalendar();
-    vcalendar.addPropertyWithValue('method', method);
-    // A RECURRENCE-ID names its instant in the SERIES' zone, which the occurrence's own may not be.
-    for (const vtimezone of vtimezoneComponents(series ? [event, series] : [event])) {
-        vcalendar.addSubcomponent(vtimezone);
+// `series` is the master of the one occurrence `event` is: RECURRENCE-ID names the ORIGINAL instant, which only the series' recurrence knows once the override has moved. A master travels with its `exceptions` instead, in the one VCALENDAR RFC 5546 wants, or the guest renders a moved occurrence at its original slot and a deleted one at all.
+export function serializeEventForImip(
+    event: CalendarEvent,
+    method: ImipMethod,
+    series?: CalendarEvent,
+    exceptions: CalendarEvent[] = [],
+): string {
+    const vcalendar = series ? newVCalendar() : buildResource([event, ...exceptions]);
+    if (series) {
+        // A RECURRENCE-ID names its instant in the SERIES' zone, which the occurrence's own may not be.
+        for (const vtimezone of vtimezoneComponents([event, series])) vcalendar.addSubcomponent(vtimezone);
+        vcalendar.addSubcomponent(buildVEvent(event, { master: series }));
     }
-    const vevent = buildVEvent(event, { master: series });
-    shapeForImip(vevent, event, method);
-    vcalendar.addSubcomponent(vevent);
+    vcalendar.addPropertyWithValue('method', method);
+    for (const vevent of vcalendar.getAllSubcomponents('vevent')) shapeForImip(vevent, method);
     // Nothing that leaves the Home carries an Eigen stamp.
     stripEigenStamps(vcalendar);
     return serializeResource(vcalendar);

@@ -345,6 +345,65 @@ describe('Occurrence edits of an invited series', () => {
         expect(findOrFail(occurrences, (e) => e.occurrenceDate === target).title).toBe('Still Bob');
     });
 
+    // An external guest has no relay, so the series reaches them as one VCALENDAR holding the master, its EXDATEs and its overrides (RFC 5546).
+    test('an external guest gets the series with its overrides and EXDATEs, on invite and on update', async () => {
+        const CAROL = 'carol.series@example.org';
+        const series = await createSeries('Weekly Occurrence External');
+        const [, moved, deleted] = (await untilBob(series.uid, (occ) => occ.length === 4)).map((e) => e.occurrenceDate);
+        const movedStart = new Date(Date.parse(`${moved}T09:00:00Z`) + HOUR);
+        await editOccurrence(series.id, moved, {
+            title: 'Moved For Carol',
+            startTime: movedStart,
+            endTime: new Date(movedStart.getTime() + HOUR),
+        });
+        await editOccurrence(series.id, deleted, { title: 'Weekly Occurrence External', status: 'cancelled' });
+        await untilBob(series.uid, (occ) => occ.length === 3 && occ.some((e) => e.title === 'Moved For Carol'));
+
+        const mailer = await import('../../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear();
+        const mailTo = (subject: string) =>
+            eventually(
+                async () =>
+                    spy.mock.calls
+                        .map((call) => call[0])
+                        .find((m) => m.subject.startsWith(subject) && m.to.some((t) => t.address === CAROL)),
+                `the ${subject} to reach Carol`,
+            );
+        const put = (body: Record<string, unknown>) =>
+            authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${series.id}`,
+                { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+            );
+        const attendees = [...guests(), { email: CAROL, name: 'Carol', status: 'pending', role: 'required' }];
+
+        expect((await put({ data: { attendees } })).status).toBe(200);
+        const invite = await mailTo('Invitation');
+        expect((await put({ title: 'Weekly External Renamed', data: { attendees } })).status).toBe(200);
+        const update = await mailTo('Updated invitation');
+        spy.mockRestore();
+
+        const compact = (key: string) => `${key.replaceAll('-', '')}T100000`;
+        for (const mail of [invite, update]) {
+            const ics = mail.icalEvent!.content.replace(/\r\n[ \t]/g, '');
+            const lines = ics.split('\r\n');
+            const count = (pattern: RegExp) => lines.filter((line) => pattern.test(line)).length;
+            expect(count(/^BEGIN:VCALENDAR$/)).toBe(1);
+            expect(count(/^METHOD:/)).toBe(1);
+            expect(count(/^BEGIN:VEVENT$/)).toBe(2);
+            expect(ics).toContain(`EXDATE;TZID=${TZ}:${compact(deleted)}`);
+            expect(ics).toContain(`RECURRENCE-ID;TZID=${TZ}:${compact(moved)}`);
+            expect(ics).not.toContain(`RECURRENCE-ID;TZID=${TZ}:${compact(deleted)}`);
+            expect(ics).toContain('SUMMARY:Moved For Carol');
+            // Every VEVENT names the organizer and rides them along as an accepted attendee.
+            expect(count(/^ORGANIZER/)).toBe(2);
+            expect(count(new RegExp(`^ATTENDEE.*:mailto:${ctx.alice.user.email}$`))).toBe(2);
+            expect(ics).not.toContain('X-EIGEN');
+            expect(ics).not.toContain('BEGIN:VALARM');
+        }
+    });
+
     test('the guest is told an invitation changed, not that they were invited to a new series', async () => {
         const { series, target } = await seeded('Weekly Occurrence Notice');
         const bobHome = await getHome(ctx.bob.user.id);
