@@ -18,21 +18,14 @@ type OperatorCallable = (...args: FormulaArg[]) => FormulaOutput;
 
 const availableOperators: Record<string, OperatorCallable> = Object.create(null);
 
-// Arithmetic operators coerce operands via `toNumber(x) ?? 0`, which silently
-// swallows an upstream Error: `Error + 1` would yield `0 + 1 = 1` and mask the
-// failure. Propagate the Error unchanged so nested arithmetic stays honest.
+// Arithmetic and comparison operators coerce their operands, which would silently
+// swallow an upstream Error: `Error + 1` would yield `0 + 1 = 1`, `Error > 0` FALSE.
+// Propagate the first Error unchanged, as Excel does, so nested expressions stay honest.
 //
-// Excluded:
-//  - Comparison operators (=, <>, <, >, <=, >=): these silently coerce Error to
-//    NaN/falsy via JS, returning `false`. That coercion is what lets common
-//    Excel-template patterns like `OR(x="", VALUE(x)>limit)` work even when
-//    `VALUE(x)` errors on a numeric input — the comparison degrades to false,
-//    OR sees false, IF picks the safe branch. Propagating here would surface
-//    the inner #VALUE! and break those templates.
-//  - Function-name operator (formulaFunction → formulajs): IF, IFERROR, IFNA,
-//    IFS, AND, OR explicitly inspect Error operands, so propagating before the
-//    call would defeat their short-circuit semantics.
-const PROPAGATE_ERROR_OPS = new Set(['+', '-', '*', '/', '^', '&']);
+// Excluded: the function-name operator (formulaFunction → formulajs). IF, IFERROR,
+// IFNA, IFS, AND, OR explicitly inspect Error operands, so propagating before the
+// call would defeat their short-circuit semantics.
+const PROPAGATE_ERROR_OPS = new Set(['+', '-', '*', '/', '^', '&', '=', '<>', '<', '>', '<=', '>=']);
 
 // Evaluate values by operator id. A thrown Error is converted to a returned
 // Error so the grammar can keep reducing — the outer expression may discard it

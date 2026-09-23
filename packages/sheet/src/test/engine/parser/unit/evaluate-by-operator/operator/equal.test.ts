@@ -45,9 +45,4 @@ describe('equal operator', () => {
         expect(func(0, void 0)).toBe(false);
         expect(func(0, null)).toBe(false);
     });
-
-    test('an Error operand is never equal', () => {
-        expect(func(new Error('#VALUE!'), 5)).toBe(false);
-        expect(func(5, new Error('#VALUE!'))).toBe(false);
-    });
 });
