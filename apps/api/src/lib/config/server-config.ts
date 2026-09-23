@@ -12,9 +12,8 @@ const BUILT_AT: Date | undefined = process.env['EIGEN_BUILT_AT'] ? new Date(proc
 
 // Identity + secrets for the deployment. The secret is made at first boot, the rest set once during
 // setup; never changed via API thereafter. Runtime-tunable defaults — including the storage backend — live in
-// ServerSettings (settings.json), not here.
+// ServerSettings (settings.json), not here. The web address is DOMAIN, from ./eigen setup.
 export type ServerConfig = {
-    domain: string;
     orgName: string;
     orgId: string;
     secret: string;
@@ -24,7 +23,6 @@ export type ServerConfig = {
 
 const serverFs = new LocalFilesystem(getServerDataPath());
 const store = new JsonStore<ServerConfig>(serverFs, 'config.json', {
-    domain: 'localhost',
     orgName: '',
     orgId: '',
     secret: '',
@@ -64,10 +62,9 @@ export function isSetupRequired(): boolean {
     return !isSetupCompleted();
 }
 
+// A checkout's dev server runs without DOMAIN.
 export function getDomain(): string {
-    const envDomain = process.env['DOMAIN'];
-    if (envDomain && envDomain !== 'localhost') return envDomain;
-    return store.get().domain || envDomain || 'localhost';
+    return process.env['DOMAIN'] || 'localhost';
 }
 
 // Mail address suffix — defaults to the web domain. Set MAIL_DOMAIN to decouple, e.g. web at

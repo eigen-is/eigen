@@ -4,12 +4,7 @@ import { dirname } from 'node:path';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { auth } from '../auth/auth';
 import { getServerDataPath } from '../config/paths';
-import {
-    isSetupRequired as checkSetupRequired,
-    getDomain,
-    getMailDomain,
-    updateServerConfig,
-} from '../config/server-config';
+import { isSetupRequired as checkSetupRequired, getMailDomain, updateServerConfig } from '../config/server-config';
 import { updateServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { checkS3Connection } from '../storage/s3-storage';
@@ -335,7 +330,6 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
         // setup re-runnable: isSetupRequired() stays true and resetAuthDatabase() clears
         // the partial state on the next attempt.
         await updateServerConfig({
-            domain: getDomain(),
             orgName: input.orgName,
             orgId: org.id,
             setupCompleted: true,

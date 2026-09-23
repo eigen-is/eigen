@@ -17,7 +17,7 @@ import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { docUpdates } from '../../lib/collab/schema';
 import { getAvatarsDir } from '../../lib/config/paths';
-import { getServerConfig } from '../../lib/config/server-config';
+import { getDomain, getServerConfig } from '../../lib/config/server-config';
 import { avatarNameOf } from '../../lib/contacts/card-store';
 import { getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
@@ -360,7 +360,7 @@ describe('Backup snapshotHome', () => {
         expect(manifest.email).toBe(ctx.alice.user.email);
         expect(manifest.name).toBe(ctx.alice.user.name);
         expect(manifest.appVersion.length).toBeGreaterThan(0);
-        expect(manifest.server).toEqual({ domain: config.domain, orgId: config.orgId });
+        expect(manifest.server).toEqual({ domain: getDomain(), orgId: config.orgId });
         expect(new Date(manifest.createdAt).getTime()).toBeGreaterThan(0);
         expect(manifest.mounts.map((m) => m.id)).toEqual(expect.arrayContaining([LOCAL_MOUNT_ID, defaultMountId]));
         expect(findOrFail(manifest.mounts, (m) => m.id === LOCAL_MOUNT_ID).storageType).toBe('local');

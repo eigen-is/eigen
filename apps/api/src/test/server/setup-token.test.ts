@@ -2,8 +2,10 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getServerDataPath } from '../../lib/config/paths';
+import { getDomain } from '../../lib/config/server-config';
 import type { SetupLink } from '../../lib/control/control';
 import { clearSetupToken, createSetupToken, verifySetupToken } from '../../lib/setup/setup-token';
+import { restoreEnvAfterEach } from '../env-test-helpers';
 import { TEST_DATA_DIR } from '../setup';
 
 // The routes answer differently only while setup is pending, which this worker's own server is past as soon as
@@ -58,6 +60,17 @@ describe('setup token', () => {
             expect(verifySetupToken(token)).toBe(false);
         }
         clearSetupToken();
+    });
+});
+
+describe('the web address', () => {
+    restoreEnvAfterEach(['DOMAIN']);
+
+    test('is DOMAIN alone, so a localhost install never names the domain an older setup stored', () => {
+        process.env['DOMAIN'] = 'localhost';
+        expect(getDomain()).toBe('localhost');
+        delete process.env['DOMAIN'];
+        expect(getDomain()).toBe('localhost');
     });
 });
 
@@ -253,7 +266,7 @@ describe('the /setup routes before setup', () => {
         expect(done.status).toBe(200);
         expect(twice.status).toBe(409);
         expect((await done.json()).user.email).toBe(ADMIN_EMAIL);
-        expect(storedConfig().domain).toBe(DOMAIN);
+        expect(storedConfig()).not.toHaveProperty('domain');
         expect(existsSync(join(dataRoot, 'server/setup-token.json'))).toBe(false);
 
         expect((await post('complete', { ...admin, setupToken: newer })).status).toBe(403);
