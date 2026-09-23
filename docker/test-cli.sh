@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# The online commands against a scratch edge,mail install of this working tree, run the way an operator runs
+# The operator commands against a scratch edge,mail install of this working tree, run the way an operator runs
 # them: ./eigen from the no-Bun docker:cli container. ./eigen status reports the version and every service,
 # the control socket lives inside the API container and never under data/, ./eigen setup ends with a one-time
 # link without which the /setup routes refuse through the real gateway, ./eigen reset-password with a piped
-# password changes it and signs the account out over HTTP, and both commands say where to look when the API
-# is stopped.
+# password changes it and signs the account out over HTTP, ./eigen backup and ./eigen restore round-trip a
+# folder made over HTTP with owners and modes intact, a failed snapshot still brings the stack back, a snapshot
+# of a newer Eigen is refused without stopping anything, and status and reset-password say where to look when
+# the API is stopped.
 #
 # Usage:  ./docker/test-cli.sh
 # Needs:  docker, curl, git. Builds every image in Docker (a few minutes on a cold cache).
@@ -43,6 +45,22 @@ setup_token() { grep -o 'setup=[A-Za-z0-9_-]*' "$1" | tail -n 1 | cut -d= -f2 ||
 setup_post() {
     curl -sk -o /dev/null -w '%{http_code} %{time_total}' --max-time 20 -X POST -H 'Content-Type: application/json' \
         -d "{$2}" "$BASE/setup/$1" || echo '000 20'
+}
+
+# Every service running and eigen-api healthy.
+stack_up() {
+    local states
+    states=$(dc ps -a --format '{{.Service}} {{.State}} {{.Health}}')
+    printf '%s\n' "$states" | grep -q '^eigen-api running healthy$' &&
+        ! printf '%s\n' "$states" | grep -v ' running' | grep -q .
+}
+
+api_started() { docker inspect --format '{{.State.StartedAt}}' "$(dc ps -q eigen-api)"; }
+
+# The distinct owners under data/, seen from inside a container.
+data_owners() {
+    docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c 'find "$1" -exec stat -c "%u:%g" {} + | sort -u' sh \
+        "$INSTALL/data" | tr '\n' ' '
 }
 
 # sign_in <password> <cookie jar>: prints the HTTP status of a browser sign-in.
@@ -219,6 +237,121 @@ fi
 
 eigen status
 if printf '%s\n' "$OUT" | grep -q '^Setup'; then fail "status still says setup is not finished"; else ok "status drops the setup line once an admin exists"; fi
+
+##############################################################################
+header "./eigen backup and ./eigen restore"
+##############################################################################
+JAR="$SCRATCH/backup-session"
+code=$(sign_in "$NEW_PASSWORD" "$JAR")
+admin_id=$(curl -sk -b "$JAR" "$BASE/auth/get-session" | grep -o '"userId":"[^"]*"' | head -n 1 | cut -d'"' -f4 || true)
+# drive <method> <path> [json]: the body of a drive call as the signed-in admin.
+drive() {
+    curl -sk -b "$JAR" -X "$1" -H 'Content-Type: application/json' -H 'Origin: https://localhost' ${3:+-d "$3"} \
+        "$BASE/drive/$admin_id/default$2" || true
+}
+root_id=$(drive GET /root | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4 || true)
+drive POST "/folder/$root_id" '{"folderName":"Kept by the snapshot"}' >/dev/null
+if [ "$code" = 200 ] && drive GET "/folder/$root_id" | grep -q '"Kept by the snapshot"'; then
+    ok "the admin made a folder over HTTPS"
+else
+    fail "could not make a folder to back up (sign-in $code, admin '$admin_id', root '$root_id')"
+fi
+# Docker Desktop shows a file the operator's container wrote as theirs to one container and as root's to another
+# until it is chowned; on Linux this changes nothing.
+docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" chown "$OPERATOR" "$INSTALL/.env.production"
+ENV_OWNER=$(owner_mode "$INSTALL/.env.production")
+OWNERS=$(data_owners)
+
+started=$SECONDS
+eigen backup
+show
+SNAPSHOT=$(printf '%s\n' "$OUT" | grep -o 'eigen-[0-9]\{8\}-[0-9]\{6\}\.tar\.gz' | head -n 1 || true)
+if [ "$CODE" = 0 ] && [ -n "$SNAPSHOT" ]; then
+    ok "./eigen backup saved backups/$SNAPSHOT in $((SECONDS - started))s"
+else
+    fail "./eigen backup exited $CODE"
+fi
+if stack_up; then ok "the stack is back up after the backup"; else fail "the stack is not up after the backup"; fi
+got=$(owner_mode "$INSTALL/backups/$SNAPSHOT")
+if [ "$got" = '1000:1000 600' ]; then ok "the snapshot is 1000:1000, mode 600"; else fail "the snapshot is '$got'"; fi
+members=$(docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" tar -tzf "$INSTALL/backups/$SNAPSHOT" | awk 'NR <= 3' | tr '\n' ' ')
+if [ "$members" = 'eigen-snapshot.json .env.production data/ ' ]; then
+    ok "the snapshot starts with eigen-snapshot.json, .env.production, data/"
+else
+    fail "the snapshot starts with: $members"
+fi
+
+drive POST "/folder/$root_id" '{"folderName":"Made after the snapshot"}' >/dev/null
+started=$(api_started)
+eigen restore "$SNAPSHOT"
+if [ "$CODE" != 0 ] && printf '%s\n' "$OUT" | grep -q -- '--yes' && [ "$(api_started)" = "$started" ]; then
+    ok "restore without a terminal asks for --yes and stops nothing (exit $CODE)"
+else
+    fail "restore without --yes: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
+fi
+
+started=$SECONDS
+eigen restore "backups/$SNAPSHOT" --yes
+show
+if [ "$CODE" = 0 ]; then ok "./eigen restore --yes finished in $((SECONDS - started))s"; else fail "./eigen restore exited $CODE"; fi
+if stack_up; then ok "the stack is up after the restore"; else fail "the stack is not up after the restore"; fi
+# A session made before the API's first restart does not outlive it (the secret before setup is a throwaway).
+sign_in "$NEW_PASSWORD" "$JAR" >/dev/null
+listing=$(drive GET "/folder/$root_id")
+if printf '%s' "$listing" | grep -q '"Kept by the snapshot"' && ! printf '%s' "$listing" | grep -q '"Made after the snapshot"'; then
+    ok "the drive is as it was at the snapshot"
+else
+    fail "the drive after the restore: $listing"
+fi
+got=$(owner_mode "$INSTALL/.env.production")
+if [ "$got" = "$ENV_OWNER" ]; then ok ".env.production kept its owner and mode ($got)"; else fail ".env.production is '$got', was '$ENV_OWNER'"; fi
+got=$(data_owners)
+if [ "$got" = "$OWNERS" ] && [ "$(printf '%s' "$OWNERS" | wc -w)" -gt 1 ]; then
+    ok "data/ has the same mixed owners as before ($got)"
+else
+    fail "owners under data/: '$got', were '$OWNERS'"
+fi
+aside=$(cd "$INSTALL" && ls -d data.pre-restore-* .env.production.pre-restore-* 2>/dev/null | tr '\n' ' ' || true)
+case $aside in
+    data.pre-restore-*' '.env.production.pre-restore-*|.env.production.pre-restore-*' 'data.pre-restore-*)
+        ok "the replaced data is kept aside: $aside" ;;
+    *) fail "kept aside: '$aside'" ;;
+esac
+
+docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" mkdir "$INSTALL/backups/.eigen-snapshot.partial"
+eigen backup
+show
+if [ "$CODE" != 0 ] && printf '%s\n' "$OUT" | grep -q 'Could not write to backups/'; then
+    ok "a snapshot that cannot be written fails and says so (exit $CODE)"
+else
+    fail "the blocked snapshot: exit $CODE"
+fi
+if printf '%s\n' "$OUT" | grep -q 'Eigen is running' && stack_up; then
+    ok "the stack is back up after the failed snapshot"
+else
+    fail "the stack is not up after the failed snapshot"
+fi
+docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" rmdir "$INSTALL/backups/.eigen-snapshot.partial"
+
+NEWER=eigen-20990101-000000.tar.gz
+docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c 'cd "$(mktemp -d)" && mkdir data &&
+    echo "{\"version\":\"999.0.0\",\"createdAt\":\"2099-01-01T00:00:00.000Z\"}" >eigen-snapshot.json &&
+    echo DOMAIN=newer.example.org >.env.production && tar -czf "$1" eigen-snapshot.json .env.production data' sh \
+    "$INSTALL/backups/$NEWER"
+started=$(api_started)
+eigen restore "$NEWER" --yes
+show
+if [ "$CODE" != 0 ] && printf '%s\n' "$OUT" | grep -q '999.0.0' && printf '%s\n' "$OUT" | grep -q 'Update first, then restore'; then
+    ok "a snapshot of a newer Eigen is refused (exit $CODE)"
+else
+    fail "the newer snapshot: exit $CODE"
+fi
+if [ "$(api_started)" = "$started" ] && [ "$(cd "$INSTALL" && ls -d data.pre-restore-* | wc -l | tr -d ' ')" = 1 ] &&
+    grep -q '^DOMAIN=' "$INSTALL/.env.production" && ! grep -q newer.example.org "$INSTALL/.env.production"; then
+    ok "the refusal stopped nothing and changed nothing"
+else
+    fail "the refused restore changed something"
+fi
 
 ##############################################################################
 header "With the API stopped"
