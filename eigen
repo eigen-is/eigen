@@ -746,7 +746,6 @@ update() {
     fi
     trap - EXIT
     step "Starting Eigen $new" "Eigen $new is running" "Eigen $new did not start; ./eigen logs shows why" start
-    unset AGAIN
 
     refresh_fail2ban
     step "Removing old images" "Old images removed" "Could not remove the old images" \
@@ -762,7 +761,7 @@ update() {
             say "$GRAY" '│' "Eigen builds in Docker now; unless you develop here, delete:$leftovers"
         fi
     fi
-    say "$GRAY" '└' "./eigen rollback goes back to how it was."
+    say "$GRAY" '└' "${AGAIN# }"
 }
 
 # Release installs only: the pre-update snapshot brings back the data and the old pins, and the old image writes its
