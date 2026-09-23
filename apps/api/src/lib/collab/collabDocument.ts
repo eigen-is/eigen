@@ -32,6 +32,14 @@ const MAX_AWARENESS_CLIENT_IDS = 8;
 // the per-state bytes fanned out to every peer and replayed to every joiner.
 const MAX_AWARENESS_STATE_BYTES = 16 * 1024;
 
+// Bun negotiates permessage-deflate but only deflates a frame when send() asks. A large sheet's raw
+// whole-state sync reply can't finish inside y-websocket's 30s silence window on a slow link.
+const COMPRESS_FRAME_MIN_BYTES = 1024;
+
+function sendFrame(conn: ServerWebSocket<unknown>, message: Uint8Array): void {
+    conn.send(Buffer.from(message), message.byteLength >= COMPRESS_FRAME_MIN_BYTES);
+}
+
 const SNAPSHOT_INTERVAL = 100;
 // Sheets' flushSnapshot dumps the whole sheet JSON into one update row on tab
 // close; a count-only threshold lets data.db balloon to ~100× the doc size
@@ -402,7 +410,7 @@ export default class CollabDocument {
 
             if (encoding.length(encoder) > 1) {
                 const responseMessage = encoding.toUint8Array(encoder);
-                conn.send(Buffer.from(responseMessage));
+                sendFrame(conn, responseMessage);
             }
         } else if (messageType === MESSAGE_AWARENESS) {
             const awarenessUpdate = decoding.readVarUint8Array(decoder);
@@ -459,7 +467,7 @@ export default class CollabDocument {
         for (const conn of this.connections.keys()) {
             if (conn !== originConn && conn.readyState === WebSocket.OPEN) {
                 try {
-                    conn.send(Buffer.from(message));
+                    sendFrame(conn, message);
                 } catch (err) {
                     console.error('Error sending message to client:', err);
                 }
@@ -473,7 +481,7 @@ export default class CollabDocument {
             encoding.writeVarUint(encoder, MESSAGE_SYNC);
             syncProtocol.writeSyncStep1(encoder, this.doc);
             const syncMessage = encoding.toUint8Array(encoder);
-            conn.send(Buffer.from(syncMessage));
+            sendFrame(conn, syncMessage);
 
             const awarenessStates = this.awareness.getStates();
             if (awarenessStates.size > 0) {
@@ -485,7 +493,7 @@ export default class CollabDocument {
                 );
 
                 const awarenessMessage = encoding.toUint8Array(awarenessEncoder);
-                conn.send(Buffer.from(awarenessMessage));
+                sendFrame(conn, awarenessMessage);
             }
         } catch (err) {
             console.error('Error sending sync step 1:', err);
