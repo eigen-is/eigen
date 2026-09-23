@@ -10,7 +10,8 @@ export type ConfigureAnswers = {
     domain: string;
     mail: boolean;
     mailDomain: string;
-    proxy: string | null;
+    behindProxy: boolean;
+    staticAddress: string;
     contactEmail: string;
     relay: { host: string; port: string; user: string; password: string } | null;
     from: string;
@@ -26,7 +27,6 @@ export type DockerNetwork = {
 const ENV_PATH = '.env.production';
 const DEFAULT_SUBNET = '172.20.0.0/24';
 const SUBNET_CANDIDATES = [DEFAULT_SUBNET, '172.30.0.0/24', '172.31.0.0/24', '10.20.0.0/24'];
-const PLACEHOLDER_DOMAINS = new Set(['eigen.example.com', 'example.com']);
 // Postfix relays when Eigen hosts mail; the API relays itself when it does not. Ports are Compose's defaults.
 const MAIL_RELAY_KEYS = ['SMTP_RELAY_HOST', 'SMTP_RELAY_PORT', 'SMTP_RELAY_USER', 'SMTP_RELAY_PASSWORD'] as const;
 const API_RELAY_KEYS = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD'] as const;
@@ -77,7 +77,9 @@ const OPTIONS = {
 } as const;
 const USAGE = `Usage: configure [flags]
 
-Asks the setup questions and writes ${ENV_PATH}. Any flag makes the run non-interactive.
+Asks the setup questions and writes ${ENV_PATH}. Any flag makes the run non-interactive:
+questions no flag answers are read from stdin, one line each. An empty line keeps the answer
+in brackets; - clears an optional answer.
 
   --domain <name>              Web address, like eigen.example.com
   --mail | --no-mail           Host email on this server
@@ -91,7 +93,8 @@ Asks the setup questions and writes ${ENV_PATH}. Any flag makes the run non-inte
   --relay-password-env <VAR>   Read the relay password from this environment variable
   --from <sender>              System sender, an address or Name <address>
   --yes                        Keep the current or default answer for every flag not given
-  --backfill                   Keep every answer, add missing keys, print one line
+  --backfill                   Only add the keys ${ENV_PATH} lacks, with their defaults;
+                               no existing line changes
   --help                       Show this help`;
 
 const NO_CONTROL = /^\P{Cc}*$/u;
@@ -102,10 +105,13 @@ const cleanDomain = (value: string) =>
         .replace(/\/.*$/, '')
         .toLowerCase();
 
+const isPort = (value: string) => /^\d{1,5}$/.test(value) && +value > 0 && +value < 65536;
+
+const hostsMail = (env: Map<string, string>) => env.get('MAIL_ENABLED') !== '0';
+
 function validateDomain(value: string): string | undefined {
     const domain = cleanDomain(value);
-    const valid = domain === 'localhost' || /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/.test(domain);
-    if (!valid || PLACEHOLDER_DOMAINS.has(domain)) {
+    if (domain !== 'localhost' && !/^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/.test(domain)) {
         return 'Enter a domain name like eigen.example.com, without https:// or a path.';
     }
 }
@@ -119,8 +125,6 @@ function validateText(value: string): string | undefined {
     if (!NO_CONTROL.test(value)) return 'Remove the control characters from this answer.';
 }
 
-const isPort = (value: string) => /^\d{1,5}$/.test(value) && +value > 0 && +value < 65536;
-
 function validateAddress(value: string): string | undefined {
     const [host = '', port = '', extra] = value.split(':');
     const octets = host.split('.');
@@ -130,10 +134,10 @@ function validateAddress(value: string): string | undefined {
 }
 
 function validateRelay(value: string): string | undefined {
-    if (value === '' || value === 'none') return;
+    if (value === '') return;
     const [host = '', port = '587', extra] = value.split(':');
-    if (!/^[a-z0-9.-]+$/i.test(host) || !isPort(port) || extra !== undefined) {
-        return 'Enter the relay as host:port, like smtp-relay.brevo.com:587, or leave it empty.';
+    if (!/^[a-z0-9][a-z0-9.-]*$/i.test(host) || !isPort(port) || extra !== undefined) {
+        return 'Enter the relay as host:port, like smtp-relay.brevo.com:587.';
     }
 }
 
@@ -168,18 +172,13 @@ export function chooseSubnet(networks: DockerNetwork[], project: string): string
     return free ?? DEFAULT_SUBNET;
 }
 
-export function configureEntries(
-    existing: Map<string, string>,
-    answers: ConfigureAnswers,
-    wasMail: boolean,
-): Map<string, string> {
+export function configureEntries(existing: Map<string, string>, answers: ConfigureAnswers): Map<string, string> {
     const entries = new Map(existing);
-    const staticAddress = `${existing.get('EIGEN_STATIC_HOST') || '127.0.0.1'}:${existing.get('EIGEN_STATIC_PORT') || '8080'}`;
-    const [staticHost = '', staticPort = ''] = (answers.proxy ?? staticAddress).split(':');
+    const [staticHost = '', staticPort = ''] = answers.staticAddress.split(':');
     entries.set('DOMAIN', answers.domain);
     entries.set('MAIL_DOMAIN', answers.mailDomain);
     entries.set('ACME_EMAIL', answers.contactEmail);
-    entries.set('COMPOSE_PROFILES', `${answers.proxy ? 'static' : 'edge'}${answers.mail ? ',mail' : ''}`);
+    entries.set('COMPOSE_PROFILES', `${answers.behindProxy ? 'static' : 'edge'}${answers.mail ? ',mail' : ''}`);
     entries.set('MAIL_ENABLED', answers.mail ? '1' : '0');
     entries.set('EIGEN_STATIC_HOST', staticHost);
     entries.set('EIGEN_STATIC_PORT', staticPort);
@@ -190,9 +189,9 @@ export function configureEntries(
         }
     }
 
-    // Switching modes moves the relay: API relay keys left behind with mail on would bypass postfix.
+    // A mode switch moves the relay: API relay keys left behind with mail on would bypass postfix.
     const [relayKeys, otherKeys] = answers.mail ? [MAIL_RELAY_KEYS, API_RELAY_KEYS] : [API_RELAY_KEYS, MAIL_RELAY_KEYS];
-    if (wasMail !== answers.mail) {
+    if (hostsMail(existing) !== answers.mail) {
         for (const key of otherKeys) entries.delete(key);
     }
     const [hostKey, portKey, userKey, passwordKey] = relayKeys;
@@ -221,17 +220,14 @@ export function configureEntries(
     return entries;
 }
 
-function parseFlags(args: string[]) {
+export async function configure(args: string[]): Promise<void> {
+    let flags: ReturnType<typeof parseArgs<{ options: typeof OPTIONS }>>['values'];
     try {
-        return parseArgs({ args, options: OPTIONS }).values;
+        flags = parseArgs({ args, options: OPTIONS }).values;
     } catch (error) {
         console.error(`${error instanceof Error ? error.message : String(error)}\n\n${USAGE}`);
         process.exit(2);
     }
-}
-
-export async function configure(args: string[]): Promise<void> {
-    const flags = parseFlags(args);
     if (flags.help) {
         console.log(USAGE);
         return;
@@ -246,10 +242,7 @@ export async function configure(args: string[]): Promise<void> {
         if (!RELEASE_PINS.has(key)) ui.fail(`EIGEN_PINS: "${pin}" is not a release pin.`, 'Run ./eigen setup again.');
         pins.set(key, value);
     }
-    const existingDomain = existing.get('DOMAIN') ?? '';
-    if (backfill && (!existingDomain || PLACEHOLDER_DOMAINS.has(existingDomain))) {
-        ui.fail(`${ENV_PATH} has no DOMAIN of your own to keep.`, 'Run eigen setup first.');
-    }
+    if (backfill && !existing.get('DOMAIN')) ui.fail(`${ENV_PATH} has no DOMAIN.`, 'Run ./eigen setup first.');
     if (!backfill) ui.intro('Configure Eigen');
 
     const answer = async (
@@ -279,13 +272,11 @@ export async function configure(args: string[]): Promise<void> {
             'Web address, like eigen.example.com',
             'domain',
             flags.domain,
-            PLACEHOLDER_DOMAINS.has(existingDomain) ? '' : existingDomain,
+            existing.get('DOMAIN') ?? '',
             validateDomain,
         ),
     );
-    const profiles = existing.get('COMPOSE_PROFILES')?.split(',');
-    // A file from before MAIL_ENABLED says mail is off only through its profiles.
-    const wasMail = existing.get('MAIL_ENABLED') !== '0' && (profiles?.includes('mail') ?? true);
+    const wasMail = hostsMail(existing);
     const mail = await decide(
         'Host email on this server?',
         '--mail or --no-mail',
@@ -294,56 +285,58 @@ export async function configure(args: string[]): Promise<void> {
     );
     // Only a guess: a web address with three or more labels usually wants mail on its parent domain.
     const labels = domain.split('.');
+    const currentMailDomain = existing.get('MAIL_DOMAIN') || (labels.length >= 3 ? labels.slice(1).join('.') : domain);
     const mailDomain = cleanDomain(
         mail || flags['mail-domain'] !== undefined
             ? await answer(
                   'Mail domain, the part after @ in addresses',
                   'mail-domain',
                   flags['mail-domain'],
-                  existing.get('MAIL_DOMAIN') || (labels.length >= 3 ? labels.slice(1).join('.') : domain),
+                  currentMailDomain,
                   validateDomain,
               )
-            : existing.get('MAIL_DOMAIN') || domain,
+            : currentMailDomain,
     );
     const behindProxy = await decide(
         'Run behind a web server you already have (nginx, Caddy, Apache)?',
         '--proxy <host:port> or --no-proxy',
         flags.proxy !== undefined ? true : flags['no-proxy'] ? false : undefined,
-        profiles?.includes('static') ?? false,
+        (existing.get('COMPOSE_PROFILES') ?? '').split(',').includes('static'),
     );
-    const proxy = behindProxy
+    const currentStatic = `${existing.get('EIGEN_STATIC_HOST') || '127.0.0.1'}:${existing.get('EIGEN_STATIC_PORT') || '8080'}`;
+    const staticAddress = behindProxy
         ? await answer(
               'Address your web server forwards to, host:port',
               'proxy',
               flags.proxy,
-              `${existing.get('EIGEN_STATIC_HOST') || '127.0.0.1'}:${existing.get('EIGEN_STATIC_PORT') || '8080'}`,
+              currentStatic,
               validateAddress,
           )
-        : null;
-    // Only the bundled Caddy asks Let's Encrypt for a certificate; behind a proxy the question is moot.
-    const contactEmailDefault = existing.get('ACME_EMAIL') || `admin@${mailDomain}`;
+        : currentStatic;
+    // Only the bundled Caddy asks Let's Encrypt for a certificate.
+    const currentContact = existing.get('ACME_EMAIL') || `admin@${mailDomain}`;
     const contactEmail =
-        proxy === null || flags['contact-email'] !== undefined
+        !behindProxy || flags['contact-email'] !== undefined
             ? await answer(
                   "Contact email for Let's Encrypt",
                   'contact-email',
                   flags['contact-email'],
-                  contactEmailDefault,
+                  currentContact,
                   validateEmail,
               )
-            : contactEmailDefault;
+            : currentContact;
 
     const [hostKey, portKey, userKey, passwordKey] = wasMail ? MAIL_RELAY_KEYS : API_RELAY_KEYS;
-    const previousHost = existing.get(hostKey);
+    const currentHost = existing.get(hostKey);
     const relayAnswer = await answer(
         'Outgoing mail relay, host:port (optional)',
         'relay',
         flags['no-relay'] ? '' : flags.relay,
-        previousHost ? `${previousHost}:${existing.get(portKey) || (wasMail ? MAIL_RELAY_PORT : API_RELAY_PORT)}` : '',
+        currentHost ? `${currentHost}:${existing.get(portKey) || (wasMail ? MAIL_RELAY_PORT : API_RELAY_PORT)}` : '',
         validateRelay,
     );
     let relay: ConfigureAnswers['relay'] = null;
-    if (relayAnswer && relayAnswer !== 'none') {
+    if (relayAnswer) {
         const [host = '', port = mail ? MAIL_RELAY_PORT : API_RELAY_PORT] = relayAnswer.split(':');
         const user = await answer(
             'Relay user name (optional)',
@@ -352,38 +345,28 @@ export async function configure(args: string[]): Promise<void> {
             existing.get(userKey) ?? '',
             validateText,
         );
-        const previousPassword = existing.get(passwordKey) ?? '';
+        const current = existing.get(passwordKey) ?? '';
         const passwordEnv = flags['relay-password-env'];
-        let password = '';
-        if (user) {
-            if (passwordEnv !== undefined) {
-                password =
-                    process.env[passwordEnv] ??
-                    ui.fail(
-                        `--relay-password-env: ${passwordEnv} is not set.`,
-                        `Export the relay password as ${passwordEnv} first.`,
-                    );
-            } else if (acceptDefaults) {
-                password = previousPassword;
-            } else {
-                const message = previousPassword
-                    ? 'Relay password (leave empty to keep the current one)'
-                    : 'Relay password';
-                password = (await ui.password({ message, flag: '--relay-password-env <VAR>' })) || previousPassword;
-            }
-            if (!password && !backfill) {
-                ui.fail(
-                    'A relay user needs a password.',
-                    'Pass --relay-password-env <VAR>, or leave the relay user empty.',
-                );
-            }
-            if (validateText(password)) {
-                ui.fail('The relay password contains control characters.', 'Pass a password without them.');
-            }
+        let password = user ? current : '';
+        if (user && passwordEnv !== undefined) {
+            password =
+                process.env[passwordEnv] ??
+                ui.fail(`--relay-password-env: ${passwordEnv} is not set.`, `Export the password as ${passwordEnv}.`);
+        } else if (user && !acceptDefaults) {
+            const keep = current ? ', or --yes to keep the current password' : '';
+            password =
+                (await ui.password({
+                    message: current ? 'Relay password (empty keeps the current one)' : 'Relay password',
+                    validate: (value) => (value || current ? validateText(value) : 'Enter the relay password.'),
+                    flag: `--relay-password-env <VAR>${keep}`,
+                })) || current;
         }
+        if (user && !password && !backfill)
+            ui.fail('A relay user needs a password.', 'Pass --relay-password-env <VAR>.');
+        if (validateText(password)) ui.fail('The relay password contains control characters.', 'Remove them.');
         relay = { host, port, user, password };
     } else if (!mail && !backfill) {
-        ui.note('Without a relay, Eigen sends no email', [
+        ui.note('Without a relay, Eigen sends none of these', [
             'Two-factor codes by email',
             'Guest sign-in codes',
             'Share and access-request notifications',
@@ -393,73 +376,55 @@ export async function configure(args: string[]): Promise<void> {
             'Rerun the setup to add a relay later.',
         ]);
     }
-    const defaultFrom = existing.get('SMTP_FROM') || `noreply@${mailDomain}`;
+    const currentFrom = existing.get('SMTP_FROM') || `noreply@${mailDomain}`;
     const from =
         mail || relay
-            ? await answer('System sender, an address or Name <address>', 'from', flags.from, defaultFrom, validateFrom)
-            : defaultFrom;
+            ? await answer('System sender, an address or Name <address>', 'from', flags.from, currentFrom, validateFrom)
+            : currentFrom;
 
     const networksFile = process.env['EIGEN_DOCKER_NETWORKS'];
     let subnet = existing.get('EIGEN_SUBNET') ?? null;
     if (subnet === null && !backfill) {
-        let networks: DockerNetwork[] | null = null;
-        if (networksFile) {
-            try {
-                networks = JSON.parse(readFileSync(networksFile, 'utf8'));
-            } catch {
-                ui.fail('Could not read the Docker network list.', 'Run the setup again.');
-            }
-        } else {
-            const spin = ui.spinner('Checking Docker networks');
-            const docker = async (dockerArgs: string[]) => {
-                try {
-                    const proc = Bun.spawn(['docker', ...dockerArgs], { stdout: 'pipe', stderr: 'ignore' });
-                    const stdout = await new Response(proc.stdout).text();
-                    return (await proc.exited) === 0 ? stdout : null;
-                } catch {
-                    return null;
-                }
-            };
-            const ids = await docker(['network', 'ls', '-q']);
-            if (ids !== null) {
-                const list = ids.split('\n').filter(Boolean);
-                const inspected = list.length ? await docker(['network', 'inspect', ...list]) : '[]';
-                if (inspected === null)
-                    ui.fail(
-                        'docker network inspect failed.',
-                        'Check that Docker is running, then run the setup again.',
-                    );
-                networks = JSON.parse(inspected);
-            }
-            spin.stop(networks ? 'Docker networks checked' : 'Docker is not running; keeping the default network');
+        // Compose takes COMPOSE_PROJECT_NAME from the env file over the folder name, which is /install in here.
+        const project =
+            existing.get('COMPOSE_PROJECT_NAME') ||
+            process.env['EIGEN_PROJECT'] ||
+            (networksFile
+                ? ui.fail('EIGEN_PROJECT is not set.', 'Run configure through ./eigen setup.')
+                : basename(process.cwd())
+                      .toLowerCase()
+                      .replace(/[^a-z0-9_-]/g, '')
+                      .replace(/^[^a-z0-9]+/, ''));
+        let networks: DockerNetwork[];
+        try {
+            networks = JSON.parse(
+                networksFile
+                    ? readFileSync(networksFile, 'utf8')
+                    : Bun.spawnSync(['sh', '-c', 'docker network inspect $(docker network ls -q)']).stdout.toString(),
+            );
+        } catch {
+            ui.fail('Could not list the Docker networks.', 'Check that Docker is running, then run the setup again.');
         }
-        if (!Array.isArray(networks)) {
-            if (networksFile) ui.fail('The Docker network list is not a JSON array.', 'Run the setup again.');
-        } else {
-            // Compose takes COMPOSE_PROJECT_NAME from the env file over the folder name; in the container the
-            // folder is /install, so only the launcher knows the project.
-            const project =
-                existing.get('COMPOSE_PROJECT_NAME') ||
-                process.env['EIGEN_PROJECT'] ||
-                (networksFile
-                    ? ui.fail('EIGEN_PROJECT is not set.', 'Run configure through ./eigen setup.')
-                    : basename(process.cwd())
-                          .toLowerCase()
-                          .replace(/[^a-z0-9_-]/g, '')
-                          .replace(/^[^a-z0-9]+/, ''));
-            subnet = chooseSubnet(networks, project);
-        }
+        subnet = chooseSubnet(networks, project);
     }
 
-    const entries = configureEntries(
-        existing,
-        { domain, mail, mailDomain, proxy, contactEmail, relay, from, subnet },
-        wasMail,
-    );
-    for (const [key, value] of pins) entries.set(key, value);
-    writeEnvFile(ENV_PATH, entries);
+    const entries = configureEntries(existing, {
+        domain,
+        mail,
+        mailDomain,
+        behindProxy,
+        staticAddress,
+        contactEmail,
+        relay,
+        from,
+        subnet,
+    });
+    // A backfill keeps every existing value; only the release pins the launcher passes may change a line.
+    const written = backfill ? new Map([...entries, ...existing]) : entries;
+    for (const [key, value] of pins) written.set(key, value);
+    writeEnvFile(ENV_PATH, written);
     if (backfill) {
-        const added = [...entries.keys()].filter((key) => !existing.has(key));
+        const added = [...written.keys()].filter((key) => !existing.has(key));
         ui.outro(added.length ? `${ENV_PATH}: added ${added.join(', ')}.` : `${ENV_PATH} is up to date.`);
         return;
     }
@@ -467,8 +432,8 @@ export async function configure(args: string[]): Promise<void> {
     const saved = [`Wrote ${ENV_PATH}`];
     if (subnet && subnet !== DEFAULT_SUBNET && !existing.has('EIGEN_SUBNET'))
         saved.push(`Uses Docker network ${subnet}`);
-    if (proxy) {
-        const [bindHost, bindPort] = proxy.split(':');
+    if (behindProxy) {
+        const [bindHost, bindPort] = staticAddress.split(':');
         const target = `${bindHost === '0.0.0.0' ? '127.0.0.1' : bindHost}:${bindPort}`;
         writeFileSync(
             'eigen.nginx.conf',

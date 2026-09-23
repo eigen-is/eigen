@@ -7,9 +7,8 @@ export type Ui = {
     intro(title: string): void;
     ask(question: { message: string; initial: string; validate: Validate; flag: string }): Promise<string>;
     confirm(question: { message: string; initial: boolean; flag: string }): Promise<boolean>;
-    password(question: { message: string; flag: string }): Promise<string>;
+    password(question: { message: string; validate: Validate; flag: string }): Promise<string>;
     note(title: string, lines: string[]): void;
-    spinner(label: string): { stop(message: string): void };
     outro(message: string): void;
     fail(message: string, next: string): never;
 };
@@ -47,16 +46,9 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
                     await clack.text({ message, initialValue: initial, validate: (value) => validate(value ?? '') }),
                 ),
             confirm: async ({ message, initial }) => answered(await clack.confirm({ message, initialValue: initial })),
-            password: async ({ message }) => answered(await clack.password({ message })),
+            password: async ({ message, validate }) =>
+                answered(await clack.password({ message, validate: (value) => validate(value ?? '') })),
             note: (title, lines) => clack.note(lines.join('\n'), title),
-            spinner: (label) => {
-                const spin = clack.spinner({
-                    styleFrame: (frame) => styleText('cyan', frame),
-                    onCancel: () => process.exit(130),
-                });
-                spin.start(label);
-                return { stop: (message) => spin.stop(message) };
-            },
             outro: (message) => clack.outro(message),
             fail: (message, next) => {
                 clack.log.error(message);
@@ -66,48 +58,30 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
         };
     }
 
-    // Buffers lines that arrive before a question asks for them: piped stdin delivers every answer up front.
+    // Created on the first question, so a run that asks nothing never holds stdin open.
     let reader: Interface | undefined;
-    let closed = false;
-    const buffered: string[] = [];
-    const waiting: ((line: string | null) => void)[] = [];
-    const nextLine = (): Promise<string | null> => {
-        if (!reader) {
-            reader = createInterface({ input: process.stdin });
-            reader.on('line', (line) => {
-                const resolve = waiting.shift();
-                if (resolve) resolve(line);
-                else buffered.push(line);
-            });
-            reader.on('close', () => {
-                closed = true;
-                for (const resolve of waiting.splice(0)) resolve(null);
-            });
-        }
-        const line = buffered.shift();
-        if (line !== undefined) return Promise.resolve(line);
-        if (closed) return Promise.resolve(null);
-        return new Promise((resolve) => waiting.push(resolve));
-    };
+    let stdinLines: AsyncIterator<string> | undefined;
     const fail = (message: string, next: string): never => {
         console.error(`\nError: ${message}\n${next}`);
         process.exit(1);
     };
     const read = async (message: string, hint: string, flag: string, echo: boolean): Promise<string> => {
         process.stdout.write(`${message}${hint}: `);
-        const line = await nextLine();
-        if (line === null) return fail(`No answer for "${message}".`, `Pass ${flag}.`);
-        if (!process.stdin.isTTY) process.stdout.write(`${echo ? line : ''}\n`);
-        return line;
+        reader ??= createInterface({ input: process.stdin });
+        stdinLines ??= reader[Symbol.asyncIterator]();
+        const line = await stdinLines.next();
+        if (line.done) return fail(`No answer for "${message}".`, `Pass ${flag}.`);
+        // Piped input is not echoed; without a newline every question would run onto one line.
+        if (!process.stdin.isTTY) process.stdout.write(`${echo ? line.value : ''}\n`);
+        return line.value;
     };
     return {
         intro: (title) => console.log(title),
         ask: async ({ message, initial, validate, flag }) => {
-            // An empty line keeps the default, so an optional answer that has one is cleared with "-".
-            const clearable = initial !== '' && !validate('');
-            const hint = clearable ? ` [${initial}, - for none]` : initial ? ` [${initial}]` : '';
+            // An empty line keeps the default, so "-" is how an optional answer is cleared.
+            const hint = initial ? ` [${initial}${validate('') ? '' : ', - for none'}]` : '';
             const line = (await read(message, hint, flag, true)).trim();
-            const answer = clearable && line === '-' ? '' : line || initial;
+            const answer = line === '-' ? '' : line || initial;
             const error = validate(answer);
             return error ? fail(error, `Pass ${flag}.`) : answer;
         },
@@ -118,12 +92,13 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
             if (answer === 'n' || answer === 'no') return false;
             return fail(`Answer y or n to "${message}".`, `Pass ${flag}.`);
         },
-        password: ({ message, flag }) =>
-            process.stdin.isTTY
-                ? fail('A password typed here would show on screen.', `Pass ${flag}.`)
-                : read(message, '', flag, false),
+        password: async ({ message, validate, flag }) => {
+            if (process.stdin.isTTY) return fail('A password typed here would show on screen.', `Pass ${flag}.`);
+            const answer = await read(message, '', flag, false);
+            const error = validate(answer);
+            return error ? fail(error, `Pass ${flag}.`) : answer;
+        },
         note: (title, lines) => console.log(`\n${title}\n${lines.map((line) => `  ${line}`).join('\n')}`),
-        spinner: () => ({ stop: (message) => console.log(message) }),
         outro: (message) => {
             reader?.close();
             console.log(message);
