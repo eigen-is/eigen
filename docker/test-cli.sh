@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
-# The operator commands against a scratch edge,mail install of this working tree, run the way an operator runs
-# them: ./eigen from the no-Bun docker:cli container. ./eigen status reports the version and every service,
-# the control socket lives inside the API container and never under data/, ./eigen setup ends with a one-time
-# link without which the /setup routes refuse through the real gateway, ./eigen reset-password with a piped
-# password changes it and signs the account out over HTTP, ./eigen backup and ./eigen restore round-trip a
-# folder made over HTTP with owners and modes intact, a failed snapshot still brings the stack back, a snapshot
-# of a newer Eigen or one holding a hard link is refused without stopping anything, an interrupted restore brings
-# the stack back on the data it had, and status and reset-password say where to look when the API is stopped.
+# Install Eigen the way a stranger does and run the operator commands against it: ./eigen from a docker:cli
+# container that has no Bun, on a scratch copy of this working tree (source mode). The main install is edge,mail
+# as uid 1001 into a folder whose name has capitals and a space (so the Compose project is not `eigen`); a second
+# one is edge only, as root. Each asserts a healthy stack, the env file 0600 and the operator's, data/ and backups/
+# 1000:1000, and no container with the Docker socket.
+#
+# On the main install: ./eigen status reports the version and every service; the control socket lives inside the
+# API container and never under data/; ./eigen setup ends with a one-time link without which the /setup routes
+# refuse through the real gateway, and a rerun keeps every line of the env file; ./eigen reset-password with a
+# piped password changes it and signs the account out over HTTP; ./eigen backup and ./eigen restore round-trip a
+# folder made over HTTP with owners and modes intact, the snapshot the operator's alone in snapshots/; a no, a
+# failed snapshot, a newer snapshot, and snapshots holding a hard link, a device, a setuid file or a link out of
+# data/ are refused before anything stops; a restore interrupted while it unpacks leaves Eigen running on the data
+# it had; and status and reset-password say where to look when Eigen is stopped.
+#
+# The copy is `git ls-files -co --exclude-standard` into the scratch folder, committed to a fresh repo: unlike
+# `git stash create` or a clone plus the diff, it also carries untracked files, and it never copies ignored ones
+# (node_modules, .env.production) or anything under data/, backups/, snapshots/ and caddy-data/.
 #
 # Usage:  ./docker/test-cli.sh
 # Needs:  docker, curl, git. Builds every image in Docker (a few minutes on a cold cache).
@@ -20,7 +30,7 @@ VERSION=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$REPO_ROOT/package.json" | h
 ADMIN_EMAIL=alice@eigen.test
 OLD_PASSWORD="probe-old-$$"
 NEW_PASSWORD="probe-new-$$"
-OPERATOR="$(id -u):$(id -g)"
+OPERATOR=1001:1001
 
 # eigen <args…>: the launcher as the operator; sets OUT (stdout and stderr) and CODE.
 eigen() {
@@ -37,6 +47,48 @@ eigen_piped() {
 }
 
 show() { printf '%s\n' "$OUT" | sed 's/^/    │ /'; }
+
+# says <text>: whether the last output holds this line fragment.
+says() { printf '%s\n' "$OUT" | grep -q -- "$1"; }
+
+# check_install <operator uid:gid>: the stack, the files and the Docker socket of a fresh install.
+check_install() {
+    local operator="$1" base="https://localhost:$PORT_HTTPS" status mounts env_stat data_stat backups_stat
+    probe "/eigen/health" "$base/eigen/health" 200 "OK"
+    probe "/ (landing)" "$base/" 200
+    probe "/admin/" "$base/admin/" 200 '"/admin/assets/'
+    probe "/eigen/setup/status" "$base/eigen/setup/status" 200 '"setupRequired":true'
+    status=$(docker ps --filter "label=com.docker.compose.project=$PROJECT" \
+        --filter "label=com.docker.compose.service=eigen-api" --format '{{.Status}}')
+    case "$status" in
+        *'(healthy)'*) ok "eigen-api of project $PROJECT is healthy" ;;
+        *) fail "eigen-api of project $PROJECT: '$status', expected healthy" ;;
+    esac
+    if docker network inspect "${PROJECT}_eigen" >/dev/null 2>&1; then
+        ok "network ${PROJECT}_eigen exists"
+    else
+        fail "no network ${PROJECT}_eigen"
+    fi
+    env_stat=$(owner_mode "$INSTALL/.env.production")
+    data_stat=$(owner_mode "$INSTALL/data")
+    backups_stat=$(owner_mode "$INSTALL/backups")
+    if [ "$env_stat" = "$operator 600" ]; then
+        ok ".env.production is $operator, mode 600"
+    else
+        fail ".env.production is '$env_stat', expected '$operator 600'"
+    fi
+    case "$data_stat $backups_stat" in
+        "1000:1000 "*" 1000:1000 "*) ok "data/ and backups/ are 1000:1000" ;;
+        *) fail "data/ is '$data_stat' and backups/ is '$backups_stat', expected 1000:1000" ;;
+    esac
+    mounts=$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT" |
+        xargs docker inspect --format '{{.Name}} {{range .Mounts}}{{.Source}} {{end}}' || true)
+    if printf '%s\n' "$mounts" | grep -q 'docker.sock'; then
+        fail "a container mounts the Docker socket: $(printf '%s\n' "$mounts" | grep docker.sock)"
+    else
+        ok "no container of $PROJECT mounts the Docker socket ($(printf '%s\n' "$mounts" | wc -l | tr -d ' ') containers)"
+    fi
+}
 
 # setup_token <log>: the token of the last setup link in ./eigen setup output.
 setup_token() { grep -o 'setup=[A-Za-z0-9_-]*' "$1" | tail -n 1 | cut -d= -f2 || true; }
@@ -57,10 +109,24 @@ stack_up() {
 
 api_started() { docker inspect --format '{{.State.StartedAt}}' "$(dc ps -q eigen-api)"; }
 
-# The distinct owners under data/, seen from inside a container.
-data_owners() {
-    docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c 'find "$1" -exec stat -c "%u:%g" {} + | sort -u' sh \
-        "$INSTALL/data" | tr '\n' ' '
+# The distinct owners under data/.
+data_owners() { scratch_run sh -c 'find "$1" -exec stat -c "%u:%g" {} + | sort -u' sh "$INSTALL/data" | tr '\n' ' '; }
+
+# aside_count: how many data/ folders a restore has kept aside.
+aside_count() { (cd "$INSTALL" && ls -d data.pre-restore-* 2>/dev/null | wc -l | tr -d ' '); }
+
+# craft <name> <commands run in its data/>: a snapshot of this version in snapshots/, made as root.
+craft() {
+    scratch_run sh -c 'cd "$(mktemp -d)" && mkdir data &&
+        echo "{\"version\":\"$2\",\"createdAt\":\"2020-01-01T00:00:00.000Z\"}" >eigen-snapshot.json &&
+        echo DOMAIN=crafted.example.org >.env.production && echo x >data/a && (cd data && eval "$3") &&
+        tar -czf "$1" eigen-snapshot.json .env.production data' sh "$INSTALL/snapshots/$1" "$VERSION" "$2"
+}
+
+# unpacked_mode <archive> <member>: the mode root's GNU tar gives the member, unpacked on this file share.
+unpacked_mode() {
+    docker run --rm -v "$SCRATCH:$SCRATCH" --entrypoint sh "$EIGEN_API_IMAGE" -c 'mkdir "$1.probe" &&
+        tar --numeric-owner -xzpf "$1" -C "$1.probe" "$2" && stat -c %a "$1.probe/$2"; rm -rf "$1.probe"' sh "$1" "$2"
 }
 
 # sign_in <password> <cookie jar>: prints the HTTP status of a browser sign-in.
@@ -70,21 +136,24 @@ sign_in() {
         "$BASE/auth/sign-in/email" || echo 000
 }
 
+SETUP_FLAGS=(--yes --domain localhost --mail --mail-domain eigen.test --contact-email admin@eigen.test --no-proxy
+    --no-relay)
+
 scratch_init cli
-new_install "eigentestcli$$"
+new_install "Eigentest CLI $$" "$OPERATOR"
 write_override
 BASE="https://localhost:$PORT_HTTPS/eigen"
 
-header "Installing edge,mail"
+header "Installing edge,mail as uid 1001 into '$(basename "$INSTALL")'"
 started=$SECONDS
-if run_setup --user "$OPERATOR" --yes --domain localhost --mail --mail-domain eigen.test \
-    --contact-email admin@eigen.test --no-proxy --no-relay >"$SCRATCH/setup.log" 2>&1; then
+if run_setup --user "$OPERATOR" "${SETUP_FLAGS[@]}" >"$SCRATCH/setup.log" 2>&1; then
     ok "./eigen setup finished in $((SECONDS - started))s"
 else
     log "× setup failed after $((SECONDS - started))s:"
     sed 's/^/    /' "$SCRATCH/setup.log"
     exit 1
 fi
+check_install "$OPERATOR"
 
 ##############################################################################
 header "./eigen status"
@@ -97,31 +166,26 @@ done
 eigen status
 show
 if [ "$CODE" = 0 ]; then ok "status exits 0"; else fail "status exited $CODE"; fi
-if printf '%s\n' "$OUT" | grep -q "^Version  *$VERSION"; then
-    ok "status prints the version $VERSION"
-else
-    fail "status does not print the version $VERSION"
-fi
+if says "◇  Version  *$VERSION"; then ok "status prints the version $VERSION"; else fail "status does not print the version $VERSION"; fi
 for service in $(dc config --services); do
-    if printf '%s\n' "$OUT" | grep -q "^$service  *running"; then
-        ok "status lists $service as running"
-    else
-        fail "status does not list $service as running"
-    fi
+    if says "  $service  *running"; then ok "status lists $service as running"; else fail "status does not list $service as running"; fi
 done
-for row in 'Setup  *not finished' 'Disk  *[0-9]*\.[0-9] [KMGT]B free of [0-9]*\.[0-9] [KMGT]B$' 'Last snapshot  *none yet' 'Mail queue  *empty'; do
-    if printf '%s\n' "$OUT" | grep -q "^$row"; then ok "status: $row"; else fail "status lacks: $row"; fi
+for row in 'Setup  *not finished' 'Disk  *[0-9]*\.[0-9] [KMGT]B free of [0-9]*\.[0-9] [KMGT]B$' \
+    'Last snapshot  *none yet' 'Mail queue  *empty'; do
+    if says "$row"; then ok "status: $row"; else fail "status lacks: $row"; fi
 done
 # The scratch checkout has no upstream to compare with.
-if printf '%s\n' "$OUT" | grep -q '^Update'; then
-    fail "status has an Update row without an upstream"
-else
-    ok "status leaves out the update check it cannot make"
-fi
+if says 'Update  '; then fail "status has an Update row without an upstream"; else ok "status leaves out the update check it cannot make"; fi
 if printf '%s' "$OUT" | grep -q "$(printf '\033')"; then
     fail "status prints escape codes without a terminal"
 else
-    ok "status is plain text without a terminal"
+    ok "status has no color without a terminal"
+fi
+eigen status extra
+if [ "$CODE" = 2 ] && says 'Unknown argument "extra"' && says 'Usage: ./eigen status'; then
+    ok "status refuses an argument it does not take, with its usage (exit 2)"
+else
+    fail "status extra: exit $CODE"
 fi
 
 ##############################################################################
@@ -133,13 +197,12 @@ if [ "$socket" = "600 1000:1000 socket" ]; then
 else
     fail "/run/eigen/control.sock: '$socket', expected '600 1000:1000 socket'"
 fi
-api_id=$(dc ps -q eigen-api)
-mounts=$(docker inspect --format '{{range .Mounts}}{{.Destination}} {{end}}' "$api_id")
+mounts=$(docker inspect --format '{{range .Mounts}}{{.Destination}} {{end}}' "$(dc ps -q eigen-api)")
 case " $mounts" in
     *' /run'*) fail "eigen-api mounts something under /run: $mounts" ;;
     *) ok "no mount of eigen-api reaches /run/eigen ($mounts)" ;;
 esac
-found=$(docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" find "$INSTALL/data" -name '*.sock')
+found=$(scratch_run find "$INSTALL/data" -name '*.sock')
 if [ -z "$found" ]; then ok "no socket under data/"; else fail "a socket under data/: $found"; fi
 
 ##############################################################################
@@ -184,13 +247,20 @@ for route in s3check s3harden complete; do
     done
 done
 
+before=$(scratch_run cat "$INSTALL/.env.production")
 started=$SECONDS
-if run_setup --user "$OPERATOR" --yes --domain localhost --mail --mail-domain eigen.test \
-    --contact-email admin@eigen.test --no-proxy --no-relay >"$SCRATCH/setup-again.log" 2>&1; then
+if run_setup --user "$OPERATOR" "${SETUP_FLAGS[@]}" >"$SCRATCH/setup-again.log" 2>&1; then
     ok "./eigen setup reran in $((SECONDS - started))s"
 else
     fail "the setup rerun failed after $((SECONDS - started))s"
     sed 's/^/    /' "$SCRATCH/setup-again.log"
+fi
+after=$(scratch_run cat "$INSTALL/.env.production")
+if [ "${after:0:${#before}}" = "$before" ]; then
+    added=$(printf '%s' "${after:${#before}}" | sed -n 's/^\([A-Z_]*\)=.*/\1/p' | tr '\n' ' ')
+    ok "the rerun kept every line of .env.production${added:+, added: $added}"
+else
+    fail ".env.production changed on rerun: $(diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") | tr '\n' ' ')"
 fi
 SECOND_TOKEN=$(setup_token "$SCRATCH/setup-again.log")
 if [ "${#SECOND_TOKEN}" = 43 ] && [ "$SECOND_TOKEN" != "$FIRST_TOKEN" ]; then
@@ -214,7 +284,7 @@ for route in complete s3check; do
 done
 OUT=$(dc exec -T eigen-api bun /app/apps/api/src/cli/index.ts setup-link 2>&1 || true)
 show
-if printf '%s\n' "$OUT" | grep -q 'already set up' && ! printf '%s' "$OUT" | grep -q 'setup='; then
+if says 'already set up' && ! says 'setup='; then
     ok "setup-link says Eigen is already set up, with no link"
 else
     fail "setup-link after the setup does not say it is done"
@@ -234,7 +304,7 @@ fi
 
 eigen_piped "$NEW_PASSWORD" reset-password ALICE@eigen.test
 show
-if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q "Password changed for $ADMIN_EMAIL"; then
+if [ "$CODE" = 0 ] && says "eigen|reset-password>" && says "Password changed for $ADMIN_EMAIL. Signed out everywhere."; then
     ok "reset-password with a piped password (address in another case) succeeds"
 else
     fail "reset-password exited $CODE"
@@ -250,14 +320,14 @@ code=$(sign_in "$NEW_PASSWORD" "$SCRATCH/new-password")
 if [ "$code" = 200 ]; then ok "the new password signs in"; else fail "new password → $code, expected 200"; fi
 
 eigen_piped "$NEW_PASSWORD" reset-password nobody@eigen.test
-if [ "$CODE" != 0 ] && printf '%s\n' "$OUT" | grep -q 'No account uses nobody@eigen.test'; then
-    ok "an unknown address fails and says so (exit $CODE)"
+if [ "$CODE" != 0 ] && says '■  No account uses nobody@eigen.test' && says '└  Check the address'; then
+    ok "an unknown address fails and says what to do (exit $CODE)"
 else
     fail "unknown address: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
 fi
 
 eigen status
-if printf '%s\n' "$OUT" | grep -q '^Setup'; then fail "status still says setup is not finished"; else ok "status drops the setup line once an admin exists"; fi
+if says 'Setup  '; then fail "status still says setup is not finished"; else ok "status drops the setup line once an admin exists"; fi
 
 ##############################################################################
 header "./eigen backup and ./eigen restore"
@@ -279,7 +349,7 @@ else
 fi
 # Docker Desktop shows a file the operator's container wrote as theirs to one container and as root's to another
 # until it is chowned; on Linux this changes nothing.
-docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" chown "$OPERATOR" "$INSTALL/.env.production"
+scratch_run chown "$OPERATOR" "$INSTALL/.env.production"
 ENV_OWNER=$(owner_mode "$INSTALL/.env.production")
 OWNERS=$(data_owners)
 
@@ -288,31 +358,64 @@ eigen backup
 show
 SNAPSHOT=$(printf '%s\n' "$OUT" | grep -o 'eigen-[0-9]\{8\}-[0-9]\{6\}\.tar\.gz' | head -n 1 || true)
 if [ "$CODE" = 0 ] && [ -n "$SNAPSHOT" ]; then
-    ok "./eigen backup saved backups/$SNAPSHOT in $((SECONDS - started))s"
+    ok "./eigen backup saved snapshots/$SNAPSHOT in $((SECONDS - started))s"
 else
     fail "./eigen backup exited $CODE"
 fi
 if stack_up; then ok "the stack is back up after the backup"; else fail "the stack is not up after the backup"; fi
-got=$(owner_mode "$INSTALL/backups/$SNAPSHOT")
-if [ "$got" = '1000:1000 600' ]; then ok "the snapshot is 1000:1000, mode 600"; else fail "the snapshot is '$got'"; fi
-members=$(docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" tar -tzf "$INSTALL/backups/$SNAPSHOT" | awk 'NR <= 3' | tr '\n' ' ')
+got="$(owner_mode "$INSTALL/snapshots") / $(owner_mode "$INSTALL/snapshots/$SNAPSHOT")"
+if [ "$got" = "$OPERATOR 700 / $OPERATOR 600" ]; then
+    ok "snapshots/ is the operator's, mode 700, and so is the snapshot, mode 600"
+else
+    fail "snapshots/ and the snapshot are '$got'"
+fi
+members=$(scratch_run tar -tzf "$INSTALL/snapshots/$SNAPSHOT" | awk 'NR <= 3' | tr '\n' ' ')
 if [ "$members" = 'eigen-snapshot.json .env.production data/ ' ]; then
     ok "the snapshot starts with eigen-snapshot.json, .env.production, data/"
 else
     fail "the snapshot starts with: $members"
 fi
+if dc config --format json | grep -q 'snapshots'; then
+    fail "a service of Eigen mounts snapshots/"
+else
+    ok "no service of Eigen mounts snapshots/"
+fi
+# Older by its time, newer by its name: status must pick by the time.
+scratch_run touch "$INSTALL/snapshots/eigen-pre-update-20200101-000000.tar.gz"
+eigen status
+if says "Last snapshot  *$SNAPSHOT, "; then ok "status names the newest snapshot by its time"; else fail "status names another snapshot"; show; fi
+scratch_run rm "$INSTALL/snapshots/eigen-pre-update-20200101-000000.tar.gz"
 
 drive POST "/folder/$root_id" '{"folderName":"Made after the snapshot"}' >/dev/null
 started=$(api_started)
 eigen restore "$SNAPSHOT"
-if [ "$CODE" != 0 ] && printf '%s\n' "$OUT" | grep -q -- '--yes' && [ "$(api_started)" = "$started" ]; then
+if [ "$CODE" != 0 ] && says '--yes' && [ "$(api_started)" = "$started" ]; then
     ok "restore without a terminal asks for --yes and stops nothing (exit $CODE)"
 else
     fail "restore without --yes: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
 fi
+eigen_piped n restore "$SNAPSHOT"
+if [ "$CODE" = 0 ] && says 'Nothing was changed.' && [ "$(api_started)" = "$started" ]; then
+    ok "a no to the restore question exits 0 and stops nothing"
+else
+    fail "restore answered no: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
+fi
+eigen restore --help
+if [ "$CODE" = 0 ] && says '^Usage: ./eigen restore <snapshot> \[--yes\]' && ! says '--check'; then
+    ok "restore --help prints its usage, without the launcher's --check"
+else
+    fail "restore --help: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
+fi
+CODE=0
+OUT=$(EIGEN_API_IMAGE="eigentest-none:$RUN" in_cli_container --user "$OPERATOR" ./eigen restore "$SNAPSHOT" 2>&1) || CODE=$?
+if [ "$CODE" = 1 ] && says '■  Eigen is not built yet.' && says '└  Run ./eigen setup first, then ./eigen restore <snapshot>.'; then
+    ok "restore without the image says Eigen is not built yet"
+else
+    fail "restore without the image: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
+fi
 
 started=$SECONDS
-eigen restore "backups/$SNAPSHOT" --yes
+eigen restore "snapshots/$SNAPSHOT" --yes
 show
 if [ "$CODE" = 0 ]; then ok "./eigen restore --yes finished in $((SECONDS - started))s"; else fail "./eigen restore exited $CODE"; fi
 if stack_up; then ok "the stack is up after the restore"; else fail "the stack is not up after the restore"; fi
@@ -341,66 +444,77 @@ case $aside in
         ok "the replaced data is kept aside: $aside" ;;
     *) fail "kept aside: '$aside'" ;;
 esac
+if [ ! -e "$INSTALL/.eigen/restore" ]; then ok "nothing is left in .eigen/restore"; else fail ".eigen/restore is left behind"; fi
 
-docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" mkdir "$INSTALL/backups/.eigen-snapshot.partial"
+scratch_run mkdir "$INSTALL/snapshots/.eigen-snapshot.partial"
 eigen backup
 show
-if [ "$CODE" != 0 ] && printf '%s\n' "$OUT" | grep -q 'Could not write to backups/'; then
+if [ "$CODE" != 0 ] && says '■  Could not write to snapshots/'; then
     ok "a snapshot that cannot be written fails and says so (exit $CODE)"
 else
     fail "the blocked snapshot: exit $CODE"
 fi
-if printf '%s\n' "$OUT" | grep -q 'Eigen is running' && stack_up; then
+if says 'Eigen is running' && stack_up; then
     ok "the stack is back up after the failed snapshot"
 else
     fail "the stack is not up after the failed snapshot"
 fi
-docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" rmdir "$INSTALL/backups/.eigen-snapshot.partial"
+scratch_run rmdir "$INSTALL/snapshots/.eigen-snapshot.partial"
 
 NEWER=eigen-20990101-000000.tar.gz
-docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c 'cd "$(mktemp -d)" && mkdir data &&
+scratch_run sh -c 'cd "$(mktemp -d)" && mkdir data &&
     echo "{\"version\":\"999.0.0\",\"createdAt\":\"2099-01-01T00:00:00.000Z\"}" >eigen-snapshot.json &&
     echo DOMAIN=newer.example.org >.env.production && tar -czf "$1" eigen-snapshot.json .env.production data' sh \
-    "$INSTALL/backups/$NEWER"
+    "$INSTALL/snapshots/$NEWER"
 started=$(api_started)
+aside=$(aside_count)
 eigen restore "$NEWER" --yes
 show
-if [ "$CODE" != 0 ] && printf '%s\n' "$OUT" | grep -q '999.0.0' && printf '%s\n' "$OUT" | grep -q 'Update first, then restore'; then
+if [ "$CODE" != 0 ] && says '999.0.0' && says 'Update first, then restore'; then
     ok "a snapshot of a newer Eigen is refused (exit $CODE)"
 else
     fail "the newer snapshot: exit $CODE"
 fi
-if [ "$(api_started)" = "$started" ] && [ "$(cd "$INSTALL" && ls -d data.pre-restore-* | wc -l | tr -d ' ')" = 1 ] &&
-    grep -q '^DOMAIN=' "$INSTALL/.env.production" && ! grep -q newer.example.org "$INSTALL/.env.production"; then
+if [ "$(api_started)" = "$started" ] && [ "$(aside_count)" = "$aside" ] &&
+    ! scratch_run grep -q newer.example.org "$INSTALL/.env.production"; then
     ok "the refusal stopped nothing and changed nothing"
 else
     fail "the refused restore changed something"
 fi
+scratch_run rm "$INSTALL/snapshots/$NEWER"
 
-CRAFTED=eigen-20200101-000000.tar.gz
-docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c 'cd "$(mktemp -d)" && mkdir data &&
-    echo "{\"version\":\"$2\",\"createdAt\":\"2020-01-01T00:00:00.000Z\"}" >eigen-snapshot.json &&
-    echo DOMAIN=crafted.example.org >.env.production && echo x >data/a && ln data/a data/b &&
-    tar -czf "$1" eigen-snapshot.json .env.production data' sh "$INSTALL/backups/$CRAFTED" "$VERSION"
-started=$(api_started)
-eigen restore "$CRAFTED" --yes
-show
-if [ "$CODE" != 0 ] && printf '%s\n' "$OUT" | grep -q 'is a hard link' && [ "$(api_started)" = "$started" ] &&
-    ! grep -q crafted.example.org "$INSTALL/.env.production"; then
-    ok "a snapshot holding a hard link is refused before anything stops (exit $CODE)"
-else
-    fail "the crafted snapshot: exit $CODE"
-fi
+# Unpacked by root with GNU tar while Eigen runs, each is refused before anything stops: by what find sees in the
+# unpacked copy, or by tar itself where the file share cannot hold a device.
+n=0
+for crafted in 'ln a b|is a hard link' 'mknod null c 1 3|null' 'chmod 4755 a|is setuid or setgid' \
+    'ln -s /etc/passwd passwd|is a link that leads out of data/'; do
+    name="eigen-20200101-00000$((++n)).tar.gz"
+    craft "$name" "${crafted%%|*}"
+    # Docker Desktop's file share drops the bit as root's tar unpacks it: then there is nothing to refuse.
+    if [ "${crafted%%|*}" = 'chmod 4755 a' ] && [ "$(unpacked_mode "$INSTALL/snapshots/$name" data/a)" != 4755 ]; then
+        skip "a setuid file: this file share drops the bit on unpack (the unit tests cover the refusal)"
+        scratch_run rm "$INSTALL/snapshots/$name"
+        continue
+    fi
+    started=$(api_started)
+    eigen restore "$name" --yes
+    if [ "$CODE" = 1 ] && says "■  $name cannot be restored: .*${crafted#*|}" && [ "$(api_started)" = "$started" ] &&
+        [ "$(aside_count)" = "$aside" ] && [ ! -e "$INSTALL/.eigen/restore" ] &&
+        ! scratch_run grep -q crafted.example.org "$INSTALL/.env.production"; then
+        ok "a snapshot where data/ holds '${crafted%%|*}' is refused before anything stops"
+    else
+        fail "the snapshot with '${crafted%%|*}': exit $CODE"
+        show
+    fi
+done
 
 # Big enough that the restore is still unpacking when the interrupt lands.
-docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c 'head -c 300000000 /dev/urandom >"$1"' sh \
-    "$INSTALL/data/ballast.bin"
+scratch_run sh -c 'head -c 300000000 /dev/urandom >"$1"' sh "$INSTALL/data/ballast.bin"
 eigen backup
 BIG=$(printf '%s\n' "$OUT" | grep -o 'eigen-[0-9]\{8\}-[0-9]\{6\}\.tar\.gz' | head -n 1 || true)
-# sh -c: the image's entrypoint would take a bare rm for docker rm.
-docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c 'rm "$1"' sh "$INSTALL/data/ballast.bin"
+scratch_run rm "$INSTALL/data/ballast.bin"
 drive POST "/folder/$root_id" '{"folderName":"Made before the interrupted restore"}' >/dev/null
-aside=$(cd "$INSTALL" && ls -d data.pre-restore-* | wc -l | tr -d ' ')
+started=$(api_started)
 (
     eigen restore "$BIG" --yes
     printf '%s\n' "$OUT" >"$SCRATCH/interrupted.log"
@@ -408,7 +522,7 @@ aside=$(cd "$INSTALL" && ls -d data.pre-restore-* | wc -l | tr -d ' ')
 ) &
 waiter=$!
 for _ in $(seq 1 600); do
-    if [ "$(cd "$INSTALL" && ls -d data.pre-restore-* | wc -l | tr -d ' ')" -gt "$aside" ]; then break; fi
+    if [ -d "$INSTALL/.eigen/restore" ]; then break; fi
     sleep 0.1
 done
 # Ctrl-C without a terminal: the signal reaches the launcher's docker client, which passes it to the CLI.
@@ -417,48 +531,66 @@ CODE=0
 wait "$waiter" || CODE=$?
 OUT=$(cat "$SCRATCH/interrupted.log")
 show
-if [ "$CODE" = 130 ] && printf '%s\n' "$OUT" | grep -q 'The restore was cancelled'; then
-    ok "an interrupted restore says it was cancelled (exit 130)"
+if [ "$CODE" = 130 ] && says 'Cancelled. Nothing was changed.'; then
+    ok "a restore interrupted while it unpacks says it was cancelled (exit 130)"
 else
     fail "the interrupted restore: exit $CODE"
 fi
 listing=$(drive GET "/folder/$root_id")
-if stack_up && printf '%s' "$listing" | grep -q '"Made before the interrupted restore"' &&
-    [ ! -e "$INSTALL/data/ballast.bin" ] && [ "$(cd "$INSTALL" && ls -d data.pre-restore-* | wc -l | tr -d ' ')" = "$aside" ]; then
-    ok "Eigen runs again on the data it had, and nothing is kept aside"
+if [ "$(api_started)" = "$started" ] && printf '%s' "$listing" | grep -q '"Made before the interrupted restore"' &&
+    [ ! -e "$INSTALL/data/ballast.bin" ] && [ "$(aside_count)" = "$aside" ] && [ ! -e "$INSTALL/.eigen/restore" ]; then
+    ok "Eigen ran on throughout, nothing is kept aside, and the unpacked copy is gone"
 else
     fail "after the interrupted restore: $listing"
 fi
-docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c 'rm "$1"' sh "$INSTALL/backups/$BIG"
+scratch_run rm "$INSTALL/snapshots/$BIG"
 
 ##############################################################################
-header "With the API stopped"
+header "With Eigen stopped"
 ##############################################################################
 dc stop eigen-api >/dev/null 2>&1
 eigen status
 show
-if [ "$CODE" != 0 ] && printf '%s\n' "$OUT" | grep -q './eigen logs eigen-api'; then
+if [ "$CODE" = 1 ] && says '■  Eigen is not running.' && says '└  Run ./eigen logs eigen-api to see why.'; then
     ok "status fails and points at ./eigen logs eigen-api (exit $CODE)"
 else
-    fail "status with the API stopped: exit $CODE"
+    fail "status with Eigen stopped: exit $CODE"
 fi
-if printf '%s\n' "$OUT" | grep -q '^eigen-api  *exited'; then
-    ok "status still lists the services, without glyphs off a terminal"
+if says '■  eigen-api  *exited' && says "Last snapshot  *$SNAPSHOT"; then
+    ok "status still lists the services and the last snapshot"
 else
-    fail "status does not list eigen-api as exited"
+    fail "status does not list eigen-api as exited, or the last snapshot"
 fi
 eigen reset-password --help
-if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q '^Usage: reset-password <email>'; then
-    ok "reset-password --help works with the API stopped"
+if [ "$CODE" = 0 ] && says '^Usage: ./eigen reset-password <email>'; then
+    ok "reset-password --help works with Eigen stopped"
 else
-    fail "reset-password --help with the API stopped: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
+    fail "reset-password --help with Eigen stopped: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
 fi
 eigen_piped "$NEW_PASSWORD" reset-password "$ADMIN_EMAIL"
-if [ "$CODE" != 0 ] && printf '%s\n' "$OUT" | grep -q 'The API is not running'; then
-    ok "reset-password fails and says the API is not running (exit $CODE)"
+if [ "$CODE" = 1 ] && says '■  Eigen is not running.'; then
+    ok "reset-password fails and says Eigen is not running (exit $CODE)"
 else
-    fail "reset-password with the API stopped: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
+    fail "reset-password with Eigen stopped: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
 fi
+down_project "$PROJECT"
+
+##############################################################################
+header "Installing edge as root into another folder"
+##############################################################################
+new_install "eigentest-root-$$" 0:0
+write_override
+started=$SECONDS
+if run_setup --yes --domain localhost --mail-domain example.org --no-mail --no-relay --no-proxy \
+    --contact-email admin@example.org \
+    >"$SCRATCH/setup-root.log" 2>&1; then
+    ok "./eigen setup as root finished in $((SECONDS - started))s"
+else
+    fail "./eigen setup as root failed after $((SECONDS - started))s"
+    sed 's/^/    /' "$SCRATCH/setup-root.log"
+fi
+check_install 0:0
+down_project "$PROJECT"
 
 ##############################################################################
 header "Result"

@@ -66,7 +66,7 @@ scratch_init() {
 }
 
 # new_install <folder name> [uid:gid]: $INSTALL, a scratch copy of the working tree (tracked and untracked
-# files, not ignored ones, nothing under data/, backups/ or caddy-data/) committed to a fresh repo so the
+# files, not ignored ones, nothing under data/, backups/, snapshots/ or caddy-data/) committed to a fresh repo so the
 # launcher sees a source checkout, owned by uid:gid (default: the host user) as if that operator had cloned
 # it. $PROJECT is the Compose project name Compose derives from the folder name.
 new_install() {
@@ -76,9 +76,8 @@ new_install() {
     HARNESS_PROJECTS="$HARNESS_PROJECTS $PROJECT"
     # Created and filled inside containers: Docker Desktop refuses a later chown of the host's read-only
     # git objects, and on Linux the host user could not write a folder another uid owns.
-    docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c 'mkdir "$1" && chown "$2" "$1"' sh \
-        "$INSTALL" "$INSTALL_OWNER"
-    (cd "$REPO_ROOT" && git ls-files -z -co --exclude-standard -- . ':!data' ':!backups' ':!caddy-data' |
+    scratch_run sh -c 'mkdir "$1" && chown "$2" "$1"' sh "$INSTALL" "$INSTALL_OWNER"
+    (cd "$REPO_ROOT" && git ls-files -z -co --exclude-standard -- . ':!data' ':!backups' ':!snapshots' ':!caddy-data' |
         while IFS= read -r -d '' file; do
             if [ -e "$file" ] || [ -L "$file" ]; then printf '%s\0' "$file"; fi
         done | COPYFILE_DISABLE=1 tar -cf - --null -T -) |
@@ -189,9 +188,7 @@ in_cli_container() {
         -e EIGEN_ALLOW_ARCH -e NO_COLOR=1 ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
 }
 
-# run_setup [--user uid:gid] <setup flags…>: ./eigen setup in the no-Bun container. Bun once crashed in a
-# Vite build on arm64 (SIGTRAP, exit 133); that failure alone is retried once, loudly. The launcher never
-# retries.
+# run_setup [--user uid:gid] <setup flags…>: ./eigen setup in the no-Bun container.
 run_setup() {
     local user=()
     if [ "$1" = --user ]; then
@@ -199,13 +196,7 @@ run_setup() {
         shift 2
     fi
     assert_isolated
-    in_cli_container ${user[@]+"${user[@]}"} ./eigen setup "$@" && return 0
-    if grep -q 'exit code: 133' "$INSTALL/.eigen/last-step.log" 2>/dev/null; then
-        log "!!! RETRY: Bun crashed (exit 133) during an image build; running ./eigen setup once more"
-        in_cli_container ${user[@]+"${user[@]}"} ./eigen setup "$@"
-        return
-    fi
-    return 1
+    in_cli_container ${user[@]+"${user[@]}"} ./eigen setup "$@"
 }
 
 # The harness's own view of the install's stack, from the host, with the files the launcher uses.
@@ -215,11 +206,14 @@ dc() {
         -f docker-compose.build.yml -f docker-compose.override.yml "$@")
 }
 
-# stat inside a container: Docker Desktop's file share shows every file as the host user, so the owner a
-# container wrote is only visible from inside one.
-owner_mode() {
-    docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" stat -c '%u:%g %a' "$1"
+# scratch_run <command…>: runs as root in the docker:cli image, the scratch folder at its own path. Docker
+# Desktop's file share shows every file as the host user, so the owner a container wrote is only visible from
+# inside one; and on Linux the host user cannot read what root or another uid keeps to itself.
+scratch_run() {
+    docker run --rm -v "$SCRATCH:$SCRATCH" --entrypoint '' "$CLI_IMAGE" "$@"
 }
+
+owner_mode() { scratch_run stat -c '%u:%g %a' "$1"; }
 
 # down_project <project>: its containers, networks and volumes, found by Compose's project label.
 down_project() {
@@ -244,7 +238,7 @@ harness_cleanup() {
     ids=$(docker ps -aq --filter "label=eigen.harness.run=$RUN")
     if [ -n "$ids" ]; then docker rm -f $ids >/dev/null || true; fi
     # data/ holds files owned by 1000 and root, which the host user cannot always delete.
-    docker run --rm -v "$SCRATCH:/scratch" "$CLI_IMAGE" find /scratch -mindepth 1 -delete >/dev/null 2>&1 || true
+    scratch_run find "$SCRATCH" -mindepth 1 -delete >/dev/null 2>&1 || true
     rm -rf "$SCRATCH"
     docker image rm "$EIGEN_API_IMAGE" "$EIGEN_FRONTEND_IMAGE" "$EIGEN_POSTFIX_IMAGE" "$EIGEN_DOVECOT_IMAGE" \
         "$CLI_IMAGE" >/dev/null 2>&1 || true
