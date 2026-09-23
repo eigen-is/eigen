@@ -82,8 +82,8 @@ questions no flag answers are read from stdin, one line each. An empty line keep
 in brackets; - clears an optional answer.
 
   --domain <name>              Web address, like eigen.example.com
+  --mail-domain <name>         The domain of every user's address, like example.com
   --mail | --no-mail           Host email on this server
-  --mail-domain <name>         The part after @ in mail addresses
   --proxy <host:port>          Run behind your own web server, which forwards to host:port
   --no-proxy                   Let Eigen's own web server take ports 80 and 443
   --contact-email <address>    Contact address for Let's Encrypt
@@ -114,6 +114,12 @@ function validateDomain(value: string): string | undefined {
     if (domain !== 'localhost' && !/^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/.test(domain)) {
         return 'Enter a domain name like eigen.example.com, without https:// or a path.';
     }
+}
+
+// User addresses need a dot in their domain, so a mail domain cannot be localhost.
+function validateMailDomain(value: string): string | undefined {
+    if (cleanDomain(value) === 'localhost') return 'Enter a domain name like example.com.';
+    return validateDomain(value);
 }
 
 function validateEmail(value: string): string | undefined {
@@ -245,19 +251,16 @@ export async function configure(args: string[]): Promise<void> {
     if (backfill && !existing.get('DOMAIN')) ui.fail(`${ENV_PATH} has no DOMAIN.`, 'Run ./eigen setup first.');
     if (!backfill) {
         ui.intro('Configure Eigen');
-        ui.explain(
-            'A few questions about this server. Enter keeps the suggested answer. You can change any answer later.',
-        );
+        ui.explain('A few questions. Enter keeps the suggested answer.');
     }
 
     const answer = async (
-        message: string,
-        help: string,
-        flag: string,
+        question: { message: string; help: string; flag: string; placeholder?: string },
         given: string | undefined,
         initial: string,
         validate: (value: string) => string | undefined,
     ): Promise<string> => {
+        const { message, flag } = question;
         if (given !== undefined) {
             const error = validate(given);
             return error ? ui.fail(`--${flag}: ${error}`, `Pass a valid --${flag}.`) : given;
@@ -265,78 +268,79 @@ export async function configure(args: string[]): Promise<void> {
         if (backfill) return initial;
         if (acceptDefaults)
             return validate(initial) ? ui.fail(`No answer for "${message}".`, `Pass --${flag}.`) : initial;
-        ui.explain(help);
-        return ui.ask({ message, initial, validate, flag: `--${flag}` });
+        return ui.ask({ ...question, initial, validate, flag: `--${flag}` });
     };
     const decide = async (
-        message: string,
-        help: string,
-        flag: string,
+        question: { message: string; help: string; flag: string },
         given: boolean | undefined,
         initial: boolean,
     ) => {
         if (given !== undefined) return given;
         if (acceptDefaults) return initial;
-        ui.explain(help);
-        return ui.confirm({ message, initial, flag });
+        return ui.confirm({ ...question, initial });
     };
 
     const domain = cleanDomain(
         await answer(
-            'Which web address will people use?',
-            'The address people type in their browser, like eigen.example.com. Its DNS must point to this server. ' +
-                'Eigen also uses it for the HTTPS certificate and for the links in the emails it sends.',
-            'domain',
+            {
+                message: 'Where will Eigen be hosted?',
+                help: 'People open Eigen here. You must be able to set DNS records for it.',
+                flag: 'domain',
+                placeholder: 'eigen.example.com',
+            },
             flags.domain,
             existing.get('DOMAIN') ?? '',
             validateDomain,
         ),
     );
+    const currentMailDomain = existing.get('MAIL_DOMAIN') || domain;
+    const mailDomain = cleanDomain(
+        await answer(
+            {
+                message: 'Which mail domain will you use?',
+                help:
+                    `Everyone's sign-in address ends in it, like admin@${currentMailDomain}.\n` +
+                    'Mailboxes live on this server or wherever its email is hosted now.',
+                flag: 'mail-domain',
+            },
+            flags['mail-domain'],
+            currentMailDomain,
+            validateMailDomain,
+        ),
+    );
     const wasMail = hostsMail(existing);
     const mail = await decide(
-        'Host email on this server?',
-        'Yes: Eigen runs its own mail server, and people get mailboxes at your mail domain. ' +
-            'Ports 25, 465, 587 and 993 must be reachable, and you add the DNS records shown at the end.\n' +
-            'No: there is no Mail app. Everything else works, and people keep the email they have. ' +
-            'Eigen still sends notifications, sign-in codes and invitations through an outgoing mail relay, ' +
-            'which comes next.',
-        '--mail or --no-mail',
+        {
+            message: 'Host email on this server?',
+            help:
+                'Yes: a mail server runs here, on ports 25, 465, 587 and 993.\n' +
+                'No: there is no Mail app, and email stays where it is.',
+            flag: '--mail or --no-mail',
+        },
         flags.mail ? true : flags['no-mail'] ? false : undefined,
         wasMail,
     );
-    // Only a guess: a web address with three or more labels usually wants mail on its parent domain.
-    const labels = domain.split('.');
-    const currentMailDomain = existing.get('MAIL_DOMAIN') || (labels.length >= 3 ? labels.slice(1).join('.') : domain);
-    const mailDomain = cleanDomain(
-        mail || flags['mail-domain'] !== undefined
-            ? await answer(
-                  'Which domain comes after the @ in email addresses?',
-                  'Like example.com for alice@example.com. It may differ from the web address. ' +
-                      'The mail DNS records shown at the end go on this domain.',
-                  'mail-domain',
-                  flags['mail-domain'],
-                  currentMailDomain,
-                  validateDomain,
-              )
-            : currentMailDomain,
-    );
     const behindProxy = await decide(
-        'Is there already a web server on this machine?',
-        'Yes: something here already serves ports 80 and 443, such as nginx, Apache, Caddy, Traefik, ' +
-            'a Synology NAS or a tunnel. Eigen leaves those ports alone, and your web server forwards traffic to Eigen.\n' +
-            "No: Eigen takes ports 80 and 443 itself and gets its HTTPS certificate from Let's Encrypt automatically.",
-        '--proxy <host:port> or --no-proxy',
+        {
+            message: 'Is there already a web server on this machine?',
+            help:
+                'Yes: your web server keeps ports 80 and 443 and forwards here.\n' +
+                'No: Eigen takes ports 80 and 443 and gets its own certificate.',
+            flag: '--proxy <host:port> or --no-proxy',
+        },
         flags.proxy !== undefined ? true : flags['no-proxy'] ? false : undefined,
         (existing.get('COMPOSE_PROFILES') ?? '').split(',').includes('static'),
     );
     const currentStatic = `${existing.get('EIGEN_STATIC_HOST') || '127.0.0.1'}:${existing.get('EIGEN_STATIC_PORT') || '8080'}`;
     const staticAddress = behindProxy
         ? await answer(
-              'Where should Eigen listen for your web server, as host:port?',
-              'Eigen runs on this address, and you point your web server at it. 127.0.0.1 keeps it reachable ' +
-                  'from this machine only. If your web server runs in a Docker container, use the Docker host ' +
-                  'address, like 172.17.0.1.',
-              'proxy',
+              {
+                  message: 'Where should Eigen listen for your web server, as host:port?',
+                  help:
+                      '127.0.0.1 keeps it on this machine.\n' +
+                      'For a web server in Docker, use the Docker host, like 172.17.0.1.',
+                  flag: 'proxy',
+              },
               flags.proxy,
               currentStatic,
               validateAddress,
@@ -347,9 +351,11 @@ export async function configure(args: string[]): Promise<void> {
     const contactEmail =
         !behindProxy || flags['contact-email'] !== undefined
             ? await answer(
-                  "Which email address should Let's Encrypt use?",
-                  "Let's Encrypt issues the HTTPS certificate. It only writes to this address about problems with it.",
-                  'contact-email',
+                  {
+                      message: "Which email address should Let's Encrypt use?",
+                      help: 'It only writes about problems with the HTTPS certificate.',
+                      flag: 'contact-email',
+                  },
                   flags['contact-email'],
                   currentContact,
                   validateEmail,
@@ -359,15 +365,13 @@ export async function configure(args: string[]): Promise<void> {
     const [hostKey, portKey, userKey, passwordKey] = wasMail ? MAIL_RELAY_KEYS : API_RELAY_KEYS;
     const currentHost = existing.get(hostKey);
     const relayAnswer = await answer(
-        'Which mail relay should Eigen send through, as host:port? (optional)',
-        mail
-            ? "Eigen's mail server sends all outgoing mail. Many hosting providers block port 25, and receiving " +
-                  'servers trust a relay such as Brevo or Postmark more. Without one, the mail server sends ' +
-                  'directly. Leave it empty for none.'
-            : 'Eigen sends notifications, sign-in codes and invitations by email. Without a mail server of its ' +
-                  "own, it needs a relay: a service such as Brevo or Postmark, or your email provider's SMTP " +
-                  'server. Leave it empty and Eigen sends no mail.',
-        'relay',
+        {
+            message: 'Which mail relay should Eigen send through, as host:port? (optional)',
+            help: mail
+                ? 'Useful when your provider blocks port 25. Leave it empty to send directly.'
+                : 'Eigen needs one to send sign-in codes, invitations and notifications.',
+            flag: 'relay',
+        },
         flags['no-relay'] ? '' : flags.relay,
         currentHost ? `${currentHost}:${existing.get(portKey) || (wasMail ? MAIL_RELAY_PORT : API_RELAY_PORT)}` : '',
         validateRelay,
@@ -376,9 +380,11 @@ export async function configure(args: string[]): Promise<void> {
     if (relayAnswer) {
         const [host = '', port = mail ? MAIL_RELAY_PORT : API_RELAY_PORT] = relayAnswer.split(':');
         const user = await answer(
-            "What is the relay's user name? (optional)",
-            'The login your relay provider gave you. Leave it empty if the relay needs none.',
-            'relay-user',
+            {
+                message: "What is the relay's user name? (optional)",
+                help: 'Leave it empty if the relay needs none.',
+                flag: 'relay-user',
+            },
             flags['relay-user'],
             existing.get(userKey) ?? '',
             validateText,
@@ -392,12 +398,12 @@ export async function configure(args: string[]): Promise<void> {
                 ui.fail(`--relay-password-env: ${passwordEnv} is not set.`, `Export the password as ${passwordEnv}.`);
         } else if (user && !acceptDefaults) {
             const keep = current ? ', or --yes to keep the current password' : '';
-            ui.explain(`The password is saved in ${ENV_PATH}, which only its owner can read.`);
             password =
                 (await ui.password({
                     message: current
                         ? "What is the relay's password? (empty keeps the current one)"
                         : "What is the relay's password?",
+                    help: `Saved in ${ENV_PATH}, which only its owner can read.`,
                     validate: (value) => (value || current ? validateText(value) : 'Enter the relay password.'),
                     flag: `--relay-password-env <VAR>${keep}`,
                 })) || current;
@@ -407,25 +413,17 @@ export async function configure(args: string[]): Promise<void> {
         if (validateText(password)) ui.fail('The relay password contains control characters.', 'Remove them.');
         relay = { host, port, user, password };
     } else if (!mail && !backfill) {
-        ui.note('Without a relay, Eigen sends none of these', [
-            'Two-factor codes by email',
-            'Guest sign-in codes',
-            'Share and access-request notifications',
-            '"Email collaborators"',
-            'Waitlist invitations',
-            'Calendar invitations and RSVP replies',
-            'Rerun the setup to add a relay later.',
-        ]);
+        ui.note('No relay', ['Eigen sends no email. Run ./eigen setup again to add a relay.']);
     }
     const currentFrom = existing.get('SMTP_FROM') || `noreply@${mailDomain}`;
     const from =
         mail || relay
             ? await answer(
-                  "Which address should Eigen's own mail come from?",
-                  'The From address of the mail Eigen sends, as an address or Name <address>. Mail sent on ' +
-                      'someone\'s behalf shows as "Alice via Name" from this address, and replies go to Alice.' +
-                      (relay ? ' The relay must accept this address.' : ''),
-                  'from',
+                  {
+                      message: "Which address should Eigen's own mail come from?",
+                      help: `An address or Name <address>.${relay ? ' The relay must accept it.' : ''}`,
+                      flag: 'from',
+                  },
                   flags.from,
                   currentFrom,
                   validateFrom,
@@ -479,9 +477,6 @@ export async function configure(args: string[]): Promise<void> {
         return;
     }
 
-    const saved = [`Wrote ${ENV_PATH}, which only its owner can read`];
-    if (subnet && subnet !== DEFAULT_SUBNET && !existing.has('EIGEN_SUBNET'))
-        saved.push(`Uses Docker network ${subnet}`);
     if (behindProxy) {
         const [bindHost, bindPort] = staticAddress.split(':');
         const target = `${bindHost === '0.0.0.0' ? '127.0.0.1' : bindHost}:${bindPort}`;
@@ -597,15 +592,13 @@ ${domain} {
 </IfModule>
 `,
         );
-        saved.push(
-            `Wrote ready-made web server configs that forward to ${target}:`,
-            '  eigen.nginx.conf   link into /etc/nginx/sites-enabled/, reload nginx',
-            '  eigen.apache.conf  copy to sites-available/eigen.conf, a2ensite eigen',
-            '  eigen.Caddyfile    import in your Caddyfile, reload Caddy',
+        ui.note(`Point your web server at ${target}`, [
+            'eigen.nginx.conf   link into /etc/nginx/sites-enabled/, reload nginx',
+            'eigen.apache.conf  copy to sites-available/eigen.conf, a2ensite eigen',
+            'eigen.Caddyfile    import in your Caddyfile, reload Caddy',
             `nginx and Apache expect a certbot certificate for ${domain}.`,
-        );
+        ]);
     }
-    ui.note('Saved', saved);
 
     const server = "your server's IP address";
     const records = [['A', domain, server]];
@@ -627,12 +620,8 @@ ${domain} {
     }
     const width = Math.max(...records.map(([, name = '']) => name.length)) + 2;
     ui.note(
-        'DNS records',
+        'Add these DNS records',
         records.map(([type = '', name = '', value]) => `${type.padEnd(5)}${name.padEnd(width)}${value}`),
-    );
-    ui.explain(
-        'To change an answer later, run ./eigen setup again. It keeps every answer you do not change. ' +
-            './eigen setup --help lists the flags for a scripted setup.',
     );
     ui.outro(networksFile ? 'Configuration saved.' : 'Next: ./eigen setup builds and starts Eigen.');
 }

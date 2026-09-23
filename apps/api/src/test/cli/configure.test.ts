@@ -137,6 +137,7 @@ describe('configure entries', () => {
         expect(entries.get('EIGEN_STATIC_PORT')).toBe('18080');
         expect(entries.get('SMTP_FROM')).toBe('Eigen <noreply@example.org>');
         expect([...entries.keys()].some((key) => key.startsWith('SMTP_RELAY_'))).toBe(false);
+        expect(entries.get('MAIL_DOMAIN')).toBe('example.org');
     });
 
     test('turning mail back on drops the API relay keys so mail goes through postfix again', () => {
@@ -208,8 +209,8 @@ describe('subnet choice', () => {
 describe('configure command', () => {
     const PIPED = [
         'eigen.example.org',
-        'y',
         'example.org',
+        'y',
         'n',
         'admin@example.org',
         'smtp.relay.test:2525',
@@ -225,7 +226,7 @@ describe('configure command', () => {
         const pipedRun = await runConfigure(piped, [], PIPED);
         expect(pipedRun.stderr).toBe('');
         expect(pipedRun.code).toBe(0);
-        expect(pipedRun.stdout).not.toContain('The address people type');
+        expect(pipedRun.stdout).not.toContain('People open Eigen here');
         const flagRun = await runConfigure(
             flagged,
             [
@@ -282,7 +283,7 @@ describe('configure command', () => {
             'admin@example.org',
         ]);
         expect(run.code).toBe(0);
-        expect(run.stdout).toContain('Two-factor codes by email');
+        expect(run.stdout).toContain('Eigen sends no email');
         expect(readFileSync(join(dir, 'eigen.nginx.conf'), 'utf8')).toContain('proxy_pass http://127.0.0.1:18080;');
         expect(readFileSync(join(dir, 'eigen.Caddyfile'), 'utf8')).toContain('reverse_proxy 127.0.0.1:18080');
         expect(readFileSync(join(dir, 'eigen.apache.conf'), 'utf8')).toContain('http://127.0.0.1:18080/');
@@ -441,7 +442,7 @@ describe('configure command', () => {
 
     test('a piped - clears any optional answer, and a bare - is no relay host', async () => {
         const fresh = tempDir();
-        const answers = ['eigen.example.org', 'y', 'example.org', 'n', 'admin@example.org', '-', '', ''];
+        const answers = ['eigen.example.org', 'example.org', 'y', 'n', 'admin@example.org', '-', '', ''];
         const run = await runConfigure(fresh, [], answers.join('\n'));
         expect(run.stderr).toBe('');
         expect(run.code).toBe(0);
@@ -479,8 +480,32 @@ describe('configure command', () => {
         expect(run.stderr).toBe('');
         expect(run.code).toBe(0);
         const env = readEnvFile(join(dir, '.env.production'));
-        expect(env.get('MAIL_DOMAIN')).toBe('example.org');
-        expect(env.get('ACME_EMAIL')).toBe('admin@example.org');
+        expect(env.get('MAIL_DOMAIN')).toBe('eigen.example.org');
+        expect(env.get('ACME_EMAIL')).toBe('admin@eigen.example.org');
+    });
+
+    test('the mail domain comes second, suggests the web address, and stays without hosted mail', async () => {
+        const dir = tempDir();
+        const run = await runConfigure(dir, [], ['eigen.example.org', '', 'n', 'n', '', '-'].join('\n'));
+        expect(run.stderr).toBe('');
+        expect(run.code).toBe(0);
+        expect(run.stdout.indexOf('Which mail domain')).toBeLessThan(run.stdout.indexOf('Host email'));
+        const env = readEnvFile(join(dir, '.env.production'));
+        expect(env.get('MAIL_DOMAIN')).toBe('eigen.example.org');
+        expect(env.get('ACME_EMAIL')).toBe('admin@eigen.example.org');
+        expect(env.get('MAIL_ENABLED')).toBe('0');
+    });
+
+    test('a mail domain must hold addresses, so it cannot be localhost', async () => {
+        const base = ['--yes', '--no-mail', '--no-relay', '--no-proxy', '--contact-email', 'admin@example.org'];
+        const suggested = await runConfigure(tempDir(), [...base, '--domain', 'localhost']);
+        expect(suggested.code).toBe(1);
+        expect(suggested.stderr).toContain('--mail-domain');
+        const given = await runConfigure(tempDir(), [...base, '--domain', 'localhost', '--mail-domain', 'localhost']);
+        expect(given.code).toBe(1);
+        expect(given.stderr).toContain('example.com');
+        const fine = await runConfigure(tempDir(), [...base, '--domain', 'localhost', '--mail-domain', 'example.org']);
+        expect(fine.code).toBe(0);
     });
 
     test('the usage explains -', async () => {
@@ -535,10 +560,13 @@ describe('configure command', () => {
 
     test('the interactive run explains its questions and honors NO_COLOR', async () => {
         const CYAN = '\x1b[36m';
-        const cancel = { when: 'Which web address', keys: '\x03' };
+        const cancel = { when: 'Where will Eigen be hosted', keys: '\x03' };
         const plain = await runInTerminal(tempDir(), [], { NO_COLOR: '1' }, cancel);
         expect(plain.code).toBe(130);
-        expect(plain.output).toContain('The address people type');
+        expect(plain.output.indexOf('People open Eigen here')).toBeGreaterThan(
+            plain.output.indexOf('Where will Eigen'),
+        );
+        expect(plain.output).toContain('igen.example.com');
         expect(plain.output).not.toContain(CYAN);
         const colored = await runInTerminal(tempDir(), [], { NO_COLOR: undefined }, { ...cancel });
         expect(colored.code).toBe(130);

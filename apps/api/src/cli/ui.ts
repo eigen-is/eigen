@@ -3,13 +3,15 @@ import { styleText } from 'node:util';
 
 type Validate = (value: string) => string | undefined;
 
+// `help` says what a question is for, under it; interactive only, so scripts and logs stay one line per question.
+type Question = { message: string; help?: string; flag: string };
+
 export type Ui = {
     intro(title: string): void;
-    // What a question is for; interactive only, so scripts and logs stay one line per question.
     explain(text: string): void;
-    ask(question: { message: string; initial: string; validate: Validate; flag: string }): Promise<string>;
-    confirm(question: { message: string; initial: boolean; flag: string }): Promise<boolean>;
-    password(question: { message: string; validate: Validate; flag: string }): Promise<string>;
+    ask(question: Question & { initial: string; placeholder?: string; validate: Validate }): Promise<string>;
+    confirm(question: Question & { initial: boolean }): Promise<boolean>;
+    password(question: Question & { validate: Validate }): Promise<string>;
     note(title: string, lines: string[]): void;
     outro(message: string): void;
     fail(message: string, next: string): never;
@@ -59,19 +61,36 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
             }
             return value;
         };
+        const dimLines = (text: string, width = Math.min(process.stdout.columns, 80) - 4) =>
+            wrap(text, width).map((line) => styleText('dim', line));
+        // The help goes under the question. Text prompts print their message as is; confirm wraps it and adds the bar.
+        const textMessage = ({ message, help }: Question) =>
+            [message, ...(help ? dimLines(help).map((line) => `${styleText('gray', clack.S_BAR)}  ${line}`) : [])].join(
+                '\n',
+            );
+        const confirmMessage = ({ message, help }: Question) =>
+            [message, ...(help ? dimLines(help, Number.POSITIVE_INFINITY) : [])].join('\n');
         return {
             intro: (title) => clack.intro(styleText(['bgCyan', 'black'], ` ${title} `)),
-            explain: (text) =>
-                clack.log.message(
-                    wrap(text, Math.min(process.stdout.columns, 80) - 4).map((line) => styleText('dim', line)),
-                ),
-            ask: async ({ message, initial, validate }) =>
+            explain: (text) => clack.log.message(dimLines(text)),
+            ask: async ({ initial, placeholder, validate, ...question }) =>
                 answered(
-                    await clack.text({ message, initialValue: initial, validate: (value) => validate(value ?? '') }),
+                    await clack.text({
+                        message: textMessage(question),
+                        initialValue: initial,
+                        placeholder,
+                        validate: (value) => validate(value ?? ''),
+                    }),
                 ),
-            confirm: async ({ message, initial }) => answered(await clack.confirm({ message, initialValue: initial })),
-            password: async ({ message, validate }) =>
-                answered(await clack.password({ message, validate: (value) => validate(value ?? '') })),
+            confirm: async ({ initial, ...question }) =>
+                answered(await clack.confirm({ message: confirmMessage(question), initialValue: initial })),
+            password: async ({ validate, ...question }) =>
+                answered(
+                    await clack.password({
+                        message: textMessage(question),
+                        validate: (value) => validate(value ?? ''),
+                    }),
+                ),
             note: (title, lines) => clack.note(lines.join('\n'), title),
             outro: (message) => clack.outro(message),
             fail: (message, next) => {
