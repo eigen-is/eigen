@@ -11,7 +11,6 @@ import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getHome } from '../../lib/home';
 import * as mailParse from '../../lib/mail/mail-parse';
-import { PARSED_MESSAGE_CACHE_BYTES } from '../../lib/mail/maildir-store';
 import { assertJson, authedRequest, findOrFail, getTestContext, putDraft, uploadDraftAttachment } from '../setup';
 
 const isWindows = process.platform === 'win32';
@@ -797,19 +796,17 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
             expect(parsesOf(draft.id) - before).toBe(1);
         });
 
-        test('two messages over the byte ceiling evict the older one', async () => {
-            const line = `${'x'.repeat(78)}\r\n`;
-            const body = line.repeat(Math.ceil(PARSED_MESSAGE_CACHE_BYTES / 2 / line.length));
-            const older = await deliver('Cache eviction fixture A', body);
-            const newer = await deliver('Cache eviction fixture B', body);
+        test('a ninth message evicts the oldest of the eight cached', async () => {
+            const oldest = await deliver('Cache eviction fixture 0', RANGED_BODY);
+            expect((await firstByte(oldest)).status).toBe(206);
+            for (let i = 1; i <= 8; i++) {
+                expect((await firstByte(await deliver(`Cache eviction fixture ${i}`, RANGED_BODY))).status).toBe(206);
+            }
+            const before = parsesOf(oldest);
+            expect((await firstByte(oldest)).status).toBe(206);
 
-            expect((await firstByte(older)).status).toBe(206);
-            expect((await firstByte(newer)).status).toBe(206);
-            const before = parsesOf(older);
-            expect((await firstByte(older)).status).toBe(206);
-
-            expect(parsesOf(older) - before).toBe(1);
-        }, 30_000);
+            expect(parsesOf(oldest) - before).toBe(1);
+        });
     });
 
     test('a calendar part past the preview ceiling is refused with 413', async () => {

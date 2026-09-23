@@ -1,12 +1,13 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAILBOX_ARCHIVE, MAILBOX_JUNK, STANDARD_MAILBOXES } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_TRASH, STANDARD_MAILBOXES } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { evictHome } from '../../lib/home/get-home';
 import { boxDir, makeEml, seedMaildirFile } from '../mail-test-helpers';
-import { app, assertJson, authedRequest, createTestUser, ensureServer, findOrFail } from '../setup';
+import { app, assertJson, authedRequest, collectSSE, createTestUser, ensureServer, findOrFail } from '../setup';
 
 const isWindows = process.platform === 'win32';
 
@@ -482,6 +483,24 @@ describe.skipIf(isWindows)('A standard folder an IMAP client removes gets its wa
             dir: 'new',
         });
         expect((await mailboxWhenCounting(token, userId, MAILBOX_JUNK, 1)).total).toBe(1);
+    });
+
+    test('a folder recreated before the watcher notices is watched again without a listing', async () => {
+        const sse = collectSSE(userId);
+        const synced = (): boolean =>
+            sse.events.some(
+                (event) => event.type === SSEventType.MAIL_RECEIVED && event.mail.mailbox === MAILBOX_TRASH,
+            );
+        rmSync(boxDir(userId, MAILBOX_TRASH), { recursive: true });
+        seedMaildirFolder(userId, MAILBOX_TRASH);
+        // The syncs the removal itself kicks have landed, so only a live watcher can index what follows.
+        await Bun.sleep(200);
+        const eml = makeEml('Filed into the new Trash', { to: email });
+        seedMaildirFile(userId, MAILBOX_TRASH, `${Date.now()}.trashed`, eml, { dir: 'new' });
+
+        for (let attempt = 0; attempt < 100 && !synced(); attempt++) await Bun.sleep(20);
+        sse.stop();
+        expect(synced()).toBe(true);
     });
 
     test('a folder missing when the home loads is watched once it exists and is listed', async () => {

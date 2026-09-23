@@ -354,10 +354,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
 
             const result = await getTextPreview(mount, path);
             if (!result) throw new ApiError(404, 'No preview available');
-            // Stale-while-revalidate: this is the previous version, served instantly while
-            // the current one regenerates in the background. no-store only stops a browser
-            // HTTP cache from pinning it under the updatedAt URL; the app self-heals via a
-            // TanStack refetch trigger (useTextPreview's staleTime), not this header.
+            // Stale-while-revalidate: the previous version, served while the current one regenerates, never pinned by a browser cache.
             if (result.stale) set.headers['Cache-Control'] = 'no-store';
             return result.value;
         },
