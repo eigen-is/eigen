@@ -76,6 +76,9 @@ export function useSheet(
             const flushSnapshot = () => {
                 const data = latestDataRef.current;
                 if (!loadedRef.current || !data) return;
+                // Every edit reaches the doc as an op, so no pending ops means the stored snapshot is
+                // current. Rewriting it anyway sent the whole workbook to the server and every peer on close.
+                if (opsArray.length === 0 && stateMap.has('snapshot')) return;
                 let json: string;
                 try {
                     // computed: true — the client recomputes dependents inside the op-emitting produce.
