@@ -33,6 +33,10 @@ const STALE_MAILDIR_TEMP_MAX_AGE_MS = 36 * 60 * 60 * 1000;
 const BACKGROUND_RECONCILE_INTERVAL_MS = 60 * 1000;
 // Sibling of the Maildir tree (not inside it) so Dovecot IMAP doesn't see it as a folder.
 const DRAFT_ATTACHMENTS_DIR = 'draft-attachments';
+const PARSED_MESSAGE_CACHE_ENTRIES = 8;
+export const PARSED_MESSAGE_CACHE_BYTES = 32 * 1024 * 1024;
+
+type ParsedMessage = { size: number; date: number; attachments: Attachment[] };
 
 // Staged attachments are charged to the mail quota, and both surfaces that report it walk them here.
 export function readDraftStagingSize(homeFs: LocalFilesystem): Promise<number> {
@@ -89,6 +93,7 @@ export class MaildirStore implements MailStore {
     // size() answers from memory: the quota gate calls it on every metered write, and a walk per call makes an N-card sync O(N²).
     private indexBytes = 0;
     private stagedBytes = 0;
+    private parsedMessages = new Map<string, ParsedMessage>();
 
     constructor(private home: Home) {
         this.basePath = PATHS.MAIL.MAILDIR;
@@ -233,7 +238,25 @@ export class MaildirStore implements MailStore {
     async getAttachments(messageId: string): Promise<Attachment[]> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
+        const date = email.date.getTime();
+        const cached = this.parsedMessages.get(messageId);
+        this.parsedMessages.delete(messageId);
+        if (cached?.size === email.size && cached.date === date) {
+            this.parsedMessages.set(messageId, cached);
+            return cached.attachments;
+        }
+
         const parsed = await parseEml(messageId, email.mailbox, this.getMessageFile(email.mailbox, email.filename));
+        if (email.size > PARSED_MESSAGE_CACHE_BYTES) return parsed.attachments;
+        this.parsedMessages.set(messageId, { size: email.size, date, attachments: parsed.attachments });
+        let bytes = 0;
+        for (const entry of this.parsedMessages.values()) bytes += entry.size;
+        // Oldest first: a Map iterates in insertion order, and a hit is re-inserted at the end.
+        for (const [id, entry] of this.parsedMessages) {
+            if (this.parsedMessages.size <= PARSED_MESSAGE_CACHE_ENTRIES && bytes <= PARSED_MESSAGE_CACHE_BYTES) break;
+            this.parsedMessages.delete(id);
+            bytes -= entry.size;
+        }
         return parsed.attachments;
     }
 
@@ -277,6 +300,8 @@ export class MaildirStore implements MailStore {
             const replaced = this.db.getEmail(messageId)?.size ?? 0;
             this.db.addEmail(parsed);
             this.indexBytes += parsed.size - replaced;
+            // The row's date has second precision, so a same-size rewrite within the second keeps its stamp.
+            this.parsedMessages.delete(messageId);
             return parsed;
         });
     }
