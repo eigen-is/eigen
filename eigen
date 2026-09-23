@@ -22,9 +22,6 @@ if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
 else
     ACCENT='' GREEN='' RED='' YELLOW='' GRAY='' RESET=''
 fi
-# A terminal on stdin gets one in the container too, or a password typed there would echo.
-if [ -t 0 ]; then RUN_TTY=-t EXEC_TTY=''; else RUN_TTY='' EXEC_TTY=-T; fi
-
 usage() {
     cat <<EOF
 Usage: ./eigen <command>
@@ -198,14 +195,17 @@ dc() {
 EIGEN_OWNER=$(ls -ldn . | awk '{ print $3 ":" $4 }')
 export EIGEN_OWNER
 
-# cli_as <uid:gid> <command…>: the CLI in the API image on this folder, with the variables CLI_ENV names.
+# cli_as <uid:gid> <command…>: the CLI in the API image on this folder, with the variables CLI_ENV names. A terminal on
+# stdin gets one in the container too, or a password typed there would echo; asked per call, since step runs its
+# command on /dev/null.
 CLI_ENV=''
 cli_as() {
     user=$1
     shift
-    env=''
+    env='' tty=''
     for name in $CLI_ENV; do env="$env -e $name"; done
-    docker run --rm --init -i $RUN_TTY -e TERM -e NO_COLOR -e EIGEN_OWNER $env --user "$user" -e HOME=/tmp \
+    if [ -t 0 ]; then tty=-t; fi
+    docker run --rm --init -i $tty -e TERM -e NO_COLOR -e EIGEN_OWNER $env --user "$user" -e HOME=/tmp \
         -v "$PWD:/install" -w /install "$API_IMAGE" "$@"
 }
 
@@ -213,7 +213,11 @@ cli_as() {
 cli() { cli_as "$(id -u):$(id -g)" "$@"; }
 
 # The CLI in the running API container, the only way to its control socket. exec skips the image's entrypoint.
-api_cli() { dc exec $EXEC_TTY -e NO_COLOR="${NO_COLOR:-}" eigen-api bun "$API_CLI" "$@"; }
+api_cli() {
+    tty=''
+    if [ ! -t 0 ]; then tty=-T; fi
+    dc exec $tty -e NO_COLOR="${NO_COLOR:-}" eigen-api bun "$API_CLI" "$@"
+}
 
 # step <while running> <when done> <on failure> <command…>: one line per step, its output in $LOG, under a spinner on a
 # terminal. set -m gives the job its own process group, so Ctrl-C stops all of it.
