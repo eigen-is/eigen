@@ -67,7 +67,10 @@ www.{$DOMAIN} {
     handle /.well-known/autoconfig/mail/config-v1.1.xml {
         root * /etc/caddy
         rewrite * /autoconfig.xml
-        templates
+        # templates only renders HTML and plain text unless told otherwise.
+        templates {
+            mime text/html text/plain application/xml text/xml
+        }
         header Content-Type "application/xml"
         file_server
     }

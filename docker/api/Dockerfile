@@ -44,7 +44,11 @@ ARG EIGEN_BUILT_AT
 ENV EIGEN_REGISTRY=${EIGEN_REGISTRY} \
     EIGEN_COMMIT=${EIGEN_COMMIT} \
     EIGEN_BUILT_AT=${EIGEN_BUILT_AT}
-LABEL org.opencontainers.image.source="https://github.com/eigen-is/eigen" \
+LABEL org.opencontainers.image.title="eigen-api" \
+      org.opencontainers.image.description="Eigen API server: the backend every Eigen app talks to." \
+      org.opencontainers.image.url="https://github.com/eigen-is/eigen" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.source="https://github.com/eigen-is/eigen" \
       org.opencontainers.image.version="${EIGEN_VERSION}" \
       org.opencontainers.image.revision="${EIGEN_COMMIT}"
 

@@ -51,7 +51,11 @@ COPY docker/caddy/export-certs.sh /usr/local/bin/export-certs.sh
 
 ARG EIGEN_VERSION
 ARG EIGEN_COMMIT
-LABEL org.opencontainers.image.source="https://github.com/eigen-is/eigen" \
+LABEL org.opencontainers.image.title="eigen-frontend" \
+      org.opencontainers.image.description="Eigen web apps served by Caddy, with the API reverse proxy and mail autoconfig." \
+      org.opencontainers.image.url="https://github.com/eigen-is/eigen" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.source="https://github.com/eigen-is/eigen" \
       org.opencontainers.image.version="${EIGEN_VERSION}" \
       org.opencontainers.image.revision="${EIGEN_COMMIT}"
 
