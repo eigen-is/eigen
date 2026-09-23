@@ -1,11 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import pkg from '../../../../../package.json' with { type: 'json' };
 import { releaseNotes } from '../../cli/update-check';
 
 const CLI = join(import.meta.dir, '../../cli/index.ts');
-const ROOT = join(import.meta.dir, '../../../../..');
-const { version }: { version: string } = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+const { version } = pkg;
 
 const CHANGELOG = `# Changelog
 
@@ -79,6 +78,15 @@ describe('releaseNotes', () => {
         expect(ten).toEqual({ version: '0.2.10', intro: 'Ten comes after nine.', breaking: [] });
         expect(three?.intro).toBe('Big release. It spans two lines.');
         expect(three?.breaking).toEqual(['Sheets border storage (breaking) — borders are stored per cell']);
+    });
+
+    test('a section that opens with a list has no intro', () => {
+        const [note] = releaseNotes(
+            '## [0.2.1] - 2026-09-01\n\n- **Mail (breaking)** — a new store\n',
+            '0.2.0',
+            '0.2.1',
+        );
+        expect(note).toEqual({ version: '0.2.1', intro: '', breaking: ['Mail (breaking) — a new store'] });
     });
 
     test('skips [Unreleased], even when this image is newer than every release', () => {

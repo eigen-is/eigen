@@ -1,9 +1,8 @@
 import { randomBytes } from 'node:crypto';
+import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import { callControl } from './control-socket';
 import { createUi } from './ui';
 
-// better-auth's default minimum; the API checks its own configured one again.
-const MIN_PASSWORD_LENGTH = 8;
 export const RESET_PASSWORD_OPTIONS = { generate: { type: 'boolean' } } as const;
 export const RESET_PASSWORD_USAGE = `Usage: ./eigen reset-password <email> [--generate]
 

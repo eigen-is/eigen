@@ -241,12 +241,14 @@ describe('eigen status', () => {
     const SERVICES = ['eigen-api\trunning\thealthy', 'caddy\trunning\t', 'postfix\texited\t'].join('\n');
 
     test('prints one report of what the API and the launcher know, glyphs without color off a terminal', async () => {
-        const { stdout, stderr, code } = await runCli(['status'], undefined, {
-            EIGEN_STATUS_SERVICES: SERVICES,
-            EIGEN_STATUS_UPDATE: 'available 3',
-            EIGEN_STATUS_MAIL_QUEUE: '-- 2 Kbytes in 2 Requests.',
-            EIGEN_STATUS_SNAPSHOT: 'eigen-pre-update-20260301-080000.tar.gz',
-        });
+        const { stdout, stderr, code } = await runCli([
+            'status',
+            `--services=${SERVICES}`,
+            '--update=available 3',
+            '--mail-queue=-- 2 Kbytes in 2 Requests.',
+            // The newest by the time in its name, not by the name.
+            '--snapshots=eigen-20260101-120000.tar.gz\neigen-pre-update-20260301-080000.tar.gz\nnotes.txt',
+        ]);
         expect(stderr).toBe('');
         expect(code).toBe(0);
         expect(stdout).toContain(`◇  Version        ${pkg.version}`);
@@ -262,43 +264,50 @@ describe('eigen status', () => {
     });
 
     test('says when there is no snapshot yet', async () => {
-        const { stdout, code } = await runCli(['status'], undefined, { EIGEN_STATUS_SERVICES: SERVICES });
+        const { stdout, code } = await runCli(['status', `--services=${SERVICES}`]);
         expect(code).toBe(0);
         expect(stdout).toMatch(/▲ {2}Last snapshot +none yet; \.\/eigen backup makes one/);
     });
 
+    test('names the release a release install can update to', async () => {
+        const { stdout, code } = await runCli(['status', `--services=${SERVICES}`, '--update=available 0.3.0']);
+        expect(code).toBe(0);
+        expect(stdout).toMatch(/▲ {2}Update +Eigen 0\.3\.0 is out; \.\/eigen update installs it/);
+    });
+
     test('leaves out an update check that could not run, and tells an unreadable queue from a stopped postfix', async () => {
-        const { stdout, code } = await runCli(['status'], undefined, {
-            EIGEN_STATUS_SERVICES: 'eigen-api\trunning\thealthy\npostfix\trunning\t',
-            EIGEN_STATUS_UPDATE: '',
-            EIGEN_STATUS_MAIL_QUEUE: '',
-        });
+        const { stdout, code } = await runCli([
+            'status',
+            '--services=eigen-api\trunning\thealthy\npostfix\trunning\t',
+            '--update=',
+            '--mail-queue=',
+        ]);
         expect(code).toBe(0);
         expect(stdout).not.toContain('Update');
         expect(stdout).toMatch(/Mail queue +could not be read; \.\/eigen logs postfix shows why/);
     });
 
     test('colors the glyphs on a terminal, and not with NO_COLOR', async () => {
-        const env = { EIGEN_STATUS_SERVICES: SERVICES, EIGEN_STATUS_UPDATE: 'current' };
-        const colored = await runInTerminal(['status'], { ...env, NO_COLOR: undefined });
+        const args = ['status', `--services=${SERVICES}`, '--update=current'];
+        const colored = await runInTerminal(args, { NO_COLOR: undefined });
         expect(colored.code).toBe(0);
         expect(colored.output).toContain('◇');
         expect(colored.output).toContain('■');
         expect(colored.output).toContain('\x1b[');
         expect(colored.output).toContain('up to date');
 
-        const plain = await runInTerminal(['status'], { ...env, NO_COLOR: '1' });
+        const plain = await runInTerminal(args, { NO_COLOR: '1' });
         expect(plain.code).toBe(0);
         expect(plain.output).not.toContain('\x1b[3');
         expect(plain.output).toContain('◇');
     });
 
     test('with Eigen stopped, reports what the launcher knows and says where to look', async () => {
-        const { stdout, stderr, code } = await runCli(['status'], undefined, {
-            EIGEN_CONTROL_SOCKET: join(TEST_DATA_DIR, 'none.sock'),
-            EIGEN_STATUS_SERVICES: 'eigen-api\texited\t\ncaddy\trunning\t',
-            EIGEN_STATUS_SNAPSHOT: 'eigen-20260101-120000.tar.gz',
-        });
+        const { stdout, stderr, code } = await runCli(
+            ['status', '--services=eigen-api\texited\t\ncaddy\trunning\t', '--snapshots=eigen-20260101-120000.tar.gz'],
+            undefined,
+            { EIGEN_CONTROL_SOCKET: join(TEST_DATA_DIR, 'none.sock') },
+        );
         expect(code).toBe(1);
         expect(stdout).toMatch(/■ {2}eigen-api +exited\n/);
         expect(stdout).toMatch(/◇ {2}caddy +running\n/);
@@ -308,10 +317,13 @@ describe('eigen status', () => {
     });
 
     test('with Eigen running but not answering, says to wait', async () => {
-        const { stdout, stderr, code } = await runCli(['status'], undefined, {
-            EIGEN_CONTROL_SOCKET: join(TEST_DATA_DIR, 'none.sock'),
-            EIGEN_STATUS_SERVICES: 'eigen-api\trunning\tstarting',
-        });
+        const { stdout, stderr, code } = await runCli(
+            ['status', '--services=eigen-api\trunning\tstarting'],
+            undefined,
+            {
+                EIGEN_CONTROL_SOCKET: join(TEST_DATA_DIR, 'none.sock'),
+            },
+        );
         expect(code).toBe(1);
         expect(stdout).toMatch(/▲ {2}eigen-api +running, starting/);
         expect(stderr).toContain('■  Eigen is not answering.\n└  Wait a moment and try again');

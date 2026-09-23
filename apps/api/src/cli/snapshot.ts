@@ -1,6 +1,5 @@
 import {
     chmodSync,
-    chownSync,
     closeSync,
     existsSync,
     lstatSync,
@@ -17,22 +16,22 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
-import { formatDate } from '@workspace/lib/date';
+import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import { BACKUP_STAMP_PATTERN, buildBackupStamp } from '@workspace/lib/validation';
 import type { Subprocess } from 'bun';
 import pkg from '../../../../package.json' with { type: 'json' };
+import { DECLINED, ENV_PATH, ownAs, VERSION_PATTERN } from './install';
 import { createUi, glyphLine } from './ui';
 
 // Both commands run as root in a container on the install folder (-w /install), so data/ keeps its mixed owners.
-const ENV_PATH = '.env.production';
 const SNAPSHOTS = 'snapshots';
 const META = 'eigen-snapshot.json';
 // Next to data/, so the swap is two renames on one filesystem; root's alone while it holds what a snapshot brought.
 const STAGING = '.eigen/restore';
-// The exit code of a restore the operator said no to, which the launcher ends as a plain exit.
-const DECLINED = 3;
-const DAY_MS = 24 * 60 * 60 * 1000;
+// What ./eigen rollback goes back to: the pre-update snapshot, and the version and commit that made it.
+const LAST_UPDATE = '.eigen/last-update';
+const VERSION = new RegExp(`^${VERSION_PATTERN}$`);
 
 export const SNAPSHOT_NAME = new RegExp(`^eigen-(?<preUpdate>pre-update-)?${BACKUP_STAMP_PATTERN}\\.tar\\.gz$`);
 
@@ -42,8 +41,8 @@ export const SNAPSHOT_USAGE = `Usage: snapshot [--pre-update]
 Writes data/ and ${ENV_PATH} into ${SNAPSHOTS}/eigen-<UTC time>.tar.gz. Stop Eigen first: ./eigen backup does.
 
   --pre-update   Name it eigen-pre-update-<UTC time>.tar.gz, after deleting the pre-update snapshots
-                 older than the previous one`;
-// --check is the launcher's half of the seam explained at restore() in ./eigen.
+                 older than the previous one, and write ${LAST_UPDATE} for ./eigen rollback`;
+// --check is the launcher's: it unpacks and checks while Eigen runs, so a refusal stops nothing.
 export const RESTORE_OPTIONS = { yes: { type: 'boolean' }, check: { type: 'boolean' } } as const;
 export const RESTORE_USAGE = `Usage: ./eigen restore <snapshot> [--yes]
 
@@ -56,12 +55,13 @@ The current data/ and ${ENV_PATH} are kept aside.
 // install folder hands g+s down to every folder in it.
 const SUSPECTS = '-type b -o -type c -o -type p -o -type s -o -type f ( -perm -4000 -o -perm -2000 ) -o -type l';
 
-// Newest first by the time in the name, whether or not it is a pre-update one.
-const byStamp = (a: string, b: string) => b.replace('pre-update-', '').localeCompare(a.replace('pre-update-', ''));
+// The snapshots among these file names, newest first by the time in the name, pre-update ones included.
+export function newestSnapshots(names: string[]): string[] {
+    const stamp = (name: string) => name.replace('pre-update-', '');
+    return names.filter((name) => SNAPSHOT_NAME.test(name)).sort((a, b) => stamp(b).localeCompare(stamp(a)));
+}
 
-// Why the unpacked snapshot has no place in data/, or null. Root unpacked it and the server runs on it: no device,
-// fifo, socket, setuid or setgid file, or link that leads out of data/. A hard link in data/ is fine (Dovecot makes
-// them on an IMAP copy): tar links only to what it unpacked into STAGING, and the env file must be linked nowhere.
+// Why root must not swap the unpacked snapshot in, or null. A hard link is fine: Dovecot makes them on an IMAP copy.
 async function refusal(): Promise<string | null> {
     const env = lstatSync(join(STAGING, ENV_PATH));
     if (!env.isFile() || env.nlink > 1) return `${ENV_PATH} is not a plain file`;
@@ -98,18 +98,15 @@ export async function snapshot(flags: { 'pre-update'?: boolean }): Promise<void>
             'Run ./eigen backup in the install folder.',
         );
     }
-    // The launcher makes snapshots/ as the operator; the archives are theirs too.
     const owner = statSync('.');
-    const root = process.getuid?.() === 0;
     if (!existsSync(SNAPSHOTS)) mkdirSync(SNAPSHOTS, { mode: 0o700 });
-    if (root) chownSync(SNAPSHOTS, owner.uid, owner.gid);
+    ownAs(SNAPSHOTS, owner);
 
     // The previous pre-update snapshot stays for a rollback of the last update; the ones before go first, so the disk
     // holds two while this one is written.
     if (flags['pre-update']) {
-        const older = readdirSync(SNAPSHOTS)
+        const older = newestSnapshots(readdirSync(SNAPSHOTS))
             .filter((file) => SNAPSHOT_NAME.exec(file)?.groups?.['preUpdate'])
-            .sort(byStamp)
             .slice(1);
         for (const file of older) rmSync(join(SNAPSHOTS, file));
         if (older.length) console.log(glyphLine('ok', `Removed the older pre-update snapshots: ${older.join(', ')}`));
@@ -156,24 +153,29 @@ export async function snapshot(flags: { 'pre-update'?: boolean }): Promise<void>
         );
     }
     chmodSync(partial, 0o600);
-    if (root) chownSync(partial, owner.uid, owner.gid);
+    ownAs(partial, owner);
     renameSync(partial, join(SNAPSHOTS, name));
     console.log(
         glyphLine('ok', `Saved ${SNAPSHOTS}/${name} (${formatFileSize(statSync(join(SNAPSHOTS, name)).size)})`),
     );
+    if (flags['pre-update']) {
+        mkdirSync(dirname(LAST_UPDATE), { recursive: true });
+        writeFileSync(LAST_UPDATE, `${name}\n${pkg.version}\n${process.env['EIGEN_COMMIT'] ?? ''}\n`);
+        ownAs(LAST_UPDATE, owner);
+    }
 }
 
 export async function restore(archive = '', flags: { yes?: boolean; check?: boolean }): Promise<void> {
     const ui = await createUi(flags.yes === true);
 
     // Only a snapshot in snapshots/, named by the file name or its path from the install folder.
-    const snapshots = existsSync(SNAPSHOTS) ? readdirSync(SNAPSHOTS).filter((file) => SNAPSHOT_NAME.test(file)) : [];
+    const snapshots = newestSnapshots(existsSync(SNAPSHOTS) ? readdirSync(SNAPSHOTS) : []);
     const name = basename(archive);
     if (!['.', SNAPSHOTS, `./${SNAPSHOTS}`].includes(dirname(archive)) || !snapshots.includes(name)) {
         ui.fail(
             archive ? `${archive} is not a snapshot in ${SNAPSHOTS}/.` : 'Name the snapshot to restore.',
             snapshots.length
-                ? `Pick one of the newest: ${snapshots.sort(byStamp).slice(0, 5).join(', ')}`
+                ? `Pick one of the newest: ${snapshots.slice(0, 5).join(', ')}`
                 : `${SNAPSHOTS}/ has no snapshots. Run ./eigen backup to make one.`,
         );
     }
@@ -200,7 +202,7 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
         !('version' in meta) ||
         typeof meta.version !== 'string' ||
         // Bun.semver.order throws on what is not a version.
-        !/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(meta.version) ||
+        !VERSION.test(meta.version) ||
         !('createdAt' in meta) ||
         typeof meta.createdAt !== 'string' ||
         Number.isNaN(Date.parse(meta.createdAt))
@@ -230,10 +232,8 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
 
     const what = `${name}, a snapshot of Eigen ${meta.version}`;
     if (!flags.yes) {
-        const days = Math.floor((Date.now() - Date.parse(meta.createdAt)) / DAY_MS);
-        const age = days < 1 ? 'today' : `${days} day${days === 1 ? '' : 's'} ago`;
         const go = await ui.confirm({
-            message: `Replace data/ and ${ENV_PATH} with ${what}, made ${age} on ${formatDate(meta.createdAt)}? The current ones are kept aside as data.pre-restore-*.`,
+            message: `Replace data/ and ${ENV_PATH} with ${what}, made on ${formatDate(meta.createdAt)}, ${formatTimeAgo(meta.createdAt)}? The current ones are kept aside as data.pre-restore-*.`,
             initial: false,
             flag: '--yes',
         });
@@ -242,9 +242,8 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
             process.exit(DECLINED);
         }
     }
-    // The --check run unpacks and checks aside and names the snapshot in the marker; the swap run takes a copy so
-    // marked as it is (the seam is explained at restore() in ./eigen). An interrupt before the swap leaves the live
-    // data untouched; the handler also holds one during the swap, which is synchronous, until the swap is done.
+    // --check unpacks and checks aside and marks the copy; the swap run takes a copy so marked. The swap is synchronous,
+    // so an interrupt lands before it or after it.
     let interrupted = false;
     let extract: Subprocess<'ignore', 'ignore', 'pipe'> | undefined;
     const interrupt = () => {
@@ -284,9 +283,8 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
         }
     }
 
-    const envOwner = statSync(existsSync(ENV_PATH) ? ENV_PATH : '.');
     const staged = join(STAGING, ENV_PATH);
-    if (process.getuid?.() === 0) chownSync(staged, envOwner.uid, envOwner.gid);
+    ownAs(staged, statSync(existsSync(ENV_PATH) ? ENV_PATH : '.'));
     chmodSync(staged, 0o600);
     const stamp = buildBackupStamp(new Date());
     const aside: string[] = [];

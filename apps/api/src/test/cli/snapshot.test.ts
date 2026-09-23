@@ -18,11 +18,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { parseBackupStamp } from '@workspace/lib/validation';
+import pkg from '../../../../../package.json' with { type: 'json' };
 import { SNAPSHOT_NAME } from '../../cli/snapshot';
 
 const CLI = join(import.meta.dir, '../../cli/index.ts');
-const ROOT = join(import.meta.dir, '../../../../..');
-const { version }: { version: string } = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+const { version } = pkg;
 const ENV = 'DOMAIN=eigen.example.org\n';
 
 const dirs: string[] = [];
@@ -41,11 +41,11 @@ function install(): string {
     return dir;
 }
 
-async function run(cmd: string[], cwd: string, input?: string) {
+async function run(cmd: string[], cwd: string, input?: string, env: Record<string, string> = {}) {
     const proc = Bun.spawn(cmd, {
         cwd,
         // macOS tar would add AppleDouble members for extended attributes.
-        env: { ...process.env, COPYFILE_DISABLE: '1', NO_COLOR: '1' },
+        env: { ...process.env, COPYFILE_DISABLE: '1', NO_COLOR: '1', ...env },
         stdin: input === undefined ? 'ignore' : new Blob([input]),
         stdout: 'pipe',
         stderr: 'pipe',
@@ -236,7 +236,17 @@ describe('snapshot', () => {
         expect(JSON.parse(meta.stdout).version).toBe(version);
     });
 
-    test('a manual snapshot deletes nothing', async () => {
+    test('--pre-update names the snapshot, the version and the commit in .eigen/last-update for a rollback', async () => {
+        const dir = install();
+        const result = await run([process.execPath, CLI, 'snapshot', '--pre-update'], dir, undefined, {
+            EIGEN_COMMIT: 'abc1234',
+        });
+        expect(result.code).toBe(0);
+        const name = /snapshots\/(\S+)/.exec(result.stdout)?.[1];
+        expect(readFileSync(join(dir, '.eigen/last-update'), 'utf8')).toBe(`${name}\n${version}\nabc1234\n`);
+    });
+
+    test('a manual snapshot deletes nothing and leaves .eigen/last-update alone', async () => {
         const dir = install();
         const older = ['eigen-pre-update-20200101-000000.tar.gz', 'eigen-pre-update-20210101-000000.tar.gz'];
         for (const file of [...older, 'eigen-pre-update-20220101-000000.tar.gz']) {
@@ -244,6 +254,7 @@ describe('snapshot', () => {
         }
         await snapshot(dir);
         expect(readdirSync(join(dir, 'snapshots'))).toHaveLength(4);
+        expect(existsSync(join(dir, '.eigen/last-update'))).toBe(false);
     });
 });
 
@@ -540,7 +551,8 @@ describe('restore', () => {
         const name = await snapshot(dir);
         const result = await run([process.execPath, CLI, 'restore', name], dir, 'n\n');
         expect(result.code).toBe(3);
-        expect(result.stdout).toContain(`a snapshot of Eigen ${version}, made today on `);
+        expect(result.stdout).toContain(`a snapshot of Eigen ${version}, made on `);
+        expect(result.stdout).toContain(', just now?');
         expect(result.stdout).toContain('kept aside as data.pre-restore-*');
         expect(result.stdout).toContain('Nothing was changed.');
         untouched(dir);

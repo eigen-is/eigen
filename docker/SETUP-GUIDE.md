@@ -203,6 +203,8 @@ cd /opt/eigen
 
 Pulls the newest code and builds it in Docker while Eigen runs, then stops Eigen, saves a snapshot in `snapshots/` and starts the new version. `./eigen update --check` only tells whether there is an update. Active SSE/WebSocket connections briefly reconnect.
 
+`./eigen rollback` goes back to the commit before the last update, with the data as it was then: it checks out that commit, builds it, puts back the snapshot the update saved and starts Eigen. The current data is kept aside. It refuses while the checkout has local changes.
+
 ### Backups
 
 ```bash

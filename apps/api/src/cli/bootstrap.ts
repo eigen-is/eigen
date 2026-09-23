@@ -1,10 +1,10 @@
-import { chmodSync, chownSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, renameSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import pkg from '../../../../package.json' with { type: 'json' };
 import { writeEnvFile } from './env-file';
+import { ENV_PATH, ownAs, ROOT } from './install';
 import { createUi } from './ui';
 
-// The repo root in a checkout, /app in the image: the bundle is copied from the image's own tree.
-const ROOT = join(import.meta.dir, '../../../..');
 const BUNDLE_FILES = [
     'eigen',
     'docker-compose.yml',
@@ -13,7 +13,6 @@ const BUNDLE_FILES = [
     '.env.example',
 ];
 const BUNDLE_DIR = 'docker/fail2ban';
-const ENV_PATH = '.env.production';
 export const BOOTSTRAP_OPTIONS = { out: { type: 'string' }, force: { type: 'boolean' } } as const;
 export const BOOTSTRAP_USAGE = `Usage: bootstrap [--out <dir>] [--force]
 
@@ -35,13 +34,8 @@ export async function bootstrap(flags: { out?: string; force?: boolean }): Promi
     const registry =
         process.env['EIGEN_REGISTRY'] ||
         ui.fail('EIGEN_REGISTRY is not set.', 'Run bootstrap from the Eigen API image.');
-    const { version }: { version: string } = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
-
-    // Root in the container writes files the operator must own; a non-root run already owns what it writes.
+    const { version } = pkg;
     const owner = statSync(out);
-    const own = (path: string) => {
-        if (process.getuid?.() === 0) chownSync(path, owner.uid, owner.gid);
-    };
     const bundleDirFiles = readdirSync(join(ROOT, BUNDLE_DIR), { recursive: true, encoding: 'utf8' })
         .map((file) => join(BUNDLE_DIR, file))
         .filter((file) => statSync(join(ROOT, file)).isFile());
@@ -49,12 +43,12 @@ export async function bootstrap(flags: { out?: string; force?: boolean }): Promi
         const target = join(out, file);
         for (let dir = dirname(file); dir !== '.'; dir = dirname(dir)) {
             if (!existsSync(join(out, dir))) mkdirSync(join(out, dir), { recursive: true });
-            own(join(out, dir));
+            ownAs(join(out, dir), owner);
         }
         const temp = `${target}.${process.pid}.tmp`;
         await Bun.write(temp, Bun.file(join(ROOT, file)));
         chmodSync(temp, file === 'eigen' ? 0o755 : 0o644);
-        own(temp);
+        ownAs(temp, owner);
         renameSync(temp, target);
     }
 
@@ -69,7 +63,7 @@ export async function bootstrap(flags: { out?: string; force?: boolean }): Promi
                 ['EIGEN_API_IMAGE', `${registry}/api:${version}`],
             ]),
         );
-        own(envPath);
+        ownAs(envPath, owner);
     }
     ui.outro(
         flags.force

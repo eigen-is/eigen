@@ -1,9 +1,11 @@
-import { chownSync, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { parseArgs } from 'node:util';
+import { APP_URLS } from '@workspace/lib/constants';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import addressparser from 'nodemailer/lib/addressparser';
 import { readEnvFile, writeEnvFile } from './env-file';
+import { ENV_PATH, IMAGE_NAMES, ownAs, ROOT } from './install';
 import { createUi, type Ui } from './ui';
 
 export type ConfigureAnswers = {
@@ -24,29 +26,12 @@ export type DockerNetwork = {
     IPAM: { Config: { Subnet?: string }[] | null };
 };
 
-const ENV_PATH = '.env.production';
 const DEFAULT_SUBNET = '172.20.0.0/24';
 const SUBNET_CANDIDATES = [DEFAULT_SUBNET, '172.30.0.0/24', '172.31.0.0/24', '10.20.0.0/24'];
 const RELAY_PORT = '587';
-// In the image too: the API runs from source at /app.
-const PROXY_SNIPPETS = join(import.meta.dir, '../../../../docker/proxy');
-// Relative, so the same bundle serves any hostname; the API prefixes API_URL when it builds links in mail.
-const APP_URLS = {
-    VITE_API_HOST: '/eigen',
-    VITE_APP_SPACE_URL: '/space',
-    VITE_APP_MAIL_URL: '/mail',
-    VITE_APP_CALENDAR_URL: '/calendar',
-    VITE_APP_CONTACTS_URL: '/contacts',
-    VITE_APP_DRIVE_URL: '/drive',
-    VITE_APP_DOCS_URL: '/docs',
-    VITE_APP_STICKIES_URL: '/stickies',
-    VITE_APP_CHAT_URL: '/chat',
-    VITE_APP_ADMIN_URL: '/admin',
-    VITE_APP_SLIDES_URL: '/slides',
-    VITE_APP_SHEETS_URL: '/sheets',
-    VITE_APP_VECTOR_URL: '/vector',
-    VITE_APP_INDEX_URL: '/',
-};
+const PROXY_SNIPPETS = join(ROOT, 'docker/proxy');
+// The launcher resolves these on the host, where the Docker socket is.
+const PINS = ['EIGEN_REGISTRY', 'EIGEN_VERSION', ...IMAGE_NAMES.map((name) => `EIGEN_${name.toUpperCase()}_IMAGE`)];
 export const CONFIGURE_OPTIONS = {
     domain: { type: 'string' },
     mail: { type: 'boolean' },
@@ -86,15 +71,20 @@ in brackets; - clears an optional answer; a choice is answered with its number.
 
 const NO_CONTROL = /^\P{Cc}*$/u;
 
-const cleanDomain = (value: string) =>
-    value
+function cleanDomain(value: string): string {
+    return value
         .replace(/^https?:\/\//, '')
         .replace(/\/.*$/, '')
         .toLowerCase();
+}
 
-const isPort = (value: string) => /^\d{1,5}$/.test(value) && +value > 0 && +value < 65536;
+function isPort(value: string): boolean {
+    return /^\d{1,5}$/.test(value) && +value > 0 && +value < 65536;
+}
 
-const isDottedDomain = (value: string) => /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/.test(cleanDomain(value));
+function isDottedDomain(value: string): boolean {
+    return /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/.test(cleanDomain(value));
+}
 
 function validateDomain(value: string): string | undefined {
     if (cleanDomain(value) !== 'localhost' && !isDottedDomain(value)) {
@@ -199,7 +189,6 @@ export function configureEntries(existing: Map<string, string>, answers: Configu
         entries.set('SMTP_FROM', answers.from);
     }
 
-    entries.set('PRODUCTION', '1');
     entries.set('API_URL', `https://${answers.domain}`);
     for (const [key, value] of Object.entries(APP_URLS)) {
         if (!entries.has(key)) entries.set(key, value);
@@ -212,6 +201,7 @@ export async function configure(
 ): Promise<void> {
     const backfill = flags.backfill === true;
     const acceptDefaults = backfill || flags.yes === true;
+    // Annotated, so TypeScript sees that ui.fail never returns.
     const ui: Ui = await createUi(Object.keys(flags).length > 0);
     const existing = readEnvFile(ENV_PATH);
     if (backfill && !existing.get('DOMAIN')) ui.fail(`${ENV_PATH} has no DOMAIN.`, 'Run ./eigen setup first.');
@@ -429,17 +419,9 @@ export async function configure(
     });
     // A backfill keeps every existing value; only the release pins the launcher passes may change a line.
     const written = backfill ? new Map([...entries, ...existing]) : entries;
-    // The launcher resolves these on the host, where the Docker socket is, and passes EIGEN_VERSION in release mode
-    // alone; a source build's image sets its own EIGEN_REGISTRY, which is no pin.
+    // Passed in release mode alone: a source build's image sets its own EIGEN_REGISTRY, which is no pin.
     if (process.env['EIGEN_VERSION']) {
-        for (const key of [
-            'EIGEN_REGISTRY',
-            'EIGEN_VERSION',
-            'EIGEN_API_IMAGE',
-            'EIGEN_FRONTEND_IMAGE',
-            'EIGEN_POSTFIX_IMAGE',
-            'EIGEN_DOVECOT_IMAGE',
-        ]) {
+        for (const key of PINS) {
             const value = process.env[key];
             if (value) written.set(key, value);
         }
@@ -449,10 +431,10 @@ export async function configure(
         ui.outro('Configuration unchanged.');
         return;
     }
-    // Run as root, the rewrite would hand the operator's file to root.
+    // Taken before the rewrite, which would hand the operator's file to root.
     const envOwner = statSync(existsSync(ENV_PATH) ? ENV_PATH : '.');
     writeEnvFile(ENV_PATH, written);
-    if (process.getuid?.() === 0) chownSync(ENV_PATH, envOwner.uid, envOwner.gid);
+    ownAs(ENV_PATH, envOwner);
     if (backfill) {
         ui.outro(`${ENV_PATH}: set ${changed.join(', ')}.`);
         return;

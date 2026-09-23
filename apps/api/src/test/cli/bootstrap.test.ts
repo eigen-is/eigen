@@ -2,10 +2,11 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import pkg from '../../../../../package.json' with { type: 'json' };
+import { ROOT } from '../../cli/install';
 
 const CLI = join(import.meta.dir, '../../cli/index.ts');
-const ROOT = join(import.meta.dir, '../../../../..');
-const { version }: { version: string } = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+const { version } = pkg;
 
 const dirs: string[] = [];
 afterAll(() => {

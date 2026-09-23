@@ -1,16 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import pkg from '../../../../package.json' with { type: 'json' };
+import { DECLINED, ROOT, VERSION_PATTERN } from './install';
 import { createUi, glyphLine, wrap } from './ui';
 
 export type ReleaseNote = { version: string; intro: string; breaking: string[] };
 
-// The repo root in a checkout, /app in the image: this image's own changelog, which knows every version up to it.
-const CHANGELOG = join(import.meta.dir, '../../../../CHANGELOG.md');
-const VERSION = /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/;
-const HEADING = /^\[(\d+\.\d+\.\d+(?:-[\w.-]+)?)\]/;
-// The exit code of an update the operator said no to, which the launcher ends as a plain exit.
-const DECLINED = 3;
+// This image's own changelog, which knows every version up to it.
+const CHANGELOG = join(ROOT, 'CHANGELOG.md');
+const VERSION = new RegExp(`^${VERSION_PATTERN}$`);
+const HEADING = new RegExp(`^\\[(${VERSION_PATTERN})\\]`);
 
 export const UPDATE_CHECK_OPTIONS = { from: { type: 'string' }, 'accept-breaking': { type: 'boolean' } } as const;
 export const UPDATE_CHECK_USAGE = `Usage: update-check --from <version> [--accept-breaking]
@@ -35,7 +34,8 @@ export function releaseNotes(changelog: string, from: string, to: string): Relea
             return [
                 {
                     version,
-                    intro: paragraph[0]?.startsWith('#') ? '' : paragraph.join(' '),
+                    // A section that opens with a heading or a list has no intro.
+                    intro: /^[#*-]/.test(paragraph[0] ?? '') ? '' : paragraph.join(' '),
                     breaking: lines
                         .filter((line) => line.includes('(breaking)'))
                         .map((line) => line.replace(/^\s*-\s*/, '').replaceAll('**', '')),
