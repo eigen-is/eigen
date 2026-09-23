@@ -53,7 +53,8 @@ export const app = new Elysia({
     // Bun.serve's `websocket` handler from `app.config.websocket` (+ listen
     // options) only — `websocket` config set on a `.use()`d plugin (e.g.
     // collabRouter) is silently ignored. perMessageDeflate only negotiates the
-    // extension; Bun deflates just the frames sent with compress=true (collabDocument's sendFrame).
+    // extension; Bun deflates just the frames sent with compress=true
+    // (collabDocument's sendFrame).
     websocket: {
         perMessageDeflate: true,
         // Bun's 16MB default is measured on the decoded frame — below the ~48MB
