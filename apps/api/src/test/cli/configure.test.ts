@@ -496,14 +496,16 @@ describe('configure command', () => {
         expect(env.get('MAIL_ENABLED')).toBe('0');
     });
 
-    test('a mail domain must hold addresses, so it cannot be localhost', async () => {
+    test('a mail domain must hold addresses, so localhost suggests eigen.localhost and refuses localhost', async () => {
         const base = ['--yes', '--no-mail', '--no-relay', '--no-proxy', '--contact-email', 'admin@example.org'];
-        const suggested = await runConfigure(tempDir(), [...base, '--domain', 'localhost']);
-        expect(suggested.code).toBe(1);
-        expect(suggested.stderr).toContain('--mail-domain');
+        const dir = tempDir();
+        const suggested = await runConfigure(dir, [...base, '--domain', 'localhost']);
+        expect(suggested.code).toBe(0);
+        expect(readEnvFile(join(dir, '.env.production')).get('MAIL_DOMAIN')).toBe('eigen.localhost');
         const given = await runConfigure(tempDir(), [...base, '--domain', 'localhost', '--mail-domain', 'localhost']);
         expect(given.code).toBe(1);
-        expect(given.stderr).toContain('example.com');
+        expect(given.stderr).toContain('--mail-domain');
+        expect(given.stderr).toContain('eigen.localhost');
         const fine = await runConfigure(tempDir(), [...base, '--domain', 'localhost', '--mail-domain', 'example.org']);
         expect(fine.code).toBe(0);
     });

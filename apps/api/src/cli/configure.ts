@@ -118,7 +118,9 @@ function validateDomain(value: string): string | undefined {
 
 // User addresses need a dot in their domain, so a mail domain cannot be localhost.
 function validateMailDomain(value: string): string | undefined {
-    if (cleanDomain(value) === 'localhost') return 'Enter a domain name like example.com.';
+    if (cleanDomain(value) === 'localhost') {
+        return 'Addresses need a domain with a dot, like example.com. To try Eigen locally, use eigen.localhost.';
+    }
     return validateDomain(value);
 }
 
@@ -293,7 +295,7 @@ export async function configure(args: string[]): Promise<void> {
             validateDomain,
         ),
     );
-    const currentMailDomain = existing.get('MAIL_DOMAIN') || domain;
+    const currentMailDomain = existing.get('MAIL_DOMAIN') || (domain === 'localhost' ? 'eigen.localhost' : domain);
     const mailDomain = cleanDomain(
         await answer(
             {
