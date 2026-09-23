@@ -440,7 +440,7 @@ room_for_snapshot() {
     used=$(docker run --rm --user 0 --entrypoint du -v "$PWD/data:/data:ro" "$1" -sk /data) || return 1
     used=${used%%[!0-9]*}
     free=$(df -Pk snapshots | awk 'NR == 2 { print $4 }')
-    if [ -z "$free" ]; then return 1; fi
+    if [ -z "$used" ] || [ -z "$free" ]; then return 1; fi
     if [ "$used" -gt "$free" ]; then
         echo "The snapshot needs up to $((used / 1024)) MB; snapshots/ has $((free / 1024)) MB free."
         echo "Free space on that disk, or delete old snapshots from snapshots/."
