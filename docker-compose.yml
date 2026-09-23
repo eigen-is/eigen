@@ -24,7 +24,7 @@ services:
       - ./data/certs:/shared-certs
     environment:
       <<: *domains
-      CADDY_ACME_EMAIL: "email ${ACME_EMAIL:-admin@${DOMAIN}}"
+      CADDY_ACME_EMAIL: "email ${ACME_EMAIL:-admin@${MAIL_DOMAIN:-${DOMAIN}}}"
     command: sh -c "/usr/local/bin/export-certs.sh & caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"
     restart: unless-stopped
     networks: [eigen]
