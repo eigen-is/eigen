@@ -63,13 +63,16 @@ export const docContainerDescendantIds = sql`
     SELECT id FROM doc_tree
 `;
 
-// Subquery: `pathId` plus every ancestor up to the mount root. Embedded as `id IN (…)` so one
-// query fetches a whole chain (resolveStoragePath walks it down, getBreadcrumb walks it up).
-export function ancestorIds(pathId: string): SQL {
+// Subquery: each of `pathIds` plus every ancestor up to the mount root. Embedded as `id IN (…)` so one
+// query fetches whole chains (resolveStoragePath walks one down, getBreadcrumbs walks each up).
+export function ancestorIds(...pathIds: string[]): SQL {
     return sql`
         WITH RECURSIVE ancestors AS (
-            SELECT id, parentId FROM paths WHERE id = ${pathId}
-            UNION ALL
+            SELECT id, parentId FROM paths WHERE id IN (${sql.join(
+                pathIds.map((id) => sql`${id}`),
+                sql`, `,
+            )})
+            UNION
             SELECT p.id, p.parentId FROM paths p JOIN ancestors a ON p.id = a.parentId
         )
         SELECT id FROM ancestors
