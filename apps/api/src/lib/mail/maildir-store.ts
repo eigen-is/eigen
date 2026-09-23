@@ -85,7 +85,8 @@ export class MaildirStore implements MailStore {
     private deliveries = new Map<string, boolean>();
     // Reconciliation (doReconcileMailbox) must not straddle a mutation's fs+db pair, or its delete phase drops just-moved rows.
     private storeLock = new Semaphore(1);
-    private watchers: FSWatcher[] = [];
+    // Keyed by watched directory, so a listing can tell which standard folder lost its watcher.
+    private watchers = new Map<string, FSWatcher>();
     // size() answers from memory: the quota gate calls it on every metered write, and a walk per call makes an N-card sync O(N²).
     private indexBytes = 0;
     private stagedBytes = 0;
@@ -113,28 +114,44 @@ export class MaildirStore implements MailStore {
 
     // The standard six only: a watcher per IMAP folder spends the per-user inotify limit every home shares.
     watch(): void {
-        for (const mailbox of STANDARD_MAILBOXES) {
-            const mailboxPath = this.mailboxDir(mailbox);
-            for (const subdir of [PATHS.MAIL.CUR, PATHS.MAIL.NEW]) {
-                try {
-                    const watcher = this.storage.watch(path.join(mailboxPath, subdir), () =>
-                        this.reconcileMailbox(mailbox).catch((err) =>
-                            console.error('maildir: mailbox sync failed', err),
-                        ),
-                    );
-                    this.watchers.push(watcher);
-                } catch {
-                    // Directory may not exist yet
-                }
+        for (const mailbox of STANDARD_MAILBOXES) this.watchMailbox(mailbox);
+    }
+
+    async unwatch(): Promise<void> {
+        for (const watcher of this.watchers.values()) watcher.close();
+        this.watchers.clear();
+        // A sync still in flight would reach a closed db once the domain flushes drafts.
+        await Promise.allSettled([...this.reconcilingMailboxes.values()]);
+    }
+
+    private watchMailbox(mailbox: string): void {
+        // A listing still in flight during teardown would re-attach what unwatch() just closed.
+        if (this.home.destructing) return;
+        for (const subdir of [PATHS.MAIL.CUR, PATHS.MAIL.NEW]) {
+            const dir = path.join(this.mailboxDir(mailbox), subdir);
+            if (this.watchers.has(dir)) continue;
+            try {
+                const watcher = this.storage.watch(dir, () => {
+                    this.reconcileMailbox(mailbox).catch((err) => console.error('maildir: mailbox sync failed', err));
+                    // inotify reports a removed dir as a plain event and leaves the handle dead, emitting no error.
+                    this.storage
+                        .dirExists(dir)
+                        .then((exists) => {
+                            if (!exists) this.dropWatcher(dir, watcher);
+                        })
+                        .catch((err) => console.error('maildir: watcher check failed', err));
+                });
+                watcher.on('error', () => this.dropWatcher(dir, watcher));
+                this.watchers.set(dir, watcher);
+            } catch {
+                // Directory may not exist yet
             }
         }
     }
 
-    async unwatch(): Promise<void> {
-        for (const watcher of this.watchers) watcher.close();
-        this.watchers = [];
-        // A sync still in flight would reach a closed db once the domain flushes drafts.
-        await Promise.allSettled([...this.reconcilingMailboxes.values()]);
+    private dropWatcher(dir: string, watcher: FSWatcher): void {
+        watcher.close();
+        if (this.watchers.get(dir) === watcher) this.watchers.delete(dir);
     }
 
     async destruct(): Promise<void> {
@@ -163,8 +180,11 @@ export class MaildirStore implements MailStore {
         const mailboxes: MaildirMailbox[] = [];
         const paths = await this.listMailboxPaths();
         for (const name of paths) {
-            // Counts come from the index; a folder without a watcher reconciles here, in the background.
-            if (!isStandardMailbox(name) && this.reconcileDue(name)) {
+            // Counts come from the index. A standard folder recreated since load gets its watcher back here;
+            // any other folder has none and reconciles here, in the background.
+            if (isStandardMailbox(name)) {
+                this.watchMailbox(name);
+            } else if (this.reconcileDue(name)) {
                 this.reconcileMailbox(name).catch((err) =>
                     console.error('maildir: background mailbox sync failed', err),
                 );

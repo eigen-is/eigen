@@ -1,9 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAILBOX_ARCHIVE, STANDARD_MAILBOXES } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_ARCHIVE, MAILBOX_JUNK, STANDARD_MAILBOXES } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
+import { evictHome } from '../../lib/home/get-home';
 import { boxDir, makeEml, seedMaildirFile } from '../mail-test-helpers';
 import { app, assertJson, authedRequest, createTestUser, ensureServer, findOrFail } from '../setup';
 
@@ -453,5 +454,51 @@ describe.skipIf(isWindows)('A folder outside the standard six stays fresh withou
         }
         expect(messages.map((message) => message.id)).toContain(filedId);
         expect(messages.map((message) => message.id)).toContain(openedId);
+    });
+});
+
+describe.skipIf(isWindows)('A standard folder an IMAP client removes gets its watcher back', () => {
+    let userId: string;
+    let token: string;
+    let email: string;
+
+    beforeAll(async () => {
+        email = `rewatch-${Date.now()}@test.eigen.is`;
+        const user = await createTestUser(email, 'testpassword123', 'Rewatch Test');
+        userId = user.id;
+        token = user.sessionToken;
+        expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
+    });
+
+    // Listings index no standard folder, so only a live watcher can raise these counts.
+    test('a folder deleted and recreated is watched again once listed', async () => {
+        rmSync(boxDir(userId, MAILBOX_JUNK), { recursive: true });
+        // An IMAP client's DELETE and the CREATE that follows are separate round trips.
+        await Bun.sleep(100);
+        seedMaildirFolder(userId, MAILBOX_JUNK);
+        await listMailboxes(token, userId);
+
+        seedMaildirFile(userId, MAILBOX_JUNK, `${Date.now()}.junk`, makeEml('Filed into the new Junk', { to: email }), {
+            dir: 'new',
+        });
+        expect((await mailboxWhenCounting(token, userId, MAILBOX_JUNK, 1)).total).toBe(1);
+    });
+
+    test('a folder missing when the home loads is watched once it exists and is listed', async () => {
+        await evictHome(userId);
+        rmSync(boxDir(userId, MAILBOX_ARCHIVE), { recursive: true });
+        expect((await authedRequest(token, `/home/${userId}/size`)).status).toBe(200);
+
+        seedMaildirFolder(userId, MAILBOX_ARCHIVE);
+        await listMailboxes(token, userId);
+
+        seedMaildirFile(
+            userId,
+            MAILBOX_ARCHIVE,
+            `${Date.now()}.archived`,
+            makeEml('Filed into the late Archive', { to: email }),
+            { dir: 'new' },
+        );
+        expect((await mailboxWhenCounting(token, userId, MAILBOX_ARCHIVE, 1)).total).toBe(1);
     });
 });
