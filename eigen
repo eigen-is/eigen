@@ -3,7 +3,8 @@
 # that asks a question or writes config is the CLI in the API image. POSIX sh: runs under dash and BusyBox.
 set -eu
 
-cd "$(dirname "$0")"
+# Through a symlink such as /usr/local/bin/eigen too, this runs in the install folder.
+cd "$(dirname "$(readlink -f "$0")")"
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
     ACCENT=$(printf '\033[1;36m') GREEN=$(printf '\033[32m') RED=$(printf '\033[31m')
@@ -21,7 +22,7 @@ Commands:
   setup [flags]    Configure Eigen, get its images and start it. Without flags it asks;
                    ./eigen setup --help lists the flags.
   logs [service]   Follow the logs of every service, or of one: eigen-api, caddy,
-                   eigen-static, postfix, dovecot.
+                   eigen-static, postfix, dovecot, unbound.
   help             Show this help.
 
 Environment:
@@ -35,16 +36,20 @@ say() { printf '%s%s%s  %s\n' "$1" "$2" "$RESET" "$3"; }
 
 # die <what went wrong> <what to do next>
 die() {
-    say "$RED" '■' "$1"
-    say "$GRAY" '└' "$2"
+    say "$RED" '■' "$1" >&2
+    say "$GRAY" '└' "$2" >&2
     exit 1
 }
 
-# The last KEY= line of .env.production, without the quotes configure may have put around it.
+# The last KEY= line of .env.production in configure's own format: 'quoted', "quoted", or bare up to a ` #`.
 env_value() {
-    if [ -f .env.production ]; then
-        sed -n "s/^$1=//p" .env.production | tail -n 1 | sed "s/^'\(.*\)'\$/\1/; s/^\"\(.*\)\"\$/\1/"
-    fi
+    if [ ! -f .env.production ]; then return 0; fi
+    value=$(sed -n "s/^$1=//p" .env.production | tail -n 1)
+    case $value in
+        \'*) value=${value#?}; printf '%s\n' "${value%%\'*}" ;;
+        \"*) value=${value#?}; printf '%s\n' "${value%%\"*}" ;;
+        *) printf '%s\n' "$value" | sed 's/[[:space:]]\{1,\}#.*//; s/[[:space:]]*$//' ;;
+    esac
 }
 
 # version_at_least <have> <want>, both like 2.24.4
@@ -58,10 +63,12 @@ version_at_least() {
 
 if [ -e .git ] && [ -f docker-compose.build.yml ]; then MODE=source; else MODE=release; fi
 
-# Compose's own project name: COMPOSE_PROJECT_NAME, else the folder name lowercased to [a-z0-9_-].
+# Compose's project name: COMPOSE_PROJECT_NAME as given (Compose refuses an invalid one), else the folder name
+# normalized the way Compose does it.
 EIGEN_PROJECT=${COMPOSE_PROJECT_NAME:-$(env_value COMPOSE_PROJECT_NAME)}
-EIGEN_PROJECT=$(printf '%s' "${EIGEN_PROJECT:-$(basename "$PWD")}" |
-    tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-' | sed 's/^[^a-z0-9]*//')
+if [ -z "$EIGEN_PROJECT" ]; then
+    EIGEN_PROJECT=$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-' | sed 's/^[_-]*//')
+fi
 export EIGEN_PROJECT
 
 API_IMAGE=${EIGEN_API_IMAGE:-$(env_value EIGEN_API_IMAGE)}
@@ -102,9 +109,11 @@ step() {
         return 0
     fi
     if [ -t 1 ]; then printf '\r\033[2K'; fi
-    say "$RED" '■' "$failed"
-    tail -n 20 "$LOG" | sed "s/^/$GRAY│$RESET  /"
-    say "$GRAY" '└' "Full output: $LOG. Fix what it says, then run ./eigen $COMMAND again."
+    {
+        say "$RED" '■' "$failed"
+        tail -n 20 "$LOG" | sed "s/^/$GRAY│$RESET  /"
+        say "$GRAY" '└' "Full output: $LOG. Fix what it says, then run ./eigen $COMMAND again."
+    } >&2
     exit 1
 }
 
@@ -149,23 +158,25 @@ pull_images() {
 }
 
 # Removes this project's containers whose service the current profiles no longer include, so a rerun that
-# switches web or mail mode converges instead of leaving the old mode running.
+# switches web or mail mode converges instead of leaving the old mode running. Runs under step (set -e off), so
+# failures return explicitly: a broken config must not read as "no services".
 start() {
-    active=" $(dc config --services | tr '\n' ' ') "
+    services=$(dc config --services) || return 1
+    active=" $(printf '%s ' $services)"
     stale=$(docker ps -a --filter "label=com.docker.compose.project=$EIGEN_PROJECT" \
         --format '{{.ID}} {{.Label "com.docker.compose.service"}}' | while read -r id service; do
         case $active in (*" $service "*) ;; (*) echo "$id" ;; esac
     done)
-    if [ -n "$stale" ]; then docker rm -f $stale; fi
+    if [ -n "$stale" ]; then docker rm -f $stale || return 1; fi
     dc up -d --wait
 }
 
 # The server runs as 1000:1000. Only an empty folder is handed over: an existing one keeps its owners.
 prepare_data() {
-    mkdir -p data backups
+    mkdir -p data backups || return 1
     for dir in data backups; do
         if [ -z "$(ls -A "$dir" 2>/dev/null || echo unreadable)" ]; then
-            docker run --rm --user 0 --entrypoint chown -v "$PWD/$dir:/$dir" "$API_IMAGE" 1000:1000 "/$dir"
+            docker run --rm --user 0 --entrypoint chown -v "$PWD/$dir:/$dir" "$API_IMAGE" 1000:1000 "/$dir" || return 1
         fi
     done
     docker run --rm --user 1000:1000 --entrypoint sh -v "$PWD/data:/data" -v "$PWD/backups:/backups" "$API_IMAGE" \
@@ -237,7 +248,7 @@ setup() {
         step "Building the web and mail images" "Images built" "Could not build the images" dc build
     fi
     step "Preparing data/ and backups/" "Data folders ready" "The data folders are not writable" prepare_data
-    step "Starting Eigen" "Eigen is running" "Eigen did not start" start
+    step "Starting Eigen" "Eigen is running" "Eigen did not start; ./eigen logs shows why" start
 
     # U6: the setup-link step (dc exec -T eigen-api bun /app/apps/api/src/cli/index.ts setup-link) goes here.
     domain=$(env_value DOMAIN)
