@@ -34,7 +34,7 @@ export const CLIENT_FILE_EVENT_TYPES = [
     'sticky-removed',
 ] as const satisfies readonly FileEventType[];
 
-// A card or column title as an activity row shows it (two clamped lines); the client-post route caps its details at it.
+// More than the two clamped lines an activity row shows, so a clip is never visible; the client-post route caps its details at it.
 export const CARD_TITLE_MAX_LENGTH = 200;
 
 export type ClientFileEventType = (typeof CLIENT_FILE_EVENT_TYPES)[number];

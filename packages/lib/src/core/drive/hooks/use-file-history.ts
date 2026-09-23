@@ -1,7 +1,7 @@
 import { type QueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
-import type { ClientFileEventInput } from '@workspace/lib/types/file-history';
+import { CARD_TITLE_MAX_LENGTH, type ClientFileEventInput } from '@workspace/lib/types/file-history';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys } from './keys';
 
@@ -9,7 +9,19 @@ import { driveKeys } from './keys';
 export function useRecordHistory(ownerId: string, mountId: string, pathId: string) {
     return useMutation({
         mutationFn: async (input: ClientFileEventInput) => {
-            const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).history.post(input);
+            const clip = (text: string) => text.slice(0, CARD_TITLE_MAX_LENGTH);
+            const event: ClientFileEventInput =
+                input.eventType === 'sticky-removed'
+                    ? { ...input, details: { ...input.details, card: clip(input.details.card) } }
+                    : {
+                          ...input,
+                          details: {
+                              ...input.details,
+                              card: clip(input.details.card),
+                              toColumn: clip(input.details.toColumn),
+                          },
+                      };
+            const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).history.post(event);
             if (response.error) throw new AppError(response);
             return response.data;
         },

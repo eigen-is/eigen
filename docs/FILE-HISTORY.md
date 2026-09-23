@@ -76,8 +76,8 @@ comment event, so an `'edited'` row would double-report each drag.
 `sticky-added` / `sticky-moved` (`card`, `toColumn`, `cardId`) and `sticky-removed` (`card`,
 `cardId`); `isClientFileEventType` re-checks as defense in depth, and identical events from one
 actor collapse within a 30 s dedupe window. Each detail string is capped at `CARD_TITLE_MAX_LENGTH`
-(200, more than the two lines an activity row shows), so `apps/stickies` clips its titles to it before
-posting them through `useRecordHistory`; the comment-card title cached by assign/resolve uses the same bound.
+(200, more than the two clamped lines an activity row shows, so a clip is never visible), and `useRecordHistory`
+clips `card` and `toColumn` to it before posting; the comment-card title cached by assign/resolve uses the same bound.
 Slide, sheet and doc structural verbs are deliberately absent — they surface as `'edited'`.
 
 ## Watch and fan-out

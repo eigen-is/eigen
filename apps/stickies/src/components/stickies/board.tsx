@@ -14,7 +14,6 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CARD_TITLE_MAX_LENGTH } from '@workspace/lib/types/file-history';
 import {
     CollabLoadingState,
     ColumnLayout,
@@ -228,8 +227,8 @@ export function StickiesBoard({
             recordHistory.mutate({
                 eventType: 'sticky-added',
                 details: {
-                    card: (patch.title ?? '').slice(0, CARD_TITLE_MAX_LENGTH),
-                    toColumn: (board.columns[targetColumnId]?.title ?? '').slice(0, CARD_TITLE_MAX_LENGTH),
+                    card: patch.title ?? '',
+                    toColumn: board.columns[targetColumnId]?.title ?? '',
                     cardId: card?.id ?? '',
                 },
             });
@@ -469,10 +468,7 @@ export function StickiesBoard({
                                                 deleteCardFromBoard(deleteCardId);
                                                 recordHistory.mutate({
                                                     eventType: 'sticky-removed',
-                                                    details: {
-                                                        card: (removed?.title ?? '').slice(0, CARD_TITLE_MAX_LENGTH),
-                                                        cardId: deleteCardId,
-                                                    },
+                                                    details: { card: removed?.title ?? '', cardId: deleteCardId },
                                                 });
                                             }
                                         }}
