@@ -780,7 +780,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
 
     let mth = 0;
     let mtc = 0;
-    let maxcellCahe = 0;
+    let maxcellCache = 0;
     let maxrowCache = 0;
 
     const file = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!];
@@ -792,7 +792,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
             mth = minh + (th - 1) * copyh;
             mtc = minc + (tc - 1) * copyc;
             maxrowCache = minh + th * copyh;
-            maxcellCahe = minc + tc * copyc;
+            maxcellCache = minc + tc * copyc;
 
             // row/column offset values used when cells contain formulas
             const offsetRow = mth - c_r1;
@@ -804,7 +804,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
                 if (hiddenRows?.has(h.toString())) continue;
                 const x = d[h];
 
-                for (let c = mtc; c < maxcellCahe; c += 1) {
+                for (let c = mtc; c < maxcellCache; c += 1) {
                     if (hiddenCols?.has(c.toString())) continue;
                     carrySides(cfg.borderInfo, h, c, borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]);
 
@@ -878,9 +878,11 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
 
     // check whether the copy range has conditional formatting and data validation
     let cdformat: ConditionalFormatRule[] | undefined;
-    if (copyRange.copyRange.length === 1) {
-        const c_file = ctx.sheets[getSheetIndex(ctx, copySheetIndex) as number];
-        const a_file = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number];
+    const copyIndex = getSheetIndex(ctx, copySheetIndex);
+    const currentIndex = getSheetIndex(ctx, ctx.currentSheetId);
+    if (copyRange.copyRange.length === 1 && copyIndex != null && currentIndex != null) {
+        const c_file = ctx.sheets[copyIndex];
+        const a_file = ctx.sheets[currentIndex];
 
         const ruleArr_cf = cloneDeep(c_file.conditionalFormatRules);
 
@@ -897,13 +899,13 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
                         mth = minh + (th - 1) * copyh;
                         mtc = minc + (tc - 1) * copyc;
                         maxrowCache = minh + th * copyh;
-                        maxcellCahe = minc + tc * copyc;
+                        maxcellCache = minc + tc * copyc;
 
                         for (let j = 0; j < cf_range.length; j += 1) {
                             const range = cfSplitRange(
                                 cf_range[j],
                                 { row: [c_r1, c_r2], column: [c_c1, c_c2] },
-                                { row: [mth, maxrowCache - 1], column: [mtc, maxcellCahe - 1] },
+                                { row: [mth, maxrowCache - 1], column: [mtc, maxcellCache - 1] },
                                 'operatePart',
                             );
 

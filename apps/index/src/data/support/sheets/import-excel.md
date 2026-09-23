@@ -8,8 +8,7 @@ order: 110
 updated: 2026-09-23
 ---
 
-You can bring an Excel workbook into Sheets in two ways: import it into an existing spreadsheet to replace its
-content, or convert an `.xlsx` file stored in Drive into a new spreadsheet.
+You can bring an Excel workbook into Sheets in two ways: import it into an existing spreadsheet to replace its content, or convert an `.xlsx` file stored in Drive into a new spreadsheet.
 
 ## Import into an open spreadsheet
 
@@ -26,8 +25,7 @@ An **Importing xlsx file** dialog shows while Sheets loads all the sheets from t
 
 ## Convert an Excel file in Drive to a new spreadsheet
 
-If you have an `.xlsx` file sitting in Drive, you can turn it into a Sheets spreadsheet without opening it
-first. This leaves the original file in place and creates a new spreadsheet alongside it.
+If you have an `.xlsx` file sitting in Drive, you can turn it into a Sheets spreadsheet without opening it first. This leaves the original file in place and creates a new spreadsheet alongside it.
 
 1. Open [Drive](/drive) and find the `.xlsx` file.
 2. Right-click the file (or open the **⋮** menu) and choose **Convert to Sheet**.
@@ -49,12 +47,9 @@ The import reads every worksheet in the workbook and preserves:
 - The sheet tab names and their order
 - The gridlines setting (hidden or visible)
 - Conditional formatting rules, data validation rules, and hyperlinks
-- Frozen rows and columns, and the range a filter covers (the values ticked in each column's dropdown are
-  not carried over)
+- Frozen rows and columns, and the range a filter covers (the values ticked in each column's dropdown are not carried over)
 
-Fonts from Excel are mapped to the four fonts Sheets supports. Common sans-serif fonts (such as Calibri,
-Arial, and Verdana) map to Inter; serif fonts (such as Times New Roman and Georgia) map to Source Serif 4;
-monospace fonts (such as Courier New and Consolas) map to JetBrains Mono; Comic Sans maps to Excalifont.
+Fonts from Excel are mapped to the four fonts Sheets supports. Common sans-serif fonts (such as Calibri, Arial, and Verdana) map to Inter; serif fonts (such as Times New Roman and Georgia) map to Source Serif 4; monospace fonts (such as Courier New and Consolas) map to JetBrains Mono; Comic Sans maps to Excalifont.
 
 ## What does not carry over
 
