@@ -2,8 +2,7 @@ import { eq } from 'drizzle-orm';
 import { apikey } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../auth/auth';
 import { ApiError } from '../core/errors';
-import type { User } from './user';
-import { getUserByEmail } from './user';
+import { getUserByEmail, type User } from './user';
 
 export async function resetUserPassword(email: string, password: string): Promise<User> {
     const user = await getUserByEmail(email.trim());

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import { getOrgName } from '../../lib/config/server-config';
-import { buildMailOptions, createTransport, defaultFrom, onBehalfOf } from '../../lib/core/mailer';
+import { buildMailOptions, createTransport, onBehalfOf } from '../../lib/core/mailer';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 
 // nodemailer's Transporter type does not surface the resolved options the factory built, so the
@@ -84,23 +84,25 @@ describe('createTransport', () => {
     });
 });
 
-describe('defaultFrom', () => {
+describe('the system sender', () => {
     restoreEnvAfterEach(['SMTP_FROM', 'MAIL_DOMAIN']);
+
+    const systemFrom = () => buildMailOptions({ to: [], subject: 's', text: 't' }).from;
 
     test('without SMTP_FROM it is the org name at noreply@ the mail domain', () => {
         delete process.env['SMTP_FROM'];
         process.env['MAIL_DOMAIN'] = 'example.org';
-        expect(defaultFrom()).toEqual({ name: getOrgName(), address: 'noreply@example.org' });
+        expect(systemFrom()).toEqual({ name: getOrgName(), address: 'noreply@example.org' });
     });
 
     test('SMTP_FROM as Name <address> sets both', () => {
         process.env['SMTP_FROM'] = 'Acme Mail <eigen@acme.nl>';
-        expect(defaultFrom()).toEqual({ name: 'Acme Mail', address: 'eigen@acme.nl' });
+        expect(systemFrom()).toEqual({ name: 'Acme Mail', address: 'eigen@acme.nl' });
     });
 
     test('a bare SMTP_FROM address keeps the org name', () => {
         process.env['SMTP_FROM'] = 'eigen@acme.nl';
-        expect(defaultFrom()).toEqual({ name: getOrgName(), address: 'eigen@acme.nl' });
+        expect(systemFrom()).toEqual({ name: getOrgName(), address: 'eigen@acme.nl' });
     });
 });
 

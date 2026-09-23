@@ -42,7 +42,7 @@ export type OutboundMail = {
 };
 
 // SMTP_FROM is `Name <address>` or a bare address; a bare one keeps the org name.
-export function defaultFrom(): OutboundAddress {
+function defaultFrom(): OutboundAddress {
     const [configured] = addressparser(process.env['SMTP_FROM'] ?? '', { flatten: true });
     if (!configured?.address) return { name: getOrgName(), address: `noreply@${getMailDomain()}` };
     return { name: configured.name || getOrgName(), address: configured.address };
