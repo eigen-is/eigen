@@ -554,7 +554,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
         const target_cdformat = cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].conditionalFormatRules);
         let target_curCdformat = cloneDeep(target_cdformat);
         if (ruleArr.length > 0) {
-            target_curCdformat = target_curCdformat?.concat(ruleArr);
+            target_curCdformat = [...(target_curCdformat ?? []), ...ruleArr];
         }
 
         // data validation
@@ -571,7 +571,8 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             config: sourceConfig,
             curConfig: sourceCurConfig,
             cdformat: source_cdformat,
-            curCdformat: source_curCdformat,
+            // A rule whose every cell was cut away has moved to the target.
+            curCdformat: source_curCdformat?.filter((rule) => rule.cellrange.length > 0),
             dataVerification: cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetId)!].dataVerification),
             curDataVerification: c_dataVerification,
             range: {
@@ -921,7 +922,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     last.row = [minh, maxh];
     last.column = [minc, maxc];
 
-    file.conditionalFormatRules = cdformat;
+    if (cdformat) file.conditionalFormatRules = cdformat;
     file.dataVerification = cloneDeep({ ...file.dataVerification, ...dataVerification });
 
     // if the selection contains hyperlinks

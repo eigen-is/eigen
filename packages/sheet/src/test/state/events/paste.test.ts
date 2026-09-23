@@ -411,6 +411,43 @@ describe('conditional-format migration on cut/paste (cfSplitRange contract)', ()
         conditionValue: ['=B2>1'],
     });
 
+    const twoSheets = () =>
+        contextFactory({
+            currentSheetId: 'id_2',
+            selections: single(0, 0),
+            sheets: [
+                { name: 'one', id: 'id_1', order: 0, data: grid(12, 8) },
+                { name: 'two', id: 'id_2', order: 1, data: grid(12, 8) },
+            ],
+        }) as Context;
+    const crossSheetPaste = (ctx: Context, cut: boolean) => {
+        ctx.selections = rangeSel(1, 5, 1, 1);
+        copy(ctx);
+        ctx.pasteIsCut = cut;
+        ctx.currentSheetId = 'id_1';
+        ctx.selections = single(1, 1);
+        handlePasteByClick(ctx, 'internal');
+    };
+
+    it('keeps the target sheet rules when the copied cells carry none', () => {
+        const ctx = twoSheets();
+        ctx.sheets[0].conditionalFormatRules = [formulaRule()];
+
+        crossSheetPaste(ctx, false);
+
+        expect(ctx.sheets[0].conditionalFormatRules).toEqual([formulaRule()]);
+    });
+
+    it('moves a whole rule cut to a sheet without rules, leaving no empty rule behind', () => {
+        const ctx = twoSheets();
+        ctx.sheets[1].conditionalFormatRules = [formulaRule()];
+
+        crossSheetPaste(ctx, true);
+
+        expect(ctx.sheets[0].conditionalFormatRules).toEqual([formulaRule()]);
+        expect(ctx.sheets[1].conditionalFormatRules).toEqual([]);
+    });
+
     it('re-expresses a formula rule whose top rows are cut away', () => {
         const ctx = makeCtx(12, 8);
         ctx.sheets[0].conditionalFormatRules = [formulaRule()];
