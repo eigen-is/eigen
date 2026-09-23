@@ -540,6 +540,8 @@ describe('restore', () => {
         const name = await snapshot(dir);
         const result = await run([process.execPath, CLI, 'restore', name], dir, 'n\n');
         expect(result.code).toBe(3);
+        expect(result.stdout).toContain(`a snapshot of Eigen ${version}, made today on `);
+        expect(result.stdout).toContain('kept aside as data.pre-restore-*');
         expect(result.stdout).toContain('Nothing was changed.');
         untouched(dir);
     });

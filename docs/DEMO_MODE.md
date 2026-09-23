@@ -212,8 +212,8 @@ tree aside before unpacking. Both are production-usable, independent of demo mod
 - `COMPOSE_PROFILES=edge` (no `mail`): no postfix/dovecot/unbound, no MX — outbound and inbound mail
   are physically absent, which is why `sendMail` skips.
 - Local mounts only — an `s3` mount stores bytes outside the data root and would desync from the wipe.
-- `docker-compose.yml` passes `EIGEN_DEMO: ${EIGEN_DEMO:-0}` through to the API; `scripts/update.sh`
-  adds it via `add_var_if_missing EIGEN_DEMO 0`, so an update never breaks an existing `.env.production`.
+- `docker-compose.yml` passes `EIGEN_DEMO: ${EIGEN_DEMO:-0}` through to the API, so a `.env.production` without it
+  runs with demo mode off; `./eigen update` keeps every key of the file, so an update never drops it.
 - The seeder sets the server settings (signups off, quotas) each run, so they can't drift.
 
 See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator walkthrough.

@@ -17,7 +17,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
-import { formatTimeAgo } from '@workspace/lib/date';
+import { formatDate } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import { BACKUP_STAMP_PATTERN, buildBackupStamp } from '@workspace/lib/validation';
 import type { Subprocess } from 'bun';
@@ -32,6 +32,7 @@ const META = 'eigen-snapshot.json';
 const STAGING = '.eigen/restore';
 // The exit code of a restore the operator said no to, which the launcher ends as a plain exit.
 const DECLINED = 3;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const SNAPSHOT_NAME = new RegExp(`^eigen-(?<preUpdate>pre-update-)?${BACKUP_STAMP_PATTERN}\\.tar\\.gz$`);
 
@@ -229,8 +230,10 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
 
     const what = `${name}, a snapshot of Eigen ${meta.version}`;
     if (!flags.yes) {
+        const days = Math.floor((Date.now() - Date.parse(meta.createdAt)) / DAY_MS);
+        const age = days < 1 ? 'today' : `${days} day${days === 1 ? '' : 's'} ago`;
         const go = await ui.confirm({
-            message: `Replace data/ and ${ENV_PATH} with ${what} made ${formatTimeAgo(meta.createdAt)}? The current ones are kept aside.`,
+            message: `Replace data/ and ${ENV_PATH} with ${what}, made ${age} on ${formatDate(meta.createdAt)}? The current ones are kept aside as data.pre-restore-*.`,
             initial: false,
             flag: '--yes',
         });

@@ -198,10 +198,10 @@ You're done.
 
 ```bash
 cd /opt/eigen
-./scripts/update.sh
+./eigen update
 ```
 
-Pulls latest code, rebuilds the frontend, restarts containers. Active SSE/WebSocket connections briefly reconnect.
+Pulls the newest code and builds it in Docker while Eigen runs, then stops Eigen, saves a snapshot in `snapshots/` and starts the new version. `./eigen update --check` only tells whether there is an update. Active SSE/WebSocket connections briefly reconnect.
 
 ### Backups
 
@@ -310,7 +310,7 @@ fail2ban-client status eigen-postfix-sasl
 fail2ban-client status eigen-dovecot-auth
 ```
 
-It stays host config because fail2ban writes host firewall rules, and it bans in the `DOCKER-USER` chain because Docker's published ports never pass through `INPUT`. The jails' log glob is expanded at start and the Docker log path embeds the container ID, so recreating the mail containers silently disarms them until a reload; `scripts/update.sh` runs `fail2ban-client reload` itself when the jails are installed, and only a by-hand `docker compose up` leaves the reload to you. Tuning, checks, and the nftables variant are in [docker/fail2ban/README.md](fail2ban/README.md).
+It stays host config because fail2ban writes host firewall rules, and it bans in the `DOCKER-USER` chain because Docker's published ports never pass through `INPUT`. The jails' log glob is expanded at start and the Docker log path embeds the container ID, so recreating the mail containers silently disarms them until a reload; `./eigen update` refreshes the filters and runs `fail2ban-client reload` itself when it runs as root and the jails are installed (otherwise it prints the two commands), and only a by-hand `docker compose up` leaves the reload to you. Tuning, checks, and the nftables variant are in [docker/fail2ban/README.md](fail2ban/README.md).
 
 The postfix and dovecot logs are the record of an abuse run, and what fail2ban reads, so they keep 10 files of 50 MB where the other containers keep 3 of 10 MB. During the incident the old 3x10 MB rotated away in about two hours and took the start of the run with it.
 

@@ -42,7 +42,7 @@ The server never creates the folder at boot, only when the first backup or uploa
 mkdir -p data backups && chown -R 1000:1000 data backups
 ```
 
-`scripts/update.sh` does the same for an install that predates the folder.
+`./eigen setup` does the same for an install that lacks one.
 
 **An archive is a secret, at the level of `.env.production`.** It holds every file and every mail, the user's password hash, their app passwords and API keys, their 2FA secret, and the S3 credentials of every mount they own. Credentials are not stripped, because a backup that cannot restore a mount is not a complete backup. Downloads are admin-only. Anything you copy off the server, keep encrypted, and delete the copy when you are done with it.
 
