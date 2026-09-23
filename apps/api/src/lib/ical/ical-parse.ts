@@ -41,15 +41,26 @@ export function propTzid(prop: ICAL.Property | null | undefined): string | null 
     return normalizeTimezone(tzid) ?? (prop && tzid ? licLocation(prop, tzid) : null);
 }
 
+// Built once per root: Outlook's unnamed "Customized Time Zone" misses on every DTSTART, DTEND and EXDATE, and a scan per miss is quadratic.
+const licLocationsByRoot = new WeakMap<ICAL.Component, Map<string, string | null>>();
+
 // libical names a zone by a TZID no standard knows and states its IANA name only in the file's VTIMEZONE.
 function licLocation(prop: ICAL.Property, tzid: string): string | null {
     let root = prop.parent;
     while (root?.parent) root = root.parent;
-    const vtimezone = root
-        ?.getAllSubcomponents('vtimezone')
-        .find((component) => component.getFirstPropertyValue('tzid') === tzid);
-    const location = vtimezone?.getFirstPropertyValue('x-lic-location');
-    return typeof location === 'string' ? normalizeTimezone(location) : null;
+    if (!root) return null;
+    let locations = licLocationsByRoot.get(root);
+    if (!locations) {
+        locations = new Map();
+        for (const vtimezone of root.getAllSubcomponents('vtimezone')) {
+            const id = String(vtimezone.getFirstPropertyValue('tzid'));
+            const location = vtimezone.getFirstPropertyValue('x-lic-location');
+            if (!locations.has(id))
+                locations.set(id, typeof location === 'string' ? normalizeTimezone(location) : null);
+        }
+        licLocationsByRoot.set(root, locations);
+    }
+    return locations.get(tzid) ?? null;
 }
 
 // A CAL-ADDRESS is a URI, so its scheme is case-insensitive (RFC 3986) and clients emit both `mailto:` and `MAILTO:`: a surviving prefix matches no address and the row reads as someone else's invitation.
