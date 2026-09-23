@@ -60,7 +60,7 @@ export async function bootstrap(flags: { out?: string; force?: boolean }): Promi
             new Map([
                 ['EIGEN_REGISTRY', registry],
                 ['EIGEN_VERSION', version],
-                ['EIGEN_API_IMAGE', `${registry}/eigen-api:${version}`],
+                ['EIGEN_API_IMAGE', `${registry}/api:${version}`],
             ]),
         );
         own(envPath);

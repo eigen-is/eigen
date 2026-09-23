@@ -37,14 +37,14 @@ RUN mkdir -p /app/data/home /app/data/server /app/backups /run/eigen \
 
 ENV EIGEN_CONTROL_SOCKET=/run/eigen/control.sock
 
-ARG EIGEN_REGISTRY=ghcr.io/eigen-is
+ARG EIGEN_REGISTRY=ghcr.io/eigen-is/eigen
 ARG EIGEN_VERSION
 ARG EIGEN_COMMIT
 ARG EIGEN_BUILT_AT
 ENV EIGEN_REGISTRY=${EIGEN_REGISTRY} \
     EIGEN_COMMIT=${EIGEN_COMMIT} \
     EIGEN_BUILT_AT=${EIGEN_BUILT_AT}
-LABEL org.opencontainers.image.title="eigen-api" \
+LABEL org.opencontainers.image.title="Eigen API" \
       org.opencontainers.image.description="Eigen API server: the backend every Eigen app talks to." \
       org.opencontainers.image.url="https://github.com/eigen-is/eigen" \
       org.opencontainers.image.licenses="MIT" \

@@ -1,7 +1,7 @@
 services:
   caddy:
     profiles: ["edge"]
-    image: ${EIGEN_FRONTEND_IMAGE:-eigen-frontend:local}
+    image: ${EIGEN_FRONTEND_IMAGE:-ghcr.io/eigen-is/eigen/frontend:local}
     ports:
       - "80:80"
       - "443:443"
@@ -21,7 +21,7 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
   eigen-api:
-    image: ${EIGEN_API_IMAGE:-eigen-api:local}
+    image: ${EIGEN_API_IMAGE:-ghcr.io/eigen-is/eigen/api:local}
     user: "1000:1000"
     # A real PID 1: forwards SIGTERM to bun and reaps its ffmpeg/weasyprint children.
     init: true
@@ -31,8 +31,8 @@ services:
     volumes:
       - ./data:/app/data
       # Backup artifacts live outside data/ so a wipe of the data directory cannot take them with
-      # it — the same ./backups `eigen backup` writes its snapshots to. The API creates the folder
-      # only when the first backup runs; Docker creates the mount point itself.
+      # it. `./eigen backup` writes its whole-server snapshots to ./snapshots instead. The API creates
+      # the folder only when the first backup runs; Docker creates the mount point itself.
       - ./backups:/app/backups
     # Lets the API reach a relay on the host (SMTP_RELAY_HOST=host.docker.internal) when Eigen hosts no mail.
     extra_hosts:
@@ -85,7 +85,7 @@ services:
 
   eigen-static:
     profiles: ["static"]
-    image: ${EIGEN_FRONTEND_IMAGE:-eigen-frontend:local}
+    image: ${EIGEN_FRONTEND_IMAGE:-ghcr.io/eigen-is/eigen/frontend:local}
     command: caddy run --config /etc/caddy/Caddyfile.static --adapter caddyfile
     # Long-form bind so EIGEN_STATIC_HOST/PORT substitute cleanly. Avoid the short-form
     # `${IP}:${PORT}:8080` shape — the colon between vars confuses some Compose versions.
@@ -126,7 +126,7 @@ services:
 
   postfix:
     profiles: ["mail"]
-    image: ${EIGEN_POSTFIX_IMAGE:-eigen-postfix:local}
+    image: ${EIGEN_POSTFIX_IMAGE:-ghcr.io/eigen-is/eigen/postfix:local}
     ports:
       - "25:25"
       - "465:465"
@@ -170,7 +170,7 @@ services:
 
   dovecot:
     profiles: ["mail"]
-    image: ${EIGEN_DOVECOT_IMAGE:-eigen-dovecot:local}
+    image: ${EIGEN_DOVECOT_IMAGE:-ghcr.io/eigen-is/eigen/dovecot:local}
     ports:
       - "993:993"
     volumes:

@@ -14,7 +14,7 @@ afterAll(() => {
 
 async function runBootstrap(out: string, ...args: string[]) {
     const proc = Bun.spawn([process.execPath, CLI, 'bootstrap', '--out', out, ...args], {
-        env: { ...process.env, EIGEN_REGISTRY: 'localhost:5055/eigen-is' },
+        env: { ...process.env, EIGEN_REGISTRY: 'localhost:5055/eigen-is/eigen' },
         stdout: 'pipe',
         stderr: 'pipe',
     });
@@ -43,7 +43,7 @@ describe('bootstrap', () => {
         expect(mode('docker-compose.yml')).toBe(0o644);
         expect(mode('.env.production')).toBe(0o600);
         expect(readFileSync(join(out, '.env.production'), 'utf8')).toBe(
-            `EIGEN_REGISTRY=localhost:5055/eigen-is\nEIGEN_VERSION=${version}\nEIGEN_API_IMAGE=localhost:5055/eigen-is/eigen-api:${version}\n`,
+            `EIGEN_REGISTRY=localhost:5055/eigen-is/eigen\nEIGEN_VERSION=${version}\nEIGEN_API_IMAGE=localhost:5055/eigen-is/eigen/api:${version}\n`,
         );
     });
 

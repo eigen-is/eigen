@@ -20,7 +20,7 @@ RUN groupadd -g 1000 vmail && useradd -u 1000 -g 1000 -d /data/home -s /usr/sbin
 
 ARG EIGEN_VERSION
 ARG EIGEN_COMMIT
-LABEL org.opencontainers.image.title="eigen-dovecot" \
+LABEL org.opencontainers.image.title="Eigen Dovecot" \
       org.opencontainers.image.description="Dovecot IMAP server for Eigen mailboxes." \
       org.opencontainers.image.url="https://github.com/eigen-is/eigen" \
       org.opencontainers.image.licenses="MIT" \

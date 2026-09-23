@@ -22,7 +22,7 @@ RUN chmod +x /usr/local/bin/eigen-deliver /usr/local/bin/queue-monitor.sh /entry
 
 ARG EIGEN_VERSION
 ARG EIGEN_COMMIT
-LABEL org.opencontainers.image.title="eigen-postfix" \
+LABEL org.opencontainers.image.title="Eigen Postfix" \
       org.opencontainers.image.description="Postfix SMTP relay that delivers Eigen mail in and out." \
       org.opencontainers.image.url="https://github.com/eigen-is/eigen" \
       org.opencontainers.image.licenses="MIT" \

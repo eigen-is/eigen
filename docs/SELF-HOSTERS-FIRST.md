@@ -47,7 +47,7 @@ Same proposal, milestone 2. Size M.
 
 Done when: install and update work from `bootstrap` without Git or a build, one image digest serves two hostnames, and the gate is green on a real previous-to-new upgrade and its rollback.
 
-Open decision: the registry namespace and image names (`ghcr.io/eigen-is/eigen-api` and siblings is the default unless something argues against it).
+Image names: `ghcr.io/eigen-is/eigen/api`, `/frontend`, `/postfix` and `/dovecot`, one name everywhere. The tag says what it is: `:local` for a source build, the version (pinned by digest) for a release. `:local` is never published, so a stray pull fails instead of fetching someone else's image.
 
 ## 3. Whole-server backup
 

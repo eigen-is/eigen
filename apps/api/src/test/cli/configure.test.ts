@@ -162,7 +162,7 @@ describe('configure entries', () => {
         const existing = new Map([
             ['EIGEN_DEMO', '1'],
             ['QUEUE_ALERT_THRESHOLD', '50'],
-            ['EIGEN_API_IMAGE', 'ghcr.io/eigen-is/eigen-api@sha256:abc'],
+            ['EIGEN_API_IMAGE', 'ghcr.io/eigen-is/eigen/api@sha256:abc'],
             ['SMTP_SECURE', '1'],
         ]);
         const entries = configureEntries(existing, { ...ANSWERS, subnet: '172.31.0.0/24' });
@@ -356,7 +356,7 @@ describe('configure command', () => {
 
     test('a backfill refuses a file without DOMAIN and writes nothing', async () => {
         const dir = tempDir();
-        const original = 'EIGEN_REGISTRY=ghcr.io/eigen-is\nEIGEN_VERSION=0.2.99\n';
+        const original = 'EIGEN_REGISTRY=ghcr.io/eigen-is/eigen\nEIGEN_VERSION=0.2.99\n';
         writeFileSync(join(dir, '.env.production'), original);
         const run = await runConfigure(dir, ['--backfill']);
         expect(run.code).toBe(1);
@@ -404,17 +404,17 @@ describe('configure command', () => {
             '--contact-email',
             'admin@example.org',
         ];
-        const digest = 'localhost:5055/eigen-is/eigen-api@sha256:abc';
+        const digest = 'localhost:5055/eigen-is/eigen/api@sha256:abc';
         const run = await runConfigure(dir, flags, undefined, {
             EIGEN_VERSION: '0.2.99',
             EIGEN_API_IMAGE: digest,
-            EIGEN_REGISTRY: 'localhost:5055/eigen-is',
+            EIGEN_REGISTRY: 'localhost:5055/eigen-is/eigen',
         });
         expect(run.code).toBe(0);
         const env = readFileSync(join(dir, '.env.production'), 'utf8');
         expect(env).toContain('EIGEN_VERSION=0.2.99\n');
         expect(env).toContain(`EIGEN_API_IMAGE=${digest}\n`);
-        expect(env).toContain('EIGEN_REGISTRY=localhost:5055/eigen-is\n');
+        expect(env).toContain('EIGEN_REGISTRY=localhost:5055/eigen-is/eigen\n');
         expect(env).toContain('DOMAIN=eigen.example.org\n');
     });
 

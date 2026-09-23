@@ -117,7 +117,7 @@ fi
 export EIGEN_PROJECT
 
 API_IMAGE=${EIGEN_API_IMAGE:-$(env_value EIGEN_API_IMAGE)}
-API_IMAGE=${API_IMAGE:-eigen-api:local}
+API_IMAGE=${API_IMAGE:-ghcr.io/eigen-is/eigen/api:local}
 
 # Compose interpolates the build overlay for every command, so a source install always exports these.
 if [ "$MODE" = source ]; then
@@ -251,10 +251,10 @@ preflight() {
     say "$GREEN" '◇' "Docker ${server%% *}, Compose $compose"
 }
 
-# docker pull <registry>/eigen-<name>:<version> for each image
+# docker pull <registry>/<name>:<version> for each image
 pull_images() {
     for name in api frontend postfix dovecot; do
-        docker pull "$1/eigen-$name:$2" || return 1
+        docker pull "$1/$name:$2" || return 1
     done
 }
 
@@ -323,7 +323,7 @@ setup() {
         registry=${EIGEN_REGISTRY:-$(env_value EIGEN_REGISTRY)}
         version=${EIGEN_VERSION:-$(env_value EIGEN_VERSION)}
         if [ -z "$registry" ] || [ -z "$version" ]; then
-            die ".env.production names no Eigen release." "Get one first: docker run --rm -v \"\$PWD:/out\" ghcr.io/eigen-is/eigen-api bootstrap"
+            die ".env.production names no Eigen release." "Get one first: docker run --rm -v \"\$PWD:/out\" ghcr.io/eigen-is/eigen/api bootstrap"
         fi
         step "Downloading Eigen $version" "Eigen $version downloaded" "Could not download Eigen $version" \
             pull_images "$registry" "$version"
@@ -333,9 +333,9 @@ setup() {
         CLI_ENV="$CLI_ENV EIGEN_REGISTRY EIGEN_VERSION"
         for name in api frontend postfix dovecot; do
             digest=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' \
-                "$registry/eigen-$name:$version" | grep -F "$registry/eigen-$name@" | head -n 1)
+                "$registry/$name:$version" | grep -F "$registry/$name@" | head -n 1)
             if [ -z "$digest" ]; then
-                die "$registry/eigen-$name:$version has no registry digest." "Remove the local image (docker image rm $registry/eigen-$name:$version) and run ./eigen setup again."
+                die "$registry/$name:$version has no registry digest." "Remove the local image (docker image rm $registry/$name:$version) and run ./eigen setup again."
             fi
             pin=EIGEN_$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_IMAGE
             export "$pin=$digest"
@@ -454,7 +454,7 @@ status() {
         case $API_IMAGE in *@sha256:*)
             update=unknown
             registry=${EIGEN_REGISTRY:-$(env_value EIGEN_REGISTRY)}
-            latest=$(docker manifest inspect -v "$registry/eigen-api:latest" 2>/dev/null |
+            latest=$(docker manifest inspect -v "$registry/api:latest" 2>/dev/null |
                 sed -n 's/^ *"digest": *"\(sha256:[0-9a-f]*\)".*/\1/p' | head -n 1)
             if [ "${API_IMAGE#*@}" = "$latest" ]; then update=current; elif [ -n "$latest" ]; then update=available; fi
             ;;

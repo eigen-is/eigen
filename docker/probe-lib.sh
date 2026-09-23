@@ -33,7 +33,7 @@ export BUN_VERSION
 HARNESS_PROJECTS=''
 PICKED_PORTS=' '
 
-# scratch_init <purpose>: the scratch root, private image tags so eigen-*:local is never overwritten, the
+# scratch_init <purpose>: the scratch root, private image tags so ghcr.io/eigen-is/eigen/*:local is never overwritten, the
 # no-Bun docker:cli image the launcher runs in, and the cleanup trap.
 scratch_init() {
     RUN="$1$$"
