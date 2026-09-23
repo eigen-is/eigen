@@ -418,6 +418,18 @@ describe('configure command', () => {
         expect(env).toContain('DOMAIN=eigen.example.org\n');
     });
 
+    test('a source install writes no release pins, though the image sets EIGEN_REGISTRY', async () => {
+        const dir = tempDir();
+        const run = await runConfigure(
+            dir,
+            ['--yes', '--domain', 'eigen.example.org', '--no-proxy', '--contact-email', 'admin@example.org'],
+            undefined,
+            { EIGEN_REGISTRY: 'ghcr.io/eigen-is/eigen', EIGEN_VERSION: undefined },
+        );
+        expect(run.code).toBe(0);
+        expect(readFileSync(join(dir, '.env.production'), 'utf8')).not.toContain('EIGEN_REGISTRY');
+    });
+
     test('a checkout run picks no subnet and needs no Docker', async () => {
         const dir = tempDir();
         const run = await runConfigure(

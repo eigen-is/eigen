@@ -26,9 +26,15 @@ function parseFlags<T extends NonNullable<ParseArgsConfig['options']>>(
     try {
         parsed = parse();
     } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        const unknown = /^Unknown option '([^']+)'/.exec(message)?.[1];
-        return refuse(unknown ? `Unknown argument "${unknown}".` : message);
+        if (!(error instanceof Error)) throw error;
+        // The error names the unknown option in its message alone; the tokens name it as typed.
+        if ('code' in error && error.code === 'ERR_PARSE_ARGS_UNKNOWN_OPTION') {
+            const { tokens } = parseArgs({ args, options, allowPositionals: true, strict: false, tokens: true });
+            for (const token of tokens) {
+                if (token.kind === 'option' && !(token.name in options)) refuse(`Unknown argument "${token.rawName}".`);
+            }
+        }
+        return refuse(error.message);
     }
     const extra = parsed.positionals[positionals];
     if (extra !== undefined) refuse(`Unknown argument "${extra}".`);

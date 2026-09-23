@@ -40,6 +40,8 @@ describe('parseFlags', () => {
     test.each([
         [['reset-password', 'a@example.org', 'b@example.org'], 'Unknown argument "b@example.org".'],
         [['reset-password', 'a@example.org', '--bogus'], 'Unknown argument "--bogus".'],
+        [['restore', 'eigen-20200101-000000.tar.gz', '--bogus=1'], 'Unknown argument "--bogus".'],
+        [['snapshot', '-x'], 'Unknown argument "-x".'],
         [['restore', 'eigen-20200101-000000.tar.gz', 'extra'], 'Unknown argument "extra".'],
         [['snapshot', 'extra'], 'Unknown argument "extra".'],
         [['bootstrap', '--out'], "Option '--out <value>' argument missing"],

@@ -5,7 +5,13 @@ import { createUi } from './ui';
 
 // The repo root in a checkout, /app in the image: the bundle is copied from the image's own tree.
 const ROOT = join(import.meta.dir, '../../../..');
-const BUNDLE_FILES = ['eigen', 'docker-compose.yml', 'docker-compose.host-certs.yml', '.env.example'];
+const BUNDLE_FILES = [
+    'eigen',
+    'docker-compose.yml',
+    'docker-compose.host-certs.yml',
+    'docker-compose.host-api.yml',
+    '.env.example',
+];
 const BUNDLE_DIR = 'docker/fail2ban';
 const ENV_PATH = '.env.production';
 export const BOOTSTRAP_OPTIONS = { out: { type: 'string' }, force: { type: 'boolean' } } as const;

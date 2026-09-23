@@ -35,7 +35,13 @@ describe('bootstrap', () => {
         const run = await runBootstrap(out);
         expect(run.stderr).toBe('');
         expect(run.code).toBe(0);
-        for (const file of ['eigen', 'docker-compose.yml', 'docker-compose.host-certs.yml', '.env.example']) {
+        for (const file of [
+            'eigen',
+            'docker-compose.yml',
+            'docker-compose.host-certs.yml',
+            'docker-compose.host-api.yml',
+            '.env.example',
+        ]) {
             expect(readFileSync(join(out, file), 'utf8')).toBe(readFileSync(join(ROOT, file), 'utf8'));
         }
         expect(existsSync(join(out, 'docker/fail2ban/filter.d'))).toBe(true);

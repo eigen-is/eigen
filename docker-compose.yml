@@ -27,7 +27,7 @@ services:
     init: true
     # No host port binding — caddy / eigen-static / postfix / dovecot all reach the API via
     # the docker network as `eigen-api:8000`. For host-side debug access, layer the
-    # docker-compose.host-api.yml overlay (binds 127.0.0.1:${EIGEN_API_BIND_PORT:-8000}).
+    # docker-compose.host-api.yml overlay (binds ${EIGEN_API_BIND:-127.0.0.1:8000}).
     volumes:
       - ./data:/app/data
       # Backup artifacts live outside data/ so a wipe of the data directory cannot take them with
