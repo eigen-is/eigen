@@ -13,6 +13,8 @@ else
     ACCENT='' GREEN='' RED='' YELLOW='' GRAY='' RESET=''
 fi
 LOG=.eigen/last-step.log
+# POSIX sleep only takes whole seconds; the spinner falls back to 1 where 0.2 fails.
+TICK=0.2
 
 usage() {
     cat <<EOF
@@ -63,6 +65,10 @@ env_value() {
         *) printf '%s\n' "$value" | sed 's/[[:space:]]\{1,\}#.*//; s/[[:space:]]*$//' ;;
     esac
 }
+
+# Configure always writes DOMAIN; a file without it is left from a setup that did not finish. An unreadable one is
+# for preflight to report.
+installed() { [ -e .env.production ] && { [ ! -r .env.production ] || [ -n "$(env_value DOMAIN)" ]; }; }
 
 # version_at_least <have> <want>, both like 2.24.4
 version_at_least() {
@@ -122,20 +128,55 @@ cli_as() {
 # The CLI as the operator, so what it writes is theirs.
 cli() { cli_as "$(id -u):$(id -g)" "$@"; }
 
-# step <while running> <when done> <on failure> <command…>: one line per step, the output in $LOG.
+# step <while running> <when done> <on failure> <command…>: one line per step, the output in $LOG. On a terminal
+# the command runs as a background job under a spinner with the elapsed time and the log's last line; set -m gives
+# the job its own process group, so Ctrl-C can stop all of it. Every caller traps INT with exit 130 or leaves it
+# fatal, so exit 130 is the trap a step leaves behind.
 step() {
     running=$1 done=$2 failed=$3
     shift 3
-    if [ -t 1 ]; then printf '%s◒%s  %s...' "$ACCENT" "$RESET" "$running"; fi
-    if "$@" >"$LOG" 2>&1 </dev/null; then
-        if [ -t 1 ]; then printf '\r\033[2K'; fi
+    code=0
+    if [ -t 1 ]; then
+        set -m
+        (set +e; "$@") >"$LOG" 2>&1 </dev/null &
+        job=$!
+        set +m
+        trap 'kill -s TERM -- "-$job" 2>/dev/null || :; wait "$job" 2>/dev/null || :; printf "\r\033[K\033[1A\r\033[K\033[?25h"
+            say "$RED" "■" "$running: cancelled." >&2; exit 130' INT TERM
+        started=$(date +%s)
+        frame=0
+        printf '\033[?25l\n'
+        while kill -0 "$job" 2>/dev/null; do
+            case $((frame % 4)) in 0) glyph=◒ ;; 1) glyph=◐ ;; 2) glyph=◓ ;; *) glyph=◑ ;; esac
+            frame=$((frame + 1))
+            seconds=$(($(date +%s) - started))
+            elapsed=${seconds}s
+            if [ "$seconds" -ge 60 ]; then elapsed="$((seconds / 60))m $((seconds % 60))s"; fi
+            width=$(stty size </dev/tty 2>/dev/null || :)
+            width=${width#* }
+            case $width in '' | 0 | *[!0-9]*) width=80 ;; esac
+            # A wrapped line would break the redraw. BuildKit's "#12 3.45 …" loses its step number and timestamp.
+            line=$(tail -n 20 "$LOG" 2>/dev/null | awk -v width=$((width - 4)) '{
+                sub(/.*\r/, ""); gsub(/\033\[[0-9;?]*[A-Za-z]/, ""); gsub(/[[:cntrl:]]/, " ")
+                sub(/^#[0-9]+ ([0-9]+\.[0-9]+ )?/, "")
+            } NF && !/^(DONE [0-9.]+s|CACHED)$/ { line = $0 } END { print substr(line, 1, width) }')
+            printf '\r\033[K\033[1A\r\033[K%s%s%s  %s...  %s%s%s\n\033[K%s│  %s%s' "$ACCENT" "$glyph" "$RESET" \
+                "$running" "$GRAY" "$elapsed" "$RESET" "$GRAY" "$line" "$RESET"
+            sleep "$TICK" 2>/dev/null || TICK=1
+        done
+        wait "$job" 2>/dev/null || code=$?
+        trap 'exit 130' INT TERM
+        printf '\r\033[K\033[1A\r\033[K\033[?25h'
+    else
+        "$@" >"$LOG" 2>&1 </dev/null || code=$?
+    fi
+    if [ "$code" = 0 ]; then
         say "$GREEN" '◇' "$done"
         return 0
     fi
-    if [ -t 1 ]; then printf '\r\033[2K'; fi
     {
         say "$RED" '■' "$failed"
-        tail -n 20 "$LOG" | sed "s/^/$GRAY│$RESET  /"
+        tail -n 20 "$LOG" | sed "s/^/${GRAY}│${RESET}  /"
         say "$GRAY" '└' "Full output: $LOG.${AGAIN- Fix what it says, then run ./eigen $COMMAND again.}"
     } >&2
     exit 1
@@ -238,8 +279,11 @@ setup() {
 
     EIGEN_PINS=''
     if [ "$MODE" = source ]; then
-        # Compose loads env_file: even to build, so a first run needs the file before configure writes it.
+        # Compose loads env_file: even to build, so a first run needs the file before configure writes it. Left
+        # empty by a setup that ends before that, it would read as an install.
         if [ ! -e .env.production ]; then (umask 077 && : >.env.production); fi
+        trap '[ -s .env.production ] || rm -f .env.production' EXIT
+        trap 'exit 130' INT TERM
         step "Building the API image" "API image built" "Could not build the API image" dc build eigen-api
     else
         registry=${EIGEN_REGISTRY:-$(env_value EIGEN_REGISTRY)}
@@ -267,6 +311,7 @@ setup() {
     EIGEN_DOCKER_NETWORKS=/install/.eigen/networks.json
     export EIGEN_DOCKER_NETWORKS EIGEN_PINS
     cli configure "$@" || exit
+    trap - EXIT
 
     if [ "$MODE" = source ]; then
         step "Building the web and mail images" "Images built" "Could not build the images" dc build
@@ -288,7 +333,7 @@ restart() {
 # The snapshot is taken with every service stopped (dovecot and postfix write to data/ too), as root in a container
 # so the mixed owners in data/ survive. Eigen starts again whatever happens to the snapshot.
 backup() {
-    if [ ! -f .env.production ]; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
+    if ! installed; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
     wordmark backup
     preflight
     mkdir -p .eigen
@@ -331,7 +376,7 @@ restore() {
 
 # Only the launcher can ask Docker, so it gathers the services, a pending update and the mail queue for the report.
 status() {
-    if [ ! -f .env.production ]; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
+    if ! installed; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
     wordmark status
     preflight >/dev/null
     tab=$(printf '\t')
@@ -415,7 +460,7 @@ case $COMMAND in
             exit
             ;;
         esac
-        if [ ! -f .env.production ]; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
+        if ! installed; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
         if ! dc ps --status running --services 2>/dev/null | grep -qx eigen-api; then
             die "The API is not running." "./eigen status shows the services; ./eigen logs eigen-api shows why."
         fi
@@ -434,7 +479,7 @@ case $COMMAND in
         ;;
     logs)
         shift
-        if [ ! -f .env.production ]; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
+        if ! installed; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
         dc logs -f --tail 200 "$@"
         ;;
     help | -h | --help) usage ;;
