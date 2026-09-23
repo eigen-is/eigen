@@ -1,13 +1,12 @@
 # Dev overrides: HTTP-only, mailpit for catching mail, self-signed certs.
-# DOMAIN=localhost is the hostname for TLS certs and Postfix. Email addresses use a separate
-# domain configured during setup (e.g., eigen.localhost) — see LOCAL-TESTING.md.
+# Addresses need a dotted domain (better-auth refuses user@localhost), so mail defaults to eigen.localhost.
 #
 # Dev runs all profiles by default: COMPOSE_PROFILES=edge,mail.
 services:
   caddy:
     environment:
       DOMAIN: localhost
-      MAIL_DOMAIN: localhost
+      MAIL_DOMAIN: eigen.localhost
       CADDY_ACME_EMAIL: ""
     ports:
       - "80:80"
@@ -22,9 +21,8 @@ services:
       NODE_ENV: development
       EIGEN_DATA_ROOT: /app/data
       DOMAIN: localhost
-      # Email suffix is decoupled from the localhost web host — honor MAIL_DOMAIN from .env
-      # (e.g. a ./data set up with a real org domain), default localhost for a fresh stack.
-      MAIL_DOMAIN: ${MAIL_DOMAIN:-localhost}
+      # Honor MAIL_DOMAIN from .env, e.g. a ./data set up with a real org domain.
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-eigen.localhost}
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       TRUSTED_NETWORKS: "127.0.0.0/8,::1,${EIGEN_SUBNET:-172.20.0.0/24}"
@@ -32,7 +30,7 @@ services:
   eigen-static:
     environment:
       DOMAIN: localhost
-      MAIL_DOMAIN: localhost
+      MAIL_DOMAIN: eigen.localhost
 
   postfix:
     volumes:
@@ -41,7 +39,7 @@ services:
       - postfix-queue:/var/spool/postfix
     environment:
       DOMAIN: localhost
-      MAIL_DOMAIN: localhost
+      MAIL_DOMAIN: eigen.localhost
       SMTP_RELAY_HOST: ""
 
   dovecot:
@@ -50,7 +48,7 @@ services:
       - ./data/certs/dev:/certs
     environment:
       DOMAIN: localhost
-      MAIL_DOMAIN: localhost
+      MAIL_DOMAIN: eigen.localhost
 
   mailpit:
     image: axllent/mailpit

@@ -245,10 +245,11 @@ describe('the /setup routes before setup', () => {
         expect(await badName.text()).toContain(`ada lovelace@${MAIL_DOMAIN}`);
 
         // A domain in the body is not the server's to take: ./eigen setup set it.
-        const [done, twice] = await Promise.all([
-            post('complete', { ...admin, domain: 'elsewhere.example', setupToken: newer }),
-            post('complete', { ...admin, setupToken: newer }),
-        ]);
+        // Two parallel requests, either may arrive first; exactly one wins.
+        const body = { ...admin, domain: 'elsewhere.example', setupToken: newer };
+        const [done, twice] = (await Promise.all([post('complete', body), post('complete', body)])).sort(
+            (a, b) => a.status - b.status,
+        );
         expect(done.status).toBe(200);
         expect(twice.status).toBe(409);
         expect((await done.json()).user.email).toBe(ADMIN_EMAIL);
