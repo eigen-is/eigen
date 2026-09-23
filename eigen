@@ -19,8 +19,9 @@ usage() {
 Usage: ./eigen <command>
 
 Commands:
-  setup [flags]    Configure Eigen, get its images and start it. Without flags it asks;
-                   ./eigen setup --help lists the flags.
+  setup [flags]    Configure Eigen, get its images, start it and print the link that
+                   finishes the setup. Without flags it asks; ./eigen setup --help lists
+                   the flags.
   status           Report on the version, the services, disk space, the last snapshot,
                    the certificate and the mail queue.
   reset-password <email> [--generate]
@@ -261,16 +262,8 @@ setup() {
     step "Preparing data/ and backups/" "Data folders ready" "The data folders are not writable" prepare_data
     step "Starting Eigen" "Eigen is running" "Eigen did not start; ./eigen logs shows why" start
 
-    # U6: the setup-link step (dc exec -T eigen-api bun /app/apps/api/src/cli/index.ts setup-link) goes here.
-    domain=$(env_value DOMAIN)
-    case ",$(env_value COMPOSE_PROFILES)," in
-        *,static,*)
-            next="Point your web server at $(env_value EIGEN_STATIC_HOST):$(env_value EIGEN_STATIC_PORT) (snippets: eigen.nginx.conf, eigen.Caddyfile, eigen.apache.conf), then open https://$domain/admin to finish the setup."
-            ;;
-        *) next="Open https://$domain/admin to finish the setup." ;;
-    esac
-    printf '%s│%s\n' "$GRAY" "$RESET"
-    say "$GRAY" '└' "$next"
+    # The one-time link to finish in the browser, or where to sign in when setup is already done.
+    dc exec $EXEC_TTY -e NO_COLOR="${NO_COLOR:-}" eigen-api bun "$API_CLI" setup-link
 }
 
 # Only the launcher can ask Docker, so it gathers the services, a pending update and the mail queue for the report.

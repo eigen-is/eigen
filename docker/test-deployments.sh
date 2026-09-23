@@ -45,10 +45,63 @@ probe_relay() {
     fi
 }
 
-# A share notification sent through the Mailpit relay: From "<admin> via …" <system sender>, Reply-To the
-# admin. Needs the admin created through the setup link, which U6 adds.
+# A share notification sent through the Mailpit relay: From "<admin> via <organization>" <system sender>, Reply-To
+# the admin. The admin comes from the link the last ./eigen setup printed, the second user from the admin API.
 probe_share_mail() {
-    skip "share notification through Mailpit (needs the setup link)"
+    local base="$1/eigen" token admin_id folder_id code id message=''
+    local jar="$SCRATCH/share-session" password="probe-share-$$"
+    rm -f "$jar"
+    token=$(grep -o 'setup=[A-Za-z0-9_-]*' "$SCRATCH/setup.log" | tail -n 1 | cut -d= -f2 || true)
+    if [ -z "$token" ]; then
+        fail "./eigen setup printed no setup link"
+        return
+    fi
+    admin_id=$(curl -sk -X POST -H 'Content-Type: application/json' \
+        -d "{\"setupToken\":\"$token\",\"domain\":\"localhost\",\"orgName\":\"Probe Org\",\"storageType\":\"local-id\",\"adminEmail\":\"ada@eigen.test\",\"adminPassword\":\"$password\",\"adminName\":\"Ada Admin\"}" \
+        "$base/setup/complete" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4 || true)
+    if [ -z "$admin_id" ]; then
+        fail "creating the admin through the setup link failed"
+        return
+    fi
+    # api <method> <path> [json]: the HTTP status of a call as the signed-in admin.
+    api() {
+        curl -sk -o "$SCRATCH/share-body" -w '%{http_code}' -b "$jar" -c "$jar" -X "$1" \
+            -H 'Content-Type: application/json' -H 'Origin: https://localhost' ${3:+-d "$3"} "$base$2" || echo 000
+    }
+    code=$(api POST /auth/sign-in/email "{\"email\":\"ada@eigen.test\",\"password\":\"$password\"}")
+    if [ "$code" != 200 ]; then fail "the admin cannot sign in → $code"; return; fi
+    code=$(api POST /auth/admin/create-user \
+        "{\"name\":\"Bea User\",\"email\":\"bea@eigen.test\",\"password\":\"$password\",\"role\":\"user\"}")
+    if [ "$code" != 200 ]; then fail "creating bea@eigen.test through the admin API → $code"; return; fi
+    code=$(api PUT /settings/server '{"notifications":{"email":{"userOnAclAdd":true}}}')
+    if [ "$code" != 200 ]; then fail "turning on share mail for users → $code"; return; fi
+    api GET "/drive/$admin_id/default/root" >/dev/null
+    folder_id=$(grep -o '"id":"[^"]*"' "$SCRATCH/share-body" | head -n 1 | cut -d'"' -f4 || true)
+    code=$(api POST "/drive/$admin_id/default/folder/$folder_id" '{"folderName":"For Bea"}')
+    folder_id=$(grep -o '"id":"[^"]*"' "$SCRATCH/share-body" | head -n 1 | cut -d'"' -f4 || true)
+    if [ "$code" != 200 ]; then fail "creating a folder to share → $code"; return; fi
+    code=$(api PUT "/drive/$admin_id/default/path/$folder_id/acl" '{"add":[{"id":"bea@eigen.test","read":true,"write":false}]}')
+    if [ "$code" != 200 ]; then fail "sharing the folder with bea@eigen.test → $code"; return; fi
+    ok "the admin from the setup link shares a folder with a user made through the admin API"
+
+    # The notification leaves after the share answers.
+    for _ in $(seq 1 30); do
+        id=$(curl -s "http://127.0.0.1:$PORT_MAILPIT/api/v1/search?query=to:bea@eigen.test" |
+            grep -o '"ID":"[^"]*"' | head -n 1 | cut -d'"' -f4 || true)
+        if [ -n "$id" ]; then
+            message=$(curl -s "http://127.0.0.1:$PORT_MAILPIT/api/v1/message/$id" || true)
+            break
+        fi
+        sleep 1
+    done
+    if [ -z "$message" ]; then
+        fail "Mailpit received no share notification for bea@eigen.test"
+    elif printf '%s' "$message" | grep -q '"From":{"Name":"Ada Admin via Probe Org","Address":"noreply@eigen.test"}' &&
+        printf '%s' "$message" | grep -q '"ReplyTo":\[{"Name":"Ada Admin","Address":"ada@eigen.test"}\]'; then
+        ok "the share mail is From \"Ada Admin via Probe Org\" <noreply@eigen.test>, Reply-To ada@eigen.test"
+    else
+        fail "share mail sender: $(printf '%s' "$message" | grep -o '"From":{[^}]*}') $(printf '%s' "$message" | grep -o '"ReplyTo":\[[^]]*\]')"
+    fi
 }
 
 scratch_init deploy
@@ -99,8 +152,10 @@ probe "/ (landing)"          "$BASE_HTTPS/"                    200
 probe "/mail/"               "$BASE_HTTPS/mail/"               200 '"/mail/assets/'
 probe_ws "WS /eigen/ws/collab/..." "$BASE_HTTPS/eigen/ws/collab/x/y/z"
 probe_relay
-probe_share_mail
+probe_share_mail "$BASE_HTTPS"
 tear_down
+# D creates its admin through a fresh setup link too, which only a server that is not set up prints.
+docker run --rm -v "$INSTALL/data:/data" "$CLI_IMAGE" find /data -mindepth 1 -delete
 
 ##############################################################################
 header "Scenario D — static     (bundled static, no mail, Mailpit relay)"
@@ -111,7 +166,7 @@ probe "/ (landing)"          "$BASE_HTTP/"                     200
 probe "/mail/"               "$BASE_HTTP/mail/"                200 '"/mail/assets/'
 probe_ws "WS /eigen/ws/collab/..." "$BASE_HTTP/eigen/ws/collab/x/y/z"
 probe_relay
-probe_share_mail
+probe_share_mail "http://localhost:$PORT_STATIC"
 tear_down
 
 ##############################################################################

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # The online commands against a scratch edge,mail install of this working tree, run the way an operator runs
 # them: ./eigen from the no-Bun docker:cli container. ./eigen status reports the version and every service,
-# ./eigen reset-password with a piped password changes it and signs the account out over HTTP, the control
-# socket lives inside the API container and never under data/, and both commands say where to look when the
-# API is stopped.
+# the control socket lives inside the API container and never under data/, ./eigen setup ends with a one-time
+# link without which the /setup routes refuse through the real gateway, ./eigen reset-password with a piped
+# password changes it and signs the account out over HTTP, and both commands say where to look when the API
+# is stopped.
 #
 # Usage:  ./docker/test-cli.sh
 # Needs:  docker, curl, git. Builds every image in Docker (a few minutes on a cold cache).
@@ -34,6 +35,15 @@ eigen_piped() {
 }
 
 show() { printf '%s\n' "$OUT" | sed 's/^/    │ /'; }
+
+# setup_token <log>: the token of the last setup link in ./eigen setup output.
+setup_token() { grep -o 'setup=[A-Za-z0-9_-]*' "$1" | tail -n 1 | cut -d= -f2 || true; }
+
+# setup_post <route> <json fields>: the HTTP status and the seconds it took, as "403 0.012".
+setup_post() {
+    curl -sk -o /dev/null -w '%{http_code} %{time_total}' --max-time 20 -X POST -H 'Content-Type: application/json' \
+        -d "{$2}" "$BASE/setup/$1" || echo '000 20'
+}
 
 # sign_in <password> <cookie jar>: prints the HTTP status of a browser sign-in.
 sign_in() {
@@ -104,16 +114,76 @@ found=$(docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" find "$INSTALL/data"
 if [ -z "$found" ]; then ok "no socket under data/"; else fail "a socket under data/: $found"; fi
 
 ##############################################################################
-header "./eigen reset-password, piped"
+header "The setup link"
 ##############################################################################
-code=$(curl -sk -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
-    -d "{\"domain\":\"localhost\",\"orgName\":\"Probe\",\"storageType\":\"local-id\",\"adminEmail\":\"$ADMIN_EMAIL\",\"adminPassword\":\"$OLD_PASSWORD\",\"adminName\":\"Alice\"}" \
-    "$BASE/setup/complete" || true)
+FIRST_TOKEN=$(setup_token "$SCRATCH/setup.log")
+if [ "${#FIRST_TOKEN}" = 43 ]; then
+    ok "./eigen setup ends with a setup link"
+else
+    fail "./eigen setup printed no setup link"
+fi
+# Unroutable: a request that reached S3 would hang on it until the connect timeout.
+S3_FIELDS='"endpoint":"http://10.255.255.1","bucket":"probe","accessKeyId":"key","secretAccessKey":"secret"'
+ADMIN_FIELDS="\"domain\":\"localhost\",\"orgName\":\"Probe\",\"storageType\":\"local-id\",\"adminEmail\":\"$ADMIN_EMAIL\",\"adminPassword\":\"$OLD_PASSWORD\",\"adminName\":\"Alice\""
+for route in s3check s3harden complete; do
+    case $route in
+        s3check) fields=$S3_FIELDS ;;
+        s3harden) fields="$S3_FIELDS,\"noncurrentDays\":30" ;;
+        complete) fields=$ADMIN_FIELDS ;;
+    esac
+    for token in '' "${FIRST_TOKEN}x"; do
+        read -r code seconds <<<"$(setup_post "$route" "$fields${token:+,\"setupToken\":\"$token\"}")"
+        what="/setup/$route without a token"
+        if [ -n "$token" ]; then what="/setup/$route with a wrong token"; fi
+        if [ "$code" != 403 ]; then
+            fail "$what → $code, expected 403"
+        elif awk -v s="$seconds" 'BEGIN { exit !(s < 2) }'; then
+            ok "$what → 403 in ${seconds}s"
+        else
+            fail "$what → 403 but took ${seconds}s, as if it had called out"
+        fi
+    done
+done
+
+started=$SECONDS
+if run_setup --user "$OPERATOR" --yes --domain localhost --mail --mail-domain eigen.test \
+    --contact-email admin@eigen.test --no-proxy --no-relay >"$SCRATCH/setup-again.log" 2>&1; then
+    ok "./eigen setup reran in $((SECONDS - started))s"
+else
+    fail "the setup rerun failed after $((SECONDS - started))s"
+    sed 's/^/    /' "$SCRATCH/setup-again.log"
+fi
+SECOND_TOKEN=$(setup_token "$SCRATCH/setup-again.log")
+if [ "${#SECOND_TOKEN}" = 43 ] && [ "$SECOND_TOKEN" != "$FIRST_TOKEN" ]; then
+    ok "the rerun prints a fresh link"
+else
+    fail "the rerun printed no fresh link"
+fi
+read -r code _ <<<"$(setup_post complete "$ADMIN_FIELDS,\"setupToken\":\"$FIRST_TOKEN\"")"
+if [ "$code" = 403 ]; then ok "the first link no longer works (403)"; else fail "the first link → $code, expected 403"; fi
+read -r code _ <<<"$(setup_post complete "$ADMIN_FIELDS,\"setupToken\":\"$SECOND_TOKEN\"")"
 if [ "$code" != 200 ]; then
-    fail "creating $ADMIN_EMAIL through /setup/complete answered $code"
+    fail "creating $ADMIN_EMAIL through the fresh link answered $code"
     header "Result"
     probe_summary
 fi
+ok "the fresh link creates $ADMIN_EMAIL"
+for route in complete s3check; do
+    case $route in complete) fields=$ADMIN_FIELDS ;; s3check) fields=$S3_FIELDS ;; esac
+    read -r code _ <<<"$(setup_post "$route" "$fields,\"setupToken\":\"$SECOND_TOKEN\"")"
+    if [ "$code" = 403 ]; then ok "a second use on /setup/$route is refused (403)"; else fail "a second use on /setup/$route → $code"; fi
+done
+OUT=$(dc exec -T eigen-api bun /app/apps/api/src/cli/index.ts setup-link 2>&1 || true)
+show
+if printf '%s\n' "$OUT" | grep -q 'already set up' && ! printf '%s' "$OUT" | grep -q 'setup='; then
+    ok "setup-link says Eigen is already set up, with no link"
+else
+    fail "setup-link after the setup does not say it is done"
+fi
+
+##############################################################################
+header "./eigen reset-password, piped"
+##############################################################################
 OLD_SESSION="$SCRATCH/old-session"
 code=$(sign_in "$OLD_PASSWORD" "$OLD_SESSION")
 if [ "$code" = 200 ]; then ok "$ADMIN_EMAIL signs in with the setup password"; else fail "first sign-in → $code"; fi
