@@ -135,6 +135,22 @@ export async function createTestUser(email: string, password: string, name: stri
     };
 }
 
+export async function signsIn(email: string, password: string): Promise<boolean> {
+    try {
+        await auth.api.signInEmail({ body: { email, password } });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+export async function hasSession(sessionToken: string): Promise<boolean> {
+    const session = await auth.api.getSession({
+        headers: new Headers({ cookie: `better-auth.session_token=${sessionToken}` }),
+    });
+    return session !== null;
+}
+
 export async function getTestContext(): Promise<TestContext> {
     if (context) return context;
     await ensureServer();

@@ -22,8 +22,8 @@ import pkg from '../../../../../package.json' with { type: 'json' };
 import { SNAPSHOT_NAME } from '../../cli/snapshot';
 import { COLLAB_EPOCH_FILE } from '../../lib/collab/epoch';
 import { DATA_LOCK_FILE, lockDataDir } from '../../lib/config/data-lock';
+import { CLI, runCli } from '../cli-test-helpers';
 
-const CLI = join(import.meta.dir, '../../cli/index.ts');
 const { version } = pkg;
 const ENV = 'DOMAIN=eigen.example.org\n';
 
@@ -43,24 +43,17 @@ function install(): string {
     return dir;
 }
 
-async function run(cmd: string[], cwd: string, input?: string, env: Record<string, string> = {}) {
-    const proc = Bun.spawn(cmd, {
-        cwd,
-        // macOS tar would add AppleDouble members for extended attributes.
-        env: { ...process.env, COPYFILE_DISABLE: '1', NO_COLOR: '1', ...env },
-        stdin: input === undefined ? 'ignore' : new Blob([input]),
-        stdout: 'pipe',
-        stderr: 'pipe',
-    });
-    const [stdout, stderr, code] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-    ]);
-    return { stdout, stderr, code };
+// macOS tar would add AppleDouble members for extended attributes.
+const TAR_ENV = { COPYFILE_DISABLE: '1' };
+
+// tar and friends, beside the CLI.
+async function run(cmd: string[], cwd: string) {
+    const proc = Bun.spawn(cmd, { cwd, env: { ...process.env, ...TAR_ENV }, stdout: 'pipe', stderr: 'pipe' });
+    const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+    return { stdout, code };
 }
 
-const eigen = (cwd: string, ...args: string[]) => run([process.execPath, CLI, ...args], cwd);
+const eigen = (cwd: string, ...args: string[]) => runCli(args, { cwd, env: TAR_ENV });
 
 async function snapshot(dir: string, ...args: string[]): Promise<string> {
     const result = await eigen(dir, 'snapshot', ...args);
@@ -241,8 +234,9 @@ describe('snapshot', () => {
 
     test('--pre-update names the snapshot, the version and the commit in .eigen/last-update for a rollback', async () => {
         const dir = install();
-        const result = await run([process.execPath, CLI, 'snapshot', '--pre-update'], dir, undefined, {
-            EIGEN_COMMIT: 'abc1234',
+        const result = await runCli(['snapshot', '--pre-update'], {
+            cwd: dir,
+            env: { ...TAR_ENV, EIGEN_COMMIT: 'abc1234' },
         });
         expect(result.code).toBe(0);
         const name = /snapshots\/(\S+)/.exec(result.stdout)?.[1];
@@ -570,7 +564,7 @@ describe('restore', () => {
     test('a no to the question changes nothing, says so and exits 3 for the launcher', async () => {
         const dir = install();
         const name = await snapshot(dir);
-        const result = await run([process.execPath, CLI, 'restore', name], dir, 'n\n');
+        const result = await runCli(['restore', name], { cwd: dir, env: TAR_ENV, input: 'n\n' });
         expect(result.code).toBe(3);
         expect(result.stdout).toContain(`a snapshot of Eigen ${version}, made on `);
         expect(result.stdout).toContain(', just now?');

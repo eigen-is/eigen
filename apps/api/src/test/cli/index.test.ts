@@ -1,22 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { join } from 'node:path';
+import { runCli } from '../cli-test-helpers';
 
-const CLI = join(import.meta.dir, '../../cli/index.ts');
-
-async function eigen(...args: string[]) {
-    const proc = Bun.spawn([process.execPath, CLI, ...args], {
-        env: { ...process.env, NO_COLOR: '1' },
-        stdin: 'ignore',
-        stdout: 'pipe',
-        stderr: 'pipe',
-    });
-    const [stdout, stderr, code] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-    ]);
-    return { stdout, stderr, code };
-}
+const eigen = (...args: string[]) => runCli(args);
 
 describe('parseFlags', () => {
     test.each([

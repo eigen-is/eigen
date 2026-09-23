@@ -4,8 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type ConfigureAnswers, chooseSubnet, configureEntries, type DockerNetwork } from '../../cli/configure';
 import { readEnvFile } from '../../cli/env-file';
-
-const CLI = join(import.meta.dir, '../../cli/index.ts');
+import { type CliEnv, runCli, runCliInTerminal } from '../cli-test-helpers';
 
 const NETWORKS: DockerNetwork[] = [
     { Name: 'bridge', Labels: {}, IPAM: { Config: [{ Subnet: '172.17.0.0/16' }] } },
@@ -45,60 +44,19 @@ function tempDir(): string {
     return dir;
 }
 
-type Env = Record<string, string | undefined>;
-
-// An undefined value removes the variable, so a test can drop EIGEN_PROJECT or NO_COLOR.
-function spawnEnv(dir: string, env: Env, networks: DockerNetwork[]): Record<string, string> {
+// As the launcher runs it: with the host's network list and the Compose project.
+function configureEnv(dir: string, env: CliEnv, networks: DockerNetwork[]): CliEnv {
     const networksFile = join(dir, 'networks.json');
     writeFileSync(networksFile, JSON.stringify(networks));
-    const merged: Env = { ...process.env, EIGEN_DOCKER_NETWORKS: networksFile, EIGEN_PROJECT: 'my-eigen', ...env };
-    return Object.fromEntries(
-        Object.entries(merged).flatMap(([key, value]) => (value === undefined ? [] : [[key, value]])),
-    );
+    return { EIGEN_DOCKER_NETWORKS: networksFile, EIGEN_PROJECT: 'my-eigen', ...env };
 }
 
-async function runConfigure(dir: string, args: string[], input?: string, env: Env = {}, networks = NETWORKS) {
-    const proc = Bun.spawn([process.execPath, CLI, 'configure', ...args], {
-        cwd: dir,
-        env: spawnEnv(dir, env, networks),
-        stdin: input === undefined ? 'ignore' : new Blob([input]),
-        stdout: 'pipe',
-        stderr: 'pipe',
-    });
-    const [stdout, stderr, code] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-    ]);
-    return { stdout, stderr, code };
+function runConfigure(dir: string, args: string[], input?: string, env: CliEnv = {}, networks = NETWORKS) {
+    return runCli(['configure', ...args], { cwd: dir, input, env: configureEnv(dir, env, networks) });
 }
 
-// Runs in a pseudo-terminal; each answer's `keys` is typed once its `when` appears after the previous answer.
-async function runInTerminal(dir: string, args: string[], env: Env, answers: { when: string; keys: string }[]) {
-    let output = '';
-    let answered = 0;
-    const pending = [...answers];
-    const decoder = new TextDecoder();
-    const { promise: closed, resolve } = Promise.withResolvers<void>();
-    const proc = Bun.spawn([process.execPath, CLI, 'configure', ...args], {
-        cwd: dir,
-        env: spawnEnv(dir, env, NETWORKS),
-        terminal: {
-            data: (terminal, data) => {
-                output += decoder.decode(data);
-                const next = pending[0];
-                if (next && output.includes(next.when, answered)) {
-                    answered = output.length;
-                    terminal.write(next.keys);
-                    pending.shift();
-                }
-            },
-            exit: () => resolve(),
-        },
-    });
-    const [code] = await Promise.all([proc.exited, closed]);
-    proc.terminal?.close();
-    return { output, code };
+function runInTerminal(dir: string, args: string[], env: CliEnv, answers: { when: string; keys: string }[]) {
+    return runCliInTerminal(['configure', ...args], { cwd: dir, env: configureEnv(dir, env, NETWORKS) }, answers);
 }
 
 describe('configure entries', () => {

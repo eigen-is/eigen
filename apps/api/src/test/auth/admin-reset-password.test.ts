@@ -3,25 +3,9 @@ import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { verifyProtocolAuth } from '../../lib/auth/protocol-auth';
-import { authedRequest, createTestUser, getTestContext } from '../setup';
+import { authedRequest, createTestUser, getTestContext, hasSession, signsIn } from '../setup';
 
 const OLD_PASSWORD = 'old-password-1';
-
-async function signsIn(email: string, password: string): Promise<boolean> {
-    try {
-        await auth.api.signInEmail({ body: { email, password } });
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-async function hasSession(token: string): Promise<boolean> {
-    const session = await auth.api.getSession({
-        headers: new Headers({ cookie: `better-auth.session_token=${token}` }),
-    });
-    return session !== null;
-}
 
 describe('PUT /settings/user/:userId/password', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;

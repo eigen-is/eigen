@@ -9,15 +9,13 @@ import { verifyProtocolAuth } from '../../lib/auth/protocol-auth';
 import { getDataRoot } from '../../lib/config/paths';
 import type { ControlStatus } from '../../lib/config/server-status';
 import { controlRouter, startControlSocket } from '../../routes/control';
-import { createTestUser, ensureServer, TEST_DATA_DIR } from '../setup';
+import * as cli from '../cli-test-helpers';
+import { createTestUser, ensureServer, hasSession, signsIn, TEST_DATA_DIR } from '../setup';
 
-const CLI = join(import.meta.dir, '../../cli/index.ts');
 const FIXTURE_CERT = join(import.meta.dir, '../fixtures/control/expires-2036.crt');
 // Short: a Unix socket path is capped at 104 bytes on macOS.
 const SOCKET = join(TEST_DATA_DIR, 'c.sock');
 const OLD_PASSWORD = 'old-password-1';
-
-type Env = Record<string, string | undefined>;
 
 function post(path: string, body: unknown): Promise<Response> {
     return controlRouter.handle(
@@ -35,71 +33,10 @@ async function getStatus(): Promise<ControlStatus> {
     return res.json();
 }
 
-async function signsIn(email: string, password: string): Promise<boolean> {
-    try {
-        await auth.api.signInEmail({ body: { email, password } });
-        return true;
-    } catch {
-        return false;
-    }
-}
-
-async function hasSession(token: string): Promise<boolean> {
-    const session = await auth.api.getSession({
-        headers: new Headers({ cookie: `better-auth.session_token=${token}` }),
-    });
-    return session !== null;
-}
-
-// An undefined value removes the variable, so a test can drop NO_COLOR.
-function cliEnv(env: Env): Record<string, string> {
-    const merged: Env = { ...process.env, EIGEN_CONTROL_SOCKET: SOCKET, ...env };
-    return Object.fromEntries(
-        Object.entries(merged).flatMap(([key, value]) => (value === undefined ? [] : [[key, value]])),
-    );
-}
-
-async function runCli(args: string[], input?: string, env: Env = {}) {
-    const proc = Bun.spawn([process.execPath, CLI, ...args], {
-        env: cliEnv(env),
-        stdin: input === undefined ? 'ignore' : new Blob([input]),
-        stdout: 'pipe',
-        stderr: 'pipe',
-    });
-    const [stdout, stderr, code] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-    ]);
-    return { stdout, stderr, code };
-}
-
-// Runs in a pseudo-terminal; each answer is typed once its prompt appears in the output.
-async function runInTerminal(args: string[], env: Env, answers: { when: string; keys: string }[] = []) {
-    let output = '';
-    let answered = 0;
-    const pending = [...answers];
-    const decoder = new TextDecoder();
-    const { promise: closed, resolve } = Promise.withResolvers<void>();
-    const proc = Bun.spawn([process.execPath, CLI, ...args], {
-        env: cliEnv(env),
-        terminal: {
-            data: (terminal, data) => {
-                output += decoder.decode(data);
-                const next = pending[0];
-                if (next && output.includes(next.when, answered)) {
-                    terminal.write(next.keys);
-                    answered = output.length;
-                    pending.shift();
-                }
-            },
-            exit: () => resolve(),
-        },
-    });
-    const [code] = await Promise.all([proc.exited, closed]);
-    proc.terminal?.close();
-    return { output, code };
-}
+// Online commands, run while beforeAll's control socket is up.
+const runCli = (args: string[], input?: string, env: cli.CliEnv = {}) => cli.runCli(args, { input, env });
+const runInTerminal = (args: string[], env: cli.CliEnv, answers: { when: string; keys: string }[] = []) =>
+    cli.runCliInTerminal(args, { env }, answers);
 
 let socket: ReturnType<typeof startControlSocket>;
 

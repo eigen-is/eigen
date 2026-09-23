@@ -1,9 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { join } from 'node:path';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { releaseNotes } from '../../cli/update-check';
+import { runCli } from '../cli-test-helpers';
 
-const CLI = join(import.meta.dir, '../../cli/index.ts');
 const { version } = pkg;
 
 const CHANGELOG = `# Changelog
@@ -43,20 +42,7 @@ Nine.
 The base.
 `;
 
-async function eigen(...args: string[]) {
-    const proc = Bun.spawn([process.execPath, CLI, ...args], {
-        env: { ...process.env, NO_COLOR: '1' },
-        stdin: 'ignore',
-        stdout: 'pipe',
-        stderr: 'pipe',
-    });
-    const [stdout, stderr, code] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-    ]);
-    return { stdout, stderr, code };
-}
+const eigen = (...args: string[]) => runCli(args);
 
 describe('releaseNotes', () => {
     test('lists every version newer than from and not newer than to, oldest first, compared as versions', () => {

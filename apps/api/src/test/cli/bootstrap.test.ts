@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { ROOT } from '../../cli/install';
+import { runCli } from '../cli-test-helpers';
 
-const CLI = join(import.meta.dir, '../../cli/index.ts');
 const { version } = pkg;
 
 const dirs: string[] = [];
@@ -13,18 +13,8 @@ afterAll(() => {
     for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
 });
 
-async function runBootstrap(out: string, ...args: string[]) {
-    const proc = Bun.spawn([process.execPath, CLI, 'bootstrap', '--out', out, ...args], {
-        env: { ...process.env, EIGEN_REGISTRY: 'localhost:5055/eigen-is/eigen' },
-        stdout: 'pipe',
-        stderr: 'pipe',
-    });
-    const [stdout, stderr, code] = await Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-    ]);
-    return { stdout, stderr, code };
+function runBootstrap(out: string, ...args: string[]) {
+    return runCli(['bootstrap', '--out', out, ...args], { env: { EIGEN_REGISTRY: 'localhost:5055/eigen-is/eigen' } });
 }
 
 describe('bootstrap', () => {

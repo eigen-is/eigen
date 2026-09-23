@@ -5,13 +5,13 @@ import { getServerDataPath } from '../../lib/config/paths';
 import { getDomain } from '../../lib/config/server-config';
 import type { SetupLink } from '../../lib/setup/setup-token';
 import { clearSetupToken, createSetupToken, verifySetupToken } from '../../lib/setup/setup-token';
+import { runCli } from '../cli-test-helpers';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 import { TEST_DATA_DIR } from '../setup';
 
 // The routes answer differently only while setup is pending, which this worker's own server is past as soon as
 // any file boots it. So the gate is driven against a spawned `bun src/index.ts` on a fresh data root.
 const API_DIR = join(import.meta.dir, '../../..');
-const CLI = join(API_DIR, 'src/cli/index.ts');
 const RUN_DIR = join(TEST_DATA_DIR, 'setup-token');
 // Short: a Unix socket path is capped at 104 bytes on macOS.
 const SOCKET = join(TEST_DATA_DIR, 'st.sock');
@@ -123,16 +123,8 @@ describe('the /setup routes before setup', () => {
         return new URLSearchParams(new URL(setupUrl ?? '').hash.slice(1)).get('setup') ?? '';
     }
 
-    async function runCli(): Promise<{ stdout: string; code: number }> {
-        const cli = Bun.spawn([process.execPath, CLI, 'setup-link'], {
-            env: { ...process.env, EIGEN_CONTROL_SOCKET: SOCKET, COMPOSE_PROFILES: 'edge,mail' },
-            stdin: 'ignore',
-            stdout: 'pipe',
-            stderr: 'pipe',
-        });
-        const [stdout, code] = await Promise.all([new Response(cli.stdout).text(), cli.exited]);
-        return { stdout, code };
-    }
+    const setupLinkCli = () =>
+        runCli(['setup-link'], { env: { EIGEN_CONTROL_SOCKET: SOCKET, COMPOSE_PROFILES: 'edge,mail' } });
 
     async function startApi(): Promise<void> {
         const logFd = openSync(logPath, 'a');
@@ -199,7 +191,7 @@ describe('the /setup routes before setup', () => {
     });
 
     test('./eigen setup-link prints the link and what the page asks', async () => {
-        const { stdout, code } = await runCli();
+        const { stdout, code } = await setupLinkCli();
         expect(code).toBe(0);
         const setupToken = stdout.match(/https:\/\/\S+\/#setup=([\w-]{43})/)?.[1];
         expect(setupToken).toBeDefined();
@@ -280,7 +272,7 @@ describe('the /setup routes before setup', () => {
         expect(await setupLink()).toEqual({ setupUrl: null, signInUrl: `https://${DOMAIN}/admin` });
         expect(existsSync(join(dataRoot, 'server/setup-token.json'))).toBe(false);
 
-        const { stdout, code } = await runCli();
+        const { stdout, code } = await setupLinkCli();
         expect(code).toBe(0);
         expect(stdout).toContain('already set up');
         expect(stdout).toContain(`https://${DOMAIN}/admin`);
