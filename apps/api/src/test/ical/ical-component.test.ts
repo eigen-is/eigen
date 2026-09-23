@@ -753,6 +753,58 @@ describe('round trip build → serialize → project', () => {
         });
     }
 
+    // RFC 5545 §3.8.4.4: RECURRENCE-ID takes the master DTSTART's value type, whatever the override's own.
+    describe('an override toggled across all-day', () => {
+        const timedMaster: CalendarEvent = {
+            ...MASTER,
+            startTime: new Date('2026-09-27T22:30:00Z'), // Mon 28 Sep 00:30 Amsterdam
+            endTime: new Date('2026-09-27T23:30:00Z'),
+        };
+        const allDayMaster: CalendarEvent = {
+            ...MASTER,
+            allDay: true,
+            startTime: new Date('2026-09-28T00:00:00Z'),
+            endTime: new Date('2026-09-29T00:00:00Z'),
+        };
+
+        test('an all-day override of a timed series names the master DATE-TIME in its TZID', () => {
+            const override: CalendarEvent = {
+                ...OVERRIDE,
+                parentEventId: timedMaster.id,
+                recurrenceDate: '2026-10-05',
+                allDay: true,
+                startTime: new Date('2026-10-05T00:00:00Z'),
+                endTime: new Date('2026-10-06T00:00:00Z'),
+            };
+            const ics = serializeResource(buildResource([timedMaster, override]));
+
+            expect(ics).toContain('RECURRENCE-ID;TZID=Europe/Amsterdam:20261005T003000');
+            expect(ics).toContain('DTSTART;VALUE=DATE:20261005');
+            const back = parseIcs(ics).events.find((e) => e.recurrenceDate)!;
+            expect(back.recurrenceDate).toBe('2026-10-05');
+            expect(back.allDay).toBe(true);
+        });
+
+        test('a timed override of an all-day series names the master DATE', () => {
+            const override: CalendarEvent = {
+                ...OVERRIDE,
+                parentEventId: allDayMaster.id,
+                recurrenceDate: '2026-10-05',
+                allDay: false,
+                startTime: new Date('2026-10-05T08:00:00Z'),
+                endTime: new Date('2026-10-05T09:00:00Z'),
+            };
+            const ics = serializeResource(buildResource([allDayMaster, override]));
+
+            expect(ics).toContain('RECURRENCE-ID;VALUE=DATE:20261005');
+            expect(ics).toContain('DTSTART;TZID=Europe/Amsterdam:20261005T100000');
+            const back = parseIcs(ics).events.find((e) => e.recurrenceDate)!;
+            expect(back.recurrenceDate).toBe('2026-10-05');
+            expect(back.allDay).toBe(false);
+            expect(back.startTime.toISOString()).toBe('2026-10-05T08:00:00.000Z');
+        });
+    });
+
     test('a floating client VEVENT keeps its floating DTSTART through a re-stamp', () => {
         const floating = [
             'BEGIN:VEVENT',
