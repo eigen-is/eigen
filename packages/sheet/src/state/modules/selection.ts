@@ -8,7 +8,7 @@ import {
 } from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
-import { cfSplitRange } from '../../engine/conditional-format';
+import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import { numberDisplay } from '../../engine/format';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
@@ -451,8 +451,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
         );
         if (overlaps) {
             // Fresh per-rule box so a later mutation on one rule can't bleed into the others.
-            rule.cellrange = [{ row: [...applyRangeBox.row], column: [...applyRangeBox.column] }];
-            cdformat.push(rule);
+            cdformat.push(withCfRanges(rule, [{ row: [...applyRangeBox.row], column: [...applyRangeBox.column] }]));
         }
     }
 

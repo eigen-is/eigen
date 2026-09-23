@@ -18,7 +18,6 @@ import { BORDER_STYLES, SHEET_DEFAULT_COL_WIDTH, SHEET_DEFAULT_ROW_HEIGHT } from
 import {
     booleanDisplay,
     cellWrapsText,
-    functionCopy,
     iscelldata,
     numberDisplay,
     parseA1Range,
@@ -491,30 +490,22 @@ function mapCfRule(rule: XlsxCfRule, ranges: SingleRange[], theme: ThemePalette)
     return [];
 }
 
-// Excel anchors a CF formula's relative refs at the top-left of the FIRST range in the
-// sqref and shifts them per target cell across ALL ranges. The engine instead re-anchors
-// the formula at each cellrange entry's own top-left, so emit one rule per range with the
-// formula pre-shifted from the sqref anchor to that range's top-left.
+// Excel anchors a CF formula's relative refs at the first range's top-left, and so does the engine.
 function cfFormulaRules(
     formula: string,
     ranges: SingleRange[],
     format: DefaultConditionalFormatRule['format'],
 ): DefaultConditionalFormatRule[] {
-    const anchorRow = ranges[0].row[0];
-    const anchorCol = ranges[0].column[0];
-    return ranges.map((range) => {
-        const dr = range.row[0] - anchorRow;
-        const dc = range.column[0] - anchorCol;
-        const shifted = dr !== 0 || dc !== 0 ? functionCopy(formula, dr, dc) : formula;
-        return {
+    return [
+        {
             type: 'default',
-            cellrange: [range],
+            cellrange: ranges,
             format,
             conditionName: 'formula',
             conditionRange: [],
-            conditionValue: [`=${shifted}`],
-        };
-    });
+            conditionValue: [`=${formula}`],
+        },
+    ];
 }
 
 function convertDxfFormat(style: XlsxCfRule['style'], theme: ThemePalette): DefaultConditionalFormatRule['format'] {

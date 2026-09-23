@@ -17,7 +17,7 @@ import {
     trim,
     zip,
 } from 'es-toolkit/compat';
-import { cfSplitRange } from '../../engine/conditional-format';
+import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import { numberDisplay, parseCellInput } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, InlineStringSegment, SingleRange } from '../../engine/types';
@@ -544,20 +544,17 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
                     emptyRange2.push(...range2);
                 }
 
-                source_curCdformat[i].cellrange = emptyRange;
-
                 if (emptyRange2.length > 0) {
-                    // Clone so the target keeps the operate-part range without aliasing
-                    // back into source_curCdformat[i] (which now owns emptyRange).
-                    ruleArr.push({ ...cloneDeep(source_curCdformat[i]), cellrange: emptyRange2 });
+                    ruleArr.push(cloneDeep(withCfRanges(source_curCdformat[i], emptyRange2)));
                 }
+                source_curCdformat[i] = withCfRanges(source_curCdformat[i], emptyRange);
             }
         }
 
         const target_cdformat = cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].conditionalFormatRules);
         let target_curCdformat = cloneDeep(target_cdformat);
         if (ruleArr.length > 0) {
-            target_curCdformat = target_curCdformat?.concat(ruleArr);
+            target_curCdformat = [...(target_curCdformat ?? []), ...ruleArr];
         }
 
         // data validation
@@ -574,7 +571,8 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             config: sourceConfig,
             curConfig: sourceCurConfig,
             cdformat: source_cdformat,
-            curCdformat: source_curCdformat,
+            // A rule whose every cell was cut away has moved to the target.
+            curCdformat: source_curCdformat?.filter((rule) => rule.cellrange.length > 0),
             dataVerification: cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetId)!].dataVerification),
             curDataVerification: c_dataVerification,
             range: {
@@ -615,7 +613,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
                         ),
                     );
                 }
-                curCdformat[i].cellrange = emptyRange;
+                curCdformat[i] = withCfRanges(curCdformat[i], emptyRange);
             }
         }
 
@@ -915,8 +913,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
                 }
 
                 if (emptyRange.length > 0) {
-                    ruleArr_cf[i].cellrange = emptyRange;
-                    cdformat.push(ruleArr_cf[i]);
+                    cdformat.push(withCfRanges(ruleArr_cf[i], emptyRange));
                 }
             }
         }
@@ -925,7 +922,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     last.row = [minh, maxh];
     last.column = [minc, maxc];
 
-    file.conditionalFormatRules = cdformat;
+    if (cdformat) file.conditionalFormatRules = cdformat;
     file.dataVerification = cloneDeep({ ...file.dataVerification, ...dataVerification });
 
     // if the selection contains hyperlinks

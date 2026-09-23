@@ -1,6 +1,7 @@
 import { isNil } from 'es-toolkit/compat';
 import { parseCellInput } from './format';
 import type { FormulaEngine } from './formula-engine';
+import { functionCopy } from './formula-shift';
 import type { CellMatrix, CellResolver, CompiledFormula, ConditionalFormatRule, SingleRange } from './types';
 import { isRealNull } from './validation';
 
@@ -256,8 +257,7 @@ export function evaluateConditionalFormat(
             const conditionValue0 = conditionValue[0];
             const conditionValue1 = conditionValue[1];
             const { textColor, cellColor } = format;
-            // Per-range on purpose: duplicateValue's dmap, top10/average's dArr and
-            // the formula anchor are all scoped to a single range.
+            // Per-range on purpose: duplicateValue's dmap and top10/average's dArr are scoped to a single range.
             for (const range of cellrange) {
                 if (
                     conditionName === 'greaterThan' ||
@@ -438,13 +438,12 @@ export function evaluateConditionalFormat(
                     }
                 } else if (conditionName === 'formula' && options?.evaluateFormula) {
                     const { evaluateFormula } = options;
-                    // anchor = this range's top-left corner
-                    const str = range.row[0];
-                    const stc = range.column[0];
+                    // Excel's anchor: every range reads relative to the first range's top-left, even where the scan clamps it.
+                    const str = cellrange[0].row[0];
+                    const stc = cellrange[0].column[0];
 
                     const formulaSrc = String(conditionValue0);
                     const formulaTxt = formulaSrc.startsWith('=') ? formulaSrc : `=${formulaSrc}`;
-                    // The anchor stays the original top-left, even where the scan clamps the range.
                     forEachCellInRanges(data, [range], (r, c) => {
                         const raw = evaluateFormula(formulaTxt, str, stc, r, c);
                         const v = typeof raw === 'boolean' ? raw : !!Number(raw);
@@ -457,6 +456,32 @@ export function evaluateConditionalFormat(
         }
     }
     return computeMap;
+}
+
+// A formula rule reads relative to its first range's top-left, so moving that corner re-expresses the formula and
+// every cell keeps its meaning. The shift is how far a row/column delete moved the new first range.
+export function withCfRanges(
+    rule: ConditionalFormatRule,
+    cellrange: SingleRange[],
+    rowShift = 0,
+    columnShift = 0,
+): ConditionalFormatRule {
+    if (
+        rule.type !== 'default' ||
+        rule.conditionName !== 'formula' ||
+        rule.cellrange.length === 0 ||
+        cellrange.length === 0
+    ) {
+        return { ...rule, cellrange };
+    }
+    const rowOffset = cellrange[0].row[0] - rowShift - rule.cellrange[0].row[0];
+    const columnOffset = cellrange[0].column[0] - columnShift - rule.cellrange[0].column[0];
+    if (rowOffset === 0 && columnOffset === 0) return { ...rule, cellrange };
+    return {
+        ...rule,
+        cellrange,
+        conditionValue: [`=${functionCopy(String(rule.conditionValue[0]), rowOffset, columnOffset)}`],
+    };
 }
 
 // Which slice of the split cfSplitRange returns: the parts that stay put, the

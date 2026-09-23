@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import type { Sheet, SheetConfig } from '@workspace/lib/sheets';
+import { createArrayResolver } from '../../engine/cell-resolver';
+import { createCfFormulaEvaluator, evaluateConditionalFormat } from '../../engine/conditional-format';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
+import { FormulaEngine } from '../../engine/formula-engine';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from '../../engine/rowcol';
-import type { EditorSheetConfigExtras } from '../../engine/types';
+import type { EditorSheetConfigExtras, SingleRange } from '../../engine/types';
 
 // Sheet shape with the editor-runtime extras the engine passes through but lib's
 // canonical Sheet/SheetConfig don't type (rowReadOnly/colReadOnly guards, the
@@ -395,6 +398,76 @@ describe('applySheetsInsertRowCol/Delete — conditional-format formula rules', 
             id: 's1',
         });
         expect(result[0].conditionalFormatRules![0]).toMatchObject({ conditionValue: [2] });
+    });
+});
+
+describe('applySheetsInsertRowCol/Delete — a formula rule keeps its colors', () => {
+    // Column A holds 1..8; the rule colors a cell greater than 1, read relative to the first range.
+    const sheetWithRule = (cellrange: SingleRange[], formula: string) =>
+        makeSheet(
+            's1',
+            'Sheet1',
+            Array.from({ length: 8 }, (_, r) => [cell(r + 1)]),
+            {
+                conditionalFormatRules: [
+                    {
+                        type: 'default',
+                        conditionName: 'formula',
+                        cellrange,
+                        conditionValue: [formula],
+                        format: { cellColor: '#ff0000' },
+                    },
+                ],
+            },
+        );
+    const styled = (sheet: Sheet) => {
+        const data = sheet.data ?? [];
+        const evaluateFormula = createCfFormulaEvaluator(
+            new FormulaEngine(),
+            createArrayResolver([{ id: 's1', name: sheet.name, data, calculationChain: [], dynamicArrayCompute: [] }]),
+            's1',
+        );
+        return Object.keys(evaluateConditionalFormat(sheet.conditionalFormatRules, data, { evaluateFormula })).sort();
+    };
+
+    test('rows inserted between two ranges move the second range and its colors', () => {
+        const sheet = sheetWithRule(
+            [
+                { row: [0, 1], column: [0, 0] },
+                { row: [4, 5], column: [0, 0] },
+            ],
+            '=A1>1',
+        );
+        expect(styled(sheet)).toEqual(['1_0', '4_0', '5_0']);
+
+        const [after] = applySheetsInsertRowCol([sheet], {
+            type: 'row',
+            index: 3,
+            count: 2,
+            direction: 'lefttop',
+            id: 's1',
+        });
+        expect(styled(after)).toEqual(['1_0', '6_0', '7_0']);
+    });
+
+    test('deleting the first range keeps the second range colored', () => {
+        const sheet = sheetWithRule(
+            [
+                { row: [0, 1], column: [0, 0] },
+                { row: [4, 5], column: [0, 0] },
+            ],
+            '=A1>1',
+        );
+        const [after] = applySheetsDeleteRowCol([sheet], { type: 'row', start: 0, end: 1, id: 's1' });
+        expect(after.conditionalFormatRules?.[0].cellrange).toEqual([{ row: [2, 3], column: [0, 0] }]);
+        expect(styled(after)).toEqual(['2_0', '3_0']);
+    });
+
+    test('deleting the anchor row keeps the rest of the range colored', () => {
+        const sheet = sheetWithRule([{ row: [1, 3], column: [0, 0] }], '=A2>1');
+        const [after] = applySheetsDeleteRowCol([sheet], { type: 'row', start: 1, end: 1, id: 's1' });
+        expect(after.conditionalFormatRules?.[0]).toMatchObject({ conditionValue: ['=A2>1'] });
+        expect(styled(after)).toEqual(['1_0', '2_0']);
     });
 });
 
