@@ -13,6 +13,7 @@ import {
     isCalendarPart,
     isEmailDraft,
     type MaildirMailbox,
+    mailAttachmentName,
     type NewDraft,
     type SentMailResult,
 } from '@workspace/lib/types/mail';
@@ -93,7 +94,7 @@ export class Mail {
             // Seeded, not delivered: the first sync indexes it without announcing new mail.
             if (welcome) await this.store.append('', welcome, { skipReconcile: true, arrival: false });
         }
-        this.store.watch();
+        await this.store.watch();
         this.store.cleanupStaleDraftTemps().catch((err) => console.error('mail: stale draft temp cleanup failed', err));
     }
 
@@ -402,10 +403,9 @@ export class Mail {
             const attachments = await this.store.getAttachments(existingId);
             const keepSet = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
             for (const a of attachments) {
-                if (!a.filename) continue;
                 if (keepSet && !keepSet.has(a.index)) continue;
                 existingAttachments.push({
-                    filename: a.filename,
+                    filename: mailAttachmentName(a, a.index),
                     content: Buffer.from(a.content),
                     contentType: a.contentType,
                 });
@@ -463,9 +463,12 @@ export class Mail {
             bcc: email.bcc,
             text: email.text || '',
             html: cleanHtml,
-            attachments: saved.attachments.flatMap((a) =>
-                a.filename ? [{ filename: a.filename, contentType: a.contentType, size: a.size, index: a.index }] : [],
-            ),
+            attachments: saved.attachments.map((a) => ({
+                filename: mailAttachmentName(a, a.index),
+                contentType: a.contentType,
+                size: a.size,
+                index: a.index,
+            })),
             driveReferences,
             inReplyTo: email.inReplyTo,
             references: email.references,

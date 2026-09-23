@@ -7,7 +7,7 @@ import { sendToHome } from '../home/home-relay';
 import { addRegistryEntry } from '../share';
 import type { User } from '../user';
 import { getUserByEmail } from '../user/';
-import { composeCancelEmail, composeInviteEmail, composeUpdateEmail } from './imip';
+import { composeCancelEmail, composeInviteEmail } from './imip';
 import { buildCalendarEvent } from './sse-events';
 
 // The revision its receiver orders the removal against; undefined for a message about the whole series.
@@ -62,7 +62,7 @@ async function sendSeriesExceptions(
     }
 }
 
-// `series` set means `event` is one occurrence: the messages name the series id plus the occurrence key, the shape an iMIP REQUEST with a RECURRENCE-ID has (docs/CALENDAR.md § Invitations). `exceptions` are the series' own, delivered to a newly added guest so a moved occurrence does not render at its original slot and a deleted one does not render at all.
+// `series` set means `event` is one occurrence: the messages name the series id plus the occurrence key, the shape an iMIP REQUEST with a RECURRENCE-ID has (docs/CALENDAR.md § Invitations). `exceptions` are the series' own, sent to every added guest and in every external update, so a moved occurrence does not render at its original slot and a deleted one does not render at all.
 export async function propagateInvitation(
     organizerHome: Home,
     event: CalendarEvent,
@@ -91,7 +91,7 @@ export async function propagateInvitation(
                 await addRegistryEntry(organizerHome.user.id, attendee.email);
                 // Send iMIP invite email to external attendee
                 const organizer = { userId: user.id, email: user.email, name: user.name };
-                const mail = composeInviteEmail(event, organizer, [attendee], series);
+                const mail = composeInviteEmail(event, organizer, [attendee], series, exceptions);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP invite:', err));
                 continue;
             }
@@ -162,7 +162,7 @@ export async function propagateInvitation(
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
                 const organizer = { userId: user.id, email: user.email, name: user.name };
-                const mail = composeUpdateEmail(event, organizer, [attendee], series);
+                const mail = composeInviteEmail(event, organizer, [attendee], series, exceptions, true);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP update:', err));
                 continue;
             }

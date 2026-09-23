@@ -520,16 +520,11 @@ export default class SharedDrive {
 
     public async getWatches(_user: User): Promise<DrivePath[]> {
         // Drop items the caller can no longer read (revoked shares keep their watch rows)
-        const paths = await this.sharedDrive.getWatches(this.user);
+        const breadcrumbs = await this.sharedDrive.getWatchedBreadcrumbs(this.user);
         const memberships = await this.getUserMemberships();
-        const results: DrivePath[] = [];
-        for (const path of paths) {
-            const ancestors = await this.sharedDrive.breadCrumb(path.mountId, path.id);
-            if (canReadFromAncestors(ancestors, this.user, memberships)) {
-                results.push(path);
-            }
-        }
-        return results;
+        return breadcrumbs
+            .filter((ancestors) => canReadFromAncestors(ancestors, this.user, memberships))
+            .flatMap((ancestors) => ancestors.slice(-1));
     }
 
     // Team members always go through SharedDrive (no team user logs in),

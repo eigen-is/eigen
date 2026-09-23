@@ -287,6 +287,29 @@ describe('Calendar', () => {
             expect(event2.etag).not.toBe(etag1);
         });
 
+        test('updating with the current etag succeeds, a stale one is rejected with 412', async () => {
+            const url = `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${aliceEventId}`;
+            const put = (body: object): Promise<Response> =>
+                authedRequest(ctx.alice.user.sessionToken, url, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+            const loaded = await assertJson<CalendarEvent>(await authedRequest(ctx.alice.user.sessionToken, url));
+
+            const first = await assertJson<CalendarEvent>(await put({ title: 'Fresh', etag: loaded.etag }));
+            expect(first.title).toBe('Fresh');
+
+            const second = await put({ title: 'Loser', etag: loaded.etag });
+            expect(second.status).toBe(412);
+            const stored = await assertJson<CalendarEvent>(await authedRequest(ctx.alice.user.sessionToken, url));
+            expect(stored.title).toBe('Fresh');
+            expect(stored.etag).toBe(first.etag);
+
+            const unconditional = await assertJson<CalendarEvent>(await put({ title: 'No precondition' }));
+            expect(unconditional.title).toBe('No precondition');
+        });
+
         test('delete event', async () => {
             const createRes = await authedRequest(
                 ctx.alice.user.sessionToken,

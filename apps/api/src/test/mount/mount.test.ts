@@ -318,6 +318,19 @@ describe('Mount (local-key storage)', () => {
         expect(crumbs[2].name).toBe('BreadcrumbChild');
     });
 
+    test('breadcrumbs for many ids match one getBreadcrumb per id, in input order', async () => {
+        const folderId = await mount.createFolder(rootId, 'CrumbsParent');
+        const siblingA = await mount.createFolder(folderId, 'CrumbsA');
+        const data = Buffer.from('b');
+        const siblingB = await mount.createFile(folderId, 'crumbs-b.txt', 'text/plain', data.length, data);
+        const ids = [siblingB, rootId, 'missing-id', siblingA, folderId];
+
+        const single = await Promise.all(ids.map((id) => mount.getBreadcrumb(id)));
+        expect(await mount.getBreadcrumbs(ids)).toEqual(single);
+        expect(single[2]).toEqual([]);
+        expect(await mount.getBreadcrumbs([])).toEqual([]);
+    });
+
     test('writeFile updates size', async () => {
         const fileId = await mount.createFile(rootId, 'sized.txt', 'text/plain', 0, undefined);
         await mount.writeFile(fileId, Buffer.from('updated content'));

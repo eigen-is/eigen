@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { afterEach, beforeAll, beforeEach, describe, expect, type Mock, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
@@ -10,6 +10,7 @@ import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getHome } from '../../lib/home';
+import * as mailParse from '../../lib/mail/mail-parse';
 import { assertJson, authedRequest, findOrFail, getTestContext, putDraft, uploadDraftAttachment } from '../setup';
 
 const isWindows = process.platform === 'win32';
@@ -717,6 +718,94 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         test("another user's message is refused with 403", async () => {
             const res = await authedRequest(ctx.bob.user.sessionToken, icsPreviewUrl(0));
             expect(res.status).toBe(403);
+        });
+    });
+
+    describe('the parsed-message cache', () => {
+        let parses: Mock<typeof mailParse.parseEml>;
+        const parsesOf = (id: string): number => parses.mock.calls.filter(([messageId]) => messageId === id).length;
+        const partUrl = (id: string): string => `/mail/${ctx.alice.user.id}/message/${id}/attachment/0/embed/part.txt`;
+        const firstByte = (id: string): Promise<Response> =>
+            authedRequest(ctx.alice.user.sessionToken, partUrl(id), { headers: { range: 'bytes=0-0' } });
+        const deliver = async (subject: string, body: string): Promise<string> => {
+            const boundary = 'att-cache';
+            const eml = [
+                'From: sender@external.com',
+                `To: ${ctx.alice.user.email}`,
+                `Subject: ${subject}`,
+                'MIME-Version: 1.0',
+                `Content-Type: multipart/mixed; boundary="${boundary}"`,
+                '',
+                `--${boundary}`,
+                'Content-Type: text/plain; charset=utf-8',
+                'Content-Disposition: attachment; filename="part.txt"',
+                '',
+                body,
+                `--${boundary}--`,
+            ].join('\r\n');
+            const home = await getHome(ctx.alice.user.id);
+            return home.mail.mailboxDeliver(Buffer.from(eml));
+        };
+
+        beforeEach(() => {
+            parses = spyOn(mailParse, 'parseEml');
+        });
+        afterEach(() => {
+            parses.mockRestore();
+        });
+
+        test('two range requests on one part parse the message once', async () => {
+            const id = await deliver('Seeked video fixture', RANGED_BODY);
+            const before = parsesOf(id);
+
+            const first = await authedRequest(ctx.alice.user.sessionToken, partUrl(id), {
+                headers: { range: 'bytes=0-3' },
+            });
+            expect(await first.text()).toBe('0123');
+            const second = await authedRequest(ctx.alice.user.sessionToken, partUrl(id), {
+                headers: { range: 'bytes=6-9' },
+            });
+            expect(await second.text()).toBe('6789');
+
+            expect(parsesOf(id) - before).toBe(1);
+        });
+
+        test('a rewritten draft parses again and serves its new bytes', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const ownerId = ctx.alice.user.id;
+            const uploadA = await uploadDraftAttachment(token, ownerId, new File(['AAA'], 'a.txt'));
+            const draft = await putDraft(
+                token,
+                ownerId,
+                { subject: 'Cached draft', text: 'first', html: '<p>first</p>', isDraft: true, mailbox: 'Drafts' },
+                { tempAttachmentIds: [uploadA.tempId] },
+            );
+            expect(await (await authedRequest(token, partUrl(draft.id))).text()).toBe('AAA');
+            expect(await (await authedRequest(token, partUrl(draft.id))).text()).toBe('AAA');
+            const before = parsesOf(draft.id);
+
+            const uploadB = await uploadDraftAttachment(token, ownerId, new File(['BBBBBB'], 'b.txt'));
+            await putDraft(
+                token,
+                ownerId,
+                { ...draft, text: 'second', html: '<p>second</p>' },
+                { tempAttachmentIds: [uploadB.tempId], keepAttachmentIndexes: [] },
+            );
+
+            expect(await (await authedRequest(token, partUrl(draft.id))).text()).toBe('BBBBBB');
+            expect(parsesOf(draft.id) - before).toBe(1);
+        });
+
+        test('a ninth message evicts the oldest of the eight cached', async () => {
+            const oldest = await deliver('Cache eviction fixture 0', RANGED_BODY);
+            expect((await firstByte(oldest)).status).toBe(206);
+            for (let i = 1; i <= 8; i++) {
+                expect((await firstByte(await deliver(`Cache eviction fixture ${i}`, RANGED_BODY))).status).toBe(206);
+            }
+            const before = parsesOf(oldest);
+            expect((await firstByte(oldest)).status).toBe(206);
+
+            expect(parsesOf(oldest) - before).toBe(1);
         });
     });
 

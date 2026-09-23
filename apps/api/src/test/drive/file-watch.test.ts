@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
 import { CARD_TITLE_MAX_LENGTH, type FileEvent, type PathWatchStatus } from '@workspace/lib/types/file-history';
@@ -11,6 +11,7 @@ import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
+import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getHome } from '../../lib/home';
 import { getUserById } from '../../lib/user';
 import type { TestContext } from '../setup';
@@ -366,6 +367,55 @@ describe('File watch + fan-out', () => {
 
         const watches = await assertJson<DrivePath[]>(await authedRequest(bobToken, `/drive/${aliceOwnerId}/watches`));
         expect(watches.some((w) => w.id === folder.id)).toBe(false);
+    });
+
+    test('the watch list keeps exactly the watches some ancestor still grants', async () => {
+        const upload = (parentId: string, name: string): Promise<DrivePath> =>
+            driveUpload(aliceToken, aliceOwnerId, mountId, parentId, new File(['x'], name));
+        const shared = await createFolder('WatchMixShared');
+        await shareWith(shared.id, ctx.bob.user.email);
+        const inShared = await upload(shared.id, 'in-shared.txt');
+        const revoked = await createFolder('WatchMixRevoked');
+        await shareWith(revoked.id, ctx.bob.user.email);
+        const inRevoked = await upload(revoked.id, 'in-revoked.txt');
+        const unshared = await createFolder('WatchMixUnshared');
+        const ownGrant = await upload(unshared.id, 'own-grant.txt');
+        await shareWith(ownGrant.id, ctx.bob.user.email);
+        const watched = [shared, inShared, revoked, inRevoked, ownGrant];
+        for (const path of watched) await watch(bobToken, path.id);
+
+        await drivePut(aliceToken, aliceOwnerId, mountId, `path/${revoked.id}/acl`, { remove: [ctx.bob.user.email] });
+
+        const watches = await assertJson<DrivePath[]>(await authedRequest(bobToken, `/drive/${aliceOwnerId}/watches`));
+        const listed = new Set(watches.map((w) => w.id));
+        expect(watched.filter((p) => listed.has(p.id)).map((p) => p.id)).toEqual([shared.id, inShared.id, ownGrant.id]);
+    });
+
+    test('listing shared watches costs the same number of selects however many rows there are', async () => {
+        const home = await getHome(aliceOwnerId);
+        const bob = await getUserById(ctx.bob.user.id);
+        const drive = await getSharedDrive(aliceOwnerId, bob!);
+        const countSelects = async (): Promise<number> => {
+            await drive.getWatches(bob!); // warm the folder-size cache so only the listing itself is counted
+            const spies = home.drive.getMounts().map((mount) => spyOn(mount.db, 'select'));
+            try {
+                await drive.getWatches(bob!);
+                return spies.reduce((sum, spy) => sum + spy.mock.calls.length, 0);
+            } finally {
+                for (const spy of spies) spy.mockRestore();
+            }
+        };
+
+        const folder = await createFolder('WatchSelectCount');
+        await shareWith(folder.id, ctx.bob.user.email);
+        await watch(bobToken, folder.id);
+        const before = await countSelects();
+
+        for (const name of ['c1.txt', 'c2.txt', 'c3.txt']) {
+            const file = await driveUpload(aliceToken, aliceOwnerId, mountId, folder.id, new File(['x'], name));
+            await watch(bobToken, file.id);
+        }
+        expect(await countSelects()).toBe(before);
     });
 
     test('guests cannot watch', async () => {

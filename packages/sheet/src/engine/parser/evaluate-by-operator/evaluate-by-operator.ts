@@ -18,22 +18,6 @@ type OperatorCallable = (...args: FormulaArg[]) => FormulaOutput;
 
 const availableOperators: Record<string, OperatorCallable> = Object.create(null);
 
-// Arithmetic operators coerce operands via `toNumber(x) ?? 0`, which silently
-// swallows an upstream Error: `Error + 1` would yield `0 + 1 = 1` and mask the
-// failure. Propagate the Error unchanged so nested arithmetic stays honest.
-//
-// Excluded:
-//  - Comparison operators (=, <>, <, >, <=, >=): these silently coerce Error to
-//    NaN/falsy via JS, returning `false`. That coercion is what lets common
-//    Excel-template patterns like `OR(x="", VALUE(x)>limit)` work even when
-//    `VALUE(x)` errors on a numeric input — the comparison degrades to false,
-//    OR sees false, IF picks the safe branch. Propagating here would surface
-//    the inner #VALUE! and break those templates.
-//  - Function-name operator (formulaFunction → formulajs): IF, IFERROR, IFNA,
-//    IFS, AND, OR explicitly inspect Error operands, so propagating before the
-//    call would defeat their short-circuit semantics.
-const PROPAGATE_ERROR_OPS = new Set(['+', '-', '*', '/', '^', '&']);
-
 // Evaluate values by operator id. A thrown Error is converted to a returned
 // Error so the grammar can keep reducing — the outer expression may discard it
 // (e.g. an untaken IF branch). The top-level parse() unwraps the Error result
@@ -43,12 +27,6 @@ export default function evaluateByOperator(operator: string, params: FormulaArg[
 
     if (!availableOperators[upperOperator]) {
         throw Error(ERROR_NAME);
-    }
-
-    if (PROPAGATE_ERROR_OPS.has(upperOperator)) {
-        for (const p of params) {
-            if (p instanceof Error) return p;
-        }
     }
 
     try {
@@ -63,18 +41,27 @@ function registerOperation(symbol: string, func: OperatorCallable): void {
     availableOperators[symbol.toUpperCase()] = func;
 }
 
-registerOperation(add.SYMBOL, add);
-registerOperation(ampersand.SYMBOL, ampersand);
-registerOperation(divide.SYMBOL, divide);
-registerOperation(equal.SYMBOL, equal);
-registerOperation(power.SYMBOL, power);
-registerOperation(greaterThan.SYMBOL, greaterThan);
-registerOperation(greaterThanOrEqual.SYMBOL, greaterThanOrEqual);
-registerOperation(lessThan.SYMBOL, lessThan);
-registerOperation(lessThanOrEqual.SYMBOL, lessThanOrEqual);
-registerOperation(multiply.SYMBOL, multiply);
-registerOperation(notEqual.SYMBOL, notEqual);
-registerOperation(minus.SYMBOL, minus);
+// Arithmetic and comparison operators coerce their operands, which would silently
+// swallow an upstream Error: `Error + 1` would yield `0 + 1 = 1`, `Error > 0` FALSE.
+// Propagate the first Error unchanged, as Excel does, so nested expressions stay honest.
+// The formula functions below do not: IF, IFERROR, IFNA, IFS, AND, OR inspect Error operands.
+const symbolOperators: (OperatorCallable & { SYMBOL: string })[] = [
+    add,
+    ampersand,
+    divide,
+    equal,
+    power,
+    greaterThan,
+    greaterThanOrEqual,
+    lessThan,
+    lessThanOrEqual,
+    multiply,
+    notEqual,
+    minus,
+];
+for (const operator of symbolOperators) {
+    registerOperation(operator.SYMBOL, (...params) => params.find((p) => p instanceof Error) ?? operator(...params));
+}
 
 // The formula functions share one operator: each formulajs name gets the callable that
 // closes over it (`formulaFunction.SYMBOL` is SUPPORTED_FORMULAS).

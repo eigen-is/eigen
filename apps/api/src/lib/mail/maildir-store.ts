@@ -33,6 +33,11 @@ const STALE_MAILDIR_TEMP_MAX_AGE_MS = 36 * 60 * 60 * 1000;
 const BACKGROUND_RECONCILE_INTERVAL_MS = 60 * 1000;
 // Sibling of the Maildir tree (not inside it) so Dovecot IMAP doesn't see it as a folder.
 const DRAFT_ATTACHMENTS_DIR = 'draft-attachments';
+// Keyed by id and trusted only while the row's size and date match, the same inputs a part's ETag hashes.
+const PARSED_MESSAGE_CACHE_ENTRIES = 8;
+const PARSED_MESSAGE_CACHE_BYTES = 32 * 1024 * 1024;
+
+type ParsedMessage = { size: number; date: number; attachments: Attachment[] };
 
 // Staged attachments are charged to the mail quota, and both surfaces that report it walk them here.
 export function readDraftStagingSize(homeFs: LocalFilesystem): Promise<number> {
@@ -85,10 +90,12 @@ export class MaildirStore implements MailStore {
     private deliveries = new Map<string, boolean>();
     // Reconciliation (doReconcileMailbox) must not straddle a mutation's fs+db pair, or its delete phase drops just-moved rows.
     private storeLock = new Semaphore(1);
-    private watchers: FSWatcher[] = [];
+    // Keyed by watched directory, so a listing can tell which standard folder lost its watcher.
+    private watchers = new Map<string, FSWatcher>();
     // size() answers from memory: the quota gate calls it on every metered write, and a walk per call makes an N-card sync O(N²).
     private indexBytes = 0;
     private stagedBytes = 0;
+    private parsedMessages = new Map<string, ParsedMessage>();
 
     constructor(private home: Home) {
         this.basePath = PATHS.MAIL.MAILDIR;
@@ -112,29 +119,57 @@ export class MaildirStore implements MailStore {
     }
 
     // The standard six only: a watcher per IMAP folder spends the per-user inotify limit every home shares.
-    watch(): void {
-        for (const mailbox of STANDARD_MAILBOXES) {
-            const mailboxPath = this.mailboxDir(mailbox);
-            for (const subdir of [PATHS.MAIL.CUR, PATHS.MAIL.NEW]) {
-                try {
-                    const watcher = this.storage.watch(path.join(mailboxPath, subdir), () =>
-                        this.reconcileMailbox(mailbox).catch((err) =>
-                            console.error('maildir: mailbox sync failed', err),
-                        ),
-                    );
-                    this.watchers.push(watcher);
-                } catch {
-                    // Directory may not exist yet
-                }
+    async watch(): Promise<void> {
+        await Promise.all(STANDARD_MAILBOXES.map((mailbox) => this.watchMailbox(mailbox)));
+    }
+
+    async unwatch(): Promise<void> {
+        for (const watcher of this.watchers.values()) watcher.close();
+        this.watchers.clear();
+        // A sync still in flight would reach a closed db once the domain flushes drafts.
+        await Promise.allSettled([...this.reconcilingMailboxes.values()]);
+    }
+
+    private async watchMailbox(mailbox: string): Promise<void> {
+        for (const subdir of [PATHS.MAIL.CUR, PATHS.MAIL.NEW]) {
+            const dir = path.join(this.mailboxDir(mailbox), subdir);
+            if (this.watchers.has(dir)) continue;
+            // Read before the watch attaches, so a dir replaced in between costs a spare re-attach, never a dead watcher.
+            const inode = await this.dirInode(dir);
+            // A listing still in flight during teardown would re-attach what unwatch() just closed.
+            if (inode === null || this.home.destructing || this.watchers.has(dir)) continue;
+            try {
+                const watcher = this.storage.watch(dir, () => {
+                    this.reconcileMailbox(mailbox).catch((err) => console.error('maildir: mailbox sync failed', err));
+                    // inotify leaves a removed dir's handle dead without an error, and a dir recreated since holds a new inode.
+                    this.dirInode(dir)
+                        .then(async (current) => {
+                            if (current === inode || this.watchers.get(dir) !== watcher) return;
+                            this.dropWatcher(dir, watcher);
+                            if (current === null) return;
+                            await this.watchMailbox(mailbox);
+                            await this.reconcileMailbox(mailbox);
+                        })
+                        .catch((err) => console.error('maildir: watcher check failed', err));
+                });
+                watcher.on('error', () => this.dropWatcher(dir, watcher));
+                this.watchers.set(dir, watcher);
+            } catch {
+                // Removed between the stat and the watch
             }
         }
     }
 
-    async unwatch(): Promise<void> {
-        for (const watcher of this.watchers) watcher.close();
-        this.watchers = [];
-        // A sync still in flight would reach a closed db once the domain flushes drafts.
-        await Promise.allSettled([...this.reconcilingMailboxes.values()]);
+    private dropWatcher(dir: string, watcher: FSWatcher): void {
+        watcher.close();
+        if (this.watchers.get(dir) === watcher) this.watchers.delete(dir);
+    }
+
+    private dirInode(dir: string): Promise<number | null> {
+        return this.storage.stat(dir).then(
+            (stats) => stats.ino,
+            () => null,
+        );
     }
 
     async destruct(): Promise<void> {
@@ -163,8 +198,11 @@ export class MaildirStore implements MailStore {
         const mailboxes: MaildirMailbox[] = [];
         const paths = await this.listMailboxPaths();
         for (const name of paths) {
-            // Counts come from the index; a folder without a watcher reconciles here, in the background.
-            if (!isStandardMailbox(name) && this.reconcileDue(name)) {
+            // Counts come from the index. A standard folder recreated since load gets its watcher back here;
+            // any other folder has none and reconciles here, in the background.
+            if (isStandardMailbox(name)) {
+                await this.watchMailbox(name);
+            } else if (this.reconcileDue(name)) {
                 this.reconcileMailbox(name).catch((err) =>
                     console.error('maildir: background mailbox sync failed', err),
                 );
@@ -233,7 +271,25 @@ export class MaildirStore implements MailStore {
     async getAttachments(messageId: string): Promise<Attachment[]> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
+        const date = email.date.getTime();
+        const cached = this.parsedMessages.get(messageId);
+        this.parsedMessages.delete(messageId);
+        if (cached?.size === email.size && cached.date === date) {
+            this.parsedMessages.set(messageId, cached);
+            return cached.attachments;
+        }
+
         const parsed = await parseEml(messageId, email.mailbox, this.getMessageFile(email.mailbox, email.filename));
+        if (email.size > PARSED_MESSAGE_CACHE_BYTES) return parsed.attachments;
+        this.parsedMessages.set(messageId, { size: email.size, date, attachments: parsed.attachments });
+        let bytes = 0;
+        for (const entry of this.parsedMessages.values()) bytes += entry.size;
+        // Oldest first: a Map iterates in insertion order, and a hit is re-inserted at the end.
+        for (const [id, entry] of this.parsedMessages) {
+            if (this.parsedMessages.size <= PARSED_MESSAGE_CACHE_ENTRIES && bytes <= PARSED_MESSAGE_CACHE_BYTES) break;
+            this.parsedMessages.delete(id);
+            bytes -= entry.size;
+        }
         return parsed.attachments;
     }
 
@@ -277,6 +333,8 @@ export class MaildirStore implements MailStore {
             const replaced = this.db.getEmail(messageId)?.size ?? 0;
             this.db.addEmail(parsed);
             this.indexBytes += parsed.size - replaced;
+            // The row's date has second precision, so a same-size rewrite within the second keeps its stamp.
+            this.parsedMessages.delete(messageId);
             return parsed;
         });
     }

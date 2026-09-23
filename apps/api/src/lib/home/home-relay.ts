@@ -253,9 +253,10 @@ export async function updateEventAt(
     eventId: string,
     input: EventPatch,
     user: User,
+    expectedEtag?: string,
 ): Promise<CalendarEvent> {
     const home = await getHome(ownerUserId);
-    return home.calendar.updateEvent(calendarId, eventId, input, user);
+    return home.calendar.updateEvent(calendarId, eventId, input, user, expectedEtag);
 }
 
 export async function deleteEventAt(

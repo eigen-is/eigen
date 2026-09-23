@@ -1142,23 +1142,29 @@ export class Mount {
     }
 
     async getBreadcrumb(pathId: string): Promise<DrivePath[]> {
+        const [crumbs] = await this.getBreadcrumbs([pathId]);
+        return crumbs;
+    }
+
+    // One chain per id, in input order, each root first; an id with no row gets [].
+    async getBreadcrumbs(pathIds: string[]): Promise<DrivePath[][]> {
+        if (pathIds.length === 0) return [];
         const rows = await this.db
             .select()
             .from(paths)
-            .where(sql`${paths.id} IN (${ancestorIds(pathId)})`)
+            .where(sql`${paths.id} IN (${ancestorIds(...pathIds)})`)
             .all();
 
-        if (rows.length === 0) return [];
-
-        const byId = new Map(rows.map((r) => [r.id, r]));
-        const ordered: typeof rows = [];
-        let current = byId.get(pathId);
-        while (current) {
-            ordered.unshift(current);
-            current = current.parentId ? byId.get(current.parentId) : undefined;
-        }
-
-        return ordered.map((r) => this.toDrivePath(r));
+        const byId = new Map(rows.map((r) => [r.id, this.toDrivePath(r)]));
+        return pathIds.map((pathId) => {
+            const ordered: DrivePath[] = [];
+            let current = byId.get(pathId);
+            while (current) {
+                ordered.unshift(current);
+                current = current.parentId ? byId.get(current.parentId) : undefined;
+            }
+            return ordered;
+        });
     }
 
     // internal — used by mount/*.ts
