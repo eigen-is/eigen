@@ -213,6 +213,15 @@ describe('subnet choice', () => {
         expect(chooseSubnet(NETWORKS, 'fresh')).toBe('172.30.0.0/24');
         expect(chooseSubnet([], 'fresh')).toBe('172.20.0.0/24');
     });
+
+    test('a host with several stacks still gets a free subnet', () => {
+        const taken = ['172.20.0.0/24', '172.30.0.0/24', '172.31.0.0/24', '10.20.0.0/24'].map((subnet, index) => ({
+            Name: `stack${index}_eigen`,
+            Labels: null,
+            IPAM: { Config: [{ Subnet: subnet }] },
+        }));
+        expect(chooseSubnet(taken, 'fresh')).toBe('10.21.0.0/24');
+    });
 });
 
 describe('configure command', () => {

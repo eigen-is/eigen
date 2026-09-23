@@ -27,7 +27,13 @@ export type DockerNetwork = {
 };
 
 const DEFAULT_SUBNET = '172.20.0.0/24';
-const SUBNET_CANDIDATES = [DEFAULT_SUBNET, '172.30.0.0/24', '172.31.0.0/24', '10.20.0.0/24'];
+// Enough for a host that runs a few Eigen stacks side by side.
+const SUBNET_CANDIDATES = [
+    DEFAULT_SUBNET,
+    '172.30.0.0/24',
+    '172.31.0.0/24',
+    ...[20, 21, 22, 23].map((n) => `10.${n}.0.0/24`),
+];
 const RELAY_PORT = '587';
 const PROXY_SNIPPETS = join(ROOT, 'docker/proxy');
 // The launcher resolves these on the host, where the Docker socket is.
