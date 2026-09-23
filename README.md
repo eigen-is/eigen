@@ -103,12 +103,29 @@ Eigen doesn't lock you into its web interface. Standard protocols let you use yo
 
 ## Getting started
 
-### Prerequisites
+### Install on a server
 
-- [Bun](https://bun.sh) (runtime for both server and client). The pinned version is in `.bun-version`; install it with `curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat .bun-version)"`
-- [Git](https://git-scm.com)
+Eigen runs in Docker: **Caddy** (reverse proxy with automatic HTTPS), **Eigen API** (Bun), **Postfix** (email), **Dovecot** (IMAP), and **Unbound** (DNS resolver for Postfix). The server needs Docker with Compose 2.20 or newer on x86_64, and no Bun. Get a release and set it up:
 
-### Quick start
+```bash
+mkdir -p /opt/eigen && cd /opt/eigen
+docker run --rm -v "$PWD:/out" ghcr.io/eigen-is/eigen/api:<version> bootstrap
+./eigen setup
+```
+
+Or from source, which builds the images on the server:
+
+```bash
+git clone https://github.com/eigen-is/eigen.git /opt/eigen
+cd /opt/eigen
+./eigen setup
+```
+
+`./eigen setup` asks for your web address, mail domain, how HTTPS reaches Eigen and whether to host email, starts Eigen, and prints a one-time link that finishes the setup in your browser. The same command updates, backs up and restores: `./eigen help`. See the [Setup Guide](docker/SETUP-GUIDE.md) for step-by-step instructions, or the [Local Testing Guide](docker/LOCAL-TESTING.md) to run the full stack on your machine.
+
+### Development
+
+Needs [Bun](https://bun.sh), the version in `.bun-version` (install it with `curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat .bun-version)"`), and [Git](https://git-scm.com).
 
 ```bash
 git clone https://github.com/eigen-is/eigen.git
@@ -118,21 +135,7 @@ bun install
 bun run serve
 ```
 
-Open `http://localhost:3009/admin` to run the first-time setup wizard. It creates your admin account and configures
-storage.
-
-### Docker deployment
-
-For production, Eigen runs as five Docker containers: **Caddy** (reverse proxy with automatic HTTPS), **Eigen API** (Bun), **Postfix** (email), **Dovecot** (IMAP), and **Unbound** (DNS resolver for Postfix). See the [VPS Setup Guide](docker/SETUP-GUIDE.md) for step-by-step instructions, or the [Local Testing Guide](docker/LOCAL-TESTING.md) to try the full stack on your machine.
-
-```bash
-git clone https://github.com/eigen-is/eigen.git /opt/eigen
-cd /opt/eigen
-bun install
-bun run setup
-```
-
-### Development
+The API logs a one-time link, `Finish the setup at http://localhost:3009/admin/#setup=…`. Open it to run the first-time setup wizard, which creates your admin account and configures storage.
 
 ```bash
 bun run serve          # All apps + API

@@ -15,14 +15,15 @@ Everything runs in Docker — isolated, reproducible, easy to update.
 
 ## Prerequisites
 
-- A **Linux VPS** (Debian 12 or Ubuntu 22.04+, 2 GB+ RAM)
+- A **Linux VPS** (Debian 12 or Ubuntu 22.04+, 2 GB+ RAM) on **x86_64**: Eigen's images are built for x86_64 only
+- **Docker** with the **Docker Compose plugin 2.20 or newer**. No Bun or Node on the server.
 - A **domain** you control (e.g., `eigen.example.com`)
 - **SSH access** to your server
 - An **SMTP relay account** for outbound email (e.g. [Brevo](https://brevo.com)'s free tier — 300 emails/day)
 
 ### Why an SMTP relay?
 
-Most VPS providers (Hetzner, DigitalOcean) block outbound port 25 to prevent spam. A relay sends through trusted servers so your emails reach inboxes. You can skip this initially and add it later.
+Most VPS providers (Hetzner, DigitalOcean) block outbound port 25 to prevent spam. A relay sends through trusted servers so your emails reach inboxes. You can skip this initially and add it later by running `./eigen setup` again.
 
 ---
 
@@ -30,22 +31,14 @@ Most VPS providers (Hetzner, DigitalOcean) block outbound port 25 to prevent spa
 
 This path assumes a single domain, all-in-one Docker deploy. If you already run a webserver, your own mail server, or want addresses on a different domain than the web URL, see [Alternative deployments](#alternative-deployments) below.
 
-### 1. Install Docker and Bun
+### 1. Install Docker
 
 ```bash
 curl -fsSL https://get.docker.com | sh
-curl -fsSL https://bun.sh/install | bash
-source ~/.bashrc
-ln -sf ~/.bun/bin/bun  /usr/local/bin/bun
-ln -sf ~/.bun/bin/bunx /usr/local/bin/bunx
-```
-
-Verify:
-
-```bash
 docker compose version   # need 2.20+
-bun --version
 ```
+
+`./eigen` checks both before it does anything. On a server that is not x86_64 it stops; `EIGEN_ALLOW_ARCH=1 ./eigen setup` goes on anyway, unsupported.
 
 ### 2. Point your domain at the server
 
@@ -61,46 +54,44 @@ Wait for propagation (5–30 minutes), then verify:
 dig eigen.example.com A
 ```
 
-Mail-related DNS records (MX, SPF, DKIM, DMARC, SRV) come in step 6, after the mail server has booted and generated its DKIM key.
+`./eigen setup` lists every record your answers need. The mail-related ones (MX, SPF, DKIM, DMARC, SRV) come in step 6, after the mail server has booted and generated its DKIM key.
 
-### 3. Clone and configure
+### 3. Get Eigen
+
+Eigen lives in one folder, `/opt/eigen` in this guide. Get a release (recommended):
+
+```bash
+mkdir -p /opt/eigen && cd /opt/eigen
+docker run --rm -v "$PWD:/out" ghcr.io/eigen-is/eigen/api:<version> bootstrap
+```
+
+`<version>` is a release, like `0.3.0` (see the [releases](https://github.com/eigen-is/eigen/releases)). This writes the `eigen` command, the Compose files, `.env.example`, the fail2ban files and a starter `.env.production` that names the release.
+
+Or run from source, which builds the images on the server:
 
 ```bash
 git clone https://github.com/eigen-is/eigen.git /opt/eigen
 cd /opt/eigen
-bun install
-bun run setup
 ```
 
-The setup script asks four questions and writes `.env.production`. If you have an SMTP relay, add the credentials:
-
-```
-SMTP_RELAY_HOST=smtp-relay.brevo.com
-SMTP_RELAY_USER=your-api-key@brevo.com
-SMTP_RELAY_PASSWORD=your-smtp-key
-```
-
-If you don't, leave them empty for now.
-
-> **CI / scripted installs:** `./scripts/generate-env.sh eigen.example.com > .env.production` skips the prompts and uses defaults.
-
-### 4. Build the frontend
+### 4. Run setup
 
 ```bash
-set -a && source .env.production && set +a
-bun run --sequential --filter './apps/*' build
+./eigen setup
 ```
 
-`--sequential` builds one app at a time so 2–4 GB servers don't run out of memory.
+It asks, in this order, and suggests an answer for each:
 
-### 5. Start Eigen
+1. **Where will Eigen be hosted?** The web address, like `eigen.example.com`.
+2. **Which mail domain will you use?** Everyone's address and login is on it, like `admin@example.com`. It defaults to the web address.
+3. **How do people reach Eigen over HTTPS?** Eigen handles it on ports 80 and 443, or your own web server forwards to it ([Behind your existing webserver](#behind-your-existing-webserver)). With Eigen's own, it asks which email address Let's Encrypt should use; with yours, where Eigen should listen for it.
+4. **Host email on this server?** Yes: Eigen hosts the mailboxes, on ports 25, 465, 587 and 993. No: see [Using your existing mail server](#using-your-existing-mail-server).
+5. **Which mail relay should Eigen send through?** Optional with hosted mail, like `smtp-relay.brevo.com:587`, then its user name and password.
+6. **Which address should Eigen's own mail come from?** The sender of codes, invitations and notifications, `noreply@<mail domain>` by default.
 
-```bash
-mkdir -p data backups && chown -R 1000:1000 data backups
-docker compose --env-file .env.production up -d
-```
+It writes the answers to `.env.production` (only its owner can read it), lists the DNS records to add, builds or downloads Eigen, and starts it. A first build from source takes a while. Run `./eigen setup` again at any time to change an answer: it keeps the others and every key it does not know. `./eigen setup --help` lists the flags for a run without questions.
 
-Both folders are bind mounts and the API runs as uid 1000, so create them first: a mount source Docker has to create comes out owned by root, and the API can then write neither its data nor its backups.
+Run `./eigen` as the owner of the folder or as root, with access to Docker. To call it from anywhere, link it: `ln -s /opt/eigen/eigen /usr/local/bin/eigen`.
 
 Five containers start:
 
@@ -110,23 +101,15 @@ Five containers start:
 - **postfix** — incoming mail + outbound via your relay
 - **dovecot** — IMAP
 
-Check status:
+### 5. Finish in your browser
 
-```bash
-docker compose --env-file .env.production ps
-```
+Setup ends with a one-time link, `https://eigen.example.com/admin/#setup=…`. Open it. It asks for the name of your organization, where to keep files, and your admin account, then sends you to the sign-in page. The link works once; lost it? Run `./eigen setup` again for a fresh one.
 
-All containers should show `Up` and `healthy`.
-
-Open `https://eigen.example.com/admin` in your browser. The setup wizard creates your organization and admin account, then redirects you to the login page.
+Check on Eigen at any time with `./eigen status`.
 
 ### 6. Add the mail DNS records
 
-After Postfix starts for the first time, it generates a DKIM key. Print it:
-
-```bash
-docker compose --env-file .env.production logs postfix | grep -A1 "DKIM"
-```
+After Postfix starts for the first time, it generates a DKIM key. It is in `data/dkim/eigen.txt`, and in the postfix log of that first start (`./eigen logs postfix`, Ctrl-C to stop).
 
 Add these DNS records:
 
@@ -188,22 +171,28 @@ You're done.
 
 ## Operations
 
-> **Tip:** every `docker compose` command needs `--env-file .env.production`. To save typing:
-> ```bash
-> alias dc='docker compose --env-file .env.production'
-> ```
-> Examples below use the full form for clarity.
+Everything runs through `./eigen` in the install folder. `./eigen help` lists the commands, `./eigen <command> --help` tells more about one.
+
+```bash
+./eigen status                   # version, pending update, services, disk, last snapshot, certificate, mail queue
+./eigen logs [service]           # follow the logs of every service, or of one
+./eigen restart                  # start Eigen, and any part of it that stopped
+./eigen reset-password <email>   # set a new password for an account
+```
+
+`reset-password` asks for the password (or `--generate` makes one up and prints it once), signs the account out everywhere, and stops its app passwords for mail, calendar and file apps. It needs Eigen running. An admin can do the same for anyone but the owner from the admin Users page.
 
 ### Updating
 
 ```bash
-cd /opt/eigen
 ./eigen update
 ```
 
-Pulls the newest code and builds it in Docker while Eigen runs, then stops Eigen, saves a snapshot in `snapshots/` and starts the new version. `./eigen update --check` only tells whether there is an update. Active SSE/WebSocket connections briefly reconnect.
+A release install gets the newest release, or the one you name (`./eigen update 0.3.1`). It refuses a release whose notes list breaking changes until you read them and run `./eigen update --accept-breaking`. A source install pulls the newest commit of its branch and builds it; it refuses while local changes or commits of your own are in the way.
 
-`./eigen rollback` goes back to the commit before the last update, with the data as it was then: it checks out that commit, builds it, puts back the snapshot the update saved and starts Eigen. The current data is kept aside. It refuses while the checkout has local changes.
+The download or build happens while Eigen runs. Then Eigen stops, saves a snapshot of the data and `.env.production` in `snapshots/`, switches to the new version and starts again. Eigen is down for the length of that snapshot, which grows with your data; the update checks first that the snapshot fits on the disk. It keeps the snapshots of the last two updates. Active SSE/WebSocket connections briefly reconnect. `./eigen update --check` only tells whether there is an update, and what it brings.
+
+`./eigen rollback` goes back to the version before the last update, with the data as it was then: it puts back the snapshot the update saved, with the old images (a source install checks out the old commit and builds it), and starts Eigen. The current data is kept aside. It goes back one update only, and a source install refuses while the checkout has local changes.
 
 ### Backups
 
@@ -211,23 +200,38 @@ Pulls the newest code and builds it in Docker while Eigen runs, then stops Eigen
 ./eigen backup
 ```
 
-Saves all data (mail, files, contacts, calendars, settings, the server databases) and `.env.production` as one snapshot, `./backups/eigen-<UTC time>.tar.gz`. It stops every service, archives the quiet `data/` with its owners and modes, and starts Eigen again: a short downtime for a consistent snapshot. Only the server user (uid 1000) and root can read the snapshot. Schedule it daily:
+Saves all data (mail, files, contacts, calendars, settings, the server databases) and `.env.production` as one snapshot, `snapshots/eigen-<UTC time>.tar.gz`. It stops every service, archives the quiet `data/` with its owners and modes, and starts Eigen again: a short downtime for a consistent snapshot. Only the owner of the install folder can read the snapshot. Two things are not in it: `caddy-data/`, from which Caddy gets its certificates again, and the Postfix queue of mail still waiting to go out. Copy snapshots off the server, and schedule the backup daily:
 
 ```bash
 crontab -e
 # 0 3 * * * /opt/eigen/eigen backup
 ```
 
-Put a snapshot back with `./eigen restore`. It asks first, then stops Eigen, moves the current `data/` and `.env.production` aside to `data.pre-restore-<UTC time>` and `.env.production.pre-restore-<UTC time>` (never deleted), unpacks the snapshot and starts Eigen again. It refuses a snapshot of a newer Eigen version: update first, then restore.
+Put a snapshot back with `./eigen restore`. It unpacks and checks the snapshot while Eigen runs, asks, then stops Eigen, moves the current `data/` and `.env.production` aside to `data.pre-restore-<UTC time>` and `.env.production.pre-restore-<UTC time>` (never deleted), puts the snapshot in their place and starts Eigen again. It refuses a snapshot of a newer Eigen version: update first, then restore. `data/` must be a plain folder inside the install folder, not a link or a mount of another disk.
 
 ```bash
 ./eigen restore eigen-<UTC time>.tar.gz
 ./eigen restore eigen-<UTC time>.tar.gz --yes   # without the question, for scripts
 ```
 
-**Per-home backups** are the other half, and they need no downtime: an admin backs up, verifies, downloads and restores one user or one team from the Backup section of the admin Users and Teams detail panes. Those archives land in the same `./backups/` folder (`EIGEN_BACKUPS_DIR=/app/backups` inside the container, bind-mounted from the host), so keep an eye on its size. An archive holds every file, every mail and the mount credentials, so treat one like `.env.production`. Full operator guide: [docs/BACKUP.md](../docs/BACKUP.md).
+**Per-home backups** are the other half, and they need no downtime: an admin backs up, verifies, downloads and restores one user or one team from the Backup section of the admin Users and Teams detail panes. Those archives land in `./backups/` (`EIGEN_BACKUPS_DIR=/app/backups` inside the container, bind-mounted from the host), so keep an eye on its size. An archive holds every file, every mail and the mount credentials, so treat one like `.env.production`. Full operator guide: [docs/BACKUP.md](../docs/BACKUP.md).
 
 `./eigen backup` is the whole-server backup: the per-home archives do not cover `users3.db`, `eigen.db`, `waitlist.db`, the server config or `.env.production`.
+
+### Settings setup does not ask for
+
+`.env.example` lists them under ADVANCED: the Docker subnet, the Compose project name, the mail queue alert, demo mode. Add a key to `.env.production`, then run `./eigen setup` again.
+
+Extra Compose settings go in `docker-compose.override.yml` in the install folder, the one place for them: `./eigen` adds it to every Compose command, and an update leaves it alone. An override that uses Compose's `!override` tag needs Compose 2.24.4 or newer. For example, your own Caddyfile:
+
+```yaml
+services:
+  caddy:
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+```
+
+Or the API on a host port for debugging (`curl http://127.0.0.1:8000/health`): `cp docker-compose.host-api.yml docker-compose.override.yml`, and `EIGEN_API_BIND` in `.env.production` to move it off 8000. Then `./eigen restart`.
 
 ### Demo instance
 
@@ -250,7 +254,7 @@ container off the current image, and starts `eigen-api` again:
 It refuses to run unless `EIGEN_DEMO=1` is present in `.env.production`, so it can never wipe a real
 instance.
 
-Install the hourly reset with the shipped systemd units (they are **not** auto-installed by `git pull`):
+This needs a source install: `scripts/` is not in a release. Install the hourly reset with the shipped systemd units (they are **not** auto-installed by `git pull`):
 
 ```bash
 cp scripts/systemd/eigen-demo-reset.service scripts/systemd/eigen-demo-reset.timer /etc/systemd/system/
@@ -312,27 +316,21 @@ fail2ban-client status eigen-postfix-sasl
 fail2ban-client status eigen-dovecot-auth
 ```
 
-It stays host config because fail2ban writes host firewall rules, and it bans in the `DOCKER-USER` chain because Docker's published ports never pass through `INPUT`. The jails' log glob is expanded at start and the Docker log path embeds the container ID, so recreating the mail containers silently disarms them until a reload; `./eigen update` refreshes the filters and runs `fail2ban-client reload` itself when it runs as root and the jails are installed (otherwise it prints the two commands), and only a by-hand `docker compose up` leaves the reload to you. Tuning, checks, and the nftables variant are in [docker/fail2ban/README.md](fail2ban/README.md).
+It stays host config because fail2ban writes host firewall rules, and it bans in the `DOCKER-USER` chain because Docker's published ports never pass through `INPUT`. The jails' log glob is expanded at start and the Docker log path embeds the container ID, so recreating the mail containers silently disarms them until a reload; `./eigen update` and `./eigen rollback` refresh the filters and run `fail2ban-client reload` themselves when they run as root and the jails are installed (otherwise they print the two commands), and only a by-hand `docker compose up` leaves the reload to you. Tuning, checks, and the nftables variant are in [docker/fail2ban/README.md](fail2ban/README.md).
 
 The postfix and dovecot logs are the record of an abuse run, and what fail2ban reads, so they keep 10 files of 50 MB where the other containers keep 3 of 10 MB. During the incident the old 3x10 MB rotated away in about two hours and took the start of the run with it.
 
 ### Troubleshooting
 
-**Container status:**
+**Status, logs, restart:**
 ```bash
-docker compose --env-file .env.production ps
+./eigen status              # every service, its health, disk, certificate
+./eigen logs                # all
+./eigen logs eigen-api      # one service
+./eigen restart
 ```
 
-**Logs:**
-```bash
-docker compose --env-file .env.production logs              # all
-docker compose --env-file .env.production logs eigen-api    # one container
-```
-
-**Restart everything:**
-```bash
-docker compose --env-file .env.production restart
-```
+When a step of `./eigen` fails, it shows the last lines of its output; the full output is in `.eigen/last-step.log`.
 
 **HTTPS not working** — Caddy handles certs automatically. Common causes:
 - DNS not propagated yet
@@ -340,19 +338,18 @@ docker compose --env-file .env.production restart
 - Another service occupying 80/443
 
 **Email not arriving:**
-- `docker compose --env-file .env.production logs postfix`
+- `./eigen logs postfix`
 - `dig eigen.example.com MX`
 - `telnet eigen.example.com 25` from another machine
 
-**Docker network subnet conflict** — if `docker compose up` fails with
-`pool overlaps with other one on this address space`, another network on your host already uses `172.20.0.0/24`. Override both values in `.env.production`:
+**Docker network subnet conflict** — `./eigen setup` picks a subnet no other Docker network uses. If a network added later overlaps and Eigen fails to start with `pool overlaps with other one on this address space`, set both values in `.env.production`, then run `./eigen setup` again:
 
 ```
 EIGEN_SUBNET=172.30.0.0/24
 EIGEN_UNBOUND_IP=172.30.0.254
 ```
 
-The two must stay consistent — unbound's IP must lie inside the subnet (postfix uses it as its DNS resolver, so the value can't be auto-derived).
+The two must stay consistent — unbound's IP must lie inside the subnet (postfix uses it as its DNS resolver).
 
 ---
 
@@ -364,13 +361,15 @@ Pick one of these instead of (or in addition to) the Quick Start when your setup
 
 **Pick this when** your server already runs nginx, Caddy, or Apache for other sites.
 
-In step 3, when `bun run setup` asks "Run Eigen behind an existing webserver?", answer **yes**. The script sets `COMPOSE_PROFILES=static,mail` and writes a drop-in snippet next to `.env.production`:
+In step 4, when `./eigen setup` asks "How do people reach Eigen over HTTPS?", pick **My web server forwards to Eigen**, and give the address Eigen listens on for it (`127.0.0.1:8080` by default). Setup runs the bundled `eigen-static` container there instead of Caddy (`COMPOSE_PROFILES=static,…`) and writes a drop-in snippet for each web server next to `.env.production`:
 
-- `eigen.nginx.conf` — symlink into `/etc/nginx/sites-enabled/`
-- `eigen.Caddyfile` — append to your existing `Caddyfile`
-- `eigen.apache.conf` — `a2ensite` it
+- `eigen.nginx.conf` — link into `/etc/nginx/sites-enabled/`, reload nginx
+- `eigen.Caddyfile` — import it in your `Caddyfile`, reload Caddy
+- `eigen.apache.conf` — copy to `sites-available/eigen.conf`, `a2ensite eigen`
 
-Each snippet covers SSL termination, the WebSocket upgrade map, the SSE buffering settings collaborative editing needs, and a baseline set of security response headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`), and sets `X-Real-IP` to the real visitor. They proxy to the bundled `eigen-static` container on `127.0.0.1:8080`, which sets the same headers itself, so the two shapes stay consistent. The Content-Security-Policy and referrer meta ride inside each app's HTML, so every deployment shape inherits them without proxy config.
+The nginx and Apache snippets expect a certbot certificate for your web address.
+
+Each snippet covers SSL termination, the WebSocket upgrade map, the SSE buffering settings collaborative editing needs, and a baseline set of security response headers (`X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`), and sets `X-Real-IP` to the real visitor. They proxy to the bundled `eigen-static` container on the address you gave, which sets the same headers itself, so the two shapes stay consistent. The Content-Security-Policy and referrer meta ride inside each app's HTML, so every deployment shape inherits them without proxy config.
 
 The `eigen-static` gateway only ever receives connections from your host proxy over the docker bridge / loopback, so it trusts private-range peers and forwards their `X-Real-IP` through to the API. That is what keeps rate limiting, login lockout, and OTP throttling keyed on the actual visitor rather than collapsing every user into one bucket — so the proxy must set `X-Real-IP` to the visitor's address (the generated snippets do). `X-Forwarded-For` alone is not trusted, because a client can prepend its own value and pick its rate-limit key.
 
@@ -380,12 +379,8 @@ The `eigen-static` gateway only ever receives connections from your host proxy o
 
 When the webserver itself runs in docker, `127.0.0.1` inside that container is its own loopback — not the host — so the generated snippets' `proxy_pass http://127.0.0.1:8080` won't reach `eigen-static`. Two ways to fix it:
 
-- **Bind eigen-static on the LAN.** In `.env.production`:
-  ```
-  EIGEN_STATIC_HOST=0.0.0.0
-  ```
-  Then point your dockerized webserver upstream at `<host-LAN-IP>:8080`. Simple, but exposes plain HTTP on the LAN — and a LAN client that reaches `8080` directly is a trusted private-range peer, so it can send its own `X-Real-IP` and choose its rate-limit key. Prefer the shared-network option below, or firewall the port to the proxy.
-- **Share the eigen docker network.** Attach the webserver container to the `eigen_eigen` network and proxy to `eigen-static:8080` directly. In the webserver's compose file:
+- **Bind eigen-static on the LAN.** Answer `0.0.0.0:8080` when setup asks where Eigen should listen. Then point your dockerized webserver upstream at `<host-LAN-IP>:8080`. Simple, but exposes plain HTTP on the LAN — and a LAN client that reaches `8080` directly is a trusted private-range peer, so it can send its own `X-Real-IP` and choose its rate-limit key. Prefer the shared-network option below, or firewall the port to the proxy.
+- **Share the eigen docker network.** Attach the webserver container to Eigen's network, `<project>_eigen` (`eigen_eigen` for an install in `/opt/eigen`), and proxy to `eigen-static:8080` directly. In the webserver's compose file:
   ```yaml
   services:
     nginx-proxy-manager:
@@ -401,11 +396,11 @@ When the webserver itself runs in docker, `127.0.0.1` inside that container is i
 
 #### TLS certs without bundled Caddy
 
-The bundled cert manager lives in the Caddy container. When Caddy is off, postfix and dovecot still need certs for IMAPS/SMTPS. Reuse your host's Let's Encrypt certs with the host-cert overlay (needs Compose 2.24.4+ for its `!override` tag):
+The bundled cert manager lives in the Caddy container. When Caddy is off, postfix and dovecot still need certs for IMAPS/SMTPS. Reuse your host's Let's Encrypt certs with the host-cert overlay as your `docker-compose.override.yml` (it needs Compose 2.24.4+ for its `!override` tag):
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.host-certs.yml \
-    --env-file .env.production up -d
+cp docker-compose.host-certs.yml docker-compose.override.yml
+./eigen restart
 ```
 
 That mounts `/etc/letsencrypt/live/${MAIL_DOMAIN}/` into postfix and dovecot read-only. Wire a certbot deploy-hook so they reload after each renewal:
@@ -413,9 +408,7 @@ That mounts `/etc/letsencrypt/live/${MAIL_DOMAIN}/` into postfix and dovecot rea
 ```bash
 sudo tee /etc/letsencrypt/renewal-hooks/deploy/eigen.sh > /dev/null <<'EOF'
 #!/usr/bin/env sh
-docker compose -f /opt/eigen/docker-compose.yml \
-    -f /opt/eigen/docker-compose.host-certs.yml \
-    --env-file /opt/eigen/.env.production kill -s HUP postfix dovecot
+cd /opt/eigen && docker compose --env-file .env.production kill -s HUP postfix dovecot
 EOF
 sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/eigen.sh
 ```
@@ -424,7 +417,7 @@ sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/eigen.sh
 
 **Pick this when** you don't want public ports on your host.
 
-Set `COMPOSE_PROFILES=static,mail` in `.env.production`. Eigen runs the bundled static container on `127.0.0.1:8080`; the tunnel is your edge. WebSocket and SSE pass through transparently. Neither tunnel sets `X-Real-IP`, so all their visitors share one rate-limit and login-lockout bucket; put nginx, Caddy or Apache between the tunnel and the gateway if per-visitor limits matter.
+In step 4, pick **My web server forwards to Eigen** and keep `127.0.0.1:8080`. Eigen runs the bundled static container there; the tunnel is your edge. WebSocket and SSE pass through transparently. Neither tunnel sets `X-Real-IP`, so all their visitors share one rate-limit and login-lockout bucket; put nginx, Caddy or Apache between the tunnel and the gateway if per-visitor limits matter.
 
 **Cloudflare Tunnel:**
 
@@ -447,31 +440,18 @@ tailscale funnel --bg 443
 
 **Pick this when** you already run postfix/dovecot on the host, or want a third-party mail provider to handle inbox/IMAP.
 
-Set `COMPOSE_PROFILES=edge` in `.env.production` — postfix, dovecot, and unbound containers won't start. Outbound notifications (welcome, password reset, calendar invites) keep working through your existing SMTP. Add to `.env.production`:
+Answer **No** to "Host email on this server?" in step 4 (`--no-mail`). Postfix, Dovecot and Unbound don't start, and the server hosts no mailboxes: the Mail app, its entries in the app switcher and command palette, the "Mail to…" actions and the IMAP settings card all disappear, and anyone who still opens `/mail` gets a plain "Mail is turned off on this server" page. Addresses stay on your mail domain, and people still sign in with them; their mailboxes live wherever that domain's mail is hosted now.
 
-```
-MAIL_ENABLED=0
-SMTP_HOST=host.docker.internal
-SMTP_PORT=25
-```
+Eigen still sends mail of its own: two-factor codes by email, guest sign-in codes, invitations, share and access-request notifications, calendar invitations and replies. Without hosted mail it sends them through a relay, the next question setup asks. Without a relay every one of those emails fails. Setup warns when you leave it empty.
 
-`MAIL_ENABLED=0` tells the apps there are no hosted mailboxes here, so the Mail app, its entries in the app switcher and command palette, the "Mail to…" actions and the IMAP settings card all disappear, and anyone who still opens `/mail` gets a plain "Mail is turned off on this server" page. Leave it unset whenever the `mail` profile is on.
+The relay is `host:port`, and one set of keys in `.env.production` holds it, `SMTP_RELAY_HOST`, `SMTP_RELAY_PORT`, `SMTP_RELAY_USER` and `SMTP_RELAY_PASSWORD`, whichever way mail is set up. A third-party relay (Brevo, SendGrid, Postmark) takes a user name and password; setup asks for both. Port 465 is implicit TLS, any other port STARTTLS. With a user name, the connection must be encrypted and the relay's certificate must check out, so the password never goes over a plain or unverified connection.
 
-`host.docker.internal` is Docker's name for "the machine the container is running on". For this to work, your host postfix needs to:
+Your mail server on the same host works as a relay too: answer `host.docker.internal:25`. `host.docker.internal` is Docker's name for "the machine the container is running on". For this to work, your host postfix needs to:
 
 - Bind to `0.0.0.0` (or the docker bridge gateway, default `172.20.0.1`), not just `127.0.0.1`
-- Permit relay from the docker bridge subnet (`172.20.0.0/24`, or whatever you set `EIGEN_SUBNET` to)
+- Permit relay from the docker bridge subnet (`172.20.0.0/24`, or `EIGEN_SUBNET` in `.env.production`)
 
-A third-party relay (Brevo, SendGrid, Postmark) needs authentication. Point the API straight at it:
-
-```
-SMTP_HOST=smtp-relay.brevo.com
-SMTP_PORT=587
-SMTP_USER=your-relay-login
-SMTP_PASSWORD=your-relay-key
-```
-
-Port 587 starts plain and upgrades with STARTTLS; port 465 is implicit TLS. Set `SMTP_SECURE=1` or `0` to override that if your relay listens on some other port. As soon as `SMTP_USER` is set, STARTTLS is mandatory and the relay's certificate is verified, so the credentials never go over a plain or unverified connection. Set `SMTP_USER` and `SMTP_PASSWORD` together — a user without a password is a config error and the API refuses to build the transport. These are the API's own credentials — the `SMTP_RELAY_*` pair is read by the bundled postfix, and the two are set independently.
+The relay must accept the system sender, the last question setup asks. Mail a person causes, like a share notification or a calendar invitation, can't come from their own address, which the relay would refuse. It comes from the system sender with their name, `Ada via Acme <noreply@example.com>`, and replies go to them.
 
 Tell users to point their mail client at your existing mail server — Eigen no longer advertises IMAP settings of its own.
 
@@ -479,7 +459,7 @@ Tell users to point their mail client at your existing mail server — Eigen no 
 
 **Pick this when** Eigen runs at `eigen.example.com` but addresses are `you@example.com`.
 
-In `.env.production`:
+Answer `eigen.example.com` to the first setup question and `example.com` to the second. In `.env.production` that is:
 
 ```
 DOMAIN=eigen.example.com
@@ -509,11 +489,11 @@ _carddavs._tcp.example.com.      TXT  "path=/dav/"
 **Autoconfig caveat:** mail clients look for auto-discovery at `https://autoconfig.example.com/...` — the apex, not Eigen's subdomain. Two options:
 
 1. **Manual config** — tell users to enter `eigen.example.com` as the IMAP/SMTP server hostname when adding their account.
-2. **Autoconfig record** — point `autoconfig.example.com` at the same IP. The setup script prints the right A record automatically when `DOMAIN ≠ MAIL_DOMAIN`.
+2. **Autoconfig record** — point `autoconfig.example.com` at the same IP. `./eigen setup` lists that A record when `DOMAIN ≠ MAIL_DOMAIN`.
 
 ### Compose profile reference
 
-`COMPOSE_PROFILES` controls which bundled services start. `bun run setup` picks the right value based on your answers; you can also edit `.env.production` directly:
+`COMPOSE_PROFILES` controls which bundled services start. `./eigen setup` writes it from your answers to the HTTPS and mail questions; to change it, run `./eigen setup` again with other answers:
 
 | Setup | Profile |
 |---|---|

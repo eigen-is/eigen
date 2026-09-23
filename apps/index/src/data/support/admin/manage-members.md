@@ -39,6 +39,8 @@ You can set a new password for any non-owner member, for example if they are loc
 
 The dialog generates a random password. The reset signs the person out on every device, and their [app passwords](/support/connect/app-passwords) stop working, so they add new ones in their mail, calendar and file apps. Share the new password with them securely. They can change it themselves from [Security settings](/space/security/password) after signing in.
 
+The owner's password can't be reset here. Whoever runs the server resets it with `./eigen reset-password` and the owner's address.
+
 ## Remove a member
 
 <div class="eigen-callout">

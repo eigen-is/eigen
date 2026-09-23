@@ -73,7 +73,7 @@ Full architecture in [IMAP.md](../IMAP.md). The facts that drive this design:
   `milter_default_action = accept` (`docker/postfix/main.cf.template:33-37`). But the
   OpenDKIM-failure fallback runs `sed -i '/milter/d'` (`docker/postfix/entrypoint.sh:95`),
   which would also delete any rspamd milter line — the fallback must become targeted.
-- **The Docker subnet is configurable, and Postfix templates it.** Setup falls back through `172.30.0.0/24`, `172.31.0.0/24`, `10.20.0.0/24` when `172.20.0.0/24` conflicts (`scripts/setup.ts:127`), and `mynetworks` and OpenDKIM's TrustedHosts render from `EIGEN_SUBNET` (compose passes it to the postfix container; entrypoint envsubst), scoped to loopback plus the bridge subnet. The API stays inside `mynetworks` on any fallback subnet, and rspamd reads the same `EIGEN_SUBNET` for its trusted networks.
+- **The Docker subnet is configurable, and Postfix templates it.** `./eigen setup` falls back through `172.30.0.0/24`, `172.31.0.0/24` and `10.20-23.0.0/24` when `172.20.0.0/24` conflicts (`SUBNET_CANDIDATES` in `apps/api/src/cli/configure.ts`), and `mynetworks` and OpenDKIM's TrustedHosts render from `EIGEN_SUBNET` (compose passes it to the postfix container; entrypoint envsubst), scoped to loopback plus the bridge subnet. The API stays inside `mynetworks` on any fallback subnet, and rspamd reads the same `EIGEN_SUBNET` for its trusted networks.
 - **A recursive resolver already runs**: the `mail` profile includes `unbound`
   (`docker-compose.yml:106`), which Postfix uses via `dns:`. This matters — DNSBL/URIBL lookups
   are refused or lied to through public resolvers like 8.8.8.8, and are the usual pain point of
@@ -296,9 +296,7 @@ request header — and must survive every path that writes `.env.production`:
 
 | Touchpoint | Change |
 |---|---|
-| `../../scripts/update.sh` | `add_var_if_missing RSPAMD_URL http://rspamd:11334` + `add_var_if_missing RSPAMD_PASSWORD "$(openssl rand -hex 24)"` — existing deployments migrate without a stale-`.env` break (the gotcha that bit the frontend build vars). |
-| `../../scripts/setup.ts` | Include both vars in the written template; **preserve an existing `RSPAMD_PASSWORD` on rerun** (like `SMTP_RELAY_*`), generate when absent. Today a setup rerun would silently erase a migrated variable it doesn't know. |
-| `../../scripts/generate-env.sh` | Same: add to the preserve-whitelist, generate when absent. |
+| `apps/api/src/cli/configure.ts` | `configureEntries` sets `RSPAMD_URL=http://rspamd:11334` and a generated `RSPAMD_PASSWORD` when absent, and keeps an existing one on rerun. `./eigen update` runs `configure --backfill`, which only appends missing keys, so existing deployments migrate without a stale-`.env` break (the gotcha that bit the frontend build vars). |
 | `.env.example` | Document both (commented, like the relay block). |
 | `../../docker-compose.yml` | `eigen-api` gets `RSPAMD_URL` + `RSPAMD_PASSWORD`; `rspamd` gets `RSPAMD_PASSWORD` + `EIGEN_SUBNET`. |
 | rspamd entrypoint | Hash → `worker-controller.inc`; refuse to start on empty (§1). |
@@ -341,7 +339,7 @@ scripts. Each phase lands with its slice of:
   training never blocks a user action.
 - A quarantined invitation has no calendar effect; rescue produces exactly one; a second
   Junk round-trip does not duplicate it.
-- Fresh setup, headless `generate-env.sh`, `update.sh` migration, and a setup **rerun** all end
+- Fresh setup, a flag-driven `./eigen setup`, the `./eigen update` backfill, and a setup **rerun** all end
   with the same non-empty `RSPAMD_PASSWORD` in `.env.production`.
 - OpenDKIM startup failure leaves rspamd filtering active.
 

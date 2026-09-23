@@ -1,4 +1,5 @@
-# Eigen reverse-proxy snippet for Caddy. Append to your host Caddyfile.
+# Eigen reverse-proxy snippet for Caddy. Import it in your host Caddyfile (import /path/to/eigen.Caddyfile),
+# then reload Caddy.
 {{DOMAIN}} {
     encode gzip zstd
 

@@ -17,11 +17,11 @@ systemctl enable --now fail2ban
 systemctl restart fail2ban
 ```
 
-`./eigen update` re-copies the two `filter.d` files on every update when it runs as root, so a filter fix in Eigen reaches the host on its own; run as another user, it prints the commands instead. It never touches `jail.d`, so the tuning below stays yours.
+`./eigen update` and `./eigen rollback` re-copy the two `filter.d` files when they run as root, so a filter fix in Eigen reaches the host on its own; run as another user, they print the commands instead. Neither touches `jail.d`, so the tuning below stays yours.
 
 ## Reload after container recreation
 
-Fail2ban expands the jail's log glob only when the jail starts. The Docker json-log path embeds the container ID, so any `docker compose up` that recreates the postfix or dovecot container leaves both jails polling deleted log files — `fail2ban-client status` still reports them up, but nothing matches and nobody gets banned. `./eigen update` reloads the jails itself when it finds them installed, so the normal update path is covered; only when you recreate the mail containers by hand does the reload fall to you:
+Fail2ban expands the jail's log glob only when the jail starts. The Docker json-log path embeds the container ID, so any `docker compose up` that recreates the postfix or dovecot container leaves both jails polling deleted log files — `fail2ban-client status` still reports them up, but nothing matches and nobody gets banned. `./eigen update` and `./eigen rollback` reload the jails themselves when they find them installed, so the normal update path is covered. When anything else recreates the mail containers, by hand or a rerun of `./eigen setup` that changes them, the reload falls to you:
 
 ```bash
 fail2ban-client reload

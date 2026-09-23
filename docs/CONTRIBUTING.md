@@ -131,21 +131,15 @@ bun serve:docs         # Just Docs + API
 
 ### Option 2: Docker (full stack)
 
-For testing email, IMAP, HTTPS, and CalDAV you'll want the Docker setup. Four containers: Caddy, Eigen API,
-Mailpit (catches outbound mail), and Dovecot (IMAP).
+For testing email, IMAP, HTTPS, and CalDAV you'll want the Docker setup: Caddy, the Eigen API, Postfix, Dovecot, Unbound and Mailpit (catches outbound mail). Docker builds every image from your checkout.
 
 ```bash
-./scripts/generate-env.sh localhost > .env.production
-sed -i '' 's/COOKIE_DOMAIN=.localhost/COOKIE_DOMAIN=localhost/' .env.production
-
-set -a && source .env.production && set +a
-bun install
-bun run build:prod
-
-docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.production up -d
+bun run setup -- --domain localhost --yes
+BUN_VERSION=$(cat .bun-version) docker compose -f docker-compose.yml -f docker-compose.build.yml \
+    -f docker-compose.dev.yml --env-file .env.production up -d --build
 ```
 
-Open `https://localhost` (accept the self-signed certificate warning), then go to `/admin`.
+The API logs a one-time link, `Finish the setup at /admin/#setup=…` (`docker compose … logs eigen-api`). Open it on `https://localhost` (accept the self-signed certificate warning) to run the setup wizard.
 
 See the [Local Testing Guide](../docker/LOCAL-TESTING.md) for detailed instructions on testing email, IMAP,
 and CalDAV with the Docker setup.
