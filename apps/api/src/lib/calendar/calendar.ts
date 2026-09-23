@@ -534,8 +534,14 @@ export class Calendar {
         return events.createEvent(this, calendarId, input, user);
     }
 
-    public async updateEvent(calendarId: string, id: string, input: EventPatch, user?: User): Promise<CalendarEvent> {
-        return events.updateEvent(this, calendarId, id, input, user);
+    public async updateEvent(
+        calendarId: string,
+        id: string,
+        input: EventPatch,
+        user?: User,
+        expectedEtag?: string,
+    ): Promise<CalendarEvent> {
+        return events.updateEvent(this, calendarId, id, input, user, expectedEtag);
     }
 
     public async deleteEvent(calendarId: string, id: string, user?: User): Promise<void> {

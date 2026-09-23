@@ -103,6 +103,7 @@ const UpdateEventSchema = t.Object({
     timezone: t.Optional(t.Nullable(t.String(TEXT))),
     status: t.Optional(t.Union([t.Literal('confirmed'), t.Literal('tentative'), t.Literal('cancelled')])),
     data: t.Optional(t.Nullable(EventDataSchema)),
+    etag: t.Optional(t.String({ ...TEXT, minLength: 1 })),
 });
 
 const MoveEventSchema = t.Object({
@@ -271,7 +272,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             requireNonGuest(user);
             const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
-            return updateEventAt(params.ownerId, params.calId, params.id, body, user);
+            return updateEventAt(params.ownerId, params.calId, params.id, body, user, body.etag);
         },
         { body: UpdateEventSchema, auth: true },
     )
