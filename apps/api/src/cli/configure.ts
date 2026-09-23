@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import { basename } from 'node:path';
+import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import addressparser from 'nodemailer/lib/addressparser';
@@ -28,15 +28,8 @@ const ENV_PATH = '.env.production';
 const DEFAULT_SUBNET = '172.20.0.0/24';
 const SUBNET_CANDIDATES = [DEFAULT_SUBNET, '172.30.0.0/24', '172.31.0.0/24', '10.20.0.0/24'];
 const RELAY_PORT = '587';
-// Digests the launcher resolved on the host (no socket in here), passed as KEY=VALUE words in EIGEN_PINS.
-const RELEASE_PINS = new Set([
-    'EIGEN_REGISTRY',
-    'EIGEN_VERSION',
-    'EIGEN_API_IMAGE',
-    'EIGEN_FRONTEND_IMAGE',
-    'EIGEN_POSTFIX_IMAGE',
-    'EIGEN_DOVECOT_IMAGE',
-]);
+// In the image too: the API runs from source at /app.
+const PROXY_SNIPPETS = join(import.meta.dir, '../../../../docker/proxy');
 // Relative, so the same bundle serves any hostname; the API prefixes API_URL when it builds links in mail.
 const APP_URLS = {
     VITE_API_HOST: '/eigen',
@@ -103,19 +96,19 @@ const cleanDomain = (value: string) =>
 
 const isPort = (value: string) => /^\d{1,5}$/.test(value) && +value > 0 && +value < 65536;
 
+const isDottedDomain = (value: string) => /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/.test(cleanDomain(value));
+
 function validateDomain(value: string): string | undefined {
-    const domain = cleanDomain(value);
-    if (domain !== 'localhost' && !/^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/.test(domain)) {
-        return 'Enter a domain name like eigen.example.com, without https:// or a path.';
+    if (cleanDomain(value) !== 'localhost' && !isDottedDomain(value)) {
+        return 'Enter a web address, like eigen.example.com, without https:// or a path.';
     }
 }
 
 // User addresses need a dot in their domain, so a mail domain cannot be localhost.
 function validateMailDomain(value: string): string | undefined {
-    if (cleanDomain(value) === 'localhost') {
-        return 'Addresses need a domain with a dot, like example.com. To try Eigen locally, use eigen.localhost.';
+    if (!isDottedDomain(value)) {
+        return 'Enter a mail domain with a dot, like example.com. To try Eigen locally, use eigen.localhost.';
     }
-    return validateDomain(value);
 }
 
 function validateEmail(value: string): string | undefined {
@@ -186,7 +179,8 @@ export function configureEntries(existing: Map<string, string>, answers: Configu
     entries.set('EIGEN_STATIC_PORT', staticPort);
     if (answers.subnet && answers.subnet !== DEFAULT_SUBNET) {
         entries.set('EIGEN_SUBNET', answers.subnet);
-        if (!entries.has('EIGEN_UNBOUND_IP')) {
+        // Only the mail profile runs unbound; the network itself exists in every mode.
+        if (answers.mail && !entries.has('EIGEN_UNBOUND_IP')) {
             entries.set('EIGEN_UNBOUND_IP', answers.subnet.replace(/\.0\/\d+$/, '.254'));
         }
     }
@@ -231,12 +225,6 @@ export async function configure(args: string[]): Promise<void> {
     const acceptDefaults = backfill || flags.yes === true;
     const ui: Ui = await createUi(args.length > 0);
     const existing = readEnvFile(ENV_PATH);
-    const pins = new Map<string, string>();
-    for (const pin of (process.env['EIGEN_PINS'] ?? '').split(/\s+/).filter(Boolean)) {
-        const [, key = '', value = ''] = pin.match(/^([A-Z_]+)=(.+)$/) ?? [];
-        if (!RELEASE_PINS.has(key)) ui.fail(`EIGEN_PINS: "${pin}" is not a release pin.`, 'Run ./eigen setup again.');
-        pins.set(key, value);
-    }
     if (backfill && !existing.get('DOMAIN')) ui.fail(`${ENV_PATH} has no DOMAIN.`, 'Run ./eigen setup first.');
     if (!backfill) {
         ui.intro('Configure Eigen');
@@ -273,7 +261,7 @@ export async function configure(args: string[]): Promise<void> {
         await answer(
             {
                 message: 'Where will Eigen be hosted?',
-                help: 'People open Eigen here. You must be able to set DNS records for it.',
+                help: 'The web address people open, like eigen.example.com. You must be able to set its DNS records.',
                 flag: 'domain',
                 placeholder: 'eigen.example.com',
             },
@@ -405,8 +393,6 @@ export async function configure(args: string[]): Promise<void> {
             ui.fail('A relay user needs a password.', 'Pass --relay-password-env <VAR>.');
         if (validateText(password)) ui.fail('The relay password contains control characters.', 'Remove them.');
         relay = { host, port, user, password };
-    } else if (!mail && !backfill) {
-        ui.note('No relay', ['Eigen sends no email. Run ./eigen setup again to add a relay.']);
     }
     const currentFrom = existing.get('SMTP_FROM') || `noreply@${mailDomain}`;
     const from =
@@ -423,28 +409,20 @@ export async function configure(args: string[]): Promise<void> {
               )
             : currentFrom;
 
+    // Only the launcher, which always lists the host's networks, picks a subnet; a checkout keeps Compose's default.
     const networksFile = process.env['EIGEN_DOCKER_NETWORKS'];
     let subnet = existing.get('EIGEN_SUBNET') ?? null;
-    if (subnet === null && !backfill) {
+    if (subnet === null && networksFile && !backfill) {
         // Compose takes COMPOSE_PROJECT_NAME from the env file over the folder name, which is /install in here.
         const project =
             existing.get('COMPOSE_PROJECT_NAME') ||
             process.env['EIGEN_PROJECT'] ||
-            (networksFile
-                ? ui.fail('EIGEN_PROJECT is not set.', 'Run configure through ./eigen setup.')
-                : basename(process.cwd())
-                      .toLowerCase()
-                      .replace(/[^a-z0-9_-]/g, '')
-                      .replace(/^[^a-z0-9]+/, ''));
+            ui.fail('EIGEN_PROJECT is not set.', 'Run configure through ./eigen setup.');
         let networks: DockerNetwork[];
         try {
-            networks = JSON.parse(
-                networksFile
-                    ? readFileSync(networksFile, 'utf8')
-                    : Bun.spawnSync(['sh', '-c', 'docker network inspect $(docker network ls -q)']).stdout.toString(),
-            );
+            networks = JSON.parse(readFileSync(networksFile, 'utf8'));
         } catch {
-            ui.fail('Could not list the Docker networks.', 'Check that Docker is running, then run the setup again.');
+            ui.fail('Could not read the list of Docker networks.', 'Run ./eigen setup again.');
         }
         subnet = chooseSubnet(networks, project);
     }
@@ -462,129 +440,40 @@ export async function configure(args: string[]): Promise<void> {
     });
     // A backfill keeps every existing value; only the release pins the launcher passes may change a line.
     const written = backfill ? new Map([...entries, ...existing]) : entries;
-    for (const [key, value] of pins) written.set(key, value);
-    writeEnvFile(ENV_PATH, written);
-    if (backfill) {
-        const added = [...written.keys()].filter((key) => !existing.has(key));
-        ui.outro(added.length ? `${ENV_PATH}: added ${added.join(', ')}.` : `${ENV_PATH} is up to date.`);
+    // The launcher resolves these on the host, where the Docker socket is. EIGEN_PINS ('KEY=VALUE …') is its
+    // older way to pass them.
+    const pinWords = (process.env['EIGEN_PINS'] ?? '').split(/\s+/);
+    for (const key of [
+        'EIGEN_REGISTRY',
+        'EIGEN_VERSION',
+        'EIGEN_API_IMAGE',
+        'EIGEN_FRONTEND_IMAGE',
+        'EIGEN_POSTFIX_IMAGE',
+        'EIGEN_DOVECOT_IMAGE',
+    ]) {
+        const value = process.env[key] || pinWords.find((word) => word.startsWith(`${key}=`))?.slice(key.length + 1);
+        if (value) written.set(key, value);
+    }
+    const changed = [...written.keys()].filter((key) => written.get(key) !== existing.get(key));
+    if (changed.length === 0 && written.size === existing.size) {
+        ui.outro('Configuration unchanged.');
         return;
     }
+    writeEnvFile(ENV_PATH, written);
+    if (backfill) {
+        ui.outro(`${ENV_PATH}: set ${changed.join(', ')}.`);
+        return;
+    }
+
+    if (!mail && !relay) ui.note('No relay', ['Eigen sends no email. Run ./eigen setup again to add a relay.']);
 
     if (behindProxy) {
         const [bindHost, bindPort] = staticAddress.split(':');
         const target = `${bindHost === '0.0.0.0' ? '127.0.0.1' : bindHost}:${bindPort}`;
-        writeFileSync(
-            'eigen.nginx.conf',
-            `# Eigen reverse-proxy snippet for nginx.
-# From the install folder: sudo ln -s "$PWD/eigen.nginx.conf" /etc/nginx/sites-enabled/eigen.conf
-#
-# The map directive below must live at http {} scope. On Debian/Ubuntu the default
-# /etc/nginx/sites-enabled/* include is inside http {}, so dropping this file in works as-is.
-
-map $http_upgrade $connection_upgrade {
-    default upgrade;
-    ''      close;
-}
-
-server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    http2 on;
-    server_name ${domain};
-
-    ssl_certificate     /etc/letsencrypt/live/${domain}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${domain}/privkey.pem;
-
-    location / {
-        proxy_pass http://${target};
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;            # WebSocket upgrade
-        proxy_set_header Connection $connection_upgrade;   # WebSocket upgrade
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Baseline security headers (the CSP + referrer meta ride in each app's HTML).
-        add_header X-Frame-Options SAMEORIGIN always;
-        add_header X-Content-Type-Options nosniff always;
-        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
-
-        proxy_buffering off;       # SSE streams chunks immediately
-        proxy_cache off;
-        proxy_read_timeout 24h;    # SSE / WebSocket: long-lived connections
-        gzip off;                  # gzip would buffer SSE
-    }
-}
-`,
-        );
-        writeFileSync(
-            'eigen.Caddyfile',
-            `# Eigen reverse-proxy snippet for Caddy. Append to your host Caddyfile.
-${domain} {
-    encode gzip zstd
-
-    # Baseline security headers (the CSP + referrer meta ride in each app's HTML).
-    header X-Frame-Options SAMEORIGIN
-    header X-Content-Type-Options nosniff
-    header Referrer-Policy "strict-origin-when-cross-origin"
-    header Permissions-Policy "camera=(), microphone=(), geolocation=()"
-
-    reverse_proxy ${target} {
-        flush_interval -1
-        header_up X-Forwarded-Proto {scheme}
-        header_up X-Real-IP {remote_host}
-    }
-}
-`,
-        );
-        writeFileSync(
-            'eigen.apache.conf',
-            `# Eigen reverse-proxy snippet for Apache 2.4.
-# Drop into /etc/apache2/sites-available/eigen.conf, then: sudo a2ensite eigen
-#
-# Required modules, run once:
-#   sudo a2enmod proxy proxy_http proxy_wstunnel rewrite ssl headers
-#
-# Use the event MPM (the default on modern Apache). The prefork MPM spawns one process
-# per connection and exhausts slots under long-lived SSE / WebSocket clients:
-#   sudo a2dismod mpm_prefork && sudo a2enmod mpm_event && sudo systemctl restart apache2
-
-<IfModule mod_ssl.c>
-<VirtualHost *:443>
-    ServerName ${domain}
-
-    SSLEngine on
-    SSLCertificateFile    /etc/letsencrypt/live/${domain}/fullchain.pem
-    SSLCertificateKeyFile /etc/letsencrypt/live/${domain}/privkey.pem
-
-    ProxyPreserveHost On
-    ProxyTimeout 86400              # SSE / WebSocket: long-lived connections
-    RequestHeader set X-Forwarded-Proto "https"
-    RequestHeader set X-Real-IP "%{REAL_CLIENT_IP}e"   # the gateway keys rate limits on this
-
-    # Baseline security headers (the CSP + referrer meta ride in each app's HTML).
-    Header always set X-Frame-Options SAMEORIGIN
-    Header always set X-Content-Type-Options nosniff
-    Header always set Referrer-Policy "strict-origin-when-cross-origin"
-    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
-
-    # WebSocket upgrade (collab editing on sheets, slides, stickies, docs)
-    RewriteEngine On
-    # Stash the client IP so mod_headers can fill X-Real-IP (it can't read REMOTE_ADDR directly).
-    RewriteRule .* - [E=REAL_CLIENT_IP:%{REMOTE_ADDR}]
-    RewriteCond %{HTTP:Upgrade} websocket [NC]
-    RewriteCond %{HTTP:Connection} upgrade [NC]
-    RewriteRule ^/?(.*) "ws://${target}/$1" [P,L]
-
-    # Everything else
-    ProxyPass        / http://${target}/
-    ProxyPassReverse / http://${target}/
-</VirtualHost>
-</IfModule>
-`,
-        );
+        for (const name of ['eigen.nginx.conf', 'eigen.Caddyfile', 'eigen.apache.conf']) {
+            const template = readFileSync(join(PROXY_SNIPPETS, name), 'utf8');
+            writeFileSync(name, template.replaceAll('{{DOMAIN}}', domain).replaceAll('{{TARGET}}', target));
+        }
         ui.note(`Point your web server at ${target}`, [
             'eigen.nginx.conf   link into /etc/nginx/sites-enabled/, reload nginx',
             'eigen.apache.conf  copy to sites-available/eigen.conf, a2ensite eigen',
@@ -593,28 +482,31 @@ ${domain} {
         ]);
     }
 
-    const server = "your server's IP address";
-    const records = [['A', domain, server]];
-    if (mail) {
-        if (mailDomain !== domain) records.push(['A', `autoconfig.${mailDomain}`, `${server} (optional)`]);
-        records.push(
-            ['MX', mailDomain, `10 ${domain}.`],
-            ['TXT', mailDomain, `"v=spf1 mx${relay ? " include:<your relay's SPF domain>" : ''} ~all"`],
-            ['TXT', `eigen._domainkey.${mailDomain}`, 'the DKIM key from the postfix log after the first start'],
-            ['TXT', `_dmarc.${mailDomain}`, `"v=DMARC1; p=quarantine; rua=mailto:postmaster@${mailDomain}"`],
-            ['SRV', `_imaps._tcp.${mailDomain}`, `0 1 993 ${domain}.`],
-            ['SRV', `_submission._tcp.${mailDomain}`, `0 1 587 ${domain}.`],
-            ['SRV', `_caldavs._tcp.${mailDomain}`, `0 1 443 ${domain}.`],
-            ['SRV', `_carddavs._tcp.${mailDomain}`, `0 1 443 ${domain}.`],
-            ['TXT', `_caldavs._tcp.${mailDomain}`, '"path=/dav/"'],
-            ['TXT', `_carddavs._tcp.${mailDomain}`, '"path=/dav/"'],
-            ['PTR', server, `${domain}, set at your hosting provider`],
+    // A local trial needs no DNS.
+    if (!/(^|\.)localhost$/.test(domain)) {
+        const server = "your server's IP address";
+        const records = [['A', domain, server]];
+        if (mail) {
+            if (mailDomain !== domain) records.push(['A', `autoconfig.${mailDomain}`, `${server} (optional)`]);
+            records.push(
+                ['MX', mailDomain, `10 ${domain}.`],
+                ['TXT', mailDomain, `"v=spf1 mx${relay ? " include:<your relay's SPF domain>" : ''} ~all"`],
+                ['TXT', `eigen._domainkey.${mailDomain}`, 'the DKIM key from the postfix log after the first start'],
+                ['TXT', `_dmarc.${mailDomain}`, `"v=DMARC1; p=quarantine; rua=mailto:postmaster@${mailDomain}"`],
+                ['SRV', `_imaps._tcp.${mailDomain}`, `0 1 993 ${domain}.`],
+                ['SRV', `_submission._tcp.${mailDomain}`, `0 1 587 ${domain}.`],
+                ['SRV', `_caldavs._tcp.${mailDomain}`, `0 1 443 ${domain}.`],
+                ['SRV', `_carddavs._tcp.${mailDomain}`, `0 1 443 ${domain}.`],
+                ['TXT', `_caldavs._tcp.${mailDomain}`, '"path=/dav/"'],
+                ['TXT', `_carddavs._tcp.${mailDomain}`, '"path=/dav/"'],
+                ['PTR', server, `${domain}, set at your hosting provider`],
+            );
+        }
+        const width = Math.max(...records.map(([, name = '']) => name.length)) + 2;
+        ui.note(
+            'Add these DNS records',
+            records.map(([type = '', name = '', value]) => `${type.padEnd(5)}${name.padEnd(width)}${value}`),
         );
     }
-    const width = Math.max(...records.map(([, name = '']) => name.length)) + 2;
-    ui.note(
-        'Add these DNS records',
-        records.map(([type = '', name = '', value]) => `${type.padEnd(5)}${name.padEnd(width)}${value}`),
-    );
     ui.outro(networksFile ? 'Configuration saved.' : 'Next: ./eigen setup builds and starts Eigen.');
 }

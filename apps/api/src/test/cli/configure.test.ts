@@ -171,6 +171,12 @@ describe('configure entries', () => {
         expect(entries.get('EIGEN_UNBOUND_IP')).toBe('172.31.0.254');
     });
 
+    test('without hosted mail there is no unbound to place, but the network still takes the subnet', () => {
+        const entries = configureEntries(new Map(), { ...ANSWERS, mail: false, subnet: '172.31.0.0/24' });
+        expect(entries.get('EIGEN_SUBNET')).toBe('172.31.0.0/24');
+        expect(entries.has('EIGEN_UNBOUND_IP')).toBe(false);
+    });
+
     test('removing the relay drops its lines, password included', () => {
         const existing = new Map([
             ['SMTP_RELAY_HOST', 'smtp.relay.test'],
@@ -229,7 +235,7 @@ describe('configure command', () => {
         const pipedRun = await runConfigure(piped, [], PIPED);
         expect(pipedRun.stderr).toBe('');
         expect(pipedRun.code).toBe(0);
-        expect(pipedRun.stdout).not.toContain('People open Eigen here');
+        expect(pipedRun.stdout).not.toContain('The web address people open');
         const flagRun = await runConfigure(
             flagged,
             [
@@ -287,9 +293,16 @@ describe('configure command', () => {
         ]);
         expect(run.code).toBe(0);
         expect(run.stdout).toContain('Eigen sends no email');
-        expect(readFileSync(join(dir, 'eigen.nginx.conf'), 'utf8')).toContain('proxy_pass http://127.0.0.1:18080;');
-        expect(readFileSync(join(dir, 'eigen.Caddyfile'), 'utf8')).toContain('reverse_proxy 127.0.0.1:18080');
-        expect(readFileSync(join(dir, 'eigen.apache.conf'), 'utf8')).toContain('http://127.0.0.1:18080/');
+        const nginx = readFileSync(join(dir, 'eigen.nginx.conf'), 'utf8');
+        const caddy = readFileSync(join(dir, 'eigen.Caddyfile'), 'utf8');
+        const apache = readFileSync(join(dir, 'eigen.apache.conf'), 'utf8');
+        expect(nginx).toContain('proxy_pass http://127.0.0.1:18080;');
+        expect(nginx).toContain('server_name eigen.example.org;');
+        expect(caddy).toContain('reverse_proxy 127.0.0.1:18080');
+        expect(caddy).toContain('eigen.example.org {');
+        expect(apache).toContain('http://127.0.0.1:18080/');
+        expect(apache).toContain('/etc/letsencrypt/live/eigen.example.org/privkey.pem');
+        expect(nginx + caddy + apache).not.toContain('{{');
         const env = readFileSync(join(dir, '.env.production'), 'utf8');
         expect(env).toContain('COMPOSE_PROFILES=static\n');
         expect(env).toContain('EIGEN_STATIC_HOST=0.0.0.0\n');
@@ -318,9 +331,7 @@ describe('configure command', () => {
         ].join('\n');
         const dir = tempDir();
         writeFileSync(join(dir, '.env.production'), original);
-        const run = await runConfigure(dir, ['--backfill'], undefined, {
-            EIGEN_PINS: 'EIGEN_VERSION=0.2.99',
-        });
+        const run = await runConfigure(dir, ['--backfill'], undefined, { EIGEN_VERSION: '0.2.99' });
         expect(run.stderr).toBe('');
         expect(run.code).toBe(0);
         expect(run.stdout.trim().split('\n')).toHaveLength(1);
@@ -337,8 +348,9 @@ describe('configure command', () => {
         }
         expect(written).not.toContain('EIGEN_SUBNET');
 
-        const again = await runConfigure(dir, ['--backfill'], undefined, { EIGEN_PINS: 'EIGEN_VERSION=0.2.99' });
+        const again = await runConfigure(dir, ['--backfill'], undefined, { EIGEN_VERSION: '0.2.99' });
         expect(again.code).toBe(0);
+        expect(again.stdout).toContain('Configuration unchanged.');
         expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(written);
     });
 
@@ -380,7 +392,7 @@ describe('configure command', () => {
         expect(two.stderr).toContain('--from');
     });
 
-    test('EIGEN_PINS writes the release pins the launcher resolved, and nothing else', async () => {
+    test('writes the release pins the launcher passes as variables, and still reads EIGEN_PINS', async () => {
         const dir = tempDir();
         const flags = [
             '--yes',
@@ -392,19 +404,69 @@ describe('configure command', () => {
             '--contact-email',
             'admin@example.org',
         ];
-        const bad = await runConfigure(dir, flags, undefined, { EIGEN_PINS: 'DOMAIN=evil.example.org' });
-        expect(bad.code).toBe(1);
-        expect(bad.stderr).toContain('EIGEN_PINS');
-        expect(existsSync(join(dir, '.env.production'))).toBe(false);
         const digest = 'localhost:5055/eigen-is/eigen-api@sha256:abc';
         const run = await runConfigure(dir, flags, undefined, {
-            EIGEN_PINS: `EIGEN_VERSION=0.2.99 EIGEN_API_IMAGE=${digest}`,
+            EIGEN_VERSION: '0.2.99',
+            EIGEN_API_IMAGE: digest,
+            EIGEN_PINS: 'DOMAIN=evil.example.org EIGEN_REGISTRY=localhost:5055/eigen-is',
         });
         expect(run.code).toBe(0);
         const env = readFileSync(join(dir, '.env.production'), 'utf8');
         expect(env).toContain('EIGEN_VERSION=0.2.99\n');
         expect(env).toContain(`EIGEN_API_IMAGE=${digest}\n`);
+        expect(env).toContain('EIGEN_REGISTRY=localhost:5055/eigen-is\n');
         expect(env).toContain('DOMAIN=eigen.example.org\n');
+    });
+
+    test('a checkout run picks no subnet and needs no Docker', async () => {
+        const dir = tempDir();
+        const run = await runConfigure(
+            dir,
+            ['--yes', '--domain', 'eigen.example.org', '--no-proxy', '--contact-email', 'admin@example.org'],
+            undefined,
+            { EIGEN_DOCKER_NETWORKS: undefined, EIGEN_PROJECT: undefined, PATH: '/nonexistent' },
+        );
+        expect(run.stderr).toBe('');
+        expect(run.code).toBe(0);
+        expect(readFileSync(join(dir, '.env.production'), 'utf8')).not.toContain('EIGEN_SUBNET');
+    });
+
+    test('a rerun that changes no answer says so and prints nothing else', async () => {
+        const dir = tempDir();
+        const flags = ['--yes', '--domain', 'eigen.example.org', '--no-mail', '--proxy', '127.0.0.1:18080'];
+        expect((await runConfigure(dir, flags)).code).toBe(0);
+        const inode = statSync(join(dir, '.env.production')).ino;
+        const rerun = await runConfigure(dir, flags);
+        expect(rerun.code).toBe(0);
+        expect(rerun.stdout).toContain('Configuration unchanged.');
+        for (const box of ['No relay', 'Point your web server', 'DNS records']) expect(rerun.stdout).not.toContain(box);
+        expect(statSync(join(dir, '.env.production')).ino).toBe(inode);
+    });
+
+    test('a local trial gets no DNS records', async () => {
+        const base = ['--yes', '--mail', '--no-relay', '--no-proxy', '--contact-email', 'admin@example.org'];
+        for (const domain of ['localhost', 'eigen.localhost']) {
+            const run = await runConfigure(tempDir(), [
+                ...base,
+                '--domain',
+                domain,
+                '--mail-domain',
+                'eigen.localhost',
+            ]);
+            expect(run.code).toBe(0);
+            expect(run.stdout).not.toContain('DNS records');
+        }
+        const real = await runConfigure(tempDir(), [...base, '--domain', 'eigen.example.org']);
+        expect(real.stdout).toContain('DNS records');
+    });
+
+    test('the web address is called one thing in the question, the flag and the refusal', async () => {
+        const run = await runConfigure(tempDir(), ['--yes', '--domain', 'https//x']);
+        expect(run.code).toBe(1);
+        expect(run.stderr).toContain('web address, like eigen.example.com');
+        expect((await runConfigure(tempDir(), ['--help'])).stdout.toLowerCase()).toContain(
+            'web address, like eigen.example.com',
+        );
     });
 
     test('a rerun keeps the live network of the Compose project, however the project is named', async () => {
@@ -591,7 +653,7 @@ describe('configure command', () => {
         const cancel = { when: 'Where will Eigen be hosted', keys: '\x03' };
         const plain = await runInTerminal(tempDir(), [], { NO_COLOR: '1' }, [cancel]);
         expect(plain.code).toBe(130);
-        expect(plain.output.indexOf('People open Eigen here')).toBeGreaterThan(
+        expect(plain.output.indexOf('The web address people open')).toBeGreaterThan(
             plain.output.indexOf('Where will Eigen'),
         );
         expect(plain.output).toContain('igen.example.com');
