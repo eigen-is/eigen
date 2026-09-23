@@ -237,3 +237,52 @@ describe('parseIcs over a calendar export', () => {
         expect(performance.now() - startedAt).toBeLessThan(5000);
     });
 });
+
+// libical and its descendants name a zone by a TZID no standard knows and state the IANA name only as an
+// X-LIC-LOCATION inside the file's own VTIMEZONE.
+describe('parseIcs over a TZID only its VTIMEZONE names', () => {
+    const zoned = (tzid: string, location: string) =>
+        parseIcs(
+            vcal([
+                'BEGIN:VTIMEZONE',
+                `TZID:${tzid}`,
+                `X-LIC-LOCATION:${location}`,
+                'BEGIN:STANDARD',
+                'DTSTART:19701025T030000',
+                'RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU',
+                'TZOFFSETFROM:+0200',
+                'TZOFFSETTO:+0100',
+                'END:STANDARD',
+                'BEGIN:DAYLIGHT',
+                'DTSTART:19700329T020000',
+                'RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU',
+                'TZOFFSETFROM:+0100',
+                'TZOFFSETTO:+0200',
+                'END:DAYLIGHT',
+                'END:VTIMEZONE',
+                'BEGIN:VEVENT',
+                'UID:lic@eigen',
+                `DTSTART;TZID=${tzid}:20260601T100000`,
+                `DTEND;TZID=${tzid}:20260601T110000`,
+                'RRULE:FREQ=WEEKLY',
+                'SUMMARY:Standup',
+                'END:VEVENT',
+            ]),
+        ).events[0];
+
+    test('the event stores the IANA zone its X-LIC-LOCATION names', () => {
+        for (const tzid of ['/freeassociation.sourceforge.net/Tzfile/Europe/Amsterdam', 'My Custom Zone']) {
+            const event = zoned(tzid, 'Europe/Amsterdam');
+
+            expect(event.timezone).toBe('Europe/Amsterdam');
+            expect(event.startTime.toISOString()).toBe('2026-06-01T08:00:00.000Z');
+        }
+    });
+
+    test('an X-LIC-LOCATION Eigen cannot name either leaves the zone unset', () => {
+        const event = zoned('My Custom Zone', 'Not/A_Zone');
+
+        expect(event.timezone).toBeNull();
+        expect(event.startTime.toISOString()).toBe('2026-06-01T08:00:00.000Z');
+    });
+});

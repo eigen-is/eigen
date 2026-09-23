@@ -37,7 +37,19 @@ export function isEigenName(name: string): boolean {
 // A property's normalized IANA TZID parameter, or null.
 export function propTzid(prop: ICAL.Property | null | undefined): string | null {
     const raw = prop?.getParameter('tzid') || null;
-    return normalizeTimezone(Array.isArray(raw) ? raw[0] : raw);
+    const tzid = Array.isArray(raw) ? raw[0] : raw;
+    return normalizeTimezone(tzid) ?? (prop && tzid ? licLocation(prop, tzid) : null);
+}
+
+// libical names a zone by a TZID no standard knows and states its IANA name only in the file's VTIMEZONE.
+function licLocation(prop: ICAL.Property, tzid: string): string | null {
+    let root = prop.parent;
+    while (root?.parent) root = root.parent;
+    const vtimezone = root
+        ?.getAllSubcomponents('vtimezone')
+        .find((component) => component.getFirstPropertyValue('tzid') === tzid);
+    const location = vtimezone?.getFirstPropertyValue('x-lic-location');
+    return typeof location === 'string' ? normalizeTimezone(location) : null;
 }
 
 // A CAL-ADDRESS is a URI, so its scheme is case-insensitive (RFC 3986) and clients emit both `mailto:` and `MAILTO:`: a surviving prefix matches no address and the row reads as someone else's invitation.
