@@ -7,7 +7,7 @@
 #
 # The copy is `git ls-files -co --exclude-standard` into the scratch folder, committed to a fresh repo: unlike
 # `git stash create` or a clone plus the diff, it also carries untracked files, and it never copies ignored
-# ones (node_modules, data/, .env.production).
+# ones (node_modules, .env.production) or anything under data/, backups/ and caddy-data/.
 #
 # Usage:  ./docker/test-install.sh
 # Needs:  docker, curl, git. Builds every image in Docker (a few minutes on a cold cache).

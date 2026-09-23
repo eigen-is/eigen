@@ -10,6 +10,9 @@
 # folder under $TMPDIR, installs there with ./eigen under a Compose project named eigentest…, publishes
 # only 127.0.0.1 ports from 18000-18999, and removes what it started (and nothing else) on exit.
 
+# The operator's Compose settings would point the harness's host-side compose calls at another stack.
+unset COMPOSE_PROJECT_NAME COMPOSE_FILE COMPOSE_PROFILES COMPOSE_ENV_FILES
+
 PASS=0
 FAIL=0
 SKIP=0
@@ -63,9 +66,9 @@ scratch_init() {
 }
 
 # new_install <folder name> [uid:gid]: $INSTALL, a scratch copy of the working tree (tracked and untracked
-# files, not ignored ones) committed to a fresh repo so the launcher sees a source checkout, owned by uid:gid
-# (default: the host user) as if that operator had cloned it. $PROJECT is the Compose project name Compose
-# derives from the folder name.
+# files, not ignored ones, nothing under data/, backups/ or caddy-data/) committed to a fresh repo so the
+# launcher sees a source checkout, owned by uid:gid (default: the host user) as if that operator had cloned
+# it. $PROJECT is the Compose project name Compose derives from the folder name.
 new_install() {
     INSTALL="$SCRATCH/$1"
     INSTALL_OWNER="${2:-$(id -u):$(id -g)}"
@@ -75,9 +78,10 @@ new_install() {
     # git objects, and on Linux the host user could not write a folder another uid owns.
     docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c 'mkdir "$1" && chown "$2" "$1"' sh \
         "$INSTALL" "$INSTALL_OWNER"
-    (cd "$REPO_ROOT" && git ls-files -z -co --exclude-standard | while IFS= read -r -d '' file; do
-        if [ -e "$file" ] || [ -L "$file" ]; then printf '%s\0' "$file"; fi
-    done | COPYFILE_DISABLE=1 tar -cf - --null -T -) |
+    (cd "$REPO_ROOT" && git ls-files -z -co --exclude-standard -- . ':!data' ':!backups' ':!caddy-data' |
+        while IFS= read -r -d '' file; do
+            if [ -e "$file" ] || [ -L "$file" ]; then printf '%s\0' "$file"; fi
+        done | COPYFILE_DISABLE=1 tar -cf - --null -T -) |
         docker run --rm -i --user "$INSTALL_OWNER" -e HOME=/tmp -v "$SCRATCH:$SCRATCH" -w "$INSTALL" "$CLI_IMAGE" \
             sh -c 'tar -xf - && git init -q && git add -A &&
                 git -c user.name=harness -c user.email=harness@eigen.invalid commit -qm "harness copy of the working tree"'
@@ -202,7 +206,7 @@ run_setup() {
 # The harness's own view of the install's stack, from the host, with the files the launcher uses.
 dc() {
     assert_isolated
-    (cd "$INSTALL" && docker compose --env-file .env.production -f docker-compose.yml \
+    (cd "$INSTALL" && docker compose -p "$PROJECT" --env-file .env.production -f docker-compose.yml \
         -f docker-compose.build.yml -f docker-compose.override.yml "$@")
 }
 
