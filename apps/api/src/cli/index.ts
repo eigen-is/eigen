@@ -1,6 +1,6 @@
 import { type ParseArgsConfig, parseArgs } from 'node:util';
 import { BOOTSTRAP_OPTIONS, BOOTSTRAP_USAGE, bootstrap } from './bootstrap';
-import { configure } from './configure';
+import { CONFIGURE_OPTIONS, CONFIGURE_USAGE, configure } from './configure';
 import { RESET_PASSWORD_OPTIONS, RESET_PASSWORD_USAGE, resetPassword } from './reset-password';
 import { setupLink } from './setup-link';
 import { RESTORE_OPTIONS, RESTORE_USAGE, restore, SNAPSHOT_OPTIONS, SNAPSHOT_USAGE, snapshot } from './snapshot';
@@ -38,7 +38,7 @@ function parseFlags<T extends NonNullable<ParseArgsConfig['options']>>(
 // status and setup-link are run by the launcher alone, which passes them nothing.
 const COMMANDS = new Map<string, (args: string[]) => Promise<void>>([
     ['bootstrap', (args) => bootstrap(parseFlags(args, BOOTSTRAP_OPTIONS, BOOTSTRAP_USAGE).values)],
-    ['configure', configure],
+    ['configure', (args) => configure(parseFlags(args, CONFIGURE_OPTIONS, CONFIGURE_USAGE).values)],
     ['status', status],
     [
         'reset-password',

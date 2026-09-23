@@ -14,9 +14,8 @@ import { getDataRoot, getTeamDataPath, getUserHomePath } from '../config/paths';
 import { ApiError, PATHS } from '../core';
 import { getUserById } from '../user/user';
 
-// Where backup artifacts live. Outside `data/` on purpose — the same place `eigen backup`
-// writes its snapshots, so one wipe of the data directory can never take the backups with it. In the
-// container it is the `./backups` bind mount, named by EIGEN_BACKUPS_DIR.
+// Where backup artifacts live. Outside `data/` on purpose, so one wipe of the data directory can never
+// take the backups with it. In the container it is the `./backups` bind mount, named by EIGEN_BACKUPS_DIR.
 export function backupsDirPath(): string {
     return process.env['EIGEN_BACKUPS_DIR'] || path.join(getDataRoot(), '..', 'backups');
 }

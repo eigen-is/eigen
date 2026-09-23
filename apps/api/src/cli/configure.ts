@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parseArgs } from 'node:util';
+import type { parseArgs } from 'node:util';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import addressparser from 'nodemailer/lib/addressparser';
 import { readEnvFile, writeEnvFile } from './env-file';
@@ -47,7 +47,7 @@ const APP_URLS = {
     VITE_APP_VECTOR_URL: '/vector',
     VITE_APP_INDEX_URL: '/',
 };
-const OPTIONS = {
+export const CONFIGURE_OPTIONS = {
     domain: { type: 'string' },
     mail: { type: 'boolean' },
     'no-mail': { type: 'boolean' },
@@ -61,10 +61,10 @@ const OPTIONS = {
     'relay-password-env': { type: 'string' },
     from: { type: 'string' },
     yes: { type: 'boolean' },
+    // The update step's: only adds the keys the env file lacks, with their defaults; no existing line changes.
     backfill: { type: 'boolean' },
-    help: { type: 'boolean', short: 'h' },
 } as const;
-const USAGE = `Usage: configure [flags]
+export const CONFIGURE_USAGE = `Usage: ./eigen setup [flags]
 
 Asks the setup questions and writes ${ENV_PATH}. Any flag makes the run non-interactive:
 questions no flag answers are read from stdin, one line each. An empty line keeps the answer
@@ -82,8 +82,6 @@ in brackets; - clears an optional answer; a choice is answered with its number.
   --relay-password-env <VAR>   Read the relay password from this environment variable
   --from <sender>              System sender, an address or Name <address>
   --yes                        Keep the current or default answer for every flag not given
-  --backfill                   Only add the keys ${ENV_PATH} lacks, with their defaults;
-                               no existing line changes
   --help                       Show this help`;
 
 const NO_CONTROL = /^\P{Cc}*$/u;
@@ -209,21 +207,12 @@ export function configureEntries(existing: Map<string, string>, answers: Configu
     return entries;
 }
 
-export async function configure(args: string[]): Promise<void> {
-    let flags: ReturnType<typeof parseArgs<{ options: typeof OPTIONS }>>['values'];
-    try {
-        flags = parseArgs({ args, options: OPTIONS }).values;
-    } catch (error) {
-        console.error(`${error instanceof Error ? error.message : String(error)}\n\n${USAGE}`);
-        process.exit(2);
-    }
-    if (flags.help) {
-        console.log(USAGE);
-        return;
-    }
+export async function configure(
+    flags: ReturnType<typeof parseArgs<{ options: typeof CONFIGURE_OPTIONS }>>['values'],
+): Promise<void> {
     const backfill = flags.backfill === true;
     const acceptDefaults = backfill || flags.yes === true;
-    const ui: Ui = await createUi(args.length > 0);
+    const ui: Ui = await createUi(Object.keys(flags).length > 0);
     const existing = readEnvFile(ENV_PATH);
     if (backfill && !existing.get('DOMAIN')) ui.fail(`${ENV_PATH} has no DOMAIN.`, 'Run ./eigen setup first.');
     if (!backfill) {
