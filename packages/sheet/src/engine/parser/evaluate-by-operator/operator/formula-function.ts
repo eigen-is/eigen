@@ -67,30 +67,21 @@ function func(symbol: string): FormulajsMethod {
     const upper = symbol.toUpperCase();
     const override = OVERRIDES[upper];
     return function __formulaFunction(...params: FormulaArg[]): FormulaOutput {
-        const result = callFormula(upper, override, params);
+        let result = override?.(params);
+        if (result === undefined) {
+            const resolved = resolveFormula(upper.split('.'));
+            if (!resolved) {
+                throw Error(ERROR_NAME);
+            }
+            const [receiver, method] = resolved;
+            result = method.apply(receiver, params);
+        }
         // formulajs hands an overflow back as Infinity; Excel shows #NUM!, as the operators do.
         if (result === Infinity || result === -Infinity) {
             throw Error(ERROR_NUM);
         }
         return result;
     };
-}
-
-function callFormula(
-    upper: string,
-    override: ((params: FormulaArg[]) => FormulaOutput | undefined) | undefined,
-    params: FormulaArg[],
-): FormulaOutput {
-    if (override) {
-        const result = override(params);
-        if (result !== undefined) return result;
-    }
-    const resolved = resolveFormula(upper.split('.'));
-    if (!resolved) {
-        throw Error(ERROR_NAME);
-    }
-    const [receiver, method] = resolved;
-    return method.apply(receiver, params);
 }
 
 func.SYMBOL = SYMBOL;
