@@ -36,9 +36,8 @@ function resolveFormula(symbolParts: string[]): [object, FormulajsMethod] | null
 const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefined> = {
     // formulajs.VALUE rejects numbers with #VALUE!. Excel accepts numbers as a
     // pass-through (and booleans as 1/0). Without this fix, calendar templates
-    // like `IF(VALUE(prev) > daysInMonth, "", prev+1)` always take the fallback
-    // branch because VALUE(numberCell) errors and the comparison silently
-    // coerces the Error to false.
+    // like `IF(VALUE(prev) > daysInMonth, "", prev+1)` are #VALUE! on every
+    // numeric cell.
     VALUE(params) {
         const v = params[0];
         if (typeof v === 'number') return v;

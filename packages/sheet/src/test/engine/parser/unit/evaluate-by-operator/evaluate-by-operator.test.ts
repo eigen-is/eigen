@@ -24,15 +24,14 @@ describe('evaluate-by-operator dispatch', () => {
         expect(evaluateByOperator('IFERROR', [result, 'fallback'])).toBe('fallback');
     });
 
-    test('comparison operators do NOT auto-propagate Error (kept as silent false)', () => {
-        // OR(x="", VALUE(numericCell) > limit) — VALUE errors on numbers in
-        // formulajs, the comparison silently coerces Error → false, OR sees
-        // false, IF picks the safe branch. Adding Error propagation here would
-        // break Excel-template patterns relied upon in real spreadsheets.
+    test('comparison operators propagate Error operands, the left one first', () => {
         const err = new Error('#VALUE!');
-        expect(evaluateByOperator('>', [err, 5])).toBe(false);
-        expect(evaluateByOperator('<', [err, 5])).toBe(false);
-        expect(evaluateByOperator('=', [err, 5])).toBe(false);
+        const other = new Error('#DIV/0!');
+        for (const op of ['=', '<>', '<', '>', '<=', '>=']) {
+            expect(evaluateByOperator(op, [err, 5])).toBe(err);
+            expect(evaluateByOperator(op, [5, err])).toBe(err);
+            expect(evaluateByOperator(op, [err, other])).toBe(err);
+        }
     });
 
     test('function-name operator passes Error operands through to formulajs', () => {

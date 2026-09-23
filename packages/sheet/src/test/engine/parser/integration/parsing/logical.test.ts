@@ -175,4 +175,14 @@ describe('.parse() logical', () => {
             result: false,
         });
     });
+
+    test('comparison operators propagate an error operand (Excel parity)', () => {
+        expect(parser!.parse('1/0>0')).toMatchObject({ error: '#DIV/0!', result: null });
+        expect(parser!.parse('1/0<>0')).toMatchObject({ error: '#DIV/0!', result: null });
+        expect(parser!.parse('(1E308+1E308)>0')).toMatchObject({ error: '#NUM!', result: null });
+        expect(parser!.parse('"a"=1/0')).toMatchObject({ error: '#DIV/0!', result: null });
+        expect(parser!.parse('0<=1/0')).toMatchObject({ error: '#DIV/0!', result: null });
+        expect(parser!.parse('1/0>=(1E308+1E308)')).toMatchObject({ error: '#DIV/0!', result: null });
+        expect(parser!.parse('IFERROR(1/0<0,"fallback")')).toMatchObject({ error: null, result: 'fallback' });
+    });
 });
