@@ -6,17 +6,20 @@ category: Basics
 tags: [admin, setup, getting-started, configuration]
 related: [admin/manage-members, admin/server-settings]
 order: 10
-updated: 2026-09-11
+updated: 2026-09-23
 ---
 
-When you open Eigen for the first time, the setup wizard runs automatically. It collects a few
-essential details, creates your admin account, and marks the server as ready. This page walks you
-through what to expect.
+The setup wizard creates your admin account and gets the server ready for everyone else. It opens from
+the setup link that `./eigen setup` prints when it finishes. This page walks you through what to expect.
 
 ## The setup wizard
 
-Open your Eigen instance in a browser. If setup has not been completed yet, you will see the
-**Welcome to Eigen** screen instead of the login page. Fill in the form below to get started.
+Open the setup link in a browser. It looks like `https://eigen.example.com/admin?setup=…`, and you
+will see the **Welcome to Eigen** screen. Fill in the form below to get started.
+
+The link works once, so nobody who finds your server before you can claim it. Opening `/admin` without
+it shows **Open the setup link that ./eigen setup printed.** instead of the form. Lost the link? Run
+`./eigen setup` again on your server, and it prints a fresh one.
 
 ### Server configuration
 
@@ -50,13 +53,6 @@ in emails sent to members.
 
 Click **Complete Setup**. Eigen creates the organization and the admin account, then shows a
 **Setup Complete!** confirmation. Click **Go to Login** to reach the sign-in page.
-
-<div class="eigen-callout">
-
-If Eigen has already been configured, the wizard shows an **Already Configured** message. Click
-**Go to Login** to proceed to the sign-in page.
-
-</div>
 
 ## What you can do after signing in
 
