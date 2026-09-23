@@ -1,3 +1,4 @@
+import { DEFAULT_RELAY_PORT, defaultSenderAddress } from '@workspace/lib/constants/mail';
 import type { ImipMethod } from '@workspace/lib/types/calendar';
 import { ICS_MIME } from '@workspace/lib/types/drive';
 import nodemailer from 'nodemailer';
@@ -44,7 +45,7 @@ export type OutboundMail = {
 // SMTP_FROM is `Name <address>` or a bare address; a bare one keeps the org name.
 function defaultFrom(): OutboundAddress {
     const [configured] = addressparser(process.env['SMTP_FROM'] ?? '', { flatten: true });
-    if (!configured?.address) return { name: getOrgName(), address: `noreply@${getMailDomain()}` };
+    if (!configured?.address) return { name: getOrgName(), address: defaultSenderAddress(getMailDomain()) };
     return { name: configured.name || getOrgName(), address: configured.address };
 }
 
@@ -78,7 +79,7 @@ export function createTransport(): Mail {
             tls: { rejectUnauthorized: false },
         });
     }
-    const port = Number(process.env['SMTP_RELAY_PORT'] || 587);
+    const port = Number(process.env['SMTP_RELAY_PORT'] || DEFAULT_RELAY_PORT);
     const user = process.env['SMTP_RELAY_USER'];
     const pass = process.env['SMTP_RELAY_PASSWORD'];
     if (user && !pass) {

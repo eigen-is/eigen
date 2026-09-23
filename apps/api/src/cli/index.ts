@@ -28,14 +28,9 @@ function parseFlags<T extends NonNullable<ParseArgsConfig['options']>>(
         parsed = parse();
     } catch (error) {
         if (!(error instanceof Error)) throw error;
-        // The error names the unknown option in its message alone; the tokens name it as typed.
-        if ('code' in error && error.code === 'ERR_PARSE_ARGS_UNKNOWN_OPTION') {
-            const { tokens } = parseArgs({ args, options, allowPositionals: true, strict: false, tokens: true });
-            for (const token of tokens) {
-                if (token.kind === 'option' && !(token.name in options)) refuse(`Unknown argument "${token.rawName}".`);
-            }
-        }
-        return refuse(error.message);
+        // Worded like the launcher's refusal, without the advice about -- that follows the option's name.
+        const unknown = /^Unknown option '(.+?)'/.exec(error.message)?.[1];
+        return refuse(unknown ? `Unknown argument "${unknown}".` : error.message);
     }
     const extra = parsed.positionals[positionals];
     if (extra !== undefined) refuse(`Unknown argument "${extra}".`);

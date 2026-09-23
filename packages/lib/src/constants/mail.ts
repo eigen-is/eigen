@@ -10,3 +10,11 @@ export const MAIL_PREVIEW_CHARS = 200;
 // a single outgoing attachment is capped at (config/enforcement.ts), which is what a message of this size
 // would be made of — a separate fact, so a separate constant.
 export const EML_MAX_BYTES = 25 * 1024 * 1024;
+
+// The relay port when SMTP_RELAY_PORT names none: submission, which every relay offers.
+export const DEFAULT_RELAY_PORT = 587;
+
+// The system sender while SMTP_FROM is unset.
+export function defaultSenderAddress(mailDomain: string): string {
+    return `noreply@${mailDomain}`;
+}

@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, renameSync, statSync } f
 import { dirname, join } from 'node:path';
 import pkg from '../../../../package.json' with { type: 'json' };
 import { writeEnvFile } from './env-file';
-import { ENV_PATH, ownAs, ROOT } from './install';
+import { ENV_PATH, installOwner, ownAs, ROOT } from './install';
 import { createUi } from './ui';
 
 const BUNDLE_FILES = [
@@ -35,7 +35,7 @@ export async function bootstrap(flags: { out?: string; force?: boolean }): Promi
         process.env['EIGEN_REGISTRY'] ||
         ui.fail('EIGEN_REGISTRY is not set.', 'Run bootstrap from the Eigen API image.');
     const { version } = pkg;
-    const owner = statSync(out);
+    const owner = installOwner(out);
     const bundleDirFiles = readdirSync(join(ROOT, BUNDLE_DIR), { recursive: true, encoding: 'utf8' })
         .map((file) => join(BUNDLE_DIR, file))
         .filter((file) => statSync(join(ROOT, file)).isFile());

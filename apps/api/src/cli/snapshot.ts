@@ -119,7 +119,7 @@ export async function snapshot(flags: { 'pre-update'?: boolean }): Promise<void>
         );
     }
     lockData(ui, 'backup');
-    const owner = installOwner();
+    const owner = installOwner('.');
     if (!existsSync(SNAPSHOTS)) mkdirSync(SNAPSHOTS, { mode: 0o700 });
     ownAs(SNAPSHOTS, owner);
 
@@ -309,7 +309,7 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
     }
 
     const staged = join(STAGING, ENV_PATH);
-    ownAs(staged, installOwner());
+    ownAs(staged, installOwner('.'));
     chmodSync(staged, 0o600);
     // Without it the next start draws a new collab epoch: a tab that loaded a document before reloads, not merges it back.
     rmSync(join(STAGING, 'data/server', COLLAB_EPOCH_FILE), { force: true });

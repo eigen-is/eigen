@@ -222,6 +222,16 @@ describe('subnet choice', () => {
         }));
         expect(chooseSubnet(taken, 'fresh')).toBe('10.21.0.0/24');
     });
+
+    test('a host where every candidate is taken is told to set EIGEN_SUBNET, and nothing is written', async () => {
+        const dir = tempDir();
+        const everything = [{ Name: 'wide', Labels: null, IPAM: { Config: [{ Subnet: '0.0.0.0/0' }] } }];
+        const flags = ['--yes', '--domain', 'eigen.example.org', '--no-proxy', '--contact-email', 'admin@example.org'];
+        const run = await runConfigure(dir, flags, undefined, {}, everything);
+        expect(run.code).toBe(1);
+        expect(run.stderr).toContain('Set EIGEN_SUBNET in .env.production to a free /24');
+        expect(existsSync(join(dir, '.env.production'))).toBe(false);
+    });
 });
 
 describe('configure command', () => {
@@ -340,10 +350,15 @@ describe('configure command', () => {
         ].join('\n');
         const dir = tempDir();
         writeFileSync(join(dir, '.env.production'), original);
-        const run = await runConfigure(dir, ['--backfill'], undefined, { EIGEN_VERSION: '0.2.99' });
+        // ./eigen update passes no network list: a backfill never picks a subnet.
+        const update = { EIGEN_VERSION: '0.2.99', EIGEN_DOCKER_NETWORKS: undefined };
+        const run = await runConfigure(dir, ['--backfill'], undefined, update);
         expect(run.stderr).toBe('');
         expect(run.code).toBe(0);
-        expect(run.stdout.trim().split('\n')).toHaveLength(1);
+        expect(run.stdout.trim().split('\n')).toEqual([
+            'Configure Eigen',
+            expect.stringContaining('.env.production: set '),
+        ]);
         const written = readFileSync(join(dir, '.env.production'), 'utf8');
         expect(written.startsWith(original)).toBe(true);
         for (const line of [
@@ -357,7 +372,7 @@ describe('configure command', () => {
         }
         expect(written).not.toContain('EIGEN_SUBNET');
 
-        const again = await runConfigure(dir, ['--backfill'], undefined, { EIGEN_VERSION: '0.2.99' });
+        const again = await runConfigure(dir, ['--backfill'], undefined, update);
         expect(again.code).toBe(0);
         expect(again.stdout).toContain('Configuration unchanged.');
         expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(written);
@@ -374,12 +389,12 @@ describe('configure command', () => {
     });
 
     // Root in the container rewrites the operator's file; only root can change an owner, so this runs as root alone.
-    test.skipIf(process.getuid?.() !== 0)('run as root, it keeps the owner of the env file', async () => {
+    test.skipIf(process.getuid?.() !== 0)('run as root, it gives the env file the install folder owner', async () => {
         const dir = tempDir();
+        chownSync(dir, 1234, 1235);
         const env = join(dir, '.env.production');
         writeFileSync(env, 'DOMAIN=eigen.example.org\nMAIL_DOMAIN=example.org\n', { mode: 0o600 });
-        chownSync(env, 1234, 1235);
-        expect((await runConfigure(dir, ['--backfill'])).code).toBe(0);
+        expect((await runConfigure(dir, ['--backfill'], undefined, { EIGEN_DOCKER_NETWORKS: undefined })).code).toBe(0);
         expect(readFileSync(env, 'utf8')).toContain('\nMAIL_ENABLED=1\n');
         expect([statSync(env).uid, statSync(env).gid]).toEqual([1234, 1235]);
 

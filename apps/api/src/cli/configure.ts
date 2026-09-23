@@ -1,11 +1,12 @@
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { parseArgs } from 'node:util';
-import { APP_URLS } from '@workspace/lib/constants';
+import { APP_URLS } from '@workspace/lib/constants/app-urls';
+import { DEFAULT_RELAY_PORT, defaultSenderAddress } from '@workspace/lib/constants/mail';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import addressparser from 'nodemailer/lib/addressparser';
 import { readEnvFile, writeEnvFile } from './env-file';
-import { ENV_PATH, IMAGE_NAMES, ownAs, ROOT } from './install';
+import { ENV_PATH, IMAGE_NAMES, installOwner, ownAs, ROOT } from './install';
 import { createUi, type Ui } from './ui';
 
 export type ConfigureAnswers = {
@@ -34,7 +35,6 @@ const SUBNET_CANDIDATES = [
     '172.31.0.0/24',
     ...[20, 21, 22, 23].map((n) => `10.${n}.0.0/24`),
 ];
-const RELAY_PORT = '587';
 const PROXY_SNIPPETS = join(ROOT, 'docker/proxy');
 // The launcher resolves these on the host, where the Docker socket is.
 const PINS = ['EIGEN_REGISTRY', 'EIGEN_VERSION', ...IMAGE_NAMES.map((name) => `EIGEN_${name.toUpperCase()}_IMAGE`)];
@@ -124,7 +124,7 @@ function validateAddress(value: string): string | undefined {
 
 function validateRelay(value: string): string | undefined {
     if (value === '') return;
-    const [host = '', port = RELAY_PORT, extra] = value.split(':');
+    const [host = '', port = String(DEFAULT_RELAY_PORT), extra] = value.split(':');
     if (!/^[a-z0-9][a-z0-9.-]*$/i.test(host) || !isPort(port) || extra !== undefined) {
         return 'Enter the relay as host:port, like smtp-relay.brevo.com:587.';
     }
@@ -144,8 +144,9 @@ function cidrRange(cidr: string): [number, number] {
     return [start, start + 2 ** (32 - Number(prefix)) - 1];
 }
 
-// A rerun must reuse the live network's subnet: recreating it elsewhere would orphan the running containers.
-export function chooseSubnet(networks: DockerNetwork[], project: string): string {
+// A rerun must reuse the live network's subnet: recreating it elsewhere would orphan the running containers. Undefined
+// when every candidate is taken.
+export function chooseSubnet(networks: DockerNetwork[], project: string): string | undefined {
     const live = networks.find(
         (network) => network.Name === `${project}_eigen` && network.Labels?.['com.docker.compose.project'] === project,
     );
@@ -154,11 +155,10 @@ export function chooseSubnet(networks: DockerNetwork[], project: string): string
     const occupied = networks
         .flatMap((network) => network.IPAM.Config ?? [])
         .flatMap((config) => (config.Subnet && /^[\d.]+\/\d+$/.test(config.Subnet) ? [cidrRange(config.Subnet)] : []));
-    const free = SUBNET_CANDIDATES.find((candidate) => {
+    return SUBNET_CANDIDATES.find((candidate) => {
         const [start, end] = cidrRange(candidate);
         return !occupied.some(([takenStart, takenEnd]) => start <= takenEnd && takenStart <= end);
     });
-    return free ?? DEFAULT_SUBNET;
 }
 
 export function configureEntries(existing: Map<string, string>, answers: ConfigureAnswers): Map<string, string> {
@@ -191,7 +191,7 @@ export function configureEntries(existing: Map<string, string>, answers: Configu
         else entries.delete(key);
     }
     // Unset or empty, the sender follows MAIL_DOMAIN; writing the default would pin it.
-    if (answers.from !== `noreply@${answers.mailDomain}` || existing.get('SMTP_FROM')) {
+    if (answers.from !== defaultSenderAddress(answers.mailDomain) || existing.get('SMTP_FROM')) {
         entries.set('SMTP_FROM', answers.from);
     }
 
@@ -211,10 +211,8 @@ export async function configure(
     const ui: Ui = await createUi(Object.keys(flags).length > 0);
     const existing = readEnvFile(ENV_PATH);
     if (backfill && !existing.get('DOMAIN')) ui.fail(`${ENV_PATH} has no DOMAIN.`, 'Run ./eigen setup first.');
-    if (!backfill) {
-        ui.intro('Configure Eigen');
-        ui.explain('A few questions. Enter keeps the suggested answer.');
-    }
+    ui.intro('Configure Eigen');
+    ui.explain('A few questions. Enter keeps the suggested answer.');
 
     const answer = async (
         question: { message: string; help: string; flag: string; placeholder?: string },
@@ -225,12 +223,13 @@ export async function configure(
         const { message, flag } = question;
         if (given !== undefined) {
             const error = validate(given);
-            return error ? ui.fail(`--${flag}: ${error}`, `Pass a valid --${flag}.`) : given;
+            return error ? ui.fail(`${flag}: ${error}`, `Pass a valid ${flag}.`) : given;
         }
+        // Everything a backfill does not add, the final merge puts back as it was.
         if (backfill) return initial;
         if (acceptDefaults)
-            return validate(initial) ? ui.fail(`No answer for "${message}".`, `Pass --${flag}.`) : initial;
-        return ui.ask({ ...question, initial, validate, flag: `--${flag}` });
+            return validate(initial) ? ui.fail(`No answer for "${message}".`, `Pass ${flag}.`) : initial;
+        return ui.ask({ ...question, initial, validate });
     };
     const decide = async (
         given: boolean | undefined,
@@ -247,7 +246,7 @@ export async function configure(
             {
                 message: 'Where will Eigen be hosted?',
                 help: 'The web address people open, like eigen.example.com. You must be able to set its DNS records.',
-                flag: 'domain',
+                flag: '--domain',
                 placeholder: 'eigen.example.com',
             },
             flags.domain,
@@ -261,9 +260,9 @@ export async function configure(
             {
                 message: 'Which mail domain will you use?',
                 help:
-                    'Everyone signs in with an address on it, like admin@example.com.\n' +
+                    'Everyone signs in with an address on it, like jane@example.com.\n' +
                     'Mailboxes live on this server or wherever its email is hosted now.',
-                flag: 'mail-domain',
+                flag: '--mail-domain',
             },
             flags['mail-domain'],
             currentMailDomain,
@@ -292,7 +291,7 @@ export async function configure(
                   help:
                       '127.0.0.1 keeps it on this machine.\n' +
                       'For a web server in Docker, use the Docker host, like 172.17.0.1.',
-                  flag: 'proxy',
+                  flag: '--proxy',
               },
               flags.proxy,
               currentStatic,
@@ -307,7 +306,7 @@ export async function configure(
                   {
                       message: "Which email address should Let's Encrypt use?",
                       help: 'It only writes about problems with the HTTPS certificate.',
-                      flag: 'contact-email',
+                      flag: '--contact-email',
                   },
                   flags['contact-email'],
                   currentContact,
@@ -336,20 +335,20 @@ export async function configure(
             help: mail
                 ? 'Useful when your provider blocks port 25. Leave it empty to send directly.'
                 : 'Eigen needs one to send sign-in codes, invitations and notifications.',
-            flag: 'relay',
+            flag: '--relay',
         },
         flags['no-relay'] ? '' : flags.relay,
-        currentHost ? `${currentHost}:${existing.get('SMTP_RELAY_PORT') || RELAY_PORT}` : '',
+        currentHost ? `${currentHost}:${existing.get('SMTP_RELAY_PORT') || DEFAULT_RELAY_PORT}` : '',
         validateRelay,
     );
     let relay: ConfigureAnswers['relay'] = null;
     if (relayAnswer) {
-        const [host = '', port = RELAY_PORT] = relayAnswer.split(':');
+        const [host = '', port = String(DEFAULT_RELAY_PORT)] = relayAnswer.split(':');
         const user = await answer(
             {
                 message: "What is the relay's user name? (optional)",
                 help: 'Leave it empty if the relay needs none.',
-                flag: 'relay-user',
+                flag: '--relay-user',
             },
             flags['relay-user'],
             existing.get('SMTP_RELAY_USER') ?? '',
@@ -374,19 +373,18 @@ export async function configure(
                     flag: `--relay-password-env <VAR>${keep}`,
                 })) || current;
         }
-        if (user && !password && !backfill)
-            ui.fail('A relay user needs a password.', 'Pass --relay-password-env <VAR>.');
+        if (user && !password) ui.fail('A relay user needs a password.', 'Pass --relay-password-env <VAR>.');
         if (validateText(password)) ui.fail('The relay password contains control characters.', 'Remove them.');
         relay = { host, port, user, password };
     }
-    const currentFrom = existing.get('SMTP_FROM') || `noreply@${mailDomain}`;
+    const currentFrom = existing.get('SMTP_FROM') || defaultSenderAddress(mailDomain);
     const from =
         mail || relay
             ? await answer(
                   {
                       message: "Which address should Eigen's own mail come from?",
                       help: `An address or Name <address>.${relay ? ' The relay must accept it.' : ''}`,
-                      flag: 'from',
+                      flag: '--from',
                   },
                   flags.from,
                   currentFrom,
@@ -397,7 +395,7 @@ export async function configure(
     // Only the launcher, which always lists the host's networks, picks a subnet; a checkout keeps Compose's default.
     const networksFile = process.env['EIGEN_DOCKER_NETWORKS'];
     let subnet = existing.get('EIGEN_SUBNET') ?? null;
-    if (subnet === null && networksFile && !backfill) {
+    if (subnet === null && networksFile) {
         // Compose takes COMPOSE_PROJECT_NAME from the env file over the folder name, which is /install in here.
         const project =
             existing.get('COMPOSE_PROJECT_NAME') ||
@@ -409,7 +407,12 @@ export async function configure(
         } catch {
             ui.fail('Could not read the list of Docker networks.', 'Run ./eigen setup again.');
         }
-        subnet = chooseSubnet(networks, project);
+        subnet =
+            chooseSubnet(networks, project) ??
+            ui.fail(
+                'Every subnet Eigen tries is taken by another Docker network on this host.',
+                `Set EIGEN_SUBNET in ${ENV_PATH} to a free /24, like 10.99.0.0/24, then run ./eigen setup again.`,
+            );
     }
 
     const entries = configureEntries(existing, {
@@ -437,10 +440,8 @@ export async function configure(
         ui.outro('Configuration unchanged.');
         return;
     }
-    // Taken before the rewrite, which would hand the operator's file to root.
-    const envOwner = statSync(existsSync(ENV_PATH) ? ENV_PATH : '.');
     writeEnvFile(ENV_PATH, written);
-    ownAs(ENV_PATH, envOwner);
+    ownAs(ENV_PATH, installOwner('.'));
     if (backfill) {
         ui.outro(`${ENV_PATH}: set ${changed.join(', ')}.`);
         return;

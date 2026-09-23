@@ -4,6 +4,9 @@ import { auth, getAuthDrizzleDb } from '../auth/auth';
 import { ApiError } from '../core/errors';
 import { getUserByEmail, type User } from './user';
 
+// What the control socket's POST /reset-password answers with.
+export type ResetPasswordResult = { email: string };
+
 export async function resetUserPassword(email: string, password: string): Promise<User> {
     const user = await getUserByEmail(email.trim());
     if (!user) throw new ApiError(404, `No account uses ${email}.`);

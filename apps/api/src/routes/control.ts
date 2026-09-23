@@ -4,7 +4,7 @@ import { getControlSocketPath } from '../lib/config/paths';
 import { type ControlStatus, getServerStatus } from '../lib/config/server-status';
 import { handleApiError } from '../lib/core/errors';
 import { createSetupLink, type SetupLink } from '../lib/setup/setup-token';
-import { resetUserPassword } from '../lib/user/reset-password';
+import { type ResetPasswordResult, resetUserPassword } from '../lib/user/reset-password';
 
 // Served only on the Unix socket, which `docker compose exec` reaches as the API's own user: the CLI's
 // online commands, never the web.
@@ -14,7 +14,7 @@ export const controlRouter = new Elysia({ name: 'control' })
     .post('/setup-link', (): SetupLink => createSetupLink())
     .post(
         '/reset-password',
-        async ({ body }): Promise<{ email: string }> => {
+        async ({ body }): Promise<ResetPasswordResult> => {
             const user = await resetUserPassword(body.email, body.password);
             return { email: user.email };
         },

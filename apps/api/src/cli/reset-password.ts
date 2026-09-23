@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
+import type { ResetPasswordResult } from '../lib/user/reset-password';
 import { callControl } from './control-socket';
 import { createUi } from './ui';
 
@@ -48,7 +49,7 @@ export async function resetPassword(email: string | undefined, flags: { generate
                 : 'Run ./eigen reset-password again with another address or password.',
         );
     }
-    const changed: { email: string } = await res.json();
+    const changed: ResetPasswordResult = await res.json();
     if (flags.generate) console.log(`New password: ${password}`);
     ui.outro(`Password changed for ${changed.email}. Signed out everywhere.`);
 }
