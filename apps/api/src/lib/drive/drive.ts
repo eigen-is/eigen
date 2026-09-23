@@ -25,6 +25,7 @@ import {
     withEigenExtension,
 } from '@workspace/lib/types/drive';
 import {
+    CARD_TITLE_MAX_LENGTH,
     type ClientFileEventRecord,
     type FileEvent,
     type FileEventRecord,
@@ -354,7 +355,7 @@ export default class Drive {
         const changed = (current?.assignee ?? null) !== assignee;
         // Best-effort title cache (client-posted, like the sticky-* event card names) — refreshed
         // even on a no-op re-assign, since the title may have changed in the same edit.
-        const card = title?.slice(0, 200);
+        const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
         if (card) await index.setTitle(chatName, card);
         if (!changed) return false;
         await index.assign(chatName, assignee);
@@ -381,7 +382,7 @@ export default class Drive {
         // 404 an unknown thread: a status write must not record an event for a nonexistent chatName.
         await assertCommentChatExists(this, mountId, pathId, chatName);
         const index = await getCommentIndex(this, mountId, pathId);
-        const card = title?.slice(0, 200);
+        const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
         if (card) await index.setTitle(chatName, card);
         if (status === 'resolved') {
             await index.resolve(chatName, user.email);
