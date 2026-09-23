@@ -44,7 +44,7 @@ bun test --preload ./src/test/preload.ts
   seeder contract test (`server/seed-demo.test.ts`, ~30 s, spawns the whole seeder) skips in a plain
   local run. Run it locally with `EIGEN_SLOW_TESTS=1 bun run test:api` after touching
   `src/scripts/demo/` or the readers it decodes with
-- Files run sequentially by default. `--parallel=N` is supported and safe: it implies `--isolate`, so
+- Files run sequentially by default. `--parallel=N` is the isolated mode (today eleven files hang in `beforeAll` under it, see the roadmap): it implies `--isolate`, so
   every test file evaluates in a fresh module graph, gets its own `EIGEN_DATA_ROOT` (a per-process dir
   under `data-test/`, see below) and boots its own server on first use. No two files share a Home
   singleton or a SQLite file, which is what makes running them concurrently safe. Setup is lazy:
@@ -121,7 +121,9 @@ steps:
   - bun run lint
   - bun run typecheck
   - bun run primitives:check      # Primitives index (docs/SHARED-PRIMITIVES.md is generated + gated)
-  - bun --filter '*' test
+  - bun --filter '*' test --timeout 30000
 ```
+
+The 30 s per-test timeout is CI-only: the runner is slower than a laptop and the one-process API suite stalls for seconds at a time (the roadmap row on the API suite has the measurements), so bun's 5 s default turned every stall into a failure of whichever file was running. Locally the default stays, so a slow test is caught where it is written. Under `GITHUB_ACTIONS` the API preload prints `[memory] rss` every 5 s and bun prints per-test timings, so a stall shows in the log as a silent gap with the process size on either side.
 
 The CI job runs on `ubuntu-latest` with a 15-minute timeout. Locally `bun run check` is the same set plus `bun scripts/check-home-imports.ts`, `bun scripts/check-test-layout.ts`, `bun scripts/check-docs-links.ts` (relative markdown links and backtick'd `apps/`|`packages/`|`docker/`|`scripts/` paths must resolve on disk), and `bun scripts/check-standards.ts` (the ratcheting code-standards gate — see [CODE-STANDARDS.md § Standards Gates](CODE-STANDARDS.md#standards-gates)): lint → typecheck → home-import check → test-layout check → docs-link check → standards check → `primitives:check` → test.
