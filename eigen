@@ -141,7 +141,7 @@ step() {
     exit 1
 }
 
-wordmark() { printf '\n%s|eigen>%s\n\n' "$ACCENT" "$RESET"; }
+wordmark() { printf '\n%seigen|%s>%s\n\n' "$ACCENT" "$1" "$RESET"; }
 
 preflight() {
     if [ -e .env.production ] && [ ! -r .env.production ]; then
@@ -232,7 +232,7 @@ setup() {
         ;;
     esac
 
-    wordmark
+    wordmark setup
     preflight
     mkdir -p .eigen
 
@@ -284,7 +284,7 @@ restart() { step "Starting Eigen" "Eigen is running" "Eigen did not start; ./eig
 # so the mixed owners in data/ survive. Eigen starts again whatever happens to the snapshot.
 backup() {
     if [ ! -f .env.production ]; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
-    wordmark
+    wordmark backup
     preflight
     mkdir -p .eigen
     trap restart EXIT
@@ -301,7 +301,7 @@ restore() {
         return
         ;;
     esac
-    wordmark
+    wordmark restore
     preflight
     mkdir -p .eigen
     cli_as 0 restore "$@" --check || exit
@@ -317,7 +317,7 @@ restore() {
 # Only the launcher can ask Docker, so it gathers the services, a pending update and the mail queue for the report.
 status() {
     if [ ! -f .env.production ]; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
-    wordmark
+    wordmark status
     preflight >/dev/null
     tab=$(printf '\t')
     listed=$(dc ps -a --format "{{.Service}}$tab{{.State}}$tab{{.Health}}") ||
