@@ -392,7 +392,7 @@ describe('configure command', () => {
         expect(two.stderr).toContain('--from');
     });
 
-    test('writes the release pins the launcher passes as variables, and still reads EIGEN_PINS', async () => {
+    test('writes the release pins the launcher passes as variables', async () => {
         const dir = tempDir();
         const flags = [
             '--yes',
@@ -408,7 +408,7 @@ describe('configure command', () => {
         const run = await runConfigure(dir, flags, undefined, {
             EIGEN_VERSION: '0.2.99',
             EIGEN_API_IMAGE: digest,
-            EIGEN_PINS: 'DOMAIN=evil.example.org EIGEN_REGISTRY=localhost:5055/eigen-is',
+            EIGEN_REGISTRY: 'localhost:5055/eigen-is',
         });
         expect(run.code).toBe(0);
         const env = readFileSync(join(dir, '.env.production'), 'utf8');

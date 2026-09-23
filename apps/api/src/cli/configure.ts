@@ -440,9 +440,7 @@ export async function configure(args: string[]): Promise<void> {
     });
     // A backfill keeps every existing value; only the release pins the launcher passes may change a line.
     const written = backfill ? new Map([...entries, ...existing]) : entries;
-    // The launcher resolves these on the host, where the Docker socket is. EIGEN_PINS ('KEY=VALUE …') is its
-    // older way to pass them.
-    const pinWords = (process.env['EIGEN_PINS'] ?? '').split(/\s+/);
+    // The launcher resolves these on the host, where the Docker socket is.
     for (const key of [
         'EIGEN_REGISTRY',
         'EIGEN_VERSION',
@@ -451,7 +449,7 @@ export async function configure(args: string[]): Promise<void> {
         'EIGEN_POSTFIX_IMAGE',
         'EIGEN_DOVECOT_IMAGE',
     ]) {
-        const value = process.env[key] || pinWords.find((word) => word.startsWith(`${key}=`))?.slice(key.length + 1);
+        const value = process.env[key];
         if (value) written.set(key, value);
     }
     const changed = [...written.keys()].filter((key) => written.get(key) !== existing.get(key));
