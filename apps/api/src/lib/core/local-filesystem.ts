@@ -110,8 +110,7 @@ export class LocalFilesystem {
         }
     }
 
-    // Unlinks rather than deletes: `delete` reaps a newly-empty parent, taking the swept directory with it.
-    // Age-gated because the sweep runs beside live requests, and a young temp may be a write about to rename.
+    // Age-gated since a young temp may be a live write about to rename; unlink, since `delete` reaps the emptied parent.
     async sweepAtomicTemps(dir: string, maxAgeMs: number): Promise<void> {
         const now = Date.now();
         for (const name of await this.list(dir)) {

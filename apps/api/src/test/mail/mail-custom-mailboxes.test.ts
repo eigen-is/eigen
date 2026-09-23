@@ -164,8 +164,8 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
         const exists = await assertJson<MaildirMailbox | false>(
             await authedRequest(token, `/mail/${userId}/mailbox-exists/My%20Stuff`),
         );
-        expect(exists).not.toBe(false);
-        expect((exists as MaildirMailbox).path).toBe('My Stuff');
+        if (!exists) throw new Error('Expected the mailbox to exist');
+        expect(exists.path).toBe('My Stuff');
     });
 
     test('a name that case-folds onto a standard mailbox addresses that one, not a second folder', async () => {
@@ -213,8 +213,8 @@ describe.skipIf(isWindows)('A folder with a folder nested under it', () => {
         const exists = await assertJson<MaildirMailbox | false>(
             await authedRequest(token, `/mail/${userId}/mailbox-exists/Clients`),
         );
-        expect(exists).not.toBe(false);
-        expect((exists as MaildirMailbox).flags).toEqual(['\\HasChildren']);
+        if (!exists) throw new Error('Expected the mailbox to exist');
+        expect(exists.flags).toEqual(['\\HasChildren']);
     });
 });
 
