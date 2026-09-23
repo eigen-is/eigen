@@ -385,9 +385,9 @@ backup() {
     cli_as 0 snapshot
 }
 
-# The CLI checks the snapshot and asks before anything stops; a no is its exit 3. Eigen starts again whatever happens
-# to the restore: the CLI unpacks and checks the snapshot aside, and only then swaps it in. An interrupt reaches the
-# CLI, which says how it ended, so the launcher waits for it instead of leaving.
+# While Eigen still runs, the CLI asks (a no is its exit 3), then unpacks and checks the snapshot aside: a refusal
+# stops nothing, and the downtime is the swap alone. Eigen starts again whatever happens to the swap. An interrupt
+# reaches the CLI, which says how it ended, so the launcher waits for it instead of leaving.
 restore() {
     case ${1:-} in -h | --help)
         need_image "Run ./eigen setup first; ./eigen restore --help works after that."
@@ -399,6 +399,7 @@ restore() {
     preflight
     need_image "Run ./eigen setup first, then ./eigen restore <snapshot>."
     mkdir -p .eigen
+    trap : INT TERM
     checked=0
     cli_as 0 restore "$@" --check || checked=$?
     case $checked in 0) ;; 3) exit 0 ;; *) exit "$checked" ;; esac
