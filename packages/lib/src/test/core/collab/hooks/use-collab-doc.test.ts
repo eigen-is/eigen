@@ -15,6 +15,11 @@ class FakeProvider {
     wsconnected = false;
     synced = false;
     destroyed = false;
+    messageHandlers: unknown[] = [];
+    params: Record<string, string> = {};
+    bcChannel = '';
+    disableBc = true;
+    connectBc() {}
     private listeners = new Map<string, Set<Listener>>();
 
     constructor(
