@@ -2,11 +2,16 @@
 # Addresses need a dotted domain (better-auth refuses user@localhost), so mail defaults to eigen.localhost.
 #
 # Dev runs all profiles by default: COMPOSE_PROFILES=edge,mail.
+
+# MAIL_DOMAIN from .env wins, e.g. for a ./data set up with a real org domain.
+x-dev-domains: &dev-domains
+  DOMAIN: localhost
+  MAIL_DOMAIN: ${MAIL_DOMAIN:-eigen.localhost}
+
 services:
   caddy:
     environment:
-      DOMAIN: localhost
-      MAIL_DOMAIN: eigen.localhost
+      <<: *dev-domains
       CADDY_ACME_EMAIL: ""
     ports:
       - "80:80"
@@ -15,22 +20,16 @@ services:
   eigen-api:
     user: ""
     environment:
+      <<: *dev-domains
       PRODUCTION: 0
       # Override the base compose's NODE_ENV=production so local dev / test-deployments.sh keep
       # dev behaviour (HTTP-only cookies, dev warnings, BA limiter off unless forced on).
       NODE_ENV: development
-      EIGEN_DATA_ROOT: /app/data
-      DOMAIN: localhost
-      # Honor MAIL_DOMAIN from .env, e.g. a ./data set up with a real org domain.
-      MAIL_DOMAIN: ${MAIL_DOMAIN:-eigen.localhost}
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
-      TRUSTED_NETWORKS: "127.0.0.0/8,::1,${EIGEN_SUBNET:-172.20.0.0/24}"
 
   eigen-static:
-    environment:
-      DOMAIN: localhost
-      MAIL_DOMAIN: eigen.localhost
+    environment: *dev-domains
 
   postfix:
     volumes:
@@ -38,17 +37,14 @@ services:
       - ./data/certs/dev:/certs:ro
       - postfix-queue:/var/spool/postfix
     environment:
-      DOMAIN: localhost
-      MAIL_DOMAIN: eigen.localhost
+      <<: *dev-domains
       SMTP_RELAY_HOST: ""
 
   dovecot:
     volumes:
       - ./data:/data
       - ./data/certs/dev:/certs
-    environment:
-      DOMAIN: localhost
-      MAIL_DOMAIN: eigen.localhost
+    environment: *dev-domains
 
   mailpit:
     image: axllent/mailpit

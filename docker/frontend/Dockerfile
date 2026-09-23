@@ -42,11 +42,11 @@ FROM caddy:2-alpine
 
 COPY --from=builder /app/dist/ /www/
 
-# Caddyfile serves the edge mode, Caddyfile.static the static mode; autoconfig.xml is templated with
-# $MAIL_DOMAIN at request time.
+# Caddyfile serves the edge mode, Caddyfile.static the static mode, both importing site.Caddyfile;
+# autoconfig.xml is templated with $MAIL_DOMAIN at request time.
 COPY Caddyfile /etc/caddy/Caddyfile
 COPY docker/static/Caddyfile /etc/caddy/Caddyfile.static
-COPY docker/caddy/autoconfig.xml /etc/caddy/autoconfig.xml
+COPY docker/caddy/site.Caddyfile docker/caddy/autoconfig.xml /etc/caddy/
 COPY docker/caddy/export-certs.sh /usr/local/bin/export-certs.sh
 
 ARG EIGEN_VERSION
