@@ -81,6 +81,7 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
     const [loaded, setLoaded] = useState(false);
     const [storageUnavailable, setStorageUnavailable] = useState(false);
     const [unsyncedEdits, setUnsyncedEdits] = useState(false);
+    const [homeReplaced, setHomeReplaced] = useState(false);
 
     const docRef = useRef<Y.Doc | null>(null);
     // A local update went out after the last completed handshake, so the server may still lack it.
@@ -177,7 +178,7 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
                 pendingUpdateRef.current = false;
                 setUnsyncedEdits(false);
                 nextProvider.disconnect();
-                window.location.reload();
+                setHomeReplaced(true);
                 return;
             }
             if (event?.code !== COLLAB_STORAGE_UNAVAILABLE_CLOSE) return;
@@ -219,6 +220,11 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
             setUndoManager(null);
         };
     }, [ownerId, mountId, pathId]);
+
+    // After the commit that disarmed UnsyncedEditsGuard: a reload inside the close handler would still meet its prompt.
+    useEffect(() => {
+        if (homeReplaced) window.location.reload();
+    }, [homeReplaced]);
 
     return {
         doc,

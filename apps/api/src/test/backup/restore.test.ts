@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON } from '@workspace/lib/constants/collab';
 import { teamOwnerId } from '@workspace/lib/types';
@@ -21,6 +21,7 @@ import {
 } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
+import { COLLAB_EPOCH_FILE, getCollabEpoch } from '../../lib/collab/epoch';
 import { getAvatarsDir } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { avatarNameOf } from '../../lib/contacts/card-store';
@@ -463,6 +464,14 @@ describe('Backup restoreHome', () => {
         await restoreHome(artifact, target.id, `restore-ws-${Date.now()}`);
 
         expect(await closed).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: COLLAB_HOME_REPLACED_REASON });
+    });
+
+    // A tab offline through the restore holds no socket to close; its reconnect names the epoch it loaded under.
+    test('draws a new collab epoch, so a tab that was offline reloads when it reconnects', async () => {
+        const before = getCollabEpoch();
+        await restoreHome(artifact, target.id, `restore-epoch-${Date.now()}`);
+        expect(getCollabEpoch()).not.toBe(before);
+        expect(readFileSync(join(TEST_DATA_DIR, 'server', COLLAB_EPOCH_FILE), 'utf8')).toBe(getCollabEpoch());
     });
 
     test('a socket that connects while the mark is set is closed 1012, never 1013', async () => {
