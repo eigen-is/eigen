@@ -506,11 +506,30 @@ describe('restore', () => {
         );
     });
 
-    test('--check checks the archive and changes nothing', async () => {
+    test('--check unpacks and checks aside, and the next run only swaps that copy in', async () => {
         const dir = install();
         const name = await snapshot(dir);
-        const result = await eigen(dir, 'restore', name, '--check', '--yes');
-        expect(result.code).toBe(0);
-        untouched(dir);
+        writeFileSync(join(dir, 'data/home/alice/notes.txt'), 'changed\n');
+        const check = await eigen(dir, 'restore', name, '--check', '--yes');
+        expect(check.code).toBe(0);
+        expect(readFileSync(join(dir, 'data/home/alice/notes.txt'), 'utf8')).toBe('changed\n');
+        expect(readFileSync(join(dir, '.eigen/restore/data/home/alice/notes.txt'), 'utf8')).toBe('original\n');
+        // Marks the unpacked copy, so the swap must use it rather than unpack again.
+        writeFileSync(join(dir, '.eigen/restore/data/home/alice/notes.txt'), 'checked\n');
+        const swap = await eigen(dir, 'restore', name, '--yes');
+        expect(swap.code).toBe(0);
+        expect(readFileSync(join(dir, 'data/home/alice/notes.txt'), 'utf8')).toBe('checked\n');
+        expect(existsSync(join(dir, '.eigen/restore'))).toBe(false);
+    });
+
+    test('an unpacked copy of another snapshot is not swapped in', async () => {
+        const dir = install();
+        const first = await snapshot(dir);
+        await Bun.sleep(1000);
+        writeFileSync(join(dir, 'data/home/alice/notes.txt'), 'second\n');
+        const second = await snapshot(dir);
+        expect((await eigen(dir, 'restore', first, '--check', '--yes')).code).toBe(0);
+        expect((await eigen(dir, 'restore', second, '--yes')).code).toBe(0);
+        expect(readFileSync(join(dir, 'data/home/alice/notes.txt'), 'utf8')).toBe('second\n');
     });
 });

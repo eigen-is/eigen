@@ -8,6 +8,7 @@ import {
     mkdtempSync,
     openSync,
     readdirSync,
+    readFileSync,
     realpathSync,
     renameSync,
     rmSync,
@@ -19,6 +20,7 @@ import { basename, dirname, join, relative } from 'node:path';
 import { formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import { BACKUP_STAMP_PATTERN, buildBackupStamp } from '@workspace/lib/validation';
+import type { Subprocess } from 'bun';
 import pkg from '../../../../package.json' with { type: 'json' };
 import { createUi, glyphLine } from './ui';
 
@@ -40,7 +42,7 @@ Writes data/ and ${ENV_PATH} into ${SNAPSHOTS}/eigen-<UTC time>.tar.gz. Stop Eig
 
   --pre-update   Name it eigen-pre-update-<UTC time>.tar.gz and delete the pre-update snapshots
                  older than the previous one`;
-// --check is the launcher's: it asks and changes nothing, so Eigen stops only after a yes.
+// --check is the launcher's: it asks, unpacks and checks while Eigen runs, and leaves the live data alone.
 export const RESTORE_OPTIONS = { yes: { type: 'boolean' }, check: { type: 'boolean' } } as const;
 export const RESTORE_USAGE = `Usage: ./eigen restore <snapshot> [--yes]
 
@@ -97,10 +99,8 @@ export async function snapshot(flags: { 'pre-update'?: boolean }): Promise<void>
     // The launcher makes snapshots/ as the operator; the archives are theirs too.
     const owner = statSync('.');
     const root = process.getuid?.() === 0;
-    if (!existsSync(SNAPSHOTS)) {
-        mkdirSync(SNAPSHOTS, { mode: 0o700 });
-        if (root) chownSync(SNAPSHOTS, owner.uid, owner.gid);
-    }
+    if (!existsSync(SNAPSHOTS)) mkdirSync(SNAPSHOTS, { mode: 0o700 });
+    if (root) chownSync(SNAPSHOTS, owner.uid, owner.gid);
 
     // The archive holds every secret of the server: nothing this writes is readable by others, not even briefly.
     process.umask(0o077);
@@ -177,7 +177,7 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
     const cannot = (reason: string): never =>
         ui.fail(`${name} cannot be restored: ${reason}.`, 'Restore a snapshot made by ./eigen backup.');
 
-    // Reads the whole archive, so a damaged one is refused before anything stops.
+    // Reads the whole archive, so a damaged one is refused before the question.
     const read = Bun.spawn(['tar', '-xzOf', path, META], { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' });
     const [text, readError, readCode] = await Promise.all([
         new Response(read.stdout).text(),
@@ -226,34 +226,42 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
             process.exit(DECLINED);
         }
     }
-    if (flags.check) return;
-
-    // Unpacked aside first: an interrupt or a refusal before the swap leaves the live data untouched.
-    const envOwner = statSync(existsSync(ENV_PATH) ? ENV_PATH : '.');
-    rmSync(STAGING, { recursive: true, force: true });
-    mkdirSync(STAGING, { recursive: true, mode: 0o700 });
-    const extract = Bun.spawn(['tar', '--numeric-owner', '-xzpf', path, '-C', STAGING, ENV_PATH, 'data'], {
-        stdin: 'ignore',
-        stdout: 'ignore',
-        stderr: 'pipe',
-    });
-    // Also holds off an interrupt during the swap below, which is synchronous, until the swap is done.
+    // Unpacked and checked aside, by the launcher's --check run while Eigen still runs, so a refusal stops nothing and
+    // the downtime is the swap alone. An interrupt before the swap leaves the live data untouched; the handler also
+    // holds one during the swap, which is synchronous, until the swap is done.
     let interrupted = false;
+    let extract: Subprocess<'ignore', 'ignore', 'pipe'> | undefined;
     const interrupt = () => {
         interrupted = true;
-        extract.kill();
+        extract?.kill();
     };
     process.on('SIGINT', interrupt);
     process.on('SIGTERM', interrupt);
-    const [code, error] = await Promise.all([extract.exited, new Response(extract.stderr).text()]);
-    const reason = interrupted ? null : code !== 0 ? error.trim() : await refusal();
-    if (interrupted || reason) {
+    const marker = join(STAGING, '.snapshot');
+    if (flags.check || !existsSync(marker) || readFileSync(marker, 'utf8') !== name) {
         rmSync(STAGING, { recursive: true, force: true });
-        if (reason) cannot(reason);
-        ui.outro('Cancelled. Nothing was changed.');
-        process.exit(130);
+        mkdirSync(STAGING, { recursive: true, mode: 0o700 });
+        extract = Bun.spawn(['tar', '--numeric-owner', '-xzpf', path, '-C', STAGING, ENV_PATH, 'data'], {
+            stdin: 'ignore',
+            stdout: 'ignore',
+            stderr: 'pipe',
+        });
+        if (interrupted) extract.kill();
+        const [code, error] = await Promise.all([extract.exited, new Response(extract.stderr).text()]);
+        const reason = interrupted ? null : code !== 0 ? error.trim() : await refusal();
+        if (interrupted || reason) {
+            rmSync(STAGING, { recursive: true, force: true });
+            if (reason) cannot(reason);
+            ui.outro('Cancelled. Nothing was changed.');
+            process.exit(130);
+        }
+        if (flags.check) {
+            writeFileSync(marker, name);
+            return;
+        }
     }
 
+    const envOwner = statSync(existsSync(ENV_PATH) ? ENV_PATH : '.');
     const staged = join(STAGING, ENV_PATH);
     if (process.getuid?.() === 0) chownSync(staged, envOwner.uid, envOwner.gid);
     chmodSync(staged, 0o600);
