@@ -360,8 +360,8 @@ export async function configure(args: string[]): Promise<void> {
         ui.confirm({
             message: 'Host email on this server?',
             help:
-                'Yes: a mail server runs here, on ports 25, 465, 587 and 993.\n' +
-                'No: there is no Mail app, and email stays where it is.',
+                'Yes: Eigen hosts the mailboxes, on ports 25, 465, 587 and 993.\n' +
+                'No: Eigen hosts no mailboxes. There is no Mail app, and email stays where it is.',
             flag: '--mail or --no-mail',
             initial,
         }),
