@@ -83,6 +83,6 @@ Click **Verify** on any archive to run the checks again and update its badge.
 
 ## Whole-server backup
 
-The panel covers one user or team at a time. To back up the whole server, run `./eigen backup` in the install folder on the server. It stops Eigen, saves the whole data directory plus the production environment file as one snapshot in the backups folder, and starts Eigen again, so there are a few seconds of downtime and no verification. `./eigen restore` puts a snapshot back and keeps the data it replaces aside.
+The panel covers one user or team at a time. To back up the whole server, run `./eigen backup` in the install folder on the server. It stops Eigen, saves the whole data directory plus the production environment file as one snapshot in the `snapshots/` folder of the install folder, and starts Eigen again, so there are a few seconds of downtime and no verification. Only the owner of the install folder can read a snapshot. `./eigen restore` puts a snapshot back and keeps the data it replaces aside.
 
 Use `./eigen backup` for disaster recovery of the entire server. Use the **Backup** panel when you want a verified copy of a single user or team, or a restore that does not take the server down.
