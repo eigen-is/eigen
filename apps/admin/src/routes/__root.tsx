@@ -8,6 +8,15 @@ import { Button } from '@workspace/ui/components/button';
 import { AdminSidebar } from '../components/admin/admin-sidebar';
 import { SetupWizard } from '../components/admin/setup-wizard';
 
+// The token of the link ./eigen setup printed, read and taken off the URL before the router starts: its
+// redirects (/ to /users, then to /login) would drop it, and off the URL it stays out of the history and any Referer.
+const setupUrl = new URL(window.location.href);
+const setupToken = setupUrl.searchParams.get('setup') ?? undefined;
+if (setupToken) {
+    setupUrl.searchParams.delete('setup');
+    window.history.replaceState(window.history.state, '', setupUrl);
+}
+
 function AdminRoot() {
     const { data: setupStatus, isLoading, error, refetch } = useSetupStatus();
 
@@ -23,7 +32,7 @@ function AdminRoot() {
     }
     // Never infer "configured" from absent data — only a resolved status decides.
     if (!setupStatus) return <LoadingState />;
-    if (setupStatus.setupRequired) return <SetupWizard status={setupStatus} />;
+    if (setupStatus.setupRequired) return <SetupWizard status={setupStatus} setupToken={setupToken} />;
 
     return <AdminApp />;
 }

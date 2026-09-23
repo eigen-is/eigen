@@ -2,23 +2,39 @@ import { useCheckSetupS3, useCompleteSetup, useHardenSetupS3, type useSetupStatu
 import { EMPTY_S3 } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerStorageType } from '@workspace/lib/types/settings';
-import { EigenLoader } from '@workspace/ui';
+import { EigenLoader, EmptyState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@workspace/ui/components/input-group';
 import { Label } from '@workspace/ui/components/label';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, KeyRound } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { StorageTypePicker } from './storage-type-picker';
 
 // The /setup/status shape the parent route already fetched and passes down.
 type SetupStatus = NonNullable<ReturnType<typeof useSetupStatus>['data']>;
 
-export function SetupWizard({ status }: { status: SetupStatus }) {
-    const completeSetup = useCompleteSetup();
-    const s3Check = useCheckSetupS3();
-    const s3Harden = useHardenSetupS3();
+// setupToken comes from the ?setup= of the link ./eigen setup printed.
+export function SetupWizard({ status, setupToken }: { status: SetupStatus; setupToken: string | undefined }) {
+    if (!setupToken) {
+        return (
+            <div className="h-screen bg-background">
+                <EmptyState
+                    icon={<KeyRound className="h-10 w-10" />}
+                    message="Open the setup link that ./eigen setup printed."
+                    hint="Lost it? Run ./eigen setup again on your server for a fresh one."
+                />
+            </div>
+        );
+    }
+    return <SetupForm status={status} setupToken={setupToken} />;
+}
+
+function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: string }) {
+    const completeSetup = useCompleteSetup(setupToken);
+    const s3Check = useCheckSetupS3(setupToken);
+    const s3Harden = useHardenSetupS3(setupToken);
     const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
     const handleS3Harden = (config: S3Config, noncurrentDays: number) =>
         s3Harden.mutateAsync({ ...config, noncurrentDays });
