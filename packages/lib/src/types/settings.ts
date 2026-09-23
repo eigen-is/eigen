@@ -60,6 +60,12 @@ export type S3HardenResult = S3CheckResult & {
     reason?: 'access-denied' | 'not-supported' | 'foreign-lifecycle' | 'error';
 };
 
+// The web address and the mail domain come from ./eigen setup; the wizard only shows the mail domain.
+export type SetupStatus = { setupRequired: boolean; mailDomain: string };
+
+// The admin account /setup/complete made.
+export type SetupResult = { user: { id: string; email: string; name: string } };
+
 export type LandingLink = {
     title: string;
     url: string;

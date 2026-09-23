@@ -1,13 +1,14 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import * as fs from 'node:fs';
+import { SETUP_LINK_PARAM } from '@workspace/lib/constants/setup';
 import { getServerDataPath } from '../config/paths';
-import { getDomain, isSetupRequired } from '../config/server-config';
-
-type SetupTokenFile = { hash: string; createdAt: string };
+import { isSetupRequired } from '../config/server-config';
+import { ApiError } from '../core/errors';
+import { adminUrl } from '../core/mail-template';
 
 export type SetupLink = { setupUrl: string | null; signInUrl: string };
 
-const TOKEN_FILE = 'setup-token.json';
+const TOKEN_FILE = 'setup-token';
 
 // Only the hash is stored, so neither data/ nor a snapshot of it holds a working link.
 function sha256(token: string): Buffer {
@@ -19,21 +20,30 @@ export function createSetupToken(): string {
     const file = getServerDataPath(TOKEN_FILE);
     // Removed first, so the mode applies even over a file restored with looser permissions.
     fs.rmSync(file, { force: true });
-    const content: SetupTokenFile = { hash: sha256(token).toString('hex'), createdAt: new Date().toISOString() };
-    fs.writeFileSync(file, JSON.stringify(content), { mode: 0o600 });
+    fs.writeFileSync(file, sha256(token).toString('hex'), { mode: 0o600 });
     return token;
 }
 
 export function verifySetupToken(token: string): boolean {
     let stored: Buffer;
     try {
-        const { hash }: SetupTokenFile = JSON.parse(fs.readFileSync(getServerDataPath(TOKEN_FILE), 'utf8'));
-        stored = Buffer.from(hash, 'hex');
+        stored = Buffer.from(fs.readFileSync(getServerDataPath(TOKEN_FILE), 'utf8'), 'hex');
     } catch {
-        // A missing, truncated or hand-edited file holds no token: ./eigen setup writes a fresh one.
+        // A missing file holds no token: ./eigen setup writes a fresh one.
         return false;
     }
     return stored.length === 32 && timingSafeEqual(sha256(token), stored);
+}
+
+// Before any S3 call or write: only whoever holds the link ./eigen setup printed may set the server up.
+export function requireSetupToken(token: string | undefined): void {
+    if (!isSetupRequired()) throw new ApiError(403, 'Setup already completed');
+    if (!token || !verifySetupToken(token)) {
+        throw new ApiError(
+            403,
+            'Open the setup link that ./eigen setup printed. Run ./eigen setup again for a fresh one.',
+        );
+    }
 }
 
 export function clearSetupToken(): void {
@@ -42,7 +52,10 @@ export function clearSetupToken(): void {
 
 // Each call replaces the previous link, so a rerun of ./eigen setup is how an operator gets a fresh one.
 export function createSetupLink(): SetupLink {
-    const signInUrl = `https://${getDomain()}/admin`;
-    // The slash skips the gateway's /admin redirect; a fragment never leaves the browser, so no log holds it.
-    return { setupUrl: isSetupRequired() ? `${signInUrl}/#setup=${createSetupToken()}` : null, signInUrl };
+    const signInUrl = adminUrl();
+    // The slash skips the gateway's /admin redirect.
+    return {
+        setupUrl: isSetupRequired() ? `${signInUrl}/#${SETUP_LINK_PARAM}=${createSetupToken()}` : null,
+        signInUrl,
+    };
 }

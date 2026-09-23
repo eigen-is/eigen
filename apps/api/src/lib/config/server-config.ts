@@ -54,12 +54,8 @@ export function getAuthSecret(): string {
     return store.get().secret;
 }
 
-export function isSetupCompleted(): boolean {
-    return store.get().setupCompleted;
-}
-
 export function isSetupRequired(): boolean {
-    return !isSetupCompleted();
+    return !store.get().setupCompleted;
 }
 
 // A checkout's dev server runs without DOMAIN.

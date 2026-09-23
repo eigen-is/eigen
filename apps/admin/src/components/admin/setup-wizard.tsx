@@ -1,8 +1,8 @@
-import { useCheckSetupS3, useCompleteSetup, useHardenSetupS3, type useSetupStatus } from '@workspace/lib/admin';
+import { useCheckSetupS3, useCompleteSetup, useHardenSetupS3 } from '@workspace/lib/admin';
 import { EMPTY_S3 } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
-import type { ServerStorageType } from '@workspace/lib/types/settings';
-import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
+import type { ServerStorageType, SetupStatus } from '@workspace/lib/types/settings';
+import { MIN_PASSWORD_LENGTH, validateUsername } from '@workspace/lib/validation';
 import { EigenLoader, EmptyState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
@@ -13,10 +13,6 @@ import { CheckCircle2, KeyRound } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { StorageTypePicker } from './storage-type-picker';
 
-// The /setup/status shape the parent route already fetched and passes down.
-type SetupStatus = NonNullable<ReturnType<typeof useSetupStatus>['data']>;
-
-// setupToken comes from the #setup= of the link ./eigen setup printed.
 export function SetupWizard({ status, setupToken }: { status: SetupStatus; setupToken: string | undefined }) {
     if (!setupToken) {
         return (
@@ -51,22 +47,25 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
     const [s3Verified, setS3Verified] = useState(true);
     const onS3Verified = useCallback((verified: boolean) => setS3Verified(verified), []);
 
+    const username = adminUsername.trim().toLowerCase();
+    const usernameError = username ? validateUsername(username) : null;
     const formReady = !!(
         orgName &&
-        adminUsername.trim() &&
+        username &&
+        !usernameError &&
         adminName &&
         adminPassword.length >= MIN_PASSWORD_LENGTH &&
         s3Verified
     );
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!formReady) return;
-        try {
-            await completeSetup.mutateAsync({
+        completeSetup.mutate(
+            {
                 orgName,
                 storageType,
-                adminUsername: adminUsername.trim(),
+                adminUsername: username,
                 adminPassword,
                 adminName,
                 ...(storageType === 's3'
@@ -78,11 +77,9 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                           s3SecretAccessKey: s3Config.secretAccessKey,
                       }
                     : {}),
-            });
-            setCompleted(true);
-        } catch {
-            // The mutation hook toasts the failure; stay on the form so the user can retry.
-        }
+            },
+            { onSuccess: () => setCompleted(true) },
+        );
     };
 
     if (completed) {
@@ -173,7 +170,11 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                                         <InputGroupText>@{status.mailDomain}</InputGroupText>
                                     </InputGroupAddon>
                                 </InputGroup>
-                                <p className="text-xs text-muted-foreground mt-1">You sign in with this address</p>
+                                {usernameError ? (
+                                    <p className="text-xs text-destructive mt-1">{usernameError}</p>
+                                ) : (
+                                    <p className="text-xs text-muted-foreground mt-1">You sign in with this address</p>
+                                )}
                             </div>
 
                             <div>

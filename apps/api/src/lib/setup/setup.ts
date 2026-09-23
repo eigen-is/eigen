@@ -2,7 +2,8 @@ import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { S3Config } from '@workspace/lib/types/mount';
-import { MIN_PASSWORD_LENGTH, validateEmailAddress, validateUsername } from '@workspace/lib/validation';
+import type { SetupResult, SetupStatus } from '@workspace/lib/types/settings';
+import { validateEmailAddress, validateUsername } from '@workspace/lib/validation';
 import { auth } from '../auth/auth';
 import { getServerDataPath } from '../config/paths';
 import { getMailDomain, isSetupRequired, updateServerConfig } from '../config/server-config';
@@ -200,7 +201,7 @@ async function resetAuthDatabase(): Promise<void> {
     // UNIQUE constraint. But setupCompleted lives in config.json, a separate file: were
     // that lost or reset while users3.db survived, these rows would be real data — so
     // snapshot the database first. Clearing is then always recoverable, never destructive.
-    const { n: existingUsers } = db.query('SELECT count(*) AS n FROM "user"').get() as { n: number };
+    const { n: existingUsers } = db.query<{ n: number }, []>('SELECT count(*) AS n FROM "user"').get()!;
     if (existingUsers > 0) {
         const backupPath = getServerDataPath(`users3.backup-${Date.now()}.db`);
         writeFileSync(backupPath, db.serialize());
@@ -242,22 +243,18 @@ export type SetupInput = {
     adminName: string;
 };
 
-// The web address and the mail domain come from ./eigen setup; the wizard only shows the mail domain.
-export function getSetupStatus(): { setupRequired: boolean; mailDomain: string } {
+export function getSetupStatus(): SetupStatus {
     return { setupRequired: isSetupRequired(), mailDomain: getMailDomain() };
 }
 
 // Two submits of the wizard would interleave resetAuthDatabase() with each other's admin creation.
 let setupRunning = false;
 
-export async function completeSetup(input: SetupInput): Promise<{ user: { id: string; email: string; name: string } }> {
+// The route has checked the setup token and the shape of the input.
+export async function completeSetup(input: SetupInput): Promise<SetupResult> {
     if (setupRunning) throw new ApiError(409, 'Setup is already running');
     setupRunning = true;
     try {
-        if (!isSetupRequired()) throw new ApiError(400, 'Setup has already been completed');
-        if (!input.orgName) throw new ApiError(400, 'Organization name is required');
-        if (!input.storageType) throw new ApiError(400, 'Storage type is required');
-
         let s3Config: S3Config | undefined;
         if (input.storageType === 's3') {
             if (!input.s3Bucket || !input.s3AccessKeyId || !input.s3SecretAccessKey) {
@@ -275,17 +272,11 @@ export async function completeSetup(input: SetupInput): Promise<{ user: { id: st
             if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
         }
 
-        if (!input.adminUsername || !input.adminPassword || !input.adminName) {
-            throw new ApiError(400, 'Admin username, password, and name are required');
-        }
         const username = input.adminUsername.toLowerCase();
         const usernameErr = validateUsername(username);
         if (usernameErr) throw new ApiError(400, usernameErr);
         const adminEmail = `${username}@${getMailDomain()}`;
         if (!validateEmailAddress(adminEmail)) throw new ApiError(400, `${adminEmail} is not a valid email address`);
-        if (input.adminPassword.length < MIN_PASSWORD_LENGTH) {
-            throw new ApiError(400, `Password must be at least ${MIN_PASSWORD_LENGTH} characters long`);
-        }
 
         await resetAuthDatabase();
 

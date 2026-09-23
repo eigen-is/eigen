@@ -1,30 +1,17 @@
-import type { S3HardenResult } from '@workspace/lib/types/settings';
+import type { S3CheckResult, S3HardenResult, SetupResult, SetupStatus } from '@workspace/lib/types/settings';
 import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
-import { isSetupRequired } from '../lib/config/server-config';
-import { ApiError } from '../lib/core/errors';
 import { completeSetup, getSetupStatus } from '../lib/setup/setup';
-import { verifySetupToken } from '../lib/setup/setup-token';
+import { requireSetupToken } from '../lib/setup/setup-token';
 import { checkS3Connection, hardenS3Bucket } from '../lib/storage/s3-storage';
 import { s3ConfigBody, s3HardenBody, toS3Config } from './shared-schemas';
 
-// Before any S3 call or write: only whoever holds the link ./eigen setup printed may set the server up.
-// Optional in the schemas so a missing token gets this answer, not a validation error.
-function requireSetupToken(setupToken: string | undefined): void {
-    if (!isSetupRequired()) throw new ApiError(403, 'Setup already completed');
-    if (!setupToken || !verifySetupToken(setupToken)) {
-        throw new ApiError(
-            403,
-            'Open the setup link that ./eigen setup printed. Run ./eigen setup again for a fresh one.',
-        );
-    }
-}
-
+// setupToken is optional in the schemas, so a missing one gets requireSetupToken's answer, not a validation error.
 export const setupRouter = new Elysia({ name: 'setup' })
-    .get('/setup/status', () => getSetupStatus())
+    .get('/setup/status', (): SetupStatus => getSetupStatus())
     .post(
         '/setup/s3check',
-        async ({ body }) => {
+        async ({ body }): Promise<S3CheckResult> => {
             requireSetupToken(body.setupToken);
             return checkS3Connection(toS3Config(body));
         },
@@ -40,7 +27,7 @@ export const setupRouter = new Elysia({ name: 'setup' })
     )
     .post(
         '/setup/complete',
-        ({ body: { setupToken, ...input } }) => {
+        ({ body: { setupToken, ...input } }): Promise<SetupResult> => {
             requireSetupToken(setupToken);
             return completeSetup(input);
         },

@@ -40,22 +40,19 @@ describe('setup token', () => {
 
     test('stores only a hash, readable by the server alone', () => {
         const token = createSetupToken();
-        const file = getServerDataPath('setup-token.json');
+        const file = getServerDataPath('setup-token');
         expect(statSync(file).mode & 0o777).toBe(0o600);
         const stored = readFileSync(file, 'utf8');
         expect(stored).not.toContain(token);
-        expect(JSON.parse(stored)).toEqual({
-            hash: expect.stringMatching(/^[0-9a-f]{64}$/),
-            createdAt: expect.any(String),
-        });
+        expect(stored).toMatch(/^[0-9a-f]{64}$/);
         clearSetupToken();
     });
 
     test('a truncated or hand-edited token file holds no token', () => {
         const token = createSetupToken();
-        const file = getServerDataPath('setup-token.json');
+        const file = getServerDataPath('setup-token');
         const stored = readFileSync(file, 'utf8');
-        for (const content of [stored.slice(0, 20), '', '{}', '{"hash":"abcd"}', '{"hash":42}', 'null']) {
+        for (const content of [stored.slice(0, 20), '', 'abcd', `${stored}00`, 'z'.repeat(64)]) {
             writeFileSync(file, content);
             expect(verifySetupToken(token)).toBe(false);
         }
@@ -137,6 +134,8 @@ describe('the /setup routes before setup', () => {
                 EIGEN_API_PORT: String(port),
                 EIGEN_CONTROL_SOCKET: SOCKET,
                 API_URL: base,
+                // As configure writes it: the API makes it absolute against API_URL.
+                VITE_APP_ADMIN_URL: '/admin',
                 DOMAIN,
                 MAIL_DOMAIN,
             },
@@ -175,14 +174,14 @@ describe('the /setup routes before setup', () => {
         s3.stop(true);
     });
 
-    test('a development boot logs a link to the local admin app', () => {
-        expect(readFileSync(logPath, 'utf8')).toMatch(/http:\/\/localhost:3009\/admin\/#setup=[\w-]{43}/);
+    test('a development boot logs an absolute link to the admin app', () => {
+        expect(readFileSync(logPath, 'utf8')).toContain(`Finish the setup at ${base}/admin/#setup=`);
     });
 
-    test('the control socket hands out the link on the configured domain', async () => {
+    test('the control socket hands out the link on the web address', async () => {
         const { setupUrl, signInUrl } = await setupLink();
-        expect(setupUrl).toMatch(new RegExp(`^https://${DOMAIN}/admin/#setup=[\\w-]{43}$`));
-        expect(signInUrl).toBe(`https://${DOMAIN}/admin`);
+        expect(setupUrl).toMatch(new RegExp(`^${base}/admin/#setup=[\\w-]{43}$`));
+        expect(signInUrl).toBe(`${base}/admin`);
     });
 
     test('/setup/status offers no domain to choose, only the mail domain of the admin address', async () => {
@@ -193,7 +192,7 @@ describe('the /setup routes before setup', () => {
     test('./eigen setup-link prints the link and what the page asks', async () => {
         const { stdout, code } = await setupLinkCli();
         expect(code).toBe(0);
-        const setupToken = stdout.match(/https:\/\/\S+\/#setup=([\w-]{43})/)?.[1];
+        const setupToken = stdout.match(/\/#setup=([\w-]{43})/)?.[1];
         expect(setupToken).toBeDefined();
         expect((await post('s3check', { ...s3Body, setupToken })).status).toBe(200);
         expect(stdout).toContain('./eigen setup');
@@ -262,20 +261,20 @@ describe('the /setup routes before setup', () => {
         expect(twice.status).toBe(409);
         expect((await done.json()).user.email).toBe(ADMIN_EMAIL);
         expect(storedConfig()).not.toHaveProperty('domain');
-        expect(existsSync(join(dataRoot, 'server/setup-token.json'))).toBe(false);
+        expect(existsSync(join(dataRoot, 'server/setup-token'))).toBe(false);
 
         expect((await post('complete', { ...admin, setupToken: newer })).status).toBe(403);
         expect((await post('s3check', { ...s3Body, setupToken: newer })).status).toBe(403);
     });
 
     test('once set up, the control socket and the CLI point at the sign-in page', async () => {
-        expect(await setupLink()).toEqual({ setupUrl: null, signInUrl: `https://${DOMAIN}/admin` });
-        expect(existsSync(join(dataRoot, 'server/setup-token.json'))).toBe(false);
+        expect(await setupLink()).toEqual({ setupUrl: null, signInUrl: `${base}/admin` });
+        expect(existsSync(join(dataRoot, 'server/setup-token'))).toBe(false);
 
         const { stdout, code } = await setupLinkCli();
         expect(code).toBe(0);
         expect(stdout).toContain('already set up');
-        expect(stdout).toContain(`https://${DOMAIN}/admin`);
+        expect(stdout).toContain(`${base}/admin`);
         expect(stdout).not.toContain('setup=');
     });
 

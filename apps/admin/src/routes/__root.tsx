@@ -1,6 +1,7 @@
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
 import { useAddTeamMember, useMembers, useSetupStatus, useTeams } from '@workspace/lib/admin';
 import { type RouterAppContext, useAuth } from '@workspace/lib/auth';
+import { SETUP_LINK_PARAM } from '@workspace/lib/constants/setup';
 import { usePublicConfig } from '@workspace/lib/public';
 import { useServerSettings } from '@workspace/lib/settings';
 import { AppShell, ErrorState, LoadingState } from '@workspace/ui';
@@ -11,7 +12,7 @@ import { SetupWizard } from '../components/admin/setup-wizard';
 // The token of the link ./eigen setup printed, in the fragment so it never reaches a server or proxy log. Read and
 // taken off the URL before the router starts: its redirects (/ to /users, then to /login) would drop it, and off
 // the URL it stays out of the history.
-const setupToken = new URLSearchParams(window.location.hash.slice(1)).get('setup') ?? undefined;
+const setupToken = new URLSearchParams(window.location.hash.slice(1)).get(SETUP_LINK_PARAM) ?? undefined;
 if (setupToken) {
     window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
 }
