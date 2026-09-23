@@ -33,25 +33,6 @@ OLD_PASSWORD="probe-old-$$"
 NEW_PASSWORD="probe-new-$$"
 OPERATOR=1001:1001
 
-# eigen <args…>: the launcher as the operator; sets OUT (stdout and stderr) and CODE.
-eigen() {
-    CODE=0
-    OUT=$(in_cli_container --user "$OPERATOR" ./eigen "$@" 2>&1) || CODE=$?
-}
-
-# eigen_piped <input> <args…>: the same with one line on stdin, as a script would answer.
-eigen_piped() {
-    local input="$1"
-    shift
-    CODE=0
-    OUT=$(printf '%s\n' "$input" | in_cli_container --stdin --user "$OPERATOR" ./eigen "$@" 2>&1) || CODE=$?
-}
-
-show() { printf '%s\n' "$OUT" | sed 's/^/    │ /'; }
-
-# says <text>: whether the last output holds this line fragment.
-says() { printf '%s\n' "$OUT" | grep -q -- "$1"; }
-
 # check_install <operator uid:gid>: the stack, the files and the Docker socket of a fresh install.
 check_install() {
     local operator="$1" base="https://localhost:$PORT_HTTPS" status mounts env_stat data_stat backups_stat
@@ -91,25 +72,6 @@ check_install() {
     fi
 }
 
-# setup_token <log>: the token of the last setup link in ./eigen setup output.
-setup_token() { grep -o 'setup=[A-Za-z0-9_-]*' "$1" | tail -n 1 | cut -d= -f2 || true; }
-
-# setup_post <route> <json fields>: the HTTP status and the seconds it took, as "403 0.012".
-setup_post() {
-    curl -sk -o /dev/null -w '%{http_code} %{time_total}' --max-time 20 -X POST -H 'Content-Type: application/json' \
-        -d "{$2}" "$BASE/setup/$1" || echo '000 20'
-}
-
-# Every service running and eigen-api healthy.
-stack_up() {
-    local states
-    states=$(dc ps -a --format '{{.Service}} {{.State}} {{.Health}}')
-    printf '%s\n' "$states" | grep -q '^eigen-api running healthy$' &&
-        ! printf '%s\n' "$states" | grep -v ' running' | grep -q .
-}
-
-api_started() { docker inspect --format '{{.State.StartedAt}}' "$(dc ps -q eigen-api)"; }
-
 # The distinct owners under data/.
 data_owners() { scratch_run sh -c 'find "$1" -exec stat -c "%u:%g" {} + | sort -u' sh "$INSTALL/data" | tr '\n' ' '; }
 
@@ -128,13 +90,6 @@ craft() {
 unpacked_mode() {
     docker run --rm -v "$SCRATCH:$SCRATCH" --entrypoint sh "$EIGEN_API_IMAGE" -c 'mkdir "$1.probe" &&
         tar --numeric-owner -xzpf "$1" -C "$1.probe" "$2" && stat -c %a "$1.probe/$2"; rm -rf "$1.probe"' sh "$1" "$2"
-}
-
-# sign_in <password> <cookie jar>: prints the HTTP status of a browser sign-in.
-sign_in() {
-    curl -sk -c "$2" -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
-        -H 'Origin: https://localhost' -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$1\"}" \
-        "$BASE/auth/sign-in/email" || echo 000
 }
 
 SETUP_FLAGS=(--yes --domain localhost --mail --mail-domain eigen.test --contact-email admin@eigen.test --no-proxy

@@ -56,10 +56,22 @@ scratch_init() {
         *) export EIGEN_ALLOW_ARCH=1 ;;
     esac
     CLI_IMAGE="eigentest-cli:$RUN"
+    # The daemon is shared with whatever else runs on this machine, so the launcher's prunes, which reach past its
+    # own install, are logged to $HARNESS_PRUNE_LOG instead of run.
+    mkdir "$SCRATCH/cli-image"
+    printf '%s\n' '#!/bin/sh' \
+        'case "$1 $2" in "image prune" | "builder prune") echo "$*" >>"$HARNESS_PRUNE_LOG"; exit 0 ;; esac' \
+        'exec docker.real "$@"' >"$SCRATCH/cli-image/docker"
+    chmod 755 "$SCRATCH/cli-image/docker"
     printf '%s\n' 'FROM docker:cli' \
         'RUN command -v git >/dev/null || apk add --no-cache git' \
-        'RUN ! command -v bun && ! command -v node && ! command -v curl' |
-        docker build -q --label eigen.harness=1 -t "$CLI_IMAGE" - >/dev/null
+        'RUN ! command -v bun && ! command -v node && ! command -v curl' \
+        'RUN mv /usr/local/bin/docker /usr/local/bin/docker.real' \
+        'COPY docker /usr/local/bin/docker' >"$SCRATCH/cli-image/Dockerfile"
+    docker build -q --label eigen.harness=1 -t "$CLI_IMAGE" "$SCRATCH/cli-image" >/dev/null
+    PRUNE_LOG="$SCRATCH/prune.log"
+    : >"$PRUNE_LOG"
+    chmod 666 "$PRUNE_LOG"
     SOCKET_GID=$(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$CLI_IMAGE" \
         stat -c %g /var/run/docker.sock)
     log "scratch $SCRATCH (run $RUN)"
@@ -127,12 +139,15 @@ free_port() {
 
 # write_override [--mailpit]: the harness overlay as the install's docker-compose.override.yml, which the
 # launcher layers on: every published port moved to a fresh 127.0.0.1 port, the harness label on every
-# image the launcher builds, and optionally Mailpit as the outgoing relay.
+# image a source install builds, and optionally Mailpit as the outgoing relay.
 write_override() {
-    local name mailpit=''
+    local name mailpit='' build=''
     for name in PORT_HTTP PORT_HTTPS PORT_STATIC PORT_SMTP PORT_SMTPS PORT_SUBMISSION PORT_IMAPS PORT_MAILPIT; do
         free_port "$name"
     done
+    # A release install pulls its images; a build: block there would ask Compose for a build context.
+    build='    labels: { eigen.harness: "1" }'
+    if [ -f "$INSTALL/docker-compose.build.yml" ]; then build='    build: *harness-build'; fi
     if [ "${1:-}" = --mailpit ]; then
         mailpit="  mailpit:
     image: axllent/mailpit
@@ -147,22 +162,22 @@ x-harness-build: &harness-build
     eigen.harness: "1"
 services:
   eigen-api:
-    build: *harness-build
+$build
   caddy:
-    build: *harness-build
+$build
     ports: !override
       - "127.0.0.1:$PORT_HTTP:80"
       - "127.0.0.1:$PORT_HTTPS:443"
   eigen-static:
-    build: *harness-build
+$build
   postfix:
-    build: *harness-build
+$build
     ports: !override
       - "127.0.0.1:$PORT_SMTP:25"
       - "127.0.0.1:$PORT_SMTPS:465"
       - "127.0.0.1:$PORT_SUBMISSION:587"
   dovecot:
-    build: *harness-build
+$build
     ports: !override
       - "127.0.0.1:$PORT_IMAPS:993"
 $mailpit
@@ -185,8 +200,28 @@ in_cli_container() {
     docker run --rm ${stdin[@]+"${stdin[@]}"} --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
         -v /var/run/docker.sock:/var/run/docker.sock -v "$SCRATCH:$SCRATCH" -w "$INSTALL" \
         -e EIGEN_API_IMAGE -e EIGEN_FRONTEND_IMAGE -e EIGEN_POSTFIX_IMAGE -e EIGEN_DOVECOT_IMAGE \
-        -e EIGEN_ALLOW_ARCH -e NO_COLOR=1 ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
+        -e EIGEN_ALLOW_ARCH -e NO_COLOR=1 -e HARNESS_PRUNE_LOG="$PRUNE_LOG" ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
 }
+
+# eigen <args…>: the launcher in the no-Bun container, as $OPERATOR when set (else root); sets OUT (stdout and
+# stderr) and CODE.
+eigen() {
+    CODE=0
+    OUT=$(in_cli_container ${OPERATOR:+--user "$OPERATOR"} ./eigen "$@" 2>&1) || CODE=$?
+}
+
+# eigen_piped <input> <args…>: the same with one line on stdin, as a script would answer.
+eigen_piped() {
+    local input="$1"
+    shift
+    CODE=0
+    OUT=$(printf '%s\n' "$input" | in_cli_container --stdin ${OPERATOR:+--user "$OPERATOR"} ./eigen "$@" 2>&1) || CODE=$?
+}
+
+show() { printf '%s\n' "$OUT" | sed 's/^/    │ /'; }
+
+# says <text>: whether the last output holds this line fragment.
+says() { printf '%s\n' "$OUT" | grep -q -- "$1"; }
 
 # run_setup [--user uid:gid] <setup flags…>: ./eigen setup in the no-Bun container.
 run_setup() {
@@ -201,9 +236,54 @@ run_setup() {
 
 # The harness's own view of the install's stack, from the host, with the files the launcher uses.
 dc() {
+    local build=()
     assert_isolated
+    if [ -f "$INSTALL/docker-compose.build.yml" ]; then build=(-f docker-compose.build.yml); fi
     (cd "$INSTALL" && docker compose -p "$PROJECT" --env-file .env.production -f docker-compose.yml \
-        -f docker-compose.build.yml -f docker-compose.override.yml "$@")
+        ${build[@]+"${build[@]}"} -f docker-compose.override.yml "$@")
+}
+
+# Every service running and eigen-api healthy.
+stack_up() {
+    local states
+    states=$(dc ps -a --format '{{.Service}} {{.State}} {{.Health}}')
+    printf '%s\n' "$states" | grep -q '^eigen-api running healthy$' &&
+        ! printf '%s\n' "$states" | grep -v ' running' | grep -q .
+}
+
+api_started() { docker inspect --format '{{.State.StartedAt}}' "$(dc ps -q eigen-api)"; }
+
+# setup_token <log>: the token of the last setup link in ./eigen setup output.
+setup_token() { grep -o 'setup=[A-Za-z0-9_-]*' "$1" | tail -n 1 | cut -d= -f2 || true; }
+
+# setup_post <route> <json fields>: the HTTP status and the seconds it took on $BASE, as "403 0.012".
+setup_post() {
+    curl -sk -o /dev/null -w '%{http_code} %{time_total}' --max-time 20 -X POST -H 'Content-Type: application/json' \
+        -d "{$2}" "$BASE/setup/$1" || echo '000 20'
+}
+
+# sign_in <password> <cookie jar>: prints the HTTP status of a browser sign-in as $ADMIN_EMAIL on $BASE.
+sign_in() {
+    curl -sk -c "$2" -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
+        -H 'Origin: https://localhost' -d "{\"email\":\"$ADMIN_EMAIL\",\"password\":\"$1\"}" \
+        "$BASE/auth/sign-in/email" || echo 000
+}
+
+# create_admin <setup log> <password>: finishes the setup through the link in the log as $ADMIN_EMAIL, signs in
+# into the cookie jar $JAR and sets ADMIN_ID; returns non-zero when a step fails.
+create_admin() {
+    local token code
+    token=$(setup_token "$1")
+    read -r code _ <<<"$(setup_post complete "\"orgName\":\"Probe\",\"storageType\":\"local-id\",\"adminUsername\":\"${ADMIN_EMAIL%@*}\",\"adminPassword\":\"$2\",\"adminName\":\"Alice\",\"setupToken\":\"$token\"")"
+    [ "$code" = 200 ] && [ "$(sign_in "$2" "$JAR")" = 200 ] || return 1
+    ADMIN_ID=$(curl -sk -b "$JAR" "$BASE/auth/get-session" | grep -o '"userId":"[^"]*"' | head -n 1 | cut -d'"' -f4)
+    [ -n "$ADMIN_ID" ]
+}
+
+# api <method> <path> [json]: the body of an API call on $BASE as the signed-in admin.
+api() {
+    curl -sk -b "$JAR" -X "$1" -H 'Content-Type: application/json' -H 'Origin: https://localhost' ${3:+-d "$3"} \
+        "$BASE$2" || true
 }
 
 # scratch_run <command…>: runs as root in the docker:cli image, the scratch folder at its own path. Docker
@@ -240,8 +320,9 @@ harness_cleanup() {
     # data/ holds files owned by 1000 and root, which the host user cannot always delete.
     scratch_run find "$SCRATCH" -mindepth 1 -delete >/dev/null 2>&1 || true
     rm -rf "$SCRATCH"
-    docker image rm "$EIGEN_API_IMAGE" "$EIGEN_FRONTEND_IMAGE" "$EIGEN_POSTFIX_IMAGE" "$EIGEN_DOVECOT_IMAGE" \
-        "$CLI_IMAGE" >/dev/null 2>&1 || true
+    # Unset where a harness installs releases, which it pulls instead of building under these tags.
+    docker image rm ${EIGEN_API_IMAGE:-} ${EIGEN_API_IMAGE:+$EIGEN_API_IMAGE-pre-update} ${EIGEN_FRONTEND_IMAGE:-} \
+        ${EIGEN_POSTFIX_IMAGE:-} ${EIGEN_DOVECOT_IMAGE:-} "$CLI_IMAGE" >/dev/null 2>&1 || true
     docker image prune -f --filter label=eigen.harness=1 >/dev/null 2>&1 || true
     return "$code"
 }
