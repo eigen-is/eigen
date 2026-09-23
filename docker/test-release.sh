@@ -1,22 +1,8 @@
 #!/usr/bin/env bash
-# The release gate, run locally: three releases built from scratch copies of the working tree, whose root package.json
-# says 0.2.98 (previous), 0.2.99 (new, also :latest) and 0.2.100 (a CHANGELOG line marked (breaking)), pushed to a
-# registry:2 of this run on a 127.0.0.1 port. The API image is built per version; the frontend, postfix and dovecot
-# images once, tagged for every version. From a docker:cli container that has no Bun:
-#
-# - bootstrap 0.2.98, ./eigen setup with flags, an admin through the setup link, and over HTTPS a document, a sheet, a
-#   calendar event, a contact, and a chat with a message;
-# - ./eigen update goes to 0.2.99 (:latest): healthy, every item intact, the pins in .env.production and every other
-#   line kept, .eigen/last-update written, only the rollback version kept besides the new one; a rerun and --check
-#   say it is up to date;
-# - ./eigen rollback asks with the snapshot's version, date and age, and with --yes goes back to 0.2.98, items intact;
-# - ./eigen update 0.2.100 refuses without --accept-breaking and changes nothing, and with it succeeds;
-# - an unknown version and a downgrade fail before anything stops;
-# - a fresh bootstrap and setup of 0.2.99, and a second one with another DOMAIN, run the same api digest and both
-#   answer.
-#
-# The launcher's global prunes are logged by the harness's docker shim, never run. Everything pushed or pulled here
-# lives under localhost:<port>/eigen-is/eigen and is removed on exit, with the registry and its volume.
+# The release gate, run locally: releases 0.2.98, 0.2.99 (also :latest) and 0.2.100 (with a breaking change), built
+# from the working tree and pushed to a registry:2 of this run. With ./eigen in a docker:cli container that has no Bun:
+# install 0.2.98 and seed a document, sheet, event, contact and chat message; update to :latest; roll back; refuse and
+# then accept the breaking release; refuse an unknown version and a downgrade; install 0.2.99 twice, on one digest.
 #
 # Usage:  ./docker/test-release.sh
 # Needs:  docker, curl, git. Builds the API three times and the other images once (the first on a cold cache takes
@@ -46,14 +32,20 @@ registry_images() {
     docker image ls --format "{{.Repository}}:{{.Tag}} {{.ID}}" | awk -v repo="$REGISTRY/" 'index($1, repo) == 1'
 }
 
+# remove_registry_images: every local image under $REGISTRY, by ID, since a dangling one has no tag to name it by.
+remove_registry_images() {
+    local images
+    images=$(registry_images | awk '{ print $2 }' | sort -u)
+    if [ -n "$images" ]; then docker image rm -f $images >/dev/null 2>&1 || true; fi
+}
+
 # What this run pushed and pulled, the registry and its volume; harness_cleanup does the rest. The installs go first:
 # an image in use stays.
 release_cleanup() {
-    local images project
+    local project
     if [ "${HARNESS_KEEP:-0}" = 1 ]; then return; fi
     for project in $HARNESS_PROJECTS; do down_project "$project"; done
-    images=$(registry_images | awk '{ print $2 }' | sort -u)
-    if [ -n "$images" ]; then docker image rm -f $images >/dev/null 2>&1 || true; fi
+    remove_registry_images
     docker rm -f "eigentest-registry-$RUN" >/dev/null 2>&1 || true
     docker volume rm "$REGISTRY_VOLUME" >/dev/null 2>&1 || true
 }
@@ -64,10 +56,7 @@ trap 'code=$?; release_cleanup; (exit $code); harness_cleanup' EXIT
 release_source() {
     local dir="$SCRATCH/src-$1"
     mkdir "$dir"
-    (cd "$REPO_ROOT" && git ls-files -z -co --exclude-standard -- . ':!data' ':!backups' ':!snapshots' ':!caddy-data' |
-        while IFS= read -r -d '' file; do
-            if [ -e "$file" ] || [ -L "$file" ]; then printf '%s\0' "$file"; fi
-        done | COPYFILE_DISABLE=1 tar -cf - --null -T -) | tar -xf - -C "$dir"
+    working_tree | tar -xf - -C "$dir"
     sed -i.bak "s/^  \"version\": \".*\",\$/  \"version\": \"$1\",/" "$dir/package.json"
     printf '%s\n' "$2" >"$dir/sections.md"
     awk -v sections="$dir/sections.md" '!done && /^## \[/ { while ((getline line < sections) > 0) print line; done = 1 } 1' \
@@ -98,7 +87,7 @@ The harness's breaking release.
 release_install() {
     INSTALL="$SCRATCH/$1"
     INSTALL_OWNER=0:0
-    PROJECT=$1
+    PROJECT=$(project_of "$1")
     HARNESS_PROJECTS="$HARNESS_PROJECTS $PROJECT"
     scratch_run mkdir "$INSTALL"
     assert_isolated
@@ -203,7 +192,7 @@ for name in api frontend postfix dovecot; do
     for tag in "$PREVIOUS" "$NEW" "$BREAKING" latest; do docker push -q "$REGISTRY/$name:$tag" >/dev/null; done
 done
 # The installs must pull what they run.
-registry_images | awk '{ print $1 }' | xargs docker image rm >/dev/null
+remove_registry_images
 ok "built and pushed the three releases in $((SECONDS - started))s"
 
 ##############################################################################
@@ -211,13 +200,9 @@ header "Installing $PREVIOUS"
 ##############################################################################
 release_install "eigentest-release-$$" "$PREVIOUS"
 JAR="$SCRATCH/session"
-started=$SECONDS
-if run_setup "${SETUP_FLAGS[@]}" --domain localhost >"$SCRATCH/setup.log" 2>&1 &&
-    create_admin "$SCRATCH/setup.log" "$PASSWORD"; then
-    ok "bootstrap and ./eigen setup of $PREVIOUS took $((SECONDS - started))s, and the link made the admin"
-else
-    fail "installing $PREVIOUS failed after $((SECONDS - started))s"
-    sed 's/^/    /' "$SCRATCH/bootstrap-$PROJECT.log" "$SCRATCH/setup.log"
+run_setup "$SCRATCH/setup.log" "${SETUP_FLAGS[@]}" --domain localhost
+if ! create_admin "$SCRATCH/setup.log" "$PASSWORD"; then
+    fail "the setup link of $PREVIOUS made no admin"
     header "Result"
     probe_summary
 fi
@@ -247,7 +232,7 @@ fi
 archive=$(pre_update)
 pointer=$(scratch_run cat "$INSTALL/.eigen/last-update" | tr '\n' ' ')
 meta=$(scratch_run tar -xzOf "$INSTALL/snapshots/$archive" eigen-snapshot.json || true)
-if [ "$pointer" = "$archive $PREVIOUS " ] && [[ $meta == *"\"version\":\"$PREVIOUS\""* ]]; then
+if [ "$pointer" = "$archive $PREVIOUS harness " ] && [[ $meta == *"\"version\":\"$PREVIOUS\""* ]]; then
     ok ".eigen/last-update names snapshots/$archive, a snapshot of $PREVIOUS"
 else
     fail ".eigen/last-update '$pointer', snapshot $meta"
@@ -284,7 +269,7 @@ fi
 header "./eigen rollback"
 ##############################################################################
 eigen_piped n rollback
-if [ "$CODE" = 0 ] && says "a snapshot of Eigen $PREVIOUS, made today on " && says 'kept aside as data.pre-restore-\*' &&
+if [ "$CODE" = 0 ] && says "a snapshot of Eigen $PREVIOUS, made on " && says 'kept aside as data.pre-restore-\*' &&
     says 'Nothing was changed.' && [ "$(api_started)" = "$started" ]; then
     ok "rollback asks with the version, the date and the age, and a no stops nothing"
 else
@@ -379,13 +364,8 @@ RUNS=()
 PORTS=()
 for domain in localhost eigen2.localhost; do
     release_install "eigentest-release-${domain%%.*}-$$" "$NEW"
-    started=$SECONDS
-    if run_setup "${SETUP_FLAGS[@]}" --domain "$domain" >"$SCRATCH/setup-$domain.log" 2>&1 && stack_up; then
-        ok "a fresh bootstrap and setup of $NEW for $domain took $((SECONDS - started))s"
-    else
-        fail "the fresh install for $domain failed after $((SECONDS - started))s"
-        sed 's/^/    /' "$SCRATCH/setup-$domain.log"
-    fi
+    run_setup "$SCRATCH/setup-$domain.log" "${SETUP_FLAGS[@]}" --domain "$domain"
+    if stack_up; then ok "a fresh install of $NEW for $domain runs"; else fail "the fresh install for $domain is not up"; fi
     PINS+=("$(env_value EIGEN_API_IMAGE)")
     RUNS+=("$(docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)")")
     PORTS+=("$PORT_HTTPS")

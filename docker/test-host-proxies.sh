@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
-# Smoke-test nginx, Apache, and Caddy in front of the bundled `eigen-static` container, the host-webserver path
-# `eigen setup` writes snippets for. Installs `static,mail` in a scratch copy of this working tree with
-# ./eigen setup from the no-Bun docker:cli container, then runs each webserver in a container on the install's
-# network with the snippet setup wrote, pointed at eigen-static:8080 instead of the host port, and a
-# self-signed certificate where certbot's would be. Probes the same set of URLs as test-deployments.sh.
+# nginx, Apache and Caddy in front of eigen-static, with the snippets ./eigen setup writes for them. Installs static,mail
+# from a docker:cli container that has no Bun, then runs each web server on the install's network, pointed at
+# eigen-static:8080 instead of the host port, with a self-signed certificate where certbot's would be.
 #
 # Usage:  ./docker/test-host-proxies.sh
 # Needs:  docker, curl, nc, openssl, git.
 
 set -euo pipefail
 
-# Counters, log/probe helpers, the scratch installs and the Result summary.
 . "$(dirname "$0")/probe-lib.sh"
 
 # Probe a set of URLs through whichever proxy port is currently exposed.
@@ -34,7 +31,6 @@ run_proxy() {
     docker run -d --rm --name "eigentest-proxy-$name-$RUN" --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
         --network "${PROJECT}_eigen" -p "127.0.0.1:$PROXY_PORT:443" \
         -v "$snippet:$path:ro" -v "$SCRATCH/letsencrypt:/etc/letsencrypt:ro" "$@" "$image" >/dev/null
-    # Give the webserver a moment to start listening.
     sleep 2
     run_probes "https://localhost:$PROXY_PORT"
     docker rm -f "eigentest-proxy-$name-$RUN" >/dev/null 2>&1
@@ -44,14 +40,9 @@ scratch_init proxies
 new_install "eigentestproxies$$"
 write_override
 
-log "Installing static,mail (eigen-static will be the upstream)..."
-if ! run_setup --user "$(id -u):$(id -g)" --yes --domain localhost --mail --mail-domain eigen.test \
-    --contact-email admin@eigen.test --proxy "127.0.0.1:$PORT_STATIC" --no-relay >"$SCRATCH/setup.log" 2>&1; then
-    log "× setup failed:"
-    sed 's/^/    /' "$SCRATCH/setup.log"
-    dc logs --tail=30 || true
-    exit 1
-fi
+header "Installing static,mail, with eigen-static as the upstream"
+run_setup "$SCRATCH/setup.log" --user "$(id -u):$(id -g)" --yes --domain localhost --mail --mail-domain eigen.test \
+    --contact-email admin@eigen.test --proxy "127.0.0.1:$PORT_STATIC" --no-relay
 
 # Where certbot would have put the certificate for the web address.
 mkdir -p "$SCRATCH/letsencrypt/live/localhost"

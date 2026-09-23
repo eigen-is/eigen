@@ -1,14 +1,7 @@
-# Shared scaffolding for the docker/test-*.sh probe scripts: the pass/fail bookkeeping, the log
-# helpers, the scratch installs every harness runs in, the compose wrapper, the HTTP/SMTP/IMAPS probes,
-# and the Result summary. Sourced, never run:
-#
-#   . "$(dirname "$0")/probe-lib.sh"
-#
-# Everything in here must stay bash 3.2 clean, because that is what macOS ships.
-#
-# Data safety: no harness runs Compose in the checkout. Each one copies the working tree into a scratch
-# folder under $TMPDIR, installs there with ./eigen under a Compose project named eigentest…, publishes
-# only 127.0.0.1 ports from 18000-18999, and removes what it started (and nothing else) on exit.
+# What every docker/test-*.sh sources: the bookkeeping, the scratch installs, the probes and the summary. Bash 3.2
+# clean, since macOS ships it. No harness runs Compose in the checkout: each installs a copy under $TMPDIR as a Compose
+# project named eigentest…, on 127.0.0.1 ports from 18000-18999, and removes what it started, and nothing else, on exit.
+# HARNESS_KEEP=1 leaves all of it.
 
 # The operator's Compose settings would point the harness's host-side compose calls at another stack.
 unset COMPOSE_PROJECT_NAME COMPOSE_FILE COMPOSE_PROFILES COMPOSE_ENV_FILES
@@ -77,22 +70,29 @@ scratch_init() {
     log "scratch $SCRATCH (run $RUN)"
 }
 
-# new_install <folder name> [uid:gid]: $INSTALL, a scratch copy of the working tree (tracked and untracked
-# files, not ignored ones, nothing under data/, backups/, snapshots/ or caddy-data/) committed to a fresh repo so the
-# launcher sees a source checkout, owned by uid:gid (default: the host user) as if that operator had cloned
-# it. $PROJECT is the Compose project name Compose derives from the folder name.
+# working_tree: a tar of the tracked files as the working tree has them, without data/, backups/, snapshots/ and
+# caddy-data/. Untracked files, other agents' among them, stay out: git add a new file to ship it.
+working_tree() {
+    (cd "$REPO_ROOT" && git ls-files -z -c -- . ':!data' ':!backups' ':!snapshots' ':!caddy-data' |
+        while IFS= read -r -d '' file; do
+            if [ -e "$file" ] || [ -L "$file" ]; then printf '%s\0' "$file"; fi
+        done | COPYFILE_DISABLE=1 tar -cf - --null -T -)
+}
+
+# project_of <folder name>: the Compose project the launcher derives from it.
+project_of() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-' | sed 's/^[_-]*//'; }
+
+# new_install <folder name> [uid:gid]: $INSTALL, the working tree committed to a fresh repo, so the launcher sees a
+# source checkout, owned by uid:gid (default: the host user) as if that operator had cloned it.
 new_install() {
     INSTALL="$SCRATCH/$1"
     INSTALL_OWNER="${2:-$(id -u):$(id -g)}"
-    PROJECT=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')
+    PROJECT=$(project_of "$1")
     HARNESS_PROJECTS="$HARNESS_PROJECTS $PROJECT"
     # Created and filled inside containers: Docker Desktop refuses a later chown of the host's read-only
     # git objects, and on Linux the host user could not write a folder another uid owns.
     scratch_run sh -c 'mkdir "$1" && chown "$2" "$1"' sh "$INSTALL" "$INSTALL_OWNER"
-    (cd "$REPO_ROOT" && git ls-files -z -co --exclude-standard -- . ':!data' ':!backups' ':!snapshots' ':!caddy-data' |
-        while IFS= read -r -d '' file; do
-            if [ -e "$file" ] || [ -L "$file" ]; then printf '%s\0' "$file"; fi
-        done | COPYFILE_DISABLE=1 tar -cf - --null -T -) |
+    working_tree |
         docker run --rm -i --user "$INSTALL_OWNER" -e HOME=/tmp -v "$SCRATCH:$SCRATCH" -w "$INSTALL" "$CLI_IMAGE" \
             sh -c 'tar -xf - && git init -q && git add -A &&
                 git -c user.name=harness -c user.email=harness@eigen.invalid commit -qm "harness copy of the working tree"'
@@ -223,15 +223,25 @@ show() { printf '%s\n' "$OUT" | sed 's/^/    │ /'; }
 # says <text>: whether the last output holds this line fragment.
 says() { printf '%s\n' "$OUT" | grep -q -- "$1"; }
 
-# run_setup [--user uid:gid] <setup flags…>: ./eigen setup in the no-Bun container.
+# run_setup <log> [--user uid:gid] <setup flags…>: ./eigen setup in the no-Bun container, its output in <log>. A
+# setup that fails shows that output and ends the harness.
 run_setup() {
-    local user=()
+    local log="$1" user=() started=$SECONDS
+    shift
     if [ "$1" = --user ]; then
         user=(--user "$2")
         shift 2
     fi
     assert_isolated
-    in_cli_container ${user[@]+"${user[@]}"} ./eigen setup "$@"
+    if in_cli_container ${user[@]+"${user[@]}"} ./eigen setup "$@" >"$log" 2>&1; then
+        ok "./eigen setup finished in $((SECONDS - started))s"
+        return 0
+    fi
+    fail "./eigen setup failed after $((SECONDS - started))s"
+    sed 's/^/    /' "$log"
+    dc logs --tail=30 2>&1 | sed 's/^/    /' || true
+    header "Result"
+    probe_summary
 }
 
 # The harness's own view of the install's stack, from the host, with the files the launcher uses.
@@ -255,6 +265,21 @@ api_started() { docker inspect --format '{{.State.StartedAt}}' "$(dc ps -q eigen
 
 # setup_token <log>: the token of the last setup link in ./eigen setup output.
 setup_token() { grep -o 'setup=[A-Za-z0-9_-]*' "$1" | tail -n 1 | cut -d= -f2 || true; }
+
+# probe_setup_link <log> <origin>: the web server serves the page of the last setup link, which the browser asks for
+# without its fragment.
+probe_setup_link() {
+    local link path code
+    link=$(grep -o 'https://[^ ]*#setup=[A-Za-z0-9_-]*' "$1" | tail -n 1 || true)
+    path=${link#https://*/}
+    path=${path%%#*}
+    code=$(curl -sk -o /dev/null -w '%{http_code}' "$2/$path" || echo 000)
+    if [ -n "$link" ] && [ "$code" = 200 ]; then
+        ok "the setup link ${link%%#*}#… serves /$path (200)"
+    else
+        fail "the setup link '$link': /$path → $code, expected 200"
+    fi
+}
 
 # setup_post <route> <json fields>: the HTTP status and the seconds it took on $BASE, as "403 0.012".
 setup_post() {
@@ -307,9 +332,9 @@ down_project() {
 }
 
 # Removes only what this run started: its Compose projects, containers labelled with its run, its image
-# tags, dangling harness-labelled images, and the scratch folder. HARNESS_KEEP=1 leaves all of it.
+# tags, dangling harness-labelled images, and the scratch folder.
 harness_cleanup() {
-    local code=$? project ids
+    local code=$? project ids image
     if [ "${HARNESS_KEEP:-0}" = 1 ]; then
         log "HARNESS_KEEP=1: left $SCRATCH and the projects$HARNESS_PROJECTS"
         return "$code"
@@ -321,8 +346,10 @@ harness_cleanup() {
     scratch_run find "$SCRATCH" -mindepth 1 -delete >/dev/null 2>&1 || true
     rm -rf "$SCRATCH"
     # Unset where a harness installs releases, which it pulls instead of building under these tags.
-    docker image rm ${EIGEN_API_IMAGE:-} ${EIGEN_API_IMAGE:+$EIGEN_API_IMAGE-pre-update} ${EIGEN_FRONTEND_IMAGE:-} \
-        ${EIGEN_POSTFIX_IMAGE:-} ${EIGEN_DOVECOT_IMAGE:-} "$CLI_IMAGE" >/dev/null 2>&1 || true
+    for image in ${EIGEN_API_IMAGE:-} ${EIGEN_FRONTEND_IMAGE:-} ${EIGEN_POSTFIX_IMAGE:-} ${EIGEN_DOVECOT_IMAGE:-}; do
+        docker image rm "$image" "$image-next" >/dev/null 2>&1 || true
+    done
+    docker image rm "$CLI_IMAGE" >/dev/null 2>&1 || true
     docker image prune -f --filter label=eigen.harness=1 >/dev/null 2>&1 || true
     return "$code"
 }

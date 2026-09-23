@@ -1,21 +1,11 @@
 #!/usr/bin/env bash
-# Update a source install with ./eigen update, run from a docker:cli container that has no Bun. The install is a clone
-# of a scratch remote whose history is this branch, and whose main has the working tree as one more commit on top. It
-# starts at the first commit whose launcher has `update` (or $UPDATE_FROM), set up edge-only as root, with an admin and
-# a folder made over HTTPS. Then:
-#
-# - ./eigen update --check names the new commits and changes nothing;
-# - a checkout owned by another user, and local changes in the way of the pull, are refused before anything stops;
-# - ./eigen update pulls, hands over to the pulled launcher, builds, saves a pre-update snapshot and switches: Eigen is
-#   healthy, status shows the new commit, the folder is intact, every line of .env.production is kept, and
-#   .eigen/last-update names the snapshot; the prunes stay inside this install;
-# - a rerun says Eigen is up to date and running, and restarts nothing;
-# - a commit that breaks the API build leaves the running stack untouched, and the fix after it converges.
-#
-# The launcher's global prunes (dangling images, build cache) are logged by the harness's docker shim, never run.
+# Updates and rolls back a source install with ./eigen in a docker:cli container that has no Bun. The install clones a
+# scratch remote whose main is this branch plus the working tree, reset to the first commit whose snapshot writes
+# .eigen/last-update (or $UPDATE_FROM), and is set up edge-only as root with an admin and a folder. Then: update --check,
+# the refusals before anything stops, the update, a rerun, a commit that breaks the build and its fix, and the rollback.
 #
 # Usage:  ./docker/test-update.sh
-# Needs:  docker, curl, git. Builds the images four times in Docker (the first on a cold cache takes minutes).
+# Needs:  docker, curl, git. Builds the images five times in Docker (the first on a cold cache takes minutes).
 
 set -euo pipefail
 
@@ -25,9 +15,10 @@ VERSION=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$REPO_ROOT/package.json" | h
 ADMIN_EMAIL=alice@example.org
 PASSWORD="probe-$$"
 BRANCH=$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)
-FROM=${UPDATE_FROM:-$(git -C "$REPO_ROOT" log --reverse --format=%H -S'update --pulled' -- eigen | head -n 1)}
+FROM=${UPDATE_FROM:-$(git -C "$REPO_ROOT" log --reverse --format=%H -S'last-update' -- apps/api/src/cli/snapshot.ts |
+    head -n 1)}
 if [ -z "$FROM" ]; then
-    echo "harness: no commit of $BRANCH has ./eigen update yet; commit it, or set UPDATE_FROM" >&2
+    echo "harness: no commit of $BRANCH writes .eigen/last-update yet; commit it, or set UPDATE_FROM" >&2
     exit 1
 fi
 
@@ -62,11 +53,7 @@ header "A remote whose main is $BRANCH plus the working tree, and an install at 
 git_run clone -q --single-branch --branch "$BRANCH" --no-tags file:///repo "$WORK"
 docker run --rm -v "$SCRATCH:$SCRATCH" --entrypoint sh "$CLI_IMAGE" -c \
     'find "$1" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +' sh "$WORK"
-(cd "$REPO_ROOT" && git ls-files -z -co --exclude-standard -- . ':!data' ':!backups' ':!snapshots' ':!caddy-data' |
-    while IFS= read -r -d '' file; do
-        if [ -e "$file" ] || [ -L "$file" ]; then printf '%s\0' "$file"; fi
-    done | COPYFILE_DISABLE=1 tar -cf - --null -T -) |
-    docker run --rm -i -v "$SCRATCH:$SCRATCH" -w "$WORK" --entrypoint tar "$CLI_IMAGE" -xf -
+working_tree | docker run --rm -i -v "$SCRATCH:$SCRATCH" -w "$WORK" --entrypoint tar "$CLI_IMAGE" -xf -
 git_run -C "$WORK" add -A
 git_run -C "$WORK" commit -q --allow-empty -m "harness: the working tree"
 git_run init -q --bare "$REMOTE"
@@ -75,7 +62,7 @@ git_run -C "$REMOTE" symbolic-ref HEAD refs/heads/main
 
 INSTALL="$SCRATCH/eigentest-update-$$"
 INSTALL_OWNER=0:0
-PROJECT="eigentest-update-$$"
+PROJECT=$(project_of "eigentest-update-$$")
 HARNESS_PROJECTS="$HARNESS_PROJECTS $PROJECT"
 git_run clone -q "$REMOTE" "$INSTALL"
 git_run -C "$INSTALL" reset -q --hard "$FROM"
@@ -87,16 +74,8 @@ OLD=$(head_of "$INSTALL")
 behind=$(git_run -C "$INSTALL" rev-list --count HEAD..origin/main)
 log "install at $OLD, $behind commits behind origin/main"
 
-started=$SECONDS
-if run_setup --yes --domain localhost --mail-domain example.org --no-mail --no-relay --no-proxy \
-    --contact-email admin@example.org >"$SCRATCH/setup.log" 2>&1 && stack_up; then
-    ok "./eigen setup at $OLD finished in $((SECONDS - started))s"
-else
-    fail "./eigen setup at $OLD failed after $((SECONDS - started))s"
-    sed 's/^/    /' "$SCRATCH/setup.log"
-    header "Result"
-    probe_summary
-fi
+run_setup "$SCRATCH/setup.log" --yes --domain localhost --mail-domain example.org --no-mail --no-relay --no-proxy \
+    --contact-email admin@example.org
 if create_admin "$SCRATCH/setup.log" "$PASSWORD"; then
     ROOT_ID=$(api GET "/drive/$ADMIN_ID/default/root" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
     api POST "/drive/$ADMIN_ID/default/folder/$ROOT_ID" '{"folderName":"Kept by the update"}' >/dev/null
@@ -181,8 +160,8 @@ fi
 archive=$(pre_updates)
 archive=${archive% }
 pointer=$(scratch_run cat "$INSTALL/.eigen/last-update" | tr '\n' ' ')
-if [ -n "$archive" ] && [ "$pointer" = "$archive $VERSION " ] && says "snapshots/$archive"; then
-    ok ".eigen/last-update names snapshots/$archive and $VERSION"
+if [ -n "$archive" ] && [ "$pointer" = "$archive $VERSION $OLD " ] && says "snapshots/$archive"; then
+    ok ".eigen/last-update names snapshots/$archive, $VERSION and $OLD"
 else
     fail "pre-update snapshots '$archive', .eigen/last-update '$pointer'"
 fi
@@ -243,6 +222,43 @@ else
 fi
 count=$(pre_updates | wc -w | tr -d ' ')
 if [ "$count" = 2 ]; then ok "two pre-update snapshots are kept"; else fail "$count pre-update snapshots: $(pre_updates)"; fi
+
+##############################################################################
+header "./eigen rollback"
+##############################################################################
+api POST "/drive/$ADMIN_ID/default/folder/$ROOT_ID" '{"folderName":"Made after the update"}' >/dev/null
+scratch_run sh -c 'echo "A local edit." >>"$1/README.md"' sh "$INSTALL"
+started=$(api_started)
+eigen rollback --yes
+if [ "$CODE" = 1 ] && says '■  Local changes are in the way of the rollback: README.md' &&
+    [ "$(head_of "$INSTALL")" = "$FIXED" ] && [ "$(api_started)" = "$started" ]; then
+    ok "local changes are refused before anything stops"
+else
+    fail "rollback with local changes: exit $CODE"
+    show
+fi
+git_run -C "$INSTALL" checkout -q -- README.md
+started=$SECONDS
+eigen rollback --yes
+show
+if [ "$CODE" = 0 ] && says "◇  Eigen $VERSION ($FIXED) → $VERSION ($NEW) is running at https://localhost/"; then
+    ok "./eigen rollback went back from $FIXED to $NEW in $((SECONDS - started))s"
+else
+    fail "./eigen rollback exited $CODE"
+fi
+revision=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
+    "$(docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)")")
+if [ "$(head_of "$INSTALL")" = "$NEW" ] && [ "$revision" = "$NEW" ] && stack_up; then
+    ok "the checkout is at $NEW, and eigen-api runs an image built there"
+else
+    fail "after the rollback the checkout is at $(head_of "$INSTALL") and eigen-api runs $revision"
+fi
+if kept && ! api GET "/drive/$ADMIN_ID/default/folder/$ROOT_ID" | grep -q '"Made after the update"' &&
+    ! scratch_run test -e "$INSTALL/.eigen/last-update"; then
+    ok "the data is as it was before the update, and .eigen/last-update is gone"
+else
+    fail "the data or .eigen/last-update after the rollback"
+fi
 
 header "Result"
 probe_summary

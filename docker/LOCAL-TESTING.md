@@ -250,7 +250,7 @@ locally too — the dev compose hardcodes `localhost`, so you don't need real DN
 
 The three scripts below share `docker/probe-lib.sh`: the pass/fail counters, the log helpers, the
 compose wrapper, the HTTP/SMTP/IMAPS probes, and the `Result` summary. A new probe script sources it
-first and adds only its own probes.
+first and adds only its own probes. Every harness installs the tracked files as the working tree has them: `git add` a new file to include it.
 
 ```bash
 ./docker/test-deployments.sh
@@ -260,7 +260,7 @@ Boots each `COMPOSE_PROFILES` combination (`edge,mail`, `static,mail`, `edge`, `
 plus a custom-subnet variant (`EIGEN_SUBNET=172.30.0.0/24`) to exercise the network
 override path. Probes per scenario: landing page, per-app SPA bundles, `/eigen/health`,
 WebSocket upgrade pass-through, and — when `mail` is in the profile — the SMTP and IMAPS
-banners. ~3 min wall clock; prints `✓ ALL OK` or the list of failures. Run before merging
+banners. Without mail, a share notification goes through a Mailpit relay, and a document made over the API syncs over its collab WebSocket through the web server. ~3 min wall clock; prints `✓ ALL OK` or the list of failures. Run before merging
 anything that touches `setup.ts`, `docker-compose*`, `scripts/generate-env.sh`, or any
 Caddyfile.
 
@@ -278,7 +278,7 @@ without a real host webserver.
 ALICE_EMAIL=admin@eigen.local ALICE_PASSWORD='your-password' ./docker/test-mail-hardening.sh
 ```
 
-Brings up `edge,mail` and checks the mail hardening described in [SETUP-GUIDE.md § Mail abuse hardening](SETUP-GUIDE.md#mail-abuse-hardening). Eleven numbered probes: a login sending as itself (250), the same login sending as another local address and as a foreign address (553 both), the same login sending with an empty envelope sender (250 — the RFC 3834 exemption), a mixed-case login sending as its own lowercase address (250), unauthenticated inbound on port 25 with a foreign sender (accepted), the queue-backlog notification, and the SASL failure limiters — probe 10 (a run of failed logins over real SMTP AUTH locks the account's password path) and probe 11 (the client address travels the whole chain: postfix `rip` → dovecot `TCPREMOTEIP` → checkpassword `ip` → the per-IP bucket). Probe 11 asks dovecot's log which address it saw for one deliberate failed login, fills that address's bucket over HTTP from inside the API container, and then has a single real SMTP AUTH with the **correct** password refused — which can only happen if the same address traveled the chain. `PROBES=2,3,4` runs a subset (probe 1 comes along whenever a login probe is named, since it is what proves the credentials), `KEEP_STACK=1` leaves the stack up. The full run takes about 6 minutes, mostly probe 10 pacing itself under Postfix's anvil AUTH cap and probe 8 waiting for the queue monitor.
+Brings up `edge,mail` and checks the mail hardening described in [SETUP-GUIDE.md § Mail abuse hardening](SETUP-GUIDE.md#mail-abuse-hardening). Eleven numbered probes: a login sending as itself (250), the same login sending as another local address and as a foreign address (553 both), the same login sending with an empty envelope sender (250 — the RFC 3834 exemption), a mixed-case login sending as its own lowercase address (250), unauthenticated inbound on port 25 with a foreign sender (accepted), the queue-backlog notification, and the SASL failure limiters — probe 10 (a run of failed logins over real SMTP AUTH locks the account's password path) and probe 11 (the client address travels the whole chain: postfix `rip` → dovecot `TCPREMOTEIP` → checkpassword `ip` → the per-IP bucket). Probe 11 asks dovecot's log which address it saw for one deliberate failed login, fills that address's bucket over HTTP from inside the API container, and then has a single real SMTP AUTH with the **correct** password refused — which can only happen if the same address traveled the chain. `PROBES=2,3,4` runs a subset (probe 1 comes along whenever a login probe is named, since it is what proves the credentials), `HARNESS_KEEP=1` leaves the stack up. The full run takes about 6 minutes, mostly probe 10 pacing itself under Postfix's anvil AUTH cap and probe 8 waiting for the queue monitor.
 
 The script logs in as a real account, so it needs `ALICE_EMAIL` and `ALICE_PASSWORD` for an account that already exists in `./data`, and `MAIL_DOMAIN` in `.env.production` must match that address (`MAIL_DOMAIN=eigen.is` if your `./data` came from the real instance). Without them the login probes skip and the rest still run. A host dev API on `:8000` can stay up; eigen-api has no host port binding. Nothing is ever delivered: the dialogs stop at RCPT TO. The dev overlay pins postfix and dovecot to `MAIL_DOMAIN=eigen.localhost`, so Postfix's own mail domain can differ from the account's; sender binding compares the login with the envelope sender and does not care about the domain.
 

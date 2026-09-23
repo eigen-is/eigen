@@ -1,32 +1,23 @@
 #!/usr/bin/env bash
-# Smoke-test the deployment shapes (Caddy/static × mail on/off, plus a custom subnet) end to end.
-#
-# What it does: installs a scratch copy of this working tree with ./eigen setup from the no-Bun docker:cli
-# container, then reruns setup with each shape's flags on the same install, so every image is built in
-# Docker and every switch between shapes goes through the launcher. Per shape it curls the important URLs
-# (landing, per-app SPAs, /eigen/health, WebSocket upgrade) on the harness ports, asserts each app serves its
-# OWN bundle (not the landing page's), and probes the mail ports. Without mail, Mailpit is the outgoing relay.
+# Installs each deployment shape (Caddy or eigen-static, with mail or without, a custom subnet) by rerunning ./eigen
+# setup on one install, from a docker:cli container that has no Bun. Per shape: the landing page and each app's own
+# bundle, /eigen/health, the WebSocket upgrade and the mail ports; without mail, a share notification through a
+# Mailpit relay and a document that syncs over its collab WebSocket through the web server.
 #
 # Usage:  ./docker/test-deployments.sh
 # Needs:  docker, curl, nc, openssl, git.
 
 set -euo pipefail
 
-# Counters, log/probe helpers, the scratch installs and the Result summary.
 . "$(dirname "$0")/probe-lib.sh"
 
+ADMIN_EMAIL=alice@eigen.test
+PASSWORD="probe-$$"
+
 bring_up() {
-    local started=$SECONDS
     log "→ ./eigen setup $*"
-    if run_setup --user "$(id -u):$(id -g)" --yes --domain localhost --mail-domain eigen.test \
-        --contact-email admin@eigen.test "$@" >"$SCRATCH/setup.log" 2>&1; then
-        log "  up in $((SECONDS - started))s"
-    else
-        log "× setup failed after $((SECONDS - started))s:"
-        sed 's/^/    /' "$SCRATCH/setup.log"
-        dc logs --tail=30 || true
-        exit 1
-    fi
+    run_setup "$SCRATCH/setup.log" --user "$(id -u):$(id -g)" --yes --domain localhost --mail-domain eigen.test \
+        --contact-email admin@eigen.test "$@"
 }
 
 tear_down() {
@@ -45,50 +36,43 @@ probe_relay() {
     fi
 }
 
-# A share notification sent through the Mailpit relay: From "<admin> via <organization>" <system sender>, Reply-To
-# the admin. The admin comes from the link the last ./eigen setup printed, the second user from the admin API.
+# call <method> <path> [json]: the HTTP status of a call on $BASE as the signed-in admin, its body in $SCRATCH/body.
+call() {
+    curl -sk -o "$SCRATCH/body" -w '%{http_code}' -b "$JAR" -X "$1" -H 'Content-Type: application/json' \
+        -H 'Origin: https://localhost' ${3:+-d "$3"} "$BASE$2" || echo 000
+}
+
+body_id() { grep -o '"id":"[^"]*"' "$SCRATCH/body" | head -n 1 | cut -d'"' -f4 || true; }
+
+# admin <origin>: the admin from the link the last ./eigen setup printed, signed in on <origin>.
+admin() {
+    BASE="$1/eigen"
+    JAR="$SCRATCH/session"
+    rm -f "$JAR"
+    probe_setup_link "$SCRATCH/setup.log" "$1"
+    if create_admin "$SCRATCH/setup.log" "$PASSWORD"; then
+        ok "the setup link made $ADMIN_EMAIL, who signs in"
+    else
+        fail "the setup link made no admin who signs in"
+    fi
+}
+
+# A share notification through the Mailpit relay: From "<admin> via <organization>" <system sender>, Reply-To the
+# admin.
 probe_share_mail() {
-    local base="$1/eigen" token link path admin_id folder_id code id message=''
-    local jar="$SCRATCH/share-session" password="probe-share-$$"
-    rm -f "$jar"
-    token=$(grep -o 'setup=[A-Za-z0-9_-]*' "$SCRATCH/setup.log" | tail -n 1 | cut -d= -f2 || true)
-    if [ -z "$token" ]; then
-        fail "./eigen setup printed no setup link"
-        return
-    fi
-    # The browser asks for the link without its fragment; the web server must serve it, not redirect it.
-    link=$(grep -o 'https://[^ ]*#setup=[A-Za-z0-9_-]*' "$SCRATCH/setup.log" | tail -n 1 || true)
-    path=${link#https://*/}
-    path=${path%%#*}
-    code=$(curl -sk -o /dev/null -w '%{http_code}' "$1/$path" || echo 000)
-    if [ "$code" = 200 ]; then ok "the setup link's page /$path answers 200"; else fail "the setup link's page /$path → $code, expected 200"; fi
-    admin_id=$(curl -sk -X POST -H 'Content-Type: application/json' \
-        -d "{\"setupToken\":\"$token\",\"orgName\":\"Probe Org\",\"storageType\":\"local-id\",\"adminUsername\":\"ada\",\"adminPassword\":\"$password\",\"adminName\":\"Ada Admin\"}" \
-        "$base/setup/complete" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4 || true)
-    if [ -z "$admin_id" ]; then
-        fail "creating the admin through the setup link failed"
-        return
-    fi
-    # api <method> <path> [json]: the HTTP status of a call as the signed-in admin.
-    api() {
-        curl -sk -o "$SCRATCH/share-body" -w '%{http_code}' -b "$jar" -c "$jar" -X "$1" \
-            -H 'Content-Type: application/json' -H 'Origin: https://localhost' ${3:+-d "$3"} "$base$2" || echo 000
-    }
-    code=$(api POST /auth/sign-in/email "{\"email\":\"ada@eigen.test\",\"password\":\"$password\"}")
-    if [ "$code" != 200 ]; then fail "the admin cannot sign in → $code"; return; fi
-    code=$(api POST /auth/admin/create-user \
-        "{\"name\":\"Bea User\",\"email\":\"bea@eigen.test\",\"password\":\"$password\",\"role\":\"user\"}")
+    local code folder_id id message=''
+    code=$(call POST /auth/admin/create-user \
+        "{\"name\":\"Bea User\",\"email\":\"bea@eigen.test\",\"password\":\"$PASSWORD\",\"role\":\"user\"}")
     if [ "$code" != 200 ]; then fail "creating bea@eigen.test through the admin API → $code"; return; fi
-    code=$(api PUT /settings/server '{"notifications":{"email":{"userOnAclAdd":true}}}')
+    code=$(call PUT /settings/server '{"notifications":{"email":{"userOnAclAdd":true}}}')
     if [ "$code" != 200 ]; then fail "turning on share mail for users → $code"; return; fi
-    api GET "/drive/$admin_id/default/root" >/dev/null
-    folder_id=$(grep -o '"id":"[^"]*"' "$SCRATCH/share-body" | head -n 1 | cut -d'"' -f4 || true)
-    code=$(api POST "/drive/$admin_id/default/folder/$folder_id" '{"folderName":"For Bea"}')
-    folder_id=$(grep -o '"id":"[^"]*"' "$SCRATCH/share-body" | head -n 1 | cut -d'"' -f4 || true)
+    call GET "/drive/$ADMIN_ID/default/root" >/dev/null
+    code=$(call POST "/drive/$ADMIN_ID/default/folder/$(body_id)" '{"folderName":"For Bea"}')
+    folder_id=$(body_id)
     if [ "$code" != 200 ]; then fail "creating a folder to share → $code"; return; fi
-    code=$(api PUT "/drive/$admin_id/default/path/$folder_id/acl" '{"add":[{"id":"bea@eigen.test","read":true,"write":false}]}')
+    code=$(call PUT "/drive/$ADMIN_ID/default/path/$folder_id/acl" '{"add":[{"id":"bea@eigen.test","read":true,"write":false}]}')
     if [ "$code" != 200 ]; then fail "sharing the folder with bea@eigen.test → $code"; return; fi
-    ok "the admin from the setup link shares a folder with a user made through the admin API"
+    ok "the admin shares a folder with a user made through the admin API"
 
     # The notification leaves after the share answers.
     for _ in $(seq 1 30); do
@@ -102,11 +86,51 @@ probe_share_mail() {
     done
     if [ -z "$message" ]; then
         fail "Mailpit received no share notification for bea@eigen.test"
-    elif printf '%s' "$message" | grep -q '"From":{"Name":"Ada Admin via Probe Org","Address":"noreply@eigen.test"}' &&
-        printf '%s' "$message" | grep -q '"ReplyTo":\[{"Name":"Ada Admin","Address":"ada@eigen.test"}\]'; then
-        ok "the share mail is From \"Ada Admin via Probe Org\" <noreply@eigen.test>, Reply-To ada@eigen.test"
+    elif printf '%s' "$message" | grep -q '"From":{"Name":"Alice via Probe","Address":"noreply@eigen.test"}' &&
+        printf '%s' "$message" | grep -q '"ReplyTo":\[{"Name":"Alice","Address":"alice@eigen.test"}\]'; then
+        ok "the share mail is From \"Alice via Probe\" <noreply@eigen.test>, Reply-To alice@eigen.test"
     else
         fail "share mail sender: $(printf '%s' "$message" | grep -o '"From":{[^}]*}') $(printf '%s' "$message" | grep -o '"ReplyTo":\[[^]]*\]')"
+    fi
+}
+
+# probe_collab <web server service> <its URL inside its own container>: a document made over the API syncs over its
+# collab WebSocket through that web server. Bun from the API image, in the web server's network namespace, sends sync
+# step 1 and waits for the server's sync step 2.
+probe_collab() {
+    local doc_id cookie result
+    call GET "/drive/$ADMIN_ID/default/root" >/dev/null
+    call POST "/drive/$ADMIN_ID/default/folder/$(body_id)/create/doc" '{"fileName":"Collab probe"}' >/dev/null
+    doc_id=$(body_id)
+    cookie=$(awk -F'\t' 'NF >= 7 && ($1 !~ /^#/ || $1 ~ /^#HttpOnly_/) { printf "%s=%s; ", $6, $7 }' "$JAR")
+    result=$(docker run --rm --network "container:$(dc ps -q "$1")" --entrypoint bun -e COOKIE="$cookie" \
+        -e URL="$2/eigen/ws/collab/$ADMIN_ID/default/$doc_id" "$EIGEN_API_IMAGE" -e '
+            const ws = new WebSocket(process.env.URL, {
+                headers: { Cookie: process.env.COOKIE, Origin: "https://localhost" },
+                tls: { rejectUnauthorized: false },
+            });
+            ws.binaryType = "arraybuffer";
+            ws.onopen = () => ws.send(new Uint8Array([0, 0, 1, 0]));
+            ws.onmessage = ({ data }) => {
+                const frame = new Uint8Array(data);
+                if (frame[0] === 0 && frame[1] === 1) {
+                    console.log("synced");
+                    process.exit(0);
+                }
+            };
+            ws.onclose = ({ code }) => {
+                console.log(`closed ${code}`);
+                process.exit(1);
+            };
+            setTimeout(() => {
+                console.log("no sync step 2 in 15s");
+                process.exit(1);
+            }, 15000);
+        ' 2>&1 || true)
+    if [ "$result" = synced ]; then
+        ok "a document syncs over its collab WebSocket through $1"
+    else
+        fail "the collab WebSocket through $1 (doc '$doc_id'): $result"
     fi
 }
 
@@ -158,7 +182,9 @@ probe "/ (landing)"          "$BASE_HTTPS/"                    200
 probe "/mail/"               "$BASE_HTTPS/mail/"               200 '"/mail/assets/'
 probe_ws "WS /eigen/ws/collab/..." "$BASE_HTTPS/eigen/ws/collab/x/y/z"
 probe_relay
-probe_share_mail "$BASE_HTTPS"
+admin "$BASE_HTTPS"
+probe_share_mail
+probe_collab caddy wss://localhost
 tear_down
 # D creates its admin through a fresh setup link too, which only a server that is not set up prints.
 docker run --rm -v "$INSTALL/data:/data" "$CLI_IMAGE" find /data -mindepth 1 -delete
@@ -172,7 +198,9 @@ probe "/ (landing)"          "$BASE_HTTP/"                     200
 probe "/mail/"               "$BASE_HTTP/mail/"                200 '"/mail/assets/'
 probe_ws "WS /eigen/ws/collab/..." "$BASE_HTTP/eigen/ws/collab/x/y/z"
 probe_relay
-probe_share_mail "http://localhost:$PORT_STATIC"
+admin "http://localhost:$PORT_STATIC"
+probe_share_mail
+probe_collab eigen-static ws://localhost:8080
 tear_down
 
 ##############################################################################

@@ -6,7 +6,7 @@
 # Usage:
 #   ./docker/test-mail-hardening.sh
 #   PROBES=2,3,4 ./docker/test-mail-hardening.sh   # subset
-#   KEEP_STACK=1 ...                               # leave the scratch install up
+#   HARNESS_KEEP=1 ...                             # leave the scratch install up
 #
 # Needs:  docker, openssl, nc, curl, git. The install is fresh, so the script creates the admin
 #         alice@eigen.test through the setup wizard's API and logs in as her.
@@ -21,7 +21,6 @@
 
 set -euo pipefail
 
-# Counters, log helpers, the dc() compose wrapper and the Result summary.
 . "$(dirname "$0")/probe-lib.sh"
 
 
@@ -176,7 +175,6 @@ echo 0
 scratch_init mailhard
 new_install "eigentestmailhard$$"
 write_override
-HARNESS_KEEP="${KEEP_STACK:-0}"
 # The queue probe needs a threshold the seeded mail can cross. In the env file before setup, because
 # queue-monitor.sh reads its environment once, at container start; configure keeps both keys.
 printf 'QUEUE_ALERT_THRESHOLD=%s\nQUEUE_CHECK_INTERVAL=%s\n' "${QUEUE_ALERT_THRESHOLD:-3}" \
@@ -184,26 +182,19 @@ printf 'QUEUE_ALERT_THRESHOLD=%s\nQUEUE_CHECK_INTERVAL=%s\n' "${QUEUE_ALERT_THRE
 chmod 600 "$INSTALL/.env.production"
 
 header "Installing edge,mail"
-if ! run_setup --user "$(id -u):$(id -g)" --yes --domain localhost --mail --mail-domain eigen.test \
-    --contact-email admin@eigen.test --no-proxy --no-relay >"$SCRATCH/setup.log" 2>&1; then
-    log "× setup failed:"
-    sed 's/^/    /' "$SCRATCH/setup.log"
-    dc logs --tail=30 || true
-    exit 1
-fi
+run_setup "$SCRATCH/setup.log" --user "$(id -u):$(id -g)" --yes --domain localhost --mail --mail-domain eigen.test \
+    --contact-email admin@eigen.test --no-proxy --no-relay
 set -a; source "$INSTALL/.env.production"; set +a
 MAIL_DOMAIN="${MAIL_DOMAIN:-$DOMAIN}"
 
-# A fresh install has no account: create the admin through the setup wizard's API, with the token of the link
-# ./eigen setup printed.
+# A fresh install has no account: the admin comes from the link ./eigen setup printed.
 ALICE_EMAIL="alice@$MAIL_DOMAIN"
 ALICE_PASSWORD="probe-$RUN-password"
-SETUP_TOKEN=$(grep -o 'setup=[A-Za-z0-9_-]*' "$SCRATCH/setup.log" | tail -n 1 | cut -d= -f2 || true)
-code=$(curl -sk -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' \
-    -d "{\"setupToken\":\"$SETUP_TOKEN\",\"orgName\":\"Probe\",\"storageType\":\"local-id\",\"adminUsername\":\"alice\",\"adminPassword\":\"$ALICE_PASSWORD\",\"adminName\":\"Alice\"}" \
-    "https://localhost:$PORT_HTTPS/eigen/setup/complete" || true)
-if [ "$code" != 200 ]; then
-    log "× creating $ALICE_EMAIL through /setup/complete answered $code"
+ADMIN_EMAIL=$ALICE_EMAIL
+BASE="https://localhost:$PORT_HTTPS/eigen"
+JAR="$SCRATCH/session"
+if ! create_admin "$SCRATCH/setup.log" "$ALICE_PASSWORD"; then
+    log "× the setup link made no $ALICE_EMAIL who signs in"
     exit 1
 fi
 # A same-domain address the login does NOT own. It need not exist: the login/sender map is
@@ -394,7 +385,7 @@ header "Probe 9 — per-IP SASL failure lockout"
 ##############################################################################
 # The route-level half of the story: drive it with a synthetic IP so the lockout is observable
 # without locking this host out. Probe 11 proves the real SMTP path actually delivers a client IP.
-# The assertion pins the 429 at exactly attempt 51, so the bucket has to start empty: a KEEP_STACK
+# The assertion pins the 429 at exactly attempt 51, so the bucket has to start empty: a HARNESS_KEEP
 # rerun within the 15 minute window would otherwise still hold the previous run's failures.
 if should_run 9; then
     log "restarting eigen-api for a clean failure-bucket baseline..."

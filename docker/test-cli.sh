@@ -1,30 +1,14 @@
 #!/usr/bin/env bash
-# Install Eigen the way a stranger does and run the operator commands against it: ./eigen from a docker:cli
-# container that has no Bun, on a scratch copy of this working tree (source mode). The main install is edge,mail
-# as uid 1001 into a folder whose name has capitals and a space (so the Compose project is not `eigen`); a second
-# one is edge only, as root. Each asserts a healthy stack, the env file 0600 and the operator's, data/ and backups/
-# 1000:1000, and no container with the Docker socket.
-#
-# On the main install: ./eigen status reports the version and every service; the control socket lives inside the
-# API container and never under data/; ./eigen setup ends with a one-time link without which the /setup routes
-# refuse through the real gateway, and a rerun keeps every line of the env file; ./eigen reset-password with a
-# piped password changes it and signs the account out over HTTP; ./eigen backup and ./eigen restore round-trip a
-# folder made over HTTP with owners and modes intact, the snapshot the operator's alone in snapshots/; a no, a
-# failed snapshot, a newer snapshot, and snapshots holding a hard link to what is not unpacked, a device, a setuid
-# file or a link out of data/ are refused before anything stops; a restore whose stop fails, or that is interrupted
-# while it unpacks, leaves Eigen running on the data it had and no unpacked copy; and status and reset-password say
-# where to look when Eigen is stopped.
-#
-# The copy is `git ls-files -co --exclude-standard` into the scratch folder, committed to a fresh repo: unlike
-# `git stash create` or a clone plus the diff, it also carries untracked files, and it never copies ignored ones
-# (node_modules, .env.production) or anything under data/, backups/, snapshots/ and caddy-data/.
+# Installs Eigen as a stranger does, with ./eigen in a docker:cli container that has no Bun, and runs the operator
+# commands against it: status, the control socket, the setup link, reset-password, backup and restore with their
+# refusals, and what status and reset-password say with Eigen stopped. The main install is edge,mail as uid 1001 in a
+# folder whose name has capitals and a space; a second one is edge only, as root.
 #
 # Usage:  ./docker/test-cli.sh
 # Needs:  docker, curl, git. Builds every image in Docker (a few minutes on a cold cache).
 
 set -euo pipefail
 
-# Counters, log/probe helpers, the scratch installs and the Result summary.
 . "$(dirname "$0")/probe-lib.sh"
 
 VERSION=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$REPO_ROOT/package.json" | head -n 1)
@@ -78,18 +62,12 @@ data_owners() { scratch_run sh -c 'find "$1" -exec stat -c "%u:%g" {} + | sort -
 # aside_count: how many data/ folders a restore has kept aside.
 aside_count() { (cd "$INSTALL" && ls -d data.pre-restore-* 2>/dev/null | wc -l | tr -d ' '); }
 
-# craft <name> <commands run in its data/>: a snapshot of this version in snapshots/, made as root.
+# craft <name> <version> <commands run in its data/>: a snapshot in snapshots/, made as root.
 craft() {
     scratch_run sh -c 'cd "$(mktemp -d)" && mkdir data &&
         echo "{\"version\":\"$2\",\"createdAt\":\"2020-01-01T00:00:00.000Z\"}" >eigen-snapshot.json &&
         echo DOMAIN=crafted.example.org >.env.production && echo x >data/a && (cd data && eval "$3") &&
-        tar -czf "$1" eigen-snapshot.json .env.production data' sh "$INSTALL/snapshots/$1" "$VERSION" "$2"
-}
-
-# unpacked_mode <archive> <member>: the mode root's GNU tar gives the member, unpacked on this file share.
-unpacked_mode() {
-    docker run --rm -v "$SCRATCH:$SCRATCH" --entrypoint sh "$EIGEN_API_IMAGE" -c 'mkdir "$1.probe" &&
-        tar --numeric-owner -xzpf "$1" -C "$1.probe" "$2" && stat -c %a "$1.probe/$2"; rm -rf "$1.probe"' sh "$1" "$2"
+        tar -czf "$1" eigen-snapshot.json .env.production data' sh "$INSTALL/snapshots/$1" "$2" "$3"
 }
 
 SETUP_FLAGS=(--yes --domain localhost --mail --mail-domain eigen.test --contact-email admin@eigen.test --no-proxy
@@ -101,14 +79,7 @@ write_override
 BASE="https://localhost:$PORT_HTTPS/eigen"
 
 header "Installing edge,mail as uid 1001 into '$(basename "$INSTALL")'"
-started=$SECONDS
-if run_setup --user "$OPERATOR" "${SETUP_FLAGS[@]}" >"$SCRATCH/setup.log" 2>&1; then
-    ok "./eigen setup finished in $((SECONDS - started))s"
-else
-    log "× setup failed after $((SECONDS - started))s:"
-    sed 's/^/    /' "$SCRATCH/setup.log"
-    exit 1
-fi
+run_setup "$SCRATCH/setup.log" --user "$OPERATOR" "${SETUP_FLAGS[@]}"
 check_install "$OPERATOR"
 
 ##############################################################################
@@ -170,16 +141,12 @@ if [ "${#FIRST_TOKEN}" = 43 ]; then
 else
     fail "./eigen setup printed no setup link"
 fi
-# The browser asks for the link without its fragment; the gateway must serve it, not redirect it.
-link=$(grep -o 'https://[^ ]*#setup=[A-Za-z0-9_-]*' "$SCRATCH/setup.log" | tail -n 1 || true)
-path=${link#https://*/}
-path=${path%%#*}
-code=$(curl -sk -o /dev/null -w '%{http_code}' "https://localhost:$PORT_HTTPS/$path" || echo 000)
-if [ "$link" = "https://localhost/admin/#setup=$FIRST_TOKEN" ] && [ "$code" = 200 ]; then
-    ok "the link is https://localhost/admin/#setup=…, and the gateway serves /$path (200)"
+if grep -q "https://localhost/admin/#setup=$FIRST_TOKEN" "$SCRATCH/setup.log"; then
+    ok "the link is https://localhost/admin/#setup=…"
 else
-    fail "the link '$link': /$path → $code, expected 200"
+    fail "the link is not https://localhost/admin/#setup=…"
 fi
+probe_setup_link "$SCRATCH/setup.log" "https://localhost:$PORT_HTTPS"
 # Unroutable: a request that reached S3 would hang on it until the connect timeout.
 S3_FIELDS='"endpoint":"http://10.255.255.1","bucket":"probe","accessKeyId":"key","secretAccessKey":"secret"'
 ADMIN_FIELDS="\"orgName\":\"Probe\",\"storageType\":\"local-id\",\"adminUsername\":\"${ADMIN_EMAIL%@*}\",\"adminPassword\":\"$OLD_PASSWORD\",\"adminName\":\"Alice\""
@@ -204,13 +171,7 @@ for route in s3check s3harden complete; do
 done
 
 before=$(scratch_run cat "$INSTALL/.env.production")
-started=$SECONDS
-if run_setup --user "$OPERATOR" "${SETUP_FLAGS[@]}" >"$SCRATCH/setup-again.log" 2>&1; then
-    ok "./eigen setup reran in $((SECONDS - started))s"
-else
-    fail "the setup rerun failed after $((SECONDS - started))s"
-    sed 's/^/    /' "$SCRATCH/setup-again.log"
-fi
+run_setup "$SCRATCH/setup-again.log" --user "$OPERATOR" "${SETUP_FLAGS[@]}"
 after=$(scratch_run cat "$INSTALL/.env.production")
 if [ "${after:0:${#before}}" = "$before" ]; then
     added=$(printf '%s' "${after:${#before}}" | sed -n 's/^\([A-Z_]*\)=.*/\1/p' | tr '\n' ' ')
@@ -418,10 +379,7 @@ fi
 scratch_run rmdir "$INSTALL/snapshots/.eigen-snapshot.partial"
 
 NEWER=eigen-20990101-000000.tar.gz
-scratch_run sh -c 'cd "$(mktemp -d)" && mkdir data &&
-    echo "{\"version\":\"999.0.0\",\"createdAt\":\"2099-01-01T00:00:00.000Z\"}" >eigen-snapshot.json &&
-    echo DOMAIN=newer.example.org >.env.production && tar -czf "$1" eigen-snapshot.json .env.production data' sh \
-    "$INSTALL/snapshots/$NEWER"
+craft "$NEWER" 999.0.0 :
 started=$(api_started)
 aside=$(aside_count)
 eigen restore "$NEWER" --yes
@@ -432,7 +390,7 @@ else
     fail "the newer snapshot: exit $CODE"
 fi
 if [ "$(api_started)" = "$started" ] && [ "$(aside_count)" = "$aside" ] &&
-    ! scratch_run grep -q newer.example.org "$INSTALL/.env.production"; then
+    ! scratch_run grep -q crafted.example.org "$INSTALL/.env.production"; then
     ok "the refusal stopped nothing and changed nothing"
 else
     fail "the refused restore changed something"
@@ -446,9 +404,11 @@ n=0
 for crafted in 'ln ../eigen-snapshot.json leak|leak' 'mknod null c 1 3|null' 'chmod 4755 a|is setuid or setgid' \
     'ln -s /etc/passwd passwd|is a link that leads out of data/'; do
     name="eigen-20200101-00000$((++n)).tar.gz"
-    craft "$name" "${crafted%%|*}"
+    craft "$name" "$VERSION" "${crafted%%|*}"
     # Docker Desktop's file share drops the bit as root's tar unpacks it: then there is nothing to refuse.
-    if [ "${crafted%%|*}" = 'chmod 4755 a' ] && [ "$(unpacked_mode "$INSTALL/snapshots/$name" data/a)" != 4755 ]; then
+    if [ "${crafted%%|*}" = 'chmod 4755 a' ] && [ "$(docker run --rm -v "$SCRATCH:$SCRATCH" --entrypoint sh \
+        "$EIGEN_API_IMAGE" -c 'mkdir "$1.probe" && tar --numeric-owner -xzpf "$1" -C "$1.probe" data/a &&
+        stat -c %a "$1.probe/data/a"; rm -rf "$1.probe"' sh "$INSTALL/snapshots/$name")" != 4755 ]; then
         skip "a setuid file: this file share drops the bit on unpack (the unit tests cover the refusal)"
         scratch_run rm "$INSTALL/snapshots/$name"
         continue
@@ -551,15 +511,8 @@ header "Installing edge as root into another folder"
 ##############################################################################
 new_install "eigentest-root-$$" 0:0
 write_override
-started=$SECONDS
-if run_setup --yes --domain localhost --mail-domain example.org --no-mail --no-relay --no-proxy \
-    --contact-email admin@example.org \
-    >"$SCRATCH/setup-root.log" 2>&1; then
-    ok "./eigen setup as root finished in $((SECONDS - started))s"
-else
-    fail "./eigen setup as root failed after $((SECONDS - started))s"
-    sed 's/^/    /' "$SCRATCH/setup-root.log"
-fi
+run_setup "$SCRATCH/setup-root.log" --yes --domain localhost --mail-domain example.org --no-mail --no-relay \
+    --no-proxy --contact-email admin@example.org
 check_install 0:0
 down_project "$PROJECT"
 
