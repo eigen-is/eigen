@@ -383,13 +383,13 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
         expect(html).toContain('background:#d1f0d1');
     });
 
-    test('a formula rule whose kept range stays enormous is dropped, not evaluated', () => {
+    test('a formula rule anchored far above the window evaluates only the rendered cell', () => {
         const cell = { v: 5, m: '5', ct: { fa: 'General', t: 'n' } };
         const data: Sheet['data'] = [];
         data[1_000_000] = [cell];
         const sheet: Sheet = {
-            id: 'cf-drop',
-            name: 'CFDrop',
+            id: 'cf-far',
+            name: 'CFFar',
             celldata: [{ r: 1_000_000, c: 0, v: cell }],
             data,
             config: {},
@@ -409,8 +409,34 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
         const evaluated = evaluate.mock.calls.length;
         evaluate.mockRestore();
 
-        expect(evaluated).toBe(0);
-        expect(html).toContain('>5</td>');
+        expect(evaluated).toBe(1);
+        expect(html).toContain('background:#d1f0d1');
+    });
+
+    test('a formula rule whose first range lies past the window still reads from that range', () => {
+        const cell = { v: 5, m: '5', ct: { fa: 'General', t: 'n' } };
+        const sheet: Sheet = {
+            id: 'cf-first-out',
+            name: 'CFFirstOut',
+            celldata: [{ r: 0, c: 0, v: cell }],
+            data: [[cell]],
+            config: {},
+            conditionalFormatRules: [
+                {
+                    type: 'default',
+                    cellrange: [
+                        { row: [299, 310], column: [0, 0] },
+                        { row: [0, 2], column: [0, 0] },
+                    ],
+                    format: { cellColor: '#d1f0d1' },
+                    conditionName: 'formula',
+                    conditionValue: ['=A300>1'],
+                },
+            ],
+        };
+
+        const { html } = renderSheetsPreviewHtml([sheet], NO_MEDIA);
+        expect(html).toContain('background:#d1f0d1');
     });
 });
 

@@ -1,7 +1,8 @@
 import { cloneSides, type MergeCell, parseCellKey, type Sheet } from '@workspace/lib/sheets';
+import { withCfRanges } from './conditional-format';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from './defaults';
 import { functionStrChange } from './formula-shift';
-import type { ExtendedSheetConfig } from './types';
+import type { ExtendedSheetConfig, SingleRange } from './types';
 
 export type InsertRowColOp = {
     type: 'row' | 'column';
@@ -459,7 +460,7 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
     if (target.conditionalFormatRules != null) {
         const newCFarr = [];
         for (const cf of target.conditionalFormatRules) {
-            const cf_new_range = [];
+            const cf_new_range: SingleRange[] = [];
             for (const range of cf.cellrange) {
                 let r1 = range.row[0];
                 let r2 = range.row[1];
@@ -506,7 +507,13 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
                 }
             }
             if (cf_new_range.length > 0) {
-                newCFarr.push({ ...cf, cellrange: cf_new_range });
+                const first = op.type === 'row' ? cf_new_range[0].row[0] : cf_new_range[0].column[0];
+                const shift = first >= op.start ? -removeCount : 0;
+                newCFarr.push(
+                    op.type === 'row'
+                        ? withCfRanges(cf, cf_new_range, shift, 0)
+                        : withCfRanges(cf, cf_new_range, 0, shift),
+                );
             }
         }
         newTarget.conditionalFormatRules = newCFarr;

@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { evaluateConditionalFormat } from '../../engine/conditional-format';
-import type { Cell, CellMatrix } from '../../engine/types';
+import { createArrayResolver } from '../../engine/cell-resolver';
+import { createCfFormulaEvaluator, evaluateConditionalFormat, withCfRanges } from '../../engine/conditional-format';
+import { FormulaEngine } from '../../engine/formula-engine';
+import { functionCopy } from '../../engine/formula-shift';
+import type { Cell, CellMatrix, ConditionalFormatRule, SingleRange } from '../../engine/types';
 
 function numCell(v: number): Cell {
     return { v, ct: { t: 'n', fa: 'General' } };
@@ -426,5 +429,77 @@ describe('engine/conditional-format — null / empty / disabled', () => {
         expect(seen).toEqual(['0_0', '0_1']);
         expect(styles['0_0']?.cellColor).toBe('#ff0000');
         expect(styles['1_0']).toBeUndefined();
+    });
+});
+
+describe('engine/conditional-format — formula rules across several ranges', () => {
+    // Rows 0-5 × columns 0-4, each cell holding row * 10 + column.
+    const data = buildMatrix(Array.from({ length: 6 }, (_, r) => Array.from({ length: 5 }, (_, c) => r * 10 + c)));
+    const evaluateFormula = createCfFormulaEvaluator(
+        new FormulaEngine(),
+        createArrayResolver([{ id: 's1', name: 'Sheet1', data, calculationChain: [], dynamicArrayCompute: [] }]),
+        's1',
+    );
+    const formulaRule = (cellrange: SingleRange[], formula: string): ConditionalFormatRule => ({
+        type: 'default',
+        cellrange,
+        format: { cellColor: '#ff0000' },
+        conditionName: 'formula',
+        conditionRange: [],
+        conditionValue: [formula],
+    });
+    const styled = (rules: ConditionalFormatRule[]) =>
+        Object.keys(evaluateConditionalFormat(rules, data, { evaluateFormula })).sort();
+
+    test('every range evaluates from the top-left of the first range, like one split rule per range', () => {
+        const first: SingleRange = { row: [0, 1], column: [0, 0] };
+        const second: SingleRange = { row: [2, 5], column: [2, 3] };
+        const multi = styled([formulaRule([first, second], '=A1>30')]);
+        const split = styled([
+            formulaRule([first], '=A1>30'),
+            formulaRule([second], `=${functionCopy('A1>30', 2, 2)}`),
+        ]);
+
+        expect(multi).toEqual(split);
+        expect(multi).toEqual(['3_2', '3_3', '4_2', '4_3', '5_2', '5_3']);
+    });
+
+    test('withCfRanges re-expresses a formula rule whose first range moves, so every kept cell keeps its color', () => {
+        const rule = formulaRule(
+            [
+                { row: [0, 1], column: [0, 0] },
+                { row: [3, 5], column: [1, 3] },
+            ],
+            '=A1>30',
+        );
+        const kept = withCfRanges(rule, [{ row: [4, 5], column: [2, 3] }]);
+
+        expect(kept.cellrange).toEqual([{ row: [4, 5], column: [2, 3] }]);
+        expect(kept).toMatchObject({ conditionValue: ['=C5>30'] });
+        expect(styled([kept])).toEqual(['4_2', '4_3', '5_2', '5_3']);
+        expect(styled([rule])).toEqual(expect.arrayContaining(styled([kept])));
+    });
+
+    test('withCfRanges maps the new first range back by the shift a row delete gave it', () => {
+        const rule = formulaRule([{ row: [2, 4], column: [0, 0] }], '=A3>0');
+        // Rows 0-2 deleted: the kept rows 3-4 now sit at 0-1, and their old anchor was row 3.
+        expect(withCfRanges(rule, [{ row: [0, 1], column: [0, 0] }], -3, 0)).toMatchObject({
+            conditionValue: ['=A4>0'],
+        });
+    });
+
+    test('withCfRanges only swaps the ranges of a rule without a formula', () => {
+        const rule: ConditionalFormatRule = {
+            type: 'default',
+            cellrange: [{ row: [0, 3], column: [0, 0] }],
+            format: { cellColor: '#ff0000' },
+            conditionName: 'greaterThan',
+            conditionRange: [],
+            conditionValue: [2],
+        };
+        expect(withCfRanges(rule, [{ row: [2, 3], column: [0, 0] }])).toEqual({
+            ...rule,
+            cellrange: [{ row: [2, 3], column: [0, 0] }],
+        });
     });
 });

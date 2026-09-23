@@ -18,7 +18,7 @@
 // pasteHandler plain-string branch, entered via handlePasteByClick.
 
 import { describe, expect, it } from 'bun:test';
-import type { Cell } from '../../../engine/types';
+import type { Cell, DefaultConditionalFormatRule } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { handlePasteByClick } from '../../../state/events/paste';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
@@ -399,6 +399,84 @@ describe('conditional-format migration on cut/paste (cfSplitRange contract)', ()
         // silently deleted) must fail this.
         const rule = ctx.sheets[0].conditionalFormatRules![0];
         expect(rule.cellrange).toEqual([{ row: [4, 4], column: [4, 4] }]);
+    });
+
+    // A formula rule reads relative to its first range's top-left, so a paste that moves
+    // that corner must re-express the formula for every cell to read what it read before.
+    const formulaRule = (): DefaultConditionalFormatRule => ({
+        type: 'default',
+        cellrange: [{ row: [1, 5], column: [1, 1] }],
+        format: { cellColor: '#ff0000' },
+        conditionName: 'formula',
+        conditionValue: ['=B2>1'],
+    });
+
+    const twoSheets = () =>
+        contextFactory({
+            currentSheetId: 'id_2',
+            selections: single(0, 0),
+            sheets: [
+                { name: 'one', id: 'id_1', order: 0, data: grid(12, 8) },
+                { name: 'two', id: 'id_2', order: 1, data: grid(12, 8) },
+            ],
+        }) as Context;
+    const crossSheetPaste = (ctx: Context, cut: boolean) => {
+        ctx.selections = rangeSel(1, 5, 1, 1);
+        copy(ctx);
+        ctx.pasteIsCut = cut;
+        ctx.currentSheetId = 'id_1';
+        ctx.selections = single(1, 1);
+        handlePasteByClick(ctx, 'internal');
+    };
+
+    it('keeps the target sheet rules when the copied cells carry none', () => {
+        const ctx = twoSheets();
+        ctx.sheets[0].conditionalFormatRules = [formulaRule()];
+
+        crossSheetPaste(ctx, false);
+
+        expect(ctx.sheets[0].conditionalFormatRules).toEqual([formulaRule()]);
+    });
+
+    it('moves a whole rule cut to a sheet without rules, leaving no empty rule behind', () => {
+        const ctx = twoSheets();
+        ctx.sheets[1].conditionalFormatRules = [formulaRule()];
+
+        crossSheetPaste(ctx, true);
+
+        expect(ctx.sheets[0].conditionalFormatRules).toEqual([formulaRule()]);
+        expect(ctx.sheets[1].conditionalFormatRules).toEqual([]);
+    });
+
+    it('re-expresses a formula rule whose top rows are cut away', () => {
+        const ctx = makeCtx(12, 8);
+        ctx.sheets[0].conditionalFormatRules = [formulaRule()];
+
+        copyThenPaste(ctx, rangeSel(1, 2, 1, 1), single(7, 4), { cut: true });
+
+        expect(ctx.sheets[0].conditionalFormatRules).toEqual([
+            {
+                ...formulaRule(),
+                cellrange: [
+                    { row: [3, 5], column: [1, 1] },
+                    { row: [7, 8], column: [4, 4] },
+                ],
+                conditionValue: ['=B4>1'],
+            },
+        ]);
+    });
+
+    it('re-expresses a formula rule copied from the middle of its range', () => {
+        const ctx = makeCtx(12, 8);
+        ctx.sheets[0].conditionalFormatRules = [formulaRule()];
+
+        copyThenPaste(ctx, single(2, 1), single(5, 4));
+
+        expect(ctx.sheets[0].conditionalFormatRules?.[1]).toEqual({
+            ...formulaRule(),
+            cellrange: [{ row: [5, 5], column: [4, 4] }],
+            conditionValue: ['=E6>1'],
+        });
     });
 });
 

@@ -1,5 +1,5 @@
 import { cloneDeep, set } from 'es-toolkit/compat';
-import { cfSplitRange } from '../../engine/conditional-format';
+import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import type { Cell, SingleRange } from '../../engine/types';
 
 import { type Context, getFlowdata } from '../context';
@@ -338,7 +338,7 @@ export function onCellsMoveEnd(
                     ),
                 );
             }
-            cdformat[i].cellrange = emptyRange;
+            cdformat[i] = withCfRanges(cdformat[i], emptyRange);
         }
     }
 

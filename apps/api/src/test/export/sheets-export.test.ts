@@ -415,6 +415,32 @@ describe('Sheets xlsx export — conditional formatting', () => {
         expect(rt[0].conditionalFormatRules).toEqual(rules);
     });
 
+    test('exports a formula rule over several ranges as one rule with a multi-range sqref', async () => {
+        const rules: ConditionalFormatRule[] = [
+            {
+                type: 'default',
+                cellrange: [
+                    { row: [1, 3], column: [1, 1] },
+                    { row: [1, 3], column: [3, 3] },
+                ],
+                format: { textColor: '#0000FF', cellColor: null },
+                conditionName: 'formula',
+                conditionRange: [],
+                conditionValue: ['=LEN(B2)>2'],
+            },
+        ];
+        const sheets: Sheet[] = [
+            { name: 'CF', celldata: [{ r: 1, c: 1, v: { v: 'longtext' } }], conditionalFormatRules: rules },
+        ];
+        const blocks = readCfBlocks(getSheet(await exportAndReload(sheets), 'CF'));
+        expect(blocks).toHaveLength(1);
+        expect(blocks[0].ref).toBe('B2:B4 D2:D4');
+        expect(blocks[0].rules[0]).toMatchObject({ type: 'expression', formulae: ['LEN(B2)>2'] });
+
+        const rt = await roundTrip(sheets);
+        expect(rt[0].conditionalFormatRules).toEqual(rules);
+    });
+
     test('exports the top10 family and above/below average', async () => {
         const rules: ConditionalFormatRule[] = (
             [
@@ -598,33 +624,16 @@ describe('Sheets xlsx export — conditional formatting', () => {
             ],
         });
 
-        // The importer re-anchors the expression per sqref range: one formula rule per
-        // cellrange entry, relative refs shifted, absolute COUNTIF ranges pinned.
+        // It re-imports as one formula rule over the same ranges, anchored at the first one like Excel.
         const rt = await roundTrip(sheets);
         expect(rt[0].conditionalFormatRules).toEqual([
             {
                 type: 'default',
-                cellrange: [{ row: [0, 4], column: [0, 0] }],
+                cellrange: rules[0].cellrange,
                 format,
                 conditionName: 'formula',
                 conditionRange: [],
                 conditionValue: ['=COUNTIF($A$1:$A$5,A1)+COUNTIF($C$1:$C$10,A1)+COUNTIF($E$1,A1)>1'],
-            },
-            {
-                type: 'default',
-                cellrange: [{ row: [0, 9], column: [2, 2] }],
-                format,
-                conditionName: 'formula',
-                conditionRange: [],
-                conditionValue: ['=COUNTIF($A$1:$A$5,C1)+COUNTIF($C$1:$C$10,C1)+COUNTIF($E$1,C1)>1'],
-            },
-            {
-                type: 'default',
-                cellrange: [{ row: [0, 0], column: [4, 4] }],
-                format,
-                conditionName: 'formula',
-                conditionRange: [],
-                conditionValue: ['=COUNTIF($A$1:$A$5,E1)+COUNTIF($C$1:$C$10,E1)+COUNTIF($E$1,E1)>1'],
             },
         ]);
     });

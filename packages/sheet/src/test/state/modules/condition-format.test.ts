@@ -200,8 +200,8 @@ describe('state/condition-format — formula rules resolve relative refs per cel
         expect(painted('=IF(A1>2,"B1","x")="B1"', [range(0, 5, 0, 0)])).toEqual(['1_0', '2_0', '3_0', '5_0']);
     });
 
-    it('anchors each range of a rule at its own top-left', () => {
-        expect(painted('=A1>2', [range(0, 1, 0, 0), range(3, 4, 1, 1)])).toEqual(['1_0', '4_1']);
+    it('anchors every range of a rule at the first range top-left', () => {
+        expect(painted('=A1>2', [range(0, 1, 0, 0), range(3, 4, 1, 1)])).toEqual(['1_0', '3_1']);
     });
 
     it('paints nothing for a formula that does not parse', () => {

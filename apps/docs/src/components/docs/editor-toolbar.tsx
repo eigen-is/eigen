@@ -748,6 +748,7 @@ export const EditorToolbar = ({
                 open={importPickerOpen}
                 onOpenChange={setImportPickerOpen}
                 title="Import docx file"
+                progressTitle="Importing docx file"
                 mime={DOCX_MIME}
                 accept=".docx"
             />
