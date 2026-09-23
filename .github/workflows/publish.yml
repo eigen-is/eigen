@@ -7,6 +7,9 @@ on:
 permissions:
   contents: read
 
+env:
+  REGISTRY: ghcr.io/eigen-is/eigen
+
 jobs:
   # The local release gate on a clean runner: update, rollback and a breaking release through a registry of its own.
   gate:
@@ -71,18 +74,22 @@ jobs:
           platforms: linux/amd64
           provenance: false
           sbom: false
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
           build-args: |
             BUN_VERSION=${{ needs.gate.outputs.bun-version }}
             EIGEN_VERSION=${{ needs.gate.outputs.version }}
             EIGEN_COMMIT=${{ needs.gate.outputs.commit }}
             EIGEN_BUILT_AT=${{ needs.gate.outputs.built-at }}
-            EIGEN_REGISTRY=ghcr.io/eigen-is/eigen
-          tags: ghcr.io/eigen-is/eigen/${{ matrix.name }}:${{ needs.gate.outputs.version }}
+            EIGEN_REGISTRY=${{ env.REGISTRY }}
+          tags: ${{ env.REGISTRY }}/${{ matrix.name }}:${{ needs.gate.outputs.version }}
           outputs: type=image,push=true,oci-mediatypes=true,annotation.org.opencontainers.image.version=${{ needs.gate.outputs.version }}
 
-  # Only once all four versions are pushed; a byte-for-byte copy, so :latest has the digest of the version.
+  # Only once all four versions are pushed, and never for a prerelease; a byte-for-byte copy, so :latest has the
+  # digest of the version.
   latest:
     needs: [gate, publish]
+    if: ${{ !contains(needs.gate.outputs.version, '-') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -102,5 +109,5 @@ jobs:
         run: |
           for name in api frontend postfix dovecot; do
             docker buildx imagetools create --prefer-index=false \
-              -t "ghcr.io/eigen-is/eigen/$name:latest" "ghcr.io/eigen-is/eigen/$name:$VERSION"
+              -t "$REGISTRY/$name:latest" "$REGISTRY/$name:$VERSION"
           done
