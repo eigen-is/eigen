@@ -71,7 +71,8 @@ export const controlApp = new Elysia({ name: 'control' })
     // Each call replaces the previous link, so a rerun of ./eigen setup is how an operator gets a fresh one.
     .post('/setup-link', (): SetupLink => {
         const signInUrl = `https://${getDomain()}/admin`;
-        return { setupUrl: isSetupRequired() ? `${signInUrl}?setup=${createSetupToken()}` : null, signInUrl };
+        // The slash skips the gateway's /admin redirect; a fragment never leaves the browser, so no log holds it.
+        return { setupUrl: isSetupRequired() ? `${signInUrl}/#setup=${createSetupToken()}` : null, signInUrl };
     })
     .post(
         '/reset-password',

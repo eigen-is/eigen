@@ -15,7 +15,7 @@ import { StorageTypePicker } from './storage-type-picker';
 // The /setup/status shape the parent route already fetched and passes down.
 type SetupStatus = NonNullable<ReturnType<typeof useSetupStatus>['data']>;
 
-// setupToken comes from the ?setup= of the link ./eigen setup printed.
+// setupToken comes from the #setup= of the link ./eigen setup printed.
 export function SetupWizard({ status, setupToken }: { status: SetupStatus; setupToken: string | undefined }) {
     if (!setupToken) {
         return (

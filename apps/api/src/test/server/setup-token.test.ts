@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getServerDataPath } from '../../lib/config/paths';
 import type { SetupLink } from '../../lib/control/control';
@@ -46,13 +46,27 @@ describe('setup token', () => {
         });
         clearSetupToken();
     });
+
+    test('a truncated or hand-edited token file holds no token', () => {
+        const token = createSetupToken();
+        const file = getServerDataPath('setup-token.json');
+        const stored = readFileSync(file, 'utf8');
+        for (const content of [stored.slice(0, 20), '', '{}', '{"hash":"abcd"}', '{"hash":42}', 'null']) {
+            writeFileSync(file, content);
+            expect(verifySetupToken(token)).toBe(false);
+        }
+        clearSetupToken();
+    });
 });
 
 describe('the /setup routes before setup', () => {
     const dataRoot = join(RUN_DIR, 'data');
     const logPath = join(RUN_DIR, 'api.log');
+    const probe = Bun.serve({ port: 0, fetch: () => new Response('') });
+    const { port } = probe;
+    probe.stop(true);
+    const base = `http://localhost:${port}`;
     let proc: Bun.Subprocess;
-    let base = '';
     // Every request the S3 endpoint below receives; a gated call must never add one.
     let s3Requests = 0;
     const s3 = Bun.serve({
@@ -92,7 +106,7 @@ describe('the /setup routes before setup', () => {
 
     async function freshToken(): Promise<string> {
         const { setupUrl } = await setupLink();
-        return new URL(setupUrl ?? '').searchParams.get('setup') ?? '';
+        return new URLSearchParams(new URL(setupUrl ?? '').hash.slice(1)).get('setup') ?? '';
     }
 
     async function runCli(): Promise<{ stdout: string; code: number }> {
@@ -106,13 +120,8 @@ describe('the /setup routes before setup', () => {
         return { stdout, code };
     }
 
-    beforeAll(async () => {
-        mkdirSync(join(dataRoot, 'server'), { recursive: true });
-        mkdirSync(join(dataRoot, 'home'), { recursive: true });
-        const probe = Bun.serve({ port: 0, fetch: () => new Response('') });
-        const { port } = probe;
-        probe.stop(true);
-        const logFd = openSync(logPath, 'w');
+    async function startApi(): Promise<void> {
+        const logFd = openSync(logPath, 'a');
         proc = Bun.spawn(['bun', 'src/index.ts'], {
             cwd: API_DIR,
             env: {
@@ -121,7 +130,7 @@ describe('the /setup routes before setup', () => {
                 EIGEN_BACKUPS_DIR: join(RUN_DIR, 'backups'),
                 EIGEN_API_PORT: String(port),
                 EIGEN_CONTROL_SOCKET: SOCKET,
-                API_URL: `http://localhost:${port}`,
+                API_URL: base,
                 DOMAIN,
             },
             stdin: 'ignore',
@@ -129,7 +138,6 @@ describe('the /setup routes before setup', () => {
             stderr: logFd,
         });
         closeSync(logFd);
-        base = `http://localhost:${port}`;
         const deadline = Date.now() + LISTEN_TIMEOUT_MS;
         while (Date.now() < deadline) {
             if (proc.exitCode !== null) throw new Error(`the API exited:\n${readFileSync(logPath, 'utf8')}`);
@@ -141,6 +149,13 @@ describe('the /setup routes before setup', () => {
             await Bun.sleep(150);
         }
         throw new Error(`the API did not listen:\n${readFileSync(logPath, 'utf8')}`);
+    }
+
+    beforeAll(async () => {
+        mkdirSync(join(dataRoot, 'server'), { recursive: true });
+        mkdirSync(join(dataRoot, 'home'), { recursive: true });
+        writeFileSync(logPath, '');
+        await startApi();
     }, LISTEN_TIMEOUT_MS + 5_000);
 
     afterAll(async () => {
@@ -150,19 +165,19 @@ describe('the /setup routes before setup', () => {
     });
 
     test('a development boot logs a link to the local admin app', () => {
-        expect(readFileSync(logPath, 'utf8')).toMatch(/http:\/\/localhost:3009\/admin\?setup=[\w-]{43}/);
+        expect(readFileSync(logPath, 'utf8')).toMatch(/http:\/\/localhost:3009\/admin\/#setup=[\w-]{43}/);
     });
 
     test('the control socket hands out the link on the configured domain', async () => {
         const { setupUrl, signInUrl } = await setupLink();
-        expect(setupUrl).toMatch(new RegExp(`^https://${DOMAIN}/admin\\?setup=[\\w-]{43}$`));
+        expect(setupUrl).toMatch(new RegExp(`^https://${DOMAIN}/admin/#setup=[\\w-]{43}$`));
         expect(signInUrl).toBe(`https://${DOMAIN}/admin`);
     });
 
     test('./eigen setup-link prints the link and what the page asks', async () => {
         const { stdout, code } = await runCli();
         expect(code).toBe(0);
-        const setupToken = stdout.match(/https:\/\/\S+\?setup=([\w-]{43})/)?.[1];
+        const setupToken = stdout.match(/https:\/\/\S+\/#setup=([\w-]{43})/)?.[1];
         expect(setupToken).toBeDefined();
         expect((await post('s3check', { ...s3Body, setupToken })).status).toBe(200);
         expect(stdout).toContain('./eigen setup');
@@ -206,13 +221,20 @@ describe('the /setup routes before setup', () => {
         expect(s3Requests).toBeGreaterThan(before);
     });
 
-    test('a newer link replaces the older one, and the link works once', async () => {
+    test('a newer link replaces the older one, survives a failed attempt, and works once', async () => {
         const older = await freshToken();
         const newer = await freshToken();
         expect((await post('complete', { ...admin, setupToken: older })).status).toBe(403);
 
-        const done = await post('complete', { ...admin, setupToken: newer });
+        const failed = await post('complete', { ...admin, storageType: 's3', setupToken: newer });
+        expect(failed.status).toBe(400);
+
+        const [done, twice] = await Promise.all([
+            post('complete', { ...admin, setupToken: newer }),
+            post('complete', { ...admin, setupToken: newer }),
+        ]);
         expect(done.status).toBe(200);
+        expect(twice.status).toBe(409);
         expect((await done.json()).user.email).toBe(admin.adminEmail);
         expect(existsSync(join(dataRoot, 'server/setup-token.json'))).toBe(false);
 
@@ -228,6 +250,6 @@ describe('the /setup routes before setup', () => {
         expect(code).toBe(0);
         expect(stdout).toContain('already set up');
         expect(stdout).toContain(`https://${DOMAIN}/admin`);
-        expect(stdout).not.toContain('?setup=');
+        expect(stdout).not.toContain('setup=');
     });
 });

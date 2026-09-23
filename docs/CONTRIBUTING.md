@@ -117,7 +117,7 @@ bun install
 bun run serve
 ```
 
-The API logs a one-time link, `Finish the setup at http://localhost:3009/admin?setup=…`; open it to run the setup wizard. It creates your admin account and initializes storage. Every restart of the API before setup is done logs a fresh link and retires the previous one.
+The API logs a one-time link, `Finish the setup at http://localhost:3009/admin/#setup=…`; open it to run the setup wizard. It creates your admin account and initializes storage. Every restart of the API before setup is done logs a fresh link and retires the previous one.
 
 After that, run everything or just what you need:
 

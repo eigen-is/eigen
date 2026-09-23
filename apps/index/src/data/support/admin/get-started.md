@@ -14,7 +14,7 @@ the setup link that `./eigen setup` prints when it finishes. This page walks you
 
 ## The setup wizard
 
-Open the setup link in a browser. It looks like `https://eigen.example.com/admin?setup=…`, and you
+Open the setup link in a browser. It looks like `https://eigen.example.com/admin/#setup=…`, and you
 will see the **Welcome to Eigen** screen. Fill in the form below to get started.
 
 The link works once, so nobody who finds your server before you can claim it. Opening `/admin` without

@@ -8,13 +8,12 @@ import { Button } from '@workspace/ui/components/button';
 import { AdminSidebar } from '../components/admin/admin-sidebar';
 import { SetupWizard } from '../components/admin/setup-wizard';
 
-// The token of the link ./eigen setup printed, read and taken off the URL before the router starts: its
-// redirects (/ to /users, then to /login) would drop it, and off the URL it stays out of the history and any Referer.
-const setupUrl = new URL(window.location.href);
-const setupToken = setupUrl.searchParams.get('setup') ?? undefined;
+// The token of the link ./eigen setup printed, in the fragment so it never reaches a server or proxy log. Read and
+// taken off the URL before the router starts: its redirects (/ to /users, then to /login) would drop it, and off
+// the URL it stays out of the history.
+const setupToken = new URLSearchParams(window.location.hash.slice(1)).get('setup') ?? undefined;
 if (setupToken) {
-    setupUrl.searchParams.delete('setup');
-    window.history.replaceState(window.history.state, '', setupUrl);
+    window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
 }
 
 function AdminRoot() {

@@ -22,10 +22,15 @@ export function createSetupToken(): string {
 }
 
 export function verifySetupToken(token: string): boolean {
-    const file = getServerDataPath(TOKEN_FILE);
-    if (!fs.existsSync(file)) return false;
-    const { hash }: SetupTokenFile = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return timingSafeEqual(sha256(token), Buffer.from(hash, 'hex'));
+    let stored: Buffer;
+    try {
+        const { hash }: SetupTokenFile = JSON.parse(fs.readFileSync(getServerDataPath(TOKEN_FILE), 'utf8'));
+        stored = Buffer.from(hash, 'hex');
+    } catch {
+        // A missing, truncated or hand-edited file holds no token: ./eigen setup writes a fresh one.
+        return false;
+    }
+    return stored.length === 32 && timingSafeEqual(sha256(token), stored);
 }
 
 export function clearSetupToken(): void {

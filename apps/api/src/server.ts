@@ -52,7 +52,7 @@ const controlSocket = startControlSocket();
 // `bun run dev` has no ./eigen setup to print the link.
 if (!isProduction() && isSetupRequired()) {
     const adminUrl = process.env['VITE_APP_ADMIN_URL'] || 'http://localhost:3009/admin';
-    console.log(`Finish the setup at ${adminUrl}?setup=${createSetupToken()}`);
+    console.log(`Finish the setup at ${adminUrl}/#setup=${createSetupToken()}`);
 }
 
 registerScheduledJobs();
