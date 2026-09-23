@@ -77,3 +77,5 @@ next-env.d.ts
 /docs/plans/
 /data/guest/
 /apps/index/src/content/.generated/
+# TanStack router generator scratch
+.tanstack/
