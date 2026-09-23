@@ -136,7 +136,7 @@ step() {
     {
         say "$RED" '■' "$failed"
         tail -n 20 "$LOG" | sed "s/^/$GRAY│$RESET  /"
-        say "$GRAY" '└' "Full output: $LOG. Fix what it says, then run ./eigen $COMMAND again."
+        say "$GRAY" '└' "Full output: $LOG.${AGAIN- Fix what it says, then run ./eigen $COMMAND again.}"
     } >&2
     exit 1
 }
@@ -278,7 +278,12 @@ setup() {
     dc exec $EXEC_TTY -e NO_COLOR="${NO_COLOR:-}" eigen-api bun "$API_CLI" setup-link
 }
 
-restart() { step "Starting Eigen" "Eigen is running" "Eigen did not start; ./eigen logs shows why" start; }
+# Once the snapshot or the restore is done, running that command again would repeat it: a failed start only points
+# at the logs.
+restart() {
+    AGAIN=''
+    step "Starting Eigen" "Eigen is running" "Eigen did not start; ./eigen logs shows why" start
+}
 
 # The snapshot is taken with every service stopped (dovecot and postfix write to data/ too), as root in a container
 # so the mixed owners in data/ survive. Eigen starts again whatever happens to the snapshot.
@@ -294,7 +299,8 @@ backup() {
 }
 
 # The CLI checks the snapshot and asks before anything stops. Eigen starts again whatever happens to the restore:
-# a failed one puts the previous data back first.
+# a failed or interrupted one puts the previous data back first. An interrupt reaches the CLI, which says how it
+# ended, so the launcher waits for it instead of leaving.
 restore() {
     case ${1:-} in -h | --help)
         usage
@@ -308,10 +314,19 @@ restore() {
     trap restart EXIT
     trap 'exit 130' INT TERM
     if [ -f .env.production ]; then step "Stopping Eigen" "Eigen stopped" "Could not stop Eigen" dc stop; fi
-    cli_as 0 restore "$@" --yes
-    trap - EXIT
+    trap : INT TERM
+    code=0
+    cli_as 0 restore "$@" --yes || code=$?
+    trap - EXIT INT TERM
     restart
-    say "$GRAY" '└' "Check that all is well, then delete what was kept aside."
+    case $code in
+        0) say "$GRAY" '└' "Check that all is well, then delete what was kept aside." ;;
+        130)
+            say "$GRAY" '└' "The restore was cancelled. Eigen runs on the data it had."
+            exit 130
+            ;;
+        *) exit "$code" ;;
+    esac
 }
 
 # Only the launcher can ask Docker, so it gathers the services, a pending update and the mail queue for the report.

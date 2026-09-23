@@ -397,7 +397,8 @@ docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c 'head -c 300000000 /de
     "$INSTALL/data/ballast.bin"
 eigen backup
 BIG=$(printf '%s\n' "$OUT" | grep -o 'eigen-[0-9]\{8\}-[0-9]\{6\}\.tar\.gz' | head -n 1 || true)
-docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" rm "$INSTALL/data/ballast.bin"
+# sh -c: the image's entrypoint would take a bare rm for docker rm.
+docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c 'rm "$1"' sh "$INSTALL/data/ballast.bin"
 drive POST "/folder/$root_id" '{"folderName":"Made before the interrupted restore"}' >/dev/null
 aside=$(cd "$INSTALL" && ls -d data.pre-restore-* | wc -l | tr -d ' ')
 (
@@ -428,7 +429,7 @@ if stack_up && printf '%s' "$listing" | grep -q '"Made before the interrupted re
 else
     fail "after the interrupted restore: $listing"
 fi
-docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" rm "$INSTALL/backups/$BIG"
+docker run --rm -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c 'rm "$1"' sh "$INSTALL/backups/$BIG"
 
 ##############################################################################
 header "With the API stopped"
