@@ -1,10 +1,15 @@
+import { bootstrap } from './bootstrap';
 import { configure } from './configure';
 
-const COMMANDS = new Map([['configure', configure]]);
+const COMMANDS = new Map([
+    ['bootstrap', bootstrap],
+    ['configure', configure],
+]);
 
 const USAGE = `Usage: eigen <command> [flags]
 
 Commands:
+  bootstrap   Write the launcher, Compose files and a starter .env.production into /out
   configure   Ask the setup questions and write .env.production`;
 
 const [command = '', ...args] = process.argv.slice(2);

@@ -32,6 +32,15 @@ const MAIL_RELAY_KEYS = ['SMTP_RELAY_HOST', 'SMTP_RELAY_PORT', 'SMTP_RELAY_USER'
 const API_RELAY_KEYS = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASSWORD'] as const;
 const MAIL_RELAY_PORT = '587';
 const API_RELAY_PORT = '25';
+// Digests the launcher resolved on the host (no socket in here), passed as KEY=VALUE words in EIGEN_PINS.
+const RELEASE_PINS = new Set([
+    'EIGEN_REGISTRY',
+    'EIGEN_VERSION',
+    'EIGEN_API_IMAGE',
+    'EIGEN_FRONTEND_IMAGE',
+    'EIGEN_POSTFIX_IMAGE',
+    'EIGEN_DOVECOT_IMAGE',
+]);
 // Relative, so the same bundle serves any hostname; the API prefixes API_URL when it builds links in mail.
 const APP_URLS = {
     VITE_API_HOST: '/eigen',
@@ -64,6 +73,7 @@ const OPTIONS = {
     from: { type: 'string' },
     yes: { type: 'boolean' },
     backfill: { type: 'boolean' },
+    help: { type: 'boolean', short: 'h' },
 } as const;
 const USAGE = `Usage: configure [flags]
 
@@ -81,7 +91,8 @@ Asks the setup questions and writes ${ENV_PATH}. Any flag makes the run non-inte
   --relay-password-env <VAR>   Read the relay password from this environment variable
   --from <sender>              System sender, an address or Name <address>
   --yes                        Keep the current or default answer for every flag not given
-  --backfill                   Keep every answer, add missing keys, print one line`;
+  --backfill                   Keep every answer, add missing keys, print one line
+  --help                       Show this help`;
 
 const NO_CONTROL = /^\P{Cc}*$/u;
 
@@ -221,10 +232,20 @@ function parseFlags(args: string[]) {
 
 export async function configure(args: string[]): Promise<void> {
     const flags = parseFlags(args);
+    if (flags.help) {
+        console.log(USAGE);
+        return;
+    }
     const backfill = flags.backfill === true;
     const acceptDefaults = backfill || flags.yes === true;
     const ui: Ui = await createUi(args.length > 0);
     const existing = readEnvFile(ENV_PATH);
+    const pins = new Map<string, string>();
+    for (const pin of (process.env['EIGEN_PINS'] ?? '').split(/\s+/).filter(Boolean)) {
+        const [, key = '', value = ''] = pin.match(/^([A-Z_]+)=(.+)$/) ?? [];
+        if (!RELEASE_PINS.has(key)) ui.fail(`EIGEN_PINS: "${pin}" is not a release pin.`, 'Run ./eigen setup again.');
+        pins.set(key, value);
+    }
     const existingDomain = existing.get('DOMAIN') ?? '';
     if (backfill && (!existingDomain || PLACEHOLDER_DOMAINS.has(existingDomain))) {
         ui.fail(`${ENV_PATH} has no DOMAIN of your own to keep.`, 'Run eigen setup first.');
@@ -435,6 +456,7 @@ export async function configure(args: string[]): Promise<void> {
         { domain, mail, mailDomain, proxy, contactEmail, relay, from, subnet },
         wasMail,
     );
+    for (const [key, value] of pins) entries.set(key, value);
     writeEnvFile(ENV_PATH, entries);
     if (backfill) {
         const added = [...entries.keys()].filter((key) => !existing.has(key));

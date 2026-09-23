@@ -386,6 +386,33 @@ describe('configure command', () => {
         expect(two.stderr).toContain('--from');
     });
 
+    test('EIGEN_PINS writes the release pins the launcher resolved, and nothing else', async () => {
+        const dir = tempDir();
+        const flags = [
+            '--yes',
+            '--domain',
+            'eigen.example.org',
+            '--no-mail',
+            '--no-relay',
+            '--no-proxy',
+            '--contact-email',
+            'admin@example.org',
+        ];
+        const bad = await runConfigure(dir, flags, undefined, { EIGEN_PINS: 'DOMAIN=evil.example.org' });
+        expect(bad.code).toBe(1);
+        expect(bad.stderr).toContain('EIGEN_PINS');
+        expect(existsSync(join(dir, '.env.production'))).toBe(false);
+        const digest = 'localhost:5055/eigen-is/eigen-api@sha256:abc';
+        const run = await runConfigure(dir, flags, undefined, {
+            EIGEN_PINS: `EIGEN_VERSION=0.2.99 EIGEN_API_IMAGE=${digest}`,
+        });
+        expect(run.code).toBe(0);
+        const env = readFileSync(join(dir, '.env.production'), 'utf8');
+        expect(env).toContain('EIGEN_VERSION=0.2.99\n');
+        expect(env).toContain(`EIGEN_API_IMAGE=${digest}\n`);
+        expect(env).toContain('DOMAIN=eigen.example.org\n');
+    });
+
     test('a rerun keeps the live network of the Compose project, however the project is named', async () => {
         const live: DockerNetwork[] = [
             {
