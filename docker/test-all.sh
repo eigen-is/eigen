@@ -3,7 +3,7 @@
 # scratch folder and cleans up after itself.
 #
 # Usage:  ./docker/test-all.sh
-# Needs:  what the harnesses need: docker, curl, nc, openssl, git.
+# Needs:  what the harnesses need: docker, curl, nc, openssl, git, expect.
 
 set -uo pipefail
 
@@ -11,8 +11,8 @@ cd "$(dirname "$0")"
 
 results=()
 failed=0
-for harness in test-cli.sh test-update.sh test-release.sh test-deployments.sh test-host-proxies.sh \
-    test-mail-hardening.sh; do
+for harness in test-launcher.sh test-cli.sh test-interactive.sh test-update.sh test-release.sh test-deployments.sh \
+    test-host-proxies.sh test-mail-hardening.sh; do
     printf '\n##### %s #####\n' "$harness"
     started=$SECONDS
     if "./$harness"; then
