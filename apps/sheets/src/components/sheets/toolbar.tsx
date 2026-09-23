@@ -35,6 +35,7 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, canWrite }: Toolbar
                 open={importPickerOpen}
                 onOpenChange={setImportPickerOpen}
                 title="Import xlsx file"
+                progressTitle="Importing xlsx file"
                 mime={XLSX_MIME}
                 accept=".xlsx"
             />

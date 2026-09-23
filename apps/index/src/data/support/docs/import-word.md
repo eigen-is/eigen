@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, import, word, docx]
 related: [docs/export, docs/create-and-edit]
 order: 100
-updated: 2026-06-08
+updated: 2026-09-23
 ---
 
 You can import a `.docx` file into an open document. The import replaces everything in the document with the
@@ -27,8 +27,7 @@ to keep it, make a copy of the document first.
    click **Select**. To use a file from your computer instead, click **Upload from device** and pick the file
    from the file chooser.
 
-The document content is replaced straight away. Images from the Word file are carried across and stored with
-the document.
+An **Importing docx file** dialog shows while the file imports. When it closes, the document content is replaced. Images from the Word file are carried across and stored with the document.
 
 ## Convert a Word file in Drive
 
