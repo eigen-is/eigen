@@ -19,18 +19,15 @@ The link works once, so nobody who finds your server before you can claim it. Op
 
 ### Server configuration
 
-**Organization Name** is the display name for your organization. It appears in the interface and
-in emails sent to members.
+**Organization Name** is the display name for your organization. It appears in the interface and in emails sent to members.
+
+**Sender name** and **Sender address** are who Eigen's own emails come from. They start as your organization name and `noreply@` your mail domain. As the form says: "Notifications, codes and invitations are sent from this address. Your mail relay must be allowed to send from it." You can change both later on the **Settings** page.
 
 **Storage Type** controls where Eigen stores user files. Three options are available:
 
-- **Local (Full names)**: files are stored on the server's local disk using their original names. A
-  good default for most self-hosted setups.
+- **Local (Full names)**: files are stored on the server's local disk using their original names. A good default for most self-hosted setups.
 - **Local (ID-based)**: files are stored on disk using internal identifiers rather than names.
-- **S3 Bucket**: files are stored in an S3-compatible object storage bucket. If you choose this
-  option, extra fields appear for the **Endpoint**, **Bucket**, **Prefix**, **Region**,
-  **Access Key ID**, and **Secret Access Key**. Eigen verifies the connection before letting you
-  proceed.
+- **S3 Bucket**: files are stored in an S3-compatible object storage bucket. If you choose this option, extra fields appear for the **Endpoint**, **Bucket**, **Prefix**, **Region**, **Access Key ID**, and **Secret Access Key**. Eigen verifies the connection before letting you proceed.
 
 ### Admin account
 
@@ -57,8 +54,7 @@ The sidebar gives you access to the main areas:
 
 As the server owner, you also see:
 
-- **Settings**: configure storage quotas, default storage type for new users, and email
-  notifications.
+- **Settings**: rename the organization, check on the server, set the sender of Eigen's emails and send a test mail, and configure storage quotas, default storage type for new users, and email notifications.
 - **Onboarding**: control the waitlist, the invite email, and the welcome email sent to new users.
 - **Guest access**: control whether guests can sign in without a prior share, and how long inactive guest accounts are kept.
 - **Waitlist**: if the waitlist is enabled, review and accept or reject applications here.
