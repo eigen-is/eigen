@@ -80,8 +80,9 @@ launch() {
         OUT=$(cd "$dir" && env "${vars[@]}" PATH="$FIX/bin:$PATH" /bin/sh ./eigen "$@" 2>"$FIX/stderr") || CODE=$?
     else
         for var in "${vars[@]}"; do flags+=(-e "$var"); done
-        OUT=$(docker run --rm -v "$FIX:$FIX" -v "$FIX/bin:/stub:ro" -w "$dir" -e PATH="$PATH_IN" "${flags[@]}" \
-            "$IMAGE" "$SHELL_CMD" ./eigen "$@" 2>"$FIX/stderr") || CODE=$?
+        # As this user, or on a Linux host root's .eigen would refuse this script's own lock below.
+        OUT=$(docker run --rm --user "$(id -u):$(id -g)" -v "$FIX:$FIX" -v "$FIX/bin:/stub:ro" -w "$dir" \
+            -e PATH="$PATH_IN" "${flags[@]}" "$IMAGE" "$SHELL_CMD" ./eigen "$@" 2>"$FIX/stderr") || CODE=$?
     fi
     ERR=$(cat "$FIX/stderr")
     CALLS=$(cat "$FIX/calls.log")

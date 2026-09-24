@@ -6,8 +6,8 @@ on:
   pull_request:
     branches: [main]
 
-# The job only checks out and runs lint/typecheck/test — it writes nothing back, comments on
-# nothing, publishes nothing. Read-only token, no per-job override needed.
+# The jobs only check out and run lint/typecheck/test — they write nothing back, comment on
+# nothing, publish nothing. Read-only token, no per-job override needed.
 permissions:
   contents: read
 
@@ -38,3 +38,12 @@ jobs:
 
       - name: Test API
         run: bun --filter '@apps/api' test --parallel=4 --timeout 30000
+
+  # The launcher under dash, BusyBox and the runner's sh, with a stub docker: no stack, no Bun.
+  launcher:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: bash docker/test-launcher.sh
