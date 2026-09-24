@@ -378,10 +378,14 @@ release_label() {
         sed -n "s/.*\"org\.opencontainers\.image\.$2\": *\"\([^\"]*\)\".*/\1/p" | head -n 1
 }
 
-# describe <api image>: the build it is, as every message names one.
-describe() { echo "$(image_label "$1" version) ($(image_label "$1" revision))"; }
+# describe <api image>: the build it is, as every message names one. Its die ends only the $(…): assign it bare.
+describe() {
+    label=$(image_label "$1" version 2>/dev/null) ||
+        die "$1 is not here." "Run ./eigen update again; it downloads what it runs."
+    echo "$label ($(image_label "$1" revision))"
+}
 
-# pull_images <tag> [name…]: its images, all five by default.
+# pull_images <tag> [name…]: its images, all five by default. Not $tag, which is update_get's.
 pull_images() {
     pulling=$1
     shift
@@ -613,9 +617,9 @@ prune_images() {
 # temporary files and renamed, so this running launcher reads on in its own copy. .eigen/bundle names the image first,
 # so status can tell files of one build from a server that still runs another.
 write_bundle() {
+    build=$(describe "$1")
     API_IMAGE=$1
     echo "$1" >.eigen/bundle
-    build=$(describe "$1")
     step "Writing the Eigen $build launcher and Compose files" "Eigen $build files written" \
         "Could not write the Eigen $build files" cli bootstrap --force --out /install
 }
@@ -716,7 +720,10 @@ status() {
     set -- --services="$services" --mail-queue="$queue" --snapshots="$(ls snapshots 2>/dev/null || :)" \
         --snapshots-kb="$(du -sk snapshots 2>/dev/null | cut -f 1)" ${newer:+"$newer"}
     bundle=$(cat .eigen/bundle 2>/dev/null || :)
-    if [ -n "$bundle" ] && [ "$bundle" != "$(image api)" ]; then set -- "$@" --files="$(describe "$bundle")"; fi
+    if [ -n "$bundle" ] && [ "$bundle" != "$(image api)" ]; then
+        files=$(describe "$bundle")
+        set -- "$@" --files="$files"
+    fi
     case $services in
         *"eigen-api${tab}running$tab"*) api_cli status "$@" ;;
         *) cli status "$@" ;;
@@ -761,6 +768,7 @@ restore() {
     wordmark restore
     preflight
     need_image "Run ./eigen setup first, then ./eigen restore <snapshot>."
+    if [ "$MODE" = release ]; then api_here; fi
     lock
     check_snapshot "$@"
     # A snapshot holds the server's config and databases: a release install goes back to the images it pins.
@@ -884,6 +892,9 @@ update_get() {
             say "$GRAY" '└' "Eigen $current is up to date."
             exit 0
         fi
+        # An update that stopped halfway, to whatever target, left the files of another build.
+        bundle=$(cat .eigen/bundle 2>/dev/null || :)
+        if [ -n "$bundle" ] && [ "$bundle" != "$(image api)" ]; then write_bundle "$(image api)"; fi
         restart
         say "$GRAY" '└' "Eigen $current is up to date and running at https://$(env_value DOMAIN)/"
         exit 0
@@ -891,6 +902,8 @@ update_get() {
     # The new version's CLI tells what changed since the old one, and refuses a downgrade.
     API_IMAGE=$REGISTRY/api:$record
     step "Getting the notes of Eigen $new" "Eigen $new is out" "Could not get Eigen $new" pull_images "$record" api
+    # The tag may have moved since the manifest was read.
+    new=$(describe "$REGISTRY/api:$record")
     if [ "$check" = 1 ]; then
         cli update-check --from "$old_version" --accept-breaking
         say "$GRAY" '└' "./eigen update installs it."
@@ -934,7 +947,9 @@ update_apply() {
         pin_images "$target"
         api_here
         old_image=$API_IMAGE new_image=$(answer EIGEN_API_IMAGE "$PINS")
-        old=$(describe "$old_image") new=$(describe "$new_image")
+        # Apart: an assignment stops on its last substitution only.
+        old=$(describe "$old_image")
+        new=$(describe "$new_image")
         # What .env.production pins before the switch is what the rollback snapshot pins.
         KEEP=$(for name in $IMAGES; do image "$name"; done)
     fi

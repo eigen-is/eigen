@@ -3,9 +3,9 @@
 # stub docker on PATH that answers info and compose version and fails on demand. Covers every command's help, unknown
 # commands and arguments, the preflight refusals, source and release mode, need_install, a failing compose config, stop,
 # what update asks the CLI and names the builds, on a release and on the main channel, the tags it refuses, a build
-# whose images differ, a pinned api image that is not here, what setup downloads with and without pins, what rollback
-# names, and what status passes the CLI about the snapshots, the files of an unfinished update and the newest build of
-# main.
+# whose images differ, a pinned api image that is not here, the files an unfinished update left, what setup downloads
+# with and without pins, what rollback names, and what status passes the CLI about the snapshots, the files of an
+# unfinished update and the newest build of main.
 #
 # Usage:  ./docker/test-launcher.sh
 # Needs:  docker (pulls debian:bookworm-slim and busybox once).
@@ -19,7 +19,8 @@ FIX=$(cd "$FIX" && pwd -P)
 trap 'rm -rf "$FIX"' EXIT
 
 # The stub logs every call to $STUB_LOG. STUB_INFO and STUB_COMPOSE answer info and compose version, empty for a
-# failure; STUB_FAIL names the compose subcommands and docker commands that fail; STUB_IMAGE=1 makes image inspect fail;
+# failure; STUB_FAIL names the compose subcommands and docker commands that fail; STUB_IMAGE=1 makes image inspect fail
+# on an image the launch has not pulled;
 # STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any api tag names;
 # STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a dovecot
 # image; a docker run with STUB_RUN_FAIL among its arguments fails, and one with --checked also prints STUB_CHECKED.
@@ -46,12 +47,12 @@ case $1 in
         esac
         ;;
     image)
+        for ref; do :; done
+        if [ "$2" = inspect ] && [ "${STUB_IMAGE:-0}" = 1 ] && ! grep -qxF "pull $ref" "$STUB_LOG"; then exit 1; fi
         case $* in
-            'image ls '*) ;;
             *Labels*image.version*) echo "${STUB_LABEL_VERSION:-0.2.99}" ;;
             *Labels*image.revision*/dovecot*) echo "${STUB_LABEL_REVISION_DOVECOT:-${STUB_LABEL_REVISION:-abc1234}}" ;;
             *Labels*image.revision*) echo "${STUB_LABEL_REVISION:-abc1234}" ;;
-            *) exit "${STUB_IMAGE:-0}" ;;
         esac
         ;;
     manifest)
@@ -358,6 +359,27 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: status with the files of the pinned image: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
+    echo ghcr.io/eigen-is/eigen/api@sha256:bbb >"$FIX/release/.eigen/bundle"
+    STUB_IMAGE=1 launch release status
+    expect_error 1 '■  ghcr.io/eigen-is/eigen/api@sha256:bbb is not here.' \
+        "status names no build of files whose api image is not here"
+
+    # An update that stopped halfway, to whatever target, left the files of another build than the one it runs.
+    STUB_LATEST=0.2.99 STUB_REVISION=abc1234 launch release update
+    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -A 100 ' ghcr.io/eigen-is/eigen/api:local bootstrap --force --out /install$' |
+        grep -q ' up -d --wait$' && [ "$(cat "$FIX/release/.eigen/bundle")" = ghcr.io/eigen-is/eigen/api:local ]; then
+        ok "$SHELL_NAME: update when up to date writes the files of the pinned build over another's, then starts Eigen"
+    else
+        fail "$SHELL_NAME: update over the files of another build: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    STUB_LATEST=0.2.99 STUB_REVISION=abc1234 launch release update
+    rm "$FIX/release/.eigen/bundle"
+    if [ "$CODE" = 0 ] && ! printf '%s\n' "$CALLS" | grep -q ' bootstrap ' &&
+        printf '%s\n' "$CALLS" | grep -q ' up -d --wait$'; then
+        ok "$SHELL_NAME: update when up to date leaves the files of the pinned build as they are"
+    else
+        fail "$SHELL_NAME: update over the files of the pinned build: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
 
     STUB_FAIL=compose-config launch source restart
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Eigen did not start' &&
@@ -403,11 +425,12 @@ for SHELL_NAME in dash busybox host; do
 EIGEN_$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_IMAGE=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     done
     STUB_IMAGE=1 STUB_CHECKED=$checked launch release restore eigen-20260101-000000.tar.gz
-    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -q '^pull ghcr.io/eigen-is/eigen/unbound@sha256:bbb$' &&
+    if [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$CALLS" | grep -m 1 '^pull ')" = 'pull ghcr.io/eigen-is/eigen/api:local' ] &&
+        printf '%s\n' "$CALLS" | grep -q '^pull ghcr.io/eigen-is/eigen/unbound@sha256:bbb$' &&
         printf '%s\n' "$CALLS" | grep -A 100 ' --yes$' |
         grep -q ' ghcr.io/eigen-is/eigen/api@sha256:bbb bootstrap --force --out /install$' &&
         [ "$(cat "$FIX/release/.eigen/bundle")" = ghcr.io/eigen-is/eigen/api@sha256:bbb ]; then
-        ok "$SHELL_NAME: a release restore pulls the images the snapshot pins, then writes the files of its api image"
+        ok "$SHELL_NAME: a release restore gets the api image it runs, pulls the images the snapshot pins, then writes the files of its api image"
     else
         fail "$SHELL_NAME: a release restore to other images: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
