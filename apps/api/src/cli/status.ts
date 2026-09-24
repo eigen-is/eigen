@@ -15,9 +15,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const CERT_WARN_DAYS = 14;
 
 // --latest is the newest release of a release install, or on a channel the commit of its newest build; --new-commits is
-// how far a checkout is behind: empty when the check failed, left out when it could not run. --files is the version the
-// launcher and Compose files were last written for, which differs from this one while an update that failed halfway is
-// not finished.
+// how far a checkout is behind: empty when the check failed, left out when it could not run. --files is the build the
+// launcher and Compose files were last written from, passed only while it is not the one .env.production pins: an
+// update that failed halfway is not finished.
 export const STATUS_OPTIONS = {
     services: { type: 'string' },
     latest: { type: 'string' },
@@ -50,11 +50,11 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
           ]
         : [];
     // Bun.semver.order throws on what is not a version.
-    if (files && files !== (channel || VERSION)) {
+    if (files) {
         build.push({
             level: 'warn',
             label: 'Update',
-            value: `files of ${files}, running ${VERSION}: run ./eigen update`,
+            value: `files of ${files}, running ${VERSION}${commit ? ` (${commit})` : ''}: run ./eigen update`,
         });
     } else if (commits === '' || latest === '' || (latest && !channel && !VERSION_PATTERN.test(latest))) {
         build.push({ level: 'warn', label: 'Update', value: 'could not check' });

@@ -175,7 +175,7 @@ Everything runs through `./eigen` in the install folder. `./eigen help` lists th
 ./eigen reset-password <email>   # set a new password for an account
 ```
 
-`status` names the newest snapshot, and how many `snapshots/` holds and their size on disk. On a release install, an update that stopped halfway shows as `files of <new version>, running <old version>`; `./eigen update` finishes it. On the main channel it shows a newer build as `a new build of main is out (<commit>)`.
+`status` names the newest snapshot, and how many `snapshots/` holds and their size on disk. On a release install, an update that stopped halfway shows as `files of <new version> (<commit>), running <old version> (<commit>)`; `./eigen update` finishes it. On the main channel it shows a newer build as `a new build of main is out (<commit>)`.
 
 `./eigen` runs one command that changes Eigen at a time: while one runs, a second, like a nightly backup in the middle of an update, stops with "Another ./eigen command is running."
 

@@ -2,9 +2,10 @@
 # The launcher alone, without a stack: under dash (debian:bookworm-slim), BusyBox sh and this host's /bin/sh, with a
 # stub docker on PATH that answers info and compose version and fails on demand. Covers every command's help, unknown
 # commands and arguments, the preflight refusals, source and release mode, need_install, a failing compose config, stop,
-# what update asks the CLI, on a release and on the main channel, the tags it refuses, a build of main whose images
-# differ, a pinned api image that is not here, what setup downloads with and without pins, and what status passes the
-# CLI about the snapshots, the files of an unfinished update and the newest build of a channel.
+# what update asks the CLI and names the builds, on a release and on the main channel, the tags it refuses, a build
+# whose images differ, a pinned api image that is not here, the files an unfinished update left, what setup downloads
+# with and without pins, what rollback names, and what status passes the CLI about the snapshots, the files of an
+# unfinished update and the newest build of main.
 #
 # Usage:  ./docker/test-launcher.sh
 # Needs:  docker (pulls debian:bookworm-slim and busybox once).
@@ -18,7 +19,8 @@ FIX=$(cd "$FIX" && pwd -P)
 trap 'rm -rf "$FIX"' EXIT
 
 # The stub logs every call to $STUB_LOG. STUB_INFO and STUB_COMPOSE answer info and compose version, empty for a
-# failure; STUB_FAIL names the compose subcommands and docker commands that fail; STUB_IMAGE=1 makes image inspect fail;
+# failure; STUB_FAIL names the compose subcommands and docker commands that fail; STUB_IMAGE=1 makes image inspect fail
+# on an image the launch has not pulled;
 # STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any api tag names;
 # STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a dovecot
 # image; a docker run with STUB_RUN_FAIL among its arguments fails, and one with --checked also prints STUB_CHECKED.
@@ -45,12 +47,12 @@ case $1 in
         esac
         ;;
     image)
+        for ref; do :; done
+        if [ "$2" = inspect ] && [ "${STUB_IMAGE:-0}" = 1 ] && ! grep -qxF "pull $ref" "$STUB_LOG"; then exit 1; fi
         case $* in
-            'image ls '*) ;;
             *Labels*image.version*) echo "${STUB_LABEL_VERSION:-0.2.99}" ;;
             *Labels*image.revision*/dovecot*) echo "${STUB_LABEL_REVISION_DOVECOT:-${STUB_LABEL_REVISION:-abc1234}}" ;;
             *Labels*image.revision*) echo "${STUB_LABEL_REVISION:-abc1234}" ;;
-            *) exit "${STUB_IMAGE:-0}" ;;
         esac
         ;;
     manifest)
@@ -237,32 +239,32 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: release setup without a version: exit $CODE, '$ERR'"
     fi
 
-    # The launcher compares versions for equality only; the new version's CLI orders them.
-    STUB_LATEST=0.2.99 launch release update --check
-    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q 'Eigen 0.2.99 is up to date' &&
+    # The launcher compares builds for equality only; the new version's CLI orders them.
+    STUB_LATEST=0.2.99 STUB_REVISION=abc1234 launch release update --check
+    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q 'Eigen 0.2.99 (abc1234) is up to date' &&
         ! printf '%s\n' "$CALLS" | grep -q '^run '; then
         ok "$SHELL_NAME: update --check on the newest version says it is up to date without running the CLI"
     else
         fail "$SHELL_NAME: update --check when up to date: exit $CODE, '$OUT'"
     fi
-    STUB_LATEST=0.2.98 launch release update --check
-    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" |
+    STUB_LATEST=0.2.98 STUB_REVISION=def5678 launch release update --check
+    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q 'Eigen 0.2.98 (def5678) is out' && printf '%s\n' "$CALLS" |
         grep -q '^run .* ghcr.io/eigen-is/eigen/api:0.2.98 update-check --from 0.2.99 --accept-breaking$'; then
         ok "$SHELL_NAME: update --check on another version asks that version's CLI, which orders them"
     else
         fail "$SHELL_NAME: update --check to another version: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
 
-    # A channel compares commits: the registry's newest build against the label of the pinned api image.
-    STUB_REVISION=abc1234 STUB_LABEL_REVISION=abc1234 launch channel update --check
-    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q 'Eigen main (abc1234) is up to date' &&
+    # main compares builds too: the registry's newest against the labels of the pinned api image.
+    STUB_LATEST=0.2.99 STUB_REVISION=abc1234 STUB_LABEL_REVISION=abc1234 launch channel update --check
+    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q 'Eigen 0.2.99 (abc1234) is up to date' &&
         ! printf '%s\n' "$CALLS" | grep -q '^run '; then
         ok "$SHELL_NAME: update --check on the newest build of main says it is up to date without running the CLI"
     else
         fail "$SHELL_NAME: update --check on main when up to date: exit $CODE, '$OUT'"
     fi
-    STUB_REVISION=def5678 STUB_LABEL_REVISION=abc1234 launch channel update --check
-    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q 'Eigen main (def5678) is out' &&
+    STUB_LATEST=0.2.99 STUB_REVISION=def5678 STUB_LABEL_REVISION=abc1234 launch channel update --check
+    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q 'Eigen 0.2.99 (def5678) is out' &&
         printf '%s\n' "$CALLS" | grep -q '^pull ghcr.io/eigen-is/eigen/api:main$' && printf '%s\n' "$CALLS" |
         grep -q '^run .* ghcr.io/eigen-is/eigen/api:main update-check --from 0.2.99 --accept-breaking$'; then
         ok "$SHELL_NAME: update --check on main with a new build pulls it and asks its CLI from the version of the running one"
@@ -285,12 +287,19 @@ for SHELL_NAME in dash busybox host; do
     STUB_IMAGE=1 STUB_FAIL=pull launch channel update --check
     expect_error 1 '■  The image Eigen runs, ghcr.io/eigen-is/eigen/api@sha256:aaa, is not here and cannot be downloaded.' \
         "update --check when the pinned api image can be neither found nor downloaded"
-    STUB_REVISION=def5678 STUB_LABEL_REVISION=abc1234 STUB_LABEL_REVISION_DOVECOT=def5678 launch channel update
-    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  The images of main are from different builds: api abc1234, frontend abc1234, postfix abc1234, dovecot def5678, unbound abc1234.' &&
-        ! printf '%s\n' "$CALLS" | grep -q ' stop$'; then
-        ok "$SHELL_NAME: update refuses the images of main when they are of different builds, before anything stops"
+    failed=''
+    for fixture in channel:main release:0.3.0; do
+        STUB_LATEST=0.3.0 STUB_REVISION=def5678 STUB_LABEL_REVISION=abc1234 STUB_LABEL_REVISION_DOVECOT=def5678 \
+            launch "${fixture%:*}" update
+        if [ "$CODE" != 1 ] || ! printf '%s\n' "$ERR" | grep -q "■  The images of ${fixture#*:} are from different builds: api abc1234, frontend abc1234, postfix abc1234, dovecot def5678, unbound abc1234." ||
+            printf '%s\n' "$CALLS" | grep -q ' stop$'; then
+            failed="$failed $fixture ($CODE)"
+        fi
+    done
+    if [ -z "$failed" ]; then
+        ok "$SHELL_NAME: update refuses the images of main or a version when they are of different builds, before anything stops"
     else
-        fail "$SHELL_NAME: update to a mixed main: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+        fail "$SHELL_NAME: a mixed build not refused:$failed"
     fi
     launch release update candidate-0.3.0-arm64
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Eigen has no "candidate-0.3.0-arm64".' &&
@@ -330,17 +339,46 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: stop: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
 
-    mkdir -p "$FIX/release/snapshots" "$FIX/release/.eigen"
+    mkdir -p "$FIX/release/snapshots" "$FIX/release/.eigen" "$FIX/channel/.eigen"
     head -c 4096 /dev/zero >"$FIX/release/snapshots/eigen-20260101-000000.tar.gz"
-    echo 0.2.100 >"$FIX/release/.eigen/bundle"
-    STUB_LATEST=0.2.99 launch release status
+    echo ghcr.io/eigen-is/eigen/api@sha256:bbb >"$FIX/release/.eigen/bundle"
+    STUB_LATEST=0.2.99 STUB_LABEL_VERSION=0.2.100 launch release status
     rm -r "$FIX/release/snapshots" "$FIX/release/.eigen/bundle"
     # --services spans lines of the call log.
     if printf '%s\n' "$CALLS" | grep -q ' --snapshots=eigen-20260101-000000.tar.gz --snapshots-kb=[1-9][0-9]* ' &&
-        printf '%s\n' "$CALLS" | grep -q ' --latest=0.2.99 --files=0.2.100$'; then
-        ok "$SHELL_NAME: status passes the snapshots, their size, and the version the files were last written for"
+        printf '%s\n' "$CALLS" | grep -q ' --latest=0.2.99 --files=0.2.100 (abc1234)$'; then
+        ok "$SHELL_NAME: status passes the snapshots, their size, and the build the files were written from"
     else
         fail "$SHELL_NAME: status: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    echo ghcr.io/eigen-is/eigen/api@sha256:aaa >"$FIX/channel/.eigen/bundle"
+    launch channel status
+    rm "$FIX/channel/.eigen/bundle"
+    if [ "$CODE" = 0 ] && ! printf '%s\n' "$CALLS" | grep -q -- '--files'; then
+        ok "$SHELL_NAME: status passes no files when they are of the api image .env.production pins"
+    else
+        fail "$SHELL_NAME: status with the files of the pinned image: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    echo ghcr.io/eigen-is/eigen/api@sha256:bbb >"$FIX/release/.eigen/bundle"
+    STUB_IMAGE=1 launch release status
+    expect_error 1 '■  ghcr.io/eigen-is/eigen/api@sha256:bbb is not here.' \
+        "status names no build of files whose api image is not here"
+
+    # An update that stopped halfway, to whatever target, left the files of another build than the one it runs.
+    STUB_LATEST=0.2.99 STUB_REVISION=abc1234 launch release update
+    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -A 100 ' ghcr.io/eigen-is/eigen/api:local bootstrap --force --out /install$' |
+        grep -q ' up -d --wait$' && [ "$(cat "$FIX/release/.eigen/bundle")" = ghcr.io/eigen-is/eigen/api:local ]; then
+        ok "$SHELL_NAME: update when up to date writes the files of the pinned build over another's, then starts Eigen"
+    else
+        fail "$SHELL_NAME: update over the files of another build: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    STUB_LATEST=0.2.99 STUB_REVISION=abc1234 launch release update
+    rm "$FIX/release/.eigen/bundle"
+    if [ "$CODE" = 0 ] && ! printf '%s\n' "$CALLS" | grep -q ' bootstrap ' &&
+        printf '%s\n' "$CALLS" | grep -q ' up -d --wait$'; then
+        ok "$SHELL_NAME: update when up to date leaves the files of the pinned build as they are"
+    else
+        fail "$SHELL_NAME: update over the files of the pinned build: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
 
     STUB_FAIL=compose-config launch source restart
@@ -387,16 +425,30 @@ for SHELL_NAME in dash busybox host; do
 EIGEN_$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_IMAGE=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     done
     STUB_IMAGE=1 STUB_CHECKED=$checked launch release restore eigen-20260101-000000.tar.gz
-    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -q '^pull ghcr.io/eigen-is/eigen/unbound@sha256:bbb$' &&
+    if [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$CALLS" | grep -m 1 '^pull ')" = 'pull ghcr.io/eigen-is/eigen/api:local' ] &&
+        printf '%s\n' "$CALLS" | grep -q '^pull ghcr.io/eigen-is/eigen/unbound@sha256:bbb$' &&
         printf '%s\n' "$CALLS" | grep -A 100 ' --yes$' |
         grep -q ' ghcr.io/eigen-is/eigen/api@sha256:bbb bootstrap --force --out /install$' &&
-        [ "$(cat "$FIX/release/.eigen/bundle")" = main ]; then
-        ok "$SHELL_NAME: a release restore pulls the images the snapshot pins, then writes the files of its api image"
+        [ "$(cat "$FIX/release/.eigen/bundle")" = ghcr.io/eigen-is/eigen/api@sha256:bbb ]; then
+        ok "$SHELL_NAME: a release restore gets the api image it runs, pulls the images the snapshot pins, then writes the files of its api image"
     else
         fail "$SHELL_NAME: a release restore to other images: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     STUB_CHECKED=EIGEN_VERSION=0.2.98 launch release restore eigen-20260101-000000.tar.gz
     expect_error 1 '■  The snapshot pins no api image.' "a release restore of a snapshot that pins no images"
+    printf 'archive=eigen-pre-update-light-20260101-000000.tar.gz\nversion=0.2.98\ncommit=fff0000\nkind=light\n' \
+        >"$FIX/release/.eigen/last-update"
+    mkdir "$FIX/release/snapshots"
+    : >"$FIX/release/snapshots/eigen-pre-update-light-20260101-000000.tar.gz"
+    STUB_CHECKED=$checked launch release rollback --yes
+    rm -rf "$FIX/release/snapshots" "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
+    if [ "$CODE" = 0 ] &&
+        printf '%s\n' "$OUT" | grep -q '◆  Back from Eigen 0.2.99 (abc1234) to Eigen 0.2.98 (fff0000), from a light snapshot' &&
+        printf '%s\n' "$OUT" | grep -q '◇  Eigen 0.2.99 (abc1234) → 0.2.99 (abc1234) is running at https://eigen.example.com/'; then
+        ok "$SHELL_NAME: rollback names the build it leaves and the one .eigen/last-update goes back to"
+    else
+        fail "$SHELL_NAME: a release rollback: exit $CODE, '$OUT', '$ERR'"
+    fi
 
     mkdir "$FIX/source/.eigen/lock"
     echo 999999 >"$FIX/source/.eigen/lock/pid"

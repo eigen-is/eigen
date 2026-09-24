@@ -198,10 +198,12 @@ for version in "$PREVIOUS" "$NEW" "$BREAKING"; do
         --build-arg EIGEN_COMMIT=harness --build-arg "EIGEN_REGISTRY=$REGISTRY" -t "$REGISTRY/api:$version" \
         "$SCRATCH/src-$version"
 done
-build -f "$SCRATCH/src-$PREVIOUS/docker/frontend/Dockerfile" -t "$REGISTRY/frontend:$PREVIOUS" "$SCRATCH/src-$PREVIOUS"
-build -t "$REGISTRY/postfix:$PREVIOUS" "$SCRATCH/src-$PREVIOUS/docker/postfix"
-build -t "$REGISTRY/dovecot:$PREVIOUS" "$SCRATCH/src-$PREVIOUS/docker/dovecot"
-build -t "$REGISTRY/unbound:$PREVIOUS" "$SCRATCH/src-$PREVIOUS/docker/unbound"
+# One commit for all five, or the launcher refuses them as images of different builds.
+build -f "$SCRATCH/src-$PREVIOUS/docker/frontend/Dockerfile" --build-arg EIGEN_COMMIT=harness \
+    -t "$REGISTRY/frontend:$PREVIOUS" "$SCRATCH/src-$PREVIOUS"
+for name in postfix dovecot unbound; do
+    build --build-arg EIGEN_COMMIT=harness -t "$REGISTRY/$name:$PREVIOUS" "$SCRATCH/src-$PREVIOUS/docker/$name"
+done
 for name in $IMAGES; do
     if [ "$name" != api ]; then
         docker tag "$REGISTRY/$name:$PREVIOUS" "$REGISTRY/$name:$NEW"
@@ -236,7 +238,7 @@ started=$SECONDS
 eigen update
 show
 if [ "$CODE" = 0 ] && says "◆  Eigen $NEW" && says "The harness's new release" &&
-    says "◇  Eigen $PREVIOUS → $NEW is running at https://localhost/"; then
+    says "◇  Eigen $PREVIOUS (harness) → $NEW (harness) is running at https://localhost/"; then
     ok "./eigen update went from $PREVIOUS to $NEW in $((SECONDS - started))s, with its notes"
 else
     fail "./eigen update exited $CODE"
@@ -272,7 +274,7 @@ fi
 
 started=$(api_started)
 eigen update
-if [ "$CODE" = 0 ] && says "Eigen $NEW is up to date and running at https://localhost/" &&
+if [ "$CODE" = 0 ] && says "Eigen $NEW (harness) is up to date and running at https://localhost/" &&
     [ "$(api_started)" = "$started" ]; then
     ok "a rerun says $NEW is up to date and running, and restarts nothing"
 else
@@ -280,7 +282,7 @@ else
     show
 fi
 eigen update --check
-if [ "$CODE" = 0 ] && says "Eigen $NEW is up to date." && [ "$(api_started)" = "$started" ]; then
+if [ "$CODE" = 0 ] && says "Eigen $NEW (harness) is up to date." && [ "$(api_started)" = "$started" ]; then
     ok "--check says it is up to date"
 else
     fail "update --check: exit $CODE"
@@ -301,7 +303,7 @@ fi
 started=$SECONDS
 eigen rollback --yes
 show
-if [ "$CODE" = 0 ] && says "◇  Eigen $NEW → $PREVIOUS is running at https://localhost/"; then
+if [ "$CODE" = 0 ] && says "◇  Eigen $NEW (harness) → $PREVIOUS (harness) is running at https://localhost/"; then
     ok "./eigen rollback --yes went back to $PREVIOUS in $((SECONDS - started))s"
 else
     fail "./eigen rollback exited $CODE"
@@ -344,7 +346,7 @@ fi
 started=$SECONDS
 eigen update "$BREAKING" --accept-breaking
 show
-if [ "$CODE" = 0 ] && says "◇  Eigen $PREVIOUS → $BREAKING is running at https://localhost/"; then
+if [ "$CODE" = 0 ] && says "◇  Eigen $PREVIOUS (harness) → $BREAKING (harness) is running at https://localhost/"; then
     ok "with --accept-breaking it went to $BREAKING in $((SECONDS - started))s"
 else
     fail "update to $BREAKING --accept-breaking: exit $CODE"
@@ -426,7 +428,7 @@ done
 inode=$(scratch_run stat -c %i "$INSTALL/eigen")
 eigen restore "$snapshot" --yes
 show
-if [ "$CODE" = 0 ] && says "◇  Eigen $PREVIOUS files written" && [ "$(scratch_run stat -c %i "$INSTALL/eigen")" != "$inode" ]; then
+if [ "$CODE" = 0 ] && says "◇  Eigen $PREVIOUS (harness) files written" && [ "$(scratch_run stat -c %i "$INSTALL/eigen")" != "$inode" ]; then
     ok "a restore of a snapshot of $PREVIOUS on $BREAKING writes the launcher and Compose files of $PREVIOUS"
 else
     fail "the restore of a snapshot of $PREVIOUS: exit $CODE"
@@ -441,7 +443,7 @@ header "The main channel"
 build_main main1
 eigen update main
 show
-if [ "$CODE" = 0 ] && says "◇  Eigen $PREVIOUS → main (main1) is running at https://localhost/"; then
+if [ "$CODE" = 0 ] && says "◇  Eigen $PREVIOUS (harness) → $NEW (main1) is running at https://localhost/"; then
     ok "./eigen update main moved $PREVIOUS onto the main channel"
 else
     fail "./eigen update main exited $CODE"
@@ -451,7 +453,7 @@ main1=$(api_image)
 
 started=$(api_started)
 eigen update
-if [ "$CODE" = 0 ] && says "Eigen main (main1) is up to date and running at https://localhost/" &&
+if [ "$CODE" = 0 ] && says "Eigen $NEW (main1) is up to date and running at https://localhost/" &&
     [ "$(api_started)" = "$started" ]; then
     ok "./eigen update on the newest build of main says it is up to date, and restarts nothing"
 else
@@ -459,7 +461,7 @@ else
     show
 fi
 eigen update --check
-if [ "$CODE" = 0 ] && says "Eigen main (main1) is up to date." && [ "$(api_started)" = "$started" ]; then
+if [ "$CODE" = 0 ] && says "Eigen $NEW (main1) is up to date." && [ "$(api_started)" = "$started" ]; then
     ok "--check on the newest build of main says it is up to date"
 else
     fail "update --check on the newest build of main: exit $CODE"
@@ -468,7 +470,7 @@ fi
 
 build_main main2
 eigen update --check
-if [ "$CODE" = 0 ] && says "Eigen main (main2) is out" && says '└  ./eigen update installs it.' &&
+if [ "$CODE" = 0 ] && says "Eigen $NEW (main2) is out" && says '└  ./eigen update installs it.' &&
     [ "$(api_started)" = "$started" ]; then
     ok "--check names the new build of main, and stops nothing"
 else
@@ -477,7 +479,7 @@ else
 fi
 eigen update
 show
-if [ "$CODE" = 0 ] && says "◇  Eigen main (main1) → main (main2) is running at https://localhost/"; then
+if [ "$CODE" = 0 ] && says "◇  Eigen $NEW (main1) → $NEW (main2) is running at https://localhost/"; then
     ok "./eigen update installed the new build of main"
 else
     fail "update to the new build of main: exit $CODE"
@@ -492,8 +494,8 @@ fi
 
 eigen rollback --yes
 show
-if [ "$CODE" = 0 ] && says "Back from Eigen main (main2) to Eigen $NEW (main1)" &&
-    says "◇  Eigen main (main2) → main (main1) is running at https://localhost/"; then
+if [ "$CODE" = 0 ] && says "Back from Eigen $NEW (main2) to Eigen $NEW (main1)" &&
+    says "◇  Eigen $NEW (main2) → $NEW (main1) is running at https://localhost/"; then
     ok "./eigen rollback went back to the previous build of main"
 else
     fail "rollback on main: exit $CODE"
@@ -510,7 +512,7 @@ else
 fi
 eigen update "$BREAKING" --accept-breaking
 show
-if [ "$CODE" = 0 ] && says "◇  Eigen main (main1) → $BREAKING is running at https://localhost/"; then
+if [ "$CODE" = 0 ] && says "◇  Eigen $NEW (main1) → $BREAKING (harness) is running at https://localhost/"; then
     ok "./eigen update $BREAKING left main"
 else
     fail "update from main to $BREAKING --accept-breaking: exit $CODE"
