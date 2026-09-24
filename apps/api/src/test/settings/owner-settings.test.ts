@@ -1,10 +1,13 @@
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import { and, eq } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
 import { member as memberSchema, organization as organizationSchema } from '../../../auth-schema';
 import { getAuthDrizzleDb } from '../../lib/auth/auth';
+import { getDataRoot } from '../../lib/config/paths';
 import { getMailDomain, getOrgName, getServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import type { ControlStatus } from '../../lib/config/server-status';
@@ -93,6 +96,48 @@ describe('owner-only settings', () => {
         expect(status.version).toBeString();
         expect(status.diskTotal).toBeGreaterThan(0);
         expect(status.domain).toBeString();
+    });
+
+    describe('the certificate row', () => {
+        const certs = join(getDataRoot(), 'certs');
+        restoreEnvAfterEach(['COMPOSE_PROFILES']);
+
+        afterEach(() => {
+            rmSync(certs, { recursive: true, force: true });
+        });
+
+        async function statusWith(profiles: string, fixture?: string): Promise<ControlStatus> {
+            process.env['COMPOSE_PROFILES'] = profiles;
+            if (fixture) {
+                mkdirSync(certs, { recursive: true });
+                copyFileSync(join(import.meta.dir, '../fixtures/control', fixture), join(certs, 'cert.pem'));
+            }
+            return assertJson<ControlStatus>(await authedRequest(ctx.alice.user.sessionToken, '/settings/status'));
+        }
+
+        test('reads an issued certificate in data/certs', async () => {
+            const status = await statusWith('edge,mail', 'issued-2036.crt');
+            expect(status.certExpiresAt).toBe('2036-12-31T23:59:59.000Z');
+            expect(status.certSelfSigned).toBe(false);
+        });
+
+        test("marks the mail server's self-signed stand-in", async () => {
+            const status = await statusWith('edge,mail', 'expires-2036.crt');
+            expect(status.certExpiresAt).toBe('2036-12-31T23:59:59.000Z');
+            expect(status.certSelfSigned).toBe(true);
+        });
+
+        test('without a certificate file, the edge profile means the bundled Caddy holds it', async () => {
+            const status = await statusWith('edge');
+            expect(status.certExpiresAt).toBeNull();
+            expect(status.bundledCaddy).toBe(true);
+        });
+
+        test('without a certificate file or the edge profile, a web server in front holds it', async () => {
+            const status = await statusWith('static,mail');
+            expect(status.certExpiresAt).toBeNull();
+            expect(status.bundledCaddy).toBe(false);
+        });
     });
 
     test('an admin does not read the server status', async () => {

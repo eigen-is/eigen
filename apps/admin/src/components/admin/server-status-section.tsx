@@ -33,8 +33,12 @@ export function ServerStatusSection() {
                     <dt className="text-muted-foreground">Certificate</dt>
                     <dd>
                         {status.certExpiresAt
-                            ? `Expires ${formatDate(status.certExpiresAt)}`
-                            : 'None on this server; a web server in front of Eigen holds it'}
+                            ? `Expires ${formatDate(status.certExpiresAt)}${status.certSelfSigned ? ', self-signed' : ''}`
+                            : status.bundledCaddy
+                              ? status.domain === 'localhost'
+                                  ? "The bundled Caddy's local certificate"
+                                  : 'Managed by the bundled Caddy'
+                              : 'None on this server; a web server in front of Eigen holds it'}
                     </dd>
                 </dl>
             </SettingsSection>

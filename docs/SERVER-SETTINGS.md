@@ -96,7 +96,7 @@ Defined in `apps/api/src/routes/settings.ts`. Changing the server's settings is 
 | PUT    | `/settings/s3config`      | owner | Validate a connection, then write `defaults.mount.s3Config`     |
 | POST   | `/settings/s3check`       | admin | Test an S3 connection without saving                           |
 | POST   | `/settings/s3harden`      | admin | Turn on the bucket's versioning and expire noncurrent versions                 |
-| GET    | `/settings/status`        | owner | `getServerStatus()`: version, hosted mail, disk, certificate expiry (what `./eigen status` reports) |
+| GET    | `/settings/status`        | owner | `getServerStatus()`: version, hosted mail, disk, the expiry of `data/certs/cert.pem` and whether it is self-signed (Postfix's stand-in), and whether the bundled Caddy runs (`edge` in `COMPOSE_PROFILES`, which the API reads through Compose's `env_file`); what `./eigen status` reports |
 | PUT    | `/settings/organization`  | owner | Rename the organization: `config.json`'s orgName and the better-auth organization. The web address and mail domain stay |
 | POST   | `/settings/mail/test`     | owner | Send one mail from the owner to the owner through `buildMailOptions`, so it tests the sender rule; a failure returns 502 with the transport's error |
 | GET    | `/settings/users`         | admin | `AdminUserRow[]` — every org member **and** orphan for the Users page (auth-DB join incl. `lastLoginAt` + session-derived `lastActiveAt`, teams) |

@@ -16,6 +16,11 @@ export function isMailEnabled(): boolean {
     return process.env['MAIL_ENABLED'] !== '0';
 }
 
+// The `edge` docker profile runs the bundled Caddy; the API reads COMPOSE_PROFILES from .env.production through env_file.
+export function isBundledCaddy(): boolean {
+    return (process.env['COMPOSE_PROFILES'] ?? '').split(',').includes('edge');
+}
+
 // The relay a mail-off install sends through; unset, it sends no email at all.
 export function getRelayHost(): string | undefined {
     return process.env['SMTP_RELAY_HOST'] || undefined;
