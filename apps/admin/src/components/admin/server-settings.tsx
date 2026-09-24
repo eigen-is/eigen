@@ -11,7 +11,7 @@ import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { LandingLink, ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
-import { LoadingState, TooltipButton } from '@workspace/ui';
+import { LoadingState, SettingsFooter, SettingsSection, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -105,9 +105,7 @@ export function ServerSettingsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Storage Quotas</h3>
-
+            <SettingsSection title="Storage Quotas">
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                         <Label>{homeDataLabel} (MB)</Label>
@@ -146,18 +144,14 @@ export function ServerSettingsPage() {
                         />
                     </div>
                 </div>
-            </div>
+            </SettingsSection>
 
             <Separator />
 
-            <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Defaults</h3>
-
-                <p className="text-sm text-muted-foreground">
-                    The storage type used for user Drives. Changing this only affects new users: existing users will not
-                    be migrated to the newly selected storage type.
-                </p>
-
+            <SettingsSection
+                title="Defaults"
+                description="The storage type used for user Drives. Changing this only affects new users: existing users will not be migrated to the newly selected storage type."
+            >
                 <StorageTypePicker
                     storageType={current.defaults.mount.storageType}
                     onStorageTypeChange={(type: ServerStorageType) => {
@@ -172,18 +166,14 @@ export function ServerSettingsPage() {
                     checkS3={handleS3Check}
                     hardenS3={handleS3Harden}
                 />
-            </div>
+            </SettingsSection>
 
             <Separator />
 
-            <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                    Email notifications
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                    Send email when a notification fires. In-app notifications always fire regardless.
-                </p>
-
+            <SettingsSection
+                title="Email notifications"
+                description="Send email when a notification fires. In-app notifications always fire regardless."
+            >
                 <div className="space-y-3">
                     <SwitchRow
                         label="Email guests when added to share"
@@ -210,16 +200,14 @@ export function ServerSettingsPage() {
                         onChange={(v) => updateEmailFlag('ownerOnAccessRequest', v)}
                     />
                 </div>
-            </div>
+            </SettingsSection>
 
             <Separator />
 
-            <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Landing page</h3>
-                <p className="text-sm text-muted-foreground">
-                    Optional extra buttons on the public landing page. Each button links to a URL.
-                </p>
-
+            <SettingsSection
+                title="Landing page"
+                description="Optional extra buttons on the public landing page. Each button links to a URL."
+            >
                 <div className="space-y-3">
                     {current.landing.links.map((link, i) => (
                         <div key={i} className="flex items-center gap-2">
@@ -253,26 +241,15 @@ export function ServerSettingsPage() {
                         </Button>
                     )}
                 </div>
-            </div>
+            </SettingsSection>
 
-            {anyDirty && (
-                <>
-                    <Separator />
-                    <div className="flex items-center justify-end gap-2">
-                        <Button variant="outline" onClick={handleReset}>
-                            Reset
-                        </Button>
-                        <Button
-                            onClick={handleSave}
-                            disabled={
-                                saving || (current.defaults.mount.storageType === 's3' && !isS3ConfigValid(currentS3))
-                            }
-                        >
-                            {saving ? 'Saving...' : 'Save'}
-                        </Button>
-                    </div>
-                </>
-            )}
+            <SettingsFooter
+                dirty={anyDirty}
+                saving={saving}
+                disabled={current.defaults.mount.storageType === 's3' && !isS3ConfigValid(currentS3)}
+                onSave={handleSave}
+                onReset={handleReset}
+            />
         </div>
     );
 }
