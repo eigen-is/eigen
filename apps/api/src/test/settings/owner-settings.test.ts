@@ -5,6 +5,7 @@ import nodemailer from 'nodemailer';
 import { member as memberSchema, organization as organizationSchema } from '../../../auth-schema';
 import { getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getOrgName, getServerConfig } from '../../lib/config/server-config';
+import { updateServerSettings } from '../../lib/config/server-settings';
 import type { ControlStatus } from '../../lib/config/server-status';
 import * as mailer from '../../lib/core/mailer';
 import { assertJson, authedRequest, createTestUser, getTestContext, type TestUser } from '../setup';
@@ -35,6 +36,38 @@ describe('owner-only settings', () => {
     test('an admin still reads the server settings, which a team mount needs', async () => {
         const res = await authedRequest(admin.sessionToken, '/settings/server');
         expect(res.status).toBe(200);
+    });
+
+    describe('the saved S3 configuration in the server settings', () => {
+        const s3Config = {
+            endpoint: 'https://s3.example.com',
+            bucket: 'eigen',
+            prefix: '',
+            accessKeyId: 'key-id',
+            secretAccessKey: 'owner-secret',
+        };
+
+        beforeAll(async () => {
+            await updateServerSettings({ defaults: { mount: { s3Config } } });
+        });
+
+        afterAll(async () => {
+            await updateServerSettings({ defaults: { mount: { s3Config: undefined } } });
+        });
+
+        test('reaches an admin without its secret', async () => {
+            const settings = await assertJson<ServerSettings>(
+                await authedRequest(admin.sessionToken, '/settings/server'),
+            );
+            expect(settings.defaults.mount.s3Config).toEqual({ ...s3Config, secretAccessKey: '' });
+        });
+
+        test('reaches the owner whole', async () => {
+            const settings = await assertJson<ServerSettings>(
+                await authedRequest(ctx.alice.user.sessionToken, '/settings/server'),
+            );
+            expect(settings.defaults.mount.s3Config).toEqual(s3Config);
+        });
     });
 
     test('an admin cannot change the server settings', async () => {

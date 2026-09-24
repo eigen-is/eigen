@@ -31,7 +31,12 @@ export const settingsRouter = new Elysia({ name: 'settings' })
         '/settings/server',
         async ({ user }): Promise<ServerSettings> => {
             await requireAdmin(user.id);
-            return getServerSettings();
+            const settings = getServerSettings();
+            const { s3Config } = settings.defaults.mount;
+            // The secret is the owner's, as on /settings/s3config; an admin's team mount form takes the rest.
+            if (!s3Config || (await getOrgRole(user.id)) === 'owner') return settings;
+            const mount = { ...settings.defaults.mount, s3Config: { ...s3Config, secretAccessKey: '' } };
+            return { ...settings, defaults: { mount } };
         },
         { auth: true },
     )
