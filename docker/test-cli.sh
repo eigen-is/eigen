@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Installs Eigen as a stranger does, with ./eigen in a docker:cli container that has no Bun, and runs the operator
 # commands against it: status, the control socket, the setup link, reset-password, full and light backups and restores
-# with their refusals and retention, stop, and what status and reset-password say with Eigen stopped. The main install is edge,mail as uid 1001 in a
-# folder whose name has capitals and a space; a second one is edge only, as root.
+# with their refusals and retention, stop, and what status and reset-password say with Eigen stopped. The main install
+# is edge,mail as uid 1001 in a folder whose name has capitals and a space; a second one is edge only, as root.
 #
 # Usage:  ./docker/test-cli.sh
 # Needs:  docker, curl, git. Builds every image in Docker (a few minutes on a cold cache).
@@ -536,33 +536,39 @@ else
     fail "backup --keep two: exit $CODE"
     show
 fi
-scratch_run sh -c 'cd "$1" && touch eigen-pre-update-20200101-000000.tar.gz eigen-20100101-000000.tar.gz \
-    eigen-20100101-000001.tar.gz' sh "$INSTALL/snapshots"
-manual_before=$(scratch_run sh -c 'cd "$1" && ls eigen-2*.tar.gz' sh "$INSTALL/snapshots" | wc -l | tr -d ' ')
+scratch_run sh -c 'cd "$1" && touch eigen-pre-update-20200101-000000.tar.gz eigen-light-20100101-000000.tar.gz \
+    eigen-light-20100101-000001.tar.gz eigen-light-20100101-000002.tar.gz' sh "$INSTALL/snapshots"
+full_before=$(scratch_run sh -c 'cd "$1" && ls eigen-2*.tar.gz' sh "$INSTALL/snapshots" | tr '\n' ' ')
+# Folders the API could make, named like tar patterns that would leave out data/server or the mount's database.
+MOUNT="$INSTALL/data/home/$ADMIN_ID/mounts/default"
+scratch_run sh -c 'mkdir "$1/$(printf "evil\nserver")" "$1/*" && chown 1000:1000 "$1/$(printf "evil\nserver")" "$1/*"' \
+    sh "$MOUNT"
 eigen backup --light
 show
-LIGHT=$(saved_snapshot)
+LIGHT=$(printf '%s\n' "$OUT" | grep -o 'eigen-light-[0-9]\{8\}-[0-9]\{6\}\.tar\.gz' | head -n 1 || true)
 if [ "$CODE" = 0 ] && [ -n "$LIGHT" ] && says "Saved snapshots/$LIGHT (light: databases and config, " && stack_up; then
-    ok "./eigen backup --light saved snapshots/$LIGHT, and the stack is back up"
+    ok "./eigen backup --light saved snapshots/$LIGHT, named for its kind, and the stack is back up"
 else
     fail "./eigen backup --light exited $CODE"
 fi
 full_size=$(scratch_run stat -c %s "$INSTALL/snapshots/$SNAPSHOT")
 light_size=$(scratch_run stat -c %s "$INSTALL/snapshots/$LIGHT")
 log "full $full_size bytes, light $light_size bytes: $(awk -v l="$light_size" -v f="$full_size" 'BEGIN { printf "%.1f%%", 100 * l / f }') of the full one"
-manual=$(scratch_run sh -c 'cd "$1" && ls eigen-2*.tar.gz' sh "$INSTALL/snapshots" | tr '\n' ' ')
-if [ -z "${manual##*"$SNAPSHOT "*}" ] && [ -z "${manual##*"$LIGHT "*}" ] && [ "$(printf '%s' "$manual" | wc -w | tr -d ' ')" = 3 ] && [ "$manual_before" -ge 4 ] &&
+light=$(scratch_run sh -c 'cd "$1" && ls eigen-light-*.tar.gz' sh "$INSTALL/snapshots" | tr '\n' ' ')
+full=$(scratch_run sh -c 'cd "$1" && ls eigen-2*.tar.gz' sh "$INSTALL/snapshots" | tr '\n' ' ')
+if [ "$light" = "eigen-light-20100101-000001.tar.gz eigen-light-20100101-000002.tar.gz $LIGHT " ] &&
+    [ "$full" = "$full_before" ] && [ -z "${full##*"$SNAPSHOT "*}" ] &&
     scratch_run test -e "$INSTALL/snapshots/eigen-pre-update-20200101-000000.tar.gz"; then
-    ok "backup keeps the newest three of its $((manual_before + 1)) snapshots, and no pre-update one counts"
+    ok "backup --light keeps the newest three light snapshots, and no full or pre-update one counts"
 else
-    fail "snapshots kept: '$manual' of $((manual_before + 1))"
+    fail "light snapshots kept: '$light'; full ones '$full', before '$full_before'"
 fi
 scratch_run rm "$INSTALL/snapshots/eigen-pre-update-20200101-000000.tar.gz"
 members=$(scratch_run tar -tzf "$INSTALL/snapshots/$LIGHT" || true)
 if printf '%s\n' "$members" | grep -q '^data/server/users3.db$' &&
     printf '%s\n' "$members" | grep -q "^data/home/$ADMIN_ID/mounts/default/metadata.db$" &&
     ! printf '%s\n' "$members" | grep -q '/mounts/default/data/'; then
-    ok "the light snapshot holds data/server and the mount's database, and none of the drive's files"
+    ok "the light snapshot holds data/server and the mount's database beside the planted folders, and no drive file"
 else
     fail "the light snapshot holds: $(printf '%s\n' "$members" | grep -v '^data/server/' | tr '\n' ' ')"
 fi
@@ -576,9 +582,28 @@ files() {
 before=$(files)
 api POST "$FOLDER/$root_id/create/doc" '{"fileName":"Made after the light snapshot"}' >/dev/null
 aside=$(aside_count)
+# As a snapshot from before setup always wrote the resolver address: a source install's Compose has no default for it.
+# Not the subnet, whose backfilled default another stack on this host may hold.
+unbound=$(scratch_run sed -n 's/^EIGEN_UNBOUND_IP=//p' "$INSTALL/.env.production")
+docker run --rm --user 0 -v "$SCRATCH:$SCRATCH" --entrypoint sh "$EIGEN_API_IMAGE" -c 'dir=$(mktemp -d) &&
+    tar --numeric-owner -xzpf "$1" -C "$dir" && sed -i "/^EIGEN_UNBOUND_IP=/d" "$dir/.env.production" &&
+    tar --numeric-owner -czf "$1" -C "$dir" eigen-snapshot.json .env.production data && rm -rf "$dir"' \
+    sh "$INSTALL/snapshots/$LIGHT"
 eigen restore "$LIGHT" --yes
 show
 listing=$(api GET "$FOLDER/$root_id")
+if [ -n "$unbound" ] && says '.env.production has what Eigen needs' &&
+    [ "$(scratch_run sed -n 's/^EIGEN_UNBOUND_IP=//p' "$INSTALL/.env.production")" = "$unbound" ]; then
+    ok "the restore adds the resolver address the snapshot's .env.production lacked: $unbound"
+else
+    fail "after the restore, .env.production holds: $(scratch_run grep '^EIGEN_' "$INSTALL/.env.production" | tr '\n' ' ')"
+fi
+if scratch_run test -d "$MOUNT/$(printf 'evil\nserver')" && scratch_run test -d "$MOUNT/*"; then
+    ok "the planted folders are left as they are, like every file folder a light restore does not hold"
+else
+    fail "a planted folder is gone after the light restore"
+fi
+scratch_run sh -c 'rm -r "$1/$(printf "evil\nserver")" "$1/*"' sh "$MOUNT"
 if [ "$CODE" = 0 ] && says "Restored $LIGHT, a light snapshot of Eigen $VERSION: databases and config restored; files and mail kept as they are" &&
     stack_up && ! printf '%s' "$listing" | grep -q '"Made after the light snapshot"'; then
     ok "a light restore puts the databases back: the document made since is out of the drive"

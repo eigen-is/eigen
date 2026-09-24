@@ -142,7 +142,7 @@ fi
 archive=$(pre_updates)
 archive=${archive% }
 pointer=$(scratch_run cat "$INSTALL/.eigen/last-update" | tr '\n' ' ')
-if [ -n "$archive" ] && [ "$pointer" = "archive=$archive version=$VERSION commit=$OLD kind=full " ] &&
+if [[ $archive == eigen-pre-update-2* ]] && [ "$pointer" = "archive=$archive version=$VERSION commit=$OLD kind=full " ] &&
     says "Saved before the update: snapshots/$archive, a full snapshot"; then
     ok "--full saves a full snapshot, and .eigen/last-update names snapshots/$archive, $VERSION and $OLD"
 else
@@ -203,9 +203,9 @@ show
 FIXED=$(head_of "$INSTALL")
 light=$(scratch_run cat "$INSTALL/.eigen/last-update" | sed -n 's/^archive=//p')
 if [ "$CODE" = 0 ] && says "→ $VERSION ($FIXED) is running" && stack_up && kept &&
-    says "Saved before the update: snapshots/$light, a light snapshot" &&
+    says "Saved before the update: snapshots/$light, a light snapshot" && [[ $light == eigen-pre-update-light-* ]] &&
     scratch_run grep -qx kind=light "$INSTALL/.eigen/last-update"; then
-    ok "the next update after the fix converges on $FIXED, with a light snapshot"
+    ok "the next update after the fix converges on $FIXED, with a light snapshot named for its kind"
 else
     fail "the update after the fix: exit $CODE"
 fi
@@ -216,8 +216,12 @@ if printf '%s\n' "$members" | grep -q '/mounts/default/metadata.db$' &&
 else
     fail "the light snapshot holds: $(printf '%s\n' "$members" | grep mounts | tr '\n' ' ')"
 fi
-count=$(pre_updates | wc -w | tr -d ' ')
-if [ "$count" = 2 ]; then ok "two pre-update snapshots are kept"; else fail "$count pre-update snapshots: $(pre_updates)"; fi
+# Pre-update retention counts per kind, so the light one leaves the full one standing.
+if [ "$(pre_updates)" = "$archive $light " ]; then
+    ok "the full pre-update snapshot and the light one are kept"
+else
+    fail "pre-update snapshots: $(pre_updates)"
+fi
 
 ##############################################################################
 header "./eigen rollback"

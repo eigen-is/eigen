@@ -226,8 +226,9 @@ archive=$(pre_updates)
 archive=${archive% }
 pointer=$(scratch_run cat "$INSTALL/.eigen/last-update" | tr '\n' ' ')
 meta=$(scratch_run tar -xzOf "$INSTALL/snapshots/$archive" eigen-snapshot.json || true)
-if [ "$pointer" = "archive=$archive version=$PREVIOUS commit=harness kind=light " ] && [[ $meta == *"\"version\":\"$PREVIOUS\""* ]]; then
-    ok ".eigen/last-update names snapshots/$archive, a snapshot of $PREVIOUS"
+if [ "$pointer" = "archive=$archive version=$PREVIOUS commit=harness kind=light " ] && [[ $meta == *"\"version\":\"$PREVIOUS\""* ]] &&
+    [[ $archive == eigen-pre-update-light-* ]]; then
+    ok ".eigen/last-update names snapshots/$archive, a light snapshot of $PREVIOUS named for its kind"
 else
     fail ".eigen/last-update '$pointer', snapshot $meta"
 fi
