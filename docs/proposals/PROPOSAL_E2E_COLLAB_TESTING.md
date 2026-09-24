@@ -149,7 +149,7 @@ or `build` script, ever.
 ### Product touches
 
 Everything else lives under `e2e/`; app/API code changes in exactly three places, each one or a few
-guarded lines: (1) `../../apps/api/src/index.ts` reads `process.env.PORT ?? 8000`; (2) the static server's
+guarded lines: (1) the API port, which `../../apps/api/src/server.ts` already reads from `EIGEN_API_PORT`; (2) the static server's
 origin (`http://localhost:8101`) joins `trustedOrigins` in `../../apps/api/src/lib/auth/auth.ts`;
 (3) a `VITE_E2E`-gated `window` handle on the `WebsocketProvider` at the four creation sites
 (§ Offline / reconnect). Nothing else in product code may know the suite exists.
@@ -163,9 +163,9 @@ origin (`http://localhost:8101`) joins `trustedOrigins` in `../../apps/api/src/l
 2. **Spawn the API** as a real subprocess (`bun apps/api/src/index.ts`) — a real listening server,
    because browsers and WebSockets need one; `app.handle()` can't serve an upgrade. Spawn with an
    explicit env, not `--env-file` (which would read the gitignored dev `.env`): `EIGEN_DATA_ROOT`,
-   `PORT=8100`, `API_URL=http://localhost:8100` (better-auth `baseURL`), `COOKIE_DOMAIN=localhost`.
+   `EIGEN_API_PORT=8100` and `API_URL=http://localhost:8100` (better-auth `baseURL`).
    The fixed dedicated port (8100) lets the suite run next to a dev stack on 8000, and needs product
-   touch 1 of 3 (see § Product touches): `../../apps/api/src/index.ts` reads `process.env.PORT ?? 8000`.
+   touch 1 of 3 (see § Product touches), which exists: `../../apps/api/src/server.ts` reads `EIGEN_API_PORT`.
 3. **Complete the wizard via API** — `POST /setup/complete` with `storageType: 'local-id'`
    (LocalStorage; **no S3 anywhere in the suite**), same body the API tests use. No UI clicking
    through the setup wizard — that's a scenario for an admin-app test someday, not an arrange step.
@@ -374,9 +374,9 @@ not by default.
   constraint is explicit.
 - **D5 — Workers.** Parallel workers from day one vs serial. *Recommendation:* `workers: 1` until
   the suite has a multi-week green history, then raise deliberately and watch.
-- **D6 — API port.** Hardcode 8100 in the e2e config with the `process.env.PORT ?? 8000` change to
-  `../../apps/api/src/index.ts`, vs keeping 8000 and forbidding a concurrent dev stack.
-  *Recommendation:* the env override — two lines, and the suite must never require killing a
+- **D6 — API port.** Hardcode 8100 in the e2e config through `EIGEN_API_PORT`
+  (`../../apps/api/src/server.ts`), vs keeping 8000 and forbidding a concurrent dev stack.
+  *Recommendation:* the env override, which exists, and the suite must never require killing a
   running dev server (standing rule).
 
 ## Phasing

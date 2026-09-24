@@ -188,7 +188,7 @@ Hourly, on the hour, host-level (no in-app scheduler — swapping DB files under
 3. `rm -rf data/server data/home data/team data/org data/guest` — an **explicit list, never a
    wildcard**. `data/certs` (Caddy) and `data/dkim` (mail) survive.
 4. Reseed in a throwaway container off the current image (`run --rm --no-deps eigen-api ...`).
-5. Restart `eigen-api` and release the lock, via a trap, but restart **only if `data/server/.demo-seeded` exists** (an empty sentinel the seeder writes as its final step, so a crash mid-seed can't satisfy the gate — the half-built world stays behind the stopped API). A failed seed leaves the API stopped rather than showing strangers the setup screen; the next hourly run (or an operator) retries.
+5. Restart `eigen-api` and release the lock, via a trap, but restart **only if `data/server/.demo-seeded` exists** (an empty sentinel the seeder writes as its final step, so a crash mid-seed can't satisfy the gate — the half-built world stays behind the stopped API). A failed seed leaves the API stopped rather than showing strangers a server that is not set up; the next hourly run (or an operator) retries.
 
 **Hard gate:** the script refuses to run unless `.env.production` contains `EIGEN_DEMO=1`, so it is
 physically unable to wipe a real box. The full-root wipe (rather than restoring a golden tarball)
