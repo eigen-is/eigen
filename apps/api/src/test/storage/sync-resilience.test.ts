@@ -17,6 +17,7 @@ import {
     createFaultMount,
     createGetLocalDatabase,
     createS3MountConfig,
+    FaultMount,
     FaultStorage,
     provisionDoc,
 } from '../fault-storage-helpers';
@@ -118,17 +119,13 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         await mount.init();
         const { dataDbId } = await provisionDoc(mount);
 
-        fault.writeDelayMs = 2_000; // every PUT is slow — awaiting even one would dominate the timing
-        const start = Bun.nanoseconds();
+        fault.hangWrites = true; // every PUT hangs — create or close awaiting one would time the test out
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mount.closeDatabase(dataDbId);
-        const elapsedMs = (Bun.nanoseconds() - start) / 1_000_000;
 
-        // create+close returned in a small fraction of one 2s PUT → they did not await the PUT.
-        expect(elapsedMs).toBeLessThan(500);
         expect(mount.pendingUploadCount).toBeGreaterThan(0); // the upload is queued, not yet done
-        fault.writeDelayMs = 0; // don't make the verification drain slow too
+        fault.releaseHungWrites();
         await mount.drainPendingUploads({ flushNow: true }); // now await the upload
         expect(mount.pendingUploadCount).toBe(0);
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
@@ -330,11 +327,12 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mount.closeDatabase(dataDbId); // enqueue
 
-        fault.writeDelayMs = 1_000; // hold the PUT in flight (its body was already read up-front)
+        fault.parkWrites = true; // hold the PUT in flight (its body was already read up-front)
         const draining = mount.drainPendingUploads({ flushNow: true });
-        await Bun.sleep(150); // let performUpload enter storage.write — the object is mid-upload
+        await fault.waitForParked((p) => p.key === key); // performUpload is inside storage.write
         await mount.deletePath(containerId); // cancel + storage.delete while the PUT is in flight
-        await draining; // PUT completes after the delay → the guard must delete what it resurrected
+        await fault.releaseOldestParked(); // the PUT lands → the guard must delete what it resurrected
+        await draining;
 
         expect(mount.pendingUploadCount).toBe(0);
         expect(await fault.exists(key)).toBe(false); // NOT resurrected
@@ -405,15 +403,15 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mount.closeDatabase(dataDbId); // enqueue; mount still live
 
-        fault.writeDelayMs = 500; // hold the PUT in flight
+        fault.parkWrites = true; // hold the PUT in flight
         const draining = mount.drainPendingUploads(); // background drain, no flush
-        await Bun.sleep(100);
+        await fault.waitForParked(() => true);
         // Idle teardown (no shutdown deadline): sets uploadClosing + unregisters, does NOT await the
         // in-flight PUT. The drain must then bail via its uploadClosing guards without throwing.
         await mount.closeAllDatabases();
+        await fault.landAllRemaining();
         await draining; // resolves cleanly — no DB-after-close error
 
-        fault.writeDelayMs = 0;
         expect(mount.pendingUploadCount).toBeGreaterThan(0); // row preserved for replay on reopen
     });
 });
@@ -433,13 +431,13 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
 
         // A new write {2} whose upload is HELD in-flight: the staged {1,2} copy + pending row exist,
-        // but "S3" is still {1}. writeDelayMs keeps that PUT from acking; reset to 0 (after the drain
-        // has entered the sleeping PUT) so the copy's own writes land on a healthy backend.
-        fault.writeDelayMs = 2_000;
+        // but "S3" is still {1}. Park that PUT; unpark once it is parked so the copy's own writes
+        // land on a healthy backend.
+        fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
         await managed.flush();
-        await Bun.sleep(100);
-        fault.writeDelayMs = 0;
+        await fault.waitForParked((p) => p.key === buildStorageKey(dataDbId, 'data.db'));
+        fault.parkWrites = false;
         expect(mount.pendingUploadCount).toBe(1);
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1); // "S3" still stale {1}
 
@@ -460,6 +458,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         // Duplicate-then-delete-original preserves the copied data.
         await mount.deletePath(containerId);
         expect(await countBackingRows(mount, copiedDataDb.id, TEST_DIR)).toBe(2);
+        await fault.landAllRemaining(); // the held PUT lands on a cancelled row: deleted again, not resurrected
     });
 
     test('a data-dir relocation keeps pending uploads (stagingPath resolves against the current stagingDir)', async () => {
@@ -470,7 +469,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
 
         // Original data dir A: stage a pending upload during an outage so it survives to relocation time.
         const baseA = join(TEST_DIR, `relocate-A-${id}`);
-        const mountA = new Mount(OWNER_ID, baseA, config, createGetLocalDatabase(baseA));
+        const mountA = new FaultMount(OWNER_ID, baseA, config, createGetLocalDatabase(baseA));
         mountA.storage = backing;
         createdMounts.push(mountA);
         backing.failNextWrites = 9999;
@@ -489,7 +488,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         mkdirSync(baseB, { recursive: true });
         renameSync(join(baseA, 'mounts'), join(baseB, 'mounts'));
 
-        const mountB = new Mount(OWNER_ID, baseB, config, createGetLocalDatabase(baseB));
+        const mountB = new FaultMount(OWNER_ID, baseB, config, createGetLocalDatabase(baseB));
         mountB.storage = backing;
         createdMounts.push(mountB);
         await mountB.init(); // reconcile: the basename resolves against B's stagingDir → row survives

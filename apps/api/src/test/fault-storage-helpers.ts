@@ -177,11 +177,23 @@ export function createGetLocalDatabase(baseDir: string) {
     };
 }
 
+// A Mount whose upload queue never retries on its own. A fault-mount test drives every retry itself
+// with drain({ flushNow }); the queue's jittered retry (a random 0-2 s after the first failure) would
+// land at an unpredictable moment — on one CI run, inside a restart mount's replay. Pinned right after
+// init builds the queue; a restart under an outage can still arm one jittered retry from init's own
+// reconcile drain, which merely fails again on the same queue.
+export class FaultMount extends Mount {
+    override async init(opts?: { passive?: boolean }): Promise<void> {
+        await super.init(opts);
+        holdRetries(this);
+    }
+}
+
 // An s3-type mount backed by a FaultStorage over a local directory. Same `id` ⇒ same baseDir +
 // backing dir ⇒ a second call simulates a process restart that shares the prior mount's
 // metadata.db, staging dir, and "S3" object store. The caller still owns init().
 export function createFaultMount(ownerId: string, baseDir: string, id: string): { mount: Mount; fault: FaultStorage } {
-    const mount = new Mount(ownerId, baseDir, createS3MountConfig(id), createGetLocalDatabase(baseDir));
+    const mount = new FaultMount(ownerId, baseDir, createS3MountConfig(id), createGetLocalDatabase(baseDir));
     const fault = new FaultStorage(new LocalStorage(join(baseDir, `backing-${id}`)));
     mount.storage = fault;
     return { mount, fault };
@@ -198,7 +210,7 @@ export function createHomeFaultMount(
     id: string,
     backingRoot: string,
 ): { mount: Mount; fault: FaultStorage } {
-    const mount = new Mount(home.user.id, home.homeDir, createS3MountConfig(id), home.getLocalDatabase.bind(home));
+    const mount = new FaultMount(home.user.id, home.homeDir, createS3MountConfig(id), home.getLocalDatabase.bind(home));
     const fault = new FaultStorage(new LocalStorage(join(backingRoot, id)));
     mount.storage = fault;
     return { mount, fault };
@@ -262,12 +274,16 @@ function queueFields(mount: Mount): QueueTestFields {
     return mount.uploadQueue as unknown as QueueTestFields;
 }
 
-// Shrinks the PUT deadline so a parked PUT orphans fast, and holds the queue's jittered backoff
-// retries: the test drives every retry with drain({flushNow}). A retry the queue fires on its own
-// inside the orphan window would take the shrunk deadline, park, and time out behind the test's back.
+// Holds the queue's jittered retry (see FaultMount); the test drives every retry with drain({flushNow}).
+function holdRetries(mount: Mount): void {
+    queueFields(mount).backoffMs = () => 60_000;
+}
+
+// Shrinks the PUT deadline so a parked PUT orphans fast. Retries are already held (FaultMount): one
+// the queue fired on its own inside the orphan window would take the shrunk deadline, park, and time
+// out behind the test's back.
 export function shrinkPutTimeout(mount: Mount, ms: number): void {
     queueFields(mount).putTimeoutMs = ms;
-    queueFields(mount).backoffMs = () => 60_000;
 }
 
 // Restores the production PUT deadline once the PUT meant to orphan has armed its timer (it is
