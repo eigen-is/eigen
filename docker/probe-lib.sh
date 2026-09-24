@@ -24,6 +24,11 @@ export BUN_VERSION
 VERSION=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$REPO_ROOT/package.json" | head -n 1)
 # IMAGES in ./eigen is the list of images a release pins.
 IMAGES=$(sed -n "s/^IMAGES='\(.*\)'/\1/p" "$REPO_ROOT/eigen")
+# image_key in ./eigen: the variable that names an image.
+image_key() { printf 'EIGEN_%s_IMAGE\n' "$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"; }
+# The docker run flags that pass those variables into a container, when set.
+IMAGE_FLAGS=()
+for name in $IMAGES; do IMAGE_FLAGS+=(-e "$(image_key "$name")"); done
 # Space-separated, not an array: bash 3.2 with `set -u` treats an empty array as unbound.
 HARNESS_PROJECTS=''
 PICKED_PORTS=' '
@@ -31,6 +36,7 @@ PICKED_PORTS=' '
 # scratch_init <purpose>: the scratch root, private image tags so ghcr.io/eigen-is/eigen/*:local is never overwritten, the
 # no-Bun docker:cli image the launcher runs in, scratch_run's container and the cleanup trap.
 scratch_init() {
+    local name
     RUN="$1$$"
     SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/eigentest-$1.XXXXXX")
     SCRATCH=$(cd "$SCRATCH" && pwd -P)
@@ -43,9 +49,7 @@ scratch_init() {
     esac
     trap harness_cleanup EXIT
     trap 'exit 130' INT TERM
-    export EIGEN_API_IMAGE="eigentest-api:$RUN" EIGEN_FRONTEND_IMAGE="eigentest-frontend:$RUN"
-    export EIGEN_POSTFIX_IMAGE="eigentest-postfix:$RUN" EIGEN_DOVECOT_IMAGE="eigentest-dovecot:$RUN"
-    export EIGEN_UNBOUND_IMAGE="eigentest-unbound:$RUN"
+    for name in $IMAGES; do export "$(image_key "$name")=eigentest-$name:$RUN"; done
     CLI_IMAGE="eigentest-cli:$RUN"
     # The daemon is shared with whatever else runs on this machine, so the launcher's prunes, which reach past its
     # own install, are logged to $HARNESS_PRUNE_LOG instead of run.
@@ -188,7 +192,7 @@ EOF
 
 # in_cli_container [--stdin] [--user uid:gid] <command…>: runs in $INSTALL inside the no-Bun docker:cli image, with
 # the Docker socket, and the scratch folder at its own path so the bind mounts Compose creates resolve on the host. The
-# EIGEN_*_IMAGE variables and EIGEN_REGISTRY pass through when set.
+# EIGEN_*_IMAGE variables pass through when set.
 # --stdin passes this script's stdin through, for a piped answer; without it the command reads nothing.
 in_cli_container() {
     local user=() stdin=()
@@ -201,9 +205,8 @@ in_cli_container() {
         shift 2
     fi
     docker run --rm ${stdin[@]+"${stdin[@]}"} --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
-        -v /var/run/docker.sock:/var/run/docker.sock -v "$SCRATCH:$SCRATCH" -w "$INSTALL" \
-        -e EIGEN_API_IMAGE -e EIGEN_FRONTEND_IMAGE -e EIGEN_POSTFIX_IMAGE -e EIGEN_DOVECOT_IMAGE \
-        -e EIGEN_UNBOUND_IMAGE -e EIGEN_REGISTRY -e NO_COLOR=1 -e HARNESS_PRUNE_LOG="$PRUNE_LOG" ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
+        -v /var/run/docker.sock:/var/run/docker.sock -v "$SCRATCH:$SCRATCH" -w "$INSTALL" "${IMAGE_FLAGS[@]}" \
+        -e NO_COLOR=1 -e HARNESS_PRUNE_LOG="$PRUNE_LOG" ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
 }
 
 # eigen <args…>: the launcher in the no-Bun container, as $OPERATOR when set (else root); sets OUT (stdout and
@@ -460,7 +463,7 @@ harness_cleanup() {
     rm -rf "$SCRATCH"
     # Unset where a harness installs releases, which it pulls instead of building under these tags.
     for name in $IMAGES; do
-        key=EIGEN_$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_IMAGE
+        key=$(image_key "$name")
         image=${!key:-}
         if [ -n "$image" ]; then docker image rm "$image" "$image-next" >/dev/null 2>&1 || true; fi
     done
