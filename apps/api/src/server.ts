@@ -4,7 +4,7 @@ import { drainBackupJobs } from './lib/backup/jobs';
 import { wipeBackupStaging } from './lib/backup/paths';
 import { recoverInterruptedRestores } from './lib/backup/recovery';
 import { isProduction } from './lib/config/env';
-import { isSetupRequired } from './lib/config/server-config';
+import { getMailDomain, isSetupRequired } from './lib/config/server-config';
 import { documentTransformRunner } from './lib/document/transform/runner';
 import { drainACLFanOuts } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';
@@ -12,6 +12,7 @@ import { registerScheduledJobs } from './lib/scheduler/jobs';
 import { stopAllSchedules } from './lib/scheduler/scheduler';
 import { createSetupLink } from './lib/setup/setup-token';
 import { setShutdownDrainDeadline } from './lib/sync';
+import { getOrgOwner } from './lib/user';
 import { startControlSocket } from './routes/control';
 
 // Wall-clock budget for flushing pending S3 uploads on shutdown. Must stay below
@@ -26,6 +27,14 @@ const SHUTDOWN_DRAIN_BUDGET_MS = 20_000;
 // backup, verify or restore interrupted by a restart leaves a half-written folder nothing resumes.
 recoverInterruptedRestores();
 wipeBackupStaging();
+
+// Every account's address was made on the mail domain and never changes; on another one nobody can sign in.
+const accountsDomain = (await getOrgOwner())?.email.split('@')[1]?.toLowerCase();
+if (accountsDomain && accountsDomain !== getMailDomain().toLowerCase()) {
+    console.error(`MAIL_DOMAIN is ${getMailDomain()}, but the accounts on this server use ${accountsDomain}.`);
+    console.error(`Set MAIL_DOMAIN=${accountsDomain} in .env.production and run ./eigen restart.`);
+    process.exit(1);
+}
 
 const server = app.listen({
     // 8000 in every deployment — Caddy, Dovecot and the container healthcheck all name it. The
