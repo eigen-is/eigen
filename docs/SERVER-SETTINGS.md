@@ -115,7 +115,7 @@ connects. So the server never ends up defaulting new drives to a bucket it canno
 
 Hooks in `packages/lib/src/core/settings/hooks/`: `useServerSettings()` / `useUpdateServerSettings()` / `invalidateServerSettings()` over query key `['settings', 'server']`, `useServerS3Config()` / `useUpdateServerS3Config()` / `invalidateServerS3Config()` over `['settings', 's3config']`, `useCheckS3Connection()` for the test button, `useServerStatus()` (fetched only for the owner), `useUpdateOrgName()` (invalidates the public config, which carries the name) and `useSendTestMail()`.
 
-The Admin app's `/settings` route sits behind the `_owner` guard, with Onboarding, Guest settings and Waitlist; an admin who opens one by URL sees "Only the server owner can open this page." It renders `ServerSettingsPage` (`apps/admin/src/components/admin/server-settings.tsx`) with these sections, each a shared `SettingsSection` over one `SettingsFooter`:
+The Admin app's `/settings` route sits behind the `_owner` guard, with Onboarding, Guest settings and Waitlist; an admin who opens one by URL sees "Only the server owner can open this page." It renders `ServerSettingsPage` (`apps/admin/src/components/admin/server-settings.tsx`) with these sections, each a shared `SettingsSection` over one `SettingsFooter`, which asks before the page is left with unsaved changes:
 
 - **General** — the organization name, editable, beside the web address and mail domain, read-only
 - **Server** — what `./eigen status` reports: version, hosted mail, disk, certificate (`server-status-section.tsx`)
