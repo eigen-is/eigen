@@ -293,6 +293,10 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
     // so a black-holed extract can't park teardown (see ContentReindexQueue.close).
     await mount.reindexQueue?.close();
 
+    // Thumbnail jobs end with getPath/updatePath on metadata.db and hold a sharp worker; each is
+    // bounded by the worker's own timeout (see thumbnails.ts).
+    await Promise.allSettled(mount.thumbnailJobs);
+
     // Snapshot + clear + register a closing deferred for EVERY pathId in one synchronous
     // block — per-iteration registration would leave later pathIds raceable during the
     // earlier closes' awaits.

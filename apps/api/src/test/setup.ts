@@ -198,12 +198,6 @@ export async function setMaxUploadSizeMB(sessionToken: string, mb: number): Prom
     expect(res.status).toBe(200);
 }
 
-export function cleanup() {
-    // if (existsSync(TEST_DATA_DIR)) {
-    //     rmSync(TEST_DATA_DIR, {recursive: true, force: true});
-    // }
-}
-
 export async function assertJson<T>(res: Response, expectedStatus = 200): Promise<T> {
     expect(res.status).toBe(expectedStatus);
     return (await res.json()) as T;

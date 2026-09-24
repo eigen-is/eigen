@@ -79,7 +79,7 @@ export function regenerateThumbnailAsync(
     fileName: string,
     onCleanup?: () => Promise<void>,
 ): void {
-    (async () => {
+    const job = (async () => {
         try {
             const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, source, mimeType, fileName);
             if (!thumbnail) return;
@@ -99,4 +99,6 @@ export function regenerateThumbnailAsync(
             await onCleanup?.();
         }
     })().catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
+    mount.thumbnailJobs.add(job);
+    job.finally(() => mount.thumbnailJobs.delete(job));
 }

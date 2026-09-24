@@ -3,7 +3,6 @@ import './test-env';
 import { afterAll } from 'bun:test';
 import { clearSucroseCache } from 'elysia/sucrose';
 import { shutdownAllHomes } from '../lib/home';
-import { cleanup } from './setup';
 
 // Every file runs in a fresh global (--isolate), so this hook runs once per file. An unref'd timer still
 // holds its callback until it fires, and two of them reach the whole module graph: each Home's idle
@@ -17,7 +16,6 @@ afterAll(async () => {
     const ms = (Bun.nanoseconds() - start) / 1_000_000;
     if (ms > 1_000) console.warn(`[preload] shutdownAllHomes took ${ms.toFixed(0)}ms`);
     clearSucroseCache(0);
-    cleanup();
     if (process.env['GITHUB_ACTIONS']) {
         const worker = process.env['BUN_TEST_WORKER_ID'] ?? '0';
         console.log(`[memory] worker ${worker} rss ${Math.round(process.memoryUsage.rss() / 1048576)}MB`);

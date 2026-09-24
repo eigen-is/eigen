@@ -83,6 +83,10 @@ export class Mount {
     // before the Home closes metadata.db (else prune scans a closed db — see closeAllDatabases).
     pruneTimer: ReturnType<typeof setTimeout> | null = null; // internal — used by mount/*.ts
 
+    // Fire-and-forget thumbnail jobs (drive/upload.ts); closeAllDatabases awaits them so no sharp
+    // worker or row update outlives the mount's metadata.db.
+    thumbnailJobs = new Set<Promise<void>>(); // internal — used by drive/upload.ts + mount/*.ts
+
     public history!: FileHistory;
 
     constructor(
