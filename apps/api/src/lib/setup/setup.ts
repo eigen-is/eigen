@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { SetupResult, SetupStatus } from '@workspace/lib/types/settings';
 import { validateEmailAddress, validateUsername } from '@workspace/lib/validation';
@@ -241,6 +242,8 @@ export type SetupInput = {
     adminUsername: string;
     adminPassword: string;
     adminName: string;
+    senderName?: string;
+    senderAddress?: string;
 };
 
 export function getSetupStatus(): SetupStatus {
@@ -277,6 +280,16 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
         if (usernameErr) throw new ApiError(400, usernameErr);
         const adminEmail = `${username}@${getMailDomain()}`;
         if (!validateEmailAddress(adminEmail)) throw new ApiError(400, `${adminEmail} is not a valid email address`);
+        // Stored only when it differs from what an empty field derives, so a later rename or domain still carries through.
+        const senderName = input.senderName?.trim() === input.orgName ? '' : (input.senderName?.trim() ?? '');
+        const senderAddress = input.senderAddress?.trim() ?? '';
+        if (senderAddress && !validateEmailAddress(senderAddress)) {
+            throw new ApiError(400, `${senderAddress} is not a valid sender address`);
+        }
+        const mailSender = {
+            senderName,
+            senderAddress: senderAddress === defaultSenderAddress(getMailDomain()) ? '' : senderAddress,
+        };
 
         await resetAuthDatabase();
 
@@ -306,7 +319,10 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
         }
         if (!org) throw new Error('Failed to create default organization');
 
-        await updateServerSettings({ defaults: { mount: { storageType: input.storageType, s3Config } } });
+        await updateServerSettings({
+            defaults: { mount: { storageType: input.storageType, s3Config } },
+            mail: mailSender,
+        });
 
         // setupCompleted flips here — written last so a failure in any step above leaves
         // setup re-runnable: isSetupRequired() stays true and resetAuthDatabase() clears

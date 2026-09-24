@@ -251,10 +251,15 @@ describe('the /setup routes before setup', () => {
         const reserved = await post('complete', { ...admin, adminUsername: 'Admin', setupToken: newer });
         expect(reserved.status).toBe(400);
         expect(await reserved.text()).toBe('This username is reserved');
+        const badSender = await post('complete', { ...admin, senderAddress: 'noreply', setupToken: newer });
+        expect(badSender.status).toBe(400);
+        expect(await badSender.text()).toContain('not a valid sender address');
 
         // A domain in the body is not the server's to take: ./eigen setup set it.
         // Two parallel requests, either may arrive first; exactly one wins.
-        const body = { ...admin, domain: 'elsewhere.example', setupToken: newer };
+        // The wizard prefills the sender address with the default, which stays empty, so it follows the domain.
+        const sender = { senderName: 'Acme Mail', senderAddress: `noreply@${MAIL_DOMAIN}` };
+        const body = { ...admin, ...sender, domain: 'elsewhere.example', setupToken: newer };
         const [done, twice] = (await Promise.all([post('complete', body), post('complete', body)])).sort(
             (a, b) => a.status - b.status,
         );
@@ -262,6 +267,8 @@ describe('the /setup routes before setup', () => {
         expect(twice.status).toBe(409);
         expect((await done.json()).user.email).toBe(ADMIN_EMAIL);
         expect(storedConfig()).not.toHaveProperty('domain');
+        const storedSettings = JSON.parse(readFileSync(join(dataRoot, 'server/settings.json'), 'utf8'));
+        expect(storedSettings.mail).toMatchObject({ senderName: 'Acme Mail', senderAddress: '' });
         expect(existsSync(join(dataRoot, 'server/setup-token'))).toBe(false);
 
         expect((await post('complete', { ...admin, setupToken: newer })).status).toBe(403);

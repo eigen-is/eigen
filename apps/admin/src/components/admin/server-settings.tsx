@@ -1,9 +1,12 @@
-import { useHomeDataLabel } from '@workspace/lib/public';
+import { defaultSenderAddress } from '@workspace/lib/constants/mail';
+import { useHomeDataLabel, useMailEnabled, usePublicConfig } from '@workspace/lib/public';
 import {
     useCheckS3Connection,
     useHardenS3Bucket,
+    useSendTestMail,
     useServerS3Config,
     useServerSettings,
+    useUpdateOrgName,
     useUpdateServerS3Config,
     useUpdateServerSettings,
 } from '@workspace/lib/settings';
@@ -11,7 +14,8 @@ import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { LandingLink, ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
-import { LoadingState, TooltipButton } from '@workspace/ui';
+import { validateEmailAddress } from '@workspace/lib/validation';
+import { LoadingState, SettingsFooter, SettingsSection, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -19,6 +23,7 @@ import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
 import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { ServerStatusSection } from './server-status-section';
 import { StorageTypePicker } from './storage-type-picker';
 
 type EmailFlag = keyof ServerSettings['notifications']['email'];
@@ -31,17 +36,24 @@ export function ServerSettingsPage() {
     const s3Check = useCheckS3Connection();
     const s3Harden = useHardenS3Bucket();
     const homeDataLabel = useHomeDataLabel();
+    const { data: config } = usePublicConfig();
+    const mailEnabled = useMailEnabled();
+    const updateOrgName = useUpdateOrgName();
+    const sendTestMail = useSendTestMail();
 
     const [draft, setDraft] = useState<DeepPartial<ServerSettings>>({});
     const [dirty, setDirty] = useState(false);
     const [s3Draft, setS3Draft] = useState<S3Config | null>(null);
     const [s3Dirty, setS3Dirty] = useState(false);
+    const [orgNameDraft, setOrgNameDraft] = useState<string | null>(null);
 
-    if (isLoading || !settings) {
+    if (isLoading || !settings || !config) {
         return <LoadingState />;
     }
 
+    const orgName = orgNameDraft ?? config.orgName;
     const current = {
+        mail: { ...settings.mail, ...draft.mail },
         quotas: { ...settings.quotas, ...draft.quotas },
         defaults: {
             mount: { ...settings.defaults.mount, ...draft.defaults?.mount },
@@ -68,6 +80,11 @@ export function ServerSettingsPage() {
         }));
     };
 
+    const updateMail = (patch: Partial<ServerSettings['mail']>) => {
+        setDirty(true);
+        setDraft((prev) => ({ ...prev, mail: { ...prev.mail, ...patch } }));
+    };
+
     const updateLinks = (links: LandingLink[]) => {
         setDirty(true);
         setDraft((prev) => ({ ...prev, landing: { links } }));
@@ -77,13 +94,17 @@ export function ServerSettingsPage() {
         updateLinks(current.landing.links.map((link, i) => (i === index ? { ...link, ...patch } : link)));
 
     const currentS3 = s3Draft ?? s3Config ?? EMPTY_S3;
-    const anyDirty = dirty || s3Dirty;
-    const saving = updateSettings.isPending || updateS3Config.isPending;
+    const anyDirty = dirty || s3Dirty || orgNameDraft !== null;
+    const saving = updateSettings.isPending || updateS3Config.isPending || updateOrgName.isPending;
+    // The test mail goes out from the saved sender, so an unsaved one would test the wrong thing.
+    const senderDirty = draft.mail !== undefined || orgNameDraft !== null;
+    const senderAddressInvalid = current.mail.senderAddress !== '' && !validateEmailAddress(current.mail.senderAddress);
     const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
     const handleS3Harden = (config: S3Config, noncurrentDays: number) =>
         s3Harden.mutateAsync({ ...config, noncurrentDays });
 
     const handleSave = async () => {
+        if (orgNameDraft !== null) await updateOrgName.mutateAsync(orgNameDraft.trim());
         if (s3Dirty && s3Draft && current.defaults.mount.storageType === 's3')
             await updateS3Config.mutateAsync(s3Draft);
         if (dirty)
@@ -94,6 +115,7 @@ export function ServerSettingsPage() {
         setDirty(false);
         setS3Draft(null);
         setS3Dirty(false);
+        setOrgNameDraft(null);
     };
 
     const handleReset = () => {
@@ -101,13 +123,90 @@ export function ServerSettingsPage() {
         setDirty(false);
         setS3Draft(null);
         setS3Dirty(false);
+        setOrgNameDraft(null);
     };
 
     return (
         <div className="space-y-6">
-            <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Storage Quotas</h3>
+            <SettingsSection title="General">
+                <div className="space-y-1.5">
+                    <Label>Organization name</Label>
+                    <Input maxLength={100} value={orgName} onChange={(e) => setOrgNameDraft(e.target.value)} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                        <Label>Web address</Label>
+                        <Input value={config.domain} disabled />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>Mail domain</Label>
+                        <Input value={config.mailDomain} disabled />
+                    </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                    The web address and mail domain are set at first setup; changing them would lock every user out.
+                </p>
+            </SettingsSection>
 
+            <Separator />
+
+            <ServerStatusSection />
+
+            <Separator />
+
+            <SettingsSection
+                title="Mail"
+                description="The sender of the notifications, codes and invitations this server sends. Leave a field empty for the default shown."
+            >
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                        <Label>Sender name</Label>
+                        <Input
+                            maxLength={100}
+                            placeholder={orgName}
+                            value={current.mail.senderName}
+                            onChange={(e) => updateMail({ senderName: e.target.value })}
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>Sender address</Label>
+                        <Input
+                            type="email"
+                            placeholder={defaultSenderAddress(config.mailDomain)}
+                            value={current.mail.senderAddress}
+                            onChange={(e) => updateMail({ senderAddress: e.target.value.trim() })}
+                        />
+                        {senderAddressInvalid && (
+                            <p className="text-xs text-destructive">This is not an email address</p>
+                        )}
+                    </div>
+                </div>
+                {!mailEnabled && (
+                    <SwitchRow
+                        label="Relay sends as users"
+                        description={`Your relay allows sending from any address at ${config.mailDomain}. Off, mail on a user's behalf goes out as 'Name via ${orgName}' from the sender address.`}
+                        checked={current.mail.relaySendsAsUsers}
+                        onChange={(relaySendsAsUsers) => updateMail({ relaySendsAsUsers })}
+                    />
+                )}
+                <div className="flex items-center gap-3">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => sendTestMail.mutate()}
+                        disabled={sendTestMail.isPending || senderDirty}
+                    >
+                        {sendTestMail.isPending ? 'Sending...' : 'Send test mail'}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                        {senderDirty ? 'Save first: the test uses the saved sender.' : 'Sends one mail to you.'}
+                    </p>
+                </div>
+            </SettingsSection>
+
+            <Separator />
+
+            <SettingsSection title="Storage Quotas">
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                         <Label>{homeDataLabel} (MB)</Label>
@@ -146,18 +245,14 @@ export function ServerSettingsPage() {
                         />
                     </div>
                 </div>
-            </div>
+            </SettingsSection>
 
             <Separator />
 
-            <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Defaults</h3>
-
-                <p className="text-sm text-muted-foreground">
-                    The storage type used for user Drives. Changing this only affects new users: existing users will not
-                    be migrated to the newly selected storage type.
-                </p>
-
+            <SettingsSection
+                title="Defaults"
+                description="The storage type used for user Drives. Changing this only affects new users: existing users will not be migrated to the newly selected storage type."
+            >
                 <StorageTypePicker
                     storageType={current.defaults.mount.storageType}
                     onStorageTypeChange={(type: ServerStorageType) => {
@@ -172,18 +267,14 @@ export function ServerSettingsPage() {
                     checkS3={handleS3Check}
                     hardenS3={handleS3Harden}
                 />
-            </div>
+            </SettingsSection>
 
             <Separator />
 
-            <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                    Email notifications
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                    Send email when a notification fires. In-app notifications always fire regardless.
-                </p>
-
+            <SettingsSection
+                title="Email notifications"
+                description="Send email when a notification fires. In-app notifications always fire regardless."
+            >
                 <div className="space-y-3">
                     <SwitchRow
                         label="Email guests when added to share"
@@ -210,16 +301,14 @@ export function ServerSettingsPage() {
                         onChange={(v) => updateEmailFlag('ownerOnAccessRequest', v)}
                     />
                 </div>
-            </div>
+            </SettingsSection>
 
             <Separator />
 
-            <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Landing page</h3>
-                <p className="text-sm text-muted-foreground">
-                    Optional extra buttons on the public landing page. Each button links to a URL.
-                </p>
-
+            <SettingsSection
+                title="Landing page"
+                description="Optional extra buttons on the public landing page. Each button links to a URL."
+            >
                 <div className="space-y-3">
                     {current.landing.links.map((link, i) => (
                         <div key={i} className="flex items-center gap-2">
@@ -253,26 +342,19 @@ export function ServerSettingsPage() {
                         </Button>
                     )}
                 </div>
-            </div>
+            </SettingsSection>
 
-            {anyDirty && (
-                <>
-                    <Separator />
-                    <div className="flex items-center justify-end gap-2">
-                        <Button variant="outline" onClick={handleReset}>
-                            Reset
-                        </Button>
-                        <Button
-                            onClick={handleSave}
-                            disabled={
-                                saving || (current.defaults.mount.storageType === 's3' && !isS3ConfigValid(currentS3))
-                            }
-                        >
-                            {saving ? 'Saving...' : 'Save'}
-                        </Button>
-                    </div>
-                </>
-            )}
+            <SettingsFooter
+                dirty={anyDirty}
+                saving={saving}
+                disabled={
+                    orgName.trim() === '' ||
+                    senderAddressInvalid ||
+                    (current.defaults.mount.storageType === 's3' && !isS3ConfigValid(currentS3))
+                }
+                onSave={handleSave}
+                onReset={handleReset}
+            />
         </div>
     );
 }

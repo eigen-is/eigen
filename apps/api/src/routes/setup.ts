@@ -4,7 +4,7 @@ import { Elysia, t } from 'elysia';
 import { completeSetup, getSetupStatus } from '../lib/setup/setup';
 import { requireSetupToken } from '../lib/setup/setup-token';
 import { checkS3Connection, hardenS3Bucket } from '../lib/storage/s3-storage';
-import { s3ConfigBody, s3HardenBody, toS3Config } from './shared-schemas';
+import { s3ConfigBody, s3HardenBody, senderAddressSchema, senderNameSchema, toS3Config } from './shared-schemas';
 
 // setupToken is optional in the schemas, so a missing one gets requireSetupToken's answer, not a validation error.
 export const setupRouter = new Elysia({ name: 'setup' })
@@ -44,6 +44,8 @@ export const setupRouter = new Elysia({ name: 'setup' })
                 adminUsername: t.String({ minLength: 1 }),
                 adminPassword: t.String({ minLength: MIN_PASSWORD_LENGTH }),
                 adminName: t.String({ minLength: 1 }),
+                senderName: t.Optional(senderNameSchema),
+                senderAddress: t.Optional(senderAddressSchema),
             }),
         },
     );

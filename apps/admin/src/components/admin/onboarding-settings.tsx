@@ -1,8 +1,7 @@
 import { useMailEnabled } from '@workspace/lib/public';
 import { useServerSettings, useUpdateServerSettings } from '@workspace/lib/settings';
 import type { ServerSettings } from '@workspace/lib/types/settings';
-import { LoadingState } from '@workspace/ui';
-import { Button } from '@workspace/ui/components/button';
+import { LoadingState, SettingsFooter, SettingsSection } from '@workspace/ui';
 import { LightEditor } from '@workspace/ui/components/editor';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -66,12 +65,10 @@ export function OnboardingSettingsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Waitlist</h3>
-                <p className="text-sm text-muted-foreground">
-                    When enabled, the landing page shows a "Join Waitlist" form.
-                </p>
-
+            <SettingsSection
+                title="Waitlist"
+                description='When enabled, the landing page shows a "Join Waitlist" form.'
+            >
                 <div className="flex items-center gap-3">
                     <Switch
                         checked={current.waitlist.enabled}
@@ -79,14 +76,13 @@ export function OnboardingSettingsPage() {
                     />
                     <Label>Enable waitlist</Label>
                 </div>
-            </div>
+            </SettingsSection>
 
             {current.waitlist.enabled && (
-                <div className="space-y-4">
-                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Invite Email</h3>
-                    <p className="text-sm text-muted-foreground">
-                        Email sent to waitlist members when their application is accepted.
-                    </p>
+                <SettingsSection
+                    title="Invite Email"
+                    description="Email sent to waitlist members when their application is accepted."
+                >
                     <div className="space-y-1.5">
                         <Label>Subject</Label>
                         <Input
@@ -109,19 +105,15 @@ export function OnboardingSettingsPage() {
                             Available placeholders: {'{email}'}, {'{orgName}'}, {'{domain}'}, {'{inviteLink}'}
                         </p>
                     </div>
-                </div>
+                </SettingsSection>
             )}
 
             <Separator />
 
-            <div className="space-y-4">
-                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                    Auto-add admin contact
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                    Automatically add the organization owner as a contact for new users.
-                </p>
-
+            <SettingsSection
+                title="Auto-add admin contact"
+                description="Automatically add the organization owner as a contact for new users."
+            >
                 <div className="flex items-center gap-3">
                     <Switch
                         checked={current.autoAddOwnerContact}
@@ -129,21 +121,17 @@ export function OnboardingSettingsPage() {
                     />
                     <Label>Add owner to new user contacts</Label>
                 </div>
-            </div>
+            </SettingsSection>
 
             {/* Never sent without hosted mail (welcome.ts), so there is nothing to set. */}
             {mailEnabled && (
                 <>
                     <Separator />
 
-                    <div className="space-y-4">
-                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                            Welcome mail
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                            Send a welcome email to new users when their account is created.
-                        </p>
-
+                    <SettingsSection
+                        title="Welcome mail"
+                        description="Send a welcome email to new users when their account is created."
+                    >
                         <div className="flex items-center gap-3">
                             <Switch
                                 checked={current.welcomeMail.enabled}
@@ -178,23 +166,11 @@ export function OnboardingSettingsPage() {
                                 </div>
                             </>
                         )}
-                    </div>
+                    </SettingsSection>
                 </>
             )}
 
-            {dirty && (
-                <>
-                    <Separator />
-                    <div className="flex items-center justify-end gap-2">
-                        <Button variant="outline" onClick={handleReset}>
-                            Reset
-                        </Button>
-                        <Button onClick={handleSave} disabled={updateSettings.isPending}>
-                            {updateSettings.isPending ? 'Saving...' : 'Save'}
-                        </Button>
-                    </div>
-                </>
-            )}
+            <SettingsFooter dirty={dirty} saving={updateSettings.isPending} onSave={handleSave} onReset={handleReset} />
         </div>
     );
 }

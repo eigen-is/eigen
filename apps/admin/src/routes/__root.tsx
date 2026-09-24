@@ -1,5 +1,5 @@
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
-import { useAddTeamMember, useMembers, useSetupStatus, useTeams } from '@workspace/lib/admin';
+import { useAddTeamMember, useIsOrgOwner, useSetupStatus, useTeams } from '@workspace/lib/admin';
 import { type RouterAppContext, useAuth } from '@workspace/lib/auth';
 import { SETUP_LINK_PARAM } from '@workspace/lib/constants/setup';
 import { usePublicConfig } from '@workspace/lib/public';
@@ -52,15 +52,12 @@ function AdminApp() {
 }
 
 function AuthenticatedAdmin() {
-    const { user } = useAuth();
     const { data: config } = usePublicConfig();
     const { data: teams = [] } = useTeams(config?.orgId);
-    const { data: members = [] } = useMembers(config?.orgId);
     const addMember = useAddTeamMember();
 
     const { data: serverSettings } = useServerSettings();
-    const currentMember = members.find((m) => m.userId === user?.id);
-    const isOwner = currentMember?.role === 'owner';
+    const isOwner = useIsOrgOwner();
     const waitlistEnabled = serverSettings?.onboarding?.waitlist?.enabled ?? false;
 
     const handleAddMembersToTeam = async (memberIds: string[], teamId: string) => {

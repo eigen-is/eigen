@@ -1,8 +1,9 @@
 import { useCheckSetupS3, useCompleteSetup, useHardenSetupS3 } from '@workspace/lib/admin';
+import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import { EMPTY_S3 } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerStorageType, SetupStatus } from '@workspace/lib/types/settings';
-import { MIN_PASSWORD_LENGTH, validateUsername } from '@workspace/lib/validation';
+import { MIN_PASSWORD_LENGTH, validateEmailAddress, validateUsername } from '@workspace/lib/validation';
 import { EigenLoader, EmptyState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
@@ -39,6 +40,9 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
     const [completed, setCompleted] = useState(false);
 
     const [orgName, setOrgName] = useState('');
+    // Follows the org name until edited; the server stores only a sender that differs from the defaults.
+    const [senderName, setSenderName] = useState<string | null>(null);
+    const [senderAddress, setSenderAddress] = useState(defaultSenderAddress(status.mailDomain));
     const [storageType, setStorageType] = useState<ServerStorageType>('local-fullnames');
     const [s3Config, setS3Config] = useState<S3Config>(EMPTY_S3);
     const [adminUsername, setAdminUsername] = useState('');
@@ -49,8 +53,10 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
 
     const username = adminUsername.trim().toLowerCase();
     const usernameError = username ? validateUsername(username) : null;
+    const senderAddressValid = validateEmailAddress(senderAddress);
     const formReady = !!(
         orgName &&
+        senderAddressValid &&
         username &&
         !usernameError &&
         adminName &&
@@ -64,6 +70,8 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
         completeSetup.mutate(
             {
                 orgName,
+                senderName: senderName ?? orgName,
+                senderAddress,
                 storageType,
                 adminUsername: username,
                 adminPassword,
@@ -128,6 +136,40 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                                     required
                                     className="mt-1.5"
                                 />
+                            </div>
+
+                            <div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <Label htmlFor="senderName">Sender name</Label>
+                                        <Input
+                                            id="senderName"
+                                            value={senderName ?? orgName}
+                                            onChange={(e) => setSenderName(e.target.value)}
+                                            maxLength={100}
+                                            className="mt-1.5"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="senderAddress">Sender address</Label>
+                                        <Input
+                                            id="senderAddress"
+                                            type="email"
+                                            value={senderAddress}
+                                            onChange={(e) => setSenderAddress(e.target.value.trim())}
+                                            required
+                                            className="mt-1.5"
+                                        />
+                                    </div>
+                                </div>
+                                {senderAddressValid ? (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Notifications, codes and invitations are sent from this address. Your mail relay
+                                        must be allowed to send from it.
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-destructive mt-1">This is not an email address</p>
+                                )}
                             </div>
 
                             <StorageTypePicker

@@ -3,6 +3,7 @@ import type { DriveImportSource, EIGEN_DOC_TYPES } from '@workspace/lib/types/dr
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { CARD_TITLE_MAX_LENGTH, type ClientFileEventInput } from '@workspace/lib/types/file-history';
 import type { S3Config } from '@workspace/lib/types/mount';
+import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { type Static, t } from 'elysia';
 
 // Explicit tuple — t.Union(arr.map(t.Literal)) loses the tuple and breaks
@@ -97,3 +98,7 @@ export function toS3Config(body: Static<typeof s3ConfigBody>): S3Config {
         region: body.region,
     };
 }
+
+// The system sender, where empty means the org name and noreply@ the mail domain; handlers check the address.
+export const senderNameSchema = t.String({ maxLength: 100, pattern: '^[^\\x00-\\x1f\\x7f]*$' });
+export const senderAddressSchema = t.String({ maxLength: MAX_EMAIL_LENGTH, pattern: '^\\S*$' });

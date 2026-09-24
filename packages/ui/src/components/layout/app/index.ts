@@ -14,6 +14,8 @@ export type { LayoutContextType } from './layout-context';
 export { LayoutContext, useApp, useLayout } from './layout-context';
 export { LoadingState } from './loading-state';
 export { RequestAccessView } from './request-access-view';
+export { SettingsFooter } from './settings-footer';
 export { SettingsPage } from './settings-page';
+export { SettingsSection } from './settings-section';
 export { Topbar } from './topbar';
 export { UnsyncedEditsGuard } from './unsynced-edits-guard';
