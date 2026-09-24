@@ -92,7 +92,7 @@ Hourly, on the hour, host-level (no in-app scheduler — swapping DB files under
 
 ## Running a demo instance
 
-A demo box wipes and reseeds itself every hour, so strangers can try the product without a login and without leaving anything behind. It needs a source install (`git clone`, then `./eigen setup`): `scripts/` is not in a release. Turn demo mode on in `.env.production` (any other value, or unset, keeps normal behavior), then run `./eigen setup` again:
+A demo box wipes and reseeds itself every hour, so strangers can try the product without a login and without leaving anything behind. A demo box is a release install like any other: the bundle ships `scripts/demo-reset.sh` and the systemd units. Turn demo mode on in `.env.production` (any other value, or unset, keeps normal behavior), then run `./eigen setup` again:
 
 ```
 EIGEN_DEMO=1
@@ -104,7 +104,7 @@ Reset the world once by hand, then let the timer keep it fresh:
 ./scripts/demo-reset.sh
 ```
 
-Install the hourly reset with the shipped systemd units. `git pull` does not install them. `OnCalendar=hourly`, with `Persistent=true` to catch a run missed while the box was down:
+Install the hourly reset with the shipped systemd units. `./eigen update` rewrites their copies in `scripts/` but does not install them. `OnCalendar=hourly`, with `Persistent=true` to catch a run missed while the box was down:
 
 ```bash
 cp scripts/systemd/eigen-demo-reset.service scripts/systemd/eigen-demo-reset.timer /etc/systemd/system/
@@ -145,9 +145,9 @@ A nightly `./eigen backup` at 03:00 meets the reset of that hour. Whichever take
 | `apps/api/src/scripts/demo/deck-build.ts` | `buildDeckDoc` — writes the `SPONSOR_DECK` slide spec into the deck's Y.Doc at seed time |
 | `apps/api/src/scripts/demo/excalifont-metrics.ts` | Generated Excalifont advance/kerning table the builder sizes text with |
 | `apps/api/src/scripts/demo/fixtures/` | Byte-copied `.eigensheets` / `.eigenstickies` containers + `images/` site photos + `branding/` logo + `avatars/` portraits (`images/` and `avatars/` carry their own `CREDITS.md`) |
-| `scripts/demo-reset.sh` | Hourly wipe + reseed (hard `EIGEN_DEMO=1` gate) |
+| `scripts/demo-reset.sh` | Hourly wipe + reseed (hard `EIGEN_DEMO=1` gate), shipped in the release bundle |
 | `apps/api/src/cli/snapshot.ts` | `eigen backup` / `eigen restore`: general offline backup/restore |
-| `scripts/systemd/eigen-demo-reset.{service,timer}` | Hourly timer units |
+| `scripts/systemd/eigen-demo-reset.{service,timer}` | Hourly timer units, shipped in the release bundle |
 | `packages/ui/.../app/demo-banner.tsx` | Workspace banner |
 | `packages/ui/.../pages/login-page.tsx` | Enter-demo entry (app login card) |
 | `apps/index/src/routes/index.tsx` | Enter-demo entry (landing-page button) |
