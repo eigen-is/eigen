@@ -4,6 +4,7 @@ import { ROLE_MAILBOX_LOCAL_PARTS } from '@workspace/lib/validation';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { JsonStore } from '../core/json-store';
 import { LocalFilesystem } from '../core/local-filesystem';
+import { isProduction } from './env';
 import { getServerDataPath } from './paths';
 
 const VERSION: string = pkg.version;
@@ -69,6 +70,29 @@ export function getDomain(): string {
 // eigen.example.com but mail at @example.com.
 export function getMailDomain(): string {
     return process.env['MAIL_DOMAIN'] || getDomain();
+}
+
+// Every account's address was made on the recorded mail domain and never changes; on another one nobody can sign in.
+export async function assertMailDomainUnchanged(): Promise<void> {
+    if (isSetupRequired()) return;
+    // Installs set up before the domain was recorded record the one they run on.
+    if (!store.get().mailDomain) await store.set({ mailDomain: getMailDomain() });
+    const recorded = store.get().mailDomain;
+    if (recorded.toLowerCase() !== getMailDomain().toLowerCase()) {
+        const mismatch = `MAIL_DOMAIN is ${getMailDomain()}, but the accounts on this server use ${recorded}.`;
+        if (isProduction()) {
+            console.error(mismatch);
+            console.error(`Set MAIL_DOMAIN=${recorded} in .env.production and run ./eigen restart.`);
+            process.exit(1);
+        }
+        console.warn(mismatch);
+    }
+    // Older setups took a free-form owner address. Lazy import: user → auth → this module.
+    const { getOrgOwner } = await import('../user');
+    const ownerEmail = (await getOrgOwner())?.email;
+    if (ownerEmail && !isInternalAddress(ownerEmail)) {
+        console.warn(`The owner's address ${ownerEmail} is not on the mail domain ${getMailDomain()}.`);
+    }
 }
 
 // True when the address belongs to this server's mail domain — i.e. an Eigen user here, not an
