@@ -130,16 +130,21 @@ export function buildMailOptions(message: OutboundMail): Mail.Options {
     return options;
 }
 
+// Throws the transport's error, where sendMail logs it; for a caller that hands the relay's answer back.
+export async function sendMailOrThrow(message: OutboundMail): Promise<void> {
+    await createTransport().sendMail(buildMailOptions(message));
+}
+
 export async function sendMail(message: OutboundMail): Promise<boolean> {
-    const options = buildMailOptions(message);
     // Skip outbound delivery in dev/test unless an SMTP host is explicitly configured, and always
     // in demo mode (a demo box has no MTA — a real send would throw on every share/invite/iMIP).
     if ((!isProduction() && !smtpHost()) || isDemo()) {
-        console.log('[DEV] Skipping email:', { from: options.from, to: message.to, subject: message.subject });
+        const { from } = buildMailOptions(message);
+        console.log('[DEV] Skipping email:', { from, to: message.to, subject: message.subject });
         return true;
     }
     try {
-        await createTransport().sendMail(options);
+        await sendMailOrThrow(message);
         return true;
     } catch (error) {
         // nodemailer puts the server's own reply, like "553 5.7.1 Sender address rejected", on `response`.

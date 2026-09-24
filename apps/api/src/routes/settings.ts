@@ -5,13 +5,14 @@ import { validateEmailAddress } from '@workspace/lib/validation';
 import { eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, session, team, teamMember, user } from '../../auth-schema';
-import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
-import { getOrgName, getServerConfig, updateServerConfig } from '../lib/config/server-config';
+import { getAuthDrizzleDb } from '../lib/auth/auth';
+import { getOrgName, getServerConfig } from '../lib/config/server-config';
 import { getS3Config, getServerSettings, updateServerSettings } from '../lib/config/server-settings';
 import { type ControlStatus, getServerStatus } from '../lib/config/server-status';
 import { ApiError } from '../lib/core';
 import { requireAdmin, requireOwner } from '../lib/core/access';
-import { buildMailOptions, createTransport } from '../lib/core/mailer';
+import { sendMailOrThrow } from '../lib/core/mailer';
+import { renameOrganization } from '../lib/org';
 import { checkS3Connection, hardenS3Bucket } from '../lib/storage/s3-storage';
 import { getOrgRole, getUserById } from '../lib/user';
 import { getAllUsersUsage } from '../lib/user/admin-usage';
@@ -182,34 +183,24 @@ export const settingsRouter = new Elysia({ name: 'settings' })
         '/settings/organization',
         async ({ body, user, request }): Promise<{ name: string }> => {
             await requireOwner(user.id);
-            const name = body.name.trim();
-            if (!name) throw new ApiError(400, 'The organization needs a name');
-            await auth.api.updateOrganization({
-                body: { organizationId: getServerConfig()?.orgId, data: { name } },
-                headers: request.headers,
-            });
-            await updateServerConfig({ orgName: name });
-            return { name: getOrgName() };
+            return { name: await renameOrganization(body.name, request.headers) };
         },
         { body: t.Object({ name: t.String({ minLength: 1, maxLength: 100 }) }), auth: true },
     )
 
-    // sendMail swallows a failure; this one hands the relay's answer back to the owner. From the owner, as a
-    // share notification is, so it tests whether the relay sends as users.
+    // From the owner, as a share notification is, so it tests whether the relay sends as users.
     .post(
         '/settings/mail/test',
         async ({ user }): Promise<{ to: string }> => {
             await requireOwner(user.id);
             const orgName = getOrgName();
             try {
-                await createTransport().sendMail(
-                    buildMailOptions({
-                        from: { name: user.name, address: user.email },
-                        to: [{ name: user.name, address: user.email }],
-                        subject: `Test mail from ${orgName}`,
-                        text: `This is a test mail from ${orgName}. It arrived, so this server can send mail.`,
-                    }),
-                );
+                await sendMailOrThrow({
+                    from: { name: user.name, address: user.email },
+                    to: [{ name: user.name, address: user.email }],
+                    subject: `Test mail from ${orgName}`,
+                    text: `This is a test mail from ${orgName}. It arrived, so this server can send mail.`,
+                });
             } catch (error) {
                 throw new ApiError(
                     502,
