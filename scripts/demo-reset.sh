@@ -2,6 +2,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# The files the launcher's dc() passes, so a reset runs the same project: a release install has no build overlay.
+dc() {
+    if [ -f docker-compose.override.yml ]; then set -- -f docker-compose.override.yml "$@"; fi
+    docker compose --env-file .env.production -f docker-compose.yml "$@"
+}
+
 # HARD SAFETY GATE: only ever run on a box explicitly flagged as a demo instance. Without this
 # the script is physically unable to wipe a real box.
 if [ ! -f .env.production ]; then
@@ -30,7 +36,7 @@ echo $$ >.eigen/lock/pid
 finish() {
     code=$?
     if [ -f data/server/.demo-seeded ]; then
-        docker compose --env-file .env.production start eigen-api || code=$?
+        dc start eigen-api || code=$?
     else
         echo "[demo-reset] Seed did not complete (no data/server/.demo-seeded); leaving eigen-api STOPPED." >&2
         code=1
@@ -41,7 +47,7 @@ finish() {
 trap finish EXIT
 
 echo "[demo-reset] Stopping eigen-api..."
-docker compose --env-file .env.production stop eigen-api
+dc stop eigen-api
 
 # Explicit list — never a wildcard. data/certs (Caddy) and data/dkim (mail) must survive.
 echo "[demo-reset] Wiping per-home + server data..."
@@ -51,7 +57,7 @@ rm -rf data/server data/home data/team data/org data/guest
 # image WORKDIR is /app/apps/api, so a repo-relative path would not resolve. The eigen-api
 # service already provides EIGEN_DATA_ROOT / DOMAIN / MAIL_DOMAIN / EIGEN_DEMO to the container.
 echo "[demo-reset] Seeding demo world..."
-docker compose --env-file .env.production run --rm --no-deps eigen-api \
+dc run --rm --no-deps eigen-api \
     bun run /app/apps/api/src/scripts/seed-demo.ts
 
 echo "[demo-reset] Reseed complete; restarting eigen-api."

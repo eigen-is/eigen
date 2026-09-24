@@ -6,7 +6,7 @@ import { DEFAULT_RELAY_PORT } from '@workspace/lib/constants/mail';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { SERVER_DIR } from '../lib/config/paths';
 import { readEnvFile, writeEnvFile } from './env-file';
-import { DATA, ENV_PATH, installOwner, ownAs, PINS, ROOT } from './install';
+import { DATA, ENV_PATH, installOwner, ownAs, PIN_KEYS, ROOT } from './install';
 import { createUi, type Ui } from './ui';
 
 export type ConfigureAnswers = {
@@ -419,7 +419,7 @@ export async function configure(
     const written = backfill ? new Map([...entries, ...existing]) : entries;
     // Passed in release mode alone: a source build's image sets its own EIGEN_REGISTRY, which is no pin.
     if (process.env['EIGEN_VERSION']) {
-        for (const key of PINS) {
+        for (const key of PIN_KEYS) {
             const value = process.env[key];
             if (value) written.set(key, value);
         }

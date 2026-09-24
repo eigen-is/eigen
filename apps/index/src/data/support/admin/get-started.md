@@ -39,8 +39,7 @@ The link works once, so nobody who finds your server before you can claim it. Op
 
 ### Completing setup
 
-Click **Complete Setup**. Eigen creates the organization and the admin account, then shows a
-**Setup Complete!** confirmation. Click **Go to Login** to reach the sign-in page.
+Click **Complete Setup**. Eigen creates the organization and the admin account, then shows a **Setup Complete!** confirmation. Click **Go to Login** to reach the sign-in page.
 
 ## What you can do after signing in
 

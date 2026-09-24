@@ -1,4 +1,4 @@
-# Source installs: layer on docker-compose.yml to build the five images from this checkout instead of
+# Source installs: layer on docker-compose.yml to build the images from this checkout instead of
 # pulling them. BUN_VERSION comes from .bun-version: BUN_VERSION=$(cat .bun-version).
 x-labels: &labels
   EIGEN_VERSION: ${EIGEN_VERSION:-}
