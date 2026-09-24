@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1547 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1551 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -210,7 +210,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyGestureContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (285)
+## Hooks (289)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -231,6 +231,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useDeleteWaitlistEntry` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
 | `useHardenSetupS3` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
 | `useIsAdmin` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-is-admin.ts |
+| `useIsOrgOwner` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-is-admin.ts |
 | `useMembers` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useRejectWaitlistEntry` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
 | `useRemoveTeam` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
@@ -434,8 +435,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSearchQuery` | `@workspace/lib/search` | packages/lib/src/core/search/hooks/use-search.ts |
 | `useCheckS3Connection` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
 | `useHardenS3Bucket` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
+| `useSendTestMail` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-test-mail.ts |
 | `useServerS3Config` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-config.ts |
 | `useServerSettings` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-server-settings.ts |
+| `useServerStatus` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-server-status.ts |
+| `useUpdateOrgName` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-organization.ts |
 | `useUpdateServerS3Config` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-config.ts |
 | `useUpdateServerSettings` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-server-settings.ts |
 | `useSpaceSettings` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-space-settings.ts |
