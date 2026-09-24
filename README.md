@@ -118,31 +118,33 @@ cd /opt/eigen
 ./eigen setup
 ```
 
-`./eigen setup` asks for your web address, mail domain, how HTTPS reaches Eigen and whether to host email, starts Eigen, and prints a one-time link that finishes the setup in your browser. The same command updates, backs up and restores: `./eigen help`. See the [Setup Guide](docker/SETUP-GUIDE.md) for step-by-step instructions, or the [Local Testing Guide](docker/LOCAL-TESTING.md) to run the full stack on your machine.
+`./eigen setup` asks for your web address, mail domain, how HTTPS reaches Eigen and whether to host email, starts Eigen, and prints a one-time link that finishes the setup in your browser. The same command updates, backs up and restores: `./eigen help`. See the [Setup Guide](docker/SETUP-GUIDE.md) for step-by-step instructions.
 
 ### Development
 
-Needs [Bun](https://bun.sh), the version in `.bun-version` (install it with `curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat .bun-version)"`), and [Git](https://git-scm.com).
+Needs [Bun](https://bun.sh) at the version in `.bun-version` (install it with `curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat .bun-version)"`) and [Git](https://git-scm.com). PDF export needs `weasyprint` on your PATH and video thumbnails need `ffmpeg`. Everything else works without them.
 
 ```bash
 git clone https://github.com/eigen-is/eigen.git
 cd eigen
-cp .env.development .env
 bun install
 bun run serve
 ```
 
-The API logs a one-time link, `Finish the setup at http://localhost:3009/admin/#setup=…`. Open it to run the first-time setup wizard, which creates your admin account and configures storage.
+This starts the API on `localhost:8000` and every app on its own port. The API logs a one-time link, `Finish the setup at http://localhost:3009/admin/#setup=…`. Open it to create your admin account and choose where files are stored. Data lands in `data/` in the checkout.
+
+The API reads `.env.development`. Put your own overrides in `.env`. Eigen sends no mail in development: the API logs each message's sender, recipient and subject instead. To read 2FA and guest codes, run [Mailpit](https://mailpit.axllent.org) and add `SMTP_HOST=localhost` and `SMTP_PORT=1025` to `.env`.
 
 ```bash
-bun run serve          # All apps + API
-bun serve:mail         # Single app + API (works for any app name)
+bun run serve:mail     # One app + API (works for any app name)
 bun run lint           # Lint + format check (Biome)
 bun run lint:fix       # Auto-fix
 bun run typecheck      # Type check all packages
 bun run test           # Run all tests
-bun run check          # lint + typecheck + repo guards + tests
+bun run check          # lint + typecheck + repo guards + tests, before every PR
 ```
+
+Docker is only needed to test mail delivery, IMAP or the images: see [CONTRIBUTING.md](docs/CONTRIBUTING.md#eigen-in-docker).
 
 ## Architecture
 
@@ -194,7 +196,7 @@ Architecture docs live in `docs/`:
 | Area | Docs |
 |------|------|
 | Architecture | [Storage](docs/STORAGE.md), [Database](docs/DATABASE.md), [SSE](docs/SSE.md), [ACL](docs/ACL.md), [Search](docs/SEARCH.md), [Scalability](docs/SCALABILITY.md) |
-| Deployment | [Docker Setup](docker/SETUP-GUIDE.md), [Local Testing](docker/LOCAL-TESTING.md), [S3 Sync](docs/SYNC.md), [Demo Mode](docs/DEMO_MODE.md), [Testing](docs/TESTING.md) |
+| Deployment | [Docker Setup](docker/SETUP-GUIDE.md), [S3 Sync](docs/SYNC.md), [Demo Mode](docs/DEMO_MODE.md), [Testing](docs/TESTING.md) |
 | Frontend | [Layout](docs/LAYOUT.md), [Clipboard](docs/CLIPBOARD.md), [Previews](docs/PREVIEWS.md) |
 | Features | [Mail](docs/MAIL.md), [Calendar](docs/CALENDAR.md), [Contacts](docs/CONTACTS.md), [Chat](docs/CHAT.md), [Notifications](docs/NOTIFICATION-CENTER.md), [IMAP](docs/IMAP.md), [WebDAV](docs/WEBDAV.md) |
 | Apps | [Sheets](docs/SHEETS.md), [Slides](docs/SLIDES.md), [Canvas engine (Vector + Slides)](docs/CANVAS.md), [Stickies](docs/STICKIES.md), [Comments](docs/COMMENTS.md) |

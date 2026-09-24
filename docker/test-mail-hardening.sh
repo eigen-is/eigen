@@ -458,7 +458,7 @@ if should_run 11 && [ "$HAVE_LOGIN" = 1 ]; then
     # 1. A deliberate failure over real SMTP, then ask dovecot which client address it saw. Never
     # hardcode it: it is the docker gateway, and the value differs between Docker Desktop and Linux.
     # Retried, because this very attempt can be one postfix abandons (see the notes in
-    # LOCAL-TESTING.md), and an abandoned attempt reaches dovecot's log no more than the API.
+    # auth_once), and an abandoned attempt reaches dovecot's log no more than the API.
     discover_user="ip-discover@probe.invalid"
     client_ip=""
     anvil_reserve 8  # 4 discovery attempts at worst, plus the assertion and its retry
