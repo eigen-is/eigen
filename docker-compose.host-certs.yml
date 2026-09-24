@@ -1,32 +1,17 @@
-# Reuse the host's Let's Encrypt certs for postfix and dovecot when COMPOSE_PROFILES omits
-# 'edge' (i.e. the bundled Caddy is off and your host web server issues the certs). The
-# bundled cert exporter only runs inside the Caddy container, so without this overlay the
-# `./data/certs/` mount stays empty and IMAPS / SMTPS can't start.
+# Postfix and dovecot get their certificate from the bundled Caddy. Without it (COMPOSE_PROFILES without edge), this
+# gives them the host's Let's Encrypt certificate for DOMAIN, the address mail clients connect to. Copy this file to
+# docker-compose.override.yml, then run ./eigen restart. Its !override tag needs Compose 2.24.4 or newer.
 #
-# Usage:
-#   docker compose -f docker-compose.yml -f docker-compose.host-certs.yml \
-#       --env-file .env.production up -d
-#
-# Cert reload on renewal:
-#   The mounts use the live/ symlinks, so renewals are picked up at the next service
-#   reload. Hook this into certbot so postfix/dovecot reload promptly:
-#
-#     # /etc/letsencrypt/renewal-hooks/deploy/eigen.sh
-#     #!/usr/bin/env sh
-#     docker compose -f /opt/eigen/docker-compose.yml \
-#         -f /opt/eigen/docker-compose.host-certs.yml \
-#         --env-file /opt/eigen/.env.production kill -s HUP postfix dovecot
-#
-#   chmod +x /etc/letsencrypt/renewal-hooks/deploy/eigen.sh
-#
-# Compose 2.24.4+ required (uses !override to fully replace the volume list).
+# Reload them after each renewal with a certbot deploy hook, /etc/letsencrypt/renewal-hooks/deploy/eigen.sh (chmod +x):
+#   #!/usr/bin/env sh
+#   cd /opt/eigen && docker compose --env-file .env.production kill -s HUP postfix dovecot
 services:
   postfix:
     volumes: !override
-      - /etc/letsencrypt/live/${MAIL_DOMAIN:-${DOMAIN}}:/certs:ro
+      - /etc/letsencrypt/live/${DOMAIN}:/certs:ro
       - ./data/dkim:/data/dkim
       - postfix-queue:/var/spool/postfix
   dovecot:
     volumes: !override
-      - /etc/letsencrypt/live/${MAIL_DOMAIN:-${DOMAIN}}:/certs:ro
+      - /etc/letsencrypt/live/${DOMAIN}:/certs:ro
       - ./data:/data
