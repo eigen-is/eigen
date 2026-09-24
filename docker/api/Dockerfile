@@ -41,8 +41,11 @@ ARG EIGEN_REGISTRY=ghcr.io/eigen-is/eigen
 ARG EIGEN_VERSION
 ARG EIGEN_COMMIT
 ARG EIGEN_BUILT_AT
+# main on a build of main, empty on a release: bootstrap pins it, status names it.
+ARG EIGEN_CHANNEL
 ENV EIGEN_REGISTRY=${EIGEN_REGISTRY} \
     EIGEN_COMMIT=${EIGEN_COMMIT} \
+    EIGEN_CHANNEL=${EIGEN_CHANNEL} \
     EIGEN_BUILT_AT=${EIGEN_BUILT_AT}
 LABEL org.opencontainers.image.title="Eigen API" \
       org.opencontainers.image.description="Eigen API server: the backend every Eigen app talks to." \
