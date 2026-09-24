@@ -22,6 +22,8 @@ REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 BUN_VERSION=$(cat "$REPO_ROOT/.bun-version")
 export BUN_VERSION
 VERSION=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$REPO_ROOT/package.json" | head -n 1)
+# IMAGES in ./eigen is the list of images a release pins.
+IMAGES=$(sed -n "s/^IMAGES='\(.*\)'/\1/p" "$REPO_ROOT/eigen")
 # Space-separated, not an array: bash 3.2 with `set -u` treats an empty array as unbound.
 HARNESS_PROJECTS=''
 PICKED_PORTS=' '
@@ -43,11 +45,7 @@ scratch_init() {
     trap 'exit 130' INT TERM
     export EIGEN_API_IMAGE="eigentest-api:$RUN" EIGEN_FRONTEND_IMAGE="eigentest-frontend:$RUN"
     export EIGEN_POSTFIX_IMAGE="eigentest-postfix:$RUN" EIGEN_DOVECOT_IMAGE="eigentest-dovecot:$RUN"
-    # The published images are amd64; an arm64 Mac runs the harness through the launcher's escape hatch.
-    case "$(docker info --format '{{.Architecture}}')" in
-        x86_64 | amd64) ;;
-        *) export EIGEN_ALLOW_ARCH=1 ;;
-    esac
+    export EIGEN_UNBOUND_IMAGE="eigentest-unbound:$RUN"
     CLI_IMAGE="eigentest-cli:$RUN"
     # The daemon is shared with whatever else runs on this machine, so the launcher's prunes, which reach past its
     # own install, are logged to $HARNESS_PRUNE_LOG instead of run.
@@ -204,7 +202,7 @@ in_cli_container() {
     docker run --rm ${stdin[@]+"${stdin[@]}"} --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
         -v /var/run/docker.sock:/var/run/docker.sock -v "$SCRATCH:$SCRATCH" -w "$INSTALL" \
         -e EIGEN_API_IMAGE -e EIGEN_FRONTEND_IMAGE -e EIGEN_POSTFIX_IMAGE -e EIGEN_DOVECOT_IMAGE \
-        -e EIGEN_ALLOW_ARCH -e NO_COLOR=1 -e HARNESS_PRUNE_LOG="$PRUNE_LOG" ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
+        -e EIGEN_UNBOUND_IMAGE -e NO_COLOR=1 -e HARNESS_PRUNE_LOG="$PRUNE_LOG" ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
 }
 
 # eigen <args…>: the launcher in the no-Bun container, as $OPERATOR when set (else root); sets OUT (stdout and
@@ -448,7 +446,7 @@ down_project() {
 # Removes only what this run started: its Compose projects, containers labelled with its run, its image
 # tags, dangling harness-labelled images, and the scratch folder.
 harness_cleanup() {
-    local code=$? project ids image
+    local code=$? project ids name key image
     if [ "${HARNESS_KEEP:-0}" = 1 ]; then
         log "HARNESS_KEEP=1: left $SCRATCH and the projects$HARNESS_PROJECTS"
         return "$code"
@@ -460,8 +458,10 @@ harness_cleanup() {
     if [ -n "$ids" ]; then docker rm -f $ids >/dev/null || true; fi
     rm -rf "$SCRATCH"
     # Unset where a harness installs releases, which it pulls instead of building under these tags.
-    for image in ${EIGEN_API_IMAGE:-} ${EIGEN_FRONTEND_IMAGE:-} ${EIGEN_POSTFIX_IMAGE:-} ${EIGEN_DOVECOT_IMAGE:-}; do
-        docker image rm "$image" "$image-next" >/dev/null 2>&1 || true
+    for name in $IMAGES; do
+        key=EIGEN_$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_IMAGE
+        image=${!key:-}
+        if [ -n "$image" ]; then docker image rm "$image" "$image-next" >/dev/null 2>&1 || true; fi
     done
     docker image rm "$CLI_IMAGE" >/dev/null 2>&1 || true
     docker image prune -f --filter label=eigen.harness=1 >/dev/null 2>&1 || true
@@ -526,6 +526,21 @@ probe_smtp() {
         ok "$desc → 220 banner"
     else
         fail "SMTP banner on port $port: '$banner'"
+    fi
+}
+
+# The ad flag on a signed domain: unbound's trust anchor holds and it reaches the root servers.
+probe_dnssec() {
+    local flags=""
+    for _ in 1 2 3 4 5; do
+        flags=$(dc exec -T unbound drill -D @127.0.0.1 cloudflare.com 2>/dev/null | grep -m1 'flags:' || true)
+        echo "$flags" | grep -q ' ad ' && break
+        sleep 1
+    done
+    if echo "$flags" | grep -q ' ad '; then
+        ok "unbound validates DNSSEC (ad flag)"
+    else
+        fail "unbound answered without the ad flag: '$flags'"
     fi
 }
 

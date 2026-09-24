@@ -24,7 +24,7 @@ SETUP_FLAGS=(--yes --mail-domain example.org --no-mail --no-relay --no-proxy --c
 
 scratch_init release
 # Release installs pull their images; the private build tags of a source install do not apply.
-unset EIGEN_API_IMAGE EIGEN_FRONTEND_IMAGE EIGEN_POSTFIX_IMAGE EIGEN_DOVECOT_IMAGE
+unset EIGEN_API_IMAGE EIGEN_FRONTEND_IMAGE EIGEN_POSTFIX_IMAGE EIGEN_DOVECOT_IMAGE EIGEN_UNBOUND_IMAGE
 
 free_port REGISTRY_PORT
 REGISTRY="localhost:$REGISTRY_PORT/eigen-is/eigen"
@@ -175,12 +175,12 @@ done
 build -f "$SCRATCH/src-$PREVIOUS/docker/frontend/Dockerfile" -t "$REGISTRY/frontend:$PREVIOUS" "$SCRATCH/src-$PREVIOUS"
 build -t "$REGISTRY/postfix:$PREVIOUS" "$SCRATCH/src-$PREVIOUS/docker/postfix"
 build -t "$REGISTRY/dovecot:$PREVIOUS" "$SCRATCH/src-$PREVIOUS/docker/dovecot"
-for name in frontend postfix dovecot; do
-    docker tag "$REGISTRY/$name:$PREVIOUS" "$REGISTRY/$name:$NEW"
-    docker tag "$REGISTRY/$name:$PREVIOUS" "$REGISTRY/$name:$BREAKING"
-done
-# The four images docker-compose.yml runs.
-for name in api frontend postfix dovecot; do
+build -t "$REGISTRY/unbound:$PREVIOUS" "$SCRATCH/src-$PREVIOUS/docker/unbound"
+for name in $IMAGES; do
+    if [ "$name" != api ]; then
+        docker tag "$REGISTRY/$name:$PREVIOUS" "$REGISTRY/$name:$NEW"
+        docker tag "$REGISTRY/$name:$PREVIOUS" "$REGISTRY/$name:$BREAKING"
+    fi
     docker tag "$REGISTRY/$name:$NEW" "$REGISTRY/$name:latest"
     for tag in "$PREVIOUS" "$NEW" "$BREAKING" latest; do docker push -q "$REGISTRY/$name:$tag" >/dev/null; done
 done
@@ -380,8 +380,8 @@ else
 fi
 
 snapshot=$(scratch_run sed -n 's/^archive=//p' "$INSTALL/.eigen/last-update")
-# Only the registry has the images of $PREVIOUS now: the four docker-compose.yml runs.
-for name in api frontend postfix dovecot; do docker image rm "$REGISTRY/$name:$PREVIOUS" >/dev/null; done
+# Only the registry has the images of $PREVIOUS now.
+for name in $IMAGES; do docker image rm "$REGISTRY/$name:$PREVIOUS" >/dev/null; done
 docker stop "eigentest-registry-$RUN" >/dev/null
 eigen restore "$snapshot" --yes
 docker start "eigentest-registry-$RUN" >/dev/null
