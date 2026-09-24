@@ -67,6 +67,7 @@ jobs:
 
       # No provenance or SBOM: either turns the push into an index, whose digest is not the one the launcher pins
       # from RepoDigests and compares with `docker manifest inspect -v`. An image ignores the build args it does not use.
+      # The candidate tag is no version, so no launcher resolves it; promote names it once all four are built.
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
@@ -82,19 +83,20 @@ jobs:
             EIGEN_COMMIT=${{ needs.gate.outputs.commit }}
             EIGEN_BUILT_AT=${{ needs.gate.outputs.built-at }}
             EIGEN_REGISTRY=${{ env.REGISTRY }}
-          tags: ${{ env.REGISTRY }}/${{ matrix.name }}:${{ needs.gate.outputs.version }}
+          tags: ${{ env.REGISTRY }}/${{ matrix.name }}:candidate-${{ needs.gate.outputs.version }}
           outputs: type=image,push=true,oci-mediatypes=true,annotation.org.opencontainers.image.version=${{ needs.gate.outputs.version }}
 
-  # Only once all four versions are pushed, and never for a prerelease; a byte-for-byte copy, so :latest has the
-  # digest of the version.
-  latest:
+  # Only once all four are built, so a failed build publishes no version; byte-for-byte copies, so the version and
+  # :latest have the candidate's digest and annotation. :latest last, and never for a prerelease.
+  promote:
     needs: [gate, publish]
-    if: ${{ !contains(needs.gate.outputs.version, '-') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
       packages: write
+    env:
+      VERSION: ${{ needs.gate.outputs.version }}
     steps:
       - uses: docker/login-action@v3
         with:
@@ -104,8 +106,13 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - env:
-          VERSION: ${{ needs.gate.outputs.version }}
+      - run: |
+          for name in api frontend postfix dovecot; do
+            docker buildx imagetools create --prefer-index=false \
+              -t "$REGISTRY/$name:$VERSION" "$REGISTRY/$name:candidate-$VERSION"
+          done
+
+      - if: ${{ !contains(needs.gate.outputs.version, '-') }}
         run: |
           for name in api frontend postfix dovecot; do
             docker buildx imagetools create --prefer-index=false \
