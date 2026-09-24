@@ -14,7 +14,9 @@ The work list for the weeks before the open-source repository is announced. One 
 
 [PROPOSAL_DOCKER_ONLY_SETUP.md](proposals/PROPOSAL_DOCKER_ONLY_SETUP.md) milestone 1. Built: `./eigen` and its CLI install, update and roll back a source install with no Bun on the host, and every profile combination passes `docker/test-deployments.sh`.
 
-- [ ] eigen.is and demo.eigen.is move to `./eigen` by hand (there is no shim for the deleted scripts): mail-off installs rename `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD` to `SMTP_RELAY_*` and drop `SMTP_SECURE`, `DOMAIN` must be the real web address, whole-server snapshots move from `backups/` to `snapshots/`. Both keep deploying from `main`
+- [ ] eigen.is and demo.eigen.is move to `./eigen` by hand (there is no shim for the deleted scripts): mail-off installs rename `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD` to `SMTP_RELAY_*` and drop `SMTP_SECURE`, `DOMAIN` must be the real web address, whole-server snapshots move from `backups/` to `snapshots/`, and the system sender moves from the env file to Admin → Settings → Mail, with **Relay sends as users** on for a mail-off install that relays through Brevo. Both keep deploying from `main`
+
+Next, after this wave: the `:main` image channel. CI builds `:main` images on every push to `main`, eigen.is follows that channel with `./eigen update`, and then source mode is deleted.
 
 Done when: eigen.is and demo.eigen.is update with `./eigen update`.
 
@@ -43,7 +45,7 @@ Not in this block: phase ④ migration between servers, chunked artifact upload,
 
 ## 4. Mail: hosted, or not, and a relay either way
 
-Built: `./eigen setup` asks whether to host email and for a relay in both modes (one key set, `SMTP_RELAY_*`), a system sender `SMTP_FROM`, mail sent on a user's behalf as "Alice via <org>" from that sender when the user's address is not hosted here, and relay probes for the mail-off scenarios in `docker/test-deployments.sh`. What mail off still leaves out is in [SERVER-SETTINGS.md § Mail environment](SERVER-SETTINGS.md#mail-environment), and its open rows are in [ROADMAP.md](ROADMAP.md).
+Built: `./eigen setup` asks whether to host email and for a relay in both modes (one key set, `SMTP_RELAY_*`), a system sender set in the setup wizard and Admin → Settings → Mail, mail sent on a user's behalf as "Alice via <org>" from that sender unless Postfix hosts the user's address or the relay sends as users, and relay probes for the mail-off scenarios in `docker/test-deployments.sh`. What mail off still leaves out is in [SERVER-SETTINGS.md § Mail environment](SERVER-SETTINGS.md#mail-environment), and its open rows are in [ROADMAP.md](ROADMAP.md).
 
 - [ ] The setup guide's mail-off section becomes a first-class path, not an alternative deployment, and the relay moves out of "optional" into the main flow
 
@@ -73,5 +75,5 @@ Size S.
 | SSO ([proposal](proposals/PROPOSAL_SSO.md)) | Homelab users ask for OIDC after the thing runs, not before. | The first issues asking for Authentik, Keycloak or Authelia. Start with the `socialProviders` slice. |
 | DSM preset (Docker-only milestone 3) | Needs real Synology hardware to be a support claim. | Hardware on the desk, or a tester with a listed model. |
 | `linux/arm64` images | The resolver image is amd64-only and the native chain is untested on arm64. Unbound only runs in the `mail` profile, so mail-off installs need just the arm64 run. | One real arm64 run of a mail-off install, then a multi-arch resolver for hosted mail. Expect this request early; Raspberry Pi and Ampere hosts are common. |
-| A `:main` image channel: CI builds `:main` images on every push, and `eigen update --channel main` pulls them instead of building | Source mode builds on the server, which works for eigen.is today. | Build time or memory on eigen.is becomes a problem. |
+| A `:main` image channel: CI builds `:main` images on every push to `main`, and an install on that channel updates with `./eigen update` instead of building | This wave closes first; until then eigen.is runs source mode, which builds on the server. | After this wave. eigen.is then follows `:main`, and source mode is deleted (block 1). |
 | Backup phase ④, Kubernetes or Helm, a GUI installer | None of them is on the path of a first install. | Demand. |
