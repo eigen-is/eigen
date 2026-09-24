@@ -102,15 +102,14 @@ Eigen doesn't lock you into its web interface. Standard protocols let you use yo
 
 ### Install on a server
 
-Eigen runs in Docker: **Caddy** (reverse proxy with automatic HTTPS), **Eigen API** (Bun), **Postfix** (email), **Dovecot** (IMAP), and **Unbound** (DNS resolver for Postfix). The server needs Docker with Compose 2.20 or newer, nothing else. Get a release and set it up:
+Eigen runs in Docker: **Caddy** (reverse proxy with automatic HTTPS), **Eigen API** (Bun), **Postfix** (email), **Dovecot** (IMAP), and **Unbound** (DNS resolver for Postfix). The server needs Docker with Compose 2.20 or newer, nothing else. Install Docker, run the one line, open the printed link:
 
 ```bash
 mkdir -p /opt/eigen && cd /opt/eigen
-docker run --rm -v "$PWD:/out" ghcr.io/eigen-is/eigen/api:latest bootstrap
-./eigen setup
+curl -fsSL https://eigen.is/install | sh
 ```
 
-`bootstrap` writes the newest release's `eigen` command and Compose file, and pins that release. `./eigen setup` asks for your web address, mail domain, how HTTPS reaches Eigen and whether to host email, starts Eigen, and prints a one-time link that finishes the setup in your browser. The same command updates, backs up and restores: `./eigen help`. See the [Setup Guide](docker/SETUP-GUIDE.md) for step-by-step instructions.
+The script fetches the `eigen` command and runs `./eigen setup`. Setup downloads the newest release, asks for your web address, mail domain, how HTTPS reaches Eigen and whether to host email, starts Eigen, and prints a one-time link that finishes the setup in your browser. The same command updates, backs up and restores: `./eigen help`. See the [Setup Guide](docker/SETUP-GUIDE.md) for step-by-step instructions.
 
 `./eigen` also runs in a clone of this repository, where it builds the images from source. That is for developing Eigen: see [CONTRIBUTING.md § Eigen in Docker](docs/CONTRIBUTING.md#eigen-in-docker).
 

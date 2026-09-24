@@ -4,7 +4,7 @@ The work list for the weeks before the open-source repository is announced. One 
 
 ## Ready to announce when
 
-- A host with Docker and Compose, and nothing else, installs Eigen from the release images in one sitting, updates it with one command, and rolls it back with another.
+- A host with Docker and Compose, and nothing else, installs Eigen from the release images in one line, updates it with one command, and rolls it back with another.
 - CI proves that install and the upgrade from the previous release, on every release.
 - The whole server backs itself up on a schedule, off the box if the admin wants, and a restore onto a fresh machine has been done for real once.
 - "I do not want to host email" is an answer setup accepts, and the result is a complete product.
