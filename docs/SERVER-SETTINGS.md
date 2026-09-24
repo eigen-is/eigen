@@ -96,8 +96,8 @@ Defined in `apps/api/src/routes/settings.ts`. Changing the server's settings is 
 | PUT    | `/settings/s3config`      | owner | Validate a connection, then write `defaults.mount.s3Config`     |
 | POST   | `/settings/s3check`       | admin | Test an S3 connection without saving                           |
 | POST   | `/settings/s3harden`      | admin | Turn on the bucket's versioning and expire noncurrent versions                 |
-| GET    | `/settings/status`        | owner | `getServerStatus()`: version, hosted mail, disk, certificate expiry (what `./eigen status` reports) |
-| PUT    | `/settings/organization`  | owner | Rename the organization: `config.json`'s orgName and the better-auth organization. The web address and mail domain stay |
+| GET    | `/settings/status`        | owner | `getServerStatus()`: version, hosted mail, disk, the expiry of `data/certs/cert.pem` and whether it is self-signed (Postfix's stand-in), and whether the bundled Caddy runs (`edge` in `COMPOSE_PROFILES`, which the API reads through Compose's `env_file`); what `./eigen status` reports |
+| PUT    | `/settings/organization`  | owner | Rename the organization: `config.json`'s orgName and the better-auth organization, plus the team still named after it (setup's default team; a team renamed by hand keeps its name). The web address and mail domain stay |
 | POST   | `/settings/mail/test`     | owner | Send one mail from the owner to the owner through `buildMailOptions`, so it tests the sender rule; a failure returns 502 with the transport's error |
 | GET    | `/settings/users`         | admin | `AdminUserRow[]` — every org member **and** orphan for the Users page (auth-DB join incl. `lastLoginAt` + session-derived `lastActiveAt`, teams) |
 | GET    | `/settings/users/usage`   | admin | `Record<userId, HomeSizeResponse>` — per-user disk usage via the `pullHomeSize` home-relay read, which sizes a home from its own databases (the mount `metadata.db`, `mail.db`, `contacts.db` and `calendar.db` totals, plus the avatars walk) rather than booting it (concurrency 4, 5-min in-memory cache) |
@@ -113,7 +113,7 @@ connects. So the server never ends up defaulting new drives to a bucket it canno
 
 ## Frontend
 
-Hooks in `packages/lib/src/core/settings/hooks/`: `useServerSettings()` / `useUpdateServerSettings()` / `invalidateServerSettings()` over query key `['settings', 'server']`, `useServerS3Config()` / `useUpdateServerS3Config()` / `invalidateServerS3Config()` over `['settings', 's3config']`, `useCheckS3Connection()` for the test button, `useServerStatus()` (fetched only for the owner), `useUpdateOrgName()` (invalidates the public config, which carries the name) and `useSendTestMail()`.
+Hooks in `packages/lib/src/core/settings/hooks/`: `useServerSettings()` / `useUpdateServerSettings()` / `invalidateServerSettings()` over query key `['settings', 'server']`, `useServerS3Config()` / `useUpdateServerS3Config()` / `invalidateServerS3Config()` over `['settings', 's3config']`, `useCheckS3Connection()` for the test button, `useServerStatus()` (fetched only for the owner), `useUpdateOrgName(orgId)` (invalidates the public config, which carries the name, and the team lists, which carry the default team's) and `useSendTestMail()`.
 
 The Admin app's `/settings` route sits behind the `_owner` guard, with Onboarding, Guest settings and Waitlist; an admin who opens one by URL sees "Only the server owner can open this page." It renders `ServerSettingsPage` (`apps/admin/src/components/admin/server-settings.tsx`) with these sections, each a shared `SettingsSection` over one `SettingsFooter`, which asks before the page is left with unsaved changes:
 

@@ -126,7 +126,7 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
                     : {
                           level: days < CERT_WARN_DAYS ? 'warn' : 'ok',
                           label: 'Certificate',
-                          value: `valid until ${until}, ${days} day${days === 1 ? '' : 's'} left`,
+                          value: `valid until ${until}, ${days} day${days === 1 ? '' : 's'} left${api.certSelfSigned ? ', self-signed' : ''}`,
                       },
             );
         } else if (api.domain === 'localhost') {

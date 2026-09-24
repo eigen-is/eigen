@@ -27,7 +27,7 @@ This section shows how the server is doing. You can't change anything here.
 | **Version** | The version of Eigen the server runs |
 | **Mail** | Whether this server hosts mailboxes, sends its mail through your relay (named here), or has no relay and sends no email |
 | **Disk** | How much disk space is free |
-| **Certificate** | When the server's HTTPS certificate expires. Behind your own web server, it shows the mail certificate when this server hosts mail, and none otherwise. |
+| **Certificate** | When the server's HTTPS certificate expires. **Managed by the bundled Caddy** means the web server that comes with Eigen holds it. A self-signed certificate is the one the mail server makes for itself when there is no other. Behind your own web server, it shows that mail certificate when this server hosts mail, and none otherwise. |
 
 ## Mail
 

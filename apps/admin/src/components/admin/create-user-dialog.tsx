@@ -26,7 +26,7 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
     const [name, setName] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [role, setRole] = useState<'user' | 'admin'>('user');
+    const [role, setRole] = useState<'admin' | 'member'>('member');
     const [usernameError, setUsernameError] = useState('');
     const { data: config } = usePublicConfig();
     const createUser = useCreateUser(config?.orgId);
@@ -39,7 +39,7 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
             setName('');
             setUsername('');
             setPassword('');
-            setRole('user');
+            setRole('member');
             setUsernameError('');
         }
     }, [open]);
@@ -114,12 +114,16 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
                         <Field>
                             <FieldLabel htmlFor="role">Role</FieldLabel>
                             <FieldContent>
-                                <Select value={role} onValueChange={(v) => setRole(v as 'user' | 'admin')}>
-                                    <SelectTrigger>
+                                <Select
+                                    value={role}
+                                    // The two items below are the whole of what this can hand back.
+                                    onValueChange={(value) => setRole(value === 'admin' ? 'admin' : 'member')}
+                                >
+                                    <SelectTrigger id="role">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="user">Member</SelectItem>
+                                        <SelectItem value="member">Member</SelectItem>
                                         <SelectItem value="admin">Admin</SelectItem>
                                     </SelectContent>
                                 </Select>
