@@ -13,7 +13,6 @@ Shared harness files (`setup.ts`, `preload.ts`, `test-env.ts`, `home-test-helper
 
 `env-test-helpers.ts` holds `restoreEnvAfterEach(keys)`, which puts each named `process.env` key back after every test, so a suite that sets `MAIL_ENABLED`, `SMTP_*` or `PRODUCTION` leaks nothing into the next test or file.
 
-
 `home-test-helpers.ts` is the one fake-Home harness: `openTestHome(create, dir, user)` builds a domain class over a temp directory with no booted app behind it (a stub Home with a memoized `getLocalDatabase`, the current user and a broadcast sink), and `makeTestHome(create, root)` gives each harness its own subdir. The returned harness carries `reopen()` — a fresh instance over the same directory, which is how a crash or restart is simulated — plus `database(relativePath)` and `close()`. `makeContacts` (`contacts-test-helpers.ts`) and `makeCalendar` (`calendar-test-helpers.ts`) are thin callers of it. `dav-test-helpers.ts` holds the DAV request pair every protocol suite shares: `basicAuth(email)` and `davRequest(method, path, { email, headers, body })`.
 
 Two rules are enforced by `bun scripts/check-test-layout.ts`, which runs as part of `bun run check`:
@@ -43,39 +42,15 @@ bun test --preload ./src/test/preload.ts
 ```
 
 - `--preload ./src/test/preload.ts` registers an `afterAll` hook that calls `cleanup()`
-- No path argument: the layout rule already says where tests are, and a path here would mean a stray
-  test file silently never runs
-- Slow end-to-end suites are gated on `CI` (set by GitHub Actions) or `EIGEN_SLOW_TESTS=1`: the demo
-  seeder contract test (`server/seed-demo.test.ts`, ~30 s, spawns the whole seeder) skips in a plain
-  local run. Run it locally with `EIGEN_SLOW_TESTS=1 bun run test:api` after touching
-  `src/scripts/demo/` or the readers it decodes with
-- Files run sequentially by default, in one process. `--parallel=N` is the isolated mode, and what CI
-  runs: it implies `--isolate`, so every test file evaluates in a fresh global and module graph, gets its own
-  `EIGEN_DATA_ROOT` (a per-process dir under `data-test/`, see below) and boots its own server on first use.
-  No two files share a Home singleton or a SQLite file, which is what makes running them concurrently safe.
-  Setup is lazy: `setup.ts` exports `ensureServer()`, and the wizard POST (`/setup/complete`) runs once per
-  file, the first time a test awaits `getTestContext()`, `authedRequest()`, or `ensureServer()`. A pure-unit
-  test that needs a setup side effect (the configured mail domain, the org owner, the auth schema) awaits one
-  of those in a `beforeAll`; it cannot rely on another file having booted the server. The same goes for a
-  Home: `await collectSSE()` resolves once the user's Home is open and the listener attached, so a test
-  never opens the Home itself or sleeps before the action it wants to observe
-- Isolation needs Bun 1.4.1 or newer (`.bun-version`): under 1.3.14 the runtime keeps many finished files'
-  globals alive with no retainer reachable from JS, and a worker grows by the whole app graph (~50 MB) per
-  such file. Two pins are the app's own and outlive a file on any Bun: each Home's idle timeout and Elysia's
-  sucrose cache sweep, both unref'd timers whose callbacks reach the module graph. The preload's `afterAll`
-  clears them (`shutdownAllHomes()`, `clearSucroseCache(0)`), which is why it imports `./test-env` first:
-  anything it pulls from `../lib` would otherwise open SQLite under the wrong data root
-- Why sequential stays the local default: the per-file server boot (~1 s) is the price of `--isolate`, and
-  on a laptop with few spare cores it eats the parallel gain, because many files spawn their own
-  transform/thumbnail Worker threads on top of the test worker. CI runs `--parallel=4` (the runner's core
-  count) for the isolation, not the speed: one sequential process holds every Home of the run and stalls
-  on what ran before, and bun's file order differs per run on Linux
+- No path argument: the layout rule already says where tests are, and a path here would mean a stray test file silently never runs
+- Slow end-to-end suites are gated on `CI` (set by GitHub Actions) or `EIGEN_SLOW_TESTS=1`: the demo seeder contract test (`server/seed-demo.test.ts`, ~30 s, spawns the whole seeder) skips in a plain local run. Run it locally with `EIGEN_SLOW_TESTS=1 bun run test:api` after touching `src/scripts/demo/` or the readers it decodes with
+- Files run sequentially by default, in one process. `--parallel=N` is the isolated mode, and what CI runs: it implies `--isolate`, so every test file evaluates in a fresh global and module graph, gets its own `EIGEN_DATA_ROOT` (a per-process dir under `data-test/`, see below) and boots its own server on first use. No two files share a Home singleton or a SQLite file, which is what makes running them concurrently safe. Setup is lazy: `setup.ts` exports `ensureServer()`, and the wizard POST (`/setup/complete`) runs once per file, the first time a test awaits `getTestContext()`, `authedRequest()`, or `ensureServer()`. A pure-unit test that needs a setup side effect (the configured mail domain, the org owner, the auth schema) awaits one of those in a `beforeAll`; it cannot rely on another file having booted the server. The same goes for a Home: `await collectSSE()` resolves once the user's Home is open and the listener attached, so a test never opens the Home itself or sleeps before the action it wants to observe
+- Isolation needs Bun 1.4.1 or newer (`.bun-version`): under 1.3.14 the runtime keeps many finished files' globals alive with no retainer reachable from JS, and a worker grows by the whole app graph (~50 MB) per such file. Two pins are the app's own and outlive a file on any Bun: each Home's idle timeout and Elysia's sucrose cache sweep, both unref'd timers whose callbacks reach the module graph. The preload's `afterAll` clears them (`shutdownAllHomes()`, `clearSucroseCache(0)`), which is why it imports `./test-env` first: anything it pulls from `../lib` would otherwise open SQLite under the wrong data root
+- Why sequential stays the local default: the per-file server boot (~1 s) is the price of `--isolate`, and on a laptop with few spare cores it eats the parallel gain, because many files spawn their own transform/thumbnail Worker threads on top of the test worker. CI runs `--parallel=4` (the runner's core count) for the isolation, not the speed: one sequential process holds every Home of the run and stalls on what ran before, and bun's file order differs per run on Linux
 
 ### One file at a time
 
-`bun test apps/api/src/test/drive/drive.test.ts` from the repo root **fails** with `Setup has already been
-completed`: Bun auto-loads the root `.env`, which collides with the harness's fresh-`EIGEN_DATA_ROOT`
-setup flow. Run it from `apps/api` with the package script's own flags, and `-t` to filter by name:
+`bun test apps/api/src/test/drive/drive.test.ts` from the repo root **fails** with `Setup has already been completed`: Bun auto-loads the root `.env`, which collides with the harness's fresh-`EIGEN_DATA_ROOT` setup flow. Run it from `apps/api` with the package script's own flags, and `-t` to filter by name:
 
 ```bash
 cd apps/api && bun test --preload ./src/test/preload.ts ./src/test/drive/drive.test.ts -t "rename"
@@ -87,16 +62,9 @@ cd apps/api && bun test --preload ./src/test/preload.ts ./src/test/drive/drive.t
 Test -> Eden Treaty / authedRequest() -> app.handle() -> Real business logic -> Temp data dir
 ```
 
-- **Data isolation**: `apps/api/src/test/test-env.ts` (imported first by `setup.ts`, before the app/auth modules
-  open their SQLite files) sets `EIGEN_DATA_ROOT` to `data-test/test-<pid>-<random>` — a fresh dir per worker
-  process. It prunes by age alone, once per worker process: anything under `data-test/` older than ten minutes is a
-  dead run. A live sibling's dir is never that old, so the many unit tests that keep their own
-  `data-test/test-<name>-<ts>` scratch dir survive a concurrent run
+- **Data isolation**: `apps/api/src/test/test-env.ts` (imported first by `setup.ts`, before the app/auth modules open their SQLite files) sets `EIGEN_DATA_ROOT` to `data-test/test-<pid>-<random>` — a fresh dir per worker process. It prunes by age alone, once per worker process: anything under `data-test/` older than ten minutes is a dead run. A live sibling's dir is never that old, so the many unit tests that keep their own `data-test/test-<name>-<ts>` scratch dir survive a concurrent run
 - **Test users**: Alice (`alice@test.eigen.is`), Bob (`bob@test.eigen.is`), Charlie (`charlie@test.eigen.is`)
-- **Setup**: `apps/api/src/test/setup.ts` boots the server lazily via `ensureServer()` (runs the setup wizard),
-  seeds the three users on first `getTestContext()`, and exports the helper functions (`authedRequest`,
-  `drivePost`, `chatGet`, etc.). It has no top-level `await` — under `--isolate` a suspended module would be
-  observed mid-evaluation by the importing file, so its exports are all defined synchronously
+- **Setup**: `apps/api/src/test/setup.ts` boots the server lazily via `ensureServer()` (runs the setup wizard), seeds the three users on first `getTestContext()`, and exports the helper functions (`authedRequest`, `drivePost`, `chatGet`, etc.). It has no top-level `await` — under `--isolate` a suspended module would be observed mid-evaluation by the importing file, so its exports are all defined synchronously
 - **Preload**: `apps/api/src/test/preload.ts` registers an `afterAll` cleanup hook
 - **Integration tests** (`drive.test.ts`, `calendar.test.ts`, etc.) use test helpers from `setup.ts`: `getTestContext()` → returns `{ alice, bob, charlie }` test users with session tokens and API clients; `authedRequest(token, path, options?)` → make authenticated HTTP request; `driveGet/drivePost/drivePut/driveDelete` → typed drive API helpers; `driveGetPermission` → check read/write permissions
 - **Unit tests** (`mount.test.ts`, `storage.test.ts`, etc.) create isolated instances with temp directories
@@ -105,8 +73,7 @@ Test -> Eden Treaty / authedRequest() -> app.handle() -> Real business logic -> 
 
 Every API test lives in a feature folder under `apps/api/src/test/` — `acl/`, `auth/`, `backup/`, `caldav/`, `calendar/`, `carddav/`, `chat/`, `cli/`, `collab/`, `comments/`, `contacts/`, `core/`, `dav/`, `document/`, `drive/`, `export/`, `home/`, `ical/`, `import/`, `mail/`, `mount/`, `preview/`, `search/`, `server/`, `storage/`, `vcard/`, `webdav/` — one `<subject>.test.ts` per subject. Coverage spans CalDAV, WebDAV, mail, drive, collab, file history, search, import/export, demo mode, upload-queue chaos and more — grep the tree rather than assuming an area is untested.
 
-Not part of the suite: `src/test/transform-benchmark.ts` is a standalone responsiveness/memory benchmark for
-document transforms — run it from `apps/api` with `bun src/test/transform-benchmark.ts` (see PREVIEWS.md).
+Not part of the suite: `src/test/transform-benchmark.ts` is a standalone responsiveness/memory benchmark for document transforms — run it from `apps/api` with `bun src/test/transform-benchmark.ts` (see PREVIEWS.md).
 
 Not part of the suite either: the Docker harnesses below.
 
@@ -131,10 +98,7 @@ Run them one at a time: two started together can pick the same subnet. `./docker
 
 - **Treaty**: Used for static path routes. `authedRequest()` for dynamic `:mountId` params
 - **Contacts**: `addContact`/`addLabel` return plain UUID strings. Auto-seeds user as contact on first access
-- **One auth DB per file**: under `--isolate` each test file boots its own server in its own data dir, so
-  it sees only the users/orgs it (or its `getTestContext()`) created; files share no users/orgs
-  table. Still scope assertions to the entities the test itself created: a single file that creates users
-  beyond Alice/Bob/Charlie breaks an exact global count (`users.length === 3`) the same way
+- **One auth DB per file**: under `--isolate` each test file boots its own server in its own data dir, so it sees only the users/orgs it (or its `getTestContext()`) created; files share no users/orgs table. Still scope assertions to the entities the test itself created: a single file that creates users beyond Alice/Bob/Charlie breaks an exact global count (`users.length === 3`) the same way
 
 ## CI
 
