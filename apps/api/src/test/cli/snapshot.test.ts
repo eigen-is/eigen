@@ -1,5 +1,6 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomBytes } from 'node:crypto';
+import * as fs from 'node:fs';
 import {
     existsSync,
     linkSync,
@@ -19,7 +20,7 @@ import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { parseBackupStamp } from '@workspace/lib/validation';
 import pkg from '../../../../../package.json' with { type: 'json' };
-import { SNAPSHOT_NAME } from '../../cli/snapshot';
+import { lightWalk, SNAPSHOT_NAME } from '../../cli/snapshot';
 import { COLLAB_EPOCH_FILE } from '../../lib/collab/epoch';
 import { DATA_LOCK_FILE, lockDataDir } from '../../lib/config/data-lock';
 import { CLI, runCli } from '../cli-test-helpers';
@@ -470,6 +471,23 @@ describe('snapshot --check', () => {
         expect((await eigen(dir, 'snapshot', '--check')).stdout).toBe('kind=full\n');
         expect((await eigen(dir, 'snapshot', '--check', '--light')).stdout).toBe('kind=light\n');
         expect(readdirSync(join(dir, 'snapshots'))).toEqual([]);
+    });
+
+    test('a light walk leaves out a folder that goes between listing it and reading it, as it may while Eigen runs', () => {
+        const dir = server();
+        const gone = join(dir, 'data/team/t1');
+        const readdir = fs.readdirSync;
+        const spy = spyOn(fs, 'readdirSync').mockImplementation(((path: string, options: fs.ObjectEncodingOptions) => {
+            if (path === gone) rmSync(gone, { recursive: true });
+            return readdir(path, options);
+        }) as typeof readdir);
+        try {
+            const held = lightWalk(dir).map(({ path }) => path);
+            expect(held).toContain('data/home/alice/settings.json');
+            expect(held.filter((path) => path.startsWith('data/team/t1'))).toEqual([]);
+        } finally {
+            spy.mockRestore();
+        }
     });
 
     test('--from makes it full after all when a release since that version is breaking', async () => {
