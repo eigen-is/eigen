@@ -278,6 +278,22 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: the project was asked $(printf '%s\n' "$CALLS" | grep -c ' config$') times"
     fi
 
+    # A source install runs today's Compose files on what an older snapshot's .env.production holds.
+    launch source restore eigen-20260101-000000.tar.gz
+    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -A 1 ' restore eigen-20260101-000000.tar.gz --yes$' |
+        grep -q ' configure --backfill$' && printf '%s\n' "$CALLS" | grep -q ' up -d --wait$'; then
+        ok "$SHELL_NAME: a source restore adds what is new to the restored .env.production, then starts Eigen"
+    else
+        fail "$SHELL_NAME: a source restore: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    launch release restore eigen-20260101-000000.tar.gz
+    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -q ' restore eigen-20260101-000000.tar.gz --yes$' &&
+        ! printf '%s\n' "$CALLS" | grep -q ' configure '; then
+        ok "$SHELL_NAME: a release restore leaves the snapshot's .env.production to the files of its version"
+    else
+        fail "$SHELL_NAME: a release restore: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+
     mkdir "$FIX/source/.eigen/lock"
     echo 999999 >"$FIX/source/.eigen/lock/pid"
     STUB_FAIL=compose-config launch source restart

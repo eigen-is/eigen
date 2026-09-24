@@ -720,6 +720,12 @@ restore() {
             pull_images "$switch_to"
     fi
     swap_snapshot "$@"
+    # A release install runs the Compose files of the snapshot's version; a source install runs today's, which may need
+    # keys an older snapshot lacks.
+    if [ "$MODE" = source ]; then
+        step "Adding what is new to .env.production" ".env.production has what Eigen needs" \
+            "Could not update .env.production" cli configure --backfill
+    fi
     if [ -n "$switch_to" ]; then write_bundle "$switch_to"; fi
     AT_EXIT=''
     restart
