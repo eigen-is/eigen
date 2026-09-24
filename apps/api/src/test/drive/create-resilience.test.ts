@@ -57,8 +57,7 @@ afterAll(async () => {
 
 describe('Drive.create is atomic under degraded storage', () => {
     test('a failed document provisioning leaves no row, emits nothing, and a same-name retry succeeds', async () => {
-        const sse = collectSSE(ownerId);
-        await new Promise((resolve) => setTimeout(resolve, 50)); // collectSSE subscribes asynchronously
+        const sse = await collectSSE(ownerId);
 
         fault.failNextExists = 1; // the create-mode probe for the container's data.db
         await expect(drive.create(MOUNT_ID, rootId, 'Notes', 'doc', user)).rejects.toThrow();
@@ -81,8 +80,7 @@ describe('Drive.create is atomic under degraded storage', () => {
         // The chat's own data.db provisions fine; only the GET of the board's comment index fails,
         // so the failure lands in seedCommentRow — after ChatRoom.create already succeeded.
         fault.failReadKeys.add(await mount.getStorageKey(commentsDb.id));
-        const sse = collectSSE(ownerId);
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        const sse = await collectSSE(ownerId);
 
         await expect(drive.create(MOUNT_ID, chatFolder.id, 'Card 1', 'chat', user)).rejects.toThrow();
 

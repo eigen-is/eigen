@@ -42,24 +42,15 @@ async function bootServer(): Promise<void> {
     }
 }
 
-// In-process SSE listener: subscribes to a user's Home broadcast stream and
-// collects every event until stop() is called.
-export function collectSSE(userId: string): { events: SSEvent[]; stop: () => void } {
+// In-process SSE listener: subscribes to a user's Home broadcast stream (opening the Home if needed)
+// and collects every event until stop() is called. Resolves once subscribed, so nothing broadcast
+// after the await is missed.
+export async function collectSSE(userId: string): Promise<{ events: SSEvent[]; stop: () => void }> {
     const events: SSEvent[] = [];
-    let home: Awaited<ReturnType<typeof getHome>> | null = null;
     const listener = (event: SSEvent) => events.push(event);
-    const setup = getHome(userId).then((h) => {
-        home = h;
-        h.subscribeSSE(listener);
-    });
-    return {
-        events,
-        stop: () => {
-            setup.then(() => {
-                if (home) home.unsubscribeSSE(listener);
-            });
-        },
-    };
+    const home = await getHome(userId);
+    home.subscribeSSE(listener);
+    return { events, stop: () => home.unsubscribeSSE(listener) };
 }
 
 export type TestUser = {

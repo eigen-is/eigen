@@ -52,8 +52,8 @@ bun test --preload ./src/test/preload.ts
   file, the first time a test awaits `getTestContext()`, `authedRequest()`, or `ensureServer()`. A pure-unit
   test that needs a setup side effect (the configured mail domain, the org owner, the auth schema) awaits one
   of those in a `beforeAll`; it cannot rely on another file having booted the server. The same goes for a
-  Home: `collectSSE()` subscribes once the user's Home has opened, so a test that expects a poke from a job
-  that finishes quickly awaits `getHome()` first
+  Home: `await collectSSE()` resolves once the user's Home is open and the listener attached, so a test
+  never opens the Home itself or sleeps before the action it wants to observe
 - Isolation needs Bun 1.4.1 or newer (`.bun-version`): under 1.3.14 the runtime keeps many finished files'
   globals alive with no retainer reachable from JS, and a worker grows by the whole app graph (~50 MB) per
   such file. Two pins are the app's own and outlive a file on any Bun: each Home's idle timeout and Elysia's

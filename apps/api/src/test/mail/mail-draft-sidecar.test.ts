@@ -153,7 +153,7 @@ describe.skipIf(isWindows)('Mail — draft sidecar', () => {
         seedMaildirFile(user.id, MAILBOX_DRAFTS, uniqueId, eml, { flags: 'DS' });
         expect((await listDrafts(user)).map((row) => row.id)).toContain(uniqueId);
 
-        const sse = collectSSE(user.id);
+        const sse = await collectSSE(user.id);
         const res = await authedRequest(user.sessionToken, `/mail/${user.id}/message/${encodeURIComponent(uniqueId)}`, {
             method: 'DELETE',
         });

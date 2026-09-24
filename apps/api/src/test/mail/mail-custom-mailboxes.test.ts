@@ -488,7 +488,7 @@ describe.skipIf(isWindows)('A standard folder an IMAP client removes gets its wa
     });
 
     test('a folder recreated before the watcher notices is watched again without a listing', async () => {
-        const sse = collectSSE(userId);
+        const sse = await collectSSE(userId);
         const synced = (): boolean =>
             sse.events.some(
                 (event) => event.type === SSEventType.MAIL_RECEIVED && event.mail.mailbox === MAILBOX_TRASH,

@@ -833,7 +833,7 @@ describe('Calendar transfer routes', () => {
             ),
         );
 
-        const sse = collectSSE(alice.id);
+        const sse = await collectSSE(alice.id);
         const result = await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file));
         sse.stop();
         expect(result).toEqual({ imported: 1, skipped: 0, failed: 0 });
@@ -1030,7 +1030,7 @@ describe('Calendar transfer routes', () => {
             ),
         );
 
-        const sse = collectSSE(alice.id);
+        const sse = await collectSSE(alice.id);
         const result = await assertJson<ImportCountsResult>(await importRequest(alice, calendarId, file));
         sse.stop();
 
@@ -1345,7 +1345,7 @@ describe('Calendar transfer routes', () => {
         );
         expect(shareRes.status).toBe(200);
 
-        const sse = collectSSE(bob.id);
+        const sse = await collectSSE(bob.id);
         try {
             const file = vcal(
                 vevent(`shared-import-${randomUUID()}@other`, 'Shared', '20260401T090000Z', '20260401T100000Z'),
