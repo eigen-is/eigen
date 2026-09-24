@@ -54,7 +54,7 @@ Built: `./eigen setup` asks whether to host email and for a relay in both modes 
 Size S–M, mostly writing. Public text goes out in Reinder's voice.
 
 - [ ] An operating guide: updating, breaking releases and the pre-1.0 data policy in plain words, backup and restore, moving to another machine, logs, where things live on disk, resetting an admin password. Decide where it lives (repository guide or help center; the ROADMAP help-center row has left this open)
-- [ ] Requirements stated once: measured runtime memory, disk, `linux/amd64` only and why, Compose minimum, ports per profile
+- [ ] Requirements stated once: measured runtime memory, disk, amd64 and arm64, Compose minimum, ports per profile
 - [ ] A Traefik recipe beside the generated nginx, Apache and Caddy snippets and the tunnel section
 - [ ] A short "what Eigen is not yet" section, so the first issue reports are not about things already known
 
@@ -74,6 +74,5 @@ Size S.
 | IMAP backend for mail hosted elsewhere ([proposal](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)) | Size L, depends on the SSO slice, and adds a second `MailStore` at the seam where bugs concentrate. Block 4 covers most of the need for a fraction of the cost. | Repeated requests from people running mail-off installs. |
 | SSO ([proposal](proposals/PROPOSAL_SSO.md)) | Homelab users ask for OIDC after the thing runs, not before. | The first issues asking for Authentik, Keycloak or Authelia. Start with the `socialProviders` slice. |
 | DSM preset (Docker-only milestone 3) | Needs real Synology hardware to be a support claim. | Hardware on the desk, or a tester with a listed model. |
-| `linux/arm64` images | The resolver image is amd64-only and the native chain is untested on arm64. Unbound only runs in the `mail` profile, so mail-off installs need just the arm64 run. | One real arm64 run of a mail-off install, then a multi-arch resolver for hosted mail. Expect this request early; Raspberry Pi and Ampere hosts are common. |
 | A `:main` image channel: CI builds `:main` images on every push to `main`, and an install on that channel updates with `./eigen update` instead of building | This wave closes first; until then eigen.is runs source mode, which builds on the server. | After this wave. eigen.is then follows `:main`, and source mode is deleted (block 1). |
 | Backup phase ④, Kubernetes or Helm, a GUI installer | None of them is on the path of a first install. | Demand. |

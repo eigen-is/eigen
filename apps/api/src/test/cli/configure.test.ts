@@ -465,15 +465,18 @@ describe('configure command', () => {
             'admin@example.org',
         ];
         const digest = 'localhost:5055/eigen-is/eigen/api@sha256:abc';
+        const resolver = 'localhost:5055/eigen-is/eigen/unbound@sha256:def';
         const run = await runConfigure(dir, flags, undefined, {
             EIGEN_VERSION: '0.2.99',
             EIGEN_API_IMAGE: digest,
+            EIGEN_UNBOUND_IMAGE: resolver,
             EIGEN_REGISTRY: 'localhost:5055/eigen-is/eigen',
         });
         expect(run.code).toBe(0);
         const env = readFileSync(join(dir, '.env.production'), 'utf8');
         expect(env).toContain('EIGEN_VERSION=0.2.99\n');
         expect(env).toContain(`EIGEN_API_IMAGE=${digest}\n`);
+        expect(env).toContain(`EIGEN_UNBOUND_IMAGE=${resolver}\n`);
         expect(env).toContain('EIGEN_REGISTRY=localhost:5055/eigen-is/eigen\n');
         expect(env).toContain('DOMAIN=eigen.example.org\n');
     });

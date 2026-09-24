@@ -11,7 +11,7 @@ export const VERSION = pkg.version;
 export const DECLINED = 3;
 export const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/;
 // IMAGES in ./eigen.
-export const IMAGE_NAMES = ['api', 'frontend', 'postfix', 'dovecot'] as const;
+export const IMAGE_NAMES = ['api', 'frontend', 'postfix', 'dovecot', 'unbound'] as const;
 
 type Owner = { uid: number; gid: number };
 

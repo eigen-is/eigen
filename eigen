@@ -9,8 +9,8 @@ cd "$(dirname "$(readlink -f "$0")")"
 REPO=https://github.com/eigen-is/eigen
 REGISTRY=ghcr.io/eigen-is/eigen
 # IMAGE_NAMES in apps/api/src/cli/install.ts. Not from compose config --images: that names the images of the
-# profiles in use, and a release pins all four.
-IMAGES='api frontend postfix dovecot'
+# profiles in use, and a release pins all five.
+IMAGES='api frontend postfix dovecot unbound'
 # The CLI's exit code for a question answered no: DECLINED in apps/api/src/cli/install.ts.
 DECLINED=3
 LOG=.eigen/last-step.log
@@ -43,9 +43,7 @@ Commands:
 ./eigen <command> --help tells more about one.
 
 Environment:
-  NO_COLOR=1           Plain output without color.
-  EIGEN_ALLOW_ARCH=1   Run on a server that is not x86_64. Unsupported: Eigen's images are
-                       built for x86_64 only.
+  NO_COLOR=1       Plain output without color.
 EOF
 }
 
@@ -316,17 +314,8 @@ preflight() {
         die "Docker Compose $compose is too old for this install; it needs $need or newer." "Update the Docker Compose plugin, then run ./eigen $COMMAND again."
     fi
     arch=${server#* }
-    case $arch in
-        x86_64 | amd64) ;;
-        *)
-            if [ "${EIGEN_ALLOW_ARCH:-}" != 1 ]; then
-                die "Eigen runs on x86_64 servers; this Docker runs on $arch." "Use an x86_64 server."
-            fi
-            say "$YELLOW" '▲' "$arch is unsupported; going on because EIGEN_ALLOW_ARCH=1."
-            ;;
-    esac
     mkdir -p .eigen
-    say "$GREEN" '◇' "Docker ${server%% *}, Compose $compose"
+    say "$GREEN" '◇' "Docker ${server%% *} on $arch, Compose $compose"
 }
 
 # Configure always writes DOMAIN; an unreadable .env.production is for preflight to report.
@@ -375,7 +364,7 @@ cli_help() {
     exit
 }
 
-# pull_images <version> [name…]: the images of that release, all four by default; those already here stay.
+# pull_images <version> [name…]: the images of that release, all five by default; those already here stay.
 pull_images() {
     version=$1
     shift

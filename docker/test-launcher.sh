@@ -68,12 +68,12 @@ docker pull -q busybox >/dev/null
 PATH_IN=/stub:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # launch <folder> <args…>: the launcher under $SHELL_NAME in $FIX/<folder>; sets CODE, OUT (stdout), ERR (stderr) and
-# CALLS (what docker was asked). STUB_* and EIGEN_ALLOW_ARCH pass through as set here.
+# CALLS (what docker was asked). STUB_* pass through as set here.
 launch() {
     local dir="$FIX/$1" vars=("STUB_LOG=$FIX/calls.log") flags=() name var
     shift
     : >"$FIX/calls.log"
-    for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_RUN_FAIL EIGEN_ALLOW_ARCH; do
+    for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_RUN_FAIL; do
         if [ -n "${!name+set}" ]; then vars+=("$name=${!name}"); fi
     done
     CODE=0
@@ -183,13 +183,10 @@ for SHELL_NAME in dash busybox host; do
     rm "$FIX/source/docker-compose.override.yml"
     expect_error 1 'it needs 2.24.4 or newer' "an override with !override and Compose 2.24.3"
     STUB_INFO='27.3.1 aarch64' launch source restart
-    expect_error 1 '■  Eigen runs on x86_64 servers; this Docker runs on aarch64.' "aarch64 without EIGEN_ALLOW_ARCH"
-    STUB_INFO='27.3.1 aarch64' EIGEN_ALLOW_ARCH=1 launch source restart
-    if printf '%s\n' "$OUT" | grep -q '▲  aarch64 is unsupported; going on because EIGEN_ALLOW_ARCH=1.' &&
-        printf '%s\n' "$OUT" | grep -q '◇  Docker 27.3.1, Compose 2.29.1'; then
-        ok "$SHELL_NAME: EIGEN_ALLOW_ARCH=1 lets aarch64 through with a warning"
+    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q '◇  Docker 27.3.1 on aarch64, Compose 2.29.1'; then
+        ok "$SHELL_NAME: an aarch64 server goes through, its architecture named"
     else
-        fail "$SHELL_NAME: EIGEN_ALLOW_ARCH=1: exit $CODE, '$OUT'"
+        fail "$SHELL_NAME: aarch64: exit $CODE, '$OUT'"
     fi
 
     launch source restart

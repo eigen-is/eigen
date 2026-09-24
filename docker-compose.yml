@@ -109,8 +109,7 @@ services:
 
   unbound:
     profiles: ["mail"]
-    # mvance/unbound:latest as resolved on 2026-09-23 (linux/amd64 only).
-    image: mvance/unbound@sha256:76906da36d1806f3387338f15dcf8b357c51ce6897fb6450d6ce010460927e90
+    image: ${EIGEN_UNBOUND_IMAGE:-ghcr.io/eigen-is/eigen/unbound:local}
     restart: unless-stopped
     networks:
       eigen:

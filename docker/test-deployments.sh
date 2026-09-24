@@ -121,6 +121,7 @@ header "Scenario A — edge,mail   (bundled Caddy + mail trio)"
 bring_up --mail --no-proxy --no-relay
 probe_site "$BASE_HTTPS"
 probe_smtp postfix "$PORT_SMTP"
+probe_dnssec
 probe_imaps dovecot "$PORT_IMAPS"
 # No tear-down: B reruns setup on the running stack, which must switch from Caddy to eigen-static.
 
