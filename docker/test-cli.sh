@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Installs Eigen as a stranger does, with ./eigen in a docker:cli container that has no Bun, and runs the operator
-# commands against it: status, the control socket, the setup link, reset-password, backup and restore with their
-# refusals, and what status and reset-password say with Eigen stopped. The main install is edge,mail as uid 1001 in a
+# commands against it: status, the control socket, the setup link, reset-password, full and light backups and restores
+# with their refusals and retention, stop, and what status and reset-password say with Eigen stopped. The main install is edge,mail as uid 1001 in a
 # folder whose name has capitals and a space; a second one is edge only, as root.
 #
 # Usage:  ./docker/test-cli.sh
@@ -106,6 +106,16 @@ if printf '%s' "$OUT" | grep -q "$(printf '\033')"; then
     fail "status prints escape codes without a terminal"
 else
     ok "status has no color without a terminal"
+fi
+# What status shows while an update that failed halfway left the files of one version beside a server of another.
+scratch_run sh -c 'echo 9.9.9 >"$1/.eigen/bundle"' sh "$INSTALL"
+eigen status
+scratch_run rm "$INSTALL/.eigen/bundle"
+if says "▲  Update  *files of 9.9.9, running $VERSION: run ./eigen update"; then
+    ok "status says an update is unfinished while the files are of another version"
+else
+    fail "status does not flag files of another version"
+    show
 fi
 eigen status extra
 if [ "$CODE" = 2 ] && says 'Unknown argument "extra"' && says 'Usage: ./eigen status'; then
@@ -272,8 +282,8 @@ started=$SECONDS
 eigen backup
 show
 SNAPSHOT=$(saved_snapshot)
-if [ "$CODE" = 0 ] && [ -n "$SNAPSHOT" ]; then
-    ok "./eigen backup saved snapshots/$SNAPSHOT in $((SECONDS - started))s"
+if [ "$CODE" = 0 ] && [ -n "$SNAPSHOT" ] && says "Saved snapshots/$SNAPSHOT (full, "; then
+    ok "./eigen backup saved snapshots/$SNAPSHOT, a full snapshot, in $((SECONDS - started))s"
 else
     fail "./eigen backup exited $CODE"
 fi
@@ -307,7 +317,12 @@ fi
 # Older by its time, newer by its name: status must pick by the time.
 scratch_run touch "$INSTALL/snapshots/eigen-pre-update-20200101-000000.tar.gz"
 eigen status
-if says "Last snapshot  *$SNAPSHOT, "; then ok "status names the newest snapshot by its time"; else fail "status names another snapshot"; show; fi
+if says "Last snapshot  *$SNAPSHOT, " && says 'Snapshots  *2 in snapshots/, [0-9.]* [KMG]B on disk'; then
+    ok "status names the newest snapshot by its time, and counts the snapshots and their size"
+else
+    fail "status names another snapshot, or does not count them"
+    show
+fi
 scratch_run rm "$INSTALL/snapshots/eigen-pre-update-20200101-000000.tar.gz"
 
 api POST "$FOLDER/$root_id" '{"folderName":"Made after the snapshot"}' >/dev/null
@@ -500,10 +515,97 @@ else
 fi
 scratch_run rm "$INSTALL/snapshots/$BIG"
 
+# The launcher runs these as a restore's --check, then asks for what it checked.
+checked=$(docker run --rm --user 0 -e NO_COLOR=1 -v "$INSTALL:/install" -w /install "$EIGEN_API_IMAGE" \
+    sh -c 'cli=/app/docker/api/entrypoint.sh; $cli restore "$1" --check --yes >/dev/null && $cli restore "$1" --checked
+        rm -rf .eigen/restore' sh "$SNAPSHOT" 2>&1 || true)
+if [ "$checked" = "$(printf 'version=%s\nkind=full' "$VERSION")" ]; then
+    ok "restore --checked answers version=$VERSION and kind=full for what --check unpacked"
+else
+    fail "restore --checked answered: $checked"
+fi
+
 ##############################################################################
-header "With Eigen stopped"
+header "./eigen backup --light, retention, and a light restore"
 ##############################################################################
-dc stop eigen-api >/dev/null 2>&1
+started=$(api_started)
+eigen backup --keep two
+if [ "$CODE" = 1 ] && says '--keep takes a number of snapshots' && [ "$(api_started)" = "$started" ]; then
+    ok "backup --keep two is refused before anything stops"
+else
+    fail "backup --keep two: exit $CODE"
+    show
+fi
+scratch_run sh -c 'cd "$1" && touch eigen-pre-update-20200101-000000.tar.gz eigen-20100101-000000.tar.gz \
+    eigen-20100101-000001.tar.gz' sh "$INSTALL/snapshots"
+manual_before=$(scratch_run sh -c 'cd "$1" && ls eigen-2*.tar.gz' sh "$INSTALL/snapshots" | wc -l | tr -d ' ')
+eigen backup --light
+show
+LIGHT=$(saved_snapshot)
+if [ "$CODE" = 0 ] && [ -n "$LIGHT" ] && says "Saved snapshots/$LIGHT (light: databases and config, " && stack_up; then
+    ok "./eigen backup --light saved snapshots/$LIGHT, and the stack is back up"
+else
+    fail "./eigen backup --light exited $CODE"
+fi
+full_size=$(scratch_run stat -c %s "$INSTALL/snapshots/$SNAPSHOT")
+light_size=$(scratch_run stat -c %s "$INSTALL/snapshots/$LIGHT")
+log "full $full_size bytes, light $light_size bytes: $(awk -v l="$light_size" -v f="$full_size" 'BEGIN { printf "%.1f%%", 100 * l / f }') of the full one"
+manual=$(scratch_run sh -c 'cd "$1" && ls eigen-2*.tar.gz' sh "$INSTALL/snapshots" | tr '\n' ' ')
+if [ -z "${manual##*"$SNAPSHOT "*}" ] && [ -z "${manual##*"$LIGHT "*}" ] && [ "$(printf '%s' "$manual" | wc -w | tr -d ' ')" = 3 ] && [ "$manual_before" -ge 4 ] &&
+    scratch_run test -e "$INSTALL/snapshots/eigen-pre-update-20200101-000000.tar.gz"; then
+    ok "backup keeps the newest three of its $((manual_before + 1)) snapshots, and no pre-update one counts"
+else
+    fail "snapshots kept: '$manual' of $((manual_before + 1))"
+fi
+scratch_run rm "$INSTALL/snapshots/eigen-pre-update-20200101-000000.tar.gz"
+members=$(scratch_run tar -tzf "$INSTALL/snapshots/$LIGHT" || true)
+if printf '%s\n' "$members" | grep -q '^data/server/users3.db$' &&
+    printf '%s\n' "$members" | grep -q "^data/home/$ADMIN_ID/mounts/default/metadata.db$" &&
+    ! printf '%s\n' "$members" | grep -q '/mounts/default/data/'; then
+    ok "the light snapshot holds data/server and the mount's database, and none of the drive's files"
+else
+    fail "the light snapshot holds: $(printf '%s\n' "$members" | grep -v '^data/server/' | tr '\n' ' ')"
+fi
+
+# The drive keeps its files by id: what is on disk is the files, what the listing shows is its database. A document's
+# file is written by the time Eigen stops; its -wal and -shm go when it closes.
+files() {
+    { scratch_run ls "$INSTALL/data/home/$ADMIN_ID/mounts/default/data" 2>/dev/null || true; } |
+        grep -v -e '-wal$' -e '-shm$' | tr '\n' ' ' || true
+}
+before=$(files)
+api POST "$FOLDER/$root_id/create/doc" '{"fileName":"Made after the light snapshot"}' >/dev/null
+aside=$(aside_count)
+eigen restore "$LIGHT" --yes
+show
+listing=$(api GET "$FOLDER/$root_id")
+if [ "$CODE" = 0 ] && says "Restored $LIGHT, a light snapshot of Eigen $VERSION: databases and config restored; files and mail kept as they are" &&
+    stack_up && ! printf '%s' "$listing" | grep -q '"Made after the light snapshot"'; then
+    ok "a light restore puts the databases back: the document made since is out of the drive"
+else
+    fail "the light restore: exit $CODE, listing $listing"
+fi
+after=$(files)
+kept=1
+for file in $before; do case " $after" in *" $file "*) ;; *) kept=0 ;; esac; done
+if [ "$kept" = 1 ] && [ "$(printf '%s' "$after" | wc -w)" -gt "$(printf '%s' "$before" | wc -w)" ] &&
+    [ "$(aside_count)" = $((aside + 1)) ]; then
+    ok "and keeps the files as they are, the document's too, with what it replaced kept aside"
+else
+    fail "files after the light restore: '$after', before the document '$before'; kept aside $(aside_count), was $aside"
+fi
+
+##############################################################################
+header "./eigen stop, and with Eigen stopped"
+##############################################################################
+eigen stop
+show
+running=$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT")
+if [ "$CODE" = 0 ] && says '◇  Eigen stopped' && [ -z "$running" ]; then
+    ok "./eigen stop stops every container of the project"
+else
+    fail "./eigen stop: exit $CODE, still running: $running"
+fi
 eigen status
 show
 if [ "$CODE" = 1 ] && says '■  Eigen is not running.' && says '└  Run ./eigen logs eigen-api to see why.'; then
@@ -511,7 +613,7 @@ if [ "$CODE" = 1 ] && says '■  Eigen is not running.' && says '└  Run ./eige
 else
     fail "status with Eigen stopped: exit $CODE"
 fi
-if says '■  eigen-api  *exited' && says "Last snapshot  *$SNAPSHOT"; then
+if says '■  eigen-api  *exited' && says "Last snapshot  *$LIGHT"; then
     ok "status still lists the services and the last snapshot"
 else
     fail "status does not list eigen-api as exited, or the last snapshot"
