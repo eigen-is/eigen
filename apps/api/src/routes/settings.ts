@@ -1,7 +1,6 @@
 import type { AdminUser, AdminUserRow } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { HomeSizeResponse, S3CheckResult, S3HardenResult, ServerSettings } from '@workspace/lib/types/settings';
-import { validateEmailAddress } from '@workspace/lib/validation';
 import { eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, session, team, teamMember, user } from '../../auth-schema';
@@ -11,7 +10,7 @@ import { getS3Config, getServerSettings, updateServerSettings } from '../lib/con
 import { type ControlStatus, getServerStatus } from '../lib/config/server-status';
 import { ApiError } from '../lib/core';
 import { requireAdmin, requireOwner } from '../lib/core/access';
-import { sendMailOrThrow } from '../lib/core/mailer';
+import { sendMailOrThrow, storedSender } from '../lib/core/mailer';
 import { renameOrganization } from '../lib/org';
 import { checkS3Connection, hardenS3Bucket } from '../lib/storage/s3-storage';
 import { getOrgRole, getUserById } from '../lib/user';
@@ -52,12 +51,8 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                 const s3Result = await checkS3Connection(s3);
                 if (!s3Result.ok) throw new ApiError(400, `Cannot set storage type to S3: ${s3Result.message}`);
             }
-            const senderAddress = body.mail?.senderAddress;
-            if (senderAddress && !validateEmailAddress(senderAddress)) {
-                throw new ApiError(400, `${senderAddress} is not a valid sender address`);
-            }
-            if (body.mail?.senderName) body.mail.senderName = body.mail.senderName.trim();
-            await updateServerSettings(body);
+            const mail = body.mail && { ...body.mail, ...storedSender(body.mail, getOrgName()) };
+            await updateServerSettings(mail ? { ...body, mail } : body);
             return getServerSettings();
         },
         {

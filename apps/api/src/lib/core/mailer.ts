@@ -1,18 +1,23 @@
 import { DEFAULT_RELAY_PORT, defaultSenderAddress } from '@workspace/lib/constants/mail';
 import type { ImipMethod } from '@workspace/lib/types/calendar';
 import { ICS_MIME } from '@workspace/lib/types/drive';
+import type { ServerSettings } from '@workspace/lib/types/settings';
+import { validateEmailAddress } from '@workspace/lib/validation';
 import nodemailer from 'nodemailer';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import type Mail from 'nodemailer/lib/mailer';
 import { isDemo, isMailEnabled, isProduction } from '../config/env';
 import { getMailDomain, getOrgName, isInternalAddress } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
+import { ApiError } from './errors';
 
 // Outbound email types — the inbound parsing types live in packages/lib/types/mail.ts
 type OutboundAddress = {
     name: string;
     address: string;
 };
+
+type SenderFields = Partial<Pick<ServerSettings['mail'], 'senderName' | 'senderAddress'>>;
 
 export type OutboundAttachment = {
     filename: string;
@@ -46,6 +51,23 @@ export type OutboundMail = {
 function systemSender(): OutboundAddress {
     const { senderName, senderAddress } = getServerSettings().mail;
     return { name: senderName || getOrgName(), address: senderAddress || defaultSenderAddress(getMailDomain()) };
+}
+
+// Stored only when it differs from what an empty field derives, so a later rename or domain still carries through.
+export function storedSender(sender: SenderFields, orgName: string): SenderFields {
+    const stored: SenderFields = {};
+    if (sender.senderName !== undefined) {
+        const name = sender.senderName.trim();
+        stored.senderName = name === orgName.trim() ? '' : name;
+    }
+    if (sender.senderAddress !== undefined) {
+        const address = sender.senderAddress.trim();
+        if (address && !validateEmailAddress(address)) {
+            throw new ApiError(400, `${address} is not a valid sender address`);
+        }
+        stored.senderAddress = address === defaultSenderAddress(getMailDomain()) ? '' : address;
+    }
+    return stored;
 }
 
 // Postfix sends as any address on the mail domain, a relay only when the admin says it may; everyone else goes out "via".

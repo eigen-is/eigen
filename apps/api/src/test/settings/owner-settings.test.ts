@@ -1,10 +1,11 @@
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import { and, eq } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
 import { member as memberSchema, organization as organizationSchema } from '../../../auth-schema';
 import { getAuthDrizzleDb } from '../../lib/auth/auth';
-import { getOrgName, getServerConfig } from '../../lib/config/server-config';
+import { getMailDomain, getOrgName, getServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import type { ControlStatus } from '../../lib/config/server-status';
 import * as mailer from '../../lib/core/mailer';
@@ -141,6 +142,18 @@ describe('owner-only settings', () => {
             });
             const settings = await assertJson<ServerSettings>(res);
             expect(settings.mail.senderName).toBe('Acme');
+        });
+
+        test('a sender equal to the default is stored empty, so it follows a later rename or domain', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+                method: 'PUT',
+                headers: JSON_HEADERS,
+                body: JSON.stringify({
+                    mail: { senderName: ` ${getOrgName()} `, senderAddress: defaultSenderAddress(getMailDomain()) },
+                }),
+            });
+            const settings = await assertJson<ServerSettings>(res);
+            expect(settings.mail).toMatchObject({ senderName: '', senderAddress: '' });
         });
 
         test('an address that is none is refused', async () => {

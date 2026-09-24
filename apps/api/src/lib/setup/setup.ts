@@ -1,7 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { SetupResult, SetupStatus } from '@workspace/lib/types/settings';
 import { validateEmailAddress, validateUsername } from '@workspace/lib/validation';
@@ -10,6 +9,7 @@ import { getServerDataPath } from '../config/paths';
 import { getMailDomain, isSetupRequired, updateServerConfig } from '../config/server-config';
 import { updateServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
+import { storedSender } from '../core/mailer';
 import { checkS3Connection } from '../storage/s3-storage';
 import { clearSetupToken } from './setup-token';
 
@@ -280,16 +280,10 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
         if (usernameErr) throw new ApiError(400, usernameErr);
         const adminEmail = `${username}@${getMailDomain()}`;
         if (!validateEmailAddress(adminEmail)) throw new ApiError(400, `${adminEmail} is not a valid email address`);
-        // Stored only when it differs from what an empty field derives, so a later rename or domain still carries through.
-        const senderName = input.senderName?.trim() === input.orgName.trim() ? '' : (input.senderName?.trim() ?? '');
-        const senderAddress = input.senderAddress?.trim() ?? '';
-        if (senderAddress && !validateEmailAddress(senderAddress)) {
-            throw new ApiError(400, `${senderAddress} is not a valid sender address`);
-        }
-        const mailSender = {
-            senderName,
-            senderAddress: senderAddress === defaultSenderAddress(getMailDomain()) ? '' : senderAddress,
-        };
+        const mailSender = storedSender(
+            { senderName: input.senderName ?? '', senderAddress: input.senderAddress ?? '' },
+            input.orgName,
+        );
 
         await resetAuthDatabase();
 
