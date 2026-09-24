@@ -366,7 +366,7 @@ cli_help() {
 
 # A build is an api image, named by its labels as <version> (<revision>) on every install. Three files hold what an
 # install is. .env.production: what runs, EIGEN_VERSION for what the install follows (main, the one channel, or the
-# release it was pinned to, which follows latest) and every image by digest; the CLI's configure writes it from PINS.
+# release it was pinned to) and every image by digest; the CLI's configure writes it from PINS.
 # .eigen/bundle: the api image the launcher and Compose files came from; write_bundle writes it, and status tells by it
 # the files of one build from a server that runs another. .eigen/last-update: the snapshot the last update saved; the
 # CLI's snapshot --pre-update writes it, and rollback, which goes back to it, removes it.
@@ -886,7 +886,7 @@ update_get() {
     check_room $light --from "$old_version"
     if [ "$KIND" = full ]; then full=--full; fi
     write_bundle "$(answer EIGEN_API_IMAGE "$PINS")"
-    # The new launcher gets the tag and --full as arguments and parses them as this one did; nothing else crosses.
+    # The new launcher gets the tag and --full as arguments and parses them as this one did; no variable crosses.
     exec ./eigen update --pulled "$tag" $full
 }
 

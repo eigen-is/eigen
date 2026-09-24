@@ -5,9 +5,10 @@
 # refused in a local build, a failing compose config, stop, what update asks the CLI and names the builds, on a release
 # and on the main channel, the tags it refuses, a build whose images differ, a tag that moves during an update, a pinned
 # api image that is not here, the files an unfinished update left, which build's CLI the handed-over update saves the
-# snapshot with, what setup downloads with and without pins, what rollback names, a lock without a pid, and what status passes the CLI about the snapshots, the files of an unfinished
-# update and the newest build of main; setup in a folder that holds the launcher alone, with the registry or the build
-# .env.production names, and the installer script apps/index/public/install on this host, as a file and on stdin.
+# snapshot with, what setup downloads with and without pins, what rollback names, a lock without a pid, and what status
+# passes the CLI about the snapshots, the files of an unfinished update and the newest build of main; setup in a folder
+# that holds the launcher alone, with the registry or the build .env.production names, and the installer script
+# apps/index/public/install on this host, as a file and on stdin.
 #
 # Usage:  ./docker/test-launcher.sh
 # Needs:  docker (pulls debian:bookworm-slim and busybox once).
