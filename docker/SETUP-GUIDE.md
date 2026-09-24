@@ -58,21 +58,16 @@ dig eigen.example.com A
 
 ### 3. Get Eigen
 
-Eigen lives in one folder, `/opt/eigen` in this guide. Get a release (recommended):
+Eigen lives in one folder, `/opt/eigen` in this guide. Get the newest release:
 
 ```bash
 mkdir -p /opt/eigen && cd /opt/eigen
-docker run --rm -v "$PWD:/out" ghcr.io/eigen-is/eigen/api:<version> bootstrap
+docker run --rm -v "$PWD:/out" ghcr.io/eigen-is/eigen/api:latest bootstrap
 ```
 
-`<version>` is a release, like `0.3.0` (see the [releases](https://github.com/eigen-is/eigen/releases)). This writes the `eigen` command, the Compose files, `.env.example`, the fail2ban files and a starter `.env.production` that names the release.
+This writes the `eigen` command, the Compose file, `.env.example`, the fail2ban files and a starter `.env.production` that names the release it came from, so the install stays on that version until `./eigen update`. For another release, name it instead of `latest`, like `api:0.3.0` (see the [releases](https://github.com/eigen-is/eigen/releases)).
 
-Or run from source, which builds the images on the server:
-
-```bash
-git clone https://github.com/eigen-is/eigen.git /opt/eigen
-cd /opt/eigen
-```
+Developing Eigen? `./eigen` also runs in a clone of the repository, where it builds the images from source: see [CONTRIBUTING.md § Eigen in Docker](../docs/CONTRIBUTING.md#eigen-in-docker). On a server, run a release.
 
 ### 4. Run setup
 
@@ -83,13 +78,12 @@ cd /opt/eigen
 It asks, in this order, and suggests an answer for each:
 
 1. **Where will Eigen be hosted?** The web address, like `eigen.example.com`.
-2. **Which mail domain will you use?** Everyone's address and login is on it, like `jane@example.com`. It defaults to the web address.
-3. **How do people reach Eigen over HTTPS?** Eigen handles it on ports 80 and 443, or your own web server forwards to it ([Behind your existing webserver](#behind-your-existing-webserver)). With Eigen's own, it asks which email address Let's Encrypt should use; with yours, where Eigen should listen for it.
+2. **Which mail domain will you use?** Everyone's address and login is on it, like `jane@example.com`. It defaults to the web address. The mail domain cannot change after setup: every account is made on it. A later `./eigen setup` shows it instead of asking.
+3. **How do people reach Eigen over HTTPS?** Eigen handles it on ports 80 and 443, or your own web server forwards to it ([Behind your existing webserver](#behind-your-existing-webserver)). With Eigen's own, it asks which email address Let's Encrypt should use, `admin@<mail domain>` by default; with yours, where Eigen should listen for it.
 4. **Host email on this server?** Yes: Eigen hosts the mailboxes, on ports 25, 465, 587 and 993. No: see [Using your existing mail server](#using-your-existing-mail-server).
-5. **Which mail relay should Eigen send through?** Optional with hosted mail, like `smtp-relay.brevo.com:587`, then its user name and password.
-6. **Which address should Eigen's own mail come from?** The sender of codes, invitations and notifications, `noreply@<mail domain>` by default.
+5. **Which mail relay should Eigen send through?** Optional with hosted mail, like `smtp-relay.brevo.com:587`, then its user name and password. With hosted mail, Postfix sends every user's mail through it as that user, so the relay must accept every address on your mail domain.
 
-Before the first question, it downloads the release, or builds the API image from source. After the last, it writes the answers to `.env.production` (only its owner can read it), lists the DNS records to add, builds the web and mail images from source, and starts Eigen. A first build from source takes a while. Run `./eigen setup` again at any time to change an answer: it keeps the others and every key it does not know. `./eigen setup --help` lists the flags for a run without questions.
+Before the first question, it downloads the release. After the last, it writes the answers to `.env.production` (only its owner can read it), lists the DNS records to add, and starts Eigen. Run `./eigen setup` again at any time to change an answer: it keeps the others and every key it does not know. `./eigen setup --help` lists the flags for a run without questions.
 
 Run `./eigen` as the owner of the folder or as root, with access to Docker. To call it from anywhere, link it: `ln -s /opt/eigen/eigen /usr/local/bin/eigen`.
 
@@ -103,7 +97,7 @@ Five containers start:
 
 ### 5. Finish in your browser
 
-Setup ends with a one-time link, `https://eigen.example.com/admin/#setup=…`. Open it. It asks for the name of your organization, where to keep files, and your admin account, then sends you to the sign-in page. The link works once; lost it? Run `./eigen setup` again for a fresh one.
+Setup ends with a one-time link, `https://eigen.example.com/admin/#setup=…`. Open it. It asks for the name of your organization, the sender of Eigen's own mail (codes, invitations and notifications; the organization name and `noreply@<mail domain>` unless you change them), where to keep files, and your admin account. Then **Go to Login** takes you to the sign-in page. You can change the sender later in Admin, under **Settings → Mail**. The link works once; lost it? Run `./eigen setup` again for a fresh one.
 
 Check on Eigen at any time with `./eigen status`.
 
@@ -222,7 +216,7 @@ Put a snapshot back with `./eigen restore`. It unpacks and checks the snapshot w
 
 ### Settings setup does not ask for
 
-`.env.example` lists them under ADVANCED: the Docker subnet, the Compose project name, the mail queue alert, demo mode. Add a key to `.env.production`, then run `./eigen setup` again.
+`.env.example` lists them under ADVANCED: the Docker subnet, the Compose project name, the mail queue alert, demo mode ([DEMO_MODE.md](../docs/DEMO_MODE.md)). Add a key to `.env.production`, then run `./eigen setup` again.
 
 Extra Compose settings go in `docker-compose.override.yml` in the install folder, the one place for them: `./eigen` adds it to every Compose command, and an update leaves it alone. An override that uses Compose's `!override` tag needs Compose 2.24.4 or newer. For example, your own Caddyfile:
 
@@ -233,40 +227,15 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
 ```
 
-Or the API on a host port for debugging (`curl http://127.0.0.1:8000/health`): `cp docker-compose.host-api.yml docker-compose.override.yml`, and `EIGEN_API_BIND` in `.env.production` to move it off 8000. Then `./eigen restart`.
+Or the API on a host port for debugging (`curl http://127.0.0.1:8000/health`):
 
-### Demo instance
-
-A demo box wipes and reseeds itself every hour, so strangers can try the product without a login and without leaving anything behind. Turn it on with `EIGEN_DEMO=1` in `.env.production` (any other value, or unset, keeps normal behavior):
-
-```
-EIGEN_DEMO=1
+```yaml
+services:
+  eigen-api:
+    ports: ["127.0.0.1:8000:8000"]
 ```
 
-Reset the world once by hand, then let the timer keep it fresh. `demo-reset.sh` stops `eigen-api`, wipes the per-home + server data (never `data/certs` or `data/dkim`), runs the seeder in a throwaway container off the current image, and starts `eigen-api` again:
-
-```bash
-./scripts/demo-reset.sh
-```
-
-It refuses to run unless `EIGEN_DEMO=1` is present in `.env.production`, so it can never wipe a real instance.
-
-This needs a source install: `scripts/` is not in a release. Install the hourly reset with the shipped systemd units (they are **not** auto-installed by `git pull`):
-
-```bash
-cp scripts/systemd/eigen-demo-reset.service scripts/systemd/eigen-demo-reset.timer /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now eigen-demo-reset.timer
-```
-
-The units assume the repo lives at `/opt/eigen`; edit `WorkingDirectory`/`ExecStart` if yours differs. Check the schedule with `systemctl list-timers eigen-demo-reset.timer` and follow a run with `journalctl -u eigen-demo-reset.service -f`.
-
-Prefer cron? One line does the same:
-
-```bash
-crontab -e
-# 0 * * * * /opt/eigen/scripts/demo-reset.sh >> /var/log/eigen-demo-reset.log 2>&1
-```
+Then `./eigen restart`.
 
 ### Firewall
 
@@ -391,22 +360,23 @@ When the webserver itself runs in docker, `127.0.0.1` inside that container is i
 
 #### TLS certs without bundled Caddy
 
-The bundled cert manager lives in the Caddy container. When Caddy is off, postfix and dovecot still need certs for IMAPS/SMTPS. Reuse your host's Let's Encrypt certs with the host-cert overlay as your `docker-compose.override.yml` (it needs Compose 2.24.4+ for its `!override` tag):
-
-```bash
-cp docker-compose.host-certs.yml docker-compose.override.yml
-./eigen restart
-```
-
-That mounts `/etc/letsencrypt/live/${MAIL_DOMAIN}/` into postfix and dovecot read-only. Wire a certbot deploy-hook so they reload after each renewal:
+The bundled cert manager lives in the Caddy container. When Caddy is off, postfix and dovecot still need a certificate for IMAPS and SMTPS. They read `data/certs/cert.pem` and `data/certs/key.pem`, and make a self-signed one when there is none. Mail clients connect to your web address (`DOMAIN`), so the certificate is the one for that name. Copy your host's Let's Encrypt certificate there with a certbot deploy hook, which runs after each renewal:
 
 ```bash
 sudo tee /etc/letsencrypt/renewal-hooks/deploy/eigen.sh > /dev/null <<'EOF'
-#!/usr/bin/env sh
+#!/bin/sh
+set -e
+live=/etc/letsencrypt/live/eigen.example.com
+certs=/opt/eigen/data/certs
+cp "$live/privkey.pem" "$certs/key.pem.tmp" && chmod 600 "$certs/key.pem.tmp" && mv -f "$certs/key.pem.tmp" "$certs/key.pem"
+cp "$live/fullchain.pem" "$certs/cert.pem.tmp" && chmod 644 "$certs/cert.pem.tmp" && mv -f "$certs/cert.pem.tmp" "$certs/cert.pem"
 cd /opt/eigen && docker compose --env-file .env.production kill -s HUP postfix dovecot
 EOF
 sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/eigen.sh
+sudo /etc/letsencrypt/renewal-hooks/deploy/eigen.sh
 ```
+
+Replace `eigen.example.com` with your web address. The last line runs the hook once, to put the current certificate in place. The signal makes both reload it; dovecot also notices a changed certificate by itself within ten minutes.
 
 ### Behind Cloudflare Tunnel or Tailscale Funnel
 
@@ -439,14 +409,14 @@ Answer **No** to "Host email on this server?" in step 4 (`--no-mail`). Postfix, 
 
 Eigen still sends mail of its own: two-factor codes by email, guest sign-in codes, invitations, share and access-request notifications, calendar invitations and replies. Without hosted mail it sends them through a relay, the next question setup asks. Without a relay every one of those emails fails. Setup warns when you leave it empty.
 
-The relay is `host:port`, and one set of keys in `.env.production` holds it, `SMTP_RELAY_HOST`, `SMTP_RELAY_PORT`, `SMTP_RELAY_USER` and `SMTP_RELAY_PASSWORD`, whichever way mail is set up. A third-party relay (Brevo, SendGrid, Postmark) takes a user name and password; setup asks for both. Port 465 is implicit TLS, any other port STARTTLS. With a user name, the connection must be encrypted and the relay's certificate must check out, so the password never goes over a plain or unverified connection.
+The relay is `host:port`, and one set of keys in `.env.production` holds it, `SMTP_RELAY_HOST`, `SMTP_RELAY_PORT`, `SMTP_RELAY_USER` and `SMTP_RELAY_PASSWORD`, whichever way mail is set up. A third-party relay (Brevo, SendGrid, Postmark) takes a user name and password; setup asks for both. Port 465 is implicit TLS, any other port STARTTLS. With a user name, the connection must be encrypted, so the password never goes over a plain connection; without hosted mail, the relay's certificate must check out too.
 
 Your mail server on the same host works as a relay too: answer `host.docker.internal:25`. `host.docker.internal` is Docker's name for "the machine the container is running on". For this to work, your host postfix needs to:
 
 - Bind to `0.0.0.0` (or the gateway of `EIGEN_SUBNET`, the Docker network in `.env.production`), not just `127.0.0.1`
 - Permit relay from `EIGEN_SUBNET`
 
-The relay must accept the system sender, the last question setup asks. Mail a person causes, like a share notification or a calendar invitation, can't come from their own address, which the relay would refuse. It comes from the system sender with their name, `Ada via Acme <noreply@example.com>`, and replies go to them.
+The relay must accept the system sender, the address Eigen's own mail comes from. You set it in the setup wizard, and later in Admin under **Settings → Mail**. Mail a person causes, like a share notification or a calendar invitation, comes from the system sender with their name, `Ada via Acme <noreply@example.com>`, and replies go to them. If your relay allows every address on your mail domain as a sender, turn on **Relay sends as users** in the same place: mail a person causes then comes from their own address. **Send test mail** there sends one mail from you to you, the way a share notification goes out.
 
 Tell users to point their mail client at your existing mail server. Eigen shows no IMAP settings of its own.
 
