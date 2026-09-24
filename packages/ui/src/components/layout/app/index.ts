@@ -12,6 +12,7 @@ export { ErrorBoundary } from './error-boundary';
 export { ErrorState } from './error-state';
 export type { LayoutContextType } from './layout-context';
 export { LayoutContext, useApp, useLayout } from './layout-context';
+export { LeaveGuard } from './leave-guard';
 export { LoadingState } from './loading-state';
 export { RequestAccessView } from './request-access-view';
 export { SettingsFooter } from './settings-footer';
