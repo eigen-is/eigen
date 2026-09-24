@@ -1,14 +1,17 @@
 import type { AdminUser, AdminUserRow } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { HomeSizeResponse, S3CheckResult, S3HardenResult, ServerSettings } from '@workspace/lib/types/settings';
+import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, session, team, teamMember, user } from '../../auth-schema';
 import { getAuthDrizzleDb } from '../lib/auth/auth';
-import { getServerConfig } from '../lib/config/server-config';
+import { getOrgName, getServerConfig, updateServerConfig } from '../lib/config/server-config';
 import { getS3Config, getServerSettings, updateServerSettings } from '../lib/config/server-settings';
+import { type ControlStatus, getServerStatus } from '../lib/config/server-status';
 import { ApiError } from '../lib/core';
-import { requireAdmin } from '../lib/core/access';
+import { requireAdmin, requireOwner } from '../lib/core/access';
+import { buildMailOptions, createTransport } from '../lib/core/mailer';
 import { checkS3Connection, hardenS3Bucket } from '../lib/storage/s3-storage';
 import { getOrgRole, getUserById } from '../lib/user';
 import { getAllUsersUsage } from '../lib/user/admin-usage';
@@ -36,7 +39,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
     .put(
         '/settings/server',
         async ({ body, user }): Promise<ServerSettings> => {
-            await requireAdmin(user.id);
+            await requireOwner(user.id);
             if (body.defaults?.mount?.storageType === 's3') {
                 const s3 = getS3Config();
                 if (!s3) throw new ApiError(400, 'Cannot set storage type to S3 without a saved S3 configuration');
@@ -121,6 +124,16 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                         ),
                     }),
                 ),
+                // Empty sender fields mean the org name and noreply@ the mail domain.
+                mail: t.Optional(
+                    t.Object({
+                        senderName: t.Optional(t.String({ maxLength: 100 })),
+                        senderAddress: t.Optional(
+                            t.Union([t.Literal(''), t.String({ format: 'email', maxLength: MAX_EMAIL_LENGTH })]),
+                        ),
+                        relaySendsAsUsers: t.Optional(t.Boolean()),
+                    }),
+                ),
             }),
             auth: true,
         },
@@ -129,7 +142,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
     .get(
         '/settings/s3config',
         async ({ user }): Promise<S3Config | null> => {
-            await requireAdmin(user.id);
+            await requireOwner(user.id);
             return getS3Config() ?? null;
         },
         { auth: true },
@@ -138,7 +151,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
     .put(
         '/settings/s3config',
         async ({ body, user }): Promise<S3Config | null> => {
-            await requireAdmin(user.id);
+            await requireOwner(user.id);
             const s3Config = toS3Config(body);
             const s3Result = await checkS3Connection(s3Config);
             if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
@@ -146,6 +159,53 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             return getS3Config() ?? null;
         },
         { body: s3ConfigBody, auth: true },
+    )
+
+    .get(
+        '/settings/status',
+        async ({ user }): Promise<ControlStatus> => {
+            await requireOwner(user.id);
+            return getServerStatus();
+        },
+        { auth: true },
+    )
+
+    // The web address and the mail domain stay as setup made them: every account is on them.
+    .put(
+        '/settings/organization',
+        async ({ body, user }): Promise<{ name: string }> => {
+            await requireOwner(user.id);
+            const name = body.name.trim();
+            if (!name) throw new ApiError(400, 'The organization needs a name');
+            await updateServerConfig({ orgName: name });
+            return { name: getOrgName() };
+        },
+        { body: t.Object({ name: t.String({ minLength: 1, maxLength: 100 }) }), auth: true },
+    )
+
+    // sendMail swallows a failure; this one hands the relay's answer back to the owner.
+    .post(
+        '/settings/mail/test',
+        async ({ user }): Promise<{ to: string }> => {
+            await requireOwner(user.id);
+            const orgName = getOrgName();
+            try {
+                await createTransport().sendMail(
+                    buildMailOptions({
+                        to: [{ name: user.name, address: user.email }],
+                        subject: `Test mail from ${orgName}`,
+                        text: `This is a test mail from ${orgName}. It arrived, so this server can send mail.`,
+                    }),
+                );
+            } catch (error) {
+                throw new ApiError(
+                    502,
+                    `The test mail was not sent: ${error instanceof Error ? error.message : error}`,
+                );
+            }
+            return { to: user.email };
+        },
+        { auth: true },
     )
 
     .get(
@@ -256,6 +316,9 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             await requireAdmin(user.id);
             if (params.userId === user.id) {
                 throw new ApiError(400, 'Cannot delete your own account');
+            }
+            if ((await getOrgRole(params.userId)) === 'owner') {
+                throw new ApiError(400, 'The server owner cannot be deleted');
             }
             await deleteUserCompletely(params.userId, request.headers);
             return { success: true };

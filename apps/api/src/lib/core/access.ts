@@ -95,3 +95,7 @@ export async function requireAdmin(userId: string): Promise<void> {
     const role = await getOrgRole(userId);
     if (role !== 'admin' && role !== 'owner') throw new ApiError(403, 'Admin or owner role required');
 }
+
+export async function requireOwner(userId: string): Promise<void> {
+    if ((await getOrgRole(userId)) !== 'owner') throw new ApiError(403, 'Only the server owner can do this');
+}

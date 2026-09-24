@@ -115,6 +115,11 @@ export type ServerSettings = {
             ownerOnAccessRequest: boolean;
         };
     };
+    mail: {
+        senderName: string;
+        senderAddress: string;
+        relaySendsAsUsers: boolean;
+    };
 };
 
 export type MountResponse = {
