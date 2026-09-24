@@ -1,22 +1,19 @@
 # Server Settings
 
-> **TLDR**: Runtime-configurable server settings in `data/server/settings.json`, held by a `JsonStore` with typed
-> defaults. Admins edit them from the Admin app. `config.json` is the separate, setup-time identity file — it holds
-> orgName, orgId and the auth secret (made at first boot, never changed), and nothing about storage or the web address, which is `DOMAIN` alone (`getDomain()`). The storage type and S3 credentials are settings,
-> under `defaults.mount`.
+> **TLDR**: Runtime-configurable server settings in `data/server/settings.json`, held by a `JsonStore` with typed defaults. The owner edits them from the Admin app. `config.json` is the separate identity file: the auth secret (made at first boot, never changed), and the orgName, orgId and mail domain setup records. Only orgName changes after setup, from the owner's Settings page. Neither file holds the web address, which is `DOMAIN` alone (`getDomain()`). The storage type and S3 credentials are settings, under `defaults.mount`; the system sender is a setting, under `mail`.
 
 ## config.json vs settings.json
 
 |              | `config.json`                     | `settings.json`                              |
 |--------------|-----------------------------------|----------------------------------------------|
 | **Path**     | `data/server/config.json`         | `data/server/settings.json`                  |
-| **Written**  | Secret at first boot, the rest during setup | By an admin at runtime                       |
-| **Contains** | orgName, orgId, secret            | quotas, mount defaults, onboarding, guests, landing, notifications |
-| **Editable** | No (immutable after setup)        | Yes (admin settings UI)                      |
+| **Written**  | Secret at first boot, the rest at setup completion | By the owner at runtime, and the wizard's storage and sender at setup |
+| **Contains** | orgName, orgId, secret, setupCompleted, setupCompletedAt, mailDomain | quotas, mount defaults, onboarding, guests, landing, notifications, mail |
+| **Editable** | orgName only (`PUT /settings/organization`) | Yes (the owner's admin settings pages)       |
 
-`config.json` has **no** storage field (`apps/api/src/lib/config/server-config.ts`). Storage type and S3
-credentials live in `settings.json` under `defaults.mount`. The settings store is a plain `JsonStore` with a
-hardcoded `'local-fullnames'` default — it does not read anything out of `config.json`.
+`config.json` has **no** storage field (`apps/api/src/lib/config/server-config.ts`). Storage type and S3 credentials live in `settings.json` under `defaults.mount`. The settings store is a plain `JsonStore` with a hardcoded `'local-fullnames'` default; it does not read anything out of `config.json`.
+
+`mailDomain` is the `MAIL_DOMAIN` setup ran on. Every account's address was made on it, so it cannot change: once it is recorded, `./eigen setup` states it instead of asking and refuses a different `--mail-domain` (`apps/api/src/cli/configure.ts`). At boot the API compares `MAIL_DOMAIN` with the domain of the owner's address (`apps/api/src/server.ts`); on a mismatch it exits in production, naming the value to put back, and warns in development.
 
 ## JsonStore
 
@@ -58,6 +55,8 @@ without session activity). See [GUEST-ACCESS.md](GUEST-ACCESS.md).
 **`landing.links`** — optional extra buttons on the public landing page, each `{ title, url }`. Served to the
 unauthenticated frontend through the public config route.
 
+**`mail`** — the system sender and how the relay treats users. `senderName` and `senderAddress` name the From of the mail the server sends itself (codes, notifications, invitations); empty means derived, the org name and `noreply@` the mail domain, so a later rename carries through. The setup wizard stores a sender only when it differs from those defaults. `relaySendsAsUsers` matters only without hosted mail: on, the relay accepts every address on the mail domain as a sender, so a user's mail goes out from their own address. See [Sending as a user](#mail-environment).
+
 ### notifications.email
 
 The cross-cutting seam. Each flag turns one *email* on or off; the matching in-app notification always fires
@@ -87,20 +86,26 @@ access-request flag by `propagateAccessRequest` in `access-request-propagation.t
 
 ## Admin API
 
-All endpoints require the org role `admin` or `owner`. Defined in `apps/api/src/routes/settings.ts`.
+Defined in `apps/api/src/routes/settings.ts`. Changing the server's settings is the org owner's (`requireOwner`); admins keep what the Users, Guests and team pages read.
 
-| Method | Path                      | Description                                                    |
-|--------|---------------------------|----------------------------------------------------------------|
-| GET    | `/settings/server`        | Read current server settings                                   |
-| PUT    | `/settings/server`        | Partial update of any branch                                   |
-| GET    | `/settings/s3config`      | Read the saved S3 configuration                                |
-| PUT    | `/settings/s3config`      | Validate a connection, then write `defaults.mount.s3Config`     |
-| POST   | `/settings/s3check`       | Test an S3 connection without saving                           |
-| GET    | `/settings/users`         | `AdminUserRow[]` — every org member **and** orphan for the Users page (auth-DB join incl. `lastLoginAt` + session-derived `lastActiveAt`, teams) |
-| GET    | `/settings/users/usage`   | `Record<userId, HomeSizeResponse>` — per-user disk usage via the `pullHomeSize` home-relay read, which sizes a home from its own databases (the mount `metadata.db`, `mail.db`, `contacts.db` and `calendar.db` totals, plus the avatars walk) rather than booting it (concurrency 4, 5-min in-memory cache) |
-| GET    | `/settings/users/guests`  | Guest accounts only, for the admin Guests page                 |
-| DELETE | `/settings/user/:userId`  | Delete a user account (cannot delete self)                     |
-| PUT    | `/settings/user/:userId/password` | Set a user's password via `resetUserPassword()`, the CLI's `./eigen reset-password` path: signs them out everywhere and revokes their app passwords; refuses guests and the owner. better-auth's own `/auth/admin/set-user-password`, which revokes nothing, is in `disabledPaths` |
+| Method | Path                      | Who   | Description                                                    |
+|--------|---------------------------|-------|----------------------------------------------------------------|
+| GET    | `/settings/server`        | admin | Read current server settings (the team page reads the quota defaults) |
+| PUT    | `/settings/server`        | owner | Partial update of any branch; a `mail.senderAddress` must be an email address, a `mail.senderName` is stored trimmed |
+| GET    | `/settings/s3config`      | owner | Read the saved S3 configuration                                |
+| PUT    | `/settings/s3config`      | owner | Validate a connection, then write `defaults.mount.s3Config`     |
+| POST   | `/settings/s3check`       | admin | Test an S3 connection without saving                           |
+| POST   | `/settings/s3harden`      | admin | Turn on the bucket's versioning and expire noncurrent versions                 |
+| GET    | `/settings/status`        | owner | `getServerStatus()`: version, hosted mail, disk, certificate expiry (what `./eigen status` reports) |
+| PUT    | `/settings/organization`  | owner | Rename the organization: `config.json`'s orgName and the better-auth organization. The web address and mail domain stay |
+| POST   | `/settings/mail/test`     | owner | Send one mail from the owner to the owner through `buildMailOptions`, so it tests the sender rule; a failure returns 502 with the transport's error |
+| GET    | `/settings/users`         | admin | `AdminUserRow[]` — every org member **and** orphan for the Users page (auth-DB join incl. `lastLoginAt` + session-derived `lastActiveAt`, teams) |
+| GET    | `/settings/users/usage`   | admin | `Record<userId, HomeSizeResponse>` — per-user disk usage via the `pullHomeSize` home-relay read, which sizes a home from its own databases (the mount `metadata.db`, `mail.db`, `contacts.db` and `calendar.db` totals, plus the avatars walk) rather than booting it (concurrency 4, 5-min in-memory cache) |
+| GET    | `/settings/users/guests`  | admin | Guest accounts only, for the admin Guests page                 |
+| DELETE | `/settings/user/:userId`  | admin | Delete a user account; refuses your own account and the owner's |
+| PUT    | `/settings/user/:userId/password` | admin | Set a user's password via `resetUserPassword()`, the CLI's `./eigen reset-password` path: signs them out everywhere and revokes their app passwords. Refuses guests, and the owner unless the owner resets their own. better-auth's own `/auth/admin/set-user-password`, which revokes nothing, is in `disabledPaths` |
+
+The waitlist routes (`/waitlist/entries`, `apps/api/src/routes/waitlist.ts`) are the owner's too, like the Waitlist page.
 
 Both S3 paths refuse a configuration that does not connect: `PUT /settings/s3config` runs `checkS3Connection`
 before saving, and `PUT /settings/server` refuses `storageType: 's3'` unless a saved S3 config exists **and** still
@@ -108,14 +113,13 @@ connects. So the server never ends up defaulting new drives to a bucket it canno
 
 ## Frontend
 
-Hooks in `packages/lib/src/core/settings/hooks/`: `useServerSettings()` / `useUpdateServerSettings()` /
-`invalidateServerSettings()` over query key `['settings', 'server']`, `useServerS3Config()` /
-`useUpdateServerS3Config()` / `invalidateServerS3Config()` over `['settings', 's3config']`, and
-`useCheckS3Connection()` for the test button. Both queries use a 5-minute stale time.
+Hooks in `packages/lib/src/core/settings/hooks/`: `useServerSettings()` / `useUpdateServerSettings()` / `invalidateServerSettings()` over query key `['settings', 'server']`, `useServerS3Config()` / `useUpdateServerS3Config()` / `invalidateServerS3Config()` over `['settings', 's3config']`, `useCheckS3Connection()` for the test button, `useServerStatus()` (fetched only for the owner), `useUpdateOrgName()` (invalidates the public config, which carries the name) and `useSendTestMail()`.
 
-The Admin app's `/settings` route renders `ServerSettingsPage`
-(`apps/admin/src/components/admin/server-settings.tsx`) with four sections:
+The Admin app's `/settings` route sits behind the `_owner` guard, with Onboarding, Guest settings and Waitlist; an admin who opens one by URL sees "Only the server owner can open this page." It renders `ServerSettingsPage` (`apps/admin/src/components/admin/server-settings.tsx`) with these sections, each a shared `SettingsSection` over one `SettingsFooter`:
 
+- **General** — the organization name, editable, beside the web address and mail domain, read-only
+- **Server** — what `./eigen status` reports: version, hosted mail, disk, certificate (`server-status-section.tsx`)
+- **Mail** — the sender name and address, **Relay sends as users** (only without hosted mail), and **Send test mail**
 - **Storage Quotas** — mail/contacts max, default mount max, upload limit, trash retention
 - **Defaults** — the storage type picker, which carries the S3 endpoint/bucket/credentials and the connection test
   inline (there is no separate S3 section)
@@ -138,12 +142,11 @@ Whether this deployment hosts mailboxes at all, and how the API hands mail to an
 | `SMTP_RELAY_PORT`     | `587`                | Its port. `465` is implicit TLS, any other port STARTTLS                    |
 | `SMTP_RELAY_USER`     | unset                | SASL username. Set it and the transport authenticates                       |
 | `SMTP_RELAY_PASSWORD` | unset                | SASL password. Required whenever `SMTP_RELAY_USER` is set                   |
-| `SMTP_FROM`           | `<org name> <noreply@MAIL_DOMAIN>` | The system sender: an address or `Name <address>`; a bare address keeps the org name |
 
 `MAIL_ENABLED` rides out to the frontend as `mailEnabled` on `GET /p/config`, where `useMailEnabled()` (`packages/lib/src/core/public/hooks/use-public.ts`) is the one read of it: it reports on until the config lands, so the common deployment never flashes a missing Mail app. Built on it: `useEnabledApps()` (the app switcher, the Space home and the cycling logo), the `mailOnly` flag on a `FILE_ACTIONS` row (**Import to Mail** on an `.eml`), `useHomeDataLabel()`, and `MailOffState` (`packages/ui`), the one screen for a typed `/mail` URL and the Space mail page. `useMailboxes` is the exception — it gates its fetch on `mailEnabled === true` from the config itself, so a mail-off server is never asked for a mailbox list. Outbound mail goes on with mailboxes off, as long as a relay is set: share notifications, invites and "Email collaborators" go out through it. Without a relay every email fails, two-factor codes by email and guest sign-in codes included; `./eigen setup` says so when it writes that shape.
 
-**Sending on a user's behalf.** `onBehalfOf()` (`mailer.ts`) picks the From of mail a user causes (share notifications, invitations, "Email collaborators", iMIP). With hosted mail and an address this server hosts, the user's own address is the From. Otherwise, mail off or an outside address, a relay would refuse the user's address and receivers enforce DMARC, so the From is the system sender with the user's name, `Ada via Acme <noreply@example.com>`, and Reply-To is the user. The system sender's own mail (codes, notifications) always comes from `SMTP_FROM`.
+**Sending as a user.** `buildMailOptions()` (`mailer.ts`) holds the one sender rule. A message's `from` is the person it is from; absent, it is the system's own mail and goes out from the system sender (`mail.senderName`, `mail.senderAddress`, empty meaning the org name and `noreply@` the mail domain). A person on the mail domain sends as themselves when Postfix hosts the domain, or when the relay takes any address on it (`mail.relaySendsAsUsers`). Everyone else goes out "via": the From is the system sender's address with `Ada via Acme` as its name, and Reply-To is the person, since a relay refuses an address it does not allow and receivers enforce DMARC. The envelope sender follows the resolved From.
 
-**What mail off leaves out.** No Mail app, no IMAP, no inbound mail. Every home still builds its Maildir and watcher, an idle cost. The `/mail/:ownerId/*` routes stay live apart from the two imports, which refuse with 403 (`requireMailEnabled()`, `apps/api/src/lib/core/access.ts`); the UI hides them, and a direct send from them uses the user's address, which a relay refuses. Calendar invitations go out, but replies from outside attendees go to the organizer's own mailbox and Eigen never updates their status, since inbound iMIP needs hosted mail. The role addresses `postmaster@`, `abuse@` and `noreply@` stay unclaimable, and an address on the server's own mail domain is never a guest, even when its mailbox lives elsewhere.
+**What mail off leaves out.** No Mail app, no IMAP, no inbound mail. Every home still builds its Maildir and watcher, an idle cost. The `/mail/:ownerId/*` routes stay live apart from the two imports and the send route, which refuse with 403 (`requireMailEnabled()`, `apps/api/src/lib/core/access.ts`); the UI hides them. Calendar invitations go out, but replies from outside attendees go to the organizer's own mailbox and Eigen never updates their status, since inbound iMIP needs hosted mail. The role addresses `postmaster@`, `abuse@` and `noreply@` stay unclaimable, and an address on the server's own mail domain is never a guest, even when its mailbox lives elsewhere.
 
 Transport security follows `SMTP_RELAY_USER`: the hop to Postfix and an anonymous relay (self-signed, no cert) keep opportunistic TLS, while a relay that takes credentials must accept TLS, so credentials never travel in the clear; the API also checks the relay's certificate. `SMTP_RELAY_USER` without `SMTP_RELAY_PASSWORD` is a config error — `createTransport()` throws rather than authenticate with a blank password.

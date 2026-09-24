@@ -161,8 +161,7 @@ client API (`authClient.organization.*`) for org/team operations and Eden Treaty
 - **Team Detail**: List/add/remove team members, toggle team calendar on/off, set calendar member access
   (free-busy/read/write), manage mounts (add/edit/enable/disable), set quota overrides (mail & contacts, default
   mount), set/remove the team avatar (see [Team Avatars](#team-avatars))
-- **Settings**: Server-wide settings — quotas, storage defaults (incl. S3), email-notification toggles, landing
-  page links. See [SERVER-SETTINGS.md](SERVER-SETTINGS.md)
+- **Settings**: Server-wide settings — the organization name, the server's status, the system sender and test mail, quotas, storage defaults (incl. S3), email-notification toggles, landing page links. See [SERVER-SETTINGS.md](SERVER-SETTINGS.md)
 - **Guests**: guest accounts, with detail + delete — see [GUEST-ACCESS.md](GUEST-ACCESS.md) (the `/guest-settings`
   page next to it holds the guest toggles)
 - **Waitlist**: waitlist entries — accept, reject, resend invite, delete
@@ -170,8 +169,7 @@ client API (`authClient.organization.*`) for org/team operations and Eden Treaty
 
 ### Access
 
-Route guard in `_auth.tsx`: fetches org members, checks current user has role `admin` or `owner`. Non-admins see an access-denied
-`EmptyState`. Visible via "Admin" in app switcher.
+Route guard in `_auth.tsx`: fetches org members, checks current user has role `admin` or `owner`. Non-admins see an access-denied `EmptyState`. Settings, Onboarding, Guest settings and Waitlist sit under a second guard, `_auth._owner.tsx` (`useIsOrgOwner()`), since their routes are the owner's; the sidebar hides them from admins. Visible via "Admin" in app switcher.
 
 ### API
 
