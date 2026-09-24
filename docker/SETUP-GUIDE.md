@@ -168,11 +168,14 @@ You're done.
 Everything runs through `./eigen` in the install folder. `./eigen help` lists the commands, `./eigen <command> --help` tells more about one.
 
 ```bash
-./eigen status                   # version, pending update, services, disk, last snapshot, certificate, mail queue
+./eigen status                   # version, pending update, services, disk, snapshots, certificate, mail queue
 ./eigen logs [service]           # follow the logs of every service, or of one
 ./eigen restart                  # start Eigen, and any part of it that stopped
+./eigen stop                     # stop Eigen; ./eigen restart starts it again
 ./eigen reset-password <email>   # set a new password for an account
 ```
+
+`status` names the newest snapshot, and how many `snapshots/` holds and their size on disk. On a release install, an update that stopped halfway shows as `files of <new version>, running <old version>`; `./eigen update` finishes it.
 
 `./eigen` runs one command that changes Eigen at a time: while one runs, a second, like a nightly backup in the middle of an update, stops with "Another ./eigen command is running."
 
@@ -186,9 +189,11 @@ Everything runs through `./eigen` in the install folder. `./eigen help` lists th
 
 A release install gets the newest release, or the one you name (`./eigen update 0.3.1`). When the release notes list breaking changes, it shows them and asks whether to go on; run without a terminal, like from cron, it refuses until you run `./eigen update --accept-breaking`. A source install pulls the newest commit of its branch and builds it; it refuses while local changes or commits of your own are in the way.
 
-The download or build happens while Eigen runs. Then Eigen stops, saves a snapshot of the data and `.env.production` in `snapshots/`, switches to the new version and starts again. Eigen is down for the length of that snapshot, which grows with your data; the update checks first that the snapshot fits on the disk. It keeps the snapshots of the last two updates. Active SSE/WebSocket connections briefly reconnect. `./eigen update --check` only tells whether there is an update, and what it brings.
+The download or build happens while Eigen runs. Then Eigen stops, saves a snapshot in `snapshots/`, switches to the new version and starts again. That snapshot is a light one: the databases, settings and `.env.production`, without the files and the mail. When a release since yours marks a change (breaking) in its CHANGELOG, or with `./eigen update --full`, it is a full one, files and mail too. A source install reads no release notes, so it saves a light one unless you pass `--full`. Eigen is down for the length of that snapshot; the update checks first that the snapshot fits on the disk. It keeps the snapshots of the last two updates. Active SSE/WebSocket connections briefly reconnect. `./eigen update --check` only tells whether there is an update, and what it brings.
 
-`./eigen rollback` goes back to the version before the last update, with the data as it was then: it puts back the snapshot the update saved, with the old images (a source install checks out the old commit and builds it), and starts Eigen. The current data is kept aside. It goes back one update only, and a source install refuses while the checkout has local changes.
+`./eigen rollback` goes back to the version before the last update, with the data as it was then: it puts back the snapshot the update saved, with the old images (a source install checks out the old commit and builds it), and starts Eigen. The current data is kept aside. After a light snapshot it puts back only the databases, settings and `.env.production`, so files and mail added since the update stay. It goes back one update only, and a source install refuses while the checkout has local changes.
+
+Coming from a version without light snapshots, the first `./eigen update` stops at the snapshot, because the old version cannot save a light one: run `./eigen update --full` then. `./eigen rollback` cannot go back past that one update; `./eigen restore` with its `eigen-pre-update-*` snapshot can.
 
 ### Backups
 
@@ -196,14 +201,14 @@ The download or build happens while Eigen runs. Then Eigen stops, saves a snapsh
 ./eigen backup
 ```
 
-Saves all data (mail, files, contacts, calendars, settings, the server databases) and `.env.production` as one snapshot, `snapshots/eigen-<UTC time>.tar.gz`. It stops every service, archives the quiet `data/` with its owners and modes, and starts Eigen again: a short downtime for a consistent snapshot. Only the owner of the install folder can read the snapshot. Two things are not in it: `caddy-data/`, from which Caddy gets its certificates again, and the Postfix queue of mail still waiting to go out. Copy snapshots off the server, and schedule the backup daily:
+Saves all data (mail, files, contacts, calendars, settings, the server databases) and `.env.production` as one full snapshot, `snapshots/eigen-<UTC time>.tar.gz`. It checks first that the snapshot fits on the disk, stops every service, archives the quiet `data/` with its owners and modes, and starts Eigen again: a short downtime for a consistent snapshot. Then it deletes all but the newest three snapshots it made; `--keep <n>` keeps another number, and the snapshots of updates do not count. `./eigen backup --light` saves a light snapshot: the databases, settings and `.env.production`, without the files and the mail. Only the owner of the install folder can read a snapshot. Not in any snapshot: `caddy-data/`, from which Caddy gets its certificates again, the Postfix queue of mail still waiting to go out, `backups/` with the per-home archives, and `docker-compose.override.yml`. Copy snapshots off the server, and schedule the backup daily:
 
 ```bash
 crontab -e
 # 0 3 * * * /opt/eigen/eigen backup
 ```
 
-Put a snapshot back with `./eigen restore`. It unpacks and checks the snapshot while Eigen runs, asks, then stops Eigen, moves the current `data/` and `.env.production` aside to `data.pre-restore-<UTC time>` and `.env.production.pre-restore-<UTC time>` (never deleted), puts the snapshot in their place and starts Eigen again. A snapshot is the whole server: on a release install, a snapshot of an older version brings that version back too, with its images and its launcher and Compose files, as a rollback does. The images come first: if they cannot be downloaded, Eigen runs on as it was. It refuses a snapshot of a newer Eigen version: update first, then restore. It also refuses a snapshot of a source install on a release install, and the other way around. `data/` must be a plain folder inside the install folder, not a link or a mount of another disk.
+Put a snapshot back with `./eigen restore`. It unpacks and checks the snapshot while Eigen runs, asks, then stops Eigen, moves the current `data/` and `.env.production` aside to `data.pre-restore-<UTC time>` and `.env.production.pre-restore-<UTC time>` (never deleted), puts the snapshot in their place and starts Eigen again. A light snapshot puts back only the databases, settings and `.env.production`, moves the ones it replaces aside into `data.pre-restore-<UTC time>`, and leaves files and mail as they are. A snapshot records the version that made it: on a release install, a snapshot of an older version brings that version back too, with its images and its launcher and Compose files, as a rollback does. The images come first: if they cannot be downloaded, Eigen runs on as it was. It refuses a snapshot of a newer Eigen version: update first, then restore. It also refuses a snapshot of a source install on a release install, and the other way around. `data/` must be a plain folder inside the install folder, not a link or a mount of another disk.
 
 ```bash
 ./eigen restore eigen-<UTC time>.tar.gz
