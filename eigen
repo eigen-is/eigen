@@ -143,7 +143,8 @@ arguments() {
 }
 
 # The glyphs are GLYPHS in apps/api/src/cli/ui.ts, so the CLI's lines read like these.
-say() { printf '%s%s%s  %s\n' "$1" "$2" "$RESET" "$3"; }
+# A write to a terminal that hung up fails; the command must not end with it.
+say() { printf '%s%s%s  %s\n' "$1" "$2" "$RESET" "$3" || :; }
 
 # die <what went wrong> <what to do next>
 die() {
@@ -272,7 +273,7 @@ step() {
         done
         wait "$job" 2>/dev/null || code=$?
         trap 'exit 130' INT TERM
-        printf '\r\033[K\033[1A\r\033[K\033[?25h'
+        printf '\r\033[K\033[1A\r\033[K\033[?25h' || :
     else
         "$@" >"$LOG" 2>&1 </dev/null || code=$?
     fi

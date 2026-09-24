@@ -28,7 +28,7 @@ JAR="$SCRATCH/session"
 # The terminal: a docker:cli container that outlives each command, so what a command leaves running shows in its ps.
 TERMINAL=$(docker run -d --init --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
     -v /var/run/docker.sock:/var/run/docker.sock -v "$SCRATCH:$SCRATCH" \
-    "${IMAGE_FLAGS[@]}" -e HARNESS_PRUNE_LOG="$PRUNE_LOG" --entrypoint tail "$CLI_IMAGE" -f /dev/null)
+    ${IMAGE_FLAGS[@]+"${IMAGE_FLAGS[@]}"} -e HARNESS_PRUNE_LOG="$PRUNE_LOG" --entrypoint tail "$CLI_IMAGE" -f /dev/null)
 
 # type_into <name> <launcher args…>: ./eigen in the terminal, driven by the expect lines on stdin, which read their
 # values from the environment. Its screen goes to $SCRATCH/<name>.log; sets CODE and SCREEN (that file).

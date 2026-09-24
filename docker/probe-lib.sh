@@ -26,7 +26,8 @@ VERSION=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$REPO_ROOT/package.json" | h
 IMAGES=$(sed -n "s/^IMAGES='\(.*\)'/\1/p" "$REPO_ROOT/eigen")
 # image_key in ./eigen: the variable that names an image.
 image_key() { printf 'EIGEN_%s_IMAGE\n' "$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"; }
-# The docker run flags that pass those variables into a container, when set.
+# The docker run flags that pass those variables into a container, when set. Expanded as ${IMAGE_FLAGS[@]+"…"}: bash 3.2
+# with `set -u` treats an empty array as unbound.
 IMAGE_FLAGS=()
 for name in $IMAGES; do IMAGE_FLAGS+=(-e "$(image_key "$name")"); done
 # Space-separated, not an array: bash 3.2 with `set -u` treats an empty array as unbound.
@@ -205,7 +206,7 @@ in_cli_container() {
         shift 2
     fi
     docker run --rm ${stdin[@]+"${stdin[@]}"} --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
-        -v /var/run/docker.sock:/var/run/docker.sock -v "$SCRATCH:$SCRATCH" -w "$INSTALL" "${IMAGE_FLAGS[@]}" \
+        -v /var/run/docker.sock:/var/run/docker.sock -v "$SCRATCH:$SCRATCH" -w "$INSTALL" ${IMAGE_FLAGS[@]+"${IMAGE_FLAGS[@]}"} \
         -e NO_COLOR=1 -e HARNESS_PRUNE_LOG="$PRUNE_LOG" ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
 }
 
