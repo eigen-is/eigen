@@ -1,4 +1,4 @@
-// Not surfaced from the domain barrel (see ../index.ts) — only the sibling hook file consumes it.
+// Not surfaced from the domain barrel (see ../index.ts) — only lib's own hooks consume it.
 export const publicKeys = {
     config: ['publicConfig'] as const,
 };

@@ -3,6 +3,7 @@ import type { QueryClient } from '@tanstack/react-query';
 export const settingsKeys = {
     all: ['settings'] as const,
     server: () => [...settingsKeys.all, 'server'] as const,
+    status: () => [...settingsKeys.all, 'status'] as const,
 };
 
 // Not surfaced from the domain barrel (see hooks/index.ts) — only the sibling hook file consumes it.
