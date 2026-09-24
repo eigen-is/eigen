@@ -22,7 +22,6 @@
     "serve:slides": "bun --filter '@apps/api' --filter './apps/slides' dev",
     "serve:sheets": "bun --filter '@apps/api' --filter './apps/sheets' dev",
     "serve:vector": "bun --filter '@apps/api' --filter './apps/vector' dev",
-    "setup": "bun apps/api/src/cli/index.ts configure",
     "build": "bun --workspaces build",
     "build:prod": "bun --filter './apps/*' build && bun --filter '@apps/api' buildfordocker",
     "lint": "bunx --bun @biomejs/biome check .",
