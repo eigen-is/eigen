@@ -166,7 +166,8 @@ describe('DocumentTransformRunner', () => {
         logSpy.mockRestore();
 
         expect(response.ok).toBe(true);
-        const line = logged.find((l) => l.includes('[transform] job=')) ?? '';
+        // The process-wide runner's background search extraction can log inside this window too.
+        const line = logged.find((l) => l.includes('[transform] job=') && l.includes('kind=export')) ?? '';
         expect(line).toContain('format=html');
         expect(line).toMatch(/startupMs=\d+/);
         expect(line).toContain('warnings=corrupt-blobs-skipped:3');

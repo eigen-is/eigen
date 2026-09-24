@@ -1,4 +1,4 @@
-# No default: .bun-version is the one pin (Bun 1.4.2 blows past memory late in the API suite).
+# No default: .bun-version is the one pin, read by the launcher, CI and the host alike.
 ARG BUN_VERSION
 
 # Only the manifests, so the install layer below stays cached until a dependency changes.
