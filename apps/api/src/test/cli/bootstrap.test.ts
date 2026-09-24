@@ -13,8 +13,12 @@ afterAll(() => {
     for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
 });
 
+const REGISTRY = 'localhost:5055/eigen-is/eigen';
+
 function runBootstrap(out: string, ...args: string[]) {
-    return runCli(['bootstrap', '--out', out, ...args], { env: { EIGEN_REGISTRY: 'localhost:5055/eigen-is/eigen' } });
+    return runCli(['bootstrap', '--out', out, ...args], {
+        env: { EIGEN_REGISTRY: REGISTRY, EIGEN_CHANNEL: undefined },
+    });
 }
 
 describe('bootstrap', () => {
@@ -34,7 +38,19 @@ describe('bootstrap', () => {
         expect(mode('docker-compose.yml')).toBe(0o644);
         expect(mode('.env.production')).toBe(0o600);
         expect(readFileSync(join(out, '.env.production'), 'utf8')).toBe(
-            `EIGEN_REGISTRY=localhost:5055/eigen-is/eigen\nEIGEN_VERSION=${version}\nEIGEN_API_IMAGE=localhost:5055/eigen-is/eigen/api:${version}\n`,
+            `EIGEN_REGISTRY=${REGISTRY}\nEIGEN_VERSION=${version}\nEIGEN_API_IMAGE=${REGISTRY}/api:${version}\n`,
+        );
+    });
+
+    test('a build of a channel pins the channel', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'eigen-bootstrap-'));
+        dirs.push(dir);
+        const run = await runCli(['bootstrap', '--out', dir], {
+            env: { EIGEN_REGISTRY: REGISTRY, EIGEN_CHANNEL: 'main' },
+        });
+        expect(run.code).toBe(0);
+        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(
+            `EIGEN_REGISTRY=${REGISTRY}\nEIGEN_VERSION=main\nEIGEN_API_IMAGE=${REGISTRY}/api:main\n`,
         );
     });
 
@@ -46,14 +62,25 @@ describe('bootstrap', () => {
         expect(readFileSync(join(out, 'docker-compose.yml'), 'utf8')).toBe('edited\n');
     });
 
-    test('--force rewrites the bundle files and leaves the env file alone', async () => {
-        writeFileSync(join(out, '.env.production'), 'DOMAIN=eigen.example.org\n', { mode: 0o600 });
+    test('--force rewrites the bundle files and leaves an env file that names a release alone', async () => {
+        const env = 'DOMAIN=eigen.example.org\nEIGEN_VERSION=0.1.0\n';
+        writeFileSync(join(out, '.env.production'), env, { mode: 0o600 });
         const run = await runBootstrap(out, '--force');
         expect(run.code).toBe(0);
         expect(readFileSync(join(out, 'docker-compose.yml'), 'utf8')).toBe(
             readFileSync(join(ROOT, 'docker-compose.yml'), 'utf8'),
         );
-        expect(readFileSync(join(out, '.env.production'), 'utf8')).toBe('DOMAIN=eigen.example.org\n');
+        expect(readFileSync(join(out, '.env.production'), 'utf8')).toBe(env);
         expect(mode('eigen')).toBe(0o755);
+    });
+
+    test('--force adds the release pins to an env file that names none, and keeps its lines', async () => {
+        writeFileSync(join(out, '.env.production'), '# Source install\nDOMAIN=eigen.example.org\n', { mode: 0o600 });
+        const run = await runBootstrap(out, '--force');
+        expect(run.code).toBe(0);
+        expect(readFileSync(join(out, '.env.production'), 'utf8')).toBe(
+            `# Source install\nDOMAIN=eigen.example.org\nEIGEN_REGISTRY=${REGISTRY}\nEIGEN_VERSION=${version}\nEIGEN_API_IMAGE=${REGISTRY}/api:${version}\n`,
+        );
+        expect(mode('.env.production')).toBe(0o600);
     });
 });

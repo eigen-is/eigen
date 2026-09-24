@@ -4,10 +4,11 @@
 # install .8 and seed a document, sheet, event, contact and chat message; update to :latest; roll back; refuse and
 # then accept the breaking release; refuse an unknown version and a downgrade; refuse a source install's snapshot, and a
 # snapshot of .8 while the registry is down, before anything stops; restore a snapshot of .8, which brings its
-# launcher and Compose files back; install .9 twice, on one digest.
+# launcher and Compose files back; move .8 onto the main channel, update it to a second build of main, roll back one
+# build, and leave main for .10; install from main; install .9 twice, on one digest.
 #
 # Usage:  ./docker/test-release.sh
-# Needs:  docker, curl, git. Builds the API three times and the other images once (the first on a cold cache takes
+# Needs:  docker, curl, git. Builds the API five times and the other images once (the first on a cold cache takes
 #         minutes).
 
 set -euo pipefail
@@ -133,14 +134,15 @@ missing_items() {
     printf '%s' "$missing"
 }
 
-# check_running <version>: healthy, status names the version, it is pinned by digest, every seeded item is there.
+# check_running <version> [channel]: healthy, status names the version, it or the channel is pinned by digest, every
+# seeded item is there.
 check_running() {
-    local missing
+    local missing pinned=${2:-$1}
     if stack_up; then ok "every service runs and eigen-api is healthy"; else fail "the stack is not up"; fi
     eigen status
     if says "Version  *$1"; then ok "status shows $1"; else fail "status shows another version"; show; fi
-    if [ "$(env_of EIGEN_VERSION)" = "$1" ] && env_of EIGEN_API_IMAGE | grep -q "^$REGISTRY/api@sha256:"; then
-        ok ".env.production pins $1 by digest"
+    if [ "$(env_of EIGEN_VERSION)" = "$pinned" ] && env_of EIGEN_API_IMAGE | grep -q "^$REGISTRY/api@sha256:"; then
+        ok ".env.production pins $pinned by digest"
     else
         fail ".env.production pins $(env_of EIGEN_VERSION) as $(env_of EIGEN_API_IMAGE)"
     fi
@@ -151,6 +153,20 @@ check_running() {
         fail "missing:$missing"
     fi
 }
+
+# check_channel <commit>: check_running on the build of main at that commit, which is $NEW's code.
+check_channel() { check_running "$NEW ($1) on main" main; }
+
+# build_main <commit>: api:main from $NEW's code at that commit, pushed; the installs must pull it.
+build_main() {
+    build -f "$SCRATCH/src-$NEW/docker/api/Dockerfile" --build-arg "EIGEN_VERSION=$NEW" --build-arg "EIGEN_COMMIT=$1" \
+        --build-arg EIGEN_CHANNEL=main --build-arg "EIGEN_REGISTRY=$REGISTRY" -t "$REGISTRY/api:main" "$SCRATCH/src-$NEW"
+    docker push -q "$REGISTRY/api:main" >/dev/null
+    docker image rm "$REGISTRY/api:main" >/dev/null
+}
+
+# The api image the install runs, by ID.
+api_image() { docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)"; }
 
 # Every line of the env file but the pins.
 unpinned() { scratch_run cat "$INSTALL/.env.production" | grep -v '^EIGEN_\(VERSION\|[A-Z]*_IMAGE\)='; }
@@ -232,8 +248,9 @@ if [ "$pointer" = "archive=$archive version=$PREVIOUS commit=harness kind=light 
 else
     fail ".eigen/last-update '$pointer', snapshot $meta"
 fi
-if tags_are "$PREVIOUS" "$NEW"; then
-    ok "only $PREVIOUS (for a rollback) and $NEW are kept"
+# latest is the same image as $NEW.
+if tags_are "$PREVIOUS" "$NEW" latest; then
+    ok "only $PREVIOUS (for a rollback) and $NEW, also tagged latest, are kept"
 else
     fail "api tags kept: $(api_tags)"
 fi
@@ -405,6 +422,107 @@ else
     fail "the restore of a snapshot of $PREVIOUS: exit $CODE"
 fi
 check_running "$PREVIOUS"
+
+##############################################################################
+header "The main channel"
+##############################################################################
+# registry:2 over plain HTTP takes no annotations, so the launcher finds the commit of main's newest build by pulling
+# api:main and reading its label.
+build_main main1
+for name in $IMAGES; do
+    if [ "$name" != api ]; then
+        docker pull -q "$REGISTRY/$name:$PREVIOUS" >/dev/null
+        docker tag "$REGISTRY/$name:$PREVIOUS" "$REGISTRY/$name:main"
+        docker push -q "$REGISTRY/$name:main" >/dev/null
+        docker image rm "$REGISTRY/$name:main" >/dev/null
+    fi
+done
+eigen update main
+show
+if [ "$CODE" = 0 ] && says "◇  Eigen $PREVIOUS → main (main1) is running at https://localhost/"; then
+    ok "./eigen update main moved $PREVIOUS onto the main channel"
+else
+    fail "./eigen update main exited $CODE"
+fi
+check_channel main1
+main1=$(api_image)
+
+started=$(api_started)
+eigen update
+if [ "$CODE" = 0 ] && says "Eigen main (main1) is up to date and running at https://localhost/" &&
+    [ "$(api_started)" = "$started" ]; then
+    ok "./eigen update on the newest build of main says it is up to date, and restarts nothing"
+else
+    fail "update on the newest build of main: exit $CODE"
+    show
+fi
+eigen update --check
+if [ "$CODE" = 0 ] && says "Eigen main (main1) is up to date." && [ "$(api_started)" = "$started" ]; then
+    ok "--check on the newest build of main says it is up to date"
+else
+    fail "update --check on the newest build of main: exit $CODE"
+    show
+fi
+
+build_main main2
+eigen update --check
+if [ "$CODE" = 0 ] && says "Eigen main (main2) is out" && says '└  ./eigen update installs it.' &&
+    [ "$(api_started)" = "$started" ]; then
+    ok "--check names the new build of main, and stops nothing"
+else
+    fail "update --check with a new build of main: exit $CODE"
+    show
+fi
+eigen update
+show
+if [ "$CODE" = 0 ] && says "◇  Eigen main (main1) → main (main2) is running at https://localhost/"; then
+    ok "./eigen update installed the new build of main"
+else
+    fail "update to the new build of main: exit $CODE"
+fi
+check_channel main2
+kept=$(docker image ls "$REGISTRY/api" -q --no-trunc | sort -u | tr '\n' ' ')
+if [ "$kept" = "$(printf '%s\n' "$main1" "$(api_image)" | sort -u | tr '\n' ' ')" ]; then
+    ok "only the two builds of main are kept: the running one, and the one the rollback snapshot pins"
+else
+    fail "api images kept: $kept"
+fi
+
+eigen rollback --yes
+show
+if [ "$CODE" = 0 ] && says "Back from Eigen main (main2) to Eigen $NEW (main1)" &&
+    says "◇  Eigen main (main2) → main (main1) is running at https://localhost/"; then
+    ok "./eigen rollback went back to the previous build of main"
+else
+    fail "rollback on main: exit $CODE"
+fi
+check_channel main1
+
+started=$(api_started)
+eigen update "$BREAKING"
+if [ "$CODE" = 1 ] && says "■  Eigen $BREAKING has breaking changes, listed above." && [ "$(api_started)" = "$started" ]; then
+    ok "leaving main for $BREAKING refuses its breaking change, since the version changes"
+else
+    fail "update from main to $BREAKING without the flag: exit $CODE"
+    show
+fi
+eigen update "$BREAKING" --accept-breaking
+show
+if [ "$CODE" = 0 ] && says "◇  Eigen main (main1) → $BREAKING is running at https://localhost/"; then
+    ok "./eigen update $BREAKING left main"
+else
+    fail "update from main to $BREAKING --accept-breaking: exit $CODE"
+fi
+check_running "$BREAKING"
+down_project "$PROJECT"
+
+release_install "eigentest-main-$$" main
+run_setup "$SCRATCH/setup-main.log" "${SETUP_FLAGS[@]}" --domain localhost
+if stack_up && [ "$(env_of EIGEN_VERSION)" = main ]; then
+    ok "an install bootstrapped from api:main follows main and runs"
+else
+    fail "the install from api:main: EIGEN_VERSION=$(env_of EIGEN_VERSION)"
+fi
 down_project "$PROJECT"
 
 ##############################################################################

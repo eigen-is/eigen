@@ -2,7 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { runCli } from '../cli-test-helpers';
 
-const status = (...flags: string[]) => runCli(['status', '--services=', ...flags], { env: { NO_COLOR: '1' } });
+const status = (...flags: string[]) =>
+    runCli(['status', '--services=', ...flags], { env: { NO_COLOR: '1', EIGEN_CHANNEL: undefined } });
+const onMain = (...flags: string[]) =>
+    runCli(['status', '--services=', ...flags], {
+        env: { NO_COLOR: '1', EIGEN_CHANNEL: 'main', EIGEN_COMMIT: 'abc1234' },
+    });
 
 describe('status', () => {
     test('a newest release that is not a version is reported as not checked', async () => {
@@ -16,6 +21,17 @@ describe('status', () => {
         expect(result.stdout).toContain(`▲  Update         files of 9.9.9, running ${pkg.version}: run ./eigen update`);
         expect(result.stdout).not.toContain('99.0.0');
         expect((await status(`--files=${pkg.version}`)).stdout).not.toContain('Update');
+    });
+
+    test('on a channel, --latest is the commit of its newest build', async () => {
+        expect((await onMain('--latest=abc1234', '--files=main')).stdout).toMatch(/◇ {2}Update +up to date/);
+        expect((await onMain('--latest=def5678')).stdout).toMatch(
+            /▲ {2}Update +a new build of main is out \(def5678\); \.\/eigen update installs it/,
+        );
+        expect((await onMain('--latest=')).stdout).toMatch(/Update +could not check/);
+        expect((await onMain(`--files=${pkg.version}`, '--latest=abc1234')).stdout).toContain(
+            `files of ${pkg.version}, running ${pkg.version}: run ./eigen update`,
+        );
     });
 
     test('counts the snapshots and what they take on disk', async () => {

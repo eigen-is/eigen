@@ -28,7 +28,7 @@ import { SERVER_DIR } from '../lib/config/paths';
 import { PATHS } from '../lib/core/constants';
 import { isEnoent } from '../lib/core/local-filesystem';
 import { readEnvFile } from './env-file';
-import { DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
+import { DATA, DECLINED, ENV_PATH, installOwner, ownAs, PINS, VERSION, VERSION_PATTERN } from './install';
 import { createUi, glyphLine, type Ui } from './ui';
 import { notesSince } from './update-check';
 
@@ -76,7 +76,7 @@ Writes data/ and ${ENV_PATH} into ${SNAPSHOTS}/eigen-<UTC time>.tar.gz, a full s
   --check            Write nothing: check that ${SNAPSHOTS}/ has room for it, and print kind=full or kind=light
   --from <version>   With --check: full after all when a release since <version> has breaking changes`;
 // --check and --checked are the launcher's: it unpacks and checks while Eigen runs, so a refusal stops nothing, then
-// reads the version of what it checked.
+// reads the version of what it checked and the images its .env.production pins.
 export const RESTORE_OPTIONS = {
     yes: { type: 'boolean' },
     check: { type: 'boolean' },
@@ -333,7 +333,9 @@ export async function restore(
     if (flags.checked) {
         if (marked?.name !== name)
             return ui.fail(`${name} is not checked yet.`, 'Run ./eigen restore, which checks it.');
-        console.log(`version=${marked.version}\nkind=${marked.kind}`);
+        const env = readEnvFile(join(STAGING, ENV_PATH));
+        const pins = PINS.flatMap((key) => (env.has(key) ? [`${key}=${env.get(key)}`] : []));
+        console.log([`version=${marked.version}`, `kind=${marked.kind}`, ...pins].join('\n'));
         return;
     }
     let meta: SnapshotMeta;
