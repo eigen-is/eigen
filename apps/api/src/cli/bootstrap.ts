@@ -5,13 +5,7 @@ import { writeEnvFile } from './env-file';
 import { ENV_PATH, installOwner, ownAs, ROOT } from './install';
 import { createUi } from './ui';
 
-const BUNDLE_FILES = [
-    'eigen',
-    'docker-compose.yml',
-    'docker-compose.host-certs.yml',
-    'docker-compose.host-api.yml',
-    '.env.example',
-];
+const BUNDLE_FILES = ['eigen', 'docker-compose.yml', '.env.example'];
 const BUNDLE_DIR = 'docker/fail2ban';
 export const BOOTSTRAP_OPTIONS = { out: { type: 'string' }, force: { type: 'boolean' } } as const;
 export const BOOTSTRAP_USAGE = `Usage: bootstrap [--out <dir>] [--force]
