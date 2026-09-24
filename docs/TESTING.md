@@ -24,8 +24,10 @@ Note the second rule only fires once a workspace actually has tests. Do not add 
 
 ## Running
 
+Set up the checkout first: [CONTRIBUTING.md § Setting up your development environment](CONTRIBUTING.md#setting-up-your-development-environment).
+
 ```bash
-bun run check              # lint + typecheck + home-import check + test-layout check + docs-link check + primitives:check + test
+bun run check              # lint + typecheck + home-import + test-layout + docs-link + standards + primitives:check + test
 bun run test               # tests only (all workspaces: api + sheet + lib + index)
 bun run test:api           # API tests only
 bun run test:sheet         # sheet package unit tests only (packages/sheet, plain `bun test`, no preload)
@@ -105,7 +107,24 @@ Every API test lives in a feature folder under `apps/api/src/test/` — `acl/`, 
 Not part of the suite: `src/test/transform-benchmark.ts` is a standalone responsiveness/memory benchmark for
 document transforms — run it from `apps/api` with `bun src/test/transform-benchmark.ts` (see PREVIEWS.md).
 
-Not part of the suite either: the Docker harnesses in `docker/test-*.sh` install Eigen from the working tree into a scratch folder with `./eigen`, with no Bun on the host, and probe it (every deployment shape, the operator commands, updates, the release gate). `docker/test-all.sh` runs them one after another; run them one at a time, since two at once can pick the same subnet. The publish workflow runs `docker/test-release.sh` before it pushes a release. The list and what each covers: [LOCAL-TESTING.md § Smoke-test the deployment shapes](../docker/LOCAL-TESTING.md#smoke-test-the-deployment-shapes).
+Not part of the suite either: the Docker harnesses below.
+
+## Docker harnesses
+
+The scripts in `docker/` install Eigen the way a stranger does and probe it. Each copies the tracked files as the working tree has them (`git add` a new file to include it) into a scratch folder under `$TMPDIR`, runs `./eigen` there from a `docker:cli` container that has no Bun, as its own Compose project on `127.0.0.1` ports 18000-18999, and removes what it started on exit. They never touch your checkout's `data/` or a stack you run. `HARNESS_KEEP=1` leaves the scratch install up. They share `docker/probe-lib.sh`, so a new harness sources it first and adds only its own probes.
+
+Run them one at a time: two started together can pick the same subnet. `./docker/test-all.sh` runs them all, one after another, and prints one line per harness.
+
+| Harness | What it proves |
+|---|---|
+| `docker/test-launcher.sh` | The launcher alone, under dash, BusyBox `sh` and the host's `/bin/sh` with a stub `docker`: every command's help, the refusals, source and release mode, the lock. No stack. |
+| `docker/test-cli.sh` | The operator commands (`status`, the control socket, the setup link, `reset-password`, `backup`, `restore` and their refusals) on installs made as another uid and as root. |
+| `docker/test-interactive.sh` | The questions as a person answers them in a terminal, typed by `expect` (install it first), Ctrl-C included. |
+| `docker/test-deployments.sh` | Every `COMPOSE_PROFILES` shape (`edge,mail`, `static,mail`, `edge`, `static`) and a custom subnet: pages, app bundles, the API, WebSockets, the mail banners, and relay mail and collab sync without hosted mail. Run it before merging a change to `eigen`, `apps/api/src/cli/configure.ts`, a Compose file or a Caddyfile. |
+| `docker/test-host-proxies.sh` | nginx, Caddy and Apache in front of `eigen-static` with the snippets `./eigen setup` writes. |
+| `docker/test-update.sh` | A source install's update, a broken build and its fix, and the rollback. |
+| `docker/test-release.sh` | The release gate the publish workflow runs before it pushes: releases in a registry of its own, update, rollback, a breaking release, and the refused versions. |
+| `docker/test-mail-hardening.sh` | The mail hardening of [SETUP-GUIDE.md § Mail abuse hardening](../docker/SETUP-GUIDE.md#mail-abuse-hardening): sender checks, the queue alert and the SASL failure limiters. About 6 minutes; `PROBES=2,3,4` runs a subset. Its comments explain the SMTP AUTH behavior that looks like a bug and is not. |
 
 ## Key Details
 

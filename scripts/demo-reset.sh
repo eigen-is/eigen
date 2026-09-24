@@ -13,20 +13,35 @@ if ! grep -q '^EIGEN_DEMO=1$' .env.production; then
     exit 1
 fi
 
-echo "[demo-reset] Stopping eigen-api..."
-docker compose --env-file .env.production stop eigen-api
-# Bring the API back on exit — but never onto an un-setup data root: a failed seed would
-# otherwise serve the public first-run setup wizard to strangers. Left stopped, the next
-# hourly run (or an operator) retries.
-restart_api() {
-    if [ -f data/server/.demo-seeded ]; then
-        docker compose --env-file .env.production start eigen-api
-    else
-        echo "[demo-reset] Seed did not complete (no data/server/.demo-seeded); leaving eigen-api STOPPED." >&2
+# The launcher's lock (see lock() in ./eigen), so a reset never wipes data/ under a backup or an update.
+mkdir -p .eigen
+if ! mkdir .eigen/lock 2>/dev/null; then
+    pid=$(cat .eigen/lock/pid 2>/dev/null || :)
+    # The lock of a process that is gone is taken over.
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+        echo "[demo-reset] Refusing: an ./eigen command holds .eigen/lock. The next hourly run retries." >&2
         exit 1
     fi
+fi
+echo $$ >.eigen/lock/pid
+
+# Bring the API back on exit, but never onto an un-setup data root: a failed seed would otherwise
+# leave strangers at the setup screen. Left stopped, the next hourly run (or an operator) retries.
+finish() {
+    code=$?
+    if [ -f data/server/.demo-seeded ]; then
+        docker compose --env-file .env.production start eigen-api || code=$?
+    else
+        echo "[demo-reset] Seed did not complete (no data/server/.demo-seeded); leaving eigen-api STOPPED." >&2
+        code=1
+    fi
+    rm -rf .eigen/lock
+    exit "$code"
 }
-trap restart_api EXIT
+trap finish EXIT
+
+echo "[demo-reset] Stopping eigen-api..."
+docker compose --env-file .env.production stop eigen-api
 
 # Explicit list — never a wildcard. data/certs (Caddy) and data/dkim (mail) must survive.
 echo "[demo-reset] Wiping per-home + server data..."

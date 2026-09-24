@@ -93,7 +93,7 @@ A simple rule:
 #### PR checklist (for small fixes)
 
 1. Fork the repo, create a branch
-2. Run `bun run check` before pushing (lint + typecheck + tests)
+2. Run `bun run check` before pushing (lint, typecheck, repo guards and tests)
 3. One concern per PR
 4. Link to a related issue if there is one
 5. Enable "Allow edits from maintainers" so I can help land your PR
@@ -102,57 +102,72 @@ A simple rule:
 
 ### Prerequisites
 
-- [Bun](https://bun.sh), the version in `.bun-version` (CI and the Docker image run the same one)
+- [Bun](https://bun.sh) at the version in `.bun-version`, the one CI and the Docker image run: `curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat .bun-version)"`. `bun run serve` warns when yours differs.
 - [Git](https://git-scm.com)
+- Optional: `weasyprint` on your PATH for PDF export, `ffmpeg` for video thumbnails. Everything else works without them.
 
-### Option 1: Direct with Bun (recommended)
-
-Fastest way to get going. Runs the API and frontend apps directly on your machine.
+### Run it
 
 ```bash
 git clone https://github.com/eigen-is/eigen.git
 cd eigen
-cp .env.development .env
 bun install
 bun run serve
 ```
 
-The API logs a one-time link, `Finish the setup at http://localhost:3009/admin/#setup=…`; open it to run the setup wizard. It creates your admin account and initializes storage. Every restart of the API before setup is done logs a fresh link and retires the previous one.
+This starts the API on `localhost:8000` and every app on its own port, with hot reload. The API logs a one-time link, `Finish the setup at http://localhost:3009/admin/#setup=…`. Open it to create your admin account and choose where files are stored. Every restart before setup is done logs a fresh link and retires the previous one. Data lands in `data/` in the checkout.
 
-After that, run everything or just what you need:
+Run one app instead of all of them:
 
 ```bash
-bun run serve          # All apps + API
-bun serve:mail         # Just Mail + API
-bun serve:calendar     # Just Calendar + API
-bun serve:docs         # Just Docs + API
+bun run serve:mail     # Just Mail + API
+bun run serve:docs     # Just Docs + API
 # ... works for any app name
 ```
 
-### Option 2: Docker (full stack)
+The API reads `.env.development`. Put your own overrides in `.env`, which git ignores.
 
-For testing email, IMAP, HTTPS, and CalDAV you'll want the Docker setup: Caddy, the Eigen API, Postfix, Dovecot, Unbound and Mailpit (catches outbound mail). Docker builds every image from your checkout.
-
-```bash
-bun run setup -- --domain localhost --yes
-BUN_VERSION=$(cat .bun-version) docker compose -f docker-compose.yml -f docker-compose.build.yml \
-    -f docker-compose.dev.yml --env-file .env.production up -d --build
-```
-
-The API logs a one-time link, `Finish the setup at https://localhost/admin/#setup=…` (`docker compose … logs eigen-api`). Open it (accept the self-signed certificate warning) to run the setup wizard.
-
-See the [Local Testing Guide](../docker/LOCAL-TESTING.md) for detailed instructions on testing email, IMAP, and CalDAV with the Docker setup.
+Eigen sends no mail in development: the API logs each message's sender, recipient and subject instead. To read the mail itself, such as a 2FA or guest sign-in code, run [Mailpit](https://mailpit.axllent.org) and add `SMTP_HOST=localhost` and `SMTP_PORT=1025` to `.env`.
 
 ### Useful commands
 
 ```bash
-bun run serve          # All apps + API (dev mode with hot reload)
 bun run lint           # Lint + format check (Biome)
 bun run lint:fix       # Auto-fix lint + format
 bun run typecheck      # Type check all packages
 bun run test           # Run all tests
-bun run check          # lint + typecheck + test (run this before submitting a PR)
+bun run check          # lint + typecheck + repo guards + tests (run this before submitting a PR)
 ```
+
+Committing runs Biome on the staged files (`.githooks/pre-commit`, which `bun install` sets up). What `check` runs and how to run one test file: [TESTING.md](TESTING.md).
+
+### Eigen in Docker
+
+You need Docker only to test mail delivery, IMAP, HTTPS or the images themselves. It takes Docker with Compose 2.20 or newer, and no Bun. Use a clone of its own, never the checkout you develop in: the stack writes that folder's `data/` and `.env.production`.
+
+```bash
+git clone /path/to/your/eigen eigen-docker
+cd eigen-docker
+cp docker-compose.dev.yml docker-compose.override.yml
+./eigen setup --domain localhost --yes
+```
+
+That builds the images from the clone and starts Caddy, the API, Postfix, Dovecot, Unbound and Mailpit. Setup prints the one-time link; open it and accept the certificate warning. Eigen runs at `https://localhost`. Addresses live on `eigen.localhost`, because a sign-in address needs a dot in its domain. Mailpit, at `http://localhost:8025`, catches every mail Eigen sends. The API runs in development mode, and Postfix and Dovecot use a self-signed certificate.
+
+From then on, run the clone as an operator would: `./eigen logs`, `./eigen status`, `./eigen restart`, `./eigen backup`. To try new commits, commit them in your checkout and run `./eigen update` in the clone. Run no `docker compose up` of your own in it: that shares the launcher's project and `data/`, and `./eigen restart`, `backup` or `update` removes every container the launcher does not know.
+
+To start fresh, stop it with `docker compose --env-file .env.production down`, move `data/` and `caddy-data/` aside, and run `./eigen setup` again.
+
+Mail from outside reaches Eigen through Postfix, which calls the API on the Docker network; the web server hides that route. To deliver a message by hand, post it from inside the API container:
+
+```bash
+printf 'From: sender@example.com\nTo: you@eigen.localhost\nSubject: Test\n\nHello.\n' |
+    docker compose --env-file .env.production exec -T eigen-api curl -s -X POST \
+    -H "Content-Type: application/octet-stream" --data-binary @- \
+    "http://localhost:8000/mail/deliver/you@eigen.localhost"
+```
+
+Replace `you@eigen.localhost` with your address. To connect a mail or calendar client, follow the [setup guide](../docker/SETUP-GUIDE.md#7-connect-a-mail-or-calendar-client-optional) with `localhost` as the server and accept the certificate warning.
 
 ## Finding your way around
 
