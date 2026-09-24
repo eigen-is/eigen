@@ -3,7 +3,9 @@ import pkg from '../../../../../package.json' with { type: 'json' };
 import { runCli } from '../cli-test-helpers';
 
 const status = (...flags: string[]) =>
-    runCli(['status', '--services=', ...flags], { env: { NO_COLOR: '1', EIGEN_CHANNEL: undefined } });
+    runCli(['status', '--services=', ...flags], {
+        env: { NO_COLOR: '1', EIGEN_CHANNEL: undefined, EIGEN_COMMIT: undefined },
+    });
 const onMain = (...flags: string[]) =>
     runCli(['status', '--services=', ...flags], {
         env: { NO_COLOR: '1', EIGEN_CHANNEL: 'main', EIGEN_COMMIT: 'abc1234' },
@@ -16,21 +18,24 @@ describe('status', () => {
         expect(result.stderr).toContain('Eigen is not running.');
     });
 
-    test('files of another version than this one say an update is unfinished, before any newer release', async () => {
-        const result = await status('--files=9.9.9', '--latest=99.0.0');
-        expect(result.stdout).toContain(`▲  Update         files of 9.9.9, running ${pkg.version}: run ./eigen update`);
+    test('files of another build, as the launcher finds them, say an update is unfinished, before any newer release', async () => {
+        const result = await status('--files=9.9.9 (def5678)', '--latest=99.0.0');
+        expect(result.stdout).toContain(
+            `▲  Update         files of 9.9.9 (def5678), running ${pkg.version}: run ./eigen update`,
+        );
         expect(result.stdout).not.toContain('99.0.0');
-        expect((await status(`--files=${pkg.version}`)).stdout).not.toContain('Update');
+        expect((await status(`--files=${pkg.version}`)).stdout).toContain(`files of ${pkg.version}, running`);
+        expect((await status()).stdout).not.toContain('Update');
     });
 
     test('on a channel, --latest is the commit of its newest build', async () => {
-        expect((await onMain('--latest=abc1234', '--files=main')).stdout).toMatch(/◇ {2}Update +up to date/);
+        expect((await onMain('--latest=abc1234')).stdout).toMatch(/◇ {2}Update +up to date/);
         expect((await onMain('--latest=def5678')).stdout).toMatch(
             /▲ {2}Update +a new build of main is out \(def5678\); \.\/eigen update installs it/,
         );
         expect((await onMain('--latest=')).stdout).toMatch(/Update +could not check/);
-        expect((await onMain(`--files=${pkg.version}`, '--latest=abc1234')).stdout).toContain(
-            `files of ${pkg.version}, running ${pkg.version}: run ./eigen update`,
+        expect((await onMain(`--files=${pkg.version} (def5678)`, '--latest=abc1234')).stdout).toContain(
+            `files of ${pkg.version} (def5678), running ${pkg.version} (abc1234): run ./eigen update`,
         );
     });
 

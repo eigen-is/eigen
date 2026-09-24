@@ -107,14 +107,15 @@ if printf '%s' "$OUT" | grep -q "$(printf '\033')"; then
 else
     ok "status has no color without a terminal"
 fi
-# What status shows while an update that failed halfway left the files of one version beside a server of another.
-scratch_run sh -c 'echo 9.9.9 >"$1/.eigen/bundle"' sh "$INSTALL"
+# What status shows while an update that failed halfway left the files of one api image beside a server that runs
+# another: here the same image by its ID, which is not the name .env.production gives it.
+scratch_run sh -c 'echo "$2" >"$1/.eigen/bundle"' sh "$INSTALL" "$(docker image inspect --format '{{.Id}}' "$EIGEN_API_IMAGE")"
 eigen status
 scratch_run rm "$INSTALL/.eigen/bundle"
-if says "▲  Update  *files of 9.9.9, running $VERSION: run ./eigen update"; then
-    ok "status says an update is unfinished while the files are of another version"
+if says "▲  Update  *files of $VERSION (.*), running $VERSION (.*): run ./eigen update"; then
+    ok "status says an update is unfinished while the files are of another api image"
 else
-    fail "status does not flag files of another version"
+    fail "status does not flag files of another api image"
     show
 fi
 eigen status extra
