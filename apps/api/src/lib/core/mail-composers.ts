@@ -10,7 +10,7 @@ import {
     EMAIL_TEXT,
     renderEigenEmail,
 } from './mail-template';
-import { type OutboundMail, onBehalfOf } from './mailer';
+import type { OutboundMail } from './mailer';
 
 function pathAsAttachmentLink(path: DrivePath): AttachmentReference {
     return {
@@ -41,7 +41,7 @@ export function composeShareEmail(
         recipientEmail,
     });
     return {
-        ...onBehalfOf({ name: actor.name, address: actor.email }),
+        from: { name: actor.name, address: actor.email },
         to: [{ name: '', address: recipientEmail }],
         subject,
         text: `${actorDisplay} shared "${displayName}" with you.\n\n${buildAttachmentUrl(reference, recipientEmail)}`,
@@ -72,7 +72,7 @@ export function composeAccessRequestEmail(
     if (message) textParts.push(`Message: ${message}`);
     textParts.push(buildAttachmentUrl(reference));
     return {
-        ...onBehalfOf({ name: requester.name, address: requester.email }),
+        from: { name: requester.name, address: requester.email },
         to: [{ name: owner.name, address: owner.email }],
         subject,
         text: textParts.join('\n\n'),
@@ -100,7 +100,7 @@ export function composeCollaboratorsEmail(
     });
     const textBody = stripTagsServer(htmlMessage);
     return {
-        ...onBehalfOf({ name: sender.name, address: sender.email }),
+        from: { name: sender.name, address: sender.email },
         to: [{ name: '', address: recipientEmail }],
         subject: resolvedSubject,
         text: `${textBody}\n\n${buildAttachmentUrl(reference, recipientEmail)}`,

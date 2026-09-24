@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { EmailDraft } from '@workspace/lib/types/mail';
+import { getMailDomain } from '../../lib/config/server-config';
 import { renderAttachmentLinksText } from '../../lib/core/mail-template';
 import { buildMailOptions, composeRfc822, type OutboundMail } from '../../lib/core/mailer';
 import { draftToOutboundMail } from '../../lib/mail/sender';
@@ -20,12 +21,12 @@ describe('buildMailOptions', () => {
             messageId: '<id-1@localhost>',
             inReplyTo: '<parent@x.com>',
             references: ['<r1@x.com>', '<r2@x.com>'],
-            envelope: { from: 'me@localhost', to: ['a@x.com'] },
+            envelope: { to: ['a@x.com'] },
         });
         expect(opts.messageId).toBe('<id-1@localhost>');
         expect(opts.inReplyTo).toBe('<parent@x.com>');
         expect(opts.references).toEqual(['<r1@x.com>', '<r2@x.com>']);
-        expect(opts.envelope).toEqual({ from: 'me@localhost', to: ['a@x.com'] });
+        expect(opts.envelope).toEqual({ from: `noreply@${getMailDomain()}`, to: ['a@x.com'] });
     });
     test('omits the keys when unset (other callsites unchanged)', () => {
         const opts = buildMailOptions(base);

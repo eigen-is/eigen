@@ -1,7 +1,8 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import { getOrgName } from '../../lib/config/server-config';
-import { buildMailOptions, createTransport, onBehalfOf } from '../../lib/core/mailer';
+import { updateServerSettings } from '../../lib/config/server-settings';
+import { buildMailOptions, createTransport } from '../../lib/core/mailer';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 
 // nodemailer's Transporter type does not surface the resolved options the factory built, so the
@@ -85,65 +86,93 @@ describe('createTransport', () => {
 });
 
 describe('the system sender', () => {
-    restoreEnvAfterEach(['SMTP_FROM', 'MAIL_DOMAIN']);
+    restoreEnvAfterEach(['MAIL_DOMAIN']);
+    afterEach(() => updateServerSettings({ mail: { senderName: '', senderAddress: '' } }));
 
     const systemFrom = () => buildMailOptions({ to: [], subject: 's', text: 't' }).from;
 
-    test('without SMTP_FROM it is the org name at noreply@ the mail domain', () => {
-        delete process.env['SMTP_FROM'];
+    test('unnamed, it is the org name at noreply@ the mail domain', () => {
         process.env['MAIL_DOMAIN'] = 'example.org';
         expect(systemFrom()).toEqual({ name: getOrgName(), address: 'noreply@example.org' });
     });
 
-    test('SMTP_FROM as Name <address> sets both', () => {
-        process.env['SMTP_FROM'] = 'Acme Mail <eigen@acme.nl>';
+    test('the admin names it in the server settings', async () => {
+        await updateServerSettings({ mail: { senderName: 'Acme Mail', senderAddress: 'eigen@acme.nl' } });
         expect(systemFrom()).toEqual({ name: 'Acme Mail', address: 'eigen@acme.nl' });
     });
 
-    test('a bare SMTP_FROM address keeps the org name', () => {
-        process.env['SMTP_FROM'] = 'eigen@acme.nl';
+    test('an address alone keeps the org name', async () => {
+        await updateServerSettings({ mail: { senderAddress: 'eigen@acme.nl' } });
         expect(systemFrom()).toEqual({ name: getOrgName(), address: 'eigen@acme.nl' });
     });
 });
 
-describe('onBehalfOf', () => {
-    restoreEnvAfterEach(['SMTP_FROM', 'MAIL_DOMAIN', 'MAIL_ENABLED']);
+describe('mail from a person', () => {
+    restoreEnvAfterEach(['MAIL_DOMAIN', 'MAIL_ENABLED']);
+    beforeEach(() => updateServerSettings({ mail: { senderAddress: 'eigen@acme.nl' } }));
+    afterEach(() => updateServerSettings({ mail: { senderAddress: '', relaySendsAsUsers: false } }));
 
-    const via = { from: { name: 'Alice via Acme', address: 'eigen@acme.nl' } };
-
-    const setup = (mailEnabled: boolean) => {
-        process.env['SMTP_FROM'] = 'Acme <eigen@acme.nl>';
+    const setup = (mailEnabled: boolean, relaySendsAsUsers = false) => {
         process.env['MAIL_DOMAIN'] = 'acme.nl';
         process.env['MAIL_ENABLED'] = mailEnabled ? '1' : '0';
+        return updateServerSettings({ mail: { relaySendsAsUsers } });
     };
-
-    test('an external address goes out from the system sender and replies reach the user', () => {
-        setup(true);
-        const user = { name: 'Alice', address: 'alice@gmail.com' };
-        expect(onBehalfOf(user)).toEqual({ ...via, replyTo: user });
+    const optionsFrom = (address: string, name = 'Alice') =>
+        buildMailOptions({
+            from: { name, address },
+            to: [{ name: '', address: 'bob@example.com' }],
+            subject: 's',
+            text: 't',
+            envelope: { to: ['bob@example.com'] },
+        });
+    const via = (address: string) => ({
+        from: { name: `Alice via ${getOrgName()}`, address: 'eigen@acme.nl' },
+        replyTo: { name: 'Alice', address },
+        envelope: { from: 'eigen@acme.nl', to: ['bob@example.com'] },
+    });
+    const own = (address: string) => ({
+        from: { name: 'Alice', address },
+        envelope: { from: address, to: ['bob@example.com'] },
     });
 
-    test('with mail off a local address also goes out from the system sender', () => {
-        setup(false);
-        const user = { name: 'Alice', address: 'alice@acme.nl' };
-        expect(onBehalfOf(user)).toEqual({ ...via, replyTo: user });
+    test('with hosted mail, an address on the mail domain sends as itself', async () => {
+        await setup(true);
+        const options = optionsFrom('alice@acme.nl');
+        expect(options).toMatchObject(own('alice@acme.nl'));
+        expect('replyTo' in options).toBe(false);
     });
 
-    test('a local address with mail on sends as the user, with no Reply-To', () => {
-        setup(true);
-        const user = { name: 'Alice', address: 'alice@acme.nl' };
-        expect(onBehalfOf(user)).toEqual({ from: user });
+    test('with hosted mail, an outside address goes out via the system sender', async () => {
+        await setup(true);
+        expect(optionsFrom('alice@gmail.com')).toMatchObject(via('alice@gmail.com'));
     });
 
-    test('a user without a name is named by address', () => {
-        setup(true);
-        expect(onBehalfOf({ name: '', address: 'alice@gmail.com' }).from?.name).toBe('alice@gmail.com via Acme');
+    test('through a relay that takes the mail domain, an address on it sends as itself', async () => {
+        await setup(false, true);
+        const options = optionsFrom('alice@acme.nl');
+        expect(options).toMatchObject(own('alice@acme.nl'));
+        expect('replyTo' in options).toBe(false);
     });
 
-    test('the SMTP envelope sender follows From, and Reply-To lands in the headers', async () => {
-        setup(true);
+    test('through a relay that takes only the system sender, every address goes out via it', async () => {
+        await setup(false);
+        expect(optionsFrom('alice@acme.nl')).toMatchObject(via('alice@acme.nl'));
+        await setup(false, true);
+        expect(optionsFrom('alice@gmail.com')).toMatchObject(via('alice@gmail.com'));
+    });
+
+    test('a person without a name is named by address', async () => {
+        await setup(true);
+        expect(optionsFrom('alice@gmail.com', '').from).toEqual({
+            name: `alice@gmail.com via ${getOrgName()}`,
+            address: 'eigen@acme.nl',
+        });
+    });
+
+    test('without a per-copy envelope, the SMTP sender follows From and Reply-To lands in the headers', async () => {
+        await setup(true);
         const options = buildMailOptions({
-            ...onBehalfOf({ name: 'Alice', address: 'alice@gmail.com' }),
+            from: { name: 'Alice', address: 'alice@gmail.com' },
             to: [{ name: '', address: 'bob@example.com' }],
             subject: 's',
             text: 't',
@@ -151,7 +180,7 @@ describe('onBehalfOf', () => {
         const node = new MailComposer(options).compile();
         expect(node.getEnvelope().from).toBe('eigen@acme.nl');
         const raw = (await node.build()).toString();
-        expect(raw).toContain('From: Alice via Acme <eigen@acme.nl>');
+        expect(raw).toContain(`From: Alice via ${getOrgName()} <eigen@acme.nl>`);
         expect(raw).toContain('Reply-To: Alice <alice@gmail.com>');
     });
 });

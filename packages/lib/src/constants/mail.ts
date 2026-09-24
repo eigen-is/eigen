@@ -14,7 +14,7 @@ export const EML_MAX_BYTES = 25 * 1024 * 1024;
 // The relay port when SMTP_RELAY_PORT names none: submission, which every relay offers.
 export const DEFAULT_RELAY_PORT = 587;
 
-// The system sender while SMTP_FROM is unset.
+// The system sender while the admin names none.
 export function defaultSenderAddress(mailDomain: string): string {
     return `noreply@${mailDomain}`;
 }

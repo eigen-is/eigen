@@ -602,7 +602,6 @@ export class Mail {
             }
         } else {
             // One SMTP envelope per external recipient, so a leaked `?email=` link can never reach the wrong person.
-            const envelopeFrom = message.from.address;
             const { bcc: _bcc, ...base } = message;
             const buildCopy = (
                 recipientEmail: string | undefined,
@@ -611,7 +610,7 @@ export class Mail {
                 ...base,
                 html: appendReferenceLinks(baseHtml, refs, recipientEmail),
                 text: baseText + renderAttachmentLinksText(refs, recipientEmail),
-                envelope: { from: envelopeFrom, to: envelopeTo },
+                envelope: { to: envelopeTo },
             });
 
             const copies: ReturnType<typeof buildCopy>[] = [];

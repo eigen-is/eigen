@@ -3,10 +3,8 @@ import type { OutboundAttachment, OutboundMail } from '../core/mailer';
 import { buildMessageId } from './mailutils';
 import { canonicalizeRecipients } from './recipients';
 
-// `from` is the draft's own address, else the account's — never absent, so callers can read it directly.
-type OutboundMailWithFrom = OutboundMail & { from: NonNullable<OutboundMail['from']> };
-
-export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): OutboundMailWithFrom {
+// `from` is the draft's own address, else the account's; the mailer decides whether it goes out as that address.
+export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): OutboundMail {
     const fromValue = draft.from?.value?.[0];
 
     // Flatten groups, dedupe and validate once, then split back into the three fields.
@@ -18,7 +16,7 @@ export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): O
         byField[field].push({ name, address });
     }
 
-    const message: OutboundMailWithFrom = {
+    const message: OutboundMail = {
         from: fromValue?.address
             ? { name: fromValue.name || '', address: fromValue.address }
             : { name: '', address: fallbackEmail },

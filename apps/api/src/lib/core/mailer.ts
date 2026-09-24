@@ -2,11 +2,11 @@ import { DEFAULT_RELAY_PORT, defaultSenderAddress } from '@workspace/lib/constan
 import type { ImipMethod } from '@workspace/lib/types/calendar';
 import { ICS_MIME } from '@workspace/lib/types/drive';
 import nodemailer from 'nodemailer';
-import addressparser from 'nodemailer/lib/addressparser';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import type Mail from 'nodemailer/lib/mailer';
 import { isDemo, isMailEnabled, isProduction } from '../config/env';
 import { getMailDomain, getOrgName, isInternalAddress } from '../config/server-config';
+import { getServerSettings } from '../config/server-settings';
 
 // Outbound email types — the inbound parsing types live in packages/lib/types/mail.ts
 type OutboundAddress = {
@@ -26,8 +26,8 @@ export type OutboundICalEvent = {
 };
 
 export type OutboundMail = {
+    // The person the mail is from; absent, it is the system's own. The mailer decides what the headers say.
     from?: OutboundAddress;
-    replyTo?: OutboundAddress;
     to: OutboundAddress[];
     cc?: OutboundAddress[];
     bcc?: OutboundAddress[];
@@ -39,24 +39,18 @@ export type OutboundMail = {
     messageId?: string;
     inReplyTo?: string;
     references?: string | string[];
-    envelope?: { from: string; to: string[] };
+    // Recipients of this copy alone; the envelope sender follows the resolved From.
+    envelope?: { to: string[] };
 };
 
-// SMTP_FROM is `Name <address>` or a bare address; a bare one keeps the org name.
-function defaultFrom(): OutboundAddress {
-    const [configured] = addressparser(process.env['SMTP_FROM'] ?? '', { flatten: true });
-    if (!configured?.address) return { name: getOrgName(), address: defaultSenderAddress(getMailDomain()) };
-    return { name: configured.name || getOrgName(), address: configured.address };
+function systemSender(): OutboundAddress {
+    const { senderName, senderAddress } = getServerSettings().mail;
+    return { name: senderName || getOrgName(), address: senderAddress || defaultSenderAddress(getMailDomain()) };
 }
 
-// Relays and DMARC take only addresses this server hosts; any other sends as the system sender, replies to the user.
-export function onBehalfOf(user: OutboundAddress): Pick<OutboundMail, 'from' | 'replyTo'> {
-    if (isMailEnabled() && isInternalAddress(user.address)) return { from: user };
-    const system = defaultFrom();
-    return {
-        from: { name: `${user.name || user.address} via ${system.name}`, address: system.address },
-        replyTo: user,
-    };
+// Postfix sends as any address on the mail domain, a relay only when the admin says it may; everyone else goes out "via".
+function sendsAsThemselves(address: string): boolean {
+    return isInternalAddress(address) && (isMailEnabled() || getServerSettings().mail.relaySendsAsUsers);
 }
 
 // With hosted mail, through the bundled Postfix (SMTP_HOST), which relays; without, through SMTP_RELAY_* itself.
@@ -99,20 +93,24 @@ export function createTransport(): Mail {
 }
 
 export function buildMailOptions(message: OutboundMail): Mail.Options {
+    const person = message.from;
+    let from = systemSender();
+    if (person && sendsAsThemselves(person.address)) from = person;
+    else if (person) from = { name: `${person.name || person.address} via ${getOrgName()}`, address: from.address };
     const options: Mail.Options = {
-        from: message.from ?? defaultFrom(),
+        from,
         to: message.to,
         subject: message.subject,
         text: message.text,
     };
-    if (message.replyTo) options.replyTo = message.replyTo;
+    if (person && from !== person) options.replyTo = person;
     if (message.cc?.length) options.cc = message.cc;
     if (message.bcc?.length) options.bcc = message.bcc;
     if (message.html) options.html = message.html;
     if (message.messageId) options.messageId = message.messageId;
     if (message.inReplyTo) options.inReplyTo = message.inReplyTo;
     if (message.references) options.references = message.references;
-    if (message.envelope) options.envelope = message.envelope;
+    if (message.envelope) options.envelope = { from: from.address, to: message.envelope.to };
     if (message.attachments?.length) options.attachments = message.attachments;
     if (message.icalEvent) {
         // Build iMIP MIME: text/calendar in multipart/alternative + application/ics attachment.
@@ -133,21 +131,20 @@ export function buildMailOptions(message: OutboundMail): Mail.Options {
 }
 
 export async function sendMail(message: OutboundMail): Promise<boolean> {
+    const options = buildMailOptions(message);
     // Skip outbound delivery in dev/test unless an SMTP host is explicitly configured, and always
     // in demo mode (a demo box has no MTA — a real send would throw on every share/invite/iMIP).
     if ((!isProduction() && !smtpHost()) || isDemo()) {
-        console.log('[DEV] Skipping email:', {
-            from: message.from ?? defaultFrom(),
-            to: message.to,
-            subject: message.subject,
-        });
+        console.log('[DEV] Skipping email:', { from: options.from, to: message.to, subject: message.subject });
         return true;
     }
     try {
-        await createTransport().sendMail(buildMailOptions(message));
+        await createTransport().sendMail(options);
         return true;
     } catch (error) {
-        console.error('Failed to send email:', error);
+        // nodemailer puts the server's own reply, like "553 5.7.1 Sender address rejected", on `response`.
+        const reason = error instanceof Error && 'response' in error ? error.response : error;
+        console.error(`[mailer] Sending "${message.subject}" failed:`, reason);
         return false;
     }
 }
