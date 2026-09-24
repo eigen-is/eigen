@@ -41,7 +41,7 @@ The account is unavailable for the length of the restore, which is usually secon
 - Anyone using that account gets a "Restore in progress" message. Requests fail until the restore finishes, then work again.
 - Nobody is signed out. Sessions stay as they are.
 - Open editor tabs reload themselves once the restore is done, so they pick up the restored content instead of the version they were holding.
-- Documents open anywhere else on the server reload once too, the next time they reconnect. That way a tab that was offline during the restore can't put old content back.
+- A tab that was offline during the restore reloads this account's documents once, the next time it reconnects. That way it can't put old content back. Documents of other users and teams are not affected.
 - A mail client connected over IMAP keeps seeing the old mailbox until the restore finishes. Mail delivered or flagged in that window lands in the safety copy, not in the restored account. For a mail-heavy restore, either pause the mail client for the window or copy any missing messages out of the safety copy afterwards.
 
 ## Safety copies and undoing a restore
