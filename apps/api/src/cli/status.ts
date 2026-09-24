@@ -38,8 +38,8 @@ type StatusFlags = ReturnType<typeof parseArgs<{ options: typeof STATUS_OPTIONS 
 function printReport(flags: StatusFlags, services: Service[], api: ControlStatus | null): void {
     const { latest, 'new-commits': commits, 'mail-queue': queue, files } = flags;
     // The CLI runs in an api image: the running one, or the one .env.production pins.
-    const channel = process.env['EIGEN_CHANNEL'] || '';
-    const commit = process.env['EIGEN_COMMIT'] || '';
+    const channel = process.env['EIGEN_CHANNEL'];
+    const commit = process.env['EIGEN_COMMIT'];
     const build: Row[] = api
         ? [
               {
@@ -49,14 +49,18 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
               },
           ]
         : [];
-    // Bun.semver.order throws on what is not a version.
     if (files) {
         build.push({
             level: 'warn',
             label: 'Update',
             value: `files of ${files}, running ${VERSION}${commit ? ` (${commit})` : ''}: run ./eigen update`,
         });
-    } else if (commits === '' || latest === '' || (latest && !channel && !VERSION_PATTERN.test(latest))) {
+    } else if (
+        commits === '' ||
+        latest === '' ||
+        // Bun.semver.order throws on what is not a version.
+        (latest && !channel && !VERSION_PATTERN.test(latest))
+    ) {
         build.push({ level: 'warn', label: 'Update', value: 'could not check' });
     } else if (channel && latest && latest !== commit) {
         build.push({

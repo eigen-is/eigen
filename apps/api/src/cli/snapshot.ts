@@ -28,7 +28,7 @@ import { SERVER_DIR } from '../lib/config/paths';
 import { PATHS } from '../lib/core/constants';
 import { isEnoent } from '../lib/core/local-filesystem';
 import { readEnvFile } from './env-file';
-import { DATA, DECLINED, ENV_PATH, installOwner, ownAs, PINS, VERSION, VERSION_PATTERN } from './install';
+import { DATA, DECLINED, ENV_PATH, installOwner, ownAs, PIN_KEYS, VERSION, VERSION_PATTERN } from './install';
 import { createUi, glyphLine, type Ui } from './ui';
 import { notesSince } from './update-check';
 
@@ -334,7 +334,7 @@ export async function restore(
         if (marked?.name !== name)
             return ui.fail(`${name} is not checked yet.`, 'Run ./eigen restore, which checks it.');
         const env = readEnvFile(join(STAGING, ENV_PATH));
-        const pins = PINS.flatMap((key) => (env.has(key) ? [`${key}=${env.get(key)}`] : []));
+        const pins = PIN_KEYS.flatMap((key) => (env.has(key) ? [`${key}=${env.get(key)}`] : []));
         console.log([`version=${marked.version}`, `kind=${marked.kind}`, ...pins].join('\n'));
         return;
     }

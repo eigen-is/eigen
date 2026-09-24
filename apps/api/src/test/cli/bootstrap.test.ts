@@ -34,6 +34,11 @@ describe('bootstrap', () => {
             expect(readFileSync(join(out, file), 'utf8')).toBe(readFileSync(join(ROOT, file), 'utf8'));
         }
         expect(existsSync(join(out, 'docker/fail2ban/filter.d'))).toBe(true);
+        for (const file of ['scripts/systemd/eigen-demo-reset.service', 'scripts/systemd/eigen-demo-reset.timer']) {
+            expect(readFileSync(join(out, file), 'utf8')).toBe(readFileSync(join(ROOT, file), 'utf8'));
+            expect(mode(file)).toBe(0o644);
+        }
+        expect(mode('scripts/demo-reset.sh')).toBe(0o755);
         expect(mode('eigen')).toBe(0o755);
         expect(mode('docker-compose.yml')).toBe(0o644);
         expect(mode('.env.production')).toBe(0o600);
@@ -51,6 +56,28 @@ describe('bootstrap', () => {
         expect(run.code).toBe(0);
         expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(
             `EIGEN_REGISTRY=${REGISTRY}\nEIGEN_VERSION=main\nEIGEN_API_IMAGE=${REGISTRY}/api:main\n`,
+        );
+    });
+
+    test('an env file that names a registry keeps it, and its pins use it', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'eigen-bootstrap-'));
+        dirs.push(dir);
+        writeFileSync(join(dir, '.env.production'), 'EIGEN_REGISTRY=example.test/eigen\n', { mode: 0o600 });
+        const run = await runBootstrap(dir);
+        expect(run.code).toBe(0);
+        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(
+            `EIGEN_REGISTRY=example.test/eigen\nEIGEN_VERSION=${version}\nEIGEN_API_IMAGE=example.test/eigen/api:${version}\n`,
+        );
+    });
+
+    test('an env file that names an api image but no version gets the starter pins', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'eigen-bootstrap-'));
+        dirs.push(dir);
+        writeFileSync(join(dir, '.env.production'), 'EIGEN_API_IMAGE=example.test/other/api:0.1.0\n', { mode: 0o600 });
+        const run = await runBootstrap(dir);
+        expect(run.code).toBe(0);
+        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(
+            `EIGEN_API_IMAGE=${REGISTRY}/api:${version}\nEIGEN_REGISTRY=${REGISTRY}\nEIGEN_VERSION=${version}\n`,
         );
     });
 
