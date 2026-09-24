@@ -187,7 +187,8 @@ EOF
 }
 
 # in_cli_container [--stdin] [--user uid:gid] <command…>: runs in $INSTALL inside the no-Bun docker:cli image, with
-# the Docker socket, and the scratch folder at its own path so the bind mounts Compose creates resolve on the host.
+# the Docker socket, and the scratch folder at its own path so the bind mounts Compose creates resolve on the host. The
+# EIGEN_*_IMAGE variables and EIGEN_REGISTRY pass through when set.
 # --stdin passes this script's stdin through, for a piped answer; without it the command reads nothing.
 in_cli_container() {
     local user=() stdin=()
@@ -202,7 +203,7 @@ in_cli_container() {
     docker run --rm ${stdin[@]+"${stdin[@]}"} --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
         -v /var/run/docker.sock:/var/run/docker.sock -v "$SCRATCH:$SCRATCH" -w "$INSTALL" \
         -e EIGEN_API_IMAGE -e EIGEN_FRONTEND_IMAGE -e EIGEN_POSTFIX_IMAGE -e EIGEN_DOVECOT_IMAGE \
-        -e EIGEN_UNBOUND_IMAGE -e NO_COLOR=1 -e HARNESS_PRUNE_LOG="$PRUNE_LOG" ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
+        -e EIGEN_UNBOUND_IMAGE -e EIGEN_REGISTRY -e NO_COLOR=1 -e HARNESS_PRUNE_LOG="$PRUNE_LOG" ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
 }
 
 # eigen <args…>: the launcher in the no-Bun container, as $OPERATOR when set (else root); sets OUT (stdout and
