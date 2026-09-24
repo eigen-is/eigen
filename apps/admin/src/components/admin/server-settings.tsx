@@ -38,7 +38,7 @@ export function ServerSettingsPage() {
     const homeDataLabel = useHomeDataLabel();
     const { data: config } = usePublicConfig();
     const mailEnabled = useMailEnabled();
-    const updateOrgName = useUpdateOrgName();
+    const updateOrgName = useUpdateOrgName(config?.orgId);
     const sendTestMail = useSendTestMail();
 
     const [draft, setDraft] = useState<DeepPartial<ServerSettings>>({});

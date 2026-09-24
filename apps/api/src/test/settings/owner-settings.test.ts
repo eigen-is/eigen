@@ -3,10 +3,10 @@ import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import type { ServerSettings } from '@workspace/lib/types/settings';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
-import { member as memberSchema, organization as organizationSchema } from '../../../auth-schema';
-import { getAuthDrizzleDb } from '../../lib/auth/auth';
+import { member as memberSchema, organization as organizationSchema, team as teamSchema } from '../../../auth-schema';
+import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getDataRoot } from '../../lib/config/paths';
 import { getMailDomain, getOrgName, getServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
@@ -251,6 +251,38 @@ describe('owner-only settings', () => {
                 .where(eq(organizationSchema.id, getServerConfig()?.orgId ?? ''))
                 .get();
             expect(org?.name).toBe('Acme Renamed');
+        });
+
+        test('the team setup named after the organization follows the rename, and a team named by hand keeps its name', async () => {
+            const orgId = getServerConfig()?.orgId ?? '';
+            const current = getAuthDrizzleDb()
+                .select({ name: organizationSchema.name })
+                .from(organizationSchema)
+                .where(eq(organizationSchema.id, orgId))
+                .get();
+            const named = await auth.api.createTeam({ body: { name: current?.name ?? '', organizationId: orgId } });
+            const design = await auth.api.createTeam({ body: { name: 'Design', organizationId: orgId } });
+            try {
+                const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/organization', {
+                    method: 'PUT',
+                    headers: JSON_HEADERS,
+                    body: JSON.stringify({ name: 'Acme Teams' }),
+                });
+                expect(res.status).toBe(200);
+                const nameOf = (id: string) =>
+                    getAuthDrizzleDb()
+                        .select({ name: teamSchema.name })
+                        .from(teamSchema)
+                        .where(eq(teamSchema.id, id))
+                        .get()?.name;
+                expect(nameOf(named.id)).toBe('Acme Teams');
+                expect(nameOf(design.id)).toBe('Design');
+            } finally {
+                getAuthDrizzleDb()
+                    .delete(teamSchema)
+                    .where(inArray(teamSchema.id, [named.id, design.id]))
+                    .run();
+            }
         });
 
         test('an empty name is refused', async () => {
