@@ -365,11 +365,8 @@ cli_help() {
 }
 
 # A build is an api image, named by its labels as <version> (<revision>) on every install. Three files hold what an
-# install is. .env.production: what runs, EIGEN_VERSION for what the install follows (main, the one channel, or the
-# release it was pinned to) and every image by digest; the CLI's configure writes it from PINS.
-# .eigen/bundle: the api image the launcher and Compose files came from; write_bundle writes it, and status tells by it
-# the files of one build from a server that runs another. .eigen/last-update: the snapshot the last update saved; the
-# CLI's snapshot --pre-update writes it, and rollback, which goes back to it, removes it.
+# install is: .env.production pins what runs and what it follows (configure writes it from PINS), .eigen/bundle names
+# the api image the files came from (write_bundle), .eigen/last-update the snapshot the last update saved (snapshot).
 
 # image_label <image> <version or revision>: that label of a local image.
 image_label() { docker image inspect --format "{{index .Config.Labels \"org.opencontainers.image.$2\"}}" "$1"; }
@@ -840,8 +837,8 @@ update_get() {
     version=$(answer version "$labels") revision=$(answer revision "$labels")
     if [ -z "$version" ]; then
         # Without the annotations, the image's labels name the build.
-        step "Looking for Eigen ${target:-updates}" "Found Eigen ${target:-updates}" \
-            "Could not get Eigen ${target:-updates}. Releases: $REPO/releases" docker pull "$REGISTRY/api:$tag"
+        step "Looking for Eigen $tag" "Found Eigen $tag" "Could not get Eigen $tag. Releases: $REPO/releases" \
+            docker pull "$REGISTRY/api:$tag"
         version=$(image_label "$REGISTRY/api:$tag" version) revision=$(image_label "$REGISTRY/api:$tag" revision)
         if [ -z "$version" ]; then
             die "$REGISTRY/api:$tag names no version." "Name one: ./eigen update <version>. Releases: $REPO/releases"
