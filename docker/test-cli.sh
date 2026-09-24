@@ -545,7 +545,7 @@ scratch_run sh -c 'mkdir "$1/$(printf "evil\nserver")" "$1/*" && chown 1000:1000
     sh "$MOUNT"
 eigen backup --light
 show
-LIGHT=$(printf '%s\n' "$OUT" | grep -o 'eigen-light-[0-9]\{8\}-[0-9]\{6\}\.tar\.gz' | head -n 1 || true)
+LIGHT=$(saved_snapshot)
 if [ "$CODE" = 0 ] && [ -n "$LIGHT" ] && says "Saved snapshots/$LIGHT (light: databases and config, " && stack_up; then
     ok "./eigen backup --light saved snapshots/$LIGHT, named for its kind, and the stack is back up"
 else

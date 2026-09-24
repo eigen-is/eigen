@@ -255,7 +255,7 @@ export async function snapshot(
             partial,
             '-S',
             '--numeric-owner',
-            // bsdtar reads -T before every other name, wherever it stands.
+            // -T comes first: GNU tar reads it where it stands, bsdtar before every other name.
             ...(kind === 'light'
                 ? ['--no-recursion', '--null', '-T', members, ENV_PATH, '-C', metaDir, META]
                 : ['-C', metaDir, META, '-C', process.cwd(), ENV_PATH, DATA]),
