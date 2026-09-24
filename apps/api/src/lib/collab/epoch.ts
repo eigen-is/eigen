@@ -17,7 +17,7 @@ function drawEpoch(): string {
     return randomBytes(16).toString('base64url');
 }
 
-function getHomeEpochs(): Map<string, string> {
+function loadHomeEpochs(): Map<string, string> {
     if (!homeEpochs) {
         const file = getServerDataPath(HOME_EPOCHS_FILE);
         homeEpochs = new Map(existsSync(file) ? Object.entries(JSON.parse(readFileSync(file, 'utf8'))) : []);
@@ -34,11 +34,11 @@ export function getCollabEpoch(ownerId: string): string {
             writeFileSync(file, serverEpoch);
         }
     }
-    return serverEpoch + (getHomeEpochs().get(ownerId) ?? '');
+    return serverEpoch + (loadHomeEpochs().get(ownerId) ?? '');
 }
 
 export function rotateHomeCollabEpoch(ownerId: string): void {
-    const epochs = getHomeEpochs();
+    const epochs = loadHomeEpochs();
     epochs.set(ownerId, drawEpoch());
     writeFileSync(getServerDataPath(HOME_EPOCHS_FILE), JSON.stringify(Object.fromEntries(epochs)));
 }
