@@ -1,7 +1,7 @@
 import type { AdminUser, AdminUserRow } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { HomeSizeResponse, S3CheckResult, S3HardenResult, ServerSettings } from '@workspace/lib/types/settings';
-import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
+import { validateEmailAddress } from '@workspace/lib/validation';
 import { eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, session, team, teamMember, user } from '../../auth-schema';
@@ -18,7 +18,7 @@ import { getAllUsersUsage } from '../lib/user/admin-usage';
 import { deleteUserCompletely } from '../lib/user/delete-user';
 import { resetUserPassword } from '../lib/user/reset-password';
 import { betterAuth } from './auth';
-import { s3ConfigBody, s3HardenBody, toS3Config } from './shared-schemas';
+import { s3ConfigBody, s3HardenBody, senderAddressSchema, senderNameSchema, toS3Config } from './shared-schemas';
 
 // Who appears on the admin Users page: everyone except guests, orphans included.
 // `ne(user.role, 'guest')` alone excludes NULL-role orphans in SQLite, so OR in isNull.
@@ -45,6 +45,10 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                 if (!s3) throw new ApiError(400, 'Cannot set storage type to S3 without a saved S3 configuration');
                 const s3Result = await checkS3Connection(s3);
                 if (!s3Result.ok) throw new ApiError(400, `Cannot set storage type to S3: ${s3Result.message}`);
+            }
+            const senderAddress = body.mail?.senderAddress;
+            if (senderAddress && !validateEmailAddress(senderAddress)) {
+                throw new ApiError(400, `${senderAddress} is not a valid sender address`);
             }
             await updateServerSettings(body);
             return getServerSettings();
@@ -124,13 +128,10 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                         ),
                     }),
                 ),
-                // Empty sender fields mean the org name and noreply@ the mail domain.
                 mail: t.Optional(
                     t.Object({
-                        senderName: t.Optional(t.String({ maxLength: 100 })),
-                        senderAddress: t.Optional(
-                            t.Union([t.Literal(''), t.String({ format: 'email', maxLength: MAX_EMAIL_LENGTH })]),
-                        ),
+                        senderName: t.Optional(senderNameSchema),
+                        senderAddress: t.Optional(senderAddressSchema),
                         relaySendsAsUsers: t.Optional(t.Boolean()),
                     }),
                 ),

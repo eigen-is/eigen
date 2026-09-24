@@ -100,6 +100,16 @@ describe('owner-only settings', () => {
                 headers: JSON_HEADERS,
                 body: JSON.stringify({ mail: { senderAddress: 'not an address' } }),
             });
+            expect(res.status).toBe(400);
+            expect(await res.text()).toContain('not a valid sender address');
+        });
+
+        test('a name that would break the From header is refused', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+                method: 'PUT',
+                headers: JSON_HEADERS,
+                body: JSON.stringify({ mail: { senderName: 'Acme\r\nBcc: x@example.com' } }),
+            });
             expect(res.status).toBe(422);
         });
     });
