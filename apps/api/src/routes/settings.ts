@@ -184,7 +184,8 @@ export const settingsRouter = new Elysia({ name: 'settings' })
         { body: t.Object({ name: t.String({ minLength: 1, maxLength: 100 }) }), auth: true },
     )
 
-    // sendMail swallows a failure; this one hands the relay's answer back to the owner.
+    // sendMail swallows a failure; this one hands the relay's answer back to the owner. From the owner, as a
+    // share notification is, so it tests whether the relay sends as users.
     .post(
         '/settings/mail/test',
         async ({ user }): Promise<{ to: string }> => {
@@ -193,6 +194,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             try {
                 await createTransport().sendMail(
                     buildMailOptions({
+                        from: { name: user.name, address: user.email },
                         to: [{ name: user.name, address: user.email }],
                         subject: `Test mail from ${orgName}`,
                         text: `This is a test mail from ${orgName}. It arrived, so this server can send mail.`,

@@ -171,6 +171,7 @@ describe('owner-only settings', () => {
             const body = await assertJson<{ to: string }>(res);
             expect(body.to).toBe(ctx.alice.user.email);
             expect(send).toHaveBeenCalledTimes(1);
+            expect(send.mock.calls[0]?.[0].from).toEqual({ name: ctx.alice.user.name, address: ctx.alice.user.email });
         });
 
         test("returns the transport's error instead of swallowing it", async () => {
