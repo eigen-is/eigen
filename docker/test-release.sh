@@ -225,7 +225,7 @@ archive=$(pre_updates)
 archive=${archive% }
 pointer=$(scratch_run cat "$INSTALL/.eigen/last-update" | tr '\n' ' ')
 meta=$(scratch_run tar -xzOf "$INSTALL/snapshots/$archive" eigen-snapshot.json || true)
-if [ "$pointer" = "$archive $PREVIOUS harness " ] && [[ $meta == *"\"version\":\"$PREVIOUS\""* ]]; then
+if [ "$pointer" = "archive=$archive version=$PREVIOUS commit=harness kind=light " ] && [[ $meta == *"\"version\":\"$PREVIOUS\""* ]]; then
     ok ".eigen/last-update names snapshots/$archive, a snapshot of $PREVIOUS"
 else
     fail ".eigen/last-update '$pointer', snapshot $meta"
@@ -262,7 +262,7 @@ fi
 header "./eigen rollback"
 ##############################################################################
 eigen_piped n rollback
-if [ "$CODE" = 0 ] && says "a snapshot of Eigen $PREVIOUS, made on " && says 'kept aside as data.pre-restore-\*' &&
+if [ "$CODE" = 0 ] && says "a light snapshot of Eigen $PREVIOUS, made on " && says 'kept aside as data.pre-restore-\*' &&
     says 'Nothing was changed.' && [ "$(api_started)" = "$started" ]; then
     ok "rollback asks with the version, the date and the age, and a no stops nothing"
 else
@@ -377,7 +377,7 @@ else
     show
 fi
 
-snapshot=$(scratch_run sed -n 1p "$INSTALL/.eigen/last-update")
+snapshot=$(scratch_run sed -n 's/^archive=//p' "$INSTALL/.eigen/last-update")
 # Only the registry has the images of $PREVIOUS now.
 for name in api frontend postfix dovecot; do docker image rm "$REGISTRY/$name:$PREVIOUS" >/dev/null; done
 docker stop "eigentest-registry-$RUN" >/dev/null
