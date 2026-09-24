@@ -6,7 +6,7 @@ import { validateEmailAddress } from '@workspace/lib/validation';
 import nodemailer from 'nodemailer';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import type Mail from 'nodemailer/lib/mailer';
-import { isDemo, isMailEnabled, isProduction } from '../config/env';
+import { getRelayHost, isDemo, isMailEnabled, isProduction } from '../config/env';
 import { getMailDomain, getOrgName, isInternalAddress } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from './errors';
@@ -77,12 +77,18 @@ function sendsAsThemselves(address: string): boolean {
 
 // With hosted mail, through the bundled Postfix (SMTP_HOST), which relays; without, through SMTP_RELAY_* itself.
 function smtpHost(): string | undefined {
-    return (isMailEnabled() ? process.env['SMTP_HOST'] : process.env['SMTP_RELAY_HOST']) || undefined;
+    return isMailEnabled() ? process.env['SMTP_HOST'] || undefined : getRelayHost();
 }
 
 export function createTransport(): Mail {
     const host = smtpHost();
-    if (!host) return nodemailer.createTransport({ sendmail: true, newline: 'unix', path: '/usr/sbin/sendmail' });
+    if (!host) {
+        throw new Error(
+            isMailEnabled()
+                ? 'SMTP_HOST is unset: with hosted mail the API sends through the bundled Postfix.'
+                : 'No mail relay is configured: this server hosts no mailboxes and SMTP_RELAY_HOST is unset, so it cannot send email. Run ./eigen setup and name a relay.',
+        );
+    }
     if (isMailEnabled()) {
         // Postfix owns TLS toward the internet; its own certificate is self-signed or missing.
         return nodemailer.createTransport({

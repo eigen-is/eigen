@@ -9,6 +9,7 @@ import { getMailDomain, getOrgName, getServerConfig } from '../../lib/config/ser
 import { updateServerSettings } from '../../lib/config/server-settings';
 import type { ControlStatus } from '../../lib/config/server-status';
 import * as mailer from '../../lib/core/mailer';
+import { restoreEnvAfterEach } from '../env-test-helpers';
 import { assertJson, authedRequest, createTestUser, getTestContext, type TestUser } from '../setup';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -227,6 +228,8 @@ describe('owner-only settings', () => {
     });
 
     describe('test mail', () => {
+        restoreEnvAfterEach(['MAIL_ENABLED', 'SMTP_RELAY_HOST']);
+
         afterEach(() => {
             spyOn(mailer, 'createTransport').mockRestore();
         });
@@ -250,6 +253,14 @@ describe('owner-only settings', () => {
             const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/mail/test', { method: 'POST' });
             expect(res.status).toBe(502);
             expect(await res.text()).toContain('ECONNREFUSED');
+        });
+
+        test('without a relay it says so instead of failing on a missing sendmail', async () => {
+            process.env['MAIL_ENABLED'] = '0';
+            delete process.env['SMTP_RELAY_HOST'];
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/mail/test', { method: 'POST' });
+            expect(res.status).toBe(502);
+            expect(await res.text()).toContain('Run ./eigen setup and name a relay');
         });
 
         test('an admin cannot send it', async () => {

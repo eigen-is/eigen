@@ -87,6 +87,7 @@ describe('GET /status', () => {
         expect(status.version).toBe(pkg.version);
         expect(status.setupRequired).toBe(false);
         expect(status.mailEnabled).toBe(true);
+        expect(status.relayHost).toBeNull();
         expect(status.domain).toBe('test.eigen.is');
         expect(status.diskTotal).toBeGreaterThan(0);
         expect(status.diskFree).toBeGreaterThan(0);

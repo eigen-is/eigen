@@ -15,3 +15,8 @@ export function isDemo(): boolean {
 export function isMailEnabled(): boolean {
     return process.env['MAIL_ENABLED'] !== '0';
 }
+
+// The relay a mail-off install sends through; unset, it sends no email at all.
+export function getRelayHost(): string | undefined {
+    return process.env['SMTP_RELAY_HOST'] || undefined;
+}

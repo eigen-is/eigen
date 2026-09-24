@@ -67,6 +67,12 @@ describe('createTransport', () => {
         expect(opts['tls']).toEqual({ rejectUnauthorized: false });
     });
 
+    test('without hosted mail and without a relay it refuses to send, naming the missing key', () => {
+        process.env['MAIL_ENABLED'] = '0';
+        delete process.env['SMTP_RELAY_HOST'];
+        expect(() => createTransport()).toThrow('SMTP_RELAY_HOST is unset');
+    });
+
     test('refuses a relay user without a password', () => {
         relay('587', 'relay-user');
         expect(() => createTransport()).toThrow('SMTP_RELAY_USER is set without SMTP_RELAY_PASSWORD');
@@ -77,11 +83,11 @@ describe('createTransport', () => {
         expect(transportOptions(createTransport())['secure']).toBe(true);
     });
 
-    test('uses sendmail when there is no server to hand mail to', () => {
-        process.env['MAIL_ENABLED'] = '0';
-        delete process.env['SMTP_RELAY_HOST'];
-        process.env['SMTP_HOST'] = 'postfix';
-        expect(transportOptions(createTransport())['sendmail']).toBe(true);
+    test('with hosted mail it refuses to send when the Postfix host is missing', () => {
+        process.env['MAIL_ENABLED'] = '1';
+        delete process.env['SMTP_HOST'];
+        process.env['SMTP_RELAY_HOST'] = 'smtp-relay.brevo.com';
+        expect(() => createTransport()).toThrow('SMTP_HOST is unset');
     });
 });
 

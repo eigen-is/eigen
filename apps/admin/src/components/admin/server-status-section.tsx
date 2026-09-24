@@ -22,7 +22,9 @@ export function ServerStatusSection() {
                     <dd>
                         {status.mailEnabled
                             ? 'Mailboxes on this server'
-                            : 'No mailboxes; mail goes out through your relay'}
+                            : status.relayHost
+                              ? `No mailboxes; mail goes out through ${status.relayHost}`
+                              : 'No mailboxes and no relay: this server sends no email. Run ./eigen setup to name one.'}
                     </dd>
                     <dt className="text-muted-foreground">Disk</dt>
                     <dd>

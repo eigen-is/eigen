@@ -1,7 +1,7 @@
 import { X509Certificate } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { isMailEnabled } from './env';
+import { getRelayHost, isMailEnabled } from './env';
 import { getDataRoot } from './paths';
 import { getDomain, getPublicConfig, isSetupRequired } from './server-config';
 
@@ -11,6 +11,7 @@ export type ControlStatus = {
     builtAt: string | null;
     setupRequired: boolean;
     mailEnabled: boolean;
+    relayHost: string | null;
     domain: string;
     diskFree: number;
     diskTotal: number;
@@ -34,6 +35,7 @@ export function getServerStatus(): ControlStatus {
         builtAt: config.builtAt?.toISOString() ?? null,
         setupRequired: isSetupRequired(),
         mailEnabled: isMailEnabled(),
+        relayHost: isMailEnabled() ? null : (getRelayHost() ?? null),
         domain: getDomain(),
         diskFree: disk.bavail * disk.bsize,
         diskTotal: disk.blocks * disk.bsize,
