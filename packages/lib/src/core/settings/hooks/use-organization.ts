@@ -15,8 +15,8 @@ export function useUpdateOrgName() {
             return res.data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: publicKeys.config });
             toast.success('Organization name saved');
+            return queryClient.invalidateQueries({ queryKey: publicKeys.config });
         },
         onError: onMutationError,
     });

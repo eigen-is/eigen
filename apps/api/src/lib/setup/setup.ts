@@ -281,7 +281,7 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
         const adminEmail = `${username}@${getMailDomain()}`;
         if (!validateEmailAddress(adminEmail)) throw new ApiError(400, `${adminEmail} is not a valid email address`);
         // Stored only when it differs from what an empty field derives, so a later rename or domain still carries through.
-        const senderName = input.senderName?.trim() === input.orgName ? '' : (input.senderName?.trim() ?? '');
+        const senderName = input.senderName?.trim() === input.orgName.trim() ? '' : (input.senderName?.trim() ?? '');
         const senderAddress = input.senderAddress?.trim() ?? '';
         if (senderAddress && !validateEmailAddress(senderAddress)) {
             throw new ApiError(400, `${senderAddress} is not a valid sender address`);

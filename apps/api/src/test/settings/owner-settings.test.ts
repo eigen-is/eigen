@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'b
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import { and, eq } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
-import { member as memberSchema } from '../../../auth-schema';
+import { member as memberSchema, organization as organizationSchema } from '../../../auth-schema';
 import { getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getOrgName, getServerConfig } from '../../lib/config/server-config';
 import type { ControlStatus } from '../../lib/config/server-status';
@@ -11,7 +11,7 @@ import { assertJson, authedRequest, createTestUser, getTestContext, type TestUse
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
-// Settings, its PUT and the server's own facts are the owner's; an admin keeps users, teams and team mounts.
+// Settings, its PUT, the waitlist and the server's own facts are the owner's; an admin keeps users, teams and team mounts.
 describe('owner-only settings', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let admin: TestUser;
@@ -65,6 +65,12 @@ describe('owner-only settings', () => {
         expect(res.status).toBe(403);
     });
 
+    test('an admin does not read the waitlist', async () => {
+        const res = await authedRequest(admin.sessionToken, '/waitlist/entries');
+        expect(res.status).toBe(403);
+        expect(await res.text()).toContain('server owner');
+    });
+
     test('the org owner cannot be deleted', async () => {
         const res = await authedRequest(admin.sessionToken, `/settings/user/${ctx.alice.user.id}`, {
             method: 'DELETE',
@@ -92,6 +98,16 @@ describe('owner-only settings', () => {
                 const settings = await assertJson<ServerSettings>(res);
                 expect(settings.mail).toEqual({ senderName: 'Acme', senderAddress, relaySendsAsUsers: false });
             }
+        });
+
+        test('the sender name is stored trimmed', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+                method: 'PUT',
+                headers: JSON_HEADERS,
+                body: JSON.stringify({ mail: { senderName: '  Acme  ' } }),
+            });
+            const settings = await assertJson<ServerSettings>(res);
+            expect(settings.mail.senderName).toBe('Acme');
         });
 
         test('an address that is none is refused', async () => {
@@ -137,6 +153,12 @@ describe('owner-only settings', () => {
             });
             expect(res.status).toBe(200);
             expect(getOrgName()).toBe('Acme Renamed');
+            const org = getAuthDrizzleDb()
+                .select({ name: organizationSchema.name })
+                .from(organizationSchema)
+                .where(eq(organizationSchema.id, getServerConfig()?.orgId ?? ''))
+                .get();
+            expect(org?.name).toBe('Acme Renamed');
         });
 
         test('an empty name is refused', async () => {

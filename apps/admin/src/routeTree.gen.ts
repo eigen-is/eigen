@@ -17,10 +17,10 @@ import { Route as AuthGuestsRouteImport } from './routes/_auth.guests'
 import { Route as AuthMembersRouteImport } from './routes/_auth.members'
 import { Route as AuthTeamsRouteImport } from './routes/_auth.teams'
 import { Route as AuthUsersRouteImport } from './routes/_auth.users'
-import { Route as AuthWaitlistRouteImport } from './routes/_auth.waitlist'
 import { Route as AuthOwnerGuestSettingsRouteImport } from './routes/_auth._owner.guest-settings'
 import { Route as AuthOwnerOnboardingRouteImport } from './routes/_auth._owner.onboarding'
 import { Route as AuthOwnerSettingsRouteImport } from './routes/_auth._owner.settings'
+import { Route as AuthOwnerWaitlistRouteImport } from './routes/_auth._owner.waitlist'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -60,11 +60,6 @@ const AuthUsersRoute = AuthUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AuthRoute,
 } as any)
-const AuthWaitlistRoute = AuthWaitlistRouteImport.update({
-  id: '/waitlist',
-  path: '/waitlist',
-  getParentRoute: () => AuthRoute,
-} as any)
 const AuthOwnerGuestSettingsRoute = AuthOwnerGuestSettingsRouteImport.update({
   id: '/guest-settings',
   path: '/guest-settings',
@@ -80,6 +75,11 @@ const AuthOwnerSettingsRoute = AuthOwnerSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthOwnerRoute,
 } as any)
+const AuthOwnerWaitlistRoute = AuthOwnerWaitlistRouteImport.update({
+  id: '/waitlist',
+  path: '/waitlist',
+  getParentRoute: () => AuthOwnerRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -88,10 +88,10 @@ export interface FileRoutesByFullPath {
   '/members': typeof AuthMembersRoute
   '/teams': typeof AuthTeamsRoute
   '/users': typeof AuthUsersRoute
-  '/waitlist': typeof AuthWaitlistRoute
   '/guest-settings': typeof AuthOwnerGuestSettingsRoute
   '/onboarding': typeof AuthOwnerOnboardingRoute
   '/settings': typeof AuthOwnerSettingsRoute
+  '/waitlist': typeof AuthOwnerWaitlistRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -100,10 +100,10 @@ export interface FileRoutesByTo {
   '/members': typeof AuthMembersRoute
   '/teams': typeof AuthTeamsRoute
   '/users': typeof AuthUsersRoute
-  '/waitlist': typeof AuthWaitlistRoute
   '/guest-settings': typeof AuthOwnerGuestSettingsRoute
   '/onboarding': typeof AuthOwnerOnboardingRoute
   '/settings': typeof AuthOwnerSettingsRoute
+  '/waitlist': typeof AuthOwnerWaitlistRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -115,10 +115,10 @@ export interface FileRoutesById {
   '/_auth/members': typeof AuthMembersRoute
   '/_auth/teams': typeof AuthTeamsRoute
   '/_auth/users': typeof AuthUsersRoute
-  '/_auth/waitlist': typeof AuthWaitlistRoute
   '/_auth/_owner/guest-settings': typeof AuthOwnerGuestSettingsRoute
   '/_auth/_owner/onboarding': typeof AuthOwnerOnboardingRoute
   '/_auth/_owner/settings': typeof AuthOwnerSettingsRoute
+  '/_auth/_owner/waitlist': typeof AuthOwnerWaitlistRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -129,10 +129,10 @@ export interface FileRouteTypes {
     | '/members'
     | '/teams'
     | '/users'
-    | '/waitlist'
     | '/guest-settings'
     | '/onboarding'
     | '/settings'
+    | '/waitlist'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -141,10 +141,10 @@ export interface FileRouteTypes {
     | '/members'
     | '/teams'
     | '/users'
-    | '/waitlist'
     | '/guest-settings'
     | '/onboarding'
     | '/settings'
+    | '/waitlist'
   id:
     | '__root__'
     | '/'
@@ -155,10 +155,10 @@ export interface FileRouteTypes {
     | '/_auth/members'
     | '/_auth/teams'
     | '/_auth/users'
-    | '/_auth/waitlist'
     | '/_auth/_owner/guest-settings'
     | '/_auth/_owner/onboarding'
     | '/_auth/_owner/settings'
+    | '/_auth/_owner/waitlist'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -225,13 +225,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthUsersRouteImport
       parentRoute: typeof AuthRoute
     }
-    '/_auth/waitlist': {
-      id: '/_auth/waitlist'
-      path: '/waitlist'
-      fullPath: '/waitlist'
-      preLoaderRoute: typeof AuthWaitlistRouteImport
-      parentRoute: typeof AuthRoute
-    }
     '/_auth/_owner/guest-settings': {
       id: '/_auth/_owner/guest-settings'
       path: '/guest-settings'
@@ -253,6 +246,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthOwnerSettingsRouteImport
       parentRoute: typeof AuthOwnerRoute
     }
+    '/_auth/_owner/waitlist': {
+      id: '/_auth/_owner/waitlist'
+      path: '/waitlist'
+      fullPath: '/waitlist'
+      preLoaderRoute: typeof AuthOwnerWaitlistRouteImport
+      parentRoute: typeof AuthOwnerRoute
+    }
   }
 }
 
@@ -260,12 +260,14 @@ interface AuthOwnerRouteChildren {
   AuthOwnerGuestSettingsRoute: typeof AuthOwnerGuestSettingsRoute
   AuthOwnerOnboardingRoute: typeof AuthOwnerOnboardingRoute
   AuthOwnerSettingsRoute: typeof AuthOwnerSettingsRoute
+  AuthOwnerWaitlistRoute: typeof AuthOwnerWaitlistRoute
 }
 
 const AuthOwnerRouteChildren: AuthOwnerRouteChildren = {
   AuthOwnerGuestSettingsRoute: AuthOwnerGuestSettingsRoute,
   AuthOwnerOnboardingRoute: AuthOwnerOnboardingRoute,
   AuthOwnerSettingsRoute: AuthOwnerSettingsRoute,
+  AuthOwnerWaitlistRoute: AuthOwnerWaitlistRoute,
 }
 
 const AuthOwnerRouteWithChildren = AuthOwnerRoute._addFileChildren(
@@ -278,7 +280,6 @@ interface AuthRouteChildren {
   AuthMembersRoute: typeof AuthMembersRoute
   AuthTeamsRoute: typeof AuthTeamsRoute
   AuthUsersRoute: typeof AuthUsersRoute
-  AuthWaitlistRoute: typeof AuthWaitlistRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
@@ -287,7 +288,6 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthMembersRoute: AuthMembersRoute,
   AuthTeamsRoute: AuthTeamsRoute,
   AuthUsersRoute: AuthUsersRoute,
-  AuthWaitlistRoute: AuthWaitlistRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)

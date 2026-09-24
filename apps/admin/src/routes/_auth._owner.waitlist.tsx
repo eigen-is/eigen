@@ -22,7 +22,7 @@ type WaitlistSearch = {
     tab?: string;
 };
 
-export const Route = createFileRoute('/_auth/waitlist')({
+export const Route = createFileRoute('/_auth/_owner/waitlist')({
     component: WaitlistRoute,
     validateSearch: (search: Record<string, unknown>): WaitlistSearch => ({
         entryId: typeof search.entryId === 'string' ? search.entryId : undefined,

@@ -152,8 +152,6 @@ export function ServerSettingsPage() {
 
             <ServerStatusSection />
 
-            <Separator />
-
             <SettingsSection
                 title="Mail"
                 description="The sender of the notifications, codes and invitations this server sends. Leave a field empty for the default shown."

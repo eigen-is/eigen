@@ -5,7 +5,7 @@ import { validateEmailAddress } from '@workspace/lib/validation';
 import { eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, session, team, teamMember, user } from '../../auth-schema';
-import { getAuthDrizzleDb } from '../lib/auth/auth';
+import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { getOrgName, getServerConfig, updateServerConfig } from '../lib/config/server-config';
 import { getS3Config, getServerSettings, updateServerSettings } from '../lib/config/server-settings';
 import { type ControlStatus, getServerStatus } from '../lib/config/server-status';
@@ -50,6 +50,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             if (senderAddress && !validateEmailAddress(senderAddress)) {
                 throw new ApiError(400, `${senderAddress} is not a valid sender address`);
             }
+            if (body.mail?.senderName) body.mail.senderName = body.mail.senderName.trim();
             await updateServerSettings(body);
             return getServerSettings();
         },
@@ -174,10 +175,14 @@ export const settingsRouter = new Elysia({ name: 'settings' })
     // The web address and the mail domain stay as setup made them: every account is on them.
     .put(
         '/settings/organization',
-        async ({ body, user }): Promise<{ name: string }> => {
+        async ({ body, user, request }): Promise<{ name: string }> => {
             await requireOwner(user.id);
             const name = body.name.trim();
             if (!name) throw new ApiError(400, 'The organization needs a name');
+            await auth.api.updateOrganization({
+                body: { organizationId: getServerConfig()?.orgId, data: { name } },
+                headers: request.headers,
+            });
             await updateServerConfig({ orgName: name });
             return { name: getOrgName() };
         },
