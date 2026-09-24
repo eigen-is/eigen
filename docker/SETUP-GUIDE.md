@@ -15,7 +15,7 @@ Everything runs in Docker — isolated, reproducible, easy to update.
 
 ## Prerequisites
 
-- A **Linux VPS** (Debian 12 or Ubuntu 22.04+, 2 GB+ RAM) on **x86_64**: Eigen's images are built for x86_64 only
+- A **Linux server** (Debian 12 or Ubuntu 22.04+, 2 GB+ RAM) on amd64 or arm64
 - **Docker** with the **Docker Compose plugin 2.20 or newer**. No Bun or Node on the server.
 - A **domain** you control (e.g., `eigen.example.com`)
 - **SSH access** to your server
@@ -38,7 +38,7 @@ curl -fsSL https://get.docker.com | sh
 docker compose version   # need 2.20+
 ```
 
-`./eigen` checks both before it does anything. On a server that is not x86_64 it stops; `EIGEN_ALLOW_ARCH=1 ./eigen setup` goes on anyway, unsupported.
+`./eigen` checks both before it does anything.
 
 ### 2. Point your domain at the server
 
