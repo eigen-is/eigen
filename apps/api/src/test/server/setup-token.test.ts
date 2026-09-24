@@ -267,6 +267,7 @@ describe('the /setup routes before setup', () => {
         expect(twice.status).toBe(409);
         expect((await done.json()).user.email).toBe(ADMIN_EMAIL);
         expect(storedConfig()).not.toHaveProperty('domain');
+        expect(storedConfig().mailDomain).toBe(MAIL_DOMAIN);
         const storedSettings = JSON.parse(readFileSync(join(dataRoot, 'server/settings.json'), 'utf8'));
         expect(storedSettings.mail).toMatchObject({ senderName: 'Acme Mail', senderAddress: '' });
         expect(existsSync(join(dataRoot, 'server/setup-token'))).toBe(false);
@@ -311,11 +312,24 @@ describe('the /setup routes before setup', () => {
     );
 
     test(
-        'once set up, the API refuses to start on a mail domain the accounts are not on',
+        'once set up, a development API on a mail domain the accounts are not on warns and starts',
         async () => {
             proc.kill('SIGTERM');
             await proc.exited;
-            const started = startApi({ MAIL_DOMAIN: 'elsewhere.example' });
+            await startApi({ MAIL_DOMAIN: 'elsewhere.example' });
+            expect(readFileSync(logPath, 'utf8')).toContain(
+                `MAIL_DOMAIN is elsewhere.example, but the accounts on this server use ${MAIL_DOMAIN}.`,
+            );
+        },
+        LISTEN_TIMEOUT_MS + 5_000,
+    );
+
+    test(
+        'once set up, a production API refuses to start on a mail domain the accounts are not on',
+        async () => {
+            proc.kill('SIGTERM');
+            await proc.exited;
+            const started = startApi({ MAIL_DOMAIN: 'elsewhere.example', PRODUCTION: '1' });
             await expect(started).rejects.toThrow(
                 `MAIL_DOMAIN is elsewhere.example, but the accounts on this server use ${MAIL_DOMAIN}.`,
             );

@@ -126,12 +126,12 @@ function validateRelay(value: string): string | undefined {
     }
 }
 
-// Every account's address was made on the mail domain; an unreadable data folder leaves the check to the API's boot.
-function isSetUp(): boolean {
+// Setup records the domain every account's address was made on; an unreadable data folder leaves the check to the API's boot.
+function readSetMailDomain(): string | undefined {
     try {
-        return JSON.parse(readFileSync('data/server/config.json', 'utf8')).setupCompleted === true;
+        return JSON.parse(readFileSync('data/server/config.json', 'utf8')).mailDomain || undefined;
     } catch {
-        return false;
+        return undefined;
     }
 }
 
@@ -246,7 +246,7 @@ export async function configure(
             validateDomain,
         ),
     );
-    const setMailDomain = isSetUp() ? existing.get('MAIL_DOMAIN') : undefined;
+    const setMailDomain = readSetMailDomain();
     const givenMailDomain = flags['mail-domain'];
     if (setMailDomain && givenMailDomain !== undefined && cleanDomain(givenMailDomain) !== setMailDomain) {
         ui.fail(

@@ -19,6 +19,7 @@ export type ServerConfig = {
     secret: string;
     setupCompleted: boolean;
     setupCompletedAt?: string;
+    mailDomain: string;
 };
 
 const serverFs = new LocalFilesystem(getServerDataPath());
@@ -27,6 +28,7 @@ const store = new JsonStore<ServerConfig>(serverFs, 'config.json', {
     orgId: '',
     secret: '',
     setupCompleted: false,
+    mailDomain: '',
 });
 
 let loaded = false;

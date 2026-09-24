@@ -31,9 +31,13 @@ wipeBackupStaging();
 // Every account's address was made on the mail domain and never changes; on another one nobody can sign in.
 const accountsDomain = (await getOrgOwner())?.email.split('@')[1]?.toLowerCase();
 if (accountsDomain && accountsDomain !== getMailDomain().toLowerCase()) {
-    console.error(`MAIL_DOMAIN is ${getMailDomain()}, but the accounts on this server use ${accountsDomain}.`);
-    console.error(`Set MAIL_DOMAIN=${accountsDomain} in .env.production and run ./eigen restart.`);
-    process.exit(1);
+    const mismatch = `MAIL_DOMAIN is ${getMailDomain()}, but the accounts on this server use ${accountsDomain}.`;
+    if (isProduction()) {
+        console.error(mismatch);
+        console.error(`Set MAIL_DOMAIN=${accountsDomain} in .env.production and run ./eigen restart.`);
+        process.exit(1);
+    }
+    console.warn(mismatch);
 }
 
 const server = app.listen({

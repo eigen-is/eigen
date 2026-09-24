@@ -374,7 +374,10 @@ describe('configure command', () => {
     // The API's own config.json, as the wizard leaves it.
     const setUp = (dir: string) => {
         mkdirSync(join(dir, 'data/server'), { recursive: true });
-        writeFileSync(join(dir, 'data/server/config.json'), JSON.stringify({ setupCompleted: true }));
+        writeFileSync(
+            join(dir, 'data/server/config.json'),
+            JSON.stringify({ setupCompleted: true, mailDomain: 'example.org' }),
+        );
     };
 
     test('once set up, the mail domain is stated, not asked, and the same --mail-domain changes nothing', async () => {
@@ -402,6 +405,32 @@ describe('configure command', () => {
         expect(run.code).toBe(1);
         expect(run.stderr).toContain('every account here is on example.org');
         expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(INSTALLED);
+    });
+
+    test('once set up, the recorded mail domain wins over a stale MAIL_DOMAIN in the env file', async () => {
+        const dir = tempDir();
+        setUp(dir);
+        writeFileSync(join(dir, '.env.production'), INSTALLED.replace('MAIL_DOMAIN=example.org', 'MAIL_DOMAIN='));
+        const run = await runConfigure(dir, ['--yes', '--mail-domain', 'example.org']);
+        expect(run.code).toBe(0);
+        expect(readEnvFile(join(dir, '.env.production')).get('MAIL_DOMAIN')).toBe('example.org');
+        writeFileSync(
+            join(dir, '.env.production'),
+            INSTALLED.replace('MAIL_DOMAIN=example.org', 'MAIL_DOMAIN=example.com'),
+        );
+        const stale = await runConfigure(dir, ['--yes', '--mail-domain', 'example.com']);
+        expect(stale.code).toBe(1);
+        expect(stale.stderr).toContain('every account here is on example.org');
+    });
+
+    test('a config.json without a recorded mail domain leaves the mail domain a question', async () => {
+        const dir = tempDir();
+        mkdirSync(join(dir, 'data/server'), { recursive: true });
+        writeFileSync(join(dir, 'data/server/config.json'), JSON.stringify({ setupCompleted: true }));
+        writeFileSync(join(dir, '.env.production'), INSTALLED);
+        const run = await runConfigure(dir, ['--yes', '--mail-domain', 'example.com']);
+        expect(run.code).toBe(0);
+        expect(readEnvFile(join(dir, '.env.production')).get('MAIL_DOMAIN')).toBe('example.com');
     });
 
     // Root reads any file, so the unreadable folder exists only for another user.

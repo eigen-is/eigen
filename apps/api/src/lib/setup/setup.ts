@@ -332,6 +332,7 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
             orgId: org.id,
             setupCompleted: true,
             setupCompletedAt: new Date().toISOString(),
+            mailDomain: getMailDomain(),
         });
         clearSetupToken();
 
