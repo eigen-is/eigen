@@ -88,7 +88,7 @@ describe('Backup job pokes', () => {
         const membership = and(eq(memberSchema.userId, signUp.user.id), eq(memberSchema.organizationId, orgId));
         await db.update(memberSchema).set({ role: 'admin' }).where(membership);
 
-        const sse = collectSSE(signUp.user.id);
+        const sse = await collectSSE(signUp.user.id);
         try {
             const ownerId = `poke-owner-${randomUUID()}`;
             const job = startBackupJob('backup', ownerId, ctx.alice.user.id, async () => 'artifact.tar.zst');

@@ -276,8 +276,7 @@ describe('File watch + fan-out', () => {
         await watch(bobToken, folder.id);
         const file = await driveUpload(aliceToken, aliceOwnerId, mountId, folder.id, new File(['x'], 'co.txt'));
 
-        const sse = collectSSE(ctx.bob.user.id);
-        await new Promise((r) => setTimeout(r, 50));
+        const sse = await collectSSE(ctx.bob.user.id);
 
         await drivePut(aliceToken, aliceOwnerId, mountId, `path/${file.id}/rename`, { newName: 'co1.txt' });
         await drivePut(aliceToken, aliceOwnerId, mountId, `path/${file.id}/rename`, { newName: 'co2.txt' });

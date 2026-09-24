@@ -124,6 +124,10 @@ describe('process death mid-drain', () => {
         await m1.fault.write(key, Bun.file(join(m1.mount.stagingDir, staged[0])));
         expect(await countBackingRows(m1.mount, dataDbId, TEST_DIR)).toBe(1);
 
+        // The process dies: stop m1's queue, or its armed backoff retry (a random 0-2s) fires into
+        // the replay below, acks first, and m2 misreads the vanished row as a cancel.
+        m1.mount.uploadQueue?.close();
+
         // Restart: the leftover row replays; the duplicate PUT is idempotent and the row clears.
         const m2 = createS3Mount('death-pre-ack');
         await m2.mount.init();
@@ -161,9 +165,11 @@ describe('corrupted staged copy', () => {
         expect(staged).toHaveLength(1);
         await Bun.write(join(m1.mount.stagingDir, staged[0]), new Uint8Array(0));
 
-        // Restart with a healthy backend: reconcile keeps the row (file exists), but the drain
-        // refuses to PUT a copy that fails the SQLite magic check (isSqliteFile) — the poison row
-        // and staged copy are dropped loudly instead of acking 0 bytes over the good object.
+        // The process dies (its armed retry must not race the replay), then restarts with a healthy
+        // backend: reconcile keeps the row (file exists), but the drain refuses to PUT a copy that
+        // fails the SQLite magic check (isSqliteFile) — the poison row and staged copy are dropped
+        // loudly instead of acking 0 bytes over the good object.
+        m1.mount.uploadQueue?.close();
         const m2 = createS3Mount('staging-truncated');
         await m2.mount.init();
         await m2.mount.drainPendingUploads({ flushNow: true });

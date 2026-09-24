@@ -1851,8 +1851,9 @@ describe('trash/restore content reindex', () => {
             onExtract = resolve;
         });
         await mount.restorePath(containerId);
-        // Pre-fix nothing re-drives the queue, so the extract signal never fires.
-        const kicked = await Promise.race([extracted.then(() => true), Bun.sleep(300).then(() => false)]);
+        // Pre-fix nothing re-drives the queue, so the extract signal never fires. The bound only pays
+        // on that failure path; a kicked drain resolves at once, so it is generous for a loaded runner.
+        const kicked = await Promise.race([extracted.then(() => true), Bun.sleep(5_000).then(() => false)]);
         await mount.closeAllDatabases(); // settles the in-flight drain + cancels timers before asserting
         expect(kicked).toBe(true);
         expect(mount.searchPaths({ q: 'grendeltwo', limit: 20 }).some((h) => h.id === containerId)).toBe(true);

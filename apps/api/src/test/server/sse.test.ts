@@ -98,8 +98,7 @@ describe('SSE', () => {
                 .post({ folderName: 'sse-test-folder' });
 
             // Subscribe to Alice's SSE events
-            const aliceSSE = collectSSE(ctx.alice.user.id);
-            await new Promise((r) => setTimeout(r, 50));
+            const aliceSSE = await collectSSE(ctx.alice.user.id);
 
             // Set ACL - share with Bob
             await ctx.alice.api
@@ -135,8 +134,7 @@ describe('SSE', () => {
                 });
 
             // Now subscribe to Bob's SSE events
-            const bobSSE = collectSSE(ctx.bob.user.id);
-            await new Promise((r) => setTimeout(r, 50));
+            const bobSSE = await collectSSE(ctx.bob.user.id);
 
             // Modify ACL — add Charlie (Bob already has share, so receiveSharedPathChange updates existing)
             await ctx.alice.api

@@ -233,9 +233,7 @@ describe('Calendar Invites', () => {
             },
         });
 
-        const sse = collectSSE(ctx.charlie.user.id);
-        // collectSSE subscribes on the home it opens, and this await settles behind that subscription.
-        await getHome(ctx.charlie.user.id);
+        const sse = await collectSSE(ctx.charlie.user.id);
         try {
             await home.calendar.cancelInvitationOccurrence(
                 orgEventId,

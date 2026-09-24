@@ -590,10 +590,8 @@ describe('Drive history recording', () => {
             add: [{ id: ctx.bob.user.email, read: true, write: false }],
         });
 
-        const aliceSse = collectSSE(aliceOwnerId);
-        const bobSse = collectSSE(ctx.bob.user.id);
-        // collectSSE subscribes asynchronously — let both homes attach before mutating.
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        const aliceSse = await collectSSE(aliceOwnerId);
+        const bobSse = await collectSSE(ctx.bob.user.id);
 
         await drivePut(aliceToken, aliceOwnerId, aliceMountId, `path/${folder.id}/rename`, { newName: 'Broadcasted' });
 
@@ -621,9 +619,8 @@ describe('Drive history recording', () => {
         const file = new File(['content'], 'movebroadcast.txt', { type: 'text/plain' });
         const uploaded = await driveUpload(aliceToken, aliceOwnerId, aliceMountId, src.id, file);
 
-        const aliceSse = collectSSE(aliceOwnerId);
-        const bobSse = collectSSE(ctx.bob.user.id);
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        const aliceSse = await collectSSE(aliceOwnerId);
+        const bobSse = await collectSSE(ctx.bob.user.id);
 
         await drivePut(aliceToken, aliceOwnerId, aliceMountId, `path/${uploaded.id}/move`, {
             targetParentId: dest.id,

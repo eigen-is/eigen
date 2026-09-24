@@ -83,8 +83,7 @@ async function dismissMailNotifications(user: TestUser): Promise<void> {
 // The subject each mail:new broadcast carries. Announcements coalesce onto one row, so the broadcast
 // (the first of the window) and the row (the last one wins) together name both ends of the batch.
 async function announcedWhile(user: TestUser, act: () => Promise<void>): Promise<string[]> {
-    const sse = collectSSE(user.id);
-    await Bun.sleep(50);
+    const sse = await collectSSE(user.id);
     await act();
     await Bun.sleep(100);
     sse.stop();
@@ -226,8 +225,7 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
         });
 
         test('a burst of new mail within the coalesce window upserts the mail:new row but broadcasts once', async () => {
-            const sse = collectSSE(coalesceUserId);
-            await new Promise((r) => setTimeout(r, 50));
+            const sse = await collectSSE(coalesceUserId);
 
             // The still-unindexed welcome mail (delivered with skipReconcile at home-init) surfaces as
             // its own "new mail" discovery on the first sync below, alongside the burst — both

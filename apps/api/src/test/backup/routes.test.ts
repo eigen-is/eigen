@@ -190,9 +190,7 @@ describe('Backup routes', () => {
     });
 
     test('a backup job runs to done, pokes the admin over SSE and lists a verified artifact', async () => {
-        const sse = collectSSE(ctx.alice.user.id);
-        // The pokes wait for the admin's home to open, which a fresh process has not yet: open it first.
-        await getHome(ctx.alice.user.id);
+        const sse = await collectSSE(ctx.alice.user.id); // opens the admin's home, which the pokes wait for
         const job = await startAndFinish(`/admin/backup/home/${target.id}`);
         sse.stop();
 
