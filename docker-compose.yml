@@ -184,5 +184,5 @@ networks:
     ipam:
       config:
         # ./eigen setup writes EIGEN_SUBNET, a /24 no other Docker network uses, and EIGEN_UNBOUND_IP inside it. No
-        # default and no :?: setup asks Compose for the project, and a source install builds, before it writes them.
+        # default and no :?: setup asks Compose for the project, and a local build builds, before it writes them.
         - subnet: ${EIGEN_SUBNET}

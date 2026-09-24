@@ -417,7 +417,7 @@ export async function configure(
     });
     // A backfill keeps every existing value; only the release pins the launcher passes may change a line.
     const written = backfill ? new Map([...entries, ...existing]) : entries;
-    // Passed in release mode alone: a source build's image sets its own EIGEN_REGISTRY, which is no pin.
+    // Passed in release mode alone: a local build's image sets its own EIGEN_REGISTRY, which is no pin.
     if (process.env['EIGEN_VERSION']) {
         for (const key of PIN_KEYS) {
             const value = process.env[key];

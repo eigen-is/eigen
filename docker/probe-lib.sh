@@ -56,7 +56,7 @@ scratch_init() {
     # own install, are logged to $HARNESS_PRUNE_LOG instead of run.
     mkdir "$SCRATCH/cli-image"
     printf '%s\n' '#!/bin/sh' \
-        'case "$1 $2" in "image prune" | "builder prune") echo "$*" >>"$HARNESS_PRUNE_LOG"; exit 0 ;; esac' \
+        'case "$1 $2" in "image prune") echo "$*" >>"$HARNESS_PRUNE_LOG"; exit 0 ;; esac' \
         'exec docker.real "$@"' >"$SCRATCH/cli-image/docker"
     chmod 755 "$SCRATCH/cli-image/docker"
     printf '%s\n' 'FROM docker:cli' \
@@ -93,8 +93,9 @@ register_install() {
     HARNESS_PROJECTS="$HARNESS_PROJECTS $PROJECT"
 }
 
-# new_install <folder name> [uid:gid]: $INSTALL, the working tree committed to a fresh repo, so the launcher sees a
-# source checkout, owned by uid:gid (default: the host user) as if that operator had cloned it.
+# new_install <folder name> [uid:gid]: $INSTALL, the working tree committed to a fresh repo, which the build overlay in
+# it makes a local build whose builds name a commit, owned by uid:gid (default: the host user) as if that operator had
+# cloned it.
 new_install() {
     register_install "$1" "${2:-$(id -u):$(id -g)}"
     # Created and filled inside containers: Docker Desktop refuses a later chown of the host's read-only
@@ -146,7 +147,7 @@ free_port() {
 }
 
 # write_override [--mailpit]: the install's docker-compose.override.yml: every published port on a fresh 127.0.0.1 port,
-# the harness label on every image a source install builds, and optionally Mailpit as the outgoing relay.
+# the harness label on every image a local build builds, and optionally Mailpit as the outgoing relay.
 write_override() {
     local name mailpit='' build=''
     for name in PORT_HTTP PORT_HTTPS PORT_STATIC PORT_SMTP PORT_SMTPS PORT_SUBMISSION PORT_IMAPS PORT_MAILPIT; do
@@ -272,12 +273,6 @@ stack_up() {
 }
 
 api_started() { docker inspect --format '{{.State.StartedAt}}' "$(dc ps -q eigen-api)"; }
-
-# The commit the image eigen-api runs was built at.
-api_revision() {
-    docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
-        "$(docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)")"
-}
 
 # The last KEY= line of the install's .env.production.
 env_of() { scratch_run sed -n "s/^$1=//p" "$INSTALL/.env.production" | tail -n 1; }
@@ -416,19 +411,12 @@ collab_tab() {
 # only visible from inside one; and on Linux the host user cannot read what root or another uid keeps to itself.
 scratch_run() { docker exec "${SCRATCH_BOX:-}" "$@"; }
 
-# scratch_box: starts scratch_run's container, replacing the one before. Named, so a subshell can replace it too. A
-# worktree's .git names the repository's own, which git in the box reaches at the same path.
+# scratch_box: starts scratch_run's container, replacing the one before. Named, so a subshell can replace it too.
 scratch_box() {
-    local git_dir
-    git_dir=$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir)
     docker rm -f "$SCRATCH_BOX" >/dev/null 2>&1 || true
     docker run -d --name "$SCRATCH_BOX" --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
-        -v "$SCRATCH:$SCRATCH" -v "$REPO_ROOT:/repo:ro" -v "$git_dir:$git_dir:ro" --entrypoint tail "$CLI_IMAGE" \
-        -f /dev/null >/dev/null
+        -v "$SCRATCH:$SCRATCH" -v "$REPO_ROOT:/repo:ro" --entrypoint tail "$CLI_IMAGE" -f /dev/null >/dev/null
 }
-
-# git_run <args…>: git as root in the scratch folder.
-git_run() { scratch_run git -c safe.directory='*' -c user.name=harness -c user.email=harness@eigen.invalid "$@"; }
 
 # owner_mode <path>: its uid:gid and mode. While a container keeps the scratch folder mounted, Docker Desktop shows a
 # file another uid wrote without a chown as root's, to every container; so the box is replaced first.
@@ -466,7 +454,7 @@ harness_cleanup() {
     for name in $IMAGES; do
         key=$(image_key "$name")
         image=${!key:-}
-        if [ -n "$image" ]; then docker image rm "$image" "$image-next" >/dev/null 2>&1 || true; fi
+        if [ -n "$image" ]; then docker image rm "$image" >/dev/null 2>&1 || true; fi
     done
     docker image rm "$CLI_IMAGE" >/dev/null 2>&1 || true
     docker image prune -f --filter label=eigen.harness=1 >/dev/null 2>&1 || true

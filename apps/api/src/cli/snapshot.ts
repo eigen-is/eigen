@@ -454,9 +454,9 @@ export async function restore(
             rmSync(STAGING, { recursive: true, force: true });
             cannot(`${conflict.path} is a folder here and a file in the snapshot`);
         }
-        // A release install runs the images its .env.production pins; a source install builds its own and pins none.
+        // A release install runs the images its .env.production pins; a local build builds its own and pins none.
         const install = (env: string) =>
-            readEnvFile(env).has('EIGEN_VERSION') ? 'a release install' : 'a source install';
+            readEnvFile(env).has('EIGEN_VERSION') ? 'a release install' : 'a local build';
         const [theirs, ours] = [install(join(STAGING, ENV_PATH)), install(ENV_PATH)];
         if (theirs !== ours) {
             rmSync(STAGING, { recursive: true, force: true });

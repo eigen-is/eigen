@@ -2,7 +2,7 @@
 # The release gate, run locally: releases <version>-harness.8, .9 (also :latest) and .10 (with a breaking change), built
 # from the working tree and pushed to a registry:2 of this run. With ./eigen in a docker:cli container that has no Bun:
 # install .8 and seed a document, sheet, event, contact and chat message; update to :latest; roll back; refuse and
-# then accept the breaking release; refuse an unknown version and a downgrade; refuse a source install's snapshot, and a
+# then accept the breaking release; refuse an unknown version and a downgrade; refuse a local build's snapshot, and a
 # snapshot of .8 while the registry is down, before anything stops; restore a snapshot of .8, which brings its
 # launcher and Compose files back; move .8 onto the main channel, update it to a second build of main, roll back one
 # build, and leave main for .10; install from main; install .9 from the launcher alone; install .9 twice, on one digest.
@@ -24,7 +24,7 @@ BREAKING=$VERSION-harness.10
 SETUP_FLAGS=(--yes --mail-domain example.org --no-mail --no-relay --no-proxy --contact-email admin@example.org)
 
 scratch_init release
-# Release installs pull their images; the private build tags of a source install do not apply.
+# Release installs pull their images; the private build tags of a local build do not apply.
 for name in $IMAGES; do unset "$(image_key "$name")"; done
 
 free_port REGISTRY_PORT
@@ -391,7 +391,7 @@ unchanged() {
         [ "$(aside_count)" = "$aside" ] && ! scratch_run test -e "$INSTALL/.eigen/restore"
 }
 
-# A source install's snapshot pins no images.
+# A local build's snapshot pins no images.
 cross=eigen-20260101-000000.tar.gz
 scratch_run sh -c 'set -e; cd "$1"; stage=$(mktemp -d)
     printf "{\"version\":\"%s\",\"createdAt\":\"2026-01-01T00:00:00.000Z\"}" "$2" >"$stage/eigen-snapshot.json"
@@ -401,10 +401,10 @@ scratch_run sh -c 'set -e; cd "$1"; stage=$(mktemp -d)
     rm -r "$stage"' sh "$INSTALL" "$BREAKING" "$cross"
 eigen restore "$cross" --yes
 scratch_run rm "$INSTALL/snapshots/$cross"
-if [ "$CODE" = 1 ] && says "■  $cross is a snapshot of a source install; this is a release install." && unchanged; then
-    ok "a snapshot of a source install is refused before anything stops"
+if [ "$CODE" = 1 ] && says "■  $cross is a snapshot of a local build; this is a release install." && unchanged; then
+    ok "a snapshot of a local build is refused before anything stops"
 else
-    fail "the restore of a source snapshot: exit $CODE"
+    fail "the restore of a local build's snapshot: exit $CODE"
     show
 fi
 

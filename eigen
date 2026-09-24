@@ -83,8 +83,8 @@ Usage: ./eigen update [version] [--check] [--accept-breaking] [--full]
 
 Updates Eigen to the newest release, or to <version>, and saves a snapshot first that
 ./eigen rollback goes back to: a light one, of the databases and config, unless the new
-version lists breaking changes. A source install pulls the newest commit and builds it.
-A release install can follow the main channel instead: ./eigen update main.
+version lists breaking changes. ./eigen update main follows the main channel instead of
+releases.
 
   --check             Only tell whether there is an update, and what it brings
   --accept-breaking   Update even when the new version lists breaking changes
@@ -169,14 +169,15 @@ env_value() {
 # answer <key> <the CLI's key=value lines>: the value it gave for that key.
 answer() { printf '%s\n' "$2" | sed -n "s/^$1=//p" | tail -n 1; }
 
-if [ -e .git ] && [ -f docker-compose.build.yml ]; then MODE=source; else MODE=release; fi
+# A folder with the build overlay, such as a clone of the repository, is a local build: setup builds its images.
+if [ -f docker-compose.build.yml ]; then MODE=local; else MODE=release; fi
 
 registry=$(env_value EIGEN_REGISTRY)
 REGISTRY=${registry:-$REGISTRY}
 
 image_key() { printf 'EIGEN_%s_IMAGE\n' "$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"; }
 
-# image <name>: the image Compose runs for it, as the environment or .env.production names it, else a source build's.
+# image <name>: the image Compose runs for it, as the environment or .env.production names it, else a local build's.
 image() {
     key=$(image_key "$1")
     eval "ref=\${$key:-}"
@@ -186,19 +187,20 @@ image() {
 
 API_IMAGE=$(image api)
 
-# Compose interpolates the build overlay for every command, so a source install always exports these.
-source_env() {
+# build_env: what the build overlay interpolates, which Compose does for every command, so a local build always
+# exports it.
+build_env() {
     BUN_VERSION=$(cat .bun-version)
     EIGEN_VERSION=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' package.json | head -n 1)
     EIGEN_COMMIT=$(git -c safe.directory="$PWD" rev-parse --short HEAD 2>/dev/null || true)
     EIGEN_BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     export BUN_VERSION EIGEN_VERSION EIGEN_COMMIT EIGEN_BUILT_AT
 }
-if [ "$MODE" = source ]; then source_env; fi
+if [ "$MODE" = local ]; then build_env; fi
 
 dc() {
     if [ -f docker-compose.override.yml ]; then set -- -f docker-compose.override.yml "$@"; fi
-    if [ "$MODE" = source ]; then set -- -f docker-compose.build.yml "$@"; fi
+    if [ "$MODE" = local ]; then set -- -f docker-compose.build.yml "$@"; fi
     docker compose --env-file .env.production -f docker-compose.yml "$@"
 }
 
@@ -328,16 +330,11 @@ need_install() {
     fi
 }
 
-# need_image <what to do>: the CLI comes with the API image, which a source install builds in ./eigen setup.
+# need_image <what to do>: the CLI comes with the API image, which a local build builds in ./eigen setup.
 need_image() {
-    if [ "$MODE" = source ] && ! docker image inspect "$API_IMAGE" >/dev/null 2>&1; then
+    if [ "$MODE" = local ] && ! docker image inspect "$API_IMAGE" >/dev/null 2>&1; then
         die "Eigen is not built yet." "$1"
     fi
-}
-
-# Git run by another user would leave objects in .git that its owner cannot write.
-need_git_owner() {
-    if [ ! -O .git ]; then die "This checkout belongs to another user." "Run ./eigen $COMMAND as the owner of $PWD/.git."; fi
 }
 
 # One command that changes Eigen at a time, or a nightly backup could stop Eigen in the middle of an update. The lock
@@ -443,26 +440,6 @@ pinned_refs() { for name in $IMAGES; do image "$name"; done; }
 api_here() {
     pull_refs "$(image api)" >"$LOG" 2>&1 ||
         die "The image Eigen runs, $(image api), is not here and cannot be downloaded." "Check the network, then run ./eigen $COMMAND again."
-}
-
-commits_behind() {
-    GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND='ssh -o BatchMode=yes' git fetch --quiet &&
-        git rev-list --count 'HEAD..@{upstream}'
-}
-
-# The source images, built under -next names: the running ones keep theirs until the snapshot is saved.
-build_next() (
-    for name in $IMAGES; do export "$(image_key "$name")=$(image "$name")-next"; done
-    dc build
-)
-
-switch_images() {
-    for name in $IMAGES; do
-        ref=$(image "$name")
-        if docker image inspect "$ref-next" >/dev/null 2>&1; then
-            docker tag "$ref-next" "$ref" && docker image rm "$ref-next" || return 1
-        fi
-    done
 }
 
 # Also removes this project's containers whose service the current profiles leave out, so a rerun that switches web
@@ -595,31 +572,23 @@ refresh_fail2ban() {
     fi
 }
 
-# prune_images [image…]: the images an update leaves behind. A release install keeps those, the rollback snapshot's,
-# and the images PINS names, and removes the rest by ID: an old build of main keeps no tag, only its digest, which no
-# prune takes. Best effort.
+# prune_images [image…]: the images an update leaves behind. Keeps those, the rollback snapshot's, and the images PINS
+# names, and removes the rest by ID: an old build of main keeps no tag, only its digest, which no prune takes. Best
+# effort.
 prune_images() {
-    label=org.opencontainers.image.source=$REPO
-    if [ "$MODE" = release ]; then
-        keep=' '
-        for ref in "$@" $PINS; do keep="$keep${ref#*=} "; done
-        for name in $IMAGES; do
-            remove=$(docker image ls "$REGISTRY/$name" --digests \
-                --format '{{.ID}} {{.Repository}}@{{.Digest}} {{.Repository}}:{{.Tag}}' | awk -v keep="$keep" '
-                { ids[$1]; if (index(keep, " " $2 " ") || index(keep, " " $3 " ")) kept[$1] }
-                END { for (id in ids) if (!(id in kept)) print id }')
-            for id in $remove; do
-                # The daemon is shared with other installs, and a stopped container keeps its image.
-                if [ -z "$(docker ps -aq --filter "ancestor=$id")" ]; then docker image rm -f "$id" || :; fi
-            done
+    keep=' '
+    for ref in "$@" $PINS; do keep="$keep${ref#*=} "; done
+    for name in $IMAGES; do
+        remove=$(docker image ls "$REGISTRY/$name" --digests \
+            --format '{{.ID}} {{.Repository}}@{{.Digest}} {{.Repository}}:{{.Tag}}' | awk -v keep="$keep" '
+            { ids[$1]; if (index(keep, " " $2 " ") || index(keep, " " $3 " ")) kept[$1] }
+            END { for (id in ids) if (!(id in kept)) print id }')
+        for id in $remove; do
+            # The daemon is shared with other installs, and a stopped container keeps its image.
+            if [ -z "$(docker ps -aq --filter "ancestor=$id")" ]; then docker image rm -f "$id" || :; fi
         done
-        docker image prune -f --filter "label=$label" || :
-    else
-        project
-        docker image prune -f --filter "label=$label" --filter "label=com.docker.compose.project=$PROJECT" || :
-        # Host-wide, but only build cache older than a week.
-        docker builder prune -f --filter until=168h || :
-    fi
+    done
+    docker image prune -f --filter "label=org.opencontainers.image.source=$REPO" || :
 }
 
 # write_bundle <api image>: a release install's launcher and Compose files, as that api image writes them. Written to
@@ -666,7 +635,7 @@ setup() {
     wordmark setup
     preflight
     lock
-    if [ "$MODE" = source ]; then
+    if [ "$MODE" = local ]; then
         # Compose loads env_file: even to build.
         if [ ! -e .env.production ]; then (umask 077 && : >.env.production); fi
         step "Building Eigen" "Eigen built" "Could not build Eigen" dc build eigen-api
@@ -694,7 +663,7 @@ setup() {
     export EIGEN_DOCKER_NETWORKS EIGEN_PROJECT
     with_pins cli configure "$@" || exit
 
-    if [ "$MODE" = source ]; then
+    if [ "$MODE" = local ]; then
         step "Building the web and mail images" "Images built" "Could not build the images" \
             dc build $(dc config --services | grep -vx eigen-api)
     fi
@@ -709,7 +678,7 @@ status() {
     need_install
     wordmark status
     preflight >/dev/null
-    # Empty when the check fails, no flag when it cannot run.
+    # Empty when the check fails; a local build has none.
     newer=''
     if [ "$MODE" = release ]; then
         if [ "$(env_value EIGEN_VERSION)" = main ]; then
@@ -717,9 +686,6 @@ status() {
         else
             newer="--latest=$(answer version "$(release_labels latest)")"
         fi
-    # Another user's fetch would leave objects in .git that its owner cannot write.
-    elif [ -O .git ] && git rev-parse --verify --quiet '@{upstream}' >/dev/null 2>&1; then
-        newer="--new-commits=$(commits_behind 2>/dev/null || :)"
     fi
     tab=$(printf '\t')
     listed=$(dc ps -a --format "{{.Service}}$tab{{.State}}$tab{{.Health}}") ||
@@ -800,9 +766,9 @@ restore() {
     fi
     if [ -n "$pins" ]; then pull_pinned "$pins"; fi
     swap_snapshot "$@"
-    # A release install runs the Compose files of the snapshot's version; a source install runs today's, which may need
+    # A release install runs the Compose files of the snapshot's version; a local build runs today's, which may need
     # keys an older snapshot lacks.
-    if [ "$MODE" = source ]; then
+    if [ "$MODE" = local ]; then
         step "Adding what is new to .env.production" ".env.production has what Eigen needs" \
             "Could not update .env.production" cli configure --backfill
     fi
@@ -829,6 +795,9 @@ update() {
             *) if [ -n "$target" ]; then refuse update "$arg"; fi; target=$arg ;;
         esac
     done
+    if [ "$MODE" = local ]; then
+        die "A local build has no updates." "Pull the code and run ./eigen setup again, which builds it."
+    fi
     need_install
     if [ "$pulled" = 1 ]; then
         preflight >/dev/null
@@ -836,7 +805,6 @@ update() {
         wordmark update
         preflight
     fi
-    if [ "$MODE" = source ]; then need_git_owner; fi
     if [ "$check" = 0 ]; then lock; fi
     if [ "$pulled" = 1 ]; then update_apply; else update_get; fi
 }
@@ -844,43 +812,6 @@ update() {
 # The part the launcher the operator typed runs, while Eigen runs on: get the new version, check it, and hand over to
 # the launcher that came with it.
 update_get() {
-    if [ "$MODE" = source ]; then
-        if [ -n "$target" ]; then
-            die "A source install updates to the newest commit; it takes no version." "Run ./eigen update."
-        fi
-        upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null) ||
-            die "This checkout follows no branch." "Set one with git branch --set-upstream-to origin/main, then run ./eigen update again."
-        if [ "$check" = 1 ]; then
-            behind=$(commits_behind 2>"$LOG") ||
-                die "Could not fetch $upstream: $(tail -n 1 "$LOG")" "Check the network, then run ./eigen update --check again."
-            if [ "$behind" = 0 ]; then
-                say "$GREEN" '◇' "Eigen is up to date with $upstream."
-                exit 0
-            fi
-            say "$YELLOW" '▲' "$behind new commit$([ "$behind" = 1 ] || echo s) on $upstream:"
-            git log --format='%h %s' 'HEAD..@{upstream}' | head -n 10 | sed "s/^/${GRAY}│${RESET}  /"
-            say "$GRAY" '└' "./eigen update installs $([ "$behind" = 1 ] && echo it || echo them)."
-            exit 0
-        fi
-        before=$(git rev-parse HEAD)
-        if ! git pull --ff-only >"$LOG" 2>&1; then
-            if grep -q 'would be overwritten' "$LOG"; then
-                files=$(sed -n "s/^$(printf '\t')//p" "$LOG" | tr '\n' ' ')
-                die "Local changes are in the way of the update: $files" "Keep them with git stash, or drop them with git checkout -- <file>; then run ./eigen update again."
-            elif grep -qi 'fast-forward' "$LOG"; then
-                die "This checkout has commits that $upstream does not have." "Put them on top with git rebase $upstream, or drop them with git reset --hard $upstream; then run ./eigen update again."
-            fi
-            die "Could not pull $upstream: $(tail -n 1 "$LOG")" "Fix what it says, then run ./eigen update again. Full output: $LOG."
-        fi
-        count=$(git rev-list --count "$before..HEAD")
-        if [ "$count" = 0 ]; then
-            say "$GREEN" '◇' "No new commits on $upstream"
-        else
-            say "$GREEN" '◇' "Pulled $count new commit$([ "$count" = 1 ] || echo s) from $upstream"
-        fi
-        exec ./eigen update --pulled $full
-    fi
-
     # main is the only channel; any other tag, such as publish.yml's candidates, is no release. A version is
     # VERSION_PATTERN in apps/api/src/cli/install.ts, loosely.
     case $target in
@@ -952,32 +883,13 @@ update_get() {
 update_apply() {
     domain=$(env_value DOMAIN)
     if [ ! -d data ]; then die "There is no data/ in $PWD." "Run ./eigen update in the install folder."; fi
-    if [ "$MODE" = source ]; then
-        container=$(dc ps -a -q eigen-api 2>/dev/null | head -n 1)
-        old_image=$API_IMAGE old='' old_pins=''
-        if [ -n "$container" ]; then
-            old_image=$(docker inspect --format '{{.Image}}' "$container")
-            old=$(describe "$old_image")
-        fi
-        new="$EIGEN_VERSION ($EIGEN_COMMIT)"
-        if [ "$old" = "$new" ]; then
-            restart
-            say "$GRAY" '└' "Eigen $new is up to date and running at https://$domain/"
-            exit 0
-        fi
-        step "Building Eigen $new" "Eigen $new built" "Could not build Eigen $new; Eigen runs on as it was" build_next
-        new_image=$API_IMAGE-next
-        API_IMAGE=$new_image
-        check_room $light
-    else
-        pin_images "$target"
-        api_here
-        old_image=$API_IMAGE new_image=$(answer EIGEN_API_IMAGE "$PINS")
-        old=$(describe "$old_image")
-        new=$(describe "$new_image")
-        # What .env.production pins before the switch is what the rollback snapshot pins.
-        old_pins=$(pinned_refs)
-    fi
+    pin_images "$target"
+    api_here
+    old_image=$API_IMAGE new_image=$(answer EIGEN_API_IMAGE "$PINS")
+    old=$(describe "$old_image")
+    new=$(describe "$new_image")
+    # What .env.production pins before the switch is what the rollback snapshot pins.
+    old_pins=$(pinned_refs)
 
     API_IMAGE=$new_image
     step "Adding what is new to .env.production" ".env.production has what Eigen $new needs" \
@@ -992,31 +904,18 @@ update_apply() {
     API_IMAGE=$old_image
     step "Saving a $kind snapshot" "Snapshot saved" "Could not save the snapshot" cli_as 0 snapshot --pre-update $light
     API_IMAGE=$new_image
-    if [ "$MODE" = source ]; then
-        step "Switching to Eigen $new" "Switched to Eigen $new" "Could not switch to Eigen $new" switch_images
-    else
-        step "Switching to Eigen $new" "Switched to Eigen $new" "Could not write Eigen $new into .env.production" \
-            with_pins cli configure --backfill
-    fi
+    step "Switching to Eigen $new" "Switched to Eigen $new" "Could not write Eigen $new into .env.production" \
+        with_pins cli configure --backfill
     AT_EXIT=''
     restart "Fix what it says, then run ./eigen restart, or ./eigen rollback to go back to Eigen $old."
     step "Removing old images" "Old images removed" "Could not remove the old images" prune_images $old_pins
-    say "$GREEN" '◇' "Eigen ${old:+$old → }$new is running at https://$domain/"
+    say "$GREEN" '◇' "Eigen $old → $new is running at https://$domain/"
     say "$GRAY" '│' "Saved before the update: snapshots/$(answer archive "$(cat .eigen/last-update)"), a $kind snapshot"
-    if [ "$MODE" = source ]; then
-        leftovers=''
-        for dir in dist node_modules; do
-            if [ -e "$dir" ]; then leftovers="$leftovers $dir/"; fi
-        done
-        if [ -n "$leftovers" ]; then
-            say "$GRAY" '│' "Eigen builds in Docker; unless you develop here, delete:$leftovers"
-        fi
-    fi
     say "$GRAY" '└' "./eigen rollback goes back to Eigen $old."
 }
 
-# The pre-update snapshot brings back the data and .env.production, checked while Eigen runs. A release install then
-# gets the images it pins and their bundle files; a source install checks out the old commit and builds it.
+# The pre-update snapshot brings back the data and .env.production, checked while Eigen runs, then the images it pins
+# and their bundle files.
 rollback() {
     yes=''
     for arg in "$@"; do
@@ -1029,6 +928,9 @@ rollback() {
             *) refuse rollback "$arg" ;;
         esac
     done
+    if [ "$MODE" = local ]; then
+        die "A local build has no update to roll back." "Go back in the code and run ./eigen setup again, which builds it."
+    fi
     need_install
     wordmark rollback
     if [ ! -f .eigen/last-update ]; then
@@ -1043,35 +945,15 @@ rollback() {
     fi
     preflight
     lock
-    if [ "$MODE" = source ]; then
-        need_git_owner
-        changed=$(git status --porcelain --untracked-files=no | cut -c4- | tr '\n' ' ')
-        if [ -n "$changed" ]; then
-            die "Local changes are in the way of the rollback: $changed" "Keep them with git stash, or drop them with git checkout -- <file>; then run ./eigen rollback again."
-        fi
-        current="$EIGEN_VERSION ($EIGEN_COMMIT)"
-    else
-        api_here
-        current=$(describe "$(image api)")
-    fi
+    api_here
+    current=$(describe "$(image api)")
     say "$ACCENT" '◆' "Back from Eigen $current to Eigen $back, from a $kind snapshot"
     check_snapshot "$archive" $yes
-    if [ "$MODE" = source ]; then
-        # git replaces this file rather than writing into it, so the running sh reads on in its own copy.
-        step "Checking out $commit" "Checked out $commit" "Could not check out $commit" git reset --hard "$commit"
-        source_env
-        step "Building Eigen $back" "Eigen $back built" "Could not build Eigen $back; Eigen runs on as it was" build_next
-    else
-        pins=$(cli_as 0 restore "$archive" --checked </dev/null)
-        pull_pinned "$pins"
-        back=$(describe "$(answer EIGEN_API_IMAGE "$pins")")
-    fi
+    pins=$(cli_as 0 restore "$archive" --checked </dev/null)
+    pull_pinned "$pins"
+    back=$(describe "$(answer EIGEN_API_IMAGE "$pins")")
     swap_snapshot "$archive"
-    if [ "$MODE" = source ]; then
-        step "Switching to Eigen $back" "Switched to Eigen $back" "Could not switch to Eigen $back" switch_images
-    else
-        write_bundle "$(answer EIGEN_API_IMAGE "$pins")"
-    fi
+    write_bundle "$(answer EIGEN_API_IMAGE "$pins")"
     AT_EXIT=''
     restart
     rm -f .eigen/last-update

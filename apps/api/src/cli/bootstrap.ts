@@ -54,8 +54,8 @@ export async function bootstrap(flags: { out?: string; force?: boolean }): Promi
         renameSync(temp, target);
     }
 
-    // A source install's file names no release until it moves to one: a file without a version is a file bootstrap
-    // owns the pins of.
+    // A local build's file names no release until it moves to one: a file without a version is a file bootstrap owns
+    // the pins of.
     const pin = !existing.has('EIGEN_VERSION');
     // A build of a channel pins the channel, which ./eigen update then follows.
     const version = process.env['EIGEN_CHANNEL'] || VERSION;

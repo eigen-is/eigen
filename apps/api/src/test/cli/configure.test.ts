@@ -481,7 +481,7 @@ describe('configure command', () => {
         expect(env).toContain('DOMAIN=eigen.example.org\n');
     });
 
-    test('a source install writes no release pins, though the image sets EIGEN_REGISTRY', async () => {
+    test('a local build writes no release pins, though the image sets EIGEN_REGISTRY', async () => {
         const dir = tempDir();
         const run = await runConfigure(
             dir,
