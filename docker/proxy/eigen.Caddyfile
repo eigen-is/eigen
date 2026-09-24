@@ -1,14 +1,6 @@
 # Eigen reverse-proxy snippet for Caddy. Import it in your host Caddyfile (import /path/to/eigen.Caddyfile),
 # then reload Caddy.
 {{DOMAIN}} {
-    encode gzip zstd
-
-    # Baseline security headers (the CSP + referrer meta ride in each app's HTML).
-    header X-Frame-Options SAMEORIGIN
-    header X-Content-Type-Options nosniff
-    header Referrer-Policy "strict-origin-when-cross-origin"
-    header Permissions-Policy "camera=(), microphone=(), geolocation=()"
-
     reverse_proxy {{TARGET}} {
         flush_interval -1
         header_up X-Forwarded-Proto {scheme}
