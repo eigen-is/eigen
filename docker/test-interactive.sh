@@ -117,7 +117,6 @@ send -- "y"
 answer "Which mail relay should Eigen send through" smtp.relay.invalid:2525
 answer "What is the relay's user name?" relayuser
 answer "What is the relay's password?" $env(RELAY_PASSWORD)
-answer "Which address should Eigen's own mail come from?" "Eigen <noreply@eigen.test>"
 EOF
 if [ "$CODE" = 0 ]; then
     ok "interactive setup with mail finishes (exit 0)"
@@ -128,8 +127,7 @@ fi
 got="$(env_of DOMAIN) $(env_of MAIL_DOMAIN) $(env_of ACME_EMAIL) $(env_of COMPOSE_PROFILES) $(env_of MAIL_ENABLED)"
 got="$got $(env_of SMTP_RELAY_HOST):$(env_of SMTP_RELAY_PORT) $(env_of SMTP_RELAY_USER)"
 if [ "$got" = "localhost eigen.test admin@eigen.test edge,mail 1 smtp.relay.invalid:2525 relayuser" ] &&
-    [ "$(env_of SMTP_RELAY_PASSWORD | tr -d "'\"")" = "$RELAY_PASSWORD" ] &&
-    env_of SMTP_FROM | grep -q 'Eigen <noreply@eigen.test>'; then
+    [ "$(env_of SMTP_RELAY_PASSWORD | tr -d "'\"")" = "$RELAY_PASSWORD" ]; then
     ok ".env.production has every answer"
 else
     fail ".env.production: $got"

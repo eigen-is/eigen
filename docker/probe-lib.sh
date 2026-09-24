@@ -413,11 +413,15 @@ collab_tab() {
 # only visible from inside one; and on Linux the host user cannot read what root or another uid keeps to itself.
 scratch_run() { docker exec "${SCRATCH_BOX:-}" "$@"; }
 
-# scratch_box: starts scratch_run's container, replacing the one before. Named, so a subshell can replace it too.
+# scratch_box: starts scratch_run's container, replacing the one before. Named, so a subshell can replace it too. A
+# worktree's .git names the repository's own, which git in the box reaches at the same path.
 scratch_box() {
+    local git_dir
+    git_dir=$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir)
     docker rm -f "$SCRATCH_BOX" >/dev/null 2>&1 || true
     docker run -d --name "$SCRATCH_BOX" --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
-        -v "$SCRATCH:$SCRATCH" -v "$REPO_ROOT:/repo:ro" --entrypoint tail "$CLI_IMAGE" -f /dev/null >/dev/null
+        -v "$SCRATCH:$SCRATCH" -v "$REPO_ROOT:/repo:ro" -v "$git_dir:$git_dir:ro" --entrypoint tail "$CLI_IMAGE" \
+        -f /dev/null >/dev/null
 }
 
 # git_run <args…>: git as root in the scratch folder.

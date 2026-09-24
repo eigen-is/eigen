@@ -6,19 +6,13 @@ import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON } from '@worksp
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
 import { apikey as apikeyScheme, user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import * as pathsModule from '../../lib/backup/paths';
-import {
-    ARCHIVE_AVATAR_DIR,
-    buildArtifactName,
-    buildHomeFolderName,
-    FAILED_RESTORE_SUFFIX,
-    getBackupsDir,
-    PRE_RESTORE_SUFFIX,
-} from '../../lib/backup/paths';
+import { ARCHIVE_AVATAR_DIR, buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getCollabEpoch } from '../../lib/collab/epoch';

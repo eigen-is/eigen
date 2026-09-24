@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The launcher alone, without a stack: under dash (debian:bookworm-slim), BusyBox sh and this host's /bin/sh, with a
 # stub docker on PATH that answers info and compose version and fails on demand. Covers every command's help, unknown
-# commands and arguments, the preflight refusals, source and release mode, need_install, and a failing compose config.
+# commands and arguments, the preflight refusals, source and release mode, need_install, a failing compose config, stop,
+# what update asks the CLI, and what status passes it about the snapshots and the files of an unfinished update.
 #
 # Usage:  ./docker/test-launcher.sh
 # Needs:  docker (pulls debian:bookworm-slim and busybox once).
@@ -114,7 +115,7 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: help: exit $CODE, calls '$CALLS'"
     fi
     failed=''
-    for command in status backup logs update rollback restart; do
+    for command in status backup logs update rollback restart stop; do
         launch bare "$command" --help
         case "$CODE $(printf '%s\n' "$OUT" | head -n 1)" in
             "0 Usage: ./eigen $command"*) ;;
@@ -122,7 +123,7 @@ for SHELL_NAME in dash busybox host; do
         esac
     done
     if [ -z "$failed" ]; then
-        ok "$SHELL_NAME: status, backup, logs, update, rollback and restart --help print their usage"
+        ok "$SHELL_NAME: status, backup, logs, update, rollback, restart and stop --help print their usage"
     else
         fail "$SHELL_NAME: no usage from --help of:$failed"
     fi
@@ -142,8 +143,8 @@ for SHELL_NAME in dash busybox host; do
     launch bare frobnicate
     expect_error 2 'Unknown command "frobnicate"' "an unknown command is refused with the usage on stderr"
     failed=''
-    for args in 'status extra' 'backup extra' 'restart extra' 'logs a b' 'update --bogus' 'update 1 2' \
-        'rollback --nope'; do
+    for args in 'status extra' 'backup extra' 'backup --keep 2 extra' 'restart extra' 'stop extra' 'logs a b' \
+        'update --bogus' 'update 1 2' 'rollback --nope'; do
         # shellcheck disable=SC2086
         launch source $args
         if [ "$CODE" != 2 ] || [ -n "$OUT" ] || ! printf '%s\n' "$ERR" | grep -q "^Unknown argument \"${args##* }\"\.$" ||
@@ -158,7 +159,7 @@ for SHELL_NAME in dash busybox host; do
     fi
 
     failed=''
-    for command in status backup restart update rollback logs reset-password; do
+    for command in status backup restart stop update rollback logs reset-password; do
         launch bare "$command"
         if [ "$CODE" != 1 ] || ! printf '%s\n' "$ERR" | grep -q '■  Eigen is not set up in' ||
             ! printf '%s\n' "$ERR" | grep -q '└  Run ./eigen setup first.' || [ -n "$CALLS" ]; then
@@ -217,22 +218,41 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: release setup without a version: exit $CODE, '$ERR'"
     fi
 
-    # A prerelease comes before its version, and its numbers compare as numbers: rc.9 before rc.10.
-    failed=''
-    for versions in '0.3.0-rc.10 0.3.0-rc.9 up' '0.3.0-rc.9 0.3.0-rc.10 behind' '0.3.0 0.3.0-rc.1 up' \
-        '0.3.0-rc.1 0.3.0 behind' '0.2.100 0.2.99 up'; do
-        read -r have latest expected <<<"$versions"
-        printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=%s\n' "$have" >"$FIX/release/.env.production"
-        STUB_LATEST=$latest launch release update --check
-        got=behind
-        if printf '%s\n' "$OUT" | grep -q "Eigen $have is up to date"; then got=up; fi
-        if [ "$CODE" != 0 ] || [ "$got" != "$expected" ]; then failed="$failed $have/$latest"; fi
-    done
-    printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=0.2.99\n' >"$FIX/release/.env.production"
-    if [ -z "$failed" ]; then
-        ok "$SHELL_NAME: update --check orders versions and prereleases"
+    # The launcher compares versions for equality only; the new version's CLI orders them.
+    STUB_LATEST=0.2.99 launch release update --check
+    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q 'Eigen 0.2.99 is up to date' &&
+        ! printf '%s\n' "$CALLS" | grep -q '^run '; then
+        ok "$SHELL_NAME: update --check on the newest version says it is up to date without running the CLI"
     else
-        fail "$SHELL_NAME: update --check misorders:$failed"
+        fail "$SHELL_NAME: update --check when up to date: exit $CODE, '$OUT'"
+    fi
+    STUB_LATEST=0.2.98 launch release update --check
+    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" |
+        grep -q '^run .* ghcr.io/eigen-is/eigen/api:0.2.98 update-check --from 0.2.99 --accept-breaking$'; then
+        ok "$SHELL_NAME: update --check on another version asks that version's CLI, which orders them"
+    else
+        fail "$SHELL_NAME: update --check to another version: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+
+    launch source stop
+    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q '◇  Eigen stopped' &&
+        printf '%s\n' "$CALLS" | grep -q '^compose .* stop$' && ! printf '%s\n' "$CALLS" | grep -q ' up '; then
+        ok "$SHELL_NAME: stop stops Eigen and starts nothing"
+    else
+        fail "$SHELL_NAME: stop: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+
+    mkdir -p "$FIX/release/snapshots" "$FIX/release/.eigen"
+    head -c 4096 /dev/zero >"$FIX/release/snapshots/eigen-20260101-000000.tar.gz"
+    echo 0.2.100 >"$FIX/release/.eigen/bundle"
+    STUB_LATEST=0.2.99 launch release status
+    rm -r "$FIX/release/snapshots" "$FIX/release/.eigen/bundle"
+    # --services spans lines of the call log.
+    if printf '%s\n' "$CALLS" | grep -q ' --snapshots=eigen-20260101-000000.tar.gz --snapshots-kb=[1-9][0-9]* ' &&
+        printf '%s\n' "$CALLS" | grep -q ' --latest=0.2.99 --files=0.2.100$'; then
+        ok "$SHELL_NAME: status passes the snapshots, their size, and the version the files were last written for"
+    else
+        fail "$SHELL_NAME: status: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
 
     STUB_FAIL=compose-config launch source restart

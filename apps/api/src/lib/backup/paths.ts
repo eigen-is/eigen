@@ -8,6 +8,8 @@ import {
     BACKUP_HOME_PREFIX,
     BACKUP_STAMP_PATTERN,
     buildBackupStamp,
+    FAILED_RESTORE_SUFFIX,
+    PRE_RESTORE_SUFFIX,
     parseBackupStamp,
 } from '@workspace/lib/validation';
 import { getDataRoot, getTeamDataPath, getUserHomePath } from '../config/paths';
@@ -149,11 +151,6 @@ export function freeArtifactName(ownerId: string, at: Date): string {
     );
     return buildArtifactName(ownerId, free);
 }
-
-// The home folder a restore moved aside (the state before it) and the incomplete folder a failed
-// restore left behind. Nothing deletes either automatically; the admin pane lists and removes them.
-export const PRE_RESTORE_SUFFIX = '.pre-restore-';
-export const FAILED_RESTORE_SUFFIX = '.failed-restore-';
 
 // `{homeFolderName}{suffix}{stamp}`. The caller compares `homeName` against the home it asked
 // about: that equality, not the character class, is what keeps a delete inside the right directory.

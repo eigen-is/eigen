@@ -80,6 +80,11 @@ describe('releaseNotes', () => {
         expect(notes).toEqual([]);
     });
 
+    test('orders prereleases before their release, and their numbers as numbers', () => {
+        const changelog = '## [0.3.0-rc.10] - 2026-10-02\n\nTen.\n\n## [0.3.0-rc.9] - 2026-10-01\n\nNine.\n';
+        expect(releaseNotes(changelog, '0.3.0-rc.9', '0.3.0').map((note) => note.version)).toEqual(['0.3.0-rc.10']);
+    });
+
     test('a downgrade or the same version has no notes', () => {
         expect(releaseNotes(CHANGELOG, '0.3.0', '0.2.9')).toEqual([]);
         expect(releaseNotes(CHANGELOG, '0.2.10', '0.2.10')).toEqual([]);
@@ -110,10 +115,15 @@ describe('update-check', () => {
         expect(run.stdout).toContain('▲  Sheets border storage (breaking)');
     });
 
-    test('refuses a downgrade', async () => {
-        const run = await eigen('update-check', '--from', '99.0.0');
-        expect(run.code).toBe(1);
-        expect(run.stderr).toContain(`■  This is Eigen ${version}, older than 99.0.0.`);
+    test('refuses a downgrade, and takes this version or a prerelease of it', async () => {
+        for (const from of ['99.0.0', '99.0.0-rc.1']) {
+            const run = await eigen('update-check', '--from', from);
+            expect(run.code).toBe(1);
+            expect(run.stderr).toContain(`■  Eigen ${version} is older than Eigen ${from}, which runs here.`);
+        }
+        for (const from of [version, `${version}-rc.1`]) {
+            expect((await eigen('update-check', '--from', from, '--accept-breaking')).code).toBe(0);
+        }
     });
 
     test('refuses a --from that is no version, and a missing one', async () => {

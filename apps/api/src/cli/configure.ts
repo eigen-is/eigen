@@ -167,13 +167,10 @@ export function configureEntries(existing: Map<string, string>, answers: Configu
     entries.set('MAIL_ENABLED', answers.mail ? '1' : '0');
     entries.set('EIGEN_STATIC_HOST', staticHost);
     entries.set('EIGEN_STATIC_PORT', staticPort);
-    if (answers.subnet && answers.subnet !== DEFAULT_SUBNET) {
-        entries.set('EIGEN_SUBNET', answers.subnet);
-        // Only the mail profile runs unbound; the network itself exists in every mode.
-        if (answers.mail && !entries.has('EIGEN_UNBOUND_IP')) {
-            entries.set('EIGEN_UNBOUND_IP', answers.subnet.replace(/\.0\/\d+$/, '.254'));
-        }
-    }
+    // Compose has no default for either, whether or not the mail profile runs unbound: this is their one default.
+    const subnet = answers.subnet ?? DEFAULT_SUBNET;
+    entries.set('EIGEN_SUBNET', subnet);
+    if (!entries.has('EIGEN_UNBOUND_IP')) entries.set('EIGEN_UNBOUND_IP', subnet.replace(/\.0\/\d+$/, '.254'));
 
     // Postfix relays through these with hosted mail, the API without it.
     const relay = answers.relay ?? { host: '', port: '', user: '', password: '' };
@@ -382,7 +379,7 @@ export async function configure(
         relay = { host, port, user, password };
     }
 
-    // Only the launcher, which always lists the host's networks, picks a subnet; a checkout keeps Compose's default.
+    // Only the launcher's setup lists the host's networks to pick a subnet from; without the list, the default.
     const networksFile = process.env['EIGEN_DOCKER_NETWORKS'];
     let subnet = existing.get('EIGEN_SUBNET') ?? null;
     if (subnet === null && networksFile) {

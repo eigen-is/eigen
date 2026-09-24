@@ -1,13 +1,15 @@
 import { chownSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import pkg from '../../../../package.json' with { type: 'json' };
 
 // The repo root in a checkout, /app in the image.
 export const ROOT = join(import.meta.dir, '../../../..');
 export const ENV_PATH = '.env.production';
-// The exit code of a question the operator said no to, which the launcher ends as a plain exit.
+export const VERSION = pkg.version;
+// The exit code of a question the operator said no to, which the launcher ends as a plain exit; DECLINED in ./eigen.
 export const DECLINED = 3;
-export const VERSION_PATTERN = String.raw`\d+\.\d+\.\d+(?:-[\w.-]+)?`;
-export const VERSION = new RegExp(`^${VERSION_PATTERN}$`);
+export const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/;
+// IMAGES in ./eigen.
 export const IMAGE_NAMES = ['api', 'frontend', 'postfix', 'dovecot'] as const;
 
 type Owner = { uid: number; gid: number };

@@ -69,8 +69,8 @@ Commands:
   status           Report on the running server (run by ./eigen status)
   reset-password   Set a new password for an account and sign it out everywhere
   setup-link       Print a fresh one-time setup link, or where to sign in once set up
-  snapshot         Write data/ and .env.production into snapshots/ (run by ./eigen backup)
-  restore          Put data/ and .env.production back from a snapshot (run by ./eigen restore)
+  snapshot         Write data/, or its databases alone, and .env.production into snapshots/ (run by ./eigen backup)
+  restore          Put what a snapshot holds of data/ and .env.production back (run by ./eigen restore)
   update-check     Print what changed since a version, and ask about breaking changes (run by ./eigen update)`;
 
 const [command = '', ...args] = process.argv.slice(2);

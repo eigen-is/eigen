@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Updates and rolls back a source install with ./eigen in a docker:cli container that has no Bun. The install clones a
-# scratch remote whose main is this branch plus the working tree, reset to the first commit whose snapshot writes
-# .eigen/last-update (or $UPDATE_FROM), and is set up edge-only as root with an admin and a folder. Then: update --check,
-# the refusals before anything stops, the update, a rerun, a commit that breaks the build and its fix, and the rollback.
+# scratch remote whose main is this branch plus the working tree, reset to the first commit whose launcher reads
+# .eigen/last-update as key=value lines (or $UPDATE_FROM), and is set up edge-only as root with an admin and a folder.
+# Then: update --check, the refusals before anything stops, an update with a full snapshot, a rerun, a commit that
+# breaks the build and its fix with a light snapshot, and the rollback to it, which keeps the files made since.
 #
 # Usage:  ./docker/test-update.sh
 # Needs:  docker, curl, git. Builds the images five times in Docker (the first on a cold cache takes minutes).
@@ -14,10 +15,9 @@ set -euo pipefail
 ADMIN_EMAIL=alice@example.org
 PASSWORD="probe-$$"
 BRANCH=$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)
-FROM=${UPDATE_FROM:-$(git -C "$REPO_ROOT" log --reverse --format=%H -S'last-update' -- apps/api/src/cli/snapshot.ts |
-    head -n 1)}
+FROM=${UPDATE_FROM:-$(git -C "$REPO_ROOT" log --reverse --format=%H -S'answer archive' -- eigen | head -n 1)}
 if [ -z "$FROM" ]; then
-    echo "harness: no commit of $BRANCH writes .eigen/last-update yet; commit it, or set UPDATE_FROM" >&2
+    echo "harness: no commit of $BRANCH reads .eigen/last-update as key=value lines yet; commit it, or set UPDATE_FROM" >&2
     exit 1
 fi
 
@@ -72,7 +72,7 @@ header "./eigen update --check"
 started=$(api_started)
 eigen update --check
 show
-if [ "$CODE" = 0 ] && says "$behind new commit" && says './eigen update installs them.' &&
+if [ "$CODE" = 0 ] && says "$behind new commit" && says "./eigen update installs $([ "$behind" = 1 ] && echo it || echo them)." &&
     [ "$(head_of "$INSTALL")" = "$OLD" ] && [ "$(api_started)" = "$started" ]; then
     ok "--check names $behind new commits and changes nothing"
 else
@@ -119,7 +119,7 @@ header "./eigen update"
 ##############################################################################
 scratch_run mkdir "$INSTALL/dist"
 started=$SECONDS
-eigen update
+eigen update --full
 show
 NEW=$(head_of "$INSTALL")
 if [ "$CODE" = 0 ] && says "Pulled $((behind + 1)) new commits from origin/main" &&
@@ -142,13 +142,17 @@ fi
 archive=$(pre_updates)
 archive=${archive% }
 pointer=$(scratch_run cat "$INSTALL/.eigen/last-update" | tr '\n' ' ')
-if [ -n "$archive" ] && [ "$pointer" = "$archive $VERSION $OLD " ] && says "snapshots/$archive"; then
-    ok ".eigen/last-update names snapshots/$archive, $VERSION and $OLD"
+if [ -n "$archive" ] && [ "$pointer" = "archive=$archive version=$VERSION commit=$OLD kind=full " ] &&
+    says "Saved before the update: snapshots/$archive, a full snapshot"; then
+    ok "--full saves a full snapshot, and .eigen/last-update names snapshots/$archive, $VERSION and $OLD"
 else
     fail "pre-update snapshots '$archive', .eigen/last-update '$pointer'"
 fi
 meta=$(scratch_run tar -xzOf "$INSTALL/snapshots/$archive" eigen-snapshot.json || true)
-case $meta in *"\"version\":\"$VERSION\""*) ok "the snapshot records $VERSION" ;; *) fail "the snapshot records: $meta" ;; esac
+case $meta in
+    *"\"version\":\"$VERSION\""*'"kind":"full"'*) ok "the snapshot records $VERSION and its kind" ;;
+    *) fail "the snapshot records: $meta" ;;
+esac
 prunes=$(cat "$PRUNE_LOG")
 if printf '%s\n' "$prunes" | grep -qx "image prune -f --filter label=org.opencontainers.image.source=https://github.com/eigen-is/eigen --filter label=com.docker.compose.project=$PROJECT" &&
     printf '%s\n' "$prunes" | grep -qx 'builder prune -f --filter until=168h'; then
@@ -197,10 +201,20 @@ push_change "harness: fix the API build" 'sed -i "\$d" docker/api/Dockerfile'
 eigen update
 show
 FIXED=$(head_of "$INSTALL")
-if [ "$CODE" = 0 ] && says "→ $VERSION ($FIXED) is running" && stack_up && kept; then
-    ok "the next update after the fix converges on $FIXED"
+light=$(scratch_run cat "$INSTALL/.eigen/last-update" | sed -n 's/^archive=//p')
+if [ "$CODE" = 0 ] && says "→ $VERSION ($FIXED) is running" && stack_up && kept &&
+    says "Saved before the update: snapshots/$light, a light snapshot" &&
+    scratch_run grep -qx kind=light "$INSTALL/.eigen/last-update"; then
+    ok "the next update after the fix converges on $FIXED, with a light snapshot"
 else
     fail "the update after the fix: exit $CODE"
+fi
+members=$(scratch_run tar -tzf "$INSTALL/snapshots/$light" || true)
+if printf '%s\n' "$members" | grep -q '/mounts/default/metadata.db$' &&
+    ! printf '%s\n' "$members" | grep -q '/mounts/default/data/'; then
+    ok "the light snapshot holds the mount's database and none of its files"
+else
+    fail "the light snapshot holds: $(printf '%s\n' "$members" | grep mounts | tr '\n' ' ')"
 fi
 count=$(pre_updates | wc -w | tr -d ' ')
 if [ "$count" = 2 ]; then ok "two pre-update snapshots are kept"; else fail "$count pre-update snapshots: $(pre_updates)"; fi
@@ -208,7 +222,15 @@ if [ "$count" = 2 ]; then ok "two pre-update snapshots are kept"; else fail "$co
 ##############################################################################
 header "./eigen rollback"
 ##############################################################################
+# The drive keeps its files by id: what is on disk is the files, what the listing shows is its database. A document's
+# file is written by the time Eigen stops; its -wal and -shm go when it closes.
+files() {
+    { scratch_run ls "$INSTALL/data/home/$ADMIN_ID/mounts/default/data" 2>/dev/null || true; } |
+        grep -v -e '-wal$' -e '-shm$' | tr '\n' ' ' || true
+}
+before=$(files)
 api POST "/drive/$ADMIN_ID/default/folder/$ROOT_ID" '{"folderName":"Made after the update"}' >/dev/null
+api POST "/drive/$ADMIN_ID/default/folder/$ROOT_ID/create/doc" '{"fileName":"Made after the update too"}' >/dev/null
 scratch_run sh -c 'echo "A local edit." >>"$1/README.md"' sh "$INSTALL"
 started=$(api_started)
 eigen rollback --yes
@@ -223,8 +245,10 @@ git_run -C "$INSTALL" checkout -q -- README.md
 started=$SECONDS
 eigen rollback --yes
 show
-if [ "$CODE" = 0 ] && says "◇  Eigen $VERSION ($FIXED) → $VERSION ($NEW) is running at https://localhost/"; then
-    ok "./eigen rollback went back from $FIXED to $NEW in $((SECONDS - started))s"
+if [ "$CODE" = 0 ] && says "Back from Eigen $VERSION ($FIXED) to Eigen $VERSION ($NEW), from a light snapshot" &&
+    says 'databases and config restored; files and mail kept as they are' &&
+    says "◇  Eigen $VERSION ($FIXED) → $VERSION ($NEW) is running at https://localhost/"; then
+    ok "./eigen rollback went back from $FIXED to $NEW in $((SECONDS - started))s, from the light snapshot"
 else
     fail "./eigen rollback exited $CODE"
 fi
@@ -236,9 +260,18 @@ else
 fi
 if kept && ! api GET "/drive/$ADMIN_ID/default/folder/$ROOT_ID" | grep -q '"Made after the update"' &&
     ! scratch_run test -e "$INSTALL/.eigen/last-update"; then
-    ok "the data is as it was before the update, and .eigen/last-update is gone"
+    ok "the databases are as they were before the update, and .eigen/last-update is gone"
 else
     fail "the data or .eigen/last-update after the rollback"
+fi
+after=$(files)
+kept=1
+for file in $before; do case " $after" in *" $file "*) ;; *) kept=0 ;; esac; done
+if [ "$kept" = 1 ] && [ "$(printf '%s' "$after" | wc -w)" -gt "$(printf '%s' "$before" | wc -w)" ] &&
+    ! api GET "/drive/$ADMIN_ID/default/folder/$ROOT_ID" | grep -q '"Made after the update too"'; then
+    ok "the document made after the update is out of the listing, and its file is still on disk"
+else
+    fail "the files after the rollback: '$after', before the document '$before'"
 fi
 
 header "Result"

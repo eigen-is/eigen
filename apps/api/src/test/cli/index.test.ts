@@ -7,7 +7,7 @@ describe('parseFlags', () => {
     test.each([
         ['reset-password', 'Usage: ./eigen reset-password <email> [--generate]'],
         ['restore', 'Usage: ./eigen restore <snapshot> [--yes]'],
-        ['snapshot', 'Usage: snapshot [--pre-update]'],
+        ['snapshot', 'Usage: snapshot [--light] [--keep <n>] [--pre-update] [--check [--from <version>]]'],
         ['bootstrap', 'Usage: bootstrap [--out <dir>] [--force]'],
         ['update-check', 'Usage: update-check --from <version> [--accept-breaking]'],
     ])('%s --help prints its usage and exits 0', async (command, usage) => {

@@ -135,10 +135,13 @@ describe('configure entries', () => {
         expect(entries.get('EIGEN_UNBOUND_IP')).toBe('172.31.0.254');
     });
 
-    test('without hosted mail there is no unbound to place, but the network still takes the subnet', () => {
+    test('without hosted mail, and without a chosen subnet, both keys are written, since Compose requires them', () => {
         const entries = configureEntries(new Map(), { ...ANSWERS, mail: false, subnet: '172.31.0.0/24' });
         expect(entries.get('EIGEN_SUBNET')).toBe('172.31.0.0/24');
-        expect(entries.has('EIGEN_UNBOUND_IP')).toBe(false);
+        expect(entries.get('EIGEN_UNBOUND_IP')).toBe('172.31.0.254');
+        const fallback = configureEntries(new Map(), ANSWERS);
+        expect(fallback.get('EIGEN_SUBNET')).toBe('172.20.0.0/24');
+        expect(fallback.get('EIGEN_UNBOUND_IP')).toBe('172.20.0.254');
     });
 
     test('removing the relay drops its lines, password included', () => {
@@ -307,7 +310,7 @@ describe('configure command', () => {
         ].join('\n');
         const dir = tempDir();
         writeFileSync(join(dir, '.env.production'), original);
-        // ./eigen update passes no network list: a backfill never picks a subnet.
+        // ./eigen update passes no network list: a backfill writes the subnet an install without one runs on.
         const update = { EIGEN_VERSION: '0.2.99', EIGEN_DOCKER_NETWORKS: undefined };
         const run = await runConfigure(dir, ['--backfill'], undefined, update);
         expect(run.stderr).toBe('');
@@ -324,10 +327,11 @@ describe('configure command', () => {
             'EIGEN_STATIC_HOST=127.0.0.1',
             'VITE_APP_DOCS_URL=/docs',
             'EIGEN_VERSION=0.2.99',
+            'EIGEN_SUBNET=172.20.0.0/24',
+            'EIGEN_UNBOUND_IP=172.20.0.254',
         ]) {
             expect(written).toContain(`\n${line}\n`);
         }
-        expect(written).not.toContain('EIGEN_SUBNET');
 
         const again = await runConfigure(dir, ['--backfill'], undefined, update);
         expect(again.code).toBe(0);
@@ -486,7 +490,7 @@ describe('configure command', () => {
         expect(readFileSync(join(dir, '.env.production'), 'utf8')).not.toContain('EIGEN_REGISTRY');
     });
 
-    test('a checkout run picks no subnet and needs no Docker', async () => {
+    test('a run without the network list takes the default subnet and needs no Docker', async () => {
         const dir = tempDir();
         const run = await runConfigure(
             dir,
@@ -496,7 +500,7 @@ describe('configure command', () => {
         );
         expect(run.stderr).toBe('');
         expect(run.code).toBe(0);
-        expect(readFileSync(join(dir, '.env.production'), 'utf8')).not.toContain('EIGEN_SUBNET');
+        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toContain('\nEIGEN_SUBNET=172.20.0.0/24\n');
     });
 
     test('a rerun that changes no answer says so and prints nothing else', async () => {
@@ -572,12 +576,12 @@ describe('configure command', () => {
         const byEnv = tempDir();
         writeFileSync(join(byEnv, '.env.production'), INSTALLED);
         expect((await runConfigure(byEnv, ['--yes'], undefined, { EIGEN_PROJECT: 'eigen' }, live)).code).toBe(0);
-        expect(readFileSync(join(byEnv, '.env.production'), 'utf8')).not.toContain('EIGEN_SUBNET');
+        expect(readFileSync(join(byEnv, '.env.production'), 'utf8')).toContain('\nEIGEN_SUBNET=172.20.0.0/24\n');
 
         const byFile = tempDir();
         writeFileSync(join(byFile, '.env.production'), `${INSTALLED}COMPOSE_PROJECT_NAME=eigen\n`);
         expect((await runConfigure(byFile, ['--yes'], undefined, { EIGEN_PROJECT: undefined }, live)).code).toBe(0);
-        expect(readFileSync(join(byFile, '.env.production'), 'utf8')).not.toContain('EIGEN_SUBNET');
+        expect(readFileSync(join(byFile, '.env.production'), 'utf8')).toContain('\nEIGEN_SUBNET=172.20.0.0/24\n');
 
         const unnamed = tempDir();
         writeFileSync(join(unnamed, '.env.production'), INSTALLED);

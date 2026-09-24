@@ -16,8 +16,11 @@ export function getDataRoot(): string {
     return './../../data';
 }
 
+// The server's own folder in data/, beside the homes.
+export const SERVER_DIR = 'server';
+
 export function getServerDataPath(filename?: string): string {
-    const serverData = path.join(getDataRoot(), 'server');
+    const serverData = path.join(getDataRoot(), SERVER_DIR);
     if (!fs.existsSync(serverData)) {
         fs.mkdirSync(serverData, { recursive: true });
     }
