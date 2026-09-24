@@ -65,7 +65,7 @@ mkdir -p /opt/eigen && cd /opt/eigen
 curl -fsSL https://eigen.is/install | sh
 ```
 
-The script downloads the `eigen` command into the folder and runs `./eigen setup`. Setup downloads the newest release, asks the questions of step 4, starts Eigen and prints the link of step 5. The folder then holds the `eigen` command, the Compose file, `.env.example`, the fail2ban files and `.env.production`. That file names the release, so the install stays on that version until `./eigen update`. For another release, run `./eigen update <version>` after the install (see the [releases](https://github.com/eigen-is/eigen/releases)).
+The script downloads the `eigen` command into the folder and runs `./eigen setup`. Setup downloads the newest release, asks the questions of step 4, starts Eigen and prints the link of step 5. The folder then holds the `eigen` command, the Compose file, `.env.example`, the fail2ban files and `.env.production`. That file names the release, so the install stays on that version until `./eigen update`.
 
 Developing Eigen? `./eigen` also runs in a clone of the repository, where it builds the images from source: see [CONTRIBUTING.md § Eigen in Docker](../docs/CONTRIBUTING.md#eigen-in-docker). On a server, run a release.
 

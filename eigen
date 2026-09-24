@@ -656,7 +656,7 @@ setup() {
         fi
         version=$(env_value EIGEN_VERSION)
         if [ -z "$version" ]; then
-            die ".env.production names no Eigen release." "Run: curl -fsSL https://eigen.is/install | sh"
+            die ".env.production names no Eigen release." "Get one into it: docker run --rm -v \"\$PWD:/out\" $REGISTRY/api:latest bootstrap --force"
         fi
         # A tag is resolved to digests once, by the first setup or by update: a rerun gets the images already pinned.
         case $(image api) in
