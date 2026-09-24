@@ -182,8 +182,12 @@ dc() {
     docker compose --env-file .env.production -f docker-compose.yml "$@"
 }
 
-# The Compose project, named the way Compose names it.
-project() { dc config 2>/dev/null | sed -n 's/^name: //p'; }
+# PROJECT: the Compose project, named the way Compose names it. Asked once, before the steps that use it, which run in
+# subshells and would each ask again.
+PROJECT=''
+project() {
+    if [ -z "$PROJECT" ]; then PROJECT=$(dc config 2>/dev/null | sed -n 's/^name: //p'); fi
+}
 
 # Whom a root run of the CLI gives what it writes: through Docker Desktop's file share, root in a container sees root.
 EIGEN_OWNER=$(ls -ldn . | awk '{ print $3 ":" $4 }')
@@ -338,13 +342,20 @@ need_git_owner() {
 # goes when the command ends, after AT_EXIT; update --pulled finds its own, handed over by exec.
 AT_EXIT=''
 lock() {
-    pid=''
-    if ! mkdir .eigen/lock 2>/dev/null; then pid=$(cat .eigen/lock/pid 2>/dev/null || :); fi
-    # The lock of a process that is gone is taken over; another user's cannot be written.
-    if [ -n "$pid" ] && [ "$pid" != $$ ] && kill -0 "$pid" 2>/dev/null || ! { echo $$ >.eigen/lock/pid; } 2>/dev/null; then
-        die "Another ./eigen command is running." "Wait for it to end, then run ./eigen $COMMAND again. If none runs, remove .eigen/lock."
+    if ! mkdir .eigen/lock 2>/dev/null; then
+        pid=$(cat .eigen/lock/pid 2>/dev/null || :)
+        # The lock of a process that is gone is taken over.
+        if [ -n "$pid" ] && [ "$pid" != $$ ] && kill -0 "$pid" 2>/dev/null; then
+            die "Another ./eigen command is running." "Wait for it to end, then run ./eigen $COMMAND again."
+        fi
+        # Another user's process cannot be asked whether it runs, and their lock cannot be taken over.
+        if [ ! -w .eigen/lock ]; then
+            holder=$(ls -ld .eigen/lock | awk '{ print $3 }')
+            die "Another ./eigen command, run by $holder, holds .eigen/lock." "Wait for it to end, then run ./eigen $COMMAND again. If none runs, remove .eigen/lock as $holder or as root."
+        fi
     fi
     trap 'code=$?; (eval "$AT_EXIT") || code=$?; rm -rf .eigen/lock; exit "$code"' EXIT
+    echo $$ >.eigen/lock/pid
 }
 
 # cli_help <CLI command>: the usage of a command the CLI parses.
@@ -419,7 +430,8 @@ switch_images() {
 start() {
     services=$(dc config --services) || return 1
     active=" $(printf '%s ' $services)"
-    stale=$(docker ps -a --filter "label=com.docker.compose.project=$(project)" \
+    project
+    stale=$(docker ps -a --filter "label=com.docker.compose.project=$PROJECT" \
         --format '{{.ID}} {{.Label "com.docker.compose.service"}}' | while read -r id service; do
         case $active in (*" $service "*) ;; (*) echo "$id" ;; esac
     done)
@@ -431,18 +443,24 @@ start() {
 # so a failed start points at ./eigen restart.
 restart() {
     NEXT=${1:-Fix what it says, then run ./eigen restart.}
+    project
+    mail=$(mail_containers)
     step "Starting Eigen" "Eigen is running" "Eigen did not start; ./eigen logs shows why" start
-    refresh_fail2ban
+    if [ "$(mail_containers)" != "$mail" ]; then refresh_fail2ban; fi
 }
 
 # Every container of this project, also those of services the current files no longer name.
 stop_containers() {
     dc stop || return 1
-    ids=$(docker ps -q --filter "label=com.docker.compose.project=$(project)")
+    project
+    ids=$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT")
     if [ -n "$ids" ]; then docker stop $ids; fi
 }
 
-stop() { step "Stopping Eigen" "Eigen stopped" "Could not stop Eigen" stop_containers; }
+stop() {
+    project
+    step "Stopping Eigen" "Eigen stopped" "Could not stop Eigen" stop_containers
+}
 
 # The server runs as 1000:1000. Only an empty folder is handed over: an existing one keeps its owners.
 prepare_data() {
@@ -492,21 +510,26 @@ swap_snapshot() {
     AT_EXIT='cli_as 0 rm -rf .eigen/restore; restart'
     if [ -f .env.production ]; then stop; fi
     trap : INT TERM
-    restored=0
-    cli_as 0 restore "$@" --yes || restored=$?
+    swapped=0
+    cli_as 0 restore "$@" --yes || swapped=$?
     trap 'exit 130' INT TERM
-    if [ "$restored" = 0 ]; then
+    if [ "$swapped" = 0 ]; then
         AT_EXIT=restart
         return
     fi
-    AT_EXIT=''
+    AT_EXIT='cli_as 0 rm -rf .eigen/restore'
     restart
-    if [ "$restored" = 130 ]; then say "$GRAY" '└' "The restore was cancelled. Eigen runs on the data it had."; fi
-    exit "$restored"
+    if [ "$swapped" = 130 ]; then say "$GRAY" '└' "The restore was cancelled. Eigen runs on the data it had."; fi
+    exit "$swapped"
 }
 
-# Fail2ban's jails follow the mail containers' logs by container ID, so every start that may recreate them reloads it.
-# The filters come with Eigen, the jail is the operator's.
+# The IDs of the mail containers, stopped ones too: fail2ban's jails follow their logs by container ID.
+mail_containers() {
+    docker ps -a --filter "label=com.docker.compose.project=$PROJECT" \
+        --format '{{.ID}} {{.Label "com.docker.compose.service"}}' | grep -E ' (postfix|dovecot)$' || :
+}
+
+# After a start that recreated the mail containers. The filters come with Eigen, the jail is the operator's.
 refresh_fail2ban() {
     jail=/etc/fail2ban/jail.d/eigen-mail-sasl.conf
     if [ ! -e "$jail" ]; then return 0; fi
@@ -534,7 +557,8 @@ prune_images() {
         done
         docker image prune -f --filter "label=$label" || :
     else
-        docker image prune -f --filter "label=$label" --filter "label=com.docker.compose.project=$(project)" || :
+        project
+        docker image prune -f --filter "label=$label" --filter "label=com.docker.compose.project=$PROJECT" || :
         # Host-wide, but only build cache older than a week.
         docker builder prune -f --filter until=168h || :
     fi
@@ -585,7 +609,8 @@ setup() {
     docker network inspect $(docker network ls -q) >.eigen/networks.json ||
         die "Could not list the Docker networks." "Check that Docker is running, then run ./eigen setup again."
     EIGEN_DOCKER_NETWORKS=/install/.eigen/networks.json
-    EIGEN_PROJECT=$(project)
+    project
+    EIGEN_PROJECT=$PROJECT
     export EIGEN_DOCKER_NETWORKS EIGEN_PROJECT
     with_pins cli configure "$@" || exit
 
@@ -604,15 +629,13 @@ status() {
     need_install
     wordmark status
     preflight >/dev/null
-    # Asked in the background while Compose answers; empty when the check fails, no flag when it cannot run.
+    # Empty when the check fails, no flag when it cannot run.
     newer=''
     if [ "$MODE" = release ]; then
-        newer=--latest
-        release_version latest >.eigen/update-check &
+        newer="--latest=$(release_version latest)"
     # Another user's fetch would leave objects in .git that its owner cannot write.
     elif [ -O .git ] && git rev-parse --verify --quiet '@{upstream}' >/dev/null 2>&1; then
-        newer=--new-commits
-        commits_behind >.eigen/update-check 2>/dev/null &
+        newer="--new-commits=$(commits_behind 2>/dev/null || :)"
     fi
     tab=$(printf '\t')
     listed=$(dc ps -a --format "{{.Service}}$tab{{.State}}$tab{{.Health}}") ||
@@ -631,11 +654,7 @@ status() {
         ;;
     esac
 
-    set -- --services="$services" --mail-queue="$queue" --snapshots="$(ls snapshots 2>/dev/null || :)"
-    if [ -n "$newer" ]; then
-        wait
-        set -- "$@" "$newer=$(cat .eigen/update-check)"
-    fi
+    set -- --services="$services" --mail-queue="$queue" --snapshots="$(ls snapshots 2>/dev/null || :)" ${newer:+"$newer"}
     case $services in
         *"eigen-api${tab}running$tab"*) api_cli status "$@" ;;
         *) cli status "$@" ;;
@@ -669,13 +688,18 @@ restore() {
     lock
     running=$(env_value EIGEN_VERSION)
     check_snapshot "$@"
-    swap_snapshot "$@"
-    # A snapshot is the whole server: a release install goes back to the version whose images it pins.
-    restored=$(env_value EIGEN_VERSION)
-    if [ "$MODE" = release ] && [ -n "$restored" ] && [ "$restored" != "$running" ]; then
-        step "Getting Eigen $restored" "Eigen $restored is here" "Could not get Eigen $restored" pull_images "$restored"
-        write_bundle "$restored"
+    # A snapshot is the whole server: a release install goes back to the version whose images it pins, got while Eigen
+    # runs on. The checked copy's marker, root's alone, names that version.
+    restored=$running
+    if [ "$MODE" = release ]; then
+        restored=$(cli_as 0 cat .eigen/restore/.snapshot </dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
     fi
+    if [ "$restored" != "$running" ]; then
+        step "Getting Eigen $restored" "Eigen $restored is here" "Could not get Eigen $restored; Eigen runs on as it was" \
+            pull_images "$restored"
+    fi
+    swap_snapshot "$@"
+    if [ "$restored" != "$running" ]; then write_bundle "$restored"; fi
     AT_EXIT=''
     restart
     say "$GRAY" '└' "Check that all is well, then delete what was kept aside."

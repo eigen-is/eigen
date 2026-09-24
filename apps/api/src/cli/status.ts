@@ -4,6 +4,7 @@ import { parseBackupStamp } from '@workspace/lib/validation';
 import pkg from '../../../../package.json' with { type: 'json' };
 import type { ControlStatus } from '../lib/config/server-status';
 import { callControl } from './control-socket';
+import { VERSION } from './install';
 import { newestSnapshots, SNAPSHOT_NAME } from './snapshot';
 import { createUi, type Glyph, glyphLine } from './ui';
 
@@ -39,8 +40,10 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
     const build: Row[] = api
         ? [{ level: 'ok', label: 'Version', value: `${api.version}${api.commit ? ` (${api.commit})` : ''}` }]
         : [];
-    if (latest === '' || commits === '') build.push({ level: 'warn', label: 'Update', value: 'could not check' });
-    else if (latest && Bun.semver.order(latest, pkg.version) > 0) {
+    // Bun.semver.order throws on what is not a version.
+    if (commits === '' || (latest !== undefined && !VERSION.test(latest))) {
+        build.push({ level: 'warn', label: 'Update', value: 'could not check' });
+    } else if (latest && Bun.semver.order(latest, pkg.version) > 0) {
         build.push({ level: 'warn', label: 'Update', value: `Eigen ${latest} is out; ./eigen update installs it` });
     } else if (commits && commits !== '0') {
         build.push({

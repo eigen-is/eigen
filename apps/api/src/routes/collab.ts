@@ -206,10 +206,10 @@ export const collabRouter = new Elysia({
                 const loadStart = performance.now();
 
                 const { ownerId, mountId, pathId } = ws.data.params;
-                // The tab loaded its document before ./eigen restore put other data back: its sync would merge
-                // what the restore undid.
+                // The tab loaded its document before a restore put other data back: its sync would merge what the
+                // restore undid.
                 const { epoch } = ws.data.query;
-                if (epoch !== undefined && epoch !== getCollabEpoch()) {
+                if (epoch !== undefined && epoch !== getCollabEpoch(ownerId)) {
                     ws.close(COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON);
                     return;
                 }
@@ -224,7 +224,7 @@ export const collabRouter = new Elysia({
                 }
 
                 const document = await drive.getCollabDocument(mountId, pathId);
-                rawWs.send(collabEpochMessage());
+                rawWs.send(collabEpochMessage(ownerId));
                 document.subscribe(user, rawWs);
                 console.log(
                     `[collab] open path=${pathId} loadMs=${(performance.now() - loadStart).toFixed(0)} ` +

@@ -2,8 +2,9 @@
 # The release gate, run locally: releases 0.2.98, 0.2.99 (also :latest) and 0.2.100 (with a breaking change), built
 # from the working tree and pushed to a registry:2 of this run. With ./eigen in a docker:cli container that has no Bun:
 # install 0.2.98 and seed a document, sheet, event, contact and chat message; update to :latest; roll back; refuse and
-# then accept the breaking release; refuse an unknown version and a downgrade; restore a snapshot of 0.2.98, which brings
-# its launcher and Compose files back; install 0.2.99 twice, on one digest.
+# then accept the breaking release; refuse an unknown version and a downgrade; refuse a source install's snapshot, and a
+# snapshot of 0.2.98 while the registry is down, before anything stops; restore a snapshot of 0.2.98, which brings its
+# launcher and Compose files back; install 0.2.99 twice, on one digest.
 #
 # Usage:  ./docker/test-release.sh
 # Needs:  docker, curl, git. Builds the API three times and the other images once (the first on a cold cache takes
@@ -349,8 +350,51 @@ fi
 ##############################################################################
 header "./eigen restore of a snapshot of $PREVIOUS"
 ##############################################################################
+started=$(api_started)
+env_before=$(scratch_run cat "$INSTALL/.env.production")
+aside=$(aside_count)
+# unchanged: Eigen was not stopped, and .env.production, data/ and the checked copy are as before the restore.
+unchanged() {
+    [ "$(api_started)" = "$started" ] && [ "$(scratch_run cat "$INSTALL/.env.production")" = "$env_before" ] &&
+        [ "$(aside_count)" = "$aside" ] && ! scratch_run test -e "$INSTALL/.eigen/restore"
+}
+
+# A source install's snapshot pins no images.
+cross=eigen-20260101-000000.tar.gz
+scratch_run sh -c 'set -e; cd "$1"; stage=$(mktemp -d)
+    printf "{\"version\":\"%s\",\"createdAt\":\"2026-01-01T00:00:00.000Z\"}" "$2" >"$stage/eigen-snapshot.json"
+    grep -v "^EIGEN_\(VERSION\|[A-Z]*_IMAGE\)=" .env.production >"$stage/.env.production"
+    mkdir "$stage/data"
+    tar -czf "snapshots/$3" -C "$stage" eigen-snapshot.json .env.production data
+    rm -r "$stage"' sh "$INSTALL" "$BREAKING" "$cross"
+eigen restore "$cross" --yes
+scratch_run rm "$INSTALL/snapshots/$cross"
+if [ "$CODE" = 1 ] && says "■  $cross is a snapshot of a source install; this is a release install." && unchanged; then
+    ok "a snapshot of a source install is refused before anything stops"
+else
+    fail "the restore of a source snapshot: exit $CODE"
+    show
+fi
+
+snapshot=$(scratch_run sed -n 1p "$INSTALL/.eigen/last-update")
+# Only the registry has the images of $PREVIOUS now.
+for name in api frontend postfix dovecot; do docker image rm "$REGISTRY/$name:$PREVIOUS" >/dev/null; done
+docker stop "eigentest-registry-$RUN" >/dev/null
+eigen restore "$snapshot" --yes
+docker start "eigentest-registry-$RUN" >/dev/null
+if [ "$CODE" = 1 ] && says "■  Could not get Eigen $PREVIOUS; Eigen runs on as it was" && unchanged; then
+    ok "with the registry down, a restore of a snapshot of $PREVIOUS stops nothing and says so"
+else
+    fail "the restore with the registry down: exit $CODE"
+    show
+fi
+for _ in $(seq 30); do
+    if curl -sf "http://localhost:$REGISTRY_PORT/v2/" >/dev/null; then break; fi
+    sleep 1
+done
+
 inode=$(scratch_run stat -c %i "$INSTALL/eigen")
-eigen restore "$(scratch_run sed -n 1p "$INSTALL/.eigen/last-update")" --yes
+eigen restore "$snapshot" --yes
 show
 if [ "$CODE" = 0 ] && says "◇  Eigen $PREVIOUS files written" && [ "$(scratch_run stat -c %i "$INSTALL/eigen")" != "$inode" ]; then
     ok "a restore of a snapshot of $PREVIOUS on $BREAKING writes the launcher and Compose files of $PREVIOUS"

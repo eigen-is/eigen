@@ -209,7 +209,7 @@ crontab -e
 # 0 3 * * * /opt/eigen/eigen backup
 ```
 
-Put a snapshot back with `./eigen restore`. It unpacks and checks the snapshot while Eigen runs, asks, then stops Eigen, moves the current `data/` and `.env.production` aside to `data.pre-restore-<UTC time>` and `.env.production.pre-restore-<UTC time>` (never deleted), puts the snapshot in their place and starts Eigen again. A snapshot is the whole server: on a release install, a snapshot of an older version brings that version back too, with its images and its launcher and Compose files, as a rollback does. It refuses a snapshot of a newer Eigen version: update first, then restore. `data/` must be a plain folder inside the install folder, not a link or a mount of another disk.
+Put a snapshot back with `./eigen restore`. It unpacks and checks the snapshot while Eigen runs, asks, then stops Eigen, moves the current `data/` and `.env.production` aside to `data.pre-restore-<UTC time>` and `.env.production.pre-restore-<UTC time>` (never deleted), puts the snapshot in their place and starts Eigen again. A snapshot is the whole server: on a release install, a snapshot of an older version brings that version back too, with its images and its launcher and Compose files, as a rollback does. The images come first: if they cannot be downloaded, Eigen runs on as it was. It refuses a snapshot of a newer Eigen version: update first, then restore. It also refuses a snapshot of a source install on a release install, and the other way around. `data/` must be a plain folder inside the install folder, not a link or a mount of another disk.
 
 ```bash
 ./eigen restore eigen-<UTC time>.tar.gz
@@ -311,7 +311,7 @@ fail2ban-client status eigen-postfix-sasl
 fail2ban-client status eigen-dovecot-auth
 ```
 
-It stays host config because fail2ban writes host firewall rules, and it bans in the `DOCKER-USER` chain because Docker's published ports never pass through `INPUT`. The jails' log glob is expanded at start and the Docker log path embeds the container ID, so recreating the mail containers silently disarms them until a reload. After every start it does, `./eigen` copies the filters again and runs `fail2ban-client reload` when the jails are installed and it can write them (as root, in practice); otherwise it prints the command to run as root. Only a by-hand `docker compose up` leaves the reload to you. Tuning, checks, and the nftables variant are in [docker/fail2ban/README.md](fail2ban/README.md).
+It stays host config because fail2ban writes host firewall rules, and it bans in the `DOCKER-USER` chain because Docker's published ports never pass through `INPUT`. The jails' log glob is expanded at start and the Docker log path embeds the container ID, so recreating the mail containers silently disarms them until a reload. After a start that recreated the mail containers, `./eigen` copies the filters again and runs `fail2ban-client reload` when the jails are installed and it can write them (as root, in practice); otherwise it prints the command to run as root. Only a by-hand `docker compose up` leaves the reload to you. Tuning, checks, and the nftables variant are in [docker/fail2ban/README.md](fail2ban/README.md).
 
 The postfix and dovecot logs are the record of an abuse run, and what fail2ban reads, so they keep 10 files of 50 MB where the other containers keep 3 of 10 MB. During the incident the old 3x10 MB rotated away in about two hours and took the start of the run with it.
 

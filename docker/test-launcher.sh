@@ -16,7 +16,8 @@ trap 'rm -rf "$FIX"' EXIT
 
 # The stub logs every call to $STUB_LOG. STUB_INFO and STUB_COMPOSE answer info and compose version, empty for a
 # failure; STUB_FAIL names the compose subcommands and docker commands that fail; STUB_IMAGE=1 makes image inspect fail;
-# STUB_LATEST is the version the registry's manifest of api:latest names.
+# STUB_LATEST is the version the registry's manifest of api:latest names; a docker run with STUB_RUN_FAIL among its
+# arguments fails.
 mkdir "$FIX/bin"
 cat >"$FIX/bin/docker" <<'EOF'
 #!/bin/sh
@@ -36,12 +37,16 @@ case $1 in
         fails "compose-$1"
         case $1 in
             version) if [ -n "${STUB_COMPOSE-2.29.1}" ]; then echo "${STUB_COMPOSE-2.29.1}"; else exit 1; fi ;;
-            config) printf 'eigen-api\ncaddy\n' ;;
+            config) if [ "${2:-}" = --services ]; then printf 'eigen-api\ncaddy\n'; else echo 'name: stub'; fi ;;
         esac
         ;;
     image) exit "${STUB_IMAGE:-0}" ;;
     manifest) echo "\"org.opencontainers.image.version\": \"${STUB_LATEST:-}\"" ;;
-    run) shift; echo "stub run: $*" ;;
+    run)
+        shift
+        echo "stub run: $*"
+        case " $* " in *" ${STUB_RUN_FAIL:-none} "*) exit 1 ;; esac
+        ;;
     *) fails "$1" ;;
 esac
 EOF
@@ -67,7 +72,7 @@ launch() {
     local dir="$FIX/$1" vars=("STUB_LOG=$FIX/calls.log") flags=() name var
     shift
     : >"$FIX/calls.log"
-    for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST EIGEN_ALLOW_ARCH; do
+    for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_RUN_FAIL EIGEN_ALLOW_ARCH; do
         if [ -n "${!name+set}" ]; then vars+=("$name=${!name}"); fi
     done
     CODE=0
@@ -236,6 +241,20 @@ for SHELL_NAME in dash busybox host; do
         ok "$SHELL_NAME: a failing compose config removes, stops and starts nothing"
     else
         fail "$SHELL_NAME: failing compose config: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+
+    STUB_RUN_FAIL=--yes launch source restore eigen-20260101-000000.tar.gz
+    if [ "$CODE" = 1 ] && printf '%s\n' "$CALLS" | grep -q ' restore eigen-20260101-000000.tar.gz --yes$' &&
+        printf '%s\n' "$CALLS" | grep -q ' up -d --wait$' &&
+        printf '%s\n' "$CALLS" | tail -n 1 | grep -q ' rm -rf .eigen/restore$' && [ ! -e "$FIX/source/.eigen/lock" ]; then
+        ok "$SHELL_NAME: a failed swap starts Eigen again, then removes the checked copy and the lock"
+    else
+        fail "$SHELL_NAME: a failed swap: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    if [ "$(printf '%s\n' "$CALLS" | grep -c ' config$')" = 1 ]; then
+        ok "$SHELL_NAME: one compose config names the project for the stop and the start"
+    else
+        fail "$SHELL_NAME: the project was asked $(printf '%s\n' "$CALLS" | grep -c ' config$') times"
     fi
 
     mkdir "$FIX/source/.eigen/lock"

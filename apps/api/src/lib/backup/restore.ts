@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { parseBackupArtifactName } from '@workspace/lib/validation';
 import { closeCollabConnectionsForHome } from '../collab/connections';
-import { rotateCollabEpoch } from '../collab/epoch';
+import { rotateHomeCollabEpoch } from '../collab/epoch';
 import { ApiError, PATHS } from '../core';
 import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-home';
 import { getTeam } from '../team/team';
@@ -68,10 +68,10 @@ async function replaceHomeFolder(
         const install = await prepare();
 
         // Sessions are untouched: the user stays signed in, every request just meets the 503 until
-        // the mark clears. The epoch is the whole server's: a tab offline now has no socket to close, and
-        // rotating it reloads every open tab once on its next reconnect, which a rare admin restore can afford.
+        // the mark clears. A tab offline now has no socket to close: the home's epoch reloads it on its
+        // next reconnect.
         closeCollabConnectionsForHome(ownerId);
-        rotateCollabEpoch();
+        rotateHomeCollabEpoch(ownerId);
         await evictHome(ownerId);
 
         // There is no home folder to move aside on a restore after the user was deleted.

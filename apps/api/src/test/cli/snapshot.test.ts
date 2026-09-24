@@ -296,6 +296,23 @@ describe('restore', () => {
         expect(existsSync(join(dir, 'data/home/alice/notes.txt'))).toBe(true);
     });
 
+    // A release install runs the images its .env.production pins; a source install builds its own and pins none.
+    test.each([
+        ['a release install', 'a source install', `${ENV}EIGEN_VERSION=${version}\n`, ENV],
+        ['a source install', 'a release install', ENV, `${ENV}EIGEN_VERSION=${version}\n`],
+    ])('refuses a snapshot of %s on %s before anything changes', async (theirs, ours, before, now) => {
+        const dir = install();
+        writeFileSync(join(dir, '.env.production'), before);
+        const name = await snapshot(dir);
+        writeFileSync(join(dir, '.env.production'), now);
+        const result = await eigen(dir, 'restore', name, '--check', '--yes');
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain(`${name} is a snapshot of ${theirs}; this is ${ours}.`);
+        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(now);
+        expect(readFileSync(join(dir, 'data/home/alice/notes.txt'), 'utf8')).toBe('original\n');
+        expect(existsSync(join(dir, '.eigen/restore'))).toBe(false);
+    });
+
     test('takes a bare name too, and gives the env file the install folder owner when there was none', async () => {
         const dir = install();
         const name = await snapshot(dir);

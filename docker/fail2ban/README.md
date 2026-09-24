@@ -17,11 +17,11 @@ systemctl enable --now fail2ban
 systemctl restart fail2ban
 ```
 
-After every start it does, `./eigen` copies the two `filter.d` files again and reloads fail2ban, when the jail is installed, it can write it (as root, in practice) and `fail2ban-client` is there. So a filter fix in Eigen reaches the host on its own; otherwise it prints the command to run as root. It never touches `jail.d`, so the tuning below stays yours.
+After a start that recreated the postfix or dovecot container, `./eigen` copies the two `filter.d` files again and reloads fail2ban, when the jail is installed, it can write it (as root, in practice) and `fail2ban-client` is there; otherwise it prints the command to run as root. It never touches `jail.d`, so the tuning below stays yours.
 
 ## Reload after container recreation
 
-Fail2ban expands the jail's log glob only when the jail starts. The Docker json-log path embeds the container ID, so any `docker compose up` that recreates the postfix or dovecot container leaves both jails polling deleted log files: `fail2ban-client status` still reports them up, but nothing matches and nobody gets banned. `./eigen` reloads the jails after every start it does (setup, restart, update, rollback, backup and restore), so only a by-hand `docker compose up` that recreates the mail containers leaves the reload to you:
+Fail2ban expands the jail's log glob only when the jail starts. The Docker json-log path embeds the container ID, so any `docker compose up` that recreates the postfix or dovecot container leaves both jails polling deleted log files: `fail2ban-client status` still reports them up, but nothing matches and nobody gets banned. `./eigen` reloads the jails after every start of setup, restart, update, rollback, backup or restore that recreated them, so only a by-hand `docker compose up` that recreates the mail containers leaves the reload to you:
 
 ```bash
 fail2ban-client reload

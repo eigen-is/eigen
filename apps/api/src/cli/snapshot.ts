@@ -22,6 +22,7 @@ import type { Subprocess } from 'bun';
 import pkg from '../../../../package.json' with { type: 'json' };
 import { COLLAB_EPOCH_FILE } from '../lib/collab/epoch';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
+import { readEnvFile } from './env-file';
 import { DECLINED, ENV_PATH, installOwner, ownAs, VERSION } from './install';
 import { createUi, glyphLine, type Ui } from './ui';
 
@@ -296,6 +297,17 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
             );
         }
         if (reason) cannot(reason);
+        // A release install runs the images its .env.production pins; a source install builds its own and pins none.
+        const kind = (env: string) =>
+            readEnvFile(env).has('EIGEN_VERSION') ? 'a release install' : 'a source install';
+        const [theirs, ours] = [kind(join(STAGING, ENV_PATH)), kind(ENV_PATH)];
+        if (theirs !== ours) {
+            rmSync(STAGING, { recursive: true, force: true });
+            ui.fail(
+                `${name} is a snapshot of ${theirs}; this is ${ours}.`,
+                `Restore it on ${theirs} of Eigen, or restore a snapshot made here.`,
+            );
+        }
         if (flags.check) {
             writeFileSync(marker, JSON.stringify({ name, ...meta }));
             return;
