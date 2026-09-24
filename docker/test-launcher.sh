@@ -3,10 +3,11 @@
 # stub docker on PATH that answers info and compose version and fails on demand. Covers every command's help, unknown
 # commands and arguments, the preflight refusals, source and release mode, need_install, a failing compose config, stop,
 # what update asks the CLI and names the builds, on a release and on the main channel, the tags it refuses, a build
-# whose images differ, a pinned api image that is not here, the files an unfinished update left, what setup downloads
-# with and without pins, what rollback names, and what status passes the CLI about the snapshots, the files of an
-# unfinished update and the newest build of main; setup in a folder that holds the launcher alone, and the installer
-# script apps/index/public/install on this host.
+# whose images differ, a tag that moves during an update, a pinned api image that is not here, the files an unfinished
+# update left, what setup downloads with and without pins, what rollback names, a lock without a pid, and what status
+# passes the CLI about the snapshots, the files of an unfinished update and the newest build of main; setup in a folder
+# that holds the launcher alone, with the registry or the build .env.production names, and the installer script
+# apps/index/public/install on this host, as a file and on stdin.
 #
 # Usage:  ./docker/test-launcher.sh
 # Needs:  docker (pulls debian:bookworm-slim and busybox once).
@@ -24,9 +25,10 @@ trap 'rm -rf "$FIX"' EXIT
 # on an image the launch has not pulled;
 # STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any api tag names;
 # STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a dovecot
-# image; STUB_DIGEST the registry digest of every local image; a docker run with STUB_RUN_FAIL among its arguments
-# fails, and one with --checked also prints STUB_CHECKED. A run of bootstrap writes a Compose file into this folder, the
-# starter .env.production when it names no release, and a launcher that prints STUB_LAUNCHER on stderr.
+# image, and STUB_MOVED that of any image once api was pulled twice, as a tag that moves; STUB_DIGEST the registry
+# digest of every local image; a docker run with STUB_RUN_FAIL among its arguments fails, and one with --checked also
+# prints STUB_CHECKED. A run of bootstrap writes a Compose file into this folder, the starter keys into .env.production
+# when it names no release, keeping the registry it names, and a launcher that prints STUB_LAUNCHER on stderr.
 mkdir "$FIX/bin"
 cat >"$FIX/bin/docker" <<'EOF'
 #!/bin/sh
@@ -52,10 +54,12 @@ case $1 in
     image)
         for ref; do :; done
         if [ "$2" = inspect ] && [ "${STUB_IMAGE:-0}" = 1 ] && ! grep -qxF "pull $ref" "$STUB_LOG"; then exit 1; fi
+        revision=${STUB_LABEL_REVISION:-abc1234}
+        if [ -n "${STUB_MOVED:-}" ] && [ "$(grep -c '^pull [^ ]*/api:' "$STUB_LOG")" -ge 2 ]; then revision=$STUB_MOVED; fi
         case $* in
             *Labels*image.version*) echo "${STUB_LABEL_VERSION:-0.2.99}" ;;
-            *Labels*image.revision*/dovecot*) echo "${STUB_LABEL_REVISION_DOVECOT:-${STUB_LABEL_REVISION:-abc1234}}" ;;
-            *Labels*image.revision*) echo "${STUB_LABEL_REVISION:-abc1234}" ;;
+            *Labels*image.revision*/dovecot*) echo "${STUB_LABEL_REVISION_DOVECOT:-$revision}" ;;
+            *Labels*image.revision*) echo "$revision" ;;
             *RepoDigests*) if [ -n "${STUB_DIGEST:-}" ]; then echo "${ref%:*}@sha256:$STUB_DIGEST"; fi ;;
         esac
         ;;
@@ -71,8 +75,12 @@ case $1 in
         case " $* " in *" bootstrap "*)
             : >docker-compose.yml
             if ! grep -q '^EIGEN_VERSION=' .env.production 2>/dev/null; then
-                printf '%s\n' EIGEN_REGISTRY=ghcr.io/eigen-is/eigen EIGEN_VERSION=0.2.99 \
-                    EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:0.2.99 >>.env.production
+                registry=$(sed -n 's/^EIGEN_REGISTRY=//p' .env.production 2>/dev/null)
+                if [ -z "$registry" ]; then
+                    registry=ghcr.io/eigen-is/eigen
+                    echo "EIGEN_REGISTRY=$registry" >>.env.production
+                fi
+                printf '%s\n' EIGEN_VERSION=0.2.99 "EIGEN_API_IMAGE=$registry/api:0.2.99" >>.env.production
             fi
             # A new file: the launcher that ran bootstrap still reads the old one.
             if [ "$(sed -n 2p eigen)" != 'echo STUB_LAUNCHER >&2' ]; then
@@ -87,6 +95,14 @@ case $1 in
 esac
 EOF
 chmod 755 "$FIX/bin/docker"
+# The installer's download: this checkout's launcher at -o, or a web page with STUB_CURL_HTML=1. Logged like docker.
+cat >"$FIX/bin/curl" <<EOF
+#!/bin/sh
+printf 'curl %s\n' "\$*" >>"\$STUB_LOG"
+while [ "\$1" != -o ]; do shift; done
+if [ "\${STUB_CURL_HTML:-0}" = 1 ]; then echo '<html>' >"\$2"; else cp "$REPO_ROOT/eigen" "\$2"; fi
+EOF
+chmod 755 "$FIX/bin/curl"
 
 # A source checkout, a release folder and one on the main channel, each with the launcher and a set-up .env.production;
 # bare/ has no install, and alone/ is the launcher alone, as the installer leaves it.
@@ -105,9 +121,8 @@ for dir in release channel; do : >"$FIX/$dir/docker-compose.yml"; done
 cp "$REPO_ROOT/.bun-version" "$REPO_ROOT/package.json" "$FIX/source/"
 for dir in source release; do printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=0.2.99\n' >"$FIX/$dir/.env.production"; done
 printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=main\n' >"$FIX/channel/.env.production"
-for name in api frontend postfix dovecot unbound; do
-    printf 'EIGEN_%s_IMAGE=ghcr.io/eigen-is/eigen/%s@sha256:aaa\n' "$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')" \
-        "$name" >>"$FIX/channel/.env.production"
+for name in $IMAGES; do
+    printf '%s=ghcr.io/eigen-is/eigen/%s@sha256:aaa\n' "$(image_key "$name")" "$name" >>"$FIX/channel/.env.production"
 done
 
 docker pull -q debian:bookworm-slim >/dev/null
@@ -115,13 +130,13 @@ docker pull -q busybox >/dev/null
 PATH_IN=/stub:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # launch <folder> <args…>: the launcher under $SHELL_NAME in $FIX/<folder>; sets CODE, OUT (stdout), ERR (stderr) and
-# CALLS (what docker was asked). STUB_* and EIGEN_REGISTRY pass through as set here.
+# CALLS (what docker was asked). STUB_* pass through as set here.
 launch() {
     local dir="$FIX/$1" vars=("STUB_LOG=$FIX/calls.log") flags=() name var
     shift
     : >"$FIX/calls.log"
     for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_REVISION STUB_LABEL_VERSION \
-        STUB_LABEL_REVISION STUB_LABEL_REVISION_DOVECOT STUB_DIGEST STUB_RUN_FAIL STUB_CHECKED EIGEN_REGISTRY; do
+        STUB_LABEL_REVISION STUB_LABEL_REVISION_DOVECOT STUB_MOVED STUB_DIGEST STUB_RUN_FAIL STUB_CHECKED; do
         if [ -n "${!name+set}" ]; then vars+=("$name=${!name}"); fi
     done
     CODE=0
@@ -333,6 +348,14 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: a mixed build not refused:$failed"
     fi
+    STUB_LATEST=0.2.99 STUB_REVISION=def5678 STUB_MOVED=fff0000 launch channel update
+    if [ "$CODE" = 1 ] &&
+        printf '%s\n' "$ERR" | grep -q '■  main moved while downloading: the notes were of Eigen 0.2.99 (abc1234).' &&
+        ! printf '%s\n' "$CALLS" | grep -Eq ' stop$| bootstrap '; then
+        ok "$SHELL_NAME: update refuses a tag that moved between the notes and the download, before anything stops"
+    else
+        fail "$SHELL_NAME: a tag that moved: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
     launch release update candidate-0.3.0-arm64
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Eigen has no "candidate-0.3.0-arm64".' &&
         ! printf '%s\n' "$CALLS" | grep -q '^pull '; then
@@ -365,13 +388,25 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: setup beside the launcher alone: exit $CODE, '$ERR', calls: $(first_setup)"
     fi
+    # A mirror install names its registry in .env.production by hand.
     alone
-    EIGEN_REGISTRY=example.test/eigen STUB_DIGEST=ddd launch alone setup
-    if [ "$(printf '%s\n' "$CALLS" | grep -m 1 '^pull ')" = 'pull example.test/eigen/api:latest' ] &&
+    echo EIGEN_REGISTRY=example.test/eigen >"$FIX/alone/.env.production"
+    STUB_DIGEST=ddd launch alone setup
+    if [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$CALLS" | grep -m 1 '^pull ')" = 'pull example.test/eigen/api:latest' ] &&
+        printf '%s\n' "$CALLS" | grep -q '^pull example.test/eigen/unbound:0.2.99$' &&
         printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER; then
-        ok "$SHELL_NAME: EIGEN_REGISTRY in the environment names the registry of a folder without .env.production"
+        ok "$SHELL_NAME: setup beside the launcher alone gets Eigen from the registry .env.production names"
     else
-        fail "$SHELL_NAME: setup beside the launcher alone with EIGEN_REGISTRY: exit $CODE, '$ERR', calls: $(first_setup)"
+        fail "$SHELL_NAME: setup beside the launcher alone with a registry: exit $CODE, '$ERR', calls: $(first_setup)"
+    fi
+    alone
+    printf 'EIGEN_VERSION=0.2.98\nEIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api@sha256:ccc\n' >"$FIX/alone/.env.production"
+    launch alone setup
+    if [ "$(printf '%s\n' "$CALLS" | grep -m 1 '^pull ')" = 'pull ghcr.io/eigen-is/eigen/api@sha256:ccc' ] &&
+        printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER; then
+        ok "$SHELL_NAME: setup beside the launcher alone bootstraps from the api image .env.production pins"
+    else
+        fail "$SHELL_NAME: setup beside the launcher alone with a pin: exit $CODE, '$ERR', calls: $(first_setup)"
     fi
     STUB_REVISION=def5678 launch channel status
     if printf '%s\n' "$CALLS" | grep -q ' --latest=def5678$'; then
@@ -469,9 +504,9 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: a release restore: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     checked="EIGEN_VERSION=main"
-    for name in api frontend postfix dovecot unbound; do
+    for name in $IMAGES; do
         checked="$checked
-EIGEN_$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_IMAGE=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
+$(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     done
     STUB_IMAGE=1 STUB_CHECKED=$checked launch release restore eigen-20260101-000000.tar.gz
     if [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$CALLS" | grep -m 1 '^pull ')" = 'pull ghcr.io/eigen-is/eigen/api:local' ] &&
@@ -507,6 +542,18 @@ EIGEN_$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_IMAGE=ghcr.io/eigen-is
     else
         fail "$SHELL_NAME: a stale lock: exit $CODE, lock $(ls "$FIX/source/.eigen/lock" 2>&1)"
     fi
+    # A launcher between its mkdir and its pid.
+    mkdir "$FIX/source/.eigen/lock"
+    : >"$FIX/source/.eigen/lock/pid"
+    launch source backup
+    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Another ./eigen command is running.' && printf '%s\n' "$ERR" |
+        grep -q '└  Wait for it to end, then run ./eigen backup again. If none runs, remove .eigen/lock.$' &&
+        [ -e "$FIX/source/.eigen/lock/pid" ]; then
+        ok "$SHELL_NAME: a lock without a pid refuses a backup, says how to remove it, and stays"
+    else
+        fail "$SHELL_NAME: a lock without a pid: exit $CODE, '$ERR', lock $(ls "$FIX/source/.eigen/lock" 2>&1)"
+    fi
+    rm -rf "$FIX/source/.eigen/lock"
     # A container's own PID namespace cannot see this shell.
     if [ "$SHELL_NAME" = host ]; then
         mkdir "$FIX/source/.eigen/lock"
@@ -517,34 +564,47 @@ EIGEN_$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')_IMAGE=ghcr.io/eigen-is
     fi
 done
 
-# The installer needs curl or wget, which the dash and BusyBox images lack.
+# The installer under this host's /bin/sh; the launcher it hands over to runs under all three above.
 header "The installer"
 INSTALLER="$REPO_ROOT/apps/index/public/install"
-mkdir "$FIX/fresh" "$FIX/taken" "$FIX/empty" "$FIX/nodocker" "$FIX/page"
-echo '<html>' >"$FIX/page.html"
+mkdir "$FIX/fresh" "$FIX/piped" "$FIX/taken" "$FIX/empty" "$FIX/nodocker" "$FIX/page"
 : >"$FIX/taken/docker-compose.yml"
-ln -s "$(command -v curl)" "$FIX/nodocker/curl"
+ln -s "$FIX/bin/curl" "$FIX/nodocker/curl"
 
-# run_installer <folder> [PATH]: the installer under this host's /bin/sh in $FIX/<folder>, with the launcher of this
-# checkout unless EIGEN_LAUNCHER names another; sets CODE, OUT, ERR and CALLS as launch does.
+# run_installer [--stdin] <folder> [PATH]: the installer under this host's /bin/sh in $FIX/<folder>, as a file or, with
+# --stdin, as curl | sh gives it; sets CODE, OUT, ERR and CALLS as launch does.
 run_installer() {
+    local script=("$INSTALLER") input=/dev/null
+    if [ "$1" = --stdin ]; then
+        script=(-s) input=$INSTALLER
+        shift
+    fi
     : >"$FIX/calls.log"
     CODE=0
-    OUT=$(cd "$FIX/$1" && env STUB_LOG="$FIX/calls.log" STUB_DIGEST=ddd \
-        EIGEN_LAUNCHER="${EIGEN_LAUNCHER:-file://$REPO_ROOT/eigen}" PATH="${2:-$FIX/bin:$PATH}" /bin/sh "$INSTALLER" 2>"$FIX/stderr") || CODE=$?
+    OUT=$(cd "$FIX/$1" && env STUB_LOG="$FIX/calls.log" STUB_DIGEST=ddd STUB_CURL_HTML="${STUB_CURL_HTML:-0}" \
+        PATH="${2:-$FIX/bin:$PATH}" /bin/sh "${script[@]}" <"$input" 2>"$FIX/stderr") || CODE=$?
     ERR=$(cat "$FIX/stderr")
     CALLS=$(cat "$FIX/calls.log")
 }
 
+# installed <folder> <how the installer ran>: the last run_installer said where Eigen goes, downloaded the launcher as it
+# is and ran ./eigen setup, which handed over.
+installed() {
+    if [ "$CODE" = 0 ] &&
+        [ "$(printf '%s\n' "$OUT" | head -n 1)" = "Installing Eigen into $FIX/$1. Its data will live in this folder." ] &&
+        [ "$(printf '%s\n' "$CALLS" | head -n 1)" = 'curl -fsSL -o eigen.tmp https://raw.githubusercontent.com/eigen-is/eigen/main/eigen' ] &&
+        sed 2d "$FIX/$1/eigen" | cmp -s "$REPO_ROOT/eigen" - && [ ! -e "$FIX/$1/eigen.tmp" ] &&
+        [ "$(first_setup)" = "$FIRST_SETUP" ] && printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER; then
+        ok "the installer $2 says where Eigen goes, downloads the launcher as it is and runs ./eigen setup, which hands over"
+    else
+        fail "the installer $2: exit $CODE, '$OUT', '$ERR', calls: $(first_setup)"
+    fi
+}
 run_installer fresh
-if [ "$CODE" = 0 ] &&
-    [ "$(printf '%s\n' "$OUT" | head -n 1)" = "Installing Eigen into $FIX/fresh. Its data will live in this folder." ] &&
-    sed 2d "$FIX/fresh/eigen" | cmp -s "$REPO_ROOT/eigen" - && [ ! -e "$FIX/fresh/eigen.tmp" ] &&
-    [ "$(first_setup)" = "$FIRST_SETUP" ] && printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER; then
-    ok "the installer says where Eigen goes, downloads the launcher as it is and runs ./eigen setup, which hands over"
-else
-    fail "the installer: exit $CODE, '$OUT', '$ERR', calls: $(first_setup)"
-fi
+installed fresh 'from a file'
+# A command that read stdin would eat the rest of the script.
+run_installer --stdin piped
+installed piped 'on stdin, as curl | sh runs it,'
 run_installer taken
 if [ "$CODE" = 1 ] &&
     [ "$ERR" = 'This folder already has an Eigen install. Run ./eigen setup to change it, or ./eigen update.' ] &&
@@ -553,7 +613,7 @@ if [ "$CODE" = 1 ] &&
 else
     fail "the installer in a folder with an install: exit $CODE, '$ERR'"
 fi
-EIGEN_LAUNCHER="file://$FIX/page.html" run_installer page
+STUB_CURL_HTML=1 run_installer page
 if [ "$CODE" = 1 ] && [ "$ERR" = 'The download is not the eigen command; try again later.' ] &&
     [ ! -e "$FIX/page/eigen" ] && [ ! -e "$FIX/page/eigen.tmp" ]; then
     ok "the installer refuses a download that is not the launcher, and leaves nothing behind"

@@ -25,7 +25,7 @@ SETUP_FLAGS=(--yes --mail-domain example.org --no-mail --no-relay --no-proxy --c
 
 scratch_init release
 # Release installs pull their images; the private build tags of a source install do not apply.
-unset EIGEN_API_IMAGE EIGEN_FRONTEND_IMAGE EIGEN_POSTFIX_IMAGE EIGEN_DOVECOT_IMAGE EIGEN_UNBOUND_IMAGE
+for name in $IMAGES; do unset "$(image_key "$name")"; done
 
 free_port REGISTRY_PORT
 REGISTRY="localhost:$REGISTRY_PORT/eigen-is/eigen"
@@ -537,9 +537,11 @@ header "Installing $NEW from the launcher alone"
 register_install "eigentest-alone-$$" 0:0
 scratch_run mkdir "$INSTALL"
 scratch_run cp /repo/eigen "$INSTALL/eigen"
+# The harness's registry is a mirror: named in .env.production before the first setup, as a mirror install does by hand.
+scratch_run sh -c 'umask 077 && echo "EIGEN_REGISTRY=$1" >"$2"' sh "$REGISTRY" "$INSTALL/.env.production"
 assert_isolated
 write_override
-EIGEN_REGISTRY=$REGISTRY run_setup "$SCRATCH/setup-alone.log" "${SETUP_FLAGS[@]}" --domain localhost
+run_setup "$SCRATCH/setup-alone.log" "${SETUP_FLAGS[@]}" --domain localhost
 missing=''
 for file in docker-compose.yml .env.example docker/fail2ban; do
     scratch_run test -e "$INSTALL/$file" || missing="$missing $file"
@@ -553,6 +555,11 @@ if stack_up && [ "$(env_of EIGEN_VERSION)" = "$NEW" ] && env_of EIGEN_API_IMAGE 
     ok "the install from the launcher alone runs, and .env.production pins $NEW by digest"
 else
     fail "the install from the launcher alone: EIGEN_VERSION=$(env_of EIGEN_VERSION), $(env_of EIGEN_API_IMAGE)"
+fi
+if [ "$(env_of EIGEN_REGISTRY)" = "$REGISTRY" ]; then
+    ok "bootstrap kept the registry .env.production named"
+else
+    fail "bootstrap replaced the registry .env.production named with '$(env_of EIGEN_REGISTRY)'"
 fi
 down_project "$PROJECT"
 

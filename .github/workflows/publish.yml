@@ -27,7 +27,6 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       channel: ${{ steps.meta.outputs.channel }}
       target: ${{ steps.meta.outputs.target }}
-      candidate: ${{ steps.meta.outputs.candidate }}
       commit: ${{ steps.meta.outputs.commit }}
       built-at: ${{ steps.meta.outputs.built-at }}
       bun-version: ${{ steps.meta.outputs.bun-version }}
@@ -38,20 +37,19 @@ jobs:
         run: |
           if [ "$GITHUB_REF_TYPE" = branch ]; then
             version=$(jq -r .version package.json)
-            channel=main target=main candidate=main
+            channel=main target=main
           else
             version=${GITHUB_REF_NAME#v}
             if [ "$(jq -r .version package.json)" != "$version" ]; then
               echo "::error::$GITHUB_REF_NAME does not match package.json $(jq -r .version package.json)"
               exit 1
             fi
-            channel='' target=$version candidate=candidate-$version
+            channel='' target=$version
           fi
           {
             echo "version=$version"
             echo "channel=$channel"
             echo "target=$target"
-            echo "candidate=$candidate"
             echo "commit=$(git rev-parse --short HEAD)"
             echo "built-at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "bun-version=$(cat .bun-version)"
@@ -100,8 +98,8 @@ jobs:
       - uses: docker/setup-buildx-action@v3
 
       # No provenance or SBOM: either makes a candidate an index of its own, and promote's index holds the two platform
-      # images alone; the launcher pins that index's digest. An image ignores the build args it does not use. The
-      # candidate tags are no version, latest or main, so the launcher refuses them.
+      # images alone; the launcher pins that index's digest. An image ignores the build args it does not use. A
+      # candidate, candidate-<version or main>-<platform>, is no version, latest or main, so the launcher refuses it.
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.image.context }}
@@ -118,7 +116,7 @@ jobs:
             EIGEN_BUILT_AT=${{ needs.meta.outputs.built-at }}
             EIGEN_CHANNEL=${{ needs.meta.outputs.channel }}
             EIGEN_REGISTRY=${{ env.REGISTRY }}
-          tags: ${{ env.REGISTRY }}/${{ matrix.image.name }}:${{ needs.meta.outputs.candidate }}-${{ matrix.platform }}
+          tags: ${{ env.REGISTRY }}/${{ matrix.image.name }}:candidate-${{ needs.meta.outputs.target }}-${{ matrix.platform }}
           outputs: type=image,push=true,oci-mediatypes=true,annotation.org.opencontainers.image.version=${{ needs.meta.outputs.version }},annotation.org.opencontainers.image.revision=${{ needs.meta.outputs.commit }}
 
   # Only once every candidate is built, so a failed build publishes no version. The version, or :main, is the index of
@@ -126,7 +124,7 @@ jobs:
   # all. :latest last, and never for a prerelease or main.
   promote:
     needs: [meta, publish]
-    if: ${{ !cancelled() && needs.meta.result == 'success' && needs.publish.result == 'success' }}
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -135,7 +133,6 @@ jobs:
     env:
       VERSION: ${{ needs.meta.outputs.version }}
       TARGET: ${{ needs.meta.outputs.target }}
-      CANDIDATE: ${{ needs.meta.outputs.candidate }}
     steps:
       - uses: actions/checkout@v4
 
@@ -147,16 +144,18 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # Here and below, IMAGES in ./eigen: the images a release pins.
+      # IMAGES in ./eigen, the images a release pins, here and in the steps below.
       - run: |
-          for name in $(sed -n "s/^IMAGES='\(.*\)'/\1/p" eigen); do
+          IMAGES=$(sed -n "s/^IMAGES='\(.*\)'/\1/p" eigen)
+          echo "IMAGES=$IMAGES" >>"$GITHUB_ENV"
+          for name in $IMAGES; do
             docker buildx imagetools create -t "$REGISTRY/$name:$TARGET" \
-              "$REGISTRY/$name:$CANDIDATE-amd64" "$REGISTRY/$name:$CANDIDATE-arm64"
+              "$REGISTRY/$name:candidate-$TARGET-amd64" "$REGISTRY/$name:candidate-$TARGET-arm64"
           done
 
       - if: ${{ github.ref_type == 'tag' && !contains(needs.meta.outputs.version, '-') }}
         run: |
-          for name in $(sed -n "s/^IMAGES='\(.*\)'/\1/p" eigen); do
+          for name in $IMAGES; do
             docker buildx imagetools create --prefer-index=false \
               -t "$REGISTRY/$name:latest" "$REGISTRY/$name:$VERSION"
           done
