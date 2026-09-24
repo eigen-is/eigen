@@ -11,7 +11,7 @@ plugin.
 
 - All new users auto-joined as `member` (via `databaseHooks.user.create.after`)
 - Every sign-in re-attempts the join when the membership row is missing (`authEnsureDefaultOrgMembership`, called from `databaseHooks.session.create.after`), so an account whose sign-up join failed still reaches the org instead of staying invisible in Admin → Users; guests are skipped
-- Setup admin becomes `owner`
+- Setup admin becomes `owner`. The owner is out of reach of better-auth's admin plugin: `/admin/impersonate-user` is disabled, and a `hooks.before` on `/admin/*` (`apps/api/src/lib/auth/auth.ts`) refuses a call that targets the owner unless the owner makes it, so an admin can neither demote, delete, rename nor sign in as the owner
 - Config stored in `serverConfig` (`data/server/`)
 - New users also trigger share reconciliation (`reconcileSharesForNewUser`)
 

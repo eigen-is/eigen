@@ -55,7 +55,7 @@ without session activity). See [GUEST-ACCESS.md](GUEST-ACCESS.md).
 **`landing.links`** — optional extra buttons on the public landing page, each `{ title, url }`. Served to the
 unauthenticated frontend through the public config route.
 
-**`mail`** — the system sender and how the relay treats users. `senderName` and `senderAddress` name the From of the mail the server sends itself (codes, notifications, invitations); empty means derived, the org name and `noreply@` the mail domain, so a later rename carries through. The setup wizard stores a sender only when it differs from those defaults. `relaySendsAsUsers` matters only without hosted mail: on, the relay accepts every address on the mail domain as a sender, so a user's mail goes out from their own address. See [Sending as a user](#mail-environment).
+**`mail`** — the system sender and how the relay treats users. `senderName` and `senderAddress` name the From of the mail the server sends itself (codes, notifications, invitations); empty means derived, the org name and `noreply@` the mail domain, so a later rename carries through. The setup wizard and the settings route store a sender only when it differs from those defaults. `relaySendsAsUsers` matters only without hosted mail: on, the relay accepts every address on the mail domain as a sender, so a user's mail goes out from their own address. See [Sending as a user](#mail-environment).
 
 ### notifications.email
 
@@ -90,8 +90,8 @@ Defined in `apps/api/src/routes/settings.ts`. Changing the server's settings is 
 
 | Method | Path                      | Who   | Description                                                    |
 |--------|---------------------------|-------|----------------------------------------------------------------|
-| GET    | `/settings/server`        | admin | Read current server settings (the team page reads the quota defaults) |
-| PUT    | `/settings/server`        | owner | Partial update of any branch; a `mail.senderAddress` must be an email address, a `mail.senderName` is stored trimmed |
+| GET    | `/settings/server`        | admin | Read current server settings (the team page reads the quota defaults); a non-owner gets `s3Config` with an empty `secretAccessKey` |
+| PUT    | `/settings/server`        | owner | Partial update of any branch; a `mail.senderAddress` must be an email address, a sender name or address equal to its derived default is stored empty (`storedSender()` in `mailer.ts`, shared with the setup wizard) |
 | GET    | `/settings/s3config`      | owner | Read the saved S3 configuration                                |
 | PUT    | `/settings/s3config`      | owner | Validate a connection, then write `defaults.mount.s3Config`     |
 | POST   | `/settings/s3check`       | admin | Test an S3 connection without saving                           |
