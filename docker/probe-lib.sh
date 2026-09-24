@@ -67,8 +67,8 @@ scratch_init() {
     chmod 666 "$PRUNE_LOG"
     SOCKET_GID=$(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$CLI_IMAGE" \
         stat -c %g /var/run/docker.sock)
-    SCRATCH_BOX=$(docker run -d --label eigen.harness=1 --label "eigen.harness.run=$RUN" -v "$SCRATCH:$SCRATCH" \
-        -v "$REPO_ROOT:/repo:ro" --entrypoint tail "$CLI_IMAGE" -f /dev/null)
+    SCRATCH_BOX="eigentest-box-$RUN"
+    scratch_box
     log "scratch $SCRATCH (run $RUN)"
 }
 
@@ -413,10 +413,22 @@ collab_tab() {
 # only visible from inside one; and on Linux the host user cannot read what root or another uid keeps to itself.
 scratch_run() { docker exec "${SCRATCH_BOX:-}" "$@"; }
 
+# scratch_box: starts scratch_run's container, replacing the one before. Named, so a subshell can replace it too.
+scratch_box() {
+    docker rm -f "$SCRATCH_BOX" >/dev/null 2>&1 || true
+    docker run -d --name "$SCRATCH_BOX" --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
+        -v "$SCRATCH:$SCRATCH" -v "$REPO_ROOT:/repo:ro" --entrypoint tail "$CLI_IMAGE" -f /dev/null >/dev/null
+}
+
 # git_run <args…>: git as root in the scratch folder.
 git_run() { scratch_run git -c safe.directory='*' -c user.name=harness -c user.email=harness@eigen.invalid "$@"; }
 
-owner_mode() { scratch_run stat -c '%u:%g %a' "$1"; }
+# owner_mode <path>: its uid:gid and mode. While a container keeps the scratch folder mounted, Docker Desktop shows a
+# file another uid wrote without a chown as root's, to every container; so the box is replaced first.
+owner_mode() {
+    scratch_box
+    scratch_run stat -c '%u:%g %a' "$1"
+}
 
 # down_project <project>: its containers, networks and volumes, found by Compose's project label.
 down_project() {

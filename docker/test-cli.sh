@@ -479,8 +479,8 @@ for _ in $(seq 1 600); do
     sleep 0.1
 done
 # Ctrl-C without a terminal: the signal reaches the launcher's docker client, which passes it to the CLI.
-launcher=$(docker ps -q --no-trunc --filter "label=eigen.harness.run=$RUN" --filter "ancestor=$CLI_IMAGE" |
-    grep -vx "$SCRATCH_BOX" || true)
+launcher=$(docker ps --filter "label=eigen.harness.run=$RUN" --filter "ancestor=$CLI_IMAGE" \
+    --format '{{.ID}} {{.Names}}' | awk -v box="$SCRATCH_BOX" '$2 != box { print $1 }')
 docker exec "$launcher" kill -INT -1 || true
 CODE=0
 wait "$waiter" || CODE=$?
