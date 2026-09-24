@@ -13,7 +13,7 @@
 
 `config.json` has **no** storage field (`apps/api/src/lib/config/server-config.ts`). Storage type and S3 credentials live in `settings.json` under `defaults.mount`. The settings store is a plain `JsonStore` with a hardcoded `'local-fullnames'` default; it does not read anything out of `config.json`.
 
-`mailDomain` is the `MAIL_DOMAIN` setup ran on, recorded at setup, or at first boot for an install that predates the field. Every account's address was made on it, so it cannot change: once it is recorded, `./eigen setup` states it instead of asking and refuses a different `--mail-domain` (`apps/api/src/cli/configure.ts`). At boot the API compares `MAIL_DOMAIN` from `.env.production` with the recorded one (`apps/api/src/server.ts`); on a mismatch it exits in production, naming the value to put back, and warns in development. An owner address on another domain only logs a warning.
+`mailDomain` is the `MAIL_DOMAIN` setup ran on, recorded at setup, or for an install that predates the field at the first boot whose `MAIL_DOMAIN` the owner's address is on; a boot it is not on records nothing. Every account's address was made on it, so it cannot change: once it is recorded, `./eigen setup` states it instead of asking and refuses a different `--mail-domain` (`apps/api/src/cli/configure.ts`). At boot the API compares `MAIL_DOMAIN` from `.env.production` with the recorded one (`apps/api/src/server.ts`); on a mismatch it exits in production, naming the value to put back, and warns in development. An owner address on another domain only logs a warning.
 
 ## JsonStore
 
