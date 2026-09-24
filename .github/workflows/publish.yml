@@ -40,20 +40,24 @@ jobs:
 
       - run: bash docker/test-release.sh
 
+  # Each platform builds on a runner of its own architecture, without QEMU.
   publish:
     needs: gate
-    runs-on: ubuntu-latest
+    name: publish ${{ matrix.image.name }} (${{ matrix.platform }})
+    runs-on: ${{ matrix.platform == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
       contents: read
       packages: write
     strategy:
       matrix:
-        include:
+        image:
           - { name: api, context: ., file: docker/api/Dockerfile }
           - { name: frontend, context: ., file: docker/frontend/Dockerfile }
           - { name: postfix, context: docker/postfix, file: docker/postfix/Dockerfile }
           - { name: dovecot, context: docker/dovecot, file: docker/dovecot/Dockerfile }
+          - { name: unbound, context: docker/unbound, file: docker/unbound/Dockerfile }
+        platform: [amd64, arm64]
     steps:
       - uses: actions/checkout@v4
 
@@ -65,29 +69,30 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # No provenance or SBOM: either turns the push into an index, whose digest is not the one the launcher pins
-      # from RepoDigests and compares with `docker manifest inspect -v`. An image ignores the build args it does not use.
-      # The candidate tag is no version, so no launcher resolves it; promote names it once all four are built.
+      # No provenance or SBOM: either makes a candidate an index of its own, and promote's index holds the two platform
+      # images alone; the launcher pins that index's digest. An image ignores the build args it does not use. The
+      # candidate tags are no version, so no launcher resolves one.
       - uses: docker/build-push-action@v6
         with:
-          context: ${{ matrix.context }}
-          file: ${{ matrix.file }}
-          platforms: linux/amd64
+          context: ${{ matrix.image.context }}
+          file: ${{ matrix.image.file }}
+          platforms: linux/${{ matrix.platform }}
           provenance: false
           sbom: false
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          cache-from: type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}-${{ matrix.platform }}
           build-args: |
             BUN_VERSION=${{ needs.gate.outputs.bun-version }}
             EIGEN_VERSION=${{ needs.gate.outputs.version }}
             EIGEN_COMMIT=${{ needs.gate.outputs.commit }}
             EIGEN_BUILT_AT=${{ needs.gate.outputs.built-at }}
             EIGEN_REGISTRY=${{ env.REGISTRY }}
-          tags: ${{ env.REGISTRY }}/${{ matrix.name }}:candidate-${{ needs.gate.outputs.version }}
+          tags: ${{ env.REGISTRY }}/${{ matrix.image.name }}:candidate-${{ needs.gate.outputs.version }}-${{ matrix.platform }}
           outputs: type=image,push=true,oci-mediatypes=true,annotation.org.opencontainers.image.version=${{ needs.gate.outputs.version }}
 
-  # Only once all four are built, so a failed build publishes no version; byte-for-byte copies, so the version and
-  # :latest have the candidate's digest and annotation. :latest last, and never for a prerelease.
+  # Only once every candidate is built, so a failed build publishes no version. The version is the index of an image's
+  # two candidates, which keep their annotation; :latest is a byte-for-byte copy of it, digest and all. :latest last,
+  # and never for a prerelease.
   promote:
     needs: [gate, publish]
     runs-on: ubuntu-latest
@@ -98,6 +103,8 @@ jobs:
     env:
       VERSION: ${{ needs.gate.outputs.version }}
     steps:
+      - uses: actions/checkout@v4
+
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -106,16 +113,16 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # Here and below, the four images docker-compose.yml runs; IMAGES in ./eigen and IMAGE_NAMES in install.ts too.
+      # Here and below, IMAGES in ./eigen: the images a release pins.
       - run: |
-          for name in api frontend postfix dovecot; do
-            docker buildx imagetools create --prefer-index=false \
-              -t "$REGISTRY/$name:$VERSION" "$REGISTRY/$name:candidate-$VERSION"
+          for name in $(sed -n "s/^IMAGES='\(.*\)'/\1/p" eigen); do
+            docker buildx imagetools create -t "$REGISTRY/$name:$VERSION" \
+              "$REGISTRY/$name:candidate-$VERSION-amd64" "$REGISTRY/$name:candidate-$VERSION-arm64"
           done
 
       - if: ${{ !contains(needs.gate.outputs.version, '-') }}
         run: |
-          for name in api frontend postfix dovecot; do
+          for name in $(sed -n "s/^IMAGES='\(.*\)'/\1/p" eigen); do
             docker buildx imagetools create --prefer-index=false \
               -t "$REGISTRY/$name:latest" "$REGISTRY/$name:$VERSION"
           done
