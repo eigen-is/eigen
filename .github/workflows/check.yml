@@ -33,5 +33,8 @@ jobs:
       - name: Primitives index
         run: bun run primitives:check
 
-      - name: Test
-        run: bun --filter '*' test --timeout 30000
+      - name: Test packages
+        run: bun --filter '!@apps/api' test --timeout 30000
+
+      - name: Test API
+        run: bun --filter '@apps/api' test --parallel=4 --timeout 30000

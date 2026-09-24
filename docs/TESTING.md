@@ -44,21 +44,27 @@ bun test --preload ./src/test/preload.ts
   seeder contract test (`server/seed-demo.test.ts`, ~30 s, spawns the whole seeder) skips in a plain
   local run. Run it locally with `EIGEN_SLOW_TESTS=1 bun run test:api` after touching
   `src/scripts/demo/` or the readers it decodes with
-- Files run sequentially by default. `--parallel=N` is the isolated mode (not viable yet: every isolated file leaves its module graph behind, ~40 MB a file, and the backup routes file fails under it; see the roadmap): it implies `--isolate`, so
-  every test file evaluates in a fresh module graph, gets its own `EIGEN_DATA_ROOT` (a per-process dir
-  under `data-test/`, see below) and boots its own server on first use. No two files share a Home
-  singleton or a SQLite file, which is what makes running them concurrently safe. Setup is lazy:
-  `setup.ts` exports `ensureServer()`, and the wizard POST (`/setup/complete`) runs once per file, the
-  first time a test awaits `getTestContext()`, `authedRequest()`, or `ensureServer()`. A pure-unit test
-  that needs a setup side effect (the configured mail domain, the org owner, the auth schema) awaits one
-  of those in a `beforeAll`; it cannot rely on another file having booted the server
-- Why sequential stays the default: the per-file server boot (~1 s) is the price of `--isolate`, and it
-  eats most of the parallel gain. Measured on the 2810-test suite: sequential 166 s; `--parallel=4` (the
-  CI runner's core count) 159 s; `--parallel=6` on a 10-core laptop 125-145 s. One worker per core on a
-  high-core machine oversubscribes CPU, because many files spawn their own transform/thumbnail Worker
-  threads on top of the test worker, and heavy work then tips over Bun's 5 s default timeout. Use
-  `--parallel=6` on a machine with cores to spare; the route to a fast CI step is `--shard=i/N` across
-  jobs, where each shard is a plain sequential process that boots once
+- Files run sequentially by default, in one process. `--parallel=N` is the isolated mode, and what CI
+  runs: it implies `--isolate`, so every test file evaluates in a fresh global and module graph, gets its own
+  `EIGEN_DATA_ROOT` (a per-process dir under `data-test/`, see below) and boots its own server on first use.
+  No two files share a Home singleton or a SQLite file, which is what makes running them concurrently safe.
+  Setup is lazy: `setup.ts` exports `ensureServer()`, and the wizard POST (`/setup/complete`) runs once per
+  file, the first time a test awaits `getTestContext()`, `authedRequest()`, or `ensureServer()`. A pure-unit
+  test that needs a setup side effect (the configured mail domain, the org owner, the auth schema) awaits one
+  of those in a `beforeAll`; it cannot rely on another file having booted the server. The same goes for a
+  Home: `collectSSE()` subscribes once the user's Home has opened, so a test that expects a poke from a job
+  that finishes quickly awaits `getHome()` first
+- Isolation needs Bun 1.4.1 or newer (`.bun-version`): under 1.3.14 the runtime keeps many finished files'
+  globals alive with no retainer reachable from JS, and a worker grows by the whole app graph (~50 MB) per
+  such file. Two pins are the app's own and outlive a file on any Bun: each Home's idle timeout and Elysia's
+  sucrose cache sweep, both unref'd timers whose callbacks reach the module graph. The preload's `afterAll`
+  clears them (`shutdownAllHomes()`, `clearSucroseCache(0)`), which is why it imports `./test-env` first:
+  anything it pulls from `../lib` would otherwise open SQLite under the wrong data root
+- Why sequential stays the local default: the per-file server boot (~1 s) is the price of `--isolate`, and
+  on a laptop with few spare cores it eats the parallel gain, because many files spawn their own
+  transform/thumbnail Worker threads on top of the test worker. CI runs `--parallel=4` (the runner's core
+  count) for the isolation, not the speed: one sequential process holds every Home of the run and stalls
+  on what ran before, and bun's file order differs per run on Linux
 
 ### One file at a time
 
@@ -121,9 +127,10 @@ steps:
   - bun run lint
   - bun run typecheck
   - bun run primitives:check      # Primitives index (docs/SHARED-PRIMITIVES.md is generated + gated)
-  - bun --filter '*' test --timeout 30000
+  - bun --filter '!@apps/api' test --timeout 30000   # package suites, one sequential process each
+  - bun --filter '@apps/api' test --parallel=4 --timeout 30000
 ```
 
-The API suite runs as one sequential process on CI. Run that way it stalls for seconds at a time and grows to 2.2 GB, and the isolated modes leak a module graph per file, so they cost more memory still; the roadmap row on the API suite has the measurements and what would make isolation viable. The 30 s per-test timeout is CI-only: the runner is slower than a laptop, and bun's 5 s default turned every stall into a failure of whichever file was running. Locally the default stays, so a slow test is caught where it is written. Under `GITHUB_ACTIONS` the API preload prints `[memory] rss` every 5 s and bun prints per-test timings, so a stall shows in the log as a silent gap with the process size on either side.
+The package suites run as one sequential process each; they still depend on file order (see the roadmap). The API suite runs isolated across four workers, the runner's core count: each file gets a fresh global, so nothing a file leaves behind reaches the next one, and no process holds every Home of the run. The 30 s per-test timeout is CI-only: the runner is slower than a laptop, and bun's 5 s default turned a slow file into a failure. Locally the default stays, so a slow test is caught where it is written. Under `GITHUB_ACTIONS` the API preload prints `[memory] worker N rss` after every file and bun prints per-test timings, so a worker's growth shows next to the file that caused it.
 
 The CI job runs on `ubuntu-latest` with a 15-minute timeout. Locally `bun run check` is the same set plus `bun scripts/check-home-imports.ts`, `bun scripts/check-test-layout.ts`, `bun scripts/check-docs-links.ts` (relative markdown links and backtick'd `apps/`|`packages/`|`docker/`|`scripts/` paths must resolve on disk), and `bun scripts/check-standards.ts` (the ratcheting code-standards gate — see [CODE-STANDARDS.md § Standards Gates](CODE-STANDARDS.md#standards-gates)): lint → typecheck → home-import check → test-layout check → docs-link check → standards check → `primitives:check` → test.
