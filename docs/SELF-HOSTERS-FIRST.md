@@ -16,8 +16,6 @@ The work list for the weeks before the open-source repository is announced. One 
 
 - [ ] eigen.is and demo.eigen.is move to `./eigen` by hand (there is no shim for the deleted scripts): mail-off installs rename `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD` to `SMTP_RELAY_*` and drop `SMTP_SECURE`, `DOMAIN` must be the real web address, whole-server snapshots move from `backups/` to `snapshots/`, and the system sender moves from the env file to Admin → Settings → Mail, with **Relay sends as users** on for a mail-off install that relays through Brevo. Both keep deploying from `main`
 
-Next, after this wave: the `:main` image channel. CI builds `:main` images on every push to `main`, eigen.is follows that channel with `./eigen update`, and then source mode is deleted.
-
 Done when: eigen.is and demo.eigen.is update with `./eigen update`.
 
 ## 2. Prebuilt images with the bundle inside, rollback, and the release gate
@@ -74,5 +72,4 @@ Size S.
 | IMAP backend for mail hosted elsewhere ([proposal](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)) | Size L, depends on the SSO slice, and adds a second `MailStore` at the seam where bugs concentrate. Block 4 covers most of the need for a fraction of the cost. | Repeated requests from people running mail-off installs. |
 | SSO ([proposal](proposals/PROPOSAL_SSO.md)) | Homelab users ask for OIDC after the thing runs, not before. | The first issues asking for Authentik, Keycloak or Authelia. Start with the `socialProviders` slice. |
 | DSM preset (Docker-only milestone 3) | Needs real Synology hardware to be a support claim. | Hardware on the desk, or a tester with a listed model. |
-| A `:main` image channel: CI builds `:main` images on every push to `main`, and an install on that channel updates with `./eigen update` instead of building | This wave closes first; until then eigen.is runs source mode, which builds on the server. | After this wave. eigen.is then follows `:main`, and source mode is deleted (block 1). |
 | Backup phase ④, Kubernetes or Helm, a GUI installer | None of them is on the path of a first install. | Demand. |
