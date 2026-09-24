@@ -312,7 +312,7 @@ describe('a light snapshot', () => {
         const dir = server();
         const name = await snapshot(dir, '--light');
         const held = await members(dir, name);
-        expect(held.slice(0, 3)).toEqual(['eigen-snapshot.json', '.env.production', 'data/']);
+        expect([held[0], ...held.slice(-2)]).toEqual(['data/', '.env.production', 'eigen-snapshot.json']);
         for (const path of [
             'data/server/users3.db',
             'data/server/avatars/a.webp',
@@ -387,6 +387,29 @@ describe('a light snapshot', () => {
             `Put back the databases and config of data/ and .env.production from ${name}, a light snapshot of Eigen ${version}, made on `,
         );
         expect(result.stdout).toContain('Files and mail stay as they are');
+    });
+
+    // The API can name a folder anything; what tar reads as a pattern would drop data/server or every member.
+    test('holds every database whatever a folder is named, and a restore of it puts them back', async () => {
+        const dir = server();
+        for (const name of ['evil\nserver', '*', 'evil\n*']) {
+            mkdirSync(join(dir, 'data/home/alice/mounts/default', name, 'data'), { recursive: true });
+        }
+        mkdirSync(join(dir, 'data/home/alice/odd\nserver'));
+        writeFileSync(join(dir, 'data/home/alice/odd\nserver/own.db'), 'own before\n');
+        const name = await snapshot(dir, '--light');
+        writeFileSync(join(dir, 'data/server/users3.db'), 'users after\n');
+        writeFileSync(join(dir, 'data/home/alice/mounts/default/metadata.db'), 'metadata after\n');
+        writeFileSync(join(dir, 'data/home/alice/odd\nserver/own.db'), 'own after\n');
+
+        const result = await eigen(dir, 'restore', name, '--yes');
+        expect(result.stderr).toBe('');
+        expect(result.code).toBe(0);
+        const read = (path: string) => readFileSync(join(dir, path), 'utf8');
+        expect(read('data/server/users3.db')).toBe('users before\n');
+        expect(read('data/home/alice/mounts/default/metadata.db')).toBe('metadata before\n');
+        expect(read('data/home/alice/odd\nserver/own.db')).toBe('own before\n');
+        expect(existsSync(join(dir, 'data/home/alice/mounts/default/evil\nserver/data'))).toBe(true);
     });
 
     test('is refused before anything moves where this install has a folder in place of one of its files', async () => {

@@ -138,22 +138,19 @@ async function refusal(): Promise<string | null> {
     return null;
 }
 
-// data/ under `root` as a light snapshot sees it: the paths it holds, every folder before what is in it, and the
-// folders it leaves out.
-function lightWalk(root = '.'): { held: string[]; skipped: string[] } {
+// data/ under `root` as a light snapshot sees it: the paths it holds, every folder before what is in it.
+function lightWalk(root = '.'): string[] {
     const held: string[] = [];
-    const skipped: string[] = [];
     const walk = (dir: string) => {
         held.push(dir);
         for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
             const path = `${dir}/${entry.name}`;
             if (!entry.isDirectory()) held.push(path);
-            else if (LIGHT_SKIPS.test(path)) skipped.push(path);
-            else walk(path);
+            else if (!LIGHT_SKIPS.test(path)) walk(path);
         }
     };
     walk(DATA);
-    return { held, skipped };
+    return held;
 }
 
 export async function snapshot(flags: {
@@ -187,7 +184,7 @@ export async function snapshot(flags: {
     if (flags.check) {
         let needed = 0;
         if (kind === 'light') {
-            needed = lightWalk().held.reduce((sum, path) => sum + lstatSync(path).blocks / 2, 0);
+            needed = lightWalk().reduce((sum, path) => sum + lstatSync(path).blocks / 2, 0);
         } else {
             const du = Bun.spawn(['du', '-sk', DATA], { stdout: 'pipe', stderr: 'ignore' });
             const [listed] = await Promise.all([new Response(du.stdout).text(), du.exited]);
@@ -222,16 +219,9 @@ export async function snapshot(flags: {
     const metaDir = mkdtempSync(join(tmpdir(), 'eigen-snapshot-'));
     const meta: SnapshotMeta = { version: VERSION, createdAt: createdAt.toISOString(), kind };
     writeFileSync(join(metaDir, META), JSON.stringify(meta));
-    // tar's exclusion patterns: every name in these folders is Eigen's own, so none holds a wildcard.
-    const skips = join(metaDir, 'skips');
-    writeFileSync(
-        skips,
-        kind === 'light'
-            ? lightWalk()
-                  .skipped.map((path) => `${path}\n`)
-                  .join('')
-            : '',
-    );
+    // The API names folders, so a light one hands tar the walk's paths verbatim, not patterns to leave out.
+    const members = join(metaDir, 'members');
+    if (kind === 'light') writeFileSync(members, lightWalk().join('\0'));
     // One fixed name, so a run that died halfway leaves nothing a later run does not overwrite.
     const partial = join(SNAPSHOTS, '.eigen-snapshot.partial');
     // Numeric owners: data/ holds the containers' ids, which this image may not name. -S keeps a sparse file small.
@@ -243,15 +233,10 @@ export async function snapshot(flags: {
             partial,
             '-S',
             '--numeric-owner',
-            '-X',
-            skips,
-            '-C',
-            metaDir,
-            META,
-            '-C',
-            process.cwd(),
-            ENV_PATH,
-            DATA,
+            // bsdtar reads -T before every other name, wherever it stands.
+            ...(kind === 'light'
+                ? ['--no-recursion', '--null', '-T', members, ENV_PATH, '-C', metaDir, META]
+                : ['-C', metaDir, META, '-C', process.cwd(), ENV_PATH, DATA]),
         ],
         { stdout: 'ignore', stderr: 'pipe' },
     );
@@ -285,7 +270,7 @@ export async function snapshot(flags: {
 // Every file of the light set here goes aside first, held by the snapshot or not: a database's -wal left beside the
 // one it came with would be replayed onto another. A folder only here stays; one only in the snapshot moves in whole.
 function swapLight(staged: string[], aside: string): void {
-    for (const path of lightWalk().held) {
+    for (const path of lightWalk()) {
         if (lstatSync(path).isDirectory()) continue;
         const target = join(aside, relative(DATA, path));
         mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
@@ -439,7 +424,7 @@ export async function restore(
         // A folder here where a light snapshot holds a file would stop its swap halfway.
         const conflict =
             meta.kind === 'light'
-                ? lightWalk(STAGING).held.find(
+                ? lightWalk(STAGING).find(
                       (held) =>
                           !lstatSync(join(STAGING, held)).isDirectory() &&
                           lstatSync(held, { throwIfNoEntry: false })?.isDirectory(),
@@ -473,7 +458,7 @@ export async function restore(
     rmSync(join(STAGING, DATA, SERVER_DIR, COLLAB_EPOCH_FILE), { force: true });
     const stamp = buildBackupStamp(new Date());
     const [dataAside, envAside] = [DATA, ENV_PATH].map((current) => `${current}${PRE_RESTORE_SUFFIX}${stamp}`);
-    if (meta.kind === 'light') swapLight(lightWalk(STAGING).held, dataAside);
+    if (meta.kind === 'light') swapLight(lightWalk(STAGING), dataAside);
     else if (existsSync(DATA)) renameSync(DATA, dataAside);
     if (existsSync(ENV_PATH)) renameSync(ENV_PATH, envAside);
     for (const current of meta.kind === 'light' ? [ENV_PATH] : [DATA, ENV_PATH]) {
