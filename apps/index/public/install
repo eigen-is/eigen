@@ -1,6 +1,7 @@
 #!/bin/sh
 # Installs Eigen into the current folder, where its data will live: downloads the eigen command and runs ./eigen setup.
 #   curl -fsSL https://eigen.is/install | sh
+#   curl -fsSL https://eigen.is/install | sh -s -- --domain eigen.example.com --yes
 set -eu
 
 if [ -e docker-compose.yml ] || [ -e .env.production ]; then
@@ -24,9 +25,14 @@ else
     echo "Neither curl nor wget is installed. Install one of them first." >&2
     exit 1
 fi
+if ! head -n 1 eigen.tmp | grep -q '^#!/bin/sh$'; then
+    echo "The download is not the eigen command; try again later." >&2
+    rm -f eigen.tmp
+    exit 1
+fi
 chmod 755 eigen.tmp
 mv eigen.tmp eigen
 
 # Under curl | sh, stdin is the script; the setup questions need the terminal.
-if [ -c /dev/tty ] && (exec </dev/tty) 2>/dev/null; then exec ./eigen setup </dev/tty; fi
-exec ./eigen setup
+if [ -c /dev/tty ] && (exec </dev/tty) 2>/dev/null; then exec ./eigen setup "$@" </dev/tty; fi
+exec ./eigen setup "$@"

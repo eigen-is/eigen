@@ -25,8 +25,8 @@ trap 'rm -rf "$FIX"' EXIT
 # STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any api tag names;
 # STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a dovecot
 # image; STUB_DIGEST the registry digest of every local image; a docker run with STUB_RUN_FAIL among its arguments
-# fails, and one with --checked also prints STUB_CHECKED. A run of bootstrap writes a Compose file into this folder, and
-# the starter .env.production when it names no release.
+# fails, and one with --checked also prints STUB_CHECKED. A run of bootstrap writes a Compose file into this folder, the
+# starter .env.production when it names no release, and a launcher that prints STUB_LAUNCHER on stderr.
 mkdir "$FIX/bin"
 cat >"$FIX/bin/docker" <<'EOF'
 #!/bin/sh
@@ -73,6 +73,12 @@ case $1 in
             if ! grep -q '^EIGEN_VERSION=' .env.production 2>/dev/null; then
                 printf '%s\n' EIGEN_REGISTRY=ghcr.io/eigen-is/eigen EIGEN_VERSION=0.2.99 \
                     EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:0.2.99 >>.env.production
+            fi
+            # A new file: the launcher that ran bootstrap still reads the old one.
+            if [ "$(sed -n 2p eigen)" != 'echo STUB_LAUNCHER >&2' ]; then
+                { head -n 1 eigen; echo 'echo STUB_LAUNCHER >&2'; tail -n +2 eigen; } >eigen.new
+                chmod 755 eigen.new
+                mv eigen.new eigen
             fi
             ;;
         esac
@@ -353,17 +359,19 @@ for SHELL_NAME in dash busybox host; do
     # What the installer leaves: the release it downloads writes the rest, and that release's launcher takes over.
     alone
     STUB_DIGEST=ddd launch alone setup
-    if [ "$CODE" = 0 ] && [ "$(first_setup)" = "$FIRST_SETUP" ] && [ ! -e "$FIX/alone/.eigen/lock" ]; then
+    if [ "$CODE" = 0 ] && [ "$(first_setup)" = "$FIRST_SETUP" ] && [ ! -e "$FIX/alone/.eigen/lock" ] &&
+        printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER; then
         ok "$SHELL_NAME: setup beside the launcher alone bootstraps from api:latest and hands over to the launcher it wrote, lock and all"
     else
         fail "$SHELL_NAME: setup beside the launcher alone: exit $CODE, '$ERR', calls: $(first_setup)"
     fi
     alone
     EIGEN_REGISTRY=example.test/eigen STUB_DIGEST=ddd launch alone setup
-    if [ "$(printf '%s\n' "$CALLS" | grep -m 1 '^pull ')" = 'pull example.test/eigen/api:latest' ]; then
+    if [ "$(printf '%s\n' "$CALLS" | grep -m 1 '^pull ')" = 'pull example.test/eigen/api:latest' ] &&
+        printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER; then
         ok "$SHELL_NAME: EIGEN_REGISTRY in the environment names the registry of a folder without .env.production"
     else
-        fail "$SHELL_NAME: setup beside the launcher alone with EIGEN_REGISTRY: exit $CODE, calls: $(first_setup)"
+        fail "$SHELL_NAME: setup beside the launcher alone with EIGEN_REGISTRY: exit $CODE, '$ERR', calls: $(first_setup)"
     fi
     STUB_REVISION=def5678 launch channel status
     if printf '%s\n' "$CALLS" | grep -q ' --latest=def5678$'; then
@@ -512,17 +520,18 @@ done
 # The installer needs curl or wget, which the dash and BusyBox images lack.
 header "The installer"
 INSTALLER="$REPO_ROOT/apps/index/public/install"
-mkdir "$FIX/fresh" "$FIX/taken" "$FIX/empty" "$FIX/nodocker"
+mkdir "$FIX/fresh" "$FIX/taken" "$FIX/empty" "$FIX/nodocker" "$FIX/page"
+echo '<html>' >"$FIX/page.html"
 : >"$FIX/taken/docker-compose.yml"
 ln -s "$(command -v curl)" "$FIX/nodocker/curl"
 
 # run_installer <folder> [PATH]: the installer under this host's /bin/sh in $FIX/<folder>, with the launcher of this
-# checkout; sets CODE, OUT, ERR and CALLS as launch does.
+# checkout unless EIGEN_LAUNCHER names another; sets CODE, OUT, ERR and CALLS as launch does.
 run_installer() {
     : >"$FIX/calls.log"
     CODE=0
-    OUT=$(cd "$FIX/$1" && env STUB_LOG="$FIX/calls.log" STUB_DIGEST=ddd EIGEN_LAUNCHER="file://$REPO_ROOT/eigen" \
-        PATH="${2:-$FIX/bin:$PATH}" /bin/sh "$INSTALLER" 2>"$FIX/stderr") || CODE=$?
+    OUT=$(cd "$FIX/$1" && env STUB_LOG="$FIX/calls.log" STUB_DIGEST=ddd \
+        EIGEN_LAUNCHER="${EIGEN_LAUNCHER:-file://$REPO_ROOT/eigen}" PATH="${2:-$FIX/bin:$PATH}" /bin/sh "$INSTALLER" 2>"$FIX/stderr") || CODE=$?
     ERR=$(cat "$FIX/stderr")
     CALLS=$(cat "$FIX/calls.log")
 }
@@ -530,9 +539,9 @@ run_installer() {
 run_installer fresh
 if [ "$CODE" = 0 ] &&
     [ "$(printf '%s\n' "$OUT" | head -n 1)" = "Installing Eigen into $FIX/fresh. Its data will live in this folder." ] &&
-    cmp -s "$REPO_ROOT/eigen" "$FIX/fresh/eigen" && [ "$(ls -l "$FIX/fresh/eigen" | cut -c 1-10)" = -rwxr-xr-x ] &&
-    [ ! -e "$FIX/fresh/eigen.tmp" ] && [ "$(first_setup)" = "$FIRST_SETUP" ]; then
-    ok "the installer says where Eigen goes, downloads the launcher as it is, executable, and runs ./eigen setup"
+    sed 2d "$FIX/fresh/eigen" | cmp -s "$REPO_ROOT/eigen" - && [ ! -e "$FIX/fresh/eigen.tmp" ] &&
+    [ "$(first_setup)" = "$FIRST_SETUP" ] && printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER; then
+    ok "the installer says where Eigen goes, downloads the launcher as it is and runs ./eigen setup, which hands over"
 else
     fail "the installer: exit $CODE, '$OUT', '$ERR', calls: $(first_setup)"
 fi
@@ -543,6 +552,13 @@ if [ "$CODE" = 1 ] &&
     ok "the installer refuses a folder with an install, before it downloads anything"
 else
     fail "the installer in a folder with an install: exit $CODE, '$ERR'"
+fi
+EIGEN_LAUNCHER="file://$FIX/page.html" run_installer page
+if [ "$CODE" = 1 ] && [ "$ERR" = 'The download is not the eigen command; try again later.' ] &&
+    [ ! -e "$FIX/page/eigen" ] && [ ! -e "$FIX/page/eigen.tmp" ]; then
+    ok "the installer refuses a download that is not the launcher, and leaves nothing behind"
+else
+    fail "the installer with a page for a launcher: exit $CODE, '$ERR', $(ls -A "$FIX/page" | tr '\n' ' ')"
 fi
 run_installer empty "$FIX/nodocker"
 if [ "$CODE" = 1 ] && [ "$ERR" = 'Docker is not installed. Install it first: https://docs.docker.com/engine/install/' ]; then
