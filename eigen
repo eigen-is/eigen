@@ -8,8 +8,10 @@ cd "$(dirname "$(readlink -f "$0")")"
 
 REPO=https://github.com/eigen-is/eigen
 REGISTRY=ghcr.io/eigen-is/eigen
+# IMAGE_NAMES in apps/api/src/cli/install.ts. Not from compose config --images: that names the images of the
+# profiles in use, and a release pins all four.
 IMAGES='api frontend postfix dovecot'
-# The CLI's exit code for a question answered no.
+# The CLI's exit code for a question answered no: DECLINED in apps/api/src/cli/install.ts.
 DECLINED=3
 LOG=.eigen/last-step.log
 # POSIX sleep only takes whole seconds; the spinner falls back to 1 where 0.2 fails.
@@ -31,6 +33,7 @@ Commands:
   update           Update Eigen to the newest version
   rollback         Go back to the version before the last update
   restart          Start Eigen, and any part of it that stopped
+  stop             Stop Eigen; ./eigen restart starts it again
   reset-password   Set a new password for an account
   backup           Save Eigen as a snapshot in snapshots/
   restore          Put a snapshot back
@@ -53,16 +56,20 @@ command_usage() {
             cat <<EOF
 Usage: ./eigen status
 
-Reports on the version, a pending update, the services, disk space, the last snapshot,
+Reports on the version, a pending update, the services, disk space, the snapshots,
 the certificate and the mail queue.
 EOF
             ;;
         backup)
             cat <<EOF
-Usage: ./eigen backup
+Usage: ./eigen backup [--light] [--keep <n>]
 
-Stops Eigen, saves data/ and .env.production as a snapshot in snapshots/, and starts
-Eigen again. Only the owner of this folder can read the snapshot.
+Stops Eigen, saves data/ and .env.production as a full snapshot in snapshots/, and starts
+Eigen again. Then deletes all but the newest three snapshots it made. Only the owner of this
+folder can read a snapshot.
+
+  --light      Only the databases and config: every account's files and mail stay out
+  --keep <n>   Keep the newest <n> snapshots instead of three
 EOF
             ;;
         logs)
@@ -74,13 +81,15 @@ EOF
             ;;
         update)
             cat <<EOF
-Usage: ./eigen update [version] [--check] [--accept-breaking]
+Usage: ./eigen update [version] [--check] [--accept-breaking] [--full]
 
 Updates Eigen to the newest release, or to <version>, and saves a snapshot first that
-./eigen rollback goes back to. A source install pulls the newest commit and builds it.
+./eigen rollback goes back to: a light one, of the databases and config, unless the new
+version lists breaking changes. A source install pulls the newest commit and builds it.
 
   --check             Only tell whether there is an update, and what it brings
   --accept-breaking   Update even when the new version lists breaking changes
+  --full              Save a full snapshot, files and mail too
 EOF
             ;;
         rollback)
@@ -98,6 +107,13 @@ EOF
 Usage: ./eigen restart
 
 Starts Eigen, and any part of it that stopped.
+EOF
+            ;;
+        stop)
+            cat <<EOF
+Usage: ./eigen stop
+
+Stops Eigen. ./eigen restart starts it again.
 EOF
             ;;
     esac
@@ -127,6 +143,7 @@ arguments() {
     fi
 }
 
+# The glyphs are GLYPHS in apps/api/src/cli/ui.ts, so the CLI's lines read like these.
 say() { printf '%s%s%s  %s\n' "$1" "$2" "$RESET" "$3"; }
 
 # die <what went wrong> <what to do next>
@@ -148,6 +165,9 @@ env_value() {
     esac
     printf '%s\n' "$value"
 }
+
+# answer <key> <the CLI's key=value lines>: the value it gave for that key.
+answer() { printf '%s\n' "$2" | sed -n "s/^$1=//p" | tail -n 1; }
 
 if [ -e .git ] && [ -f docker-compose.build.yml ]; then MODE=source; else MODE=release; fi
 
@@ -268,21 +288,11 @@ step() {
     exit 1
 }
 
-# version_at_least <have> <want>, both like 2.24.4 or 0.3.0-rc.1: a prerelease comes before its version, and its
-# numbers compare as numbers.
-version_at_least() {
+# compose_at_least <have> <want>: Compose versions like 2.24.4, number by number. Eigen's own versions the CLI orders.
+compose_at_least() {
     awk -v have="$1" -v want="$2" 'BEGIN {
-        split(have, h, "-"); split(want, w, "-"); split(h[1], hn, "."); split(w[1], wn, ".")
-        for (i = 1; i <= 3; i++) if (hn[i] + 0 != wn[i] + 0) exit !(hn[i] + 0 > wn[i] + 0)
-        hp = substr(have, length(h[1]) + 2); wp = substr(want, length(w[1]) + 2)
-        if (hp == "" || wp == "") exit !(hp == "")
-        n = split(hp, hq, "."); m = split(wp, wq, ".")
-        for (i = 1; i <= n && i <= m; i++) {
-            if (hq[i] == wq[i]) continue
-            if (hq[i] ~ /^[0-9]+$/ && wq[i] ~ /^[0-9]+$/) exit !(hq[i] + 0 > wq[i] + 0)
-            exit !(hq[i] > wq[i])
-        }
-        exit !(n >= m)
+        split(have, h, "."); split(want, w, ".")
+        for (i = 1; i <= 3; i++) if (h[i] + 0 != w[i] + 0) exit !(h[i] + 0 > w[i] + 0)
     }'
 }
 
@@ -302,7 +312,7 @@ preflight() {
     need=2.20
     if [ -f docker-compose.override.yml ] && grep -q '!override' docker-compose.override.yml; then need=2.24.4; fi
     # Docker Desktop's 2.24.4-desktop.1 is 2.24.4, no prerelease.
-    if ! version_at_least "${compose%%-*}" "$need"; then
+    if ! compose_at_least "${compose%%-*}" "$need"; then
         die "Docker Compose $compose is too old for this install; it needs $need or newer." "Update the Docker Compose plugin, then run ./eigen $COMMAND again."
     fi
     arch=${server#* }
@@ -462,6 +472,15 @@ stop() {
     step "Stopping Eigen" "Eigen stopped" "Could not stop Eigen" stop_containers
 }
 
+# check_room <snapshot flags…>: KIND, the snapshot those flags save, once the CLI found room for it. Asked while Eigen
+# runs, so a full disk stops nothing.
+KIND=''
+check_room() {
+    step "Checking the room for the snapshot" "Room for the snapshot" "The snapshot cannot be saved" \
+        cli_as 0 snapshot --check "$@"
+    KIND=$(answer kind "$(cat "$LOG")")
+}
+
 # The server runs as 1000:1000. Only an empty folder is handed over: an existing one keeps its owners.
 prepare_data() {
     mkdir -p data backups || return 1
@@ -475,20 +494,6 @@ prepare_data() {
         echo "Eigen runs as uid 1000 and cannot write here. Give it the folders: sudo chown 1000:1000 data backups"
         return 1
     }
-}
-
-# room_for_snapshot <image>: whether snapshots/ has room for a copy of data/.
-room_for_snapshot() {
-    (umask 077 && mkdir -p snapshots) || return 1
-    used=$(docker run --rm --user 0 --entrypoint du -v "$PWD/data:/data:ro" "$1" -sk /data) || return 1
-    used=${used%%[!0-9]*}
-    free=$(df -Pk snapshots | awk 'NR == 2 { print $4 }')
-    if [ -z "$used" ] || [ -z "$free" ]; then return 1; fi
-    if [ "$used" -gt "$free" ]; then
-        echo "The snapshot needs up to $((used / 1024)) MB; snapshots/ has $((free / 1024)) MB free."
-        echo "Free space on that disk, or delete old snapshots from snapshots/."
-        return 1
-    fi
 }
 
 # check_snapshot <restore arguments…>: while Eigen runs, the CLI asks, then unpacks and checks the snapshot into
@@ -543,15 +548,16 @@ refresh_fail2ban() {
     fi
 }
 
-# prune_images <new version> <rollback version>: the images an update leaves behind. Best effort.
+# prune_images <new version> <rollback version>: the images an update leaves behind, every other tag of Eigen's
+# images among them. Best effort.
 prune_images() {
     label=org.opencontainers.image.source=$REPO
     if [ "$MODE" = release ]; then
         for name in $IMAGES; do
             for tag in $(docker image ls "$REGISTRY/$name" --format '{{.Tag}}'); do
                 case $tag in
-                    "$1" | "$2") ;;
-                    latest | [0-9]*.[0-9]*.[0-9]*) docker image rm "$REGISTRY/$name:$tag" || : ;;
+                    "$1" | "$2" | '<none>') ;;
+                    *) docker image rm "$REGISTRY/$name:$tag" || : ;;
                 esac
             done
         done
@@ -565,15 +571,18 @@ prune_images() {
 }
 
 # write_bundle <version>: a release install's launcher and Compose files, as the api image of that version writes them.
-# Written to temporary files and renamed, so this running launcher reads on in its own copy.
+# Written to temporary files and renamed, so this running launcher reads on in its own copy. .eigen/bundle names that
+# version first, so status can tell files of one version from a server that still runs another.
 write_bundle() {
     API_IMAGE=$REGISTRY/api:$1
+    echo "$1" >.eigen/bundle
     step "Writing the Eigen $1 launcher and Compose files" "Eigen $1 files written" \
         "Could not write the Eigen $1 files" cli bootstrap --force --out /install
 }
 
 setup() {
     case ${1:-} in -h | --help) cli_help configure ;; esac
+    # The variable --relay-password-env names goes into the CLI's container; the CLI refuses a name that is none.
     relay=''
     previous=''
     for arg in "$@"; do
@@ -581,10 +590,6 @@ setup() {
         case $arg in --relay-password-env=*) relay=${arg#*=} ;; esac
         previous=$arg
     done
-    case $relay in [0-9]* | *[!A-Za-z0-9_]*)
-        die "--relay-password-env takes a variable name, like RELAY_PASSWORD." "Export the password in a variable and pass its name."
-        ;;
-    esac
     CLI_ENV="EIGEN_PROJECT EIGEN_DOCKER_NETWORKS $relay"
 
     wordmark setup
@@ -654,23 +659,39 @@ status() {
         ;;
     esac
 
-    set -- --services="$services" --mail-queue="$queue" --snapshots="$(ls snapshots 2>/dev/null || :)" ${newer:+"$newer"}
+    set -- --services="$services" --mail-queue="$queue" --snapshots="$(ls snapshots 2>/dev/null || :)" \
+        --snapshots-kb="$(du -sk snapshots 2>/dev/null | cut -f 1)" ${newer:+"$newer"}
+    if [ -f .eigen/bundle ]; then set -- "$@" --files="$(cat .eigen/bundle)"; fi
     case $services in
         *"eigen-api${tab}running$tab"*) api_cli status "$@" ;;
         *) cli status "$@" ;;
     esac
 }
 
-# The snapshot is taken with every service stopped, since dovecot and postfix write to data/ too.
+# The snapshot is taken with every service stopped, since dovecot and postfix write to data/ too. The CLI reads the
+# flags, and refuses a --keep that is no count, before anything stops.
 backup() {
-    arguments backup 0 "$@"
+    previous=''
+    for arg in "$@"; do
+        case $previous in --keep) previous='' && continue ;; esac
+        case $arg in
+            -h | --help)
+                command_usage backup
+                exit 0
+                ;;
+            --light | --keep | --keep=*) ;;
+            *) refuse backup "$arg" ;;
+        esac
+        previous=$arg
+    done
     need_install
     wordmark backup
     preflight
     lock
+    check_room "$@"
     AT_EXIT=restart
     stop
-    cli_as 0 snapshot
+    cli_as 0 snapshot "$@"
 }
 
 restore() {
@@ -687,11 +708,11 @@ restore() {
     need_image "Run ./eigen setup first, then ./eigen restore <snapshot>."
     lock
     check_snapshot "$@"
-    # A snapshot is the whole server: a release install goes back to the version whose images it pins, got while Eigen
-    # runs on. The checked copy's marker, root's alone, names that version.
+    # A snapshot holds the server's config and databases: a release install goes back to the version whose images it
+    # pins, got while Eigen runs on.
     switch_to=''
     if [ "$MODE" = release ]; then
-        restored=$(cli_as 0 cat .eigen/restore/.snapshot </dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+        restored=$(answer version "$(cli_as 0 restore "$@" --checked </dev/null)")
         if [ "$restored" != "$(env_value EIGEN_VERSION)" ]; then switch_to=$restored; fi
     fi
     if [ -n "$switch_to" ]; then
@@ -706,7 +727,7 @@ restore() {
 }
 
 update() {
-    target='' check=0 accept='' pulled=0
+    target='' check=0 accept='' pulled=0 full='' light=--light
     for arg in "$@"; do
         case $arg in
             -h | --help)
@@ -715,6 +736,7 @@ update() {
                 ;;
             --check) check=1 ;;
             --accept-breaking) accept=--accept-breaking ;;
+            --full) full=--full light='' ;;
             # The handover from the launcher that got the new version to the one that came with it.
             --pulled) pulled=1 ;;
             -*) refuse update "$arg" ;;
@@ -770,7 +792,7 @@ update_get() {
         else
             say "$GREEN" '◇' "Pulled $count new commit$([ "$count" = 1 ] || echo s) from $upstream"
         fi
-        exec ./eigen update --pulled
+        exec ./eigen update --pulled $full
     fi
 
     old=$(env_value EIGEN_VERSION)
@@ -787,10 +809,7 @@ update_get() {
             die "$REGISTRY/api:$tag names no version." "Name one: ./eigen update <version>. Releases: $REPO/releases"
         fi
     fi
-    if [ -n "$target" ] && ! version_at_least "$new" "$old"; then
-        die "Eigen $new is older than Eigen $old, which runs here." "./eigen rollback goes back to the version before the last update."
-    fi
-    if version_at_least "$old" "$new"; then
+    if [ "$new" = "$old" ]; then
         if [ "$check" = 1 ]; then
             say "$GRAY" '└' "Eigen $old is up to date."
             exit 0
@@ -799,23 +818,25 @@ update_get() {
         say "$GRAY" '└' "Eigen $old is up to date and running at https://$(env_value DOMAIN)/"
         exit 0
     fi
+    # The new version's CLI tells what changed since the old one, and refuses a downgrade.
     API_IMAGE=$REGISTRY/api:$new
+    step "Getting the notes of Eigen $new" "Eigen $new is out" "Could not get Eigen $new" pull_images "$new" api
     if [ "$check" = 1 ]; then
-        step "Getting the notes of Eigen $new" "Eigen $new is out" "Could not get Eigen $new" pull_images "$new" api
         cli update-check --from "$old" --accept-breaking
         say "$GRAY" '└' "./eigen update installs it."
         exit 0
     fi
-    step "Downloading Eigen $new" "Eigen $new downloaded" "Could not download Eigen $new" pull_images "$new"
     checked=0
     cli update-check --from "$old" $accept || checked=$?
     case $checked in 0) ;; "$DECLINED") exit 0 ;; *) exit "$checked" ;; esac
-    # Before the files of the new version, which a failure would leave with the old images.
+    step "Downloading Eigen $new" "Eigen $new downloaded" "Could not download Eigen $new" pull_images "$new"
+    # Before the files of the new version, which a failure would leave with the old images. A breaking release gets a
+    # full snapshot, since it may convert what a light one leaves out.
     pin_images "$new"
-    step "Checking the room for a snapshot" "Room for a snapshot" "No room for the snapshot before the update" \
-        room_for_snapshot "$API_IMAGE"
+    check_room $light --from "$old"
+    if [ "$KIND" = full ]; then full=--full; fi
     write_bundle "$new"
-    exec ./eigen update --pulled "$new"
+    exec ./eigen update --pulled "$new" $full
 }
 
 # The part the launcher of the new version runs: stop, save a snapshot with the running version, switch and start.
@@ -839,8 +860,8 @@ update_apply() {
         fi
         step "Building Eigen $new" "Eigen $new built" "Could not build Eigen $new; Eigen runs on as it was" build_next
         new_image=$API_IMAGE-next
-        step "Checking the room for a snapshot" "Room for a snapshot" "No room for the snapshot before the update" \
-            room_for_snapshot "$old_image"
+        API_IMAGE=$new_image
+        check_room $light
     else
         old=$(env_value EIGEN_VERSION) new=$target
         pin_images "$new"
@@ -857,8 +878,10 @@ update_apply() {
     AT_EXIT=restart
     stop
     # The running version makes the snapshot, so it records that version for a rollback.
+    kind=full
+    if [ -n "$light" ]; then kind=light; fi
     API_IMAGE=$old_image
-    step "Saving a snapshot" "Snapshot saved" "Could not save the snapshot" cli_as 0 snapshot --pre-update
+    step "Saving a $kind snapshot" "Snapshot saved" "Could not save the snapshot" cli_as 0 snapshot --pre-update $light
     API_IMAGE=$new_image
     if [ "$MODE" = source ]; then
         step "Switching to Eigen $new" "Switched to Eigen $new" "Could not switch to Eigen $new" switch_images
@@ -870,7 +893,7 @@ update_apply() {
     restart "Fix what it says, then run ./eigen restart, or ./eigen rollback to go back to Eigen $old."
     step "Removing old images" "Old images removed" "Could not remove the old images" prune_images "$new" "$old"
     say "$GREEN" '◇' "Eigen ${old:+$old → }$new is running at https://$domain/"
-    say "$GRAY" '│' "Saved before the update: snapshots/$(sed -n 1p .eigen/last-update)"
+    say "$GRAY" '│' "Saved before the update: snapshots/$(answer archive "$(cat .eigen/last-update)"), a $kind snapshot"
     if [ "$MODE" = source ]; then
         leftovers=''
         for dir in dist node_modules; do
@@ -902,9 +925,9 @@ rollback() {
     if [ ! -f .eigen/last-update ]; then
         die "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
     fi
-    archive=$(sed -n 1p .eigen/last-update)
-    back=$(sed -n 2p .eigen/last-update)
-    commit=$(sed -n 3p .eigen/last-update)
+    last=$(cat .eigen/last-update)
+    archive=$(answer archive "$last") back=$(answer version "$last") commit=$(answer commit "$last")
+    kind=$(answer kind "$last")
     if [ ! -f "snapshots/$archive" ]; then
         die "snapshots/$archive, saved before the update, is gone." "Restore another snapshot with ./eigen restore <snapshot>."
     fi
@@ -920,7 +943,7 @@ rollback() {
     else
         current=$(env_value EIGEN_VERSION)
     fi
-    say "$ACCENT" '◆' "Back from Eigen $current to Eigen $back"
+    say "$ACCENT" '◆' "Back from Eigen $current to Eigen $back, from a $kind snapshot"
     check_snapshot "$archive" $yes
     if [ "$MODE" = source ]; then
         # git replaces this file rather than writing into it, so the running sh reads on in its own copy.
@@ -959,6 +982,14 @@ case $COMMAND in
         preflight
         lock
         restart
+        ;;
+    stop)
+        arguments stop 0 "$@"
+        need_install
+        wordmark stop
+        preflight
+        lock
+        stop
         ;;
     reset-password)
         case ${1:-} in -h | --help) cli_help reset-password ;; esac
