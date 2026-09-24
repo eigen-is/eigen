@@ -6,7 +6,7 @@ import { DEFAULT_RELAY_PORT } from '@workspace/lib/constants/mail';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { SERVER_DIR } from '../lib/config/paths';
 import { readEnvFile, writeEnvFile } from './env-file';
-import { DATA, ENV_PATH, IMAGE_NAMES, installOwner, ownAs, ROOT } from './install';
+import { DATA, ENV_PATH, installOwner, ownAs, PINS, ROOT } from './install';
 import { createUi, type Ui } from './ui';
 
 export type ConfigureAnswers = {
@@ -35,8 +35,6 @@ const SUBNET_CANDIDATES = [
     ...[20, 21, 22, 23].map((n) => `10.${n}.0.0/24`),
 ];
 const PROXY_SNIPPETS = join(ROOT, 'docker/proxy');
-// The launcher resolves these on the host, where the Docker socket is.
-const PINS = ['EIGEN_REGISTRY', 'EIGEN_VERSION', ...IMAGE_NAMES.map((name) => `EIGEN_${name.toUpperCase()}_IMAGE`)];
 export const CONFIGURE_OPTIONS = {
     domain: { type: 'string' },
     mail: { type: 'boolean' },

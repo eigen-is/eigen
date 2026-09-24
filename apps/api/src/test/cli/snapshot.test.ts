@@ -867,7 +867,7 @@ describe('restore', () => {
         expect(existsSync(join(dir, '.eigen/restore'))).toBe(false);
     });
 
-    test('--checked prints the version and kind of the snapshot a --check run unpacked, and nothing else', async () => {
+    test('--checked prints the version and kind of the snapshot a --check run unpacked, and the images it pins', async () => {
         const dir = install();
         const name = await snapshot(dir, '--light');
         const before = await eigen(dir, 'restore', name, '--checked');
@@ -877,6 +877,13 @@ describe('restore', () => {
         const checked = await eigen(dir, 'restore', name, '--checked');
         expect(checked.stdout).toBe(`version=${version}\nkind=light\n`);
         expect(readFileSync(join(dir, 'data/home/alice/notes.txt'), 'utf8')).toBe('original\n');
+        writeFileSync(
+            join(dir, '.eigen/restore/.env.production'),
+            `${ENV}EIGEN_FRONTEND_IMAGE=example.org/frontend@sha256:bbb\nEIGEN_VERSION=main\nEIGEN_API_IMAGE=example.org/api@sha256:aaa\n`,
+        );
+        expect((await eigen(dir, 'restore', name, '--checked')).stdout).toBe(
+            `version=${version}\nkind=light\nEIGEN_VERSION=main\nEIGEN_API_IMAGE=example.org/api@sha256:aaa\nEIGEN_FRONTEND_IMAGE=example.org/frontend@sha256:bbb\n`,
+        );
     });
 
     test('the swap takes what the archive holds from the --check run instead of reading it again', async () => {

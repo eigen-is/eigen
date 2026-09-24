@@ -14,9 +14,10 @@ type Service = { service: string; state: string; health: string };
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CERT_WARN_DAYS = 14;
 
-// --latest is the newest release of a release install, --new-commits how far a checkout is behind: empty when the
-// check failed, left out when it could not run. --files is the version the launcher and Compose files were last
-// written for, which differs from this one while an update that failed halfway is not finished.
+// --latest is the newest release of a release install, or on a channel the commit of its newest build; --new-commits is
+// how far a checkout is behind: empty when the check failed, left out when it could not run. --files is the version the
+// launcher and Compose files were last written for, which differs from this one while an update that failed halfway is
+// not finished.
 export const STATUS_OPTIONS = {
     services: { type: 'string' },
     latest: { type: 'string' },
@@ -36,19 +37,34 @@ type StatusFlags = ReturnType<typeof parseArgs<{ options: typeof STATUS_OPTIONS 
 // Without the API, the report holds what the launcher knows.
 function printReport(flags: StatusFlags, services: Service[], api: ControlStatus | null): void {
     const { latest, 'new-commits': commits, 'mail-queue': queue, files } = flags;
+    // The CLI runs in an api image: the running one, or the one .env.production pins.
+    const channel = process.env['EIGEN_CHANNEL'] || '';
+    const commit = process.env['EIGEN_COMMIT'] || '';
     const build: Row[] = api
-        ? [{ level: 'ok', label: 'Version', value: `${api.version}${api.commit ? ` (${api.commit})` : ''}` }]
+        ? [
+              {
+                  level: 'ok',
+                  label: 'Version',
+                  value: `${api.version}${api.commit ? ` (${api.commit})` : ''}${channel ? ` on ${channel}` : ''}`,
+              },
+          ]
         : [];
     // Bun.semver.order throws on what is not a version.
-    if (files && files !== VERSION) {
+    if (files && files !== (channel || VERSION)) {
         build.push({
             level: 'warn',
             label: 'Update',
             value: `files of ${files}, running ${VERSION}: run ./eigen update`,
         });
-    } else if (commits === '' || (latest !== undefined && !VERSION_PATTERN.test(latest))) {
+    } else if (commits === '' || latest === '' || (latest && !channel && !VERSION_PATTERN.test(latest))) {
         build.push({ level: 'warn', label: 'Update', value: 'could not check' });
-    } else if (latest && Bun.semver.order(latest, VERSION) > 0) {
+    } else if (channel && latest && latest !== commit) {
+        build.push({
+            level: 'warn',
+            label: 'Update',
+            value: `a new build of ${channel} is out (${latest}); ./eigen update installs it`,
+        });
+    } else if (!channel && latest && Bun.semver.order(latest, VERSION) > 0) {
         build.push({ level: 'warn', label: 'Update', value: `Eigen ${latest} is out; ./eigen update installs it` });
     } else if (commits && commits !== '0') {
         const one = commits === '1';

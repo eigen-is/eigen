@@ -84,6 +84,7 @@ Usage: ./eigen update [version] [--check] [--accept-breaking] [--full]
 Updates Eigen to the newest release, or to <version>, and saves a snapshot first that
 ./eigen rollback goes back to: a light one, of the databases and config, unless the new
 version lists breaking changes. A source install pulls the newest commit and builds it.
+A release install can follow the main channel instead: ./eigen update main.
 
   --check             Only tell whether there is an update, and what it brings
   --accept-breaking   Update even when the new version lists breaking changes
@@ -364,19 +365,45 @@ cli_help() {
     exit
 }
 
-# pull_images <version> [name…]: the images of that release, all five by default; those already here stay.
+# A version is <n>.<n>.<n>, with an optional -suffix; VERSION_PATTERN in apps/api/src/cli/install.ts orders them. Any
+# other EIGEN_VERSION is main, the one channel: a tag that moves with every build.
+is_version() {
+    case $1 in [0-9]*.[0-9]*.[0-9]*) return 0 ;; esac
+    return 1
+}
+
+# pull_images <version or channel> [name…]: its images, all five by default. A version's already here stay; a
+# channel's tag has moved since.
 pull_images() {
     version=$1
     shift
     for name in ${*:-$IMAGES}; do
-        docker image inspect "$REGISTRY/$name:$version" >/dev/null 2>&1 || docker pull "$REGISTRY/$name:$version" ||
-            return 1
+        if ! is_version "$version" || ! docker image inspect "$REGISTRY/$name:$version" >/dev/null 2>&1; then
+            docker pull "$REGISTRY/$name:$version" || return 1
+        fi
     done
 }
 
-# pin_images <version>: PINS, the release as configure writes it, each image by its registry digest.
+# pull_refs <image…>: those not here yet, such as the digests a snapshot pins.
+pull_refs() {
+    for ref in "$@"; do docker image inspect "$ref" >/dev/null 2>&1 || docker pull "$ref" || return 1; done
+}
+
+# pin_images <version or channel>: PINS, the release as configure writes it, each image by its registry digest. A
+# channel's tag moves image by image while a build is published, so its five images must name one commit.
 PINS=''
 pin_images() {
+    if ! is_version "$1"; then
+        builds='' first='' mixed=''
+        for name in $IMAGES; do
+            revision=$(image_label "$REGISTRY/$name:$1" revision)
+            if [ -z "$builds" ]; then first=$revision; elif [ "$revision" != "$first" ]; then mixed=1; fi
+            builds="${builds:+$builds, }$name $revision"
+        done
+        if [ -n "$mixed" ]; then
+            die "The images of $1 are from different builds: $builds." "A build of $1 is being published; run ./eigen $COMMAND again in a few minutes."
+        fi
+    fi
     PINS="EIGEN_REGISTRY=$REGISTRY EIGEN_VERSION=$1"
     for name in $IMAGES; do
         digest=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' \
@@ -398,10 +425,31 @@ with_pins() (
     "$@"
 )
 
+# The api image .env.production pins, downloaded when it is not here: a pull that moves a channel's tag leaves the
+# build it replaced without a local name.
+api_here() {
+    pull_refs "$(image api)" >"$LOG" 2>&1 ||
+        die "The image Eigen runs, $(image api), is not here and cannot be downloaded." "Check the network, then run ./eigen $COMMAND again."
+}
+
 # release_version <tag>: the version annotated on the registry's api:<tag>, without a pull; empty without one.
 release_version() {
     docker manifest inspect -v "$REGISTRY/api:$1" 2>/dev/null |
         sed -n 's/.*"org\.opencontainers\.image\.version": *"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+# release_revision <tag>: the same for the commit it was built from.
+release_revision() {
+    docker manifest inspect -v "$REGISTRY/api:$1" 2>/dev/null |
+        sed -n 's/.*"org\.opencontainers\.image\.revision": *"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+# image_label <image> <version or revision>: that label of a local image.
+image_label() { docker image inspect --format "{{index .Config.Labels \"org.opencontainers.image.$2\"}}" "$1"; }
+
+# describe <version or channel> <its api image>: what messages call it; a channel's builds differ by their commit.
+describe() {
+    if is_version "$1"; then echo "$1"; else echo "$1 ($(image_label "$2" revision))"; fi
 }
 
 commits_behind() {
@@ -485,6 +533,21 @@ prepare_data() {
     }
 }
 
+# pull_pinned <restore --checked lines>: the images the checked snapshot pins, got while Eigen runs on.
+pull_pinned() {
+    refs=''
+    for name in $IMAGES; do
+        ref=$(answer "$(image_key "$name")" "$1")
+        if [ -z "$ref" ]; then
+            die "The snapshot pins no $name image." "Restore a snapshot made by ./eigen backup on a release install."
+        fi
+        refs="$refs $ref"
+    done
+    version=$(answer EIGEN_VERSION "$1")
+    step "Getting Eigen $version" "Eigen $version is here" "Could not get Eigen $version; Eigen runs on as it was" \
+        pull_refs $refs
+}
+
 # check_snapshot <restore arguments…>: while Eigen runs, the CLI asks, then unpacks and checks the snapshot into
 # .eigen/restore. A no ends the command; a refusal stops nothing.
 check_snapshot() {
@@ -537,18 +600,21 @@ refresh_fail2ban() {
     fi
 }
 
-# prune_images <new version> <rollback version>: the images an update leaves behind, every other tag of Eigen's
-# images among them. Best effort.
+# prune_images: the images an update leaves behind. A release install keeps the images PINS names and those the
+# rollback snapshot pins (KEEP), and removes the rest by ID: an old build of a channel keeps no tag, only its digest,
+# which no prune takes. Best effort.
+KEEP=''
 prune_images() {
     label=org.opencontainers.image.source=$REPO
     if [ "$MODE" = release ]; then
+        keep=' '
+        for ref in $KEEP $PINS; do keep="$keep${ref#*=} "; done
         for name in $IMAGES; do
-            for tag in $(docker image ls "$REGISTRY/$name" --format '{{.Tag}}'); do
-                case $tag in
-                    "$1" | "$2" | '<none>') ;;
-                    *) docker image rm "$REGISTRY/$name:$tag" || : ;;
-                esac
-            done
+            remove=$(docker image ls "$REGISTRY/$name" --digests \
+                --format '{{.ID}} {{.Repository}}@{{.Digest}} {{.Repository}}:{{.Tag}}' | awk -v keep="$keep" '
+                { ids[$1]; if (index(keep, " " $2 " ") || index(keep, " " $3 " ")) kept[$1] }
+                END { for (id in ids) if (!(id in kept)) print id }')
+            if [ -n "$remove" ]; then docker image rm -f $remove || :; fi
         done
         docker image prune -f --filter "label=$label" || :
     else
@@ -559,11 +625,11 @@ prune_images() {
     fi
 }
 
-# write_bundle <version>: a release install's launcher and Compose files, as the api image of that version writes them.
-# Written to temporary files and renamed, so this running launcher reads on in its own copy. .eigen/bundle names that
-# version first, so status can tell files of one version from a server that still runs another.
+# write_bundle <version or channel> <its api image>: a release install's launcher and Compose files, as that api image
+# writes them. Written to temporary files and renamed, so this running launcher reads on in its own copy. .eigen/bundle
+# names the version first, so status can tell files of one version from a server that still runs another.
 write_bundle() {
-    API_IMAGE=$REGISTRY/api:$1
+    API_IMAGE=$2
     echo "$1" >.eigen/bundle
     step "Writing the Eigen $1 launcher and Compose files" "Eigen $1 files written" \
         "Could not write the Eigen $1 files" cli bootstrap --force --out /install
@@ -593,10 +659,20 @@ setup() {
         if [ -z "$version" ]; then
             die ".env.production names no Eigen release." "Get one first: docker run --rm -v \"\$PWD:/out\" $REGISTRY/api bootstrap"
         fi
-        step "Downloading Eigen $version" "Eigen $version downloaded" "Could not download Eigen $version" \
-            pull_images "$version"
-        pin_images "$version"
-        API_IMAGE=$REGISTRY/api:$version
+        # A tag is resolved to digests once, by the first setup or by update: a rerun gets the images already pinned.
+        case $(image api) in
+            *@sha256:*)
+                refs=$(for name in $IMAGES; do image "$name"; done)
+                step "Downloading Eigen $version" "Eigen $version downloaded" "Could not download Eigen $version" \
+                    pull_refs $refs
+                ;;
+            *)
+                step "Downloading Eigen $version" "Eigen $version downloaded" "Could not download Eigen $version" \
+                    pull_images "$version"
+                pin_images "$version"
+                ;;
+        esac
+        API_IMAGE=$(image api)
     fi
 
     # configure picks a free subnet from this list; the CLI container cannot ask Docker itself.
@@ -626,7 +702,12 @@ status() {
     # Empty when the check fails, no flag when it cannot run.
     newer=''
     if [ "$MODE" = release ]; then
-        newer="--latest=$(release_version latest)"
+        version=$(env_value EIGEN_VERSION)
+        if is_version "$version"; then
+            newer="--latest=$(release_version latest)"
+        else
+            newer="--latest=$(release_revision "$version")"
+        fi
     # Another user's fetch would leave objects in .git that its owner cannot write.
     elif [ -O .git ] && git rev-parse --verify --quiet '@{upstream}' >/dev/null 2>&1; then
         newer="--new-commits=$(commits_behind 2>/dev/null || :)"
@@ -697,17 +778,13 @@ restore() {
     need_image "Run ./eigen setup first, then ./eigen restore <snapshot>."
     lock
     check_snapshot "$@"
-    # A snapshot holds the server's config and databases: a release install goes back to the version whose images it
-    # pins, got while Eigen runs on.
-    switch_to=''
+    # A snapshot holds the server's config and databases: a release install goes back to the images it pins.
+    pins=''
     if [ "$MODE" = release ]; then
-        restored=$(answer version "$(cli_as 0 restore "$@" --checked </dev/null)")
-        if [ "$restored" != "$(env_value EIGEN_VERSION)" ]; then switch_to=$restored; fi
+        pins=$(cli_as 0 restore "$@" --checked </dev/null)
+        if [ "$(answer EIGEN_API_IMAGE "$pins")" = "$(image api)" ]; then pins=''; fi
     fi
-    if [ -n "$switch_to" ]; then
-        step "Getting Eigen $switch_to" "Eigen $switch_to is here" "Could not get Eigen $switch_to; Eigen runs on as it was" \
-            pull_images "$switch_to"
-    fi
+    if [ -n "$pins" ]; then pull_pinned "$pins"; fi
     swap_snapshot "$@"
     # A release install runs the Compose files of the snapshot's version; a source install runs today's, which may need
     # keys an older snapshot lacks.
@@ -715,7 +792,7 @@ restore() {
         step "Adding what is new to .env.production" ".env.production has what Eigen needs" \
             "Could not update .env.production" cli configure --backfill
     fi
-    if [ -n "$switch_to" ]; then write_bundle "$switch_to"; fi
+    if [ -n "$pins" ]; then write_bundle "$(answer EIGEN_VERSION "$pins")" "$(answer EIGEN_API_IMAGE "$pins")"; fi
     AT_EXIT=''
     restart
     say "$GRAY" '└' "Check that all is well, then delete what was kept aside."
@@ -790,47 +867,68 @@ update_get() {
         exec ./eigen update --pulled $full
     fi
 
+    # main is the only channel; any other tag, such as publish.yml's candidates, is no release.
+    if [ -n "$target" ] && [ "$target" != latest ] && [ "$target" != main ] && ! is_version "$target"; then
+        die "Eigen has no \"$target\"." "Name a version (./eigen update 0.3.1), latest, or the main channel (./eigen update main)."
+    fi
     old=$(env_value EIGEN_VERSION)
     if [ -z "$old" ]; then die ".env.production names no Eigen release." "Run ./eigen setup first."; fi
+    api_here
+    current=$(describe "$old" "$(image api)")
+    # Release notes and the breaking question go by version; a channel's api image names the version it was built as.
+    old_version=$old
+    if ! is_version "$old"; then old_version=$(image_label "$(image api)" version); fi
     tag=${target:-latest}
-    new=$(release_version "$tag")
-    if [ -z "$new" ]; then
-        # Without the annotation, the version is in the image's label.
-        step "Looking for Eigen ${target:-updates}" "Found Eigen ${target:-updates}" \
-            "Could not get Eigen ${target:-updates}. Releases: $REPO/releases" docker pull "$REGISTRY/api:$tag"
-        new=$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.version"}}' \
-            "$REGISTRY/api:$tag")
+    if [ -z "$target" ] && ! is_version "$old"; then tag=$old; fi
+    if [ "$tag" = latest ] || is_version "$tag"; then
+        new=$(release_version "$tag")
         if [ -z "$new" ]; then
-            die "$REGISTRY/api:$tag names no version." "Name one: ./eigen update <version>. Releases: $REPO/releases"
+            # Without the annotation, the version is in the image's label.
+            step "Looking for Eigen ${target:-updates}" "Found Eigen ${target:-updates}" \
+                "Could not get Eigen ${target:-updates}. Releases: $REPO/releases" docker pull "$REGISTRY/api:$tag"
+            new=$(image_label "$REGISTRY/api:$tag" version)
+            if [ -z "$new" ]; then
+                die "$REGISTRY/api:$tag names no version." "Name one: ./eigen update <version>. Releases: $REPO/releases"
+            fi
         fi
+        name=$new getting="the notes of Eigen $new"
+    else
+        new=$tag
+        revision=$(release_revision "$tag")
+        if [ -z "$revision" ]; then
+            step "Looking for new builds of $tag" "Found the newest build of $tag" "Could not get Eigen $tag" \
+                docker pull "$REGISTRY/api:$tag"
+            revision=$(image_label "$REGISTRY/api:$tag" revision)
+        fi
+        name="$tag ($revision)" getting="the newest build of $tag"
     fi
-    if [ "$new" = "$old" ]; then
+    if [ "$name" = "$current" ]; then
         if [ "$check" = 1 ]; then
-            say "$GRAY" '└' "Eigen $old is up to date."
+            say "$GRAY" '└' "Eigen $current is up to date."
             exit 0
         fi
         restart
-        say "$GRAY" '└' "Eigen $old is up to date and running at https://$(env_value DOMAIN)/"
+        say "$GRAY" '└' "Eigen $current is up to date and running at https://$(env_value DOMAIN)/"
         exit 0
     fi
     # The new version's CLI tells what changed since the old one, and refuses a downgrade.
     API_IMAGE=$REGISTRY/api:$new
-    step "Getting the notes of Eigen $new" "Eigen $new is out" "Could not get Eigen $new" pull_images "$new" api
+    step "Getting $getting" "Eigen $name is out" "Could not get Eigen $name" pull_images "$new" api
     if [ "$check" = 1 ]; then
-        cli update-check --from "$old" --accept-breaking
+        cli update-check --from "$old_version" --accept-breaking
         say "$GRAY" '└' "./eigen update installs it."
         exit 0
     fi
     checked=0
-    cli update-check --from "$old" $accept || checked=$?
+    cli update-check --from "$old_version" $accept || checked=$?
     case $checked in 0) ;; "$DECLINED") exit 0 ;; *) exit "$checked" ;; esac
-    step "Downloading Eigen $new" "Eigen $new downloaded" "Could not download Eigen $new" pull_images "$new"
+    step "Downloading Eigen $name" "Eigen $name downloaded" "Could not download Eigen $name" pull_images "$new"
     # Before the files of the new version, which a failure would leave with the old images. A breaking release gets a
     # full snapshot, since it may convert what a light one leaves out.
     pin_images "$new"
-    check_room $light --from "$old"
+    check_room $light --from "$old_version"
     if [ "$KIND" = full ]; then full=--full; fi
-    write_bundle "$new"
+    write_bundle "$new" "$REGISTRY/api:$new"
     exec ./eigen update --pulled "$new" $full
 }
 
@@ -858,9 +956,12 @@ update_apply() {
         API_IMAGE=$new_image
         check_room $light
     else
-        old=$(env_value EIGEN_VERSION) new=$target
-        pin_images "$new"
-        old_image=$API_IMAGE new_image=$REGISTRY/api:$new
+        pin_images "$target"
+        api_here
+        old_image=$API_IMAGE new_image=$REGISTRY/api:$target
+        old=$(describe "$(env_value EIGEN_VERSION)" "$old_image") new=$(describe "$target" "$new_image")
+        # What .env.production pins before the switch is what the rollback snapshot pins.
+        KEEP=$(for name in $IMAGES; do image "$name"; done)
     fi
 
     API_IMAGE=$new_image
@@ -886,7 +987,7 @@ update_apply() {
     fi
     AT_EXIT=''
     restart "Fix what it says, then run ./eigen restart, or ./eigen rollback to go back to Eigen $old."
-    step "Removing old images" "Old images removed" "Could not remove the old images" prune_images "$new" "$old"
+    step "Removing old images" "Old images removed" "Could not remove the old images" prune_images
     say "$GREEN" '◇' "Eigen ${old:+$old → }$new is running at https://$domain/"
     say "$GRAY" '│' "Saved before the update: snapshots/$(answer archive "$(cat .eigen/last-update)"), a $kind snapshot"
     if [ "$MODE" = source ]; then
@@ -902,7 +1003,7 @@ update_apply() {
 }
 
 # The pre-update snapshot brings back the data and .env.production, checked while Eigen runs. A release install then
-# gets the old images and their bundle files; a source install checks out the old commit and builds it.
+# gets the images it pins and their bundle files; a source install checks out the old commit and builds it.
 rollback() {
     yes=''
     for arg in "$@"; do
@@ -937,7 +1038,9 @@ rollback() {
         fi
         current="$EIGEN_VERSION ($EIGEN_COMMIT)" back="$back ($commit)"
     else
-        current=$(env_value EIGEN_VERSION)
+        api_here
+        current=$(describe "$(env_value EIGEN_VERSION)" "$(image api)")
+        if ! is_version "$(env_value EIGEN_VERSION)"; then back="$back ($commit)"; fi
     fi
     say "$ACCENT" '◆' "Back from Eigen $current to Eigen $back, from a $kind snapshot"
     check_snapshot "$archive" $yes
@@ -947,13 +1050,15 @@ rollback() {
         source_env
         step "Building Eigen $back" "Eigen $back built" "Could not build Eigen $back; Eigen runs on as it was" build_next
     else
-        step "Getting Eigen $back" "Eigen $back is here" "Could not get Eigen $back" pull_images "$back"
+        pins=$(cli_as 0 restore "$archive" --checked </dev/null)
+        pull_pinned "$pins"
+        back=$(describe "$(answer EIGEN_VERSION "$pins")" "$(answer EIGEN_API_IMAGE "$pins")")
     fi
     swap_snapshot "$archive"
     if [ "$MODE" = source ]; then
         step "Switching to Eigen $back" "Switched to Eigen $back" "Could not switch to Eigen $back" switch_images
     else
-        write_bundle "$back"
+        write_bundle "$(answer EIGEN_VERSION "$pins")" "$(answer EIGEN_API_IMAGE "$pins")"
     fi
     AT_EXIT=''
     restart
