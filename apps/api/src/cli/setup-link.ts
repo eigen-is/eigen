@@ -14,7 +14,7 @@ export async function setupLink(): Promise<void> {
               'Finish the setup in your browser. Open this link:',
               setupUrl,
               '',
-              'It asks for the name of your organization, where to keep files, and your admin account.',
+              "It asks for the name of your organization, the sender of Eigen's own mail, where to keep files, and your admin account.",
               'The link works once. Lost it? Run ./eigen setup again for a fresh one.',
               '',
               `Then sign in at ${signInUrl} to add your people.`,
