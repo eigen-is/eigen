@@ -102,7 +102,7 @@ Eigen doesn't lock you into its web interface. Standard protocols let you use yo
 
 ### Install on a server
 
-Eigen runs in Docker: **Caddy** (reverse proxy with automatic HTTPS), **Eigen API** (Bun), **Postfix** (email), **Dovecot** (IMAP), and **Unbound** (DNS resolver for Postfix). The server needs Docker with Compose 2.20 or newer on x86_64, and no Bun. Get a release and set it up:
+Eigen runs in Docker: **Caddy** (reverse proxy with automatic HTTPS), **Eigen API** (Bun), **Postfix** (email), **Dovecot** (IMAP), and **Unbound** (DNS resolver for Postfix). The server needs Docker with Compose 2.20 or newer, nothing else. Get a release and set it up:
 
 ```bash
 mkdir -p /opt/eigen && cd /opt/eigen
