@@ -1,5 +1,5 @@
-# Pinned apart from .bun-version (CI, 1.4.2 for the isolated test suite): the roadmap's sequential-suite memory gate decides when the image follows.
-FROM oven/bun:1.3.14-slim
+# Pinned, same version as .bun-version (CI) and the host.
+FROM oven/bun:1.4.2-slim
 
 WORKDIR /app
 
