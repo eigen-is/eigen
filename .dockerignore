@@ -40,3 +40,6 @@ docker-compose.override.yml
 eigen.nginx.conf
 eigen.Caddyfile
 eigen.apache.conf
+# The Docker harnesses run on the host against a scratch install; the image never reads them.
+docker/test-*
+docker/probe-lib.sh
