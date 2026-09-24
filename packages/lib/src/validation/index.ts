@@ -6,6 +6,8 @@ export {
     BACKUP_OWNER_ID,
     BACKUP_STAMP_PATTERN,
     buildBackupStamp,
+    FAILED_RESTORE_SUFFIX,
+    PRE_RESTORE_SUFFIX,
     parseBackupArtifactName,
     parseBackupAuthRows,
     parseBackupManifest,

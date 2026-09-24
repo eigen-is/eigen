@@ -6,18 +6,13 @@ import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
 import { user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import { withBackupJobSlot } from '../../lib/backup/jobs';
-import {
-    buildArtifactName,
-    buildHomeFolderName,
-    FAILED_RESTORE_SUFFIX,
-    getBackupsDir,
-    PRE_RESTORE_SUFFIX,
-} from '../../lib/backup/paths';
+import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
 import { measureFolder } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import * as verifyModule from '../../lib/backup/verify';

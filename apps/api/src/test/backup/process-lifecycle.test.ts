@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { MountInfo } from '@workspace/lib/types/mount';
-import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '../../lib/backup/paths';
+import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { TEST_DATA_DIR } from '../setup';
 
 // The backup promises only a real process can keep. Every test here spawns `bun src/index.ts` as a

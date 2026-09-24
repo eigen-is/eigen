@@ -2,15 +2,10 @@ import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { auth } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
-import {
-    buildArtifactName,
-    buildHomeFolderName,
-    FAILED_RESTORE_SUFFIX,
-    getBackupsDir,
-    PRE_RESTORE_SUFFIX,
-} from '../../lib/backup/paths';
+import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
 import { restoreHome, restoreSafetyCopy } from '../../lib/backup/restore';
 import { deleteSafetyCopy, listSafetyCopies } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
