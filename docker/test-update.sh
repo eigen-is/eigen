@@ -11,7 +11,6 @@ set -euo pipefail
 
 . "$(dirname "$0")/probe-lib.sh"
 
-VERSION=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$REPO_ROOT/package.json" | head -n 1)
 ADMIN_EMAIL=alice@example.org
 PASSWORD="probe-$$"
 BRANCH=$(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD)
@@ -26,16 +25,9 @@ scratch_init update
 REMOTE="$SCRATCH/remote.git"
 WORK="$SCRATCH/work"
 
-# git_run <args…>: git as root in the scratch folder, where every repository of this run lives, with the checkout
-# read-only at /repo.
-git_run() {
-    docker run --rm -v "$SCRATCH:$SCRATCH" -v "$REPO_ROOT:/repo:ro" --entrypoint git "$CLI_IMAGE" \
-        -c safe.directory='*' -c user.name=harness -c user.email=harness@eigen.invalid "$@"
-}
-
 # push_change <message> <shell command run in the work tree>: one more commit on the remote's main.
 push_change() {
-    docker run --rm -v "$SCRATCH:$SCRATCH" -w "$WORK" --entrypoint sh "$CLI_IMAGE" -c "$2"
+    scratch_run sh -c 'cd "$1" && eval "$2"' sh "$WORK" "$2"
     git_run -C "$WORK" commit -qam "$1"
     git_run -C "$WORK" push -q "$REMOTE" HEAD:refs/heads/main
 }
@@ -44,15 +36,9 @@ head_of() { git_run -C "$1" rev-parse --short HEAD; }
 
 kept() { api GET "/drive/$ADMIN_ID/default/folder/$ROOT_ID" | grep -q '"Kept by the update"'; }
 
-# snapshots/ is root's alone.
-pre_updates() {
-    scratch_run sh -c 'cd "$1" 2>/dev/null && ls eigen-pre-update-*.tar.gz 2>/dev/null' sh "$INSTALL/snapshots" | tr '\n' ' '
-}
-
 header "A remote whose main is $BRANCH plus the working tree, and an install at ${FROM:0:9}"
 git_run clone -q --single-branch --branch "$BRANCH" --no-tags file:///repo "$WORK"
-docker run --rm -v "$SCRATCH:$SCRATCH" --entrypoint sh "$CLI_IMAGE" -c \
-    'find "$1" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +' sh "$WORK"
+scratch_run sh -c 'find "$1" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +' sh "$WORK"
 working_tree | docker run --rm -i -v "$SCRATCH:$SCRATCH" -w "$WORK" --entrypoint tar "$CLI_IMAGE" -xf -
 git_run -C "$WORK" add -A
 git_run -C "$WORK" commit -q --allow-empty -m "harness: the working tree"
@@ -60,10 +46,7 @@ git_run init -q --bare "$REMOTE"
 git_run -C "$WORK" push -q "$REMOTE" HEAD:refs/heads/main
 git_run -C "$REMOTE" symbolic-ref HEAD refs/heads/main
 
-INSTALL="$SCRATCH/eigentest-update-$$"
-INSTALL_OWNER=0:0
-PROJECT=$(project_of "eigentest-update-$$")
-HARNESS_PROJECTS="$HARNESS_PROJECTS $PROJECT"
+register_install "eigentest-update-$$" 0:0
 git_run clone -q "$REMOTE" "$INSTALL"
 git_run -C "$INSTALL" reset -q --hard "$FROM"
 assert_isolated
@@ -77,7 +60,7 @@ log "install at $OLD, $behind commits behind origin/main"
 run_setup "$SCRATCH/setup.log" --yes --domain localhost --mail-domain example.org --no-mail --no-relay --no-proxy \
     --contact-email admin@example.org
 if create_admin "$SCRATCH/setup.log" "$PASSWORD"; then
-    ROOT_ID=$(api GET "/drive/$ADMIN_ID/default/root" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
+    ROOT_ID=$(api GET "/drive/$ADMIN_ID/default/root" | first_id)
     api POST "/drive/$ADMIN_ID/default/folder/$ROOT_ID" '{"folderName":"Kept by the update"}' >/dev/null
 fi
 if kept; then ok "the admin made a folder over HTTPS"; else fail "could not make a folder to keep"; fi
@@ -147,8 +130,7 @@ else
 fi
 if [ "$NEW" = "$(head_of "$REMOTE")" ]; then ok "the checkout is at the remote's main"; else fail "the checkout is at $NEW"; fi
 if stack_up; then ok "every service runs and eigen-api is healthy"; else fail "the stack is not up after the update"; fi
-revision=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
-    "$(docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)")")
+revision=$(api_revision)
 if [ "$revision" = "$NEW" ]; then ok "eigen-api runs an image built at $NEW"; else fail "eigen-api runs $revision"; fi
 if kept; then ok "the folder made before the update is there"; else fail "the folder is gone after the update"; fi
 env_after=$(scratch_run cat "$INSTALL/.env.production")
@@ -246,8 +228,7 @@ if [ "$CODE" = 0 ] && says "◇  Eigen $VERSION ($FIXED) → $VERSION ($NEW) is 
 else
     fail "./eigen rollback exited $CODE"
 fi
-revision=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
-    "$(docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)")")
+revision=$(api_revision)
 if [ "$(head_of "$INSTALL")" = "$NEW" ] && [ "$revision" = "$NEW" ] && stack_up; then
     ok "the checkout is at $NEW, and eigen-api runs an image built there"
 else

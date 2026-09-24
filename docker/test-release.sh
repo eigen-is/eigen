@@ -2,7 +2,8 @@
 # The release gate, run locally: releases 0.2.98, 0.2.99 (also :latest) and 0.2.100 (with a breaking change), built
 # from the working tree and pushed to a registry:2 of this run. With ./eigen in a docker:cli container that has no Bun:
 # install 0.2.98 and seed a document, sheet, event, contact and chat message; update to :latest; roll back; refuse and
-# then accept the breaking release; refuse an unknown version and a downgrade; install 0.2.99 twice, on one digest.
+# then accept the breaking release; refuse an unknown version and a downgrade; restore a snapshot of 0.2.98, which brings
+# its launcher and Compose files back; install 0.2.99 twice, on one digest.
 #
 # Usage:  ./docker/test-release.sh
 # Needs:  docker, curl, git. Builds the API three times and the other images once (the first on a cold cache takes
@@ -85,10 +86,7 @@ The harness's breaking release.
 # release_install <folder name> <version>: $INSTALL, bootstrapped by root from the no-Bun container, with the
 # harness's ports. The folder name is the Compose project, so it holds no dot.
 release_install() {
-    INSTALL="$SCRATCH/$1"
-    INSTALL_OWNER=0:0
-    PROJECT=$(project_of "$1")
-    HARNESS_PROJECTS="$HARNESS_PROJECTS $PROJECT"
+    register_install "$1" 0:0
     scratch_run mkdir "$INSTALL"
     assert_isolated
     in_cli_container docker run --rm -v "$INSTALL:/out" "$REGISTRY/api:$2" bootstrap >"$SCRATCH/bootstrap-$1.log" 2>&1
@@ -96,19 +94,11 @@ release_install() {
     BASE="https://localhost:$PORT_HTTPS/eigen"
 }
 
-env_value() { scratch_run sed -n "s/^$1=//p" "$INSTALL/.env.production" | tail -n 1; }
-
 # tags_are <tag…>: whether the api image has these tags here and no others.
 tags_are() {
     [ "$(docker image ls "$REGISTRY/api" --format '{{.Tag}}' | grep -v '<none>' | sort | tr '\n' ' ')" = \
         "$(printf '%s\n' "$@" | sort | tr '\n' ' ')" ]
 }
-
-# snapshots/ is root's alone.
-pre_update() { scratch_run sh -c 'cd "$1" && ls eigen-pre-update-*.tar.gz' sh "$INSTALL/snapshots"; }
-
-# The first "id" of a JSON body on stdin.
-first_id() { grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4 || true; }
 
 seed() {
     local drive="/drive/$ADMIN_ID/default"
@@ -147,10 +137,10 @@ check_running() {
     if stack_up; then ok "every service runs and eigen-api is healthy"; else fail "the stack is not up"; fi
     eigen status
     if says "Version  *$1"; then ok "status shows $1"; else fail "status shows another version"; show; fi
-    if [ "$(env_value EIGEN_VERSION)" = "$1" ] && env_value EIGEN_API_IMAGE | grep -q "^$REGISTRY/api@sha256:"; then
+    if [ "$(env_of EIGEN_VERSION)" = "$1" ] && env_of EIGEN_API_IMAGE | grep -q "^$REGISTRY/api@sha256:"; then
         ok ".env.production pins $1 by digest"
     else
-        fail ".env.production pins $(env_value EIGEN_VERSION) as $(env_value EIGEN_API_IMAGE)"
+        fail ".env.production pins $(env_of EIGEN_VERSION) as $(env_of EIGEN_API_IMAGE)"
     fi
     missing=$(missing_items)
     if [ -z "$missing" ]; then
@@ -229,7 +219,8 @@ if [ "${after:0:${#UNPINNED}}" = "$UNPINNED" ]; then
 else
     fail ".env.production changed: $(diff <(printf '%s\n' "$UNPINNED") <(printf '%s\n' "$after") | tr '\n' ' ')"
 fi
-archive=$(pre_update)
+archive=$(pre_updates)
+archive=${archive% }
 pointer=$(scratch_run cat "$INSTALL/.eigen/last-update" | tr '\n' ' ')
 meta=$(scratch_run tar -xzOf "$INSTALL/snapshots/$archive" eigen-snapshot.json || true)
 if [ "$pointer" = "$archive $PREVIOUS harness " ] && [[ $meta == *"\"version\":\"$PREVIOUS\""* ]]; then
@@ -314,7 +305,7 @@ else
     fail "update to $BREAKING without the flag: exit $CODE"
 fi
 if [ "$(api_started)" = "$started" ] && [ "$(scratch_run stat -c %i "$INSTALL/eigen")" = "$inode" ] &&
-    [ "$(scratch_run cat "$INSTALL/.env.production")" = "$env_before" ] && [ "$(pre_update)" = "$archive" ]; then
+    [ "$(scratch_run cat "$INSTALL/.env.production")" = "$env_before" ] && [ "$(pre_updates)" = "$archive " ]; then
     ok "the refusal stopped nothing and changed nothing"
 else
     fail "the refused update changed something"
@@ -354,6 +345,19 @@ else
     fail "update to $NEW from $BREAKING: exit $CODE"
     show
 fi
+
+##############################################################################
+header "./eigen restore of a snapshot of $PREVIOUS"
+##############################################################################
+inode=$(scratch_run stat -c %i "$INSTALL/eigen")
+eigen restore "$(scratch_run sed -n 1p "$INSTALL/.eigen/last-update")" --yes
+show
+if [ "$CODE" = 0 ] && says "◇  Eigen $PREVIOUS files written" && [ "$(scratch_run stat -c %i "$INSTALL/eigen")" != "$inode" ]; then
+    ok "a restore of a snapshot of $PREVIOUS on $BREAKING writes the launcher and Compose files of $PREVIOUS"
+else
+    fail "the restore of a snapshot of $PREVIOUS: exit $CODE"
+fi
+check_running "$PREVIOUS"
 down_project "$PROJECT"
 
 ##############################################################################
@@ -366,7 +370,7 @@ for domain in localhost eigen2.localhost; do
     release_install "eigentest-release-${domain%%.*}-$$" "$NEW"
     run_setup "$SCRATCH/setup-$domain.log" "${SETUP_FLAGS[@]}" --domain "$domain"
     if stack_up; then ok "a fresh install of $NEW for $domain runs"; else fail "the fresh install for $domain is not up"; fi
-    PINS+=("$(env_value EIGEN_API_IMAGE)")
+    PINS+=("$(env_of EIGEN_API_IMAGE)")
     RUNS+=("$(docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)")")
     PORTS+=("$PORT_HTTPS")
 done

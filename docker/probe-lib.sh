@@ -9,8 +9,7 @@ unset COMPOSE_PROJECT_NAME COMPOSE_FILE COMPOSE_PROFILES COMPOSE_ENV_FILES
 PASS=0
 FAIL=0
 SKIP=0
-# Only ever expanded inside a `FAIL > 0` branch: bash 3.2 with `set -u` treats an empty array as
-# unbound and would exit instead of printing the summary.
+# Only expanded when FAIL > 0: bash 3.2 with `set -u` treats an empty array as unbound.
 FAIL_LINES=()
 
 log()    { printf '  %s\n' "$*"; }
@@ -22,12 +21,13 @@ skip()   { log "– skipped: $*"; SKIP=$((SKIP+1)); }
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 BUN_VERSION=$(cat "$REPO_ROOT/.bun-version")
 export BUN_VERSION
+VERSION=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$REPO_ROOT/package.json" | head -n 1)
 # Space-separated, not an array: bash 3.2 with `set -u` treats an empty array as unbound.
 HARNESS_PROJECTS=''
 PICKED_PORTS=' '
 
 # scratch_init <purpose>: the scratch root, private image tags so ghcr.io/eigen-is/eigen/*:local is never overwritten, the
-# no-Bun docker:cli image the launcher runs in, and the cleanup trap.
+# no-Bun docker:cli image the launcher runs in, scratch_run's container and the cleanup trap.
 scratch_init() {
     RUN="$1$$"
     SCRATCH=$(mktemp -d "${TMPDIR:-/tmp}/eigentest-$1.XXXXXX")
@@ -67,6 +67,8 @@ scratch_init() {
     chmod 666 "$PRUNE_LOG"
     SOCKET_GID=$(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$CLI_IMAGE" \
         stat -c %g /var/run/docker.sock)
+    SCRATCH_BOX=$(docker run -d --label eigen.harness=1 --label "eigen.harness.run=$RUN" -v "$SCRATCH:$SCRATCH" \
+        -v "$REPO_ROOT:/repo:ro" --entrypoint tail "$CLI_IMAGE" -f /dev/null)
     log "scratch $SCRATCH (run $RUN)"
 }
 
@@ -79,16 +81,19 @@ working_tree() {
         done | COPYFILE_DISABLE=1 tar -cf - --null -T -)
 }
 
-# project_of <folder name>: the Compose project the launcher derives from it.
-project_of() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-' | sed 's/^[_-]*//'; }
+# register_install <folder name> <uid:gid>: $INSTALL in the scratch root, its owner, and its Compose project as Compose
+# names it from the folder, which the cleanup removes.
+register_install() {
+    INSTALL="$SCRATCH/$1"
+    INSTALL_OWNER=$2
+    PROJECT=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-' | sed 's/^[_-]*//')
+    HARNESS_PROJECTS="$HARNESS_PROJECTS $PROJECT"
+}
 
 # new_install <folder name> [uid:gid]: $INSTALL, the working tree committed to a fresh repo, so the launcher sees a
 # source checkout, owned by uid:gid (default: the host user) as if that operator had cloned it.
 new_install() {
-    INSTALL="$SCRATCH/$1"
-    INSTALL_OWNER="${2:-$(id -u):$(id -g)}"
-    PROJECT=$(project_of "$1")
-    HARNESS_PROJECTS="$HARNESS_PROJECTS $PROJECT"
+    register_install "$1" "${2:-$(id -u):$(id -g)}"
     # Created and filled inside containers: Docker Desktop refuses a later chown of the host's read-only
     # git objects, and on Linux the host user could not write a folder another uid owns.
     scratch_run sh -c 'mkdir "$1" && chown "$2" "$1"' sh "$INSTALL" "$INSTALL_OWNER"
@@ -99,8 +104,8 @@ new_install() {
     assert_isolated
 }
 
-# The guard every harness passes before its first Compose call: a unique eigentest project whose data/ is
-# a real folder outside the checkout.
+# The guard before every harness's first Compose call: an eigentest project whose data/ is a real folder outside the
+# checkout.
 assert_isolated() {
     local data
     case "$PROJECT" in eigentest?*) ;; *)
@@ -137,9 +142,8 @@ free_port() {
     exit 1
 }
 
-# write_override [--mailpit]: the harness overlay as the install's docker-compose.override.yml, which the
-# launcher layers on: every published port moved to a fresh 127.0.0.1 port, the harness label on every
-# image a source install builds, and optionally Mailpit as the outgoing relay.
+# write_override [--mailpit]: the install's docker-compose.override.yml: every published port on a fresh 127.0.0.1 port,
+# the harness label on every image a source install builds, and optionally Mailpit as the outgoing relay.
 write_override() {
     local name mailpit='' build=''
     for name in PORT_HTTP PORT_HTTPS PORT_STATIC PORT_SMTP PORT_SMTPS PORT_SUBMISSION PORT_IMAPS PORT_MAILPIT; do
@@ -223,6 +227,9 @@ show() { printf '%s\n' "$OUT" | sed 's/^/    │ /'; }
 # says <text>: whether the last output holds this line fragment.
 says() { printf '%s\n' "$OUT" | grep -q -- "$1"; }
 
+# The snapshot the last ./eigen backup saved, from its output.
+saved_snapshot() { printf '%s\n' "$OUT" | grep -o 'eigen-[0-9]\{8\}-[0-9]\{6\}\.tar\.gz' | head -n 1 || true; }
+
 # run_setup <log> [--user uid:gid] <setup flags…>: ./eigen setup in the no-Bun container, its output in <log>. A
 # setup that fails shows that output and ends the harness.
 run_setup() {
@@ -263,11 +270,27 @@ stack_up() {
 
 api_started() { docker inspect --format '{{.State.StartedAt}}' "$(dc ps -q eigen-api)"; }
 
+# The commit the image eigen-api runs was built at.
+api_revision() {
+    docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
+        "$(docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)")"
+}
+
+# The last KEY= line of the install's .env.production.
+env_of() { scratch_run sed -n "s/^$1=//p" "$INSTALL/.env.production" | tail -n 1; }
+
+# How many data/ folders restores have kept aside.
+aside_count() { (cd "$INSTALL" && ls -d data.pre-restore-* 2>/dev/null | wc -l | tr -d ' '); }
+
+# The pre-update snapshots, space-separated; snapshots/ is root's alone.
+pre_updates() {
+    scratch_run sh -c 'cd "$1" 2>/dev/null && ls eigen-pre-update-*.tar.gz 2>/dev/null' sh "$INSTALL/snapshots" | tr '\n' ' '
+}
+
 # setup_token <log>: the token of the last setup link in ./eigen setup output.
 setup_token() { grep -o 'setup=[A-Za-z0-9_-]*' "$1" | tail -n 1 | cut -d= -f2 || true; }
 
-# probe_setup_link <log> <origin>: the web server serves the page of the last setup link, which the browser asks for
-# without its fragment.
+# probe_setup_link <log> <origin>: the web server serves the page of the last setup link, fetched without its fragment.
 probe_setup_link() {
     local link path code
     link=$(grep -o 'https://[^ ]*#setup=[A-Za-z0-9_-]*' "$1" | tail -n 1 || true)
@@ -294,14 +317,22 @@ sign_in() {
         "$BASE/auth/sign-in/email" || echo 000
 }
 
+# admin_fields <password>: the /setup/complete fields that make $ADMIN_EMAIL, without the token.
+admin_fields() {
+    printf '"orgName":"Probe","storageType":"local-id","adminUsername":"%s","adminPassword":"%s","adminName":"Alice"' \
+        "${ADMIN_EMAIL%@*}" "$1"
+}
+
+# The user ID of the session in $JAR.
+session_user() { curl -sk -b "$JAR" "$BASE/auth/get-session" | grep -o '"userId":"[^"]*"' | head -n 1 | cut -d'"' -f4 || true; }
+
 # create_admin <setup log> <password>: finishes the setup through the link in the log as $ADMIN_EMAIL, signs in
 # into the cookie jar $JAR and sets ADMIN_ID; returns non-zero when a step fails.
 create_admin() {
-    local token code
-    token=$(setup_token "$1")
-    read -r code _ <<<"$(setup_post complete "\"orgName\":\"Probe\",\"storageType\":\"local-id\",\"adminUsername\":\"${ADMIN_EMAIL%@*}\",\"adminPassword\":\"$2\",\"adminName\":\"Alice\",\"setupToken\":\"$token\"")"
+    local code
+    read -r code _ <<<"$(setup_post complete "$(admin_fields "$2"),\"setupToken\":\"$(setup_token "$1")\"")"
     [ "$code" = 200 ] && [ "$(sign_in "$2" "$JAR")" = 200 ] || return 1
-    ADMIN_ID=$(curl -sk -b "$JAR" "$BASE/auth/get-session" | grep -o '"userId":"[^"]*"' | head -n 1 | cut -d'"' -f4)
+    ADMIN_ID=$(session_user)
     [ -n "$ADMIN_ID" ]
 }
 
@@ -311,12 +342,79 @@ api() {
         "$BASE$2" || true
 }
 
-# scratch_run <command…>: runs as root in the docker:cli image, the scratch folder at its own path. Docker
-# Desktop's file share shows every file as the host user, so the owner a container wrote is only visible from
-# inside one; and on Linux the host user cannot read what root or another uid keeps to itself.
-scratch_run() {
-    docker run --rm -v "$SCRATCH:$SCRATCH" --entrypoint '' "$CLI_IMAGE" "$@"
+# The first "id" of a JSON body on stdin.
+first_id() { grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4 || true; }
+
+# collab_tab <web server service> <its origin inside its container> <doc ID> <kept> <edit>: a browser tab on the
+# document over its collab WebSocket through that web server, as the admin in $JAR, from Bun in the API image. <kept>
+# is what an open tab holds, epoch:Y.Doc, or empty for a fresh tab; <edit> is typed before it connects, as while
+# offline. Prints "synced <kept> <text>" once the server has its state, or "closed <code> <reason>".
+collab_tab() {
+    local cookie
+    cookie=$(awk -F'\t' 'NF >= 7 && ($1 !~ /^#/ || $1 ~ /^#HttpOnly_/) { printf "%s=%s; ", $6, $7 }' "$JAR")
+    docker run --rm --network "container:$(dc ps -q "$1")" --entrypoint bun -e COOKIE="$cookie" -e KEPT="$4" \
+        -e EDIT="$5" -e URL="$2/eigen/ws/collab/$ADMIN_ID/default/$3" "$EIGEN_API_IMAGE" -e '
+            const Y = require("yjs");
+            const encoding = require("lib0/encoding");
+            const decoding = require("lib0/decoding");
+            const sync = require("y-protocols/sync");
+            const doc = new Y.Doc();
+            const text = doc.getText("probe");
+            let epoch = "";
+            if (process.env.KEPT) {
+                const [kept, state] = process.env.KEPT.split(":");
+                epoch = kept;
+                Y.applyUpdate(doc, Buffer.from(state, "base64"));
+            }
+            if (process.env.EDIT) text.insert(text.length, process.env.EDIT);
+            const ws = new WebSocket(process.env.URL + (epoch ? `?epoch=${epoch}` : ""), {
+                headers: { Cookie: process.env.COOKIE, Origin: "https://localhost" },
+                tls: { rejectUnauthorized: false },
+            });
+            ws.binaryType = "arraybuffer";
+            const step1 = () => {
+                const encoder = encoding.createEncoder();
+                encoding.writeVarUint(encoder, 0);
+                sync.writeSyncStep1(encoder, doc);
+                ws.send(encoding.toUint8Array(encoder));
+            };
+            ws.onopen = step1;
+            let answers = 0;
+            ws.onmessage = ({ data }) => {
+                const decoder = decoding.createDecoder(new Uint8Array(data));
+                const type = decoding.readVarUint(decoder);
+                if (type === 100) epoch = decoding.readVarString(decoder);
+                if (type !== 0) return;
+                const encoder = encoding.createEncoder();
+                encoding.writeVarUint(encoder, 0);
+                // Answers sync step 1 of the server with what this tab has and the server lacks, as y-websocket does.
+                const kind = sync.readSyncMessage(decoder, encoder, doc, null);
+                if (encoding.length(encoder) > 1) ws.send(encoding.toUint8Array(encoder));
+                if (kind !== 1) return;
+                // The second answer comes after the server read the state this tab sent.
+                if (++answers === 1) return step1();
+                const state = Buffer.from(Y.encodeStateAsUpdate(doc)).toString("base64");
+                console.log(`synced ${epoch}:${state} ${text.toString()}`);
+                process.exit(0);
+            };
+            ws.onclose = ({ code, reason }) => {
+                console.log(`closed ${code} ${reason}`);
+                process.exit(0);
+            };
+            setTimeout(() => {
+                console.log("no sync in 15s");
+                process.exit(1);
+            }, 15000);
+        ' 2>&1 || true
 }
+
+# scratch_run <command…>: runs as root in a docker:cli container that sees the scratch folder at its own path, and the
+# checkout at /repo. Docker Desktop's file share shows every file as the host user, so the owner a container wrote is
+# only visible from inside one; and on Linux the host user cannot read what root or another uid keeps to itself.
+scratch_run() { docker exec "${SCRATCH_BOX:-}" "$@"; }
+
+# git_run <args…>: git as root in the scratch folder.
+git_run() { scratch_run git -c safe.directory='*' -c user.name=harness -c user.email=harness@eigen.invalid "$@"; }
 
 owner_mode() { scratch_run stat -c '%u:%g %a' "$1"; }
 
@@ -340,10 +438,10 @@ harness_cleanup() {
         return "$code"
     fi
     for project in $HARNESS_PROJECTS; do down_project "$project"; done
-    ids=$(docker ps -aq --filter "label=eigen.harness.run=$RUN")
-    if [ -n "$ids" ]; then docker rm -f $ids >/dev/null || true; fi
     # data/ holds files owned by 1000 and root, which the host user cannot always delete.
     scratch_run find "$SCRATCH" -mindepth 1 -delete >/dev/null 2>&1 || true
+    ids=$(docker ps -aq --filter "label=eigen.harness.run=$RUN")
+    if [ -n "$ids" ]; then docker rm -f $ids >/dev/null || true; fi
     rm -rf "$SCRATCH"
     # Unset where a harness installs releases, which it pulls instead of building under these tags.
     for image in ${EIGEN_API_IMAGE:-} ${EIGEN_FRONTEND_IMAGE:-} ${EIGEN_POSTFIX_IMAGE:-} ${EIGEN_DOVECOT_IMAGE:-}; do
@@ -354,6 +452,7 @@ harness_cleanup() {
     return "$code"
 }
 
+# probe <what> <URL> <status> [body pattern]
 probe() {
     local desc="$1" url="$2" expected_code="$3" expected_pattern="${4:-}"
     local body=/tmp/eigen-probe-body-$$
@@ -379,9 +478,7 @@ probe_ws() {
         -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
         -H 'Sec-WebSocket-Version: 13' \
         "$url" || echo 000)
-    # 401 = auth gate reached → the upgrade was correctly forwarded to the app.
-    # 404 (or 426, …) = the upgrade headers got lost in translation and the request landed as a
-    # plain GET on a route that does not exist.
+    # 401 is the auth gate, so the upgrade reached the API; a 404 means it arrived as a plain GET.
     if [ "$got_code" = "401" ]; then
         ok "$desc → 401 (auth, upgrade pass-through OK)"
     else
@@ -389,10 +486,18 @@ probe_ws() {
     fi
 }
 
-# Postfix should send a 220 SMTP banner as soon as the TCP connection is open. Doubles as proof that
-# postfix could resolve unbound's IP and start cleanly — the part that breaks when EIGEN_SUBNET /
-# EIGEN_UNBOUND_IP get out of sync. Retries because postfix has no healthcheck, so `compose up
-# --wait` returns before the listener is fully accepting.
+# probe_site <origin>: /eigen/health, the landing page, three apps with their own bundles, and the WebSocket upgrade.
+probe_site() {
+    probe "/eigen/health" "$1/eigen/health" 200 "OK"
+    probe "/ (landing)" "$1/" 200
+    probe "/mail/" "$1/mail/" 200 '"/mail/assets/'
+    probe "/sheets/" "$1/sheets/" 200 '"/sheets/assets/'
+    probe "/admin/" "$1/admin/" 200 '"/admin/assets/'
+    probe_ws "WS /eigen/ws/collab/..." "$1/eigen/ws/collab/x/y/z"
+}
+
+# The 220 banner, which also proves postfix reached unbound, the part that breaks when EIGEN_SUBNET and EIGEN_UNBOUND_IP
+# disagree. Retried: postfix has no healthcheck, so up --wait returns before it accepts.
 probe_smtp() {
     local desc="$1" port="$2"
     local banner=""
@@ -408,8 +513,7 @@ probe_smtp() {
     fi
 }
 
-# Dovecot IMAPS speaks IMAP over TLS. Sending `a logout` keeps the connection open long enough for
-# openssl to emit the `* OK ...` greeting before exiting.
+# The IMAPS greeting; `a logout` keeps openssl connected until it arrives.
 probe_imaps() {
     local desc="$1" port="$2"
     local banner=""
@@ -425,8 +529,7 @@ probe_imaps() {
     fi
 }
 
-# The tally, and the script's exit: 0 when nothing failed, 1 otherwise. Callers print their own
-# "Result" header first, so a script can put its own guard (see test-mail-hardening.sh) above this.
+# The tally, and the script's exit: 0 when nothing failed, 1 otherwise. Callers print their own "Result" header first.
 probe_summary() {
     local skipped=''
     if [ "$SKIP" -gt 0 ]; then skipped=", $SKIP skipped"; fi

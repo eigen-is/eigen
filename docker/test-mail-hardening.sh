@@ -194,8 +194,9 @@ ADMIN_EMAIL=$ALICE_EMAIL
 BASE="https://localhost:$PORT_HTTPS/eigen"
 JAR="$SCRATCH/session"
 if ! create_admin "$SCRATCH/setup.log" "$ALICE_PASSWORD"; then
-    log "× the setup link made no $ALICE_EMAIL who signs in"
-    exit 1
+    fail "the setup link made no $ALICE_EMAIL who signs in"
+    header "Result"
+    probe_summary
 fi
 # A same-domain address the login does NOT own. It need not exist: the login/sender map is
 # consulted for the sender address, not the mailbox.
@@ -203,11 +204,10 @@ SENDER_OTHER="${SENDER_OTHER:-someone-else@$MAIL_DOMAIN}"
 SENDER_FOREIGN="${SENDER_FOREIGN:-anne@pobox.com}"
 
 log "up (queue alert threshold $QUEUE_ALERT_THRESHOLD, checked every ${QUEUE_CHECK_INTERVAL}s)"
-if wait_smtps; then
-    log "postfix is answering on :465"
-else
-    log "✗ postfix never answered on :465 within 60s; look at: dc logs postfix"
-    exit 1
+if ! wait_smtps; then
+    fail "postfix never answered on :465 within 60s; look at: dc logs postfix"
+    header "Result"
+    probe_summary
 fi
 
 # Login probes. Probe 1 is what proves the credentials and sets HAVE_LOGIN, so it is not optional
@@ -344,11 +344,6 @@ console.log(newest);
 
 if should_run 8; then
     before=$(admin_alert_stamp)
-    # Restart postfix so queue-monitor.sh starts fresh: it holds its alert cooldown in memory, and
-    # a rerun against a kept stack would otherwise still be inside that 6 hour window.
-    dc restart postfix >/dev/null 2>&1
-    # `postfix reload` fails until the restarted master runs, and set -e would end the run silently.
-    wait_smtps || fail "postfix did not come back after the restart"
     # defer_transports parks every outbound message in the deferred queue without a delivery
     # attempt, so the backlog is deterministic instead of DNS-timing dependent.
     dc exec -T postfix sh -c 'postconf -e defer_transports=smtp && postfix reload' >/dev/null 2>&1
@@ -385,12 +380,8 @@ header "Probe 9 — per-IP SASL failure lockout"
 ##############################################################################
 # The route-level half of the story: drive it with a synthetic IP so the lockout is observable
 # without locking this host out. Probe 11 proves the real SMTP path actually delivers a client IP.
-# The assertion pins the 429 at exactly attempt 51, so the bucket has to start empty: a HARNESS_KEEP
-# rerun within the 15 minute window would otherwise still hold the previous run's failures.
+# The assertion pins the 429 at exactly attempt 51: no probe before this one fails a login from that address.
 if should_run 9; then
-    log "restarting eigen-api for a clean failure-bucket baseline..."
-    dc restart eigen-api >/dev/null 2>&1
-    wait_api || fail "eigen-api did not come back healthy"
     filled=$(fill_ip_bucket 198.51.100.10)
     if [ "${filled:-0}" -eq 51 ]; then
         ok "51st failure from one IP → 429 (per-IP bucket engaged)"

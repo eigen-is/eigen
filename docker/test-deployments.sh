@@ -42,7 +42,7 @@ call() {
         -H 'Origin: https://localhost' ${3:+-d "$3"} "$BASE$2" || echo 000
 }
 
-body_id() { grep -o '"id":"[^"]*"' "$SCRATCH/body" | head -n 1 | cut -d'"' -f4 || true; }
+body_id() { first_id <"$SCRATCH/body"; }
 
 # admin <origin>: the admin from the link the last ./eigen setup printed, signed in on <origin>.
 admin() {
@@ -94,40 +94,15 @@ probe_share_mail() {
     fi
 }
 
-# probe_collab <web server service> <its URL inside its own container>: a document made over the API syncs over its
-# collab WebSocket through that web server. Bun from the API image, in the web server's network namespace, sends sync
-# step 1 and waits for the server's sync step 2.
+# probe_collab <web server service> <its origin inside its container>: a document made over the API syncs over its
+# collab WebSocket through that web server.
 probe_collab() {
-    local doc_id cookie result
+    local doc_id result
     call GET "/drive/$ADMIN_ID/default/root" >/dev/null
     call POST "/drive/$ADMIN_ID/default/folder/$(body_id)/create/doc" '{"fileName":"Collab probe"}' >/dev/null
     doc_id=$(body_id)
-    cookie=$(awk -F'\t' 'NF >= 7 && ($1 !~ /^#/ || $1 ~ /^#HttpOnly_/) { printf "%s=%s; ", $6, $7 }' "$JAR")
-    result=$(docker run --rm --network "container:$(dc ps -q "$1")" --entrypoint bun -e COOKIE="$cookie" \
-        -e URL="$2/eigen/ws/collab/$ADMIN_ID/default/$doc_id" "$EIGEN_API_IMAGE" -e '
-            const ws = new WebSocket(process.env.URL, {
-                headers: { Cookie: process.env.COOKIE, Origin: "https://localhost" },
-                tls: { rejectUnauthorized: false },
-            });
-            ws.binaryType = "arraybuffer";
-            ws.onopen = () => ws.send(new Uint8Array([0, 0, 1, 0]));
-            ws.onmessage = ({ data }) => {
-                const frame = new Uint8Array(data);
-                if (frame[0] === 0 && frame[1] === 1) {
-                    console.log("synced");
-                    process.exit(0);
-                }
-            };
-            ws.onclose = ({ code }) => {
-                console.log(`closed ${code}`);
-                process.exit(1);
-            };
-            setTimeout(() => {
-                console.log("no sync step 2 in 15s");
-                process.exit(1);
-            }, 15000);
-        ' 2>&1 || true)
-    if [ "$result" = synced ]; then
+    result=$(collab_tab "$1" "$2" "$doc_id" '' '')
+    if [ "${result%% *}" = synced ]; then
         ok "a document syncs over its collab WebSocket through $1"
     else
         fail "the collab WebSocket through $1 (doc '$doc_id'): $result"
@@ -144,14 +119,9 @@ BASE_HTTP="http://127.0.0.1:$PORT_STATIC"
 header "Scenario A — edge,mail   (bundled Caddy + mail trio)"
 ##############################################################################
 bring_up --mail --no-proxy --no-relay
-probe "/eigen/health"        "$BASE_HTTPS/eigen/health"        200 "OK"
-probe "/ (landing)"          "$BASE_HTTPS/"                    200
-probe "/mail/"               "$BASE_HTTPS/mail/"               200 '"/mail/assets/'
-probe "/sheets/"             "$BASE_HTTPS/sheets/"             200 '"/sheets/assets/'
-probe "/admin/"              "$BASE_HTTPS/admin/"              200 '"/admin/assets/'
-probe_ws "WS /eigen/ws/collab/..." "$BASE_HTTPS/eigen/ws/collab/x/y/z"
-probe_smtp  "SMTP banner :25"   "$PORT_SMTP"
-probe_imaps "IMAPS banner :993" "$PORT_IMAPS"
+probe_site "$BASE_HTTPS"
+probe_smtp postfix "$PORT_SMTP"
+probe_imaps dovecot "$PORT_IMAPS"
 # No tear-down: B reruns setup on the running stack, which must switch from Caddy to eigen-static.
 
 ##############################################################################
@@ -163,24 +133,16 @@ if [ -z "$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT" --f
 else
     fail "the edge Caddy still runs after switching to static"
 fi
-probe "/eigen/health"        "$BASE_HTTP/eigen/health"         200 "OK"
-probe "/ (landing)"          "$BASE_HTTP/"                     200
-probe "/mail/"               "$BASE_HTTP/mail/"                200 '"/mail/assets/'
-probe "/sheets/"             "$BASE_HTTP/sheets/"              200 '"/sheets/assets/'
-probe "/admin/"              "$BASE_HTTP/admin/"               200 '"/admin/assets/'
-probe_ws "WS /eigen/ws/collab/..." "$BASE_HTTP/eigen/ws/collab/x/y/z"
-probe_smtp  "SMTP banner :25"   "$PORT_SMTP"
-probe_imaps "IMAPS banner :993" "$PORT_IMAPS"
+probe_site "$BASE_HTTP"
+probe_smtp postfix "$PORT_SMTP"
+probe_imaps dovecot "$PORT_IMAPS"
 tear_down
 
 ##############################################################################
 header "Scenario C — edge       (bundled Caddy, no mail, Mailpit relay)"
 ##############################################################################
 bring_up --no-mail --no-proxy --relay mailpit:1025
-probe "/eigen/health"        "$BASE_HTTPS/eigen/health"        200 "OK"
-probe "/ (landing)"          "$BASE_HTTPS/"                    200
-probe "/mail/"               "$BASE_HTTPS/mail/"               200 '"/mail/assets/'
-probe_ws "WS /eigen/ws/collab/..." "$BASE_HTTPS/eigen/ws/collab/x/y/z"
+probe_site "$BASE_HTTPS"
 probe_relay
 admin "$BASE_HTTPS"
 probe_share_mail
@@ -193,10 +155,7 @@ docker run --rm -v "$INSTALL/data:/data" "$CLI_IMAGE" find /data -mindepth 1 -de
 header "Scenario D — static     (bundled static, no mail, Mailpit relay)"
 ##############################################################################
 bring_up --no-mail --proxy "127.0.0.1:$PORT_STATIC" --relay mailpit:1025
-probe "/eigen/health"        "$BASE_HTTP/eigen/health"         200 "OK"
-probe "/ (landing)"          "$BASE_HTTP/"                     200
-probe "/mail/"               "$BASE_HTTP/mail/"                200 '"/mail/assets/'
-probe_ws "WS /eigen/ws/collab/..." "$BASE_HTTP/eigen/ws/collab/x/y/z"
+probe_site "$BASE_HTTP"
 probe_relay
 admin "http://localhost:$PORT_STATIC"
 probe_share_mail
@@ -206,9 +165,8 @@ tear_down
 ##############################################################################
 header "Scenario H — edge,mail with custom subnet (172.29.0.0/24)"
 ##############################################################################
-# Verifies EIGEN_SUBNET / EIGEN_UNBOUND_IP can be overridden in lockstep — the failure mode
-# we care about is postfix being unable to reach unbound for DNS, which would manifest as
-# either compose-up timing out or the SMTP banner probe failing. configure keeps both keys.
+# EIGEN_SUBNET and EIGEN_UNBOUND_IP moved together: postfix must still reach unbound, or the start or the SMTP banner
+# fails. configure keeps both keys.
 sed -i.bak '/^EIGEN_SUBNET=/d; /^EIGEN_UNBOUND_IP=/d' "$INSTALL/.env.production"
 rm "$INSTALL/.env.production.bak"
 printf 'EIGEN_SUBNET=172.29.0.0/24\nEIGEN_UNBOUND_IP=172.29.0.254\n' >>"$INSTALL/.env.production"
@@ -219,9 +177,9 @@ if [ "$subnet" = 172.29.0.0/24 ]; then
 else
     fail "network ${PROJECT}_eigen uses '$subnet', expected 172.29.0.0/24"
 fi
-probe "/eigen/health"        "$BASE_HTTPS/eigen/health"        200 "OK"
-probe_smtp  "SMTP banner :25"   "$PORT_SMTP"
-probe_imaps "IMAPS banner :993" "$PORT_IMAPS"
+probe "/eigen/health" "$BASE_HTTPS/eigen/health" 200 "OK"
+probe_smtp postfix "$PORT_SMTP"
+probe_imaps dovecot "$PORT_IMAPS"
 tear_down
 
 ##############################################################################

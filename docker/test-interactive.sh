@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# The interactive side of ./eigen, typed through a terminal by expect: the launcher runs under BusyBox sh in the
-# no-Bun docker:cli container, reached with docker exec -it, so both it and the CLI see a terminal. On a scratch
-# checkout: Ctrl-C at the first setup question, setup answering every question with hosted mail, reset-password typed
-# twice, restore answered no and yes, the rollback question answered no, Ctrl-C while a restore unpacks, a setup rerun
-# without mail behind a web server, ./eigen update from a remote one commit ahead, and Ctrl-C under the build spinner.
-# Asserts on exit codes, files and the stack, not the screen.
+# What only a terminal shows of ./eigen, typed by expect: the launcher runs under BusyBox sh in the no-Bun docker:cli
+# container, reached with docker exec -it, so both it and the CLI see a terminal. On a scratch checkout: Ctrl-C at the
+# first setup question, setup answering every question with hosted mail, reset-password typed twice, a restore answered
+# yes, Ctrl-C while a restore unpacks, ./eigen update from a remote one commit ahead, and Ctrl-C under the build
+# spinner. test-cli.sh and test-update.sh run the rest without a terminal. Asserts on exit codes, files and the stack.
 #
 # Usage:  ./docker/test-interactive.sh
 # Needs:  docker, curl, git, expect. Builds every image in Docker (a few minutes on a cold cache).
@@ -15,7 +14,6 @@ set -euo pipefail
 
 command -v expect >/dev/null || { echo "harness: expect is not installed" >&2; exit 1; }
 
-VERSION=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$REPO_ROOT/package.json" | head -n 1)
 ADMIN_EMAIL=alice@eigen.test
 OLD_PASSWORD="probe-old-$$"
 NEW_PASSWORD="probe-new-$$"
@@ -24,7 +22,6 @@ RELAY_PASSWORD="relay-secret-$$"
 scratch_init interactive
 new_install "eigentest-interactive-$$" 0:0
 write_override
-free_port PORT_STATIC
 BASE="https://localhost:$PORT_HTTPS/eigen"
 JAR="$SCRATCH/session"
 
@@ -66,15 +63,11 @@ EOF
 # The last lines of $SCREEN without escape codes, for a failure.
 screen_tail() { tr -d '\r' <"$SCREEN" | sed $'s/\033\\[[0-9;?]*[A-Za-z]//g' | grep . | tail -n 8 | sed 's/^/    │ /'; }
 
-env_of() { scratch_run sed -n "s/^$1=//p" "$INSTALL/.env.production" | tail -n 1; }
-
 # What still runs in the terminal besides its own tail and ps, and the maintenance git detaches after a fetch.
 leftovers() {
     docker exec "$TERMINAL" ps -o pid,args |
         awk 'NR > 1 && $2 != "tail" && $2 != "ps" && $2 !~ /init$/ && $2 !~ /git-core/' | tr '\n' ';'
 }
-
-aside_count() { (cd "$INSTALL" && ls -d data.pre-restore-* 2>/dev/null | wc -l | tr -d ' '); }
 
 folder() {
     api POST "/drive/$ADMIN_ID/default/folder/$ROOT_ID" "{\"folderName\":\"$1\"}" >/dev/null
@@ -153,7 +146,7 @@ else
 fi
 if create_admin "$SCREEN" "$OLD_PASSWORD"; then
     ok "the link on screen makes $ADMIN_EMAIL"
-    ROOT_ID=$(api GET "/drive/$ADMIN_ID/default/root" | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4)
+    ROOT_ID=$(api GET "/drive/$ADMIN_ID/default/root" | first_id)
 else
     fail "the setup link on screen made no admin"
     header "Result"
@@ -184,10 +177,10 @@ else
 fi
 
 ##############################################################################
-header "restore and rollback questions"
+header "restore, answered on a terminal"
 ##############################################################################
 eigen backup
-SNAPSHOT=$(printf '%s\n' "$OUT" | grep -o 'eigen-[0-9]\{8\}-[0-9]\{6\}\.tar\.gz' | head -n 1 || true)
+SNAPSHOT=$(saved_snapshot)
 if [ "$CODE" = 0 ] && [ -n "$SNAPSHOT" ]; then
     ok "./eigen backup saved $SNAPSHOT"
 else
@@ -195,18 +188,6 @@ else
     show
 fi
 folder "Made after the snapshot"
-started=$(api_started)
-export SNAPSHOT
-type_into restore-no restore "$SNAPSHOT" <<'EOF'
-question "Replace data/"
-send -- "n"
-EOF
-if [ "$CODE" = 0 ] && [ "$(api_started)" = "$started" ] && has_folder "Made after the snapshot" &&
-    [ "$(aside_count)" = 0 ]; then
-    ok "restore answered no exits 0 and changes nothing"
-else
-    fail "restore answered no: exit $CODE"
-fi
 type_into restore-yes restore "$SNAPSHOT" <<'EOF'
 question "Replace data/"
 send -- "y"
@@ -217,28 +198,10 @@ else
     fail "restore answered yes: exit $CODE"
 fi
 
-# A pointer as an update leaves it, to the snapshot just made: the question is the same after a real update.
-commit=$(docker run --rm -v "$SCRATCH:$SCRATCH" --entrypoint git "$CLI_IMAGE" -c safe.directory='*' -C "$INSTALL" \
-    rev-parse --short HEAD)
-scratch_run sh -c 'printf "%s\n" "$2" "$3" "$4" >"$1/.eigen/last-update"' sh "$INSTALL" "$SNAPSHOT" "$VERSION" "$commit"
-started=$(api_started)
-type_into rollback-no rollback <<'EOF'
-question "Replace data/"
-send -- "n"
-EOF
-if [ "$CODE" = 0 ] && [ "$(api_started)" = "$started" ] && [ -e "$INSTALL/.eigen/last-update" ] &&
-    [ "$(aside_count)" = 1 ]; then
-    ok "rollback answered no exits 0 and changes nothing"
-else
-    fail "rollback answered no: exit $CODE"
-fi
-skip "rollback answered yes: the same question; test-update.sh and test-release.sh run the rollback itself"
-scratch_run rm "$INSTALL/.eigen/last-update"
-
 # Big enough that the restore is still unpacking when Ctrl-C lands.
 scratch_run sh -c 'head -c 300000000 /dev/urandom >"$1"' sh "$INSTALL/data/ballast.bin"
 eigen backup
-BIG=$(printf '%s\n' "$OUT" | grep -o 'eigen-[0-9]\{8\}-[0-9]\{6\}\.tar\.gz' | head -n 1 || true)
+BIG=$(saved_snapshot)
 scratch_run rm "$INSTALL/data/ballast.bin"
 folder "Made before the interrupted restore"
 started=$(api_started)
@@ -259,60 +222,20 @@ fi
 scratch_run rm "$INSTALL/snapshots/$BIG"
 
 ##############################################################################
-header "Setup rerun: no mail, behind the operator's web server"
-##############################################################################
-export PORT_STATIC
-type_into setup-proxy setup <<'EOF'
-answer "Where will Eigen be hosted?" localhost
-answer "Which mail domain will you use?" eigen.test
-question "How do people reach Eigen over HTTPS?"
-send -- "\033\[B"
-send -- "\r"
-answer "Where should Eigen listen for your web server" 127.0.0.1:$env(PORT_STATIC)
-question "Host email on this server?"
-send -- "n"
-answer "Which mail relay should Eigen send through" ""
-EOF
-if [ "$CODE" = 0 ]; then
-    ok "the rerun finishes (exit 0)"
-else
-    fail "the rerun: exit $CODE"
-    screen_tail
-fi
-got="$(env_of COMPOSE_PROFILES) $(env_of MAIL_ENABLED) $(env_of EIGEN_STATIC_HOST):$(env_of EIGEN_STATIC_PORT)"
-got="$got [$(env_of SMTP_RELAY_HOST)]"
-if [ "$got" = "static 0 127.0.0.1:$PORT_STATIC []" ] && [ -f "$INSTALL/eigen.nginx.conf" ]; then
-    ok ".env.production has the static profile, no mail and no relay; the web server snippets are written"
-else
-    fail ".env.production after the rerun: $got"
-fi
-if stack_up && [ "$(dc ps -a --services | sort | tr '\n' ' ')" = 'eigen-api eigen-static ' ] &&
-    [ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT_STATIC/eigen/health" || true)" = 200 ]; then
-    ok "only eigen-api and eigen-static run, and 127.0.0.1:$PORT_STATIC answers"
-else
-    fail "services after the rerun: $(dc ps -a --services | tr '\n' ' ')"
-fi
-
-##############################################################################
 header "update on a terminal"
 ##############################################################################
-git_in() {
-    docker run --rm -v "$SCRATCH:$SCRATCH" --entrypoint git "$CLI_IMAGE" -c safe.directory='*' -c user.name=harness \
-        -c user.email=harness@eigen.invalid "$@"
-}
 # A remote one commit ahead, outside the build context, so the build is cached.
-git_in clone -q --bare "$INSTALL" "$SCRATCH/remote.git"
-git_in clone -q "$SCRATCH/remote.git" "$SCRATCH/work"
+git_run clone -q --bare "$INSTALL" "$SCRATCH/remote.git"
+git_run clone -q "$SCRATCH/remote.git" "$SCRATCH/work"
 scratch_run sh -c 'echo "One more line." >>"$1/docs/TESTING.md"' sh "$SCRATCH/work"
-git_in -C "$SCRATCH/work" commit -qam "docs: one more line"
-git_in -C "$SCRATCH/work" push -q
-git_in -C "$INSTALL" remote add origin "$SCRATCH/remote.git"
-git_in -C "$INSTALL" fetch -q origin
-git_in -C "$INSTALL" branch -q --set-upstream-to "origin/$(git_in -C "$INSTALL" rev-parse --abbrev-ref HEAD)"
-NEW=$(git_in -C "$SCRATCH/work" rev-parse --short HEAD)
+git_run -C "$SCRATCH/work" commit -qam "docs: one more line"
+git_run -C "$SCRATCH/work" push -q
+git_run -C "$INSTALL" remote add origin "$SCRATCH/remote.git"
+git_run -C "$INSTALL" fetch -q origin
+git_run -C "$INSTALL" branch -q --set-upstream-to "origin/$(git_run -C "$INSTALL" rev-parse --abbrev-ref HEAD)"
+NEW=$(git_run -C "$SCRATCH/work" rev-parse --short HEAD)
 type_into update update </dev/null
-revision=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
-    "$(docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)")")
+revision=$(api_revision)
 if [ "$CODE" = 0 ] && [ "$revision" = "$NEW" ] && [ -e "$INSTALL/.eigen/last-update" ] && stack_up; then
     ok "./eigen update on a terminal pulls, builds and runs $NEW"
 else

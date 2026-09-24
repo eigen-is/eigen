@@ -11,7 +11,6 @@ set -euo pipefail
 
 . "$(dirname "$0")/probe-lib.sh"
 
-VERSION=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$REPO_ROOT/package.json" | head -n 1)
 ADMIN_EMAIL=alice@eigen.test
 OLD_PASSWORD="probe-old-$$"
 NEW_PASSWORD="probe-new-$$"
@@ -59,9 +58,6 @@ check_install() {
 # The distinct owners under data/.
 data_owners() { scratch_run sh -c 'find "$1" -exec stat -c "%u:%g" {} + | sort -u' sh "$INSTALL/data" | tr '\n' ' '; }
 
-# aside_count: how many data/ folders a restore has kept aside.
-aside_count() { (cd "$INSTALL" && ls -d data.pre-restore-* 2>/dev/null | wc -l | tr -d ' '); }
-
 # craft <name> <version> <commands run in its data/>: a snapshot in snapshots/, made as root.
 craft() {
     scratch_run sh -c 'cd "$(mktemp -d)" && mkdir data &&
@@ -70,67 +66,8 @@ craft() {
         tar -czf "$1" eigen-snapshot.json .env.production data' sh "$INSTALL/snapshots/$1" "$2" "$3"
 }
 
-# collab_tab <kept> <edit>: a browser tab on $COLLAB_DOC over its collab WebSocket through Caddy, from Bun in the API
-# image. <kept> is what an open tab holds, its epoch:Y.Doc, or empty for a fresh tab; <edit> is typed before it
-# connects, as while offline. Prints "synced <kept> <text>" once the server has its state, or "closed <code> <reason>".
-collab_tab() {
-    local cookie
-    cookie=$(awk -F'\t' 'NF >= 7 && ($1 !~ /^#/ || $1 ~ /^#HttpOnly_/) { printf "%s=%s; ", $6, $7 }' "$JAR")
-    docker run --rm --network "container:$(dc ps -q caddy)" --entrypoint bun -e COOKIE="$cookie" -e KEPT="$1" \
-        -e EDIT="$2" -e URL="wss://localhost/eigen/ws/collab/$admin_id/default/$COLLAB_DOC" "$EIGEN_API_IMAGE" -e '
-            const Y = require("yjs");
-            const encoding = require("lib0/encoding");
-            const decoding = require("lib0/decoding");
-            const sync = require("y-protocols/sync");
-            const doc = new Y.Doc();
-            const text = doc.getText("probe");
-            let epoch = "";
-            if (process.env.KEPT) {
-                const [kept, state] = process.env.KEPT.split(":");
-                epoch = kept;
-                Y.applyUpdate(doc, Buffer.from(state, "base64"));
-            }
-            if (process.env.EDIT) text.insert(text.length, process.env.EDIT);
-            const ws = new WebSocket(process.env.URL + (epoch ? `?epoch=${epoch}` : ""), {
-                headers: { Cookie: process.env.COOKIE, Origin: "https://localhost" },
-                tls: { rejectUnauthorized: false },
-            });
-            ws.binaryType = "arraybuffer";
-            const step1 = () => {
-                const encoder = encoding.createEncoder();
-                encoding.writeVarUint(encoder, 0);
-                sync.writeSyncStep1(encoder, doc);
-                ws.send(encoding.toUint8Array(encoder));
-            };
-            ws.onopen = step1;
-            let answers = 0;
-            ws.onmessage = ({ data }) => {
-                const decoder = decoding.createDecoder(new Uint8Array(data));
-                const type = decoding.readVarUint(decoder);
-                if (type === 100) epoch = decoding.readVarString(decoder);
-                if (type !== 0) return;
-                const encoder = encoding.createEncoder();
-                encoding.writeVarUint(encoder, 0);
-                // Answers sync step 1 of the server with what this tab has and the server lacks, as y-websocket does.
-                const kind = sync.readSyncMessage(decoder, encoder, doc, null);
-                if (encoding.length(encoder) > 1) ws.send(encoding.toUint8Array(encoder));
-                if (kind !== 1) return;
-                // The second answer comes after the server read the state this tab sent.
-                if (++answers === 1) return step1();
-                const state = Buffer.from(Y.encodeStateAsUpdate(doc)).toString("base64");
-                console.log(`synced ${epoch}:${state} ${text.toString()}`);
-                process.exit(0);
-            };
-            ws.onclose = ({ code, reason }) => {
-                console.log(`closed ${code} ${reason}`);
-                process.exit(0);
-            };
-            setTimeout(() => {
-                console.log("no sync in 15s");
-                process.exit(1);
-            }, 15000);
-        ' 2>&1 || true
-}
+# tab <kept> <edit>: collab_tab on $COLLAB_DOC through Caddy.
+tab() { collab_tab caddy wss://localhost "$COLLAB_DOC" "$@"; }
 
 SETUP_FLAGS=(--yes --domain localhost --mail --mail-domain eigen.test --contact-email admin@eigen.test --no-proxy
     --no-relay)
@@ -211,7 +148,7 @@ fi
 probe_setup_link "$SCRATCH/setup.log" "https://localhost:$PORT_HTTPS"
 # Unroutable: a request that reached S3 would hang on it until the connect timeout.
 S3_FIELDS='"endpoint":"http://10.255.255.1","bucket":"probe","accessKeyId":"key","secretAccessKey":"secret"'
-ADMIN_FIELDS="\"orgName\":\"Probe\",\"storageType\":\"local-id\",\"adminUsername\":\"${ADMIN_EMAIL%@*}\",\"adminPassword\":\"$OLD_PASSWORD\",\"adminName\":\"Alice\""
+ADMIN_FIELDS=$(admin_fields "$OLD_PASSWORD")
 for route in s3check s3harden complete; do
     case $route in
         s3check) fields=$S3_FIELDS ;;
@@ -261,7 +198,7 @@ for route in complete s3check; do
     read -r code _ <<<"$(setup_post "$route" "$fields,\"setupToken\":\"$SECOND_TOKEN\"")"
     if [ "$code" = 403 ]; then ok "a second use on /setup/$route is refused (403)"; else fail "a second use on /setup/$route → $code"; fi
 done
-OUT=$(dc exec -T eigen-api bun /app/apps/api/src/cli/index.ts setup-link 2>&1 || true)
+OUT=$(dc exec -T eigen-api /app/docker/api/entrypoint.sh setup-link 2>&1 || true)
 show
 if says 'already set up' && ! says 'setup='; then
     ok "setup-link says Eigen is already set up, with no link"
@@ -313,22 +250,17 @@ header "./eigen backup and ./eigen restore"
 ##############################################################################
 JAR="$SCRATCH/backup-session"
 code=$(sign_in "$NEW_PASSWORD" "$JAR")
-admin_id=$(curl -sk -b "$JAR" "$BASE/auth/get-session" | grep -o '"userId":"[^"]*"' | head -n 1 | cut -d'"' -f4 || true)
-# drive <method> <path> [json]: the body of a drive call as the signed-in admin.
-drive() {
-    curl -sk -b "$JAR" -X "$1" -H 'Content-Type: application/json' -H 'Origin: https://localhost' ${3:+-d "$3"} \
-        "$BASE/drive/$admin_id/default$2" || true
-}
-root_id=$(drive GET /root | grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4 || true)
-drive POST "/folder/$root_id" '{"folderName":"Kept by the snapshot"}' >/dev/null
-if [ "$code" = 200 ] && drive GET "/folder/$root_id" | grep -q '"Kept by the snapshot"'; then
+ADMIN_ID=$(session_user)
+FOLDER="/drive/$ADMIN_ID/default/folder"
+root_id=$(api GET "/drive/$ADMIN_ID/default/root" | first_id)
+api POST "$FOLDER/$root_id" '{"folderName":"Kept by the snapshot"}' >/dev/null
+if [ "$code" = 200 ] && api GET "$FOLDER/$root_id" | grep -q '"Kept by the snapshot"'; then
     ok "the admin made a folder over HTTPS"
 else
-    fail "could not make a folder to back up (sign-in $code, admin '$admin_id', root '$root_id')"
+    fail "could not make a folder to back up (sign-in $code, admin '$ADMIN_ID', root '$root_id')"
 fi
-COLLAB_DOC=$(drive POST "/folder/$root_id/create/doc" '{"fileName":"Collab probe"}' | grep -o '"id":"[^"]*"' |
-    head -n 1 | cut -d'"' -f4 || true)
-read -r status TAB text <<<"$(collab_tab '' before)"
+COLLAB_DOC=$(api POST "$FOLDER/$root_id/create/doc" '{"fileName":"Collab probe"}' | first_id)
+read -r status TAB text <<<"$(tab '' before)"
 if [ "$status" = synced ] && [ "$text" = before ]; then
     ok "a tab typed 'before' into a document over its collab WebSocket"
 else
@@ -339,7 +271,7 @@ OWNERS=$(data_owners)
 started=$SECONDS
 eigen backup
 show
-SNAPSHOT=$(printf '%s\n' "$OUT" | grep -o 'eigen-[0-9]\{8\}-[0-9]\{6\}\.tar\.gz' | head -n 1 || true)
+SNAPSHOT=$(saved_snapshot)
 if [ "$CODE" = 0 ] && [ -n "$SNAPSHOT" ]; then
     ok "./eigen backup saved snapshots/$SNAPSHOT in $((SECONDS - started))s"
 else
@@ -347,8 +279,8 @@ else
 fi
 if stack_up; then ok "the stack is back up after the backup"; else fail "the stack is not up after the backup"; fi
 # Typed while the backup had Eigen stopped: the restart keeps the epoch, so the tab's reconnect keeps the edit.
-read -r status kept text <<<"$(collab_tab "$TAB" ' after')"
-read -r _ fresh after <<<"$(collab_tab '' '')"
+read -r status kept text <<<"$(tab "$TAB" ' after')"
+read -r _ fresh after <<<"$(tab '' '')"
 if [ "$status" = synced ] && [ "$after" = 'before after' ] && [ "${fresh%%:*}" = "${TAB%%:*}" ]; then
     ok "the tab's edit made while Eigen was stopped syncs when it reconnects"
     TAB=$kept
@@ -378,7 +310,7 @@ eigen status
 if says "Last snapshot  *$SNAPSHOT, "; then ok "status names the newest snapshot by its time"; else fail "status names another snapshot"; show; fi
 scratch_run rm "$INSTALL/snapshots/eigen-pre-update-20200101-000000.tar.gz"
 
-drive POST "/folder/$root_id" '{"folderName":"Made after the snapshot"}' >/dev/null
+api POST "$FOLDER/$root_id" '{"folderName":"Made after the snapshot"}' >/dev/null
 started=$(api_started)
 eigen restore "$SNAPSHOT"
 if [ "$CODE" != 0 ] && says '--yes' && [ "$(api_started)" = "$started" ]; then
@@ -407,7 +339,7 @@ else
 fi
 
 started=$SECONDS
-eigen restore "snapshots/$SNAPSHOT" --yes
+eigen restore "$INSTALL/snapshots/$SNAPSHOT" --yes
 show
 if [ "$CODE" = 0 ]; then ok "./eigen restore --yes finished in $((SECONDS - started))s"; else fail "./eigen restore exited $CODE"; fi
 if stack_up; then ok "the stack is up after the restore"; else fail "the stack is not up after the restore"; fi
@@ -416,7 +348,7 @@ if curl -sk -b "$JAR" "$BASE/auth/get-session" | grep -q "\"$ADMIN_EMAIL\""; the
 else
     fail "the session from before the backup was signed out by the restarts"
 fi
-listing=$(drive GET "/folder/$root_id")
+listing=$(api GET "$FOLDER/$root_id")
 if printf '%s' "$listing" | grep -q '"Kept by the snapshot"' && ! printf '%s' "$listing" | grep -q '"Made after the snapshot"'; then
     ok "the drive is as it was at the snapshot"
 else
@@ -427,13 +359,13 @@ if [ "$got" = "$OPERATOR 600" ]; then ok ".env.production is the operator's, mod
 eigen status
 if [ "$CODE" = 0 ]; then ok "the operator runs ./eigen on the restored .env.production"; else fail "status after the restore: exit $CODE"; show; fi
 # The tab still holds 'before after' from before the restore.
-read -r status code reason <<<"$(collab_tab "$TAB" '')"
+read -r status code reason <<<"$(tab "$TAB" '')"
 if [ "$status $code $reason" = 'closed 1012 home-replaced' ]; then
     ok "the tab that loaded the document before the restore is closed 1012 when it reconnects, so it reloads"
 else
     fail "the tab's reconnect after the restore: $status $code $reason"
 fi
-read -r status fresh text <<<"$(collab_tab '' '')"
+read -r status fresh text <<<"$(tab '' '')"
 if [ "$status" = synced ] && [ "$text" = before ] && [ "${fresh%%:*}" != "${TAB%%:*}" ]; then
     ok "the document is as it was at the snapshot, under a new epoch"
 else
@@ -456,8 +388,9 @@ if [ ! -e "$INSTALL/.eigen/restore" ]; then ok "nothing is left in .eigen/restor
 scratch_run mkdir "$INSTALL/snapshots/.eigen-snapshot.partial"
 eigen backup
 show
-if [ "$CODE" != 0 ] && says '■  Could not write to snapshots/'; then
-    ok "a snapshot that cannot be written fails and says so (exit $CODE)"
+if [ "$CODE" != 0 ] && says '■  Could not write the snapshot:' &&
+    ! scratch_run test -e "$INSTALL/snapshots/.eigen-snapshot.partial"; then
+    ok "a snapshot that cannot be written fails, says so and leaves no partial file (exit $CODE)"
 else
     fail "the blocked snapshot: exit $CODE"
 fi
@@ -466,7 +399,6 @@ if says 'Eigen is running' && stack_up; then
 else
     fail "the stack is not up after the failed snapshot"
 fi
-scratch_run rmdir "$INSTALL/snapshots/.eigen-snapshot.partial"
 
 NEWER=eigen-20990101-000000.tar.gz
 craft "$NEWER" 999.0.0 :
@@ -532,9 +464,9 @@ fi
 # Big enough that the restore is still unpacking when the interrupt lands.
 scratch_run sh -c 'head -c 300000000 /dev/urandom >"$1"' sh "$INSTALL/data/ballast.bin"
 eigen backup
-BIG=$(printf '%s\n' "$OUT" | grep -o 'eigen-[0-9]\{8\}-[0-9]\{6\}\.tar\.gz' | head -n 1 || true)
+BIG=$(saved_snapshot)
 scratch_run rm "$INSTALL/data/ballast.bin"
-drive POST "/folder/$root_id" '{"folderName":"Made before the interrupted restore"}' >/dev/null
+api POST "$FOLDER/$root_id" '{"folderName":"Made before the interrupted restore"}' >/dev/null
 started=$(api_started)
 (
     eigen restore "$BIG" --yes
@@ -547,7 +479,9 @@ for _ in $(seq 1 600); do
     sleep 0.1
 done
 # Ctrl-C without a terminal: the signal reaches the launcher's docker client, which passes it to the CLI.
-docker exec "$(docker ps -q --filter "label=eigen.harness.run=$RUN" --filter "ancestor=$CLI_IMAGE")" kill -INT -1 || true
+launcher=$(docker ps -q --no-trunc --filter "label=eigen.harness.run=$RUN" --filter "ancestor=$CLI_IMAGE" |
+    grep -vx "$SCRATCH_BOX" || true)
+docker exec "$launcher" kill -INT -1 || true
 CODE=0
 wait "$waiter" || CODE=$?
 OUT=$(cat "$SCRATCH/interrupted.log")
@@ -557,7 +491,7 @@ if [ "$CODE" = 130 ] && says 'Cancelled. Nothing was changed.'; then
 else
     fail "the interrupted restore: exit $CODE"
 fi
-listing=$(drive GET "/folder/$root_id")
+listing=$(api GET "$FOLDER/$root_id")
 if [ "$(api_started)" = "$started" ] && printf '%s' "$listing" | grep -q '"Made before the interrupted restore"' &&
     [ ! -e "$INSTALL/data/ballast.bin" ] && [ "$(aside_count)" = "$aside" ] && [ ! -e "$INSTALL/.eigen/restore" ]; then
     ok "Eigen ran on throughout, nothing is kept aside, and the unpacked copy is gone"
