@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1553 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1554 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -869,7 +869,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (720)
+## Utilities & constants (721)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1312,6 +1312,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FAILED_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `MAX_EMAIL_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `MIN_PASSWORD_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/password.ts |
+| `NO_CONTROL_PATTERN` | `@workspace/lib/validation` | packages/lib/src/validation/text.ts |
 | `parseBackupArtifactName` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `parseBackupAuthRows` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `parseBackupManifest` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
