@@ -111,11 +111,7 @@ export function ServerSettingsPage() {
             await updateSettings.mutateAsync(
                 draft.landing ? { ...draft, landing: { links: normalizeLinks(draft.landing.links ?? []) } } : draft,
             );
-        setDraft({});
-        setDirty(false);
-        setS3Draft(null);
-        setS3Dirty(false);
-        setOrgNameDraft(null);
+        handleReset();
     };
 
     const handleReset = () => {
