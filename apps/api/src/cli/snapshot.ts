@@ -47,6 +47,7 @@ const LIGHT_SKIPS = new RegExp(
 
 type SnapshotKind = 'full' | 'light';
 type SnapshotMeta = { version: string; createdAt: string; kind: SnapshotKind };
+type Held = { path: string; dir: boolean };
 
 // The kind is in the name, so retention and status tell them apart without opening one; restore reads the archive's.
 export const SNAPSHOT_NAME = new RegExp(
@@ -143,13 +144,13 @@ async function refusal(): Promise<string | null> {
 }
 
 // data/ under `root` as a light snapshot sees it: the paths it holds, every folder before what is in it.
-function lightWalk(root = '.'): string[] {
-    const held: string[] = [];
+function lightWalk(root = '.'): Held[] {
+    const held: Held[] = [];
     const walk = (dir: string) => {
-        held.push(dir);
+        held.push({ path: dir, dir: true });
         for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
             const path = `${dir}/${entry.name}`;
-            if (!entry.isDirectory()) held.push(path);
+            if (!entry.isDirectory()) held.push({ path, dir: false });
             else if (!LIGHT_SKIPS.test(path)) walk(path);
         }
     };
@@ -188,7 +189,11 @@ export async function snapshot(flags: {
     if (flags.check) {
         let needed = 0;
         if (kind === 'light') {
-            needed = lightWalk().reduce((sum, path) => sum + lstatSync(path).blocks / 2, 0);
+            // A -wal goes when its Home idles, which it may do mid-walk while Eigen runs.
+            needed = lightWalk().reduce(
+                (sum, { path }) => sum + (lstatSync(path, { throwIfNoEntry: false })?.blocks ?? 0) / 2,
+                0,
+            );
         } else {
             const du = Bun.spawn(['du', '-sk', DATA], { stdout: 'pipe', stderr: 'ignore' });
             const [listed] = await Promise.all([new Response(du.stdout).text(), du.exited]);
@@ -232,7 +237,7 @@ export async function snapshot(flags: {
     writeFileSync(join(metaDir, META), JSON.stringify(meta));
     // The API names folders, so a light one hands tar the walk's paths verbatim, not patterns to leave out.
     const members = join(metaDir, 'members');
-    if (kind === 'light') writeFileSync(members, lightWalk().join('\0'));
+    if (kind === 'light') writeFileSync(members, Array.from(lightWalk(), ({ path }) => path).join('\0'));
     // One fixed name, so a run that died halfway leaves nothing a later run does not overwrite.
     const partial = join(SNAPSHOTS, '.eigen-snapshot.partial');
     // Numeric owners: data/ holds the containers' ids, which this image may not name. -S keeps a sparse file small.
@@ -278,17 +283,17 @@ export async function snapshot(flags: {
 
 // Every file of the light set here goes aside first, held by the snapshot or not: a database's -wal left beside the
 // one it came with would be replayed onto another. A folder only here stays; one only in the snapshot moves in whole.
-function swapLight(staged: string[], aside: string): void {
-    for (const path of lightWalk()) {
-        if (lstatSync(path).isDirectory()) continue;
+function swapLight(staged: Held[], aside: string): void {
+    for (const { path, dir } of lightWalk()) {
+        if (dir) continue;
         const target = join(aside, relative(DATA, path));
         mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
         renameSync(path, target);
     }
     let moved = '';
-    for (const path of staged) {
+    for (const { path, dir } of staged) {
         if (moved && path.startsWith(`${moved}/`)) continue;
-        if (lstatSync(join(STAGING, path)).isDirectory() && lstatSync(path, { throwIfNoEntry: false })) continue;
+        if (dir && lstatSync(path, { throwIfNoEntry: false })) continue;
         renameSync(join(STAGING, path), path);
         moved = path;
     }
@@ -434,14 +439,12 @@ export async function restore(
         const conflict =
             meta.kind === 'light'
                 ? lightWalk(STAGING).find(
-                      (held) =>
-                          !lstatSync(join(STAGING, held)).isDirectory() &&
-                          lstatSync(held, { throwIfNoEntry: false })?.isDirectory(),
+                      ({ path, dir }) => !dir && lstatSync(path, { throwIfNoEntry: false })?.isDirectory(),
                   )
                 : undefined;
         if (conflict) {
             rmSync(STAGING, { recursive: true, force: true });
-            cannot(`${conflict} is a folder here and a file in the snapshot`);
+            cannot(`${conflict.path} is a folder here and a file in the snapshot`);
         }
         // A release install runs the images its .env.production pins; a source install builds its own and pins none.
         const install = (env: string) =>
