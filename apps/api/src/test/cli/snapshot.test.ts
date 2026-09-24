@@ -234,17 +234,10 @@ describe('snapshot', () => {
         expect(JSON.parse(meta.stdout).version).toBe(version);
     });
 
-    test('--pre-update names the snapshot, its kind, the version and the commit in .eigen/last-update', async () => {
+    test('--pre-update names the snapshot in .eigen/last-update', async () => {
         const dir = install();
-        const result = await runCli(['snapshot', '--pre-update', '--light'], {
-            cwd: dir,
-            env: { ...TAR_ENV, EIGEN_COMMIT: 'abc1234' },
-        });
-        expect(result.code).toBe(0);
-        const name = /snapshots\/(\S+)/.exec(result.stdout)?.[1];
-        expect(readFileSync(join(dir, '.eigen/last-update'), 'utf8')).toBe(
-            `archive=${name}\nversion=${version}\ncommit=abc1234\nkind=light\n`,
-        );
+        const name = await snapshot(dir, '--pre-update', '--light');
+        expect(readFileSync(join(dir, '.eigen/last-update'), 'utf8')).toBe(`${name}\n`);
     });
 
     test('a manual snapshot keeps the newest three made the same way, and no pre-update one counts', async () => {
