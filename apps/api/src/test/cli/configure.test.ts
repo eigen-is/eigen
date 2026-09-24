@@ -1,5 +1,15 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { chownSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+    chmodSync,
+    chownSync,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    statSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type ConfigureAnswers, chooseSubnet, configureEntries, type DockerNetwork } from '../../cli/configure';
@@ -29,7 +39,6 @@ const ANSWERS: ConfigureAnswers = {
     staticAddress: '127.0.0.1:8080',
     contactEmail: 'admin@example.org',
     relay: null,
-    from: 'noreply@example.org',
     subnet: null,
 };
 
@@ -72,7 +81,6 @@ describe('configure entries', () => {
         expect(entries.has('SMTP_HOST')).toBe(false);
         expect(entries.get('API_URL')).toBe('https://eigen.example.org');
         expect(entries.get('VITE_APP_DOCS_URL')).toBe('/docs');
-        expect(entries.has('SMTP_FROM')).toBe(false);
     });
 
     test('mail off writes MAIL_ENABLED=0, the same relay keys and no mail profile', () => {
@@ -87,7 +95,6 @@ describe('configure entries', () => {
             behindProxy: true,
             staticAddress: '127.0.0.1:18080',
             relay: { host: 'smtp.relay.test', port: '587', user: 'u', password: 'p$w' },
-            from: 'Eigen <noreply@example.org>',
         });
         expect(entries.get('COMPOSE_PROFILES')).toBe('static');
         expect(entries.get('MAIL_ENABLED')).toBe('0');
@@ -96,7 +103,6 @@ describe('configure entries', () => {
         expect(entries.get('SMTP_RELAY_USER')).toBe('u');
         expect(entries.get('SMTP_RELAY_PASSWORD')).toBe('p$w');
         expect(entries.get('EIGEN_STATIC_PORT')).toBe('18080');
-        expect(entries.get('SMTP_FROM')).toBe('Eigen <noreply@example.org>');
         expect(entries.has('SMTP_HOST')).toBe(false);
         expect(entries.get('MAIL_DOMAIN')).toBe('example.org');
     });
@@ -156,10 +162,6 @@ describe('configure entries', () => {
         expect(entries.has('SMTP_RELAY_USER')).toBe(false);
         expect(entries.has('SMTP_RELAY_PASSWORD')).toBe(false);
     });
-
-    test('the default sender leaves an empty SMTP_FROM alone', () => {
-        expect(configureEntries(new Map([['SMTP_FROM', '']]), ANSWERS).get('SMTP_FROM')).toBe('');
-    });
 });
 
 describe('subnet choice', () => {
@@ -202,7 +204,6 @@ describe('configure command', () => {
         'smtp.relay.test:2525',
         'relayuser',
         `pa$$word 'q"`,
-        'Eigen <noreply@example.org>',
         '',
     ].join('\n');
 
@@ -230,8 +231,6 @@ describe('configure command', () => {
                 'relayuser',
                 '--relay-password-env',
                 'RELAY_PASSWORD',
-                '--from',
-                'Eigen <noreply@example.org>',
             ],
             undefined,
             { RELAY_PASSWORD: `pa$$word 'q"` },
@@ -372,24 +371,52 @@ describe('configure command', () => {
         '',
     ].join('\n');
 
-    test('--yes keeps an empty SMTP_FROM as it is', async () => {
+    // The API's own config.json, as the wizard leaves it.
+    const setUp = (dir: string) => {
+        mkdirSync(join(dir, 'data/server'), { recursive: true });
+        writeFileSync(join(dir, 'data/server/config.json'), JSON.stringify({ setupCompleted: true }));
+    };
+
+    test('once set up, the mail domain is stated, not asked, and the same --mail-domain changes nothing', async () => {
         const dir = tempDir();
-        writeFileSync(join(dir, '.env.production'), `${INSTALLED}SMTP_FROM=\n`);
-        const run = await runConfigure(dir, ['--yes']);
+        setUp(dir);
+        writeFileSync(join(dir, '.env.production'), INSTALLED);
+        expect((await runConfigure(dir, ['--yes'])).code).toBe(0);
+        const written = readFileSync(join(dir, '.env.production'), 'utf8');
+        const run = await runConfigure(dir, [], ['', '', '', '', '', ''].join('\n'));
         expect(run.stderr).toBe('');
         expect(run.code).toBe(0);
-        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toContain('\nSMTP_FROM=\n');
+        expect(run.stdout).toContain('Mail domain: example.org');
+        expect(run.stdout).not.toContain('Which mail domain');
+        const same = await runConfigure(dir, ['--yes', '--mail-domain', 'Example.org']);
+        expect(same.code).toBe(0);
+        expect(same.stdout).toContain('Configuration unchanged.');
+        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(written);
     });
 
-    test('--from is checked by the parser the mailer uses', async () => {
-        const base = ['--yes', '--domain', 'eigen.example.org', '--no-proxy', '--contact-email', 'admin@example.org'];
+    test('once set up, a different --mail-domain is refused with the reason, and nothing is written', async () => {
         const dir = tempDir();
-        const comment = await runConfigure(dir, [...base, '--from', 'noreply@example.org (Eigen)']);
-        expect(comment.code).toBe(0);
-        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toContain("SMTP_FROM='noreply@example.org (Eigen)'");
-        const two = await runConfigure(tempDir(), [...base, '--from', 'Eigen <a@example.org>, b@example.org']);
-        expect(two.code).toBe(1);
-        expect(two.stderr).toContain('--from');
+        setUp(dir);
+        writeFileSync(join(dir, '.env.production'), INSTALLED);
+        const run = await runConfigure(dir, ['--yes', '--mail-domain', 'example.com']);
+        expect(run.code).toBe(1);
+        expect(run.stderr).toContain('every account here is on example.org');
+        expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(INSTALLED);
+    });
+
+    // Root reads any file, so the unreadable folder exists only for another user.
+    test.skipIf(process.getuid?.() === 0)('an unreadable data folder leaves the mail domain a question', async () => {
+        const dir = tempDir();
+        setUp(dir);
+        chmodSync(join(dir, 'data/server'), 0o000);
+        try {
+            writeFileSync(join(dir, '.env.production'), INSTALLED);
+            const run = await runConfigure(dir, ['--yes', '--mail-domain', 'example.com']);
+            expect(run.code).toBe(0);
+            expect(readEnvFile(join(dir, '.env.production')).get('MAIL_DOMAIN')).toBe('example.com');
+        } finally {
+            chmodSync(join(dir, 'data/server'), 0o755);
+        }
     });
 
     test('writes the release pins the launcher passes as variables', async () => {
@@ -672,8 +699,6 @@ describe('configure command', () => {
                 'smtp.relay.test:2525',
                 '--relay-user',
                 'relayuser',
-                '--from',
-                'noreply@example.org',
             ],
             {},
             [{ when: "relay's password", keys: 'secret\r' }],

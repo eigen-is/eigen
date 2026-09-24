@@ -123,7 +123,7 @@ describe('the /setup routes before setup', () => {
     const setupLinkCli = () =>
         runCli(['setup-link'], { env: { EIGEN_CONTROL_SOCKET: SOCKET, COMPOSE_PROFILES: 'edge,mail' } });
 
-    async function startApi(): Promise<void> {
+    async function startApi(env: Record<string, string> = {}): Promise<void> {
         const logFd = openSync(logPath, 'a');
         proc = Bun.spawn(['bun', 'src/index.ts'], {
             cwd: API_DIR,
@@ -138,6 +138,7 @@ describe('the /setup routes before setup', () => {
                 VITE_APP_ADMIN_URL: '/admin',
                 DOMAIN,
                 MAIL_DOMAIN,
+                ...env,
             },
             stdin: 'ignore',
             stdout: logFd,
@@ -298,6 +299,21 @@ describe('the /setup routes before setup', () => {
             const session = await fetch(`${base}/auth/get-session`, { headers: { cookie } });
             expect((await session.json())?.user?.email).toBe(ADMIN_EMAIL);
             expect(storedSecret()).toBe(secretBeforeSetup);
+        },
+        LISTEN_TIMEOUT_MS + 5_000,
+    );
+
+    test(
+        'once set up, the API refuses to start on a mail domain the accounts are not on',
+        async () => {
+            proc.kill('SIGTERM');
+            await proc.exited;
+            const started = startApi({ MAIL_DOMAIN: 'elsewhere.example' });
+            await expect(started).rejects.toThrow(
+                `MAIL_DOMAIN is elsewhere.example, but the accounts on this server use ${MAIL_DOMAIN}.`,
+            );
+            await expect(started).rejects.toThrow(`Set MAIL_DOMAIN=${MAIL_DOMAIN} in .env.production`);
+            expect(proc.exitCode).toBe(1);
         },
         LISTEN_TIMEOUT_MS + 5_000,
     );

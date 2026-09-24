@@ -333,9 +333,7 @@ describe('iMIP Outbound Email Composition', () => {
 
 describe("iMIP mail on a user's behalf", () => {
     const external = { userId: 'alice-id', email: 'alice@gmail.com', name: 'Alice' };
-    const local = { userId: 'alice-id', email: 'alice@eigen.example', name: 'Alice' };
     const attendee = { email: 'bob@external.com', name: 'Bob', status: 'pending' as const, role: 'required' as const };
-    const via = { name: 'Alice via Acme', address: 'eigen@acme.nl' };
     const unfold = (mail: { icalEvent?: { content: string } }) => mail.icalEvent!.content.replace(/\r\n[ \t]/g, '');
     type Organizer = typeof external;
     const composers: [string, (organizer: Organizer) => ReturnType<typeof composeInviteEmail>][] = [
@@ -348,43 +346,19 @@ describe("iMIP mail on a user's behalf", () => {
         ],
     ];
 
-    restoreEnvAfterEach(['MAIL_DOMAIN', 'MAIL_ENABLED', 'SMTP_FROM']);
-    beforeEach(() => {
-        process.env['MAIL_DOMAIN'] = 'eigen.example';
-        process.env['SMTP_FROM'] = 'Acme <eigen@acme.nl>';
-    });
-
-    describe.each(composers)('%s', (_name, compose) => {
-        test('an external address goes out from the system sender, replying to the user', () => {
-            const mail = compose(external);
-            expect(mail.from).toEqual(via);
-            expect(mail.replyTo).toEqual({ name: 'Alice', address: 'alice@gmail.com' });
-        });
-
-        test('with mail off a local address goes out from the system sender too', () => {
-            process.env['MAIL_ENABLED'] = '0';
-            const mail = compose(local);
-            expect(mail.from).toEqual(via);
-            expect(mail.replyTo).toEqual({ name: 'Alice', address: 'alice@eigen.example' });
-        });
-
-        test('a local address with mail on sends as the user', () => {
-            const mail = compose(local);
-            expect(mail.from).toEqual({ name: 'Alice', address: 'alice@eigen.example' });
-            expect(mail.replyTo).toBeUndefined();
-        });
+    // Whether that goes out as her own address or "via" the system sender is the mailer's rule (mailer.test.ts).
+    test.each(composers)('%s is from the user', (_name, compose) => {
+        expect(compose(external).from).toEqual({ name: 'Alice', address: 'alice@gmail.com' });
     });
 
     test('an invite from an external organizer keeps her own address as ORGANIZER', () => {
         const ics = unfold(composeInviteEmail(MOCK_EVENT, external, [attendee]));
         expect(ics).toMatch(/^ORGANIZER[^\r\n]*:mailto:alice@gmail\.com\r?$/m);
-        expect(ics).not.toContain('eigen@acme.nl');
     });
 
     test('an RSVP reply from an external attendee keeps her own address as ATTENDEE', () => {
         const ics = unfold(composeRsvpReply(MOCK_EVENT, 'alice@gmail.com', 'Alice', 'accepted'));
         expect(ics).toMatch(/^ATTENDEE[^\r\n]*:mailto:alice@gmail\.com\r?$/m);
-        expect(ics).not.toContain('eigen@acme.nl');
     });
 });
 

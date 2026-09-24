@@ -2,9 +2,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { parseArgs } from 'node:util';
 import { APP_URLS } from '@workspace/lib/constants/app-urls';
-import { DEFAULT_RELAY_PORT, defaultSenderAddress } from '@workspace/lib/constants/mail';
+import { DEFAULT_RELAY_PORT } from '@workspace/lib/constants/mail';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import addressparser from 'nodemailer/lib/addressparser';
 import { readEnvFile, writeEnvFile } from './env-file';
 import { ENV_PATH, IMAGE_NAMES, installOwner, ownAs, ROOT } from './install';
 import { createUi, type Ui } from './ui';
@@ -17,7 +16,6 @@ export type ConfigureAnswers = {
     staticAddress: string;
     contactEmail: string;
     relay: { host: string; port: string; user: string; password: string } | null;
-    from: string;
     subnet: string | null;
 };
 
@@ -50,7 +48,6 @@ export const CONFIGURE_OPTIONS = {
     'no-relay': { type: 'boolean' },
     'relay-user': { type: 'string' },
     'relay-password-env': { type: 'string' },
-    from: { type: 'string' },
     yes: { type: 'boolean' },
     // The update step's: only adds the keys the env file lacks, with their defaults; no existing line changes.
     backfill: { type: 'boolean' },
@@ -71,7 +68,6 @@ in brackets; - clears an optional answer; a choice is answered with its number.
   --no-relay                   No relay
   --relay-user <name>          Relay user name
   --relay-password-env <VAR>   Read the relay password from this environment variable
-  --from <sender>              System sender, an address or Name <address>
   --yes                        Keep the current or default answer for every flag not given
   --help                       Show this help`;
 
@@ -130,11 +126,12 @@ function validateRelay(value: string): string | undefined {
     }
 }
 
-// The mailer's own parser, so what passes here is what it sends from.
-function validateFrom(value: string): string | undefined {
-    const parsed = addressparser(value, { flatten: true });
-    if (parsed.length !== 1 || !validateEmailAddress(parsed[0]?.address ?? '') || !NO_CONTROL.test(value)) {
-        return 'Enter an address, or a name and address like Eigen <noreply@example.com>.';
+// Every account's address was made on the mail domain; an unreadable data folder leaves the check to the API's boot.
+function isSetUp(): boolean {
+    try {
+        return JSON.parse(readFileSync('data/server/config.json', 'utf8')).setupCompleted === true;
+    } catch {
+        return false;
     }
 }
 
@@ -188,10 +185,6 @@ export function configureEntries(existing: Map<string, string>, answers: Configu
     ] as const) {
         if (value) entries.set(key, value);
         else entries.delete(key);
-    }
-    // Unset or empty, the sender follows MAIL_DOMAIN; writing the default would pin it.
-    if (answers.from !== defaultSenderAddress(answers.mailDomain) || existing.get('SMTP_FROM')) {
-        entries.set('SMTP_FROM', answers.from);
     }
 
     entries.set('API_URL', `https://${answers.domain}`);
@@ -253,21 +246,33 @@ export async function configure(
             validateDomain,
         ),
     );
-    const currentMailDomain = existing.get('MAIL_DOMAIN') || (domain === 'localhost' ? 'eigen.localhost' : domain);
-    const mailDomain = cleanDomain(
-        await answer(
-            {
-                message: 'Which mail domain will you use?',
-                help:
-                    'Everyone signs in with an address on it, like jane@example.com.\n' +
-                    'Mailboxes live on this server or wherever its email is hosted now.',
-                flag: '--mail-domain',
-            },
-            flags['mail-domain'],
-            currentMailDomain,
-            validateMailDomain,
-        ),
-    );
+    const setMailDomain = isSetUp() ? existing.get('MAIL_DOMAIN') : undefined;
+    const givenMailDomain = flags['mail-domain'];
+    if (setMailDomain && givenMailDomain !== undefined && cleanDomain(givenMailDomain) !== setMailDomain) {
+        ui.fail(
+            `--mail-domain: every account here is on ${setMailDomain}, so the mail domain cannot change.`,
+            'Leave out --mail-domain.',
+        );
+    }
+    if (setMailDomain && !backfill) {
+        ui.note(`Mail domain: ${setMailDomain}`, ['Set at the first setup; every account is on it.']);
+    }
+    const mailDomain =
+        setMailDomain ??
+        cleanDomain(
+            await answer(
+                {
+                    message: 'Which mail domain will you use?',
+                    help:
+                        'Everyone signs in with an address on it, like jane@example.com.\n' +
+                        'Mailboxes live on this server or wherever its email is hosted now.',
+                    flag: '--mail-domain',
+                },
+                givenMailDomain,
+                existing.get('MAIL_DOMAIN') || (domain === 'localhost' ? 'eigen.localhost' : domain),
+                validateMailDomain,
+            ),
+        );
     const behindProxy = await decide(
         flags.proxy !== undefined ? true : flags['no-proxy'] ? false : undefined,
         (existing.get('COMPOSE_PROFILES') ?? '').split(',').includes('static'),
@@ -376,20 +381,6 @@ export async function configure(
         if (validateText(password)) ui.fail('The relay password contains control characters.', 'Remove them.');
         relay = { host, port, user, password };
     }
-    const currentFrom = existing.get('SMTP_FROM') || defaultSenderAddress(mailDomain);
-    const from =
-        mail || relay
-            ? await answer(
-                  {
-                      message: "Which address should Eigen's own mail come from?",
-                      help: `An address or Name <address>.${relay ? ' The relay must accept it.' : ''}`,
-                      flag: '--from',
-                  },
-                  flags.from,
-                  currentFrom,
-                  validateFrom,
-              )
-            : currentFrom;
 
     // Only the launcher, which always lists the host's networks, picks a subnet; a checkout keeps Compose's default.
     const networksFile = process.env['EIGEN_DOCKER_NETWORKS'];
@@ -422,7 +413,6 @@ export async function configure(
         staticAddress,
         contactEmail,
         relay,
-        from,
         subnet,
     });
     // A backfill keeps every existing value; only the release pins the launcher passes may change a line.
@@ -489,5 +479,5 @@ export async function configure(
             records.map(([type = '', name = '', value]) => `${type.padEnd(5)}${name.padEnd(width)}${value}`),
         );
     }
-    ui.outro(networksFile ? 'Configuration saved.' : 'Next: ./eigen setup builds and starts Eigen.');
+    ui.outro('Configuration saved.');
 }

@@ -50,6 +50,11 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
             ownerOnAccessRequest: true,
         },
     },
+    mail: {
+        senderName: '',
+        senderAddress: '',
+        relaySendsAsUsers: false,
+    },
 });
 
 let loaded = false;

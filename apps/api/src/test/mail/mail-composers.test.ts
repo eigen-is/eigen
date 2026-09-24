@@ -7,11 +7,10 @@ import {
     composeOtpEmail,
     composeShareEmail,
 } from '../../lib/core/mail-composers';
-import type { OutboundMail } from '../../lib/core/mailer';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 
-// The sender depends on which addresses are local, so every test pins the mail domain.
-restoreEnvAfterEach(['MAIL_DOMAIN', 'MAIL_ENABLED', 'SMTP_FROM']);
+// Links for a recipient depend on which addresses are local, so every test pins the mail domain.
+restoreEnvAfterEach(['MAIL_DOMAIN']);
 beforeEach(() => {
     process.env['MAIL_DOMAIN'] = 'test.eigen.is';
 });
@@ -174,43 +173,5 @@ describe('composeInviteEmail', () => {
         expect(mail.html).toContain('Acme'); // footer
         expect(mail.text).toContain('Create your account');
         expect(mail.text).not.toContain('<p>');
-    });
-});
-
-describe("mail on a user's behalf", () => {
-    type Sender = { name: string; email: string };
-    const owner = { name: 'Owner', email: 'owner@test.eigen.is' };
-    const composers: [string, (user: Sender) => OutboundMail][] = [
-        ['composeShareEmail', (user) => composeShareEmail(PATH, 'bob@example.com', user)],
-        ['composeAccessRequestEmail', (user) => composeAccessRequestEmail(PATH, owner, user, null)],
-        [
-            'composeCollaboratorsEmail',
-            (user) => composeCollaboratorsEmail(PATH, null, '<p>Hi</p>', user, 'bob@example.com'),
-        ],
-    ];
-
-    beforeEach(() => {
-        process.env['SMTP_FROM'] = 'Acme <eigen@acme.nl>';
-    });
-
-    describe.each(composers)('%s', (_name, compose) => {
-        test('an external address goes out from the system sender, replying to the user', () => {
-            const mail = compose({ name: 'Alice', email: 'alice@gmail.com' });
-            expect(mail.from).toEqual({ name: 'Alice via Acme', address: 'eigen@acme.nl' });
-            expect(mail.replyTo).toEqual({ name: 'Alice', address: 'alice@gmail.com' });
-        });
-
-        test('with mail off a local address goes out from the system sender too', () => {
-            process.env['MAIL_ENABLED'] = '0';
-            const mail = compose({ name: 'Alice', email: 'alice@test.eigen.is' });
-            expect(mail.from).toEqual({ name: 'Alice via Acme', address: 'eigen@acme.nl' });
-            expect(mail.replyTo).toEqual({ name: 'Alice', address: 'alice@test.eigen.is' });
-        });
-
-        test('a local address with mail on sends as the user', () => {
-            const mail = compose({ name: 'Alice', email: 'alice@test.eigen.is' });
-            expect(mail.from).toEqual({ name: 'Alice', address: 'alice@test.eigen.is' });
-            expect(mail.replyTo).toBeUndefined();
-        });
     });
 });

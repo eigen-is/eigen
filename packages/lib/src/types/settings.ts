@@ -115,6 +115,14 @@ export type ServerSettings = {
             ownerOnAccessRequest: boolean;
         };
     };
+    mail: {
+        // Empty: the organization name.
+        senderName: string;
+        // Empty: noreply@ the mail domain.
+        senderAddress: string;
+        // Without hosted mail, whether the relay accepts every address on the mail domain as a sender.
+        relaySendsAsUsers: boolean;
+    };
 };
 
 export type MountResponse = {

@@ -259,6 +259,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, body, user }): Promise<SentMailResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
+            requireMailEnabled();
             return await (await getMailClient(user)).messageSend(body.mail, {
                 grantAccessRefIds: body.grantAccessRefIds,
             });
