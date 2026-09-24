@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# The release gate, run locally: releases 0.2.98, 0.2.99 (also :latest) and 0.2.100 (with a breaking change), built
+# The release gate, run locally: releases <version>-harness.8, .9 (also :latest) and .10 (with a breaking change), built
 # from the working tree and pushed to a registry:2 of this run. With ./eigen in a docker:cli container that has no Bun:
-# install 0.2.98 and seed a document, sheet, event, contact and chat message; update to :latest; roll back; refuse and
+# install .8 and seed a document, sheet, event, contact and chat message; update to :latest; roll back; refuse and
 # then accept the breaking release; refuse an unknown version and a downgrade; refuse a source install's snapshot, and a
-# snapshot of 0.2.98 while the registry is down, before anything stops; restore a snapshot of 0.2.98, which brings its
-# launcher and Compose files back; install 0.2.99 twice, on one digest.
+# snapshot of .8 while the registry is down, before anything stops; restore a snapshot of .8, which brings its
+# launcher and Compose files back; install .9 twice, on one digest.
 #
 # Usage:  ./docker/test-release.sh
 # Needs:  docker, curl, git. Builds the API three times and the other images once (the first on a cold cache takes
@@ -16,9 +16,10 @@ set -euo pipefail
 
 ADMIN_EMAIL=alice@example.org
 PASSWORD="probe-$$"
-PREVIOUS=0.2.98
-NEW=0.2.99
-BREAKING=0.2.100
+# Prereleases of the working tree's version no real release is named like; .10 after .9 compares as numbers.
+PREVIOUS=$VERSION-harness.8
+NEW=$VERSION-harness.9
+BREAKING=$VERSION-harness.10
 SETUP_FLAGS=(--yes --mail-domain example.org --no-mail --no-relay --no-proxy --contact-email admin@example.org)
 
 scratch_init release
