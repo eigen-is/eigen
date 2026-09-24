@@ -39,7 +39,7 @@ Done when: the gate is green on a real previous-to-new upgrade and its rollback.
 - [ ] Decide how `.env.production` survives the loss of the machine, because a restore without it does not work: in the encrypted archive, or setup makes the operator save it. The drill proves whichever it is
 - [ ] `./eigen backup` runs it on demand and `./eigen update` calls it, replacing today's offline snapshot engine (`apps/api/src/cli/snapshot.ts`). `./eigen restore <archive>` restores the new archive onto an empty install
 - [ ] A restore drill: a fresh machine, the install from block 2, last night's archive, a known document and a known mailbox come back. Write down what was awkward and fix the guide
-- [ ] [BACKUP.md](BACKUP.md) keeps saying what stays the operator's job (today `caddy-data` and the Postfix queue) for the new archive
+- [ ] [BACKUP.md](BACKUP.md) keeps saying what stays the operator's job (today `caddy-data`, the Postfix queue, `backups/` and `docker-compose.override.yml`) for the new archive
 
 Not in this block: phase ④ migration between servers, chunked artifact upload, the orphaned-bucket-object sweep. Their ROADMAP rows stand.
 
