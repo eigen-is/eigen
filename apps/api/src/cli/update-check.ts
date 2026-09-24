@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import pkg from '../../../../package.json' with { type: 'json' };
 import { DECLINED, ROOT, VERSION, VERSION_PATTERN } from './install';
 import { createUi, glyphLine, wrap } from './ui';
 
@@ -8,7 +7,7 @@ type ReleaseNote = { version: string; intro: string; breaking: string[] };
 
 // This image's own changelog, which knows every version up to it.
 const CHANGELOG = join(ROOT, 'CHANGELOG.md');
-const HEADING = new RegExp(`^\\[(${VERSION_PATTERN})\\]`);
+const HEADING = /^\[([^\]]+)\]/;
 
 export const UPDATE_CHECK_OPTIONS = { from: { type: 'string' }, 'accept-breaking': { type: 'boolean' } } as const;
 export const UPDATE_CHECK_USAGE = `Usage: update-check --from <version> [--accept-breaking]
@@ -25,7 +24,13 @@ export function releaseNotes(changelog: string, from: string, to: string): Relea
         .flatMap((section) => {
             const [heading = '', ...lines] = section.split('\n');
             const version = HEADING.exec(heading)?.[1];
-            if (!version || Bun.semver.order(version, from) <= 0 || Bun.semver.order(version, to) > 0) return [];
+            if (
+                !version ||
+                !VERSION_PATTERN.test(version) ||
+                Bun.semver.order(version, from) <= 0 ||
+                Bun.semver.order(version, to) > 0
+            )
+                return [];
             const start = lines.findIndex((line) => line.trim());
             const end = lines.findIndex((line, index) => index > start && !line.trim());
             const paragraph = lines.slice(start, end === -1 ? undefined : end).map((line) => line.trim());
@@ -43,15 +48,23 @@ export function releaseNotes(changelog: string, from: string, to: string): Relea
         .sort((a, b) => Bun.semver.order(a.version, b.version));
 }
 
+// What changed since `from` up to this image.
+export function notesSince(from: string): ReleaseNote[] {
+    return releaseNotes(readFileSync(CHANGELOG, 'utf8'), from, VERSION);
+}
+
 export async function updateCheck(flags: { from?: string; 'accept-breaking'?: boolean }): Promise<void> {
     const ui = await createUi(false);
     const from = flags.from ?? '';
-    if (!VERSION.test(from)) ui.fail('--from takes a version, like 0.2.0.', 'Run it through ./eigen update.');
-    if (Bun.semver.order(from, pkg.version) > 0) {
-        ui.fail(`This is Eigen ${pkg.version}, older than ${from}.`, 'Run ./eigen update without a version.');
+    if (!VERSION_PATTERN.test(from)) ui.fail('--from takes a version, like 0.2.0.', 'Run it through ./eigen update.');
+    if (Bun.semver.order(from, VERSION) > 0) {
+        ui.fail(
+            `Eigen ${VERSION} is older than Eigen ${from}, which runs here.`,
+            './eigen rollback goes back to the version before the last update.',
+        );
     }
 
-    const notes = releaseNotes(readFileSync(CHANGELOG, 'utf8'), from, pkg.version);
+    const notes = notesSince(from);
     for (const { version, intro, breaking } of notes) {
         console.log(glyphLine('active', `Eigen ${version}`));
         for (const line of wrap(intro, 76)) if (line) console.log(glyphLine('bar', line));
@@ -64,12 +77,12 @@ export async function updateCheck(flags: { from?: string; 'accept-breaking'?: bo
 
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
         ui.fail(
-            `Eigen ${pkg.version} has breaking changes, listed above.`,
+            `Eigen ${VERSION} has breaking changes, listed above.`,
             'Read them, then run ./eigen update --accept-breaking.',
         );
     }
     const go = await ui.confirm({
-        message: `Update to Eigen ${pkg.version} despite the breaking changes above?`,
+        message: `Update to Eigen ${VERSION} despite the breaking changes above?`,
         initial: false,
         flag: '--accept-breaking',
     });

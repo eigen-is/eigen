@@ -10,6 +10,7 @@ import {
     realpathSync,
     renameSync,
     rmSync,
+    statfsSync,
     statSync,
     writeFileSync,
 } from 'node:fs';
@@ -17,40 +18,68 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
-import { BACKUP_STAMP_PATTERN, buildBackupStamp } from '@workspace/lib/validation';
+import { BACKUP_STAMP_PATTERN, buildBackupStamp, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import type { Subprocess } from 'bun';
-import pkg from '../../../../package.json' with { type: 'json' };
 import { COLLAB_EPOCH_FILE } from '../lib/collab/epoch';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
+import { SERVER_DIR } from '../lib/config/paths';
+import { PATHS } from '../lib/core/constants';
 import { readEnvFile } from './env-file';
-import { DECLINED, ENV_PATH, installOwner, ownAs, VERSION } from './install';
+import { DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
 import { createUi, glyphLine, type Ui } from './ui';
+import { notesSince } from './update-check';
 
 // Both commands run as root in a container on the install folder (-w /install), so data/ keeps its mixed owners.
 const SNAPSHOTS = 'snapshots';
+const DATA = 'data';
 const META = 'eigen-snapshot.json';
 // Next to data/, so the swap is two renames on one filesystem; root's alone while it holds what a snapshot brought.
 const STAGING = '.eigen/restore';
-// What ./eigen rollback goes back to: the pre-update snapshot, and the version and commit that made it.
+// What ./eigen rollback goes back to, as key=value lines the launcher reads: the pre-update snapshot, its kind, and
+// the version and commit that made it.
 const LAST_UPDATE = '.eigen/last-update';
+const KEEP = 3;
+// A light snapshot leaves out the folders under every home that hold its files and mail: each mount's file tree, beside
+// the mount's own databases, and the Maildir.
+const LIGHT_SKIPS = new RegExp(
+    `^${DATA}/(?!${SERVER_DIR}/)[^/]+/[^/]+/(?:${PATHS.DRIVE.ROOT}/[^/]+/[^/]+|${PATHS.MAIL.ROOT}/${PATHS.MAIL.MAILDIR})$`,
+);
 
-type SnapshotMeta = { version: string; createdAt: string };
+type SnapshotKind = 'full' | 'light';
+type SnapshotMeta = { version: string; createdAt: string; kind: SnapshotKind };
 
 export const SNAPSHOT_NAME = new RegExp(`^eigen-(?<preUpdate>pre-update-)?${BACKUP_STAMP_PATTERN}\\.tar\\.gz$`);
 
-export const SNAPSHOT_OPTIONS = { 'pre-update': { type: 'boolean' } } as const;
-export const SNAPSHOT_USAGE = `Usage: snapshot [--pre-update]
+export const SNAPSHOT_OPTIONS = {
+    light: { type: 'boolean' },
+    keep: { type: 'string' },
+    'pre-update': { type: 'boolean' },
+    check: { type: 'boolean' },
+    from: { type: 'string' },
+} as const;
+export const SNAPSHOT_USAGE = `Usage: snapshot [--light] [--keep <n>] [--pre-update] [--check [--from <version>]]
 
-Writes data/ and ${ENV_PATH} into ${SNAPSHOTS}/eigen-<UTC time>.tar.gz. Stop Eigen first: ./eigen backup does.
+Writes data/ and ${ENV_PATH} into ${SNAPSHOTS}/eigen-<UTC time>.tar.gz, a full snapshot. Stop Eigen first:
+./eigen backup does.
 
-  --pre-update   Name it eigen-pre-update-<UTC time>.tar.gz, after deleting the pre-update snapshots
-                 older than the previous one, and write ${LAST_UPDATE} for ./eigen rollback`;
-// --check is the launcher's: it unpacks and checks while Eigen runs, so a refusal stops nothing.
-export const RESTORE_OPTIONS = { yes: { type: 'boolean' }, check: { type: 'boolean' } } as const;
+  --light            Only the databases and config: every home's files and mail stay out
+  --keep <n>         Then delete all but the newest <n> snapshots made without --pre-update (default ${KEEP})
+  --pre-update       Name it eigen-pre-update-<UTC time>.tar.gz, after deleting the pre-update snapshots
+                     older than the previous one, and write ${LAST_UPDATE} for ./eigen rollback
+  --check            Write nothing: check that ${SNAPSHOTS}/ has room for it, and print kind=full or kind=light
+  --from <version>   With --check: full after all when a release since <version> has breaking changes`;
+// --check and --checked are the launcher's: it unpacks and checks while Eigen runs, so a refusal stops nothing, then
+// reads the version of what it checked.
+export const RESTORE_OPTIONS = {
+    yes: { type: 'boolean' },
+    check: { type: 'boolean' },
+    checked: { type: 'boolean' },
+} as const;
 export const RESTORE_USAGE = `Usage: ./eigen restore <snapshot> [--yes]
 
-Stops Eigen, puts data/ and ${ENV_PATH} back from a snapshot in ${SNAPSHOTS}/, and starts Eigen again.
-The current data/ and ${ENV_PATH} are kept aside.
+Stops Eigen, puts data/ and ${ENV_PATH} back from a snapshot in ${SNAPSHOTS}/, and starts Eigen again. A light
+snapshot puts back only the databases and config it holds, and leaves files and mail as they are. What it replaces
+is kept aside.
 
   --yes   Do not ask`;
 
@@ -67,7 +96,7 @@ export function newestSnapshots(names: string[]): string[] {
 let dataLock: Database | null = null;
 
 function lockData(ui: Ui, command: string): void {
-    const file = join('data/server', DATA_LOCK_FILE);
+    const file = join(DATA, SERVER_DIR, DATA_LOCK_FILE);
     // Root must not make one the API could not open; without one, no API ever ran on this data/.
     if (!existsSync(file)) return;
     dataLock = lockDataDir(file);
@@ -83,14 +112,14 @@ function lockData(ui: Ui, command: string): void {
 async function refusal(): Promise<string | null> {
     const env = lstatSync(join(STAGING, ENV_PATH));
     if (!env.isFile() || env.nlink > 1) return `${ENV_PATH} is not a plain file`;
-    if (!lstatSync(join(STAGING, 'data')).isDirectory()) return 'data is not a folder';
+    if (!lstatSync(join(STAGING, DATA)).isDirectory()) return 'data is not a folder';
     const suspects = Bun.spawn(['find', STAGING, '(', ...SUSPECTS.split(' '), ')', '-print0'], {
         stdout: 'pipe',
         stderr: 'ignore',
     });
     const [listed, code] = await Promise.all([new Response(suspects.stdout).text(), suspects.exited]);
     if (code !== 0) return 'its files cannot be listed';
-    const data = realpathSync(join(STAGING, 'data'));
+    const data = realpathSync(join(STAGING, DATA));
     for (const path of listed.split('\0').filter(Boolean)) {
         const stat = lstatSync(path);
         const name = relative(STAGING, path);
@@ -109,18 +138,73 @@ async function refusal(): Promise<string | null> {
     return null;
 }
 
-export async function snapshot(flags: { 'pre-update'?: boolean }): Promise<void> {
+// data/ under `root` as a light snapshot sees it: the paths it holds, every folder before what is in it, and the
+// folders it leaves out.
+function lightWalk(root = '.'): { held: string[]; skipped: string[] } {
+    const held: string[] = [];
+    const skipped: string[] = [];
+    const walk = (dir: string) => {
+        held.push(dir);
+        for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
+            const path = `${dir}/${entry.name}`;
+            if (!entry.isDirectory()) held.push(path);
+            else if (LIGHT_SKIPS.test(path)) skipped.push(path);
+            else walk(path);
+        }
+    };
+    walk(DATA);
+    return { held, skipped };
+}
+
+export async function snapshot(flags: {
+    light?: boolean;
+    keep?: string;
+    'pre-update'?: boolean;
+    check?: boolean;
+    from?: string;
+}): Promise<void> {
     const ui = await createUi(true);
-    if (!existsSync(ENV_PATH) || !existsSync('data')) {
+    if (!existsSync(ENV_PATH) || !existsSync(DATA)) {
         ui.fail(
             `There is no Eigen install here: ${ENV_PATH} or data/ is missing.`,
             'Run ./eigen backup in the install folder.',
         );
     }
-    lockData(ui, 'backup');
+    const keep = Number(flags.keep ?? KEEP);
+    if (!Number.isInteger(keep) || keep < 1) ui.fail('--keep takes a number of snapshots, like 3.', 'Pass --keep 3.');
+    const from = flags.from;
+    if (from !== undefined && !VERSION_PATTERN.test(from)) {
+        ui.fail('--from takes a version, like 0.2.0.', 'Run it through ./eigen update.');
+    }
+    // A breaking release may convert what a light snapshot leaves out, so only a full one could bring it back.
+    const kind: SnapshotKind =
+        flags.light && !(from && notesSince(from).some(({ breaking }) => breaking.length)) ? 'light' : 'full';
     const owner = installOwner('.');
     if (!existsSync(SNAPSHOTS)) mkdirSync(SNAPSHOTS, { mode: 0o700 });
     ownAs(SNAPSHOTS, owner);
+
+    // What the files take on disk, as du counts it: the most a snapshot of them can take.
+    if (flags.check) {
+        let needed = 0;
+        if (kind === 'light') {
+            needed = lightWalk().held.reduce((sum, path) => sum + lstatSync(path).blocks / 2, 0);
+        } else {
+            const du = Bun.spawn(['du', '-sk', DATA], { stdout: 'pipe', stderr: 'ignore' });
+            const [listed] = await Promise.all([new Response(du.stdout).text(), du.exited]);
+            needed = Number.parseInt(listed, 10);
+        }
+        const { bavail, bsize } = statfsSync(SNAPSHOTS);
+        const free = (bavail * bsize) / 1024;
+        if (!(needed <= free)) {
+            ui.fail(
+                `The ${kind} snapshot needs up to ${formatFileSize(needed * 1024)}; ${SNAPSHOTS}/ has ${formatFileSize(free * 1024)} free.`,
+                `Free space on that disk, or delete old snapshots from ${SNAPSHOTS}/.`,
+            );
+        }
+        console.log(`kind=${kind}`);
+        return;
+    }
+    lockData(ui, 'backup');
 
     // The older pre-update snapshots go first, so the disk holds two while this one is written.
     if (flags['pre-update']) {
@@ -136,7 +220,18 @@ export async function snapshot(flags: { 'pre-update'?: boolean }): Promise<void>
     const createdAt = new Date();
     const name = `eigen-${flags['pre-update'] ? 'pre-update-' : ''}${buildBackupStamp(createdAt)}.tar.gz`;
     const metaDir = mkdtempSync(join(tmpdir(), 'eigen-snapshot-'));
-    writeFileSync(join(metaDir, META), JSON.stringify({ version: pkg.version, createdAt: createdAt.toISOString() }));
+    const meta: SnapshotMeta = { version: VERSION, createdAt: createdAt.toISOString(), kind };
+    writeFileSync(join(metaDir, META), JSON.stringify(meta));
+    // tar's exclusion patterns: every name in these folders is Eigen's own, so none holds a wildcard.
+    const skips = join(metaDir, 'skips');
+    writeFileSync(
+        skips,
+        kind === 'light'
+            ? lightWalk()
+                  .skipped.map((path) => `${path}\n`)
+                  .join('')
+            : '',
+    );
     // One fixed name, so a run that died halfway leaves nothing a later run does not overwrite.
     const partial = join(SNAPSHOTS, '.eigen-snapshot.partial');
     // Numeric owners: data/ holds the containers' ids, which this image may not name. -S keeps a sparse file small.
@@ -148,13 +243,15 @@ export async function snapshot(flags: { 'pre-update'?: boolean }): Promise<void>
             partial,
             '-S',
             '--numeric-owner',
+            '-X',
+            skips,
             '-C',
             metaDir,
             META,
             '-C',
             process.cwd(),
             ENV_PATH,
-            'data',
+            DATA,
         ],
         { stdout: 'ignore', stderr: 'pipe' },
     );
@@ -167,18 +264,47 @@ export async function snapshot(flags: { 'pre-update'?: boolean }): Promise<void>
     chmodSync(partial, 0o600);
     ownAs(partial, owner);
     renameSync(partial, join(SNAPSHOTS, name));
-    console.log(
-        glyphLine('ok', `Saved ${SNAPSHOTS}/${name} (${formatFileSize(statSync(join(SNAPSHOTS, name)).size)})`),
-    );
+    const size = formatFileSize(statSync(join(SNAPSHOTS, name)).size);
+    const described = kind === 'light' ? 'light: databases and config' : 'full';
+    console.log(glyphLine('ok', `Saved ${SNAPSHOTS}/${name} (${described}, ${size})`));
     if (flags['pre-update']) {
         mkdirSync(dirname(LAST_UPDATE), { recursive: true });
-        writeFileSync(LAST_UPDATE, `${name}\n${pkg.version}\n${process.env['EIGEN_COMMIT'] ?? ''}\n`);
+        const commit = process.env['EIGEN_COMMIT'] ?? '';
+        writeFileSync(LAST_UPDATE, `archive=${name}\nversion=${VERSION}\ncommit=${commit}\nkind=${kind}\n`);
         ownAs(LAST_UPDATE, owner);
+        return;
+    }
+    // After this one is written, so a failed snapshot never costs an older one.
+    const older = newestSnapshots(readdirSync(SNAPSHOTS))
+        .filter((file) => !SNAPSHOT_NAME.exec(file)?.groups?.['preUpdate'])
+        .slice(keep);
+    for (const file of older) rmSync(join(SNAPSHOTS, file));
+    if (older.length) console.log(glyphLine('ok', `Removed the older snapshots: ${older.join(', ')}`));
+}
+
+// Every file of the light set here goes aside first, held by the snapshot or not: a database's -wal left beside the
+// one it came with would be replayed onto another. A folder only here stays; one only in the snapshot moves in whole.
+function swapLight(staged: string[], aside: string): void {
+    for (const path of lightWalk().held) {
+        if (lstatSync(path).isDirectory()) continue;
+        const target = join(aside, relative(DATA, path));
+        mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
+        renameSync(path, target);
+    }
+    let moved = '';
+    for (const path of staged) {
+        if (moved && path.startsWith(`${moved}/`)) continue;
+        if (lstatSync(join(STAGING, path)).isDirectory() && lstatSync(path, { throwIfNoEntry: false })) continue;
+        renameSync(join(STAGING, path), path);
+        moved = path;
     }
 }
 
-export async function restore(archive = '', flags: { yes?: boolean; check?: boolean }): Promise<void> {
-    const ui = await createUi(flags.yes === true);
+export async function restore(
+    archive = '',
+    flags: { yes?: boolean; check?: boolean; checked?: boolean },
+): Promise<void> {
+    const ui = await createUi(flags.yes === true || flags.checked === true);
 
     // Only a snapshot in snapshots/, named by the file name or its path from the install folder.
     const snapshots = newestSnapshots(existsSync(SNAPSHOTS) ? readdirSync(SNAPSHOTS) : []);
@@ -199,6 +325,12 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
     const marker = join(STAGING, '.snapshot');
     const marked: (SnapshotMeta & { name: string }) | null =
         !flags.check && existsSync(marker) ? JSON.parse(readFileSync(marker, 'utf8')) : null;
+    if (flags.checked) {
+        if (marked?.name !== name)
+            return ui.fail(`${name} is not checked yet.`, 'Run ./eigen restore, which checks it.');
+        console.log(`version=${marked.version}\nkind=${marked.kind}`);
+        return;
+    }
     let meta: SnapshotMeta;
     if (marked?.name === name) {
         meta = marked;
@@ -222,10 +354,12 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
             !('version' in parsed) ||
             typeof parsed.version !== 'string' ||
             // Bun.semver.order throws on what is not a version.
-            !VERSION.test(parsed.version) ||
+            !VERSION_PATTERN.test(parsed.version) ||
             !('createdAt' in parsed) ||
             typeof parsed.createdAt !== 'string' ||
-            Number.isNaN(Date.parse(parsed.createdAt))
+            Number.isNaN(Date.parse(parsed.createdAt)) ||
+            // Snapshots from before there were two kinds hold everything.
+            ('kind' in parsed && parsed.kind !== 'full' && parsed.kind !== 'light')
         ) {
             return ui.fail(
                 `${name} is not an Eigen snapshot: it has no readable ${META}.`,
@@ -233,17 +367,18 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
             );
         }
         if (readCode !== 0) cannot(readError.trim());
-        meta = { version: parsed.version, createdAt: parsed.createdAt };
+        const kind = 'kind' in parsed && parsed.kind === 'light' ? 'light' : 'full';
+        meta = { version: parsed.version, createdAt: parsed.createdAt, kind };
     }
-    if (Bun.semver.order(meta.version, pkg.version) > 0) {
+    if (Bun.semver.order(meta.version, VERSION) > 0) {
         ui.fail(
-            `${name} is a snapshot of Eigen ${meta.version}; this install runs ${pkg.version}.`,
+            `${name} is a snapshot of Eigen ${meta.version}; this install runs ${VERSION}.`,
             'Update first, then restore.',
         );
     }
 
-    // The swap is two renames: a linked data/ would move the link, and one on another disk cannot be renamed.
-    const data = lstatSync('data', { throwIfNoEntry: false });
+    // The swap is renames: a linked data/ would move the link, and one on another disk cannot be renamed.
+    const data = lstatSync(DATA, { throwIfNoEntry: false });
     if (data && (data.isSymbolicLink() || data.dev !== statSync('.').dev)) {
         ui.fail(
             'Restore needs data/ as a folder inside the install folder.',
@@ -252,10 +387,14 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
     }
     if (!flags.check) lockData(ui, 'restore');
 
-    const what = `${name}, a snapshot of Eigen ${meta.version}`;
+    const what = `${name}, a ${meta.kind} snapshot of Eigen ${meta.version}`;
     if (!flags.yes) {
+        const when = `made on ${formatDate(meta.createdAt)}, ${formatTimeAgo(meta.createdAt)}`;
         const go = await ui.confirm({
-            message: `Replace data/ and ${ENV_PATH} with ${what}, made on ${formatDate(meta.createdAt)}, ${formatTimeAgo(meta.createdAt)}? The current ones are kept aside as data.pre-restore-*.`,
+            message:
+                meta.kind === 'light'
+                    ? `Put back the databases and config of data/ and ${ENV_PATH} from ${what}, ${when}? Files and mail stay as they are; what it replaces is kept aside as data.pre-restore-*.`
+                    : `Replace data/ and ${ENV_PATH} with ${what}, ${when}? The current ones are kept aside as data.pre-restore-*.`,
             initial: false,
             flag: '--yes',
         });
@@ -276,7 +415,7 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
     if (marked?.name !== name) {
         rmSync(STAGING, { recursive: true, force: true });
         mkdirSync(STAGING, { recursive: true, mode: 0o700 });
-        extract = Bun.spawn(['tar', '--numeric-owner', '-xzpf', path, '-C', STAGING, ENV_PATH, 'data'], {
+        extract = Bun.spawn(['tar', '--numeric-owner', '-xzpf', path, '-C', STAGING, ENV_PATH, DATA], {
             stdin: 'ignore',
             stdout: 'ignore',
             stderr: 'pipe',
@@ -297,10 +436,23 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
             );
         }
         if (reason) cannot(reason);
+        // A folder here where a light snapshot holds a file would stop its swap halfway.
+        const conflict =
+            meta.kind === 'light'
+                ? lightWalk(STAGING).held.find(
+                      (held) =>
+                          !lstatSync(join(STAGING, held)).isDirectory() &&
+                          lstatSync(held, { throwIfNoEntry: false })?.isDirectory(),
+                  )
+                : undefined;
+        if (conflict) {
+            rmSync(STAGING, { recursive: true, force: true });
+            cannot(`${conflict} is a folder here and a file in the snapshot`);
+        }
         // A release install runs the images its .env.production pins; a source install builds its own and pins none.
-        const kind = (env: string) =>
+        const install = (env: string) =>
             readEnvFile(env).has('EIGEN_VERSION') ? 'a release install' : 'a source install';
-        const [theirs, ours] = [kind(join(STAGING, ENV_PATH)), kind(ENV_PATH)];
+        const [theirs, ours] = [install(join(STAGING, ENV_PATH)), install(ENV_PATH)];
         if (theirs !== ours) {
             rmSync(STAGING, { recursive: true, force: true });
             ui.fail(
@@ -318,18 +470,25 @@ export async function restore(archive = '', flags: { yes?: boolean; check?: bool
     ownAs(staged, installOwner('.'));
     chmodSync(staged, 0o600);
     // Without it the next start draws a new collab epoch: a tab that loaded a document before reloads, not merges back.
-    rmSync(join(STAGING, 'data/server', COLLAB_EPOCH_FILE), { force: true });
+    rmSync(join(STAGING, DATA, SERVER_DIR, COLLAB_EPOCH_FILE), { force: true });
     const stamp = buildBackupStamp(new Date());
-    const aside: string[] = [];
-    for (const current of ['data', ENV_PATH]) {
-        if (existsSync(current)) {
-            renameSync(current, `${current}.pre-restore-${stamp}`);
-            aside.push(`${current}.pre-restore-${stamp}`);
-        }
+    const [dataAside, envAside] = [DATA, ENV_PATH].map((current) => `${current}${PRE_RESTORE_SUFFIX}${stamp}`);
+    if (meta.kind === 'light') swapLight(lightWalk(STAGING).held, dataAside);
+    else if (existsSync(DATA)) renameSync(DATA, dataAside);
+    if (existsSync(ENV_PATH)) renameSync(ENV_PATH, envAside);
+    for (const current of meta.kind === 'light' ? [ENV_PATH] : [DATA, ENV_PATH]) {
         renameSync(join(STAGING, current), current);
     }
     rmSync(STAGING, { recursive: true });
 
-    console.log(glyphLine('ok', `Restored ${what}`));
+    console.log(
+        glyphLine(
+            'ok',
+            meta.kind === 'light'
+                ? `Restored ${what}: databases and config restored; files and mail kept as they are`
+                : `Restored ${what}`,
+        ),
+    );
+    const aside = [dataAside, envAside].filter((file) => existsSync(file));
     if (aside.length) console.log(glyphLine('ok', `Kept aside: ${aside.join(', ')}`));
 }

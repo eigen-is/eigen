@@ -1,8 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readdirSync, renameSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import pkg from '../../../../package.json' with { type: 'json' };
 import { writeEnvFile } from './env-file';
-import { ENV_PATH, installOwner, ownAs, ROOT } from './install';
+import { ENV_PATH, installOwner, ownAs, ROOT, VERSION } from './install';
 import { createUi } from './ui';
 
 const BUNDLE_FILES = ['eigen', 'docker-compose.yml', '.env.example'];
@@ -28,7 +27,6 @@ export async function bootstrap(flags: { out?: string; force?: boolean }): Promi
     const registry =
         process.env['EIGEN_REGISTRY'] ||
         ui.fail('EIGEN_REGISTRY is not set.', 'Run bootstrap from the Eigen API image.');
-    const { version } = pkg;
     const owner = installOwner(out);
     const bundleDirFiles = readdirSync(join(ROOT, BUNDLE_DIR), { recursive: true, encoding: 'utf8' })
         .map((file) => join(BUNDLE_DIR, file))
@@ -53,15 +51,15 @@ export async function bootstrap(flags: { out?: string; force?: boolean }): Promi
             envPath,
             new Map([
                 ['EIGEN_REGISTRY', registry],
-                ['EIGEN_VERSION', version],
-                ['EIGEN_API_IMAGE', `${registry}/api:${version}`],
+                ['EIGEN_VERSION', VERSION],
+                ['EIGEN_API_IMAGE', `${registry}/api:${VERSION}`],
             ]),
         );
         ownAs(envPath, owner);
     }
     ui.outro(
         flags.force
-            ? `Rewrote the Eigen ${version} bundle files.`
-            : `Wrote Eigen ${version}${starter ? '' : ` (kept the existing ${ENV_PATH})`}. Next: ./eigen setup`,
+            ? `Rewrote the Eigen ${VERSION} bundle files.`
+            : `Wrote Eigen ${VERSION}${starter ? '' : ` (kept the existing ${ENV_PATH})`}. Next: ./eigen setup`,
     );
 }

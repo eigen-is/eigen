@@ -188,8 +188,9 @@ describe('snapshot', () => {
             'data/home/alice/notes.txt',
         ]);
         const meta = JSON.parse((await run(['tar', '-xzOf', archive, 'eigen-snapshot.json'], dir)).stdout);
-        expect(Object.keys(meta)).toEqual(['version', 'createdAt']);
+        expect(Object.keys(meta)).toEqual(['version', 'createdAt', 'kind']);
         expect(meta.version).toBe(version);
+        expect(meta.kind).toBe('full');
         const groups = SNAPSHOT_NAME.exec(name)?.groups;
         expect(Math.floor(Date.parse(meta.createdAt) / 1000) * 1000).toBe(
             (groups && parseBackupStamp(groups)?.getTime()) ?? 0,
@@ -232,26 +233,190 @@ describe('snapshot', () => {
         expect(JSON.parse(meta.stdout).version).toBe(version);
     });
 
-    test('--pre-update names the snapshot, the version and the commit in .eigen/last-update for a rollback', async () => {
+    test('--pre-update names the snapshot, its kind, the version and the commit in .eigen/last-update', async () => {
         const dir = install();
-        const result = await runCli(['snapshot', '--pre-update'], {
+        const result = await runCli(['snapshot', '--pre-update', '--light'], {
             cwd: dir,
             env: { ...TAR_ENV, EIGEN_COMMIT: 'abc1234' },
         });
         expect(result.code).toBe(0);
         const name = /snapshots\/(\S+)/.exec(result.stdout)?.[1];
-        expect(readFileSync(join(dir, '.eigen/last-update'), 'utf8')).toBe(`${name}\n${version}\nabc1234\n`);
+        expect(readFileSync(join(dir, '.eigen/last-update'), 'utf8')).toBe(
+            `archive=${name}\nversion=${version}\ncommit=abc1234\nkind=light\n`,
+        );
     });
 
-    test('a manual snapshot deletes nothing and leaves .eigen/last-update alone', async () => {
+    test('a manual snapshot keeps the newest three made the same way, and no pre-update one counts', async () => {
         const dir = install();
-        const older = ['eigen-pre-update-20200101-000000.tar.gz', 'eigen-pre-update-20210101-000000.tar.gz'];
-        for (const file of [...older, 'eigen-pre-update-20220101-000000.tar.gz']) {
-            writeFileSync(join(dir, 'snapshots', file), 'x');
-        }
-        await snapshot(dir);
-        expect(readdirSync(join(dir, 'snapshots'))).toHaveLength(4);
+        const preUpdate = ['eigen-pre-update-20200101-000000.tar.gz', 'eigen-pre-update-20210101-000000.tar.gz'];
+        const manual = ['eigen-20190101-000000.tar.gz', 'eigen-20200101-000000.tar.gz', 'eigen-20210101-000000.tar.gz'];
+        for (const file of [...preUpdate, ...manual, 'notes.txt']) writeFileSync(join(dir, 'snapshots', file), 'x');
+        const name = await snapshot(dir);
+        expect(readdirSync(join(dir, 'snapshots')).sort()).toEqual(
+            [...preUpdate, ...manual.slice(1), name, 'notes.txt'].sort(),
+        );
         expect(existsSync(join(dir, '.eigen/last-update'))).toBe(false);
+    });
+
+    test('--keep sets how many manual snapshots stay, and takes only a count', async () => {
+        const dir = install();
+        writeFileSync(join(dir, 'snapshots/eigen-20200101-000000.tar.gz'), 'x');
+        const name = await snapshot(dir, '--keep', '1');
+        expect(readdirSync(join(dir, 'snapshots'))).toEqual([name]);
+        for (const keep of ['0', 'two', '1.5']) {
+            const result = await eigen(dir, 'snapshot', '--keep', keep);
+            expect(result.code).toBe(1);
+            expect(result.stderr).toContain('--keep takes a number of snapshots');
+        }
+        expect(readdirSync(join(dir, 'snapshots'))).toEqual([name]);
+    });
+
+    test('a snapshot that fails deletes no older one', async () => {
+        const dir = install();
+        const older = ['eigen-20200101-000000.tar.gz', 'eigen-20210101-000000.tar.gz', 'eigen-20220101-000000.tar.gz'];
+        for (const file of older) writeFileSync(join(dir, 'snapshots', file), 'x');
+        mkdirSync(join(dir, 'snapshots/.eigen-snapshot.partial'));
+        expect((await eigen(dir, 'snapshot')).code).toBe(1);
+        expect(readdirSync(join(dir, 'snapshots')).sort()).toEqual(older);
+    });
+});
+
+// Two homes' worth of what a server holds: databases beside a file tree in every mount, and mail beside its index.
+function server(): string {
+    const dir = install();
+    const write = (path: string, text: string) => {
+        mkdirSync(join(dir, path, '..'), { recursive: true });
+        writeFileSync(join(dir, path), text);
+    };
+    write('data/server/users3.db', 'users before\n');
+    write('data/server/avatars/a.webp', 'avatar\n');
+    write('data/dkim/eigen.example.org/mail.private', 'key\n');
+    for (const home of ['data/home/alice', 'data/team/t1']) {
+        write(`${home}/settings.json`, '{}\n');
+        write(`${home}/eigen.calendar/calendar.db`, 'calendar before\n');
+        write(`${home}/mounts/shared.db`, 'shared\n');
+        write(`${home}/mounts/default/metadata.db`, 'metadata before\n');
+        write(`${home}/mounts/default/data/report.pdf`, 'file before\n');
+        write(`${home}/mounts/default/thumbs/report.webp`, 'thumb\n');
+    }
+    write('data/home/alice/eigen.mail/mail.db', 'index before\n');
+    write('data/home/alice/eigen.mail/Maildir/cur/1.eml', 'message\n');
+    return dir;
+}
+
+const members = async (dir: string, name: string) =>
+    (await run(['tar', '-tzf', join(dir, 'snapshots', name)], dir)).stdout.split('\n').filter(Boolean);
+
+describe('a light snapshot', () => {
+    test('holds data/server, every database and settings file, and the config, but no file tree and no mail', async () => {
+        const dir = server();
+        const name = await snapshot(dir, '--light');
+        const held = await members(dir, name);
+        expect(held.slice(0, 3)).toEqual(['eigen-snapshot.json', '.env.production', 'data/']);
+        for (const path of [
+            'data/server/users3.db',
+            'data/server/avatars/a.webp',
+            'data/dkim/eigen.example.org/mail.private',
+            'data/home/alice/settings.json',
+            'data/home/alice/eigen.calendar/calendar.db',
+            'data/home/alice/eigen.mail/mail.db',
+            'data/home/alice/mounts/shared.db',
+            'data/home/alice/mounts/default/metadata.db',
+            'data/team/t1/mounts/default/metadata.db',
+        ]) {
+            expect(held).toContain(path);
+        }
+        expect(held.filter((path) => /\/mounts\/default\/.+\/|Maildir/.test(path))).toEqual([]);
+        const meta = JSON.parse(
+            (await run(['tar', '-xzOf', join(dir, 'snapshots', name), 'eigen-snapshot.json'], dir)).stdout,
+        );
+        expect(meta.kind).toBe('light');
+    });
+
+    test('puts back the databases and config in place and leaves files and mail as they are', async () => {
+        const dir = server();
+        const name = await snapshot(dir, '--light');
+        writeFileSync(join(dir, 'data/server/users3.db'), 'users after\n');
+        writeFileSync(join(dir, 'data/home/alice/mounts/default/metadata.db'), 'metadata after\n');
+        writeFileSync(join(dir, 'data/home/alice/mounts/default/metadata.db-wal'), 'wal after\n');
+        writeFileSync(join(dir, 'data/home/alice/mounts/default/data/report.pdf'), 'file after\n');
+        writeFileSync(join(dir, 'data/home/alice/mounts/default/data/new.pdf'), 'new file\n');
+        writeFileSync(join(dir, 'data/home/alice/eigen.mail/Maildir/cur/2.eml'), 'new message\n');
+        mkdirSync(join(dir, 'data/home/bob/mounts/default/data'), { recursive: true });
+        writeFileSync(join(dir, 'data/home/bob/mounts/default/metadata.db'), 'bob\n');
+        writeFileSync(join(dir, 'data/home/bob/mounts/default/data/bob.txt'), 'bob file\n');
+        rmSync(join(dir, 'data/team/t1'), { recursive: true });
+        writeFileSync(join(dir, '.env.production'), 'DOMAIN=changed.example.org\n');
+
+        const result = await eigen(dir, 'restore', name, '--yes');
+        expect(result.stderr).toBe('');
+        expect(result.code).toBe(0);
+        expect(result.stdout).toContain(
+            `Restored ${name}, a light snapshot of Eigen ${version}: databases and config restored; files and mail kept as they are`,
+        );
+        const read = (path: string) => readFileSync(join(dir, path), 'utf8');
+        expect(read('data/server/users3.db')).toBe('users before\n');
+        expect(read('data/home/alice/mounts/default/metadata.db')).toBe('metadata before\n');
+        expect(read('.env.production')).toBe(ENV);
+        expect(existsSync(join(dir, 'data/home/alice/mounts/default/metadata.db-wal'))).toBe(false);
+        expect(read('data/home/alice/mounts/default/data/report.pdf')).toBe('file after\n');
+        expect(read('data/home/alice/mounts/default/data/new.pdf')).toBe('new file\n');
+        expect(read('data/home/alice/eigen.mail/Maildir/cur/2.eml')).toBe('new message\n');
+        expect(read('data/home/bob/mounts/default/data/bob.txt')).toBe('bob file\n');
+        expect(existsSync(join(dir, 'data/home/bob/mounts/default/metadata.db'))).toBe(false);
+        expect(read('data/team/t1/mounts/default/metadata.db')).toBe('metadata before\n');
+        expect(existsSync(join(dir, 'data/team/t1/mounts/default/data'))).toBe(false);
+
+        const aside = readdirSync(dir).filter((file) => file.includes('pre-restore'));
+        const dataAside = aside.find((file) => file.startsWith('data.'));
+        expect(aside).toHaveLength(2);
+        expect(result.stdout).toContain(`Kept aside: ${dataAside}`);
+        const kept = (path: string) => readFileSync(join(dir, `${dataAside}`, path), 'utf8');
+        expect(kept('server/users3.db')).toBe('users after\n');
+        expect(kept('home/alice/mounts/default/metadata.db-wal')).toBe('wal after\n');
+        expect(kept('home/bob/mounts/default/metadata.db')).toBe('bob\n');
+        expect(existsSync(join(dir, `${dataAside}`, 'home/alice/mounts/default/data'))).toBe(false);
+    });
+
+    test('asks about the databases and config only, naming the kind', async () => {
+        const dir = server();
+        const name = await snapshot(dir, '--light');
+        const result = await runCli(['restore', name], { cwd: dir, env: TAR_ENV, input: 'n\n' });
+        expect(result.code).toBe(3);
+        expect(result.stdout).toContain(
+            `Put back the databases and config of data/ and .env.production from ${name}, a light snapshot of Eigen ${version}, made on `,
+        );
+        expect(result.stdout).toContain('Files and mail stay as they are');
+    });
+
+    test('is refused before anything moves where this install has a folder in place of one of its files', async () => {
+        const dir = server();
+        const name = await snapshot(dir, '--light');
+        rmSync(join(dir, 'data/home/alice/settings.json'));
+        mkdirSync(join(dir, 'data/home/alice/settings.json'));
+        const result = await eigen(dir, 'restore', name, '--yes');
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain(`${name} cannot be restored: data/home/alice/settings.json is a folder here`);
+        expect(readFileSync(join(dir, 'data/server/users3.db'), 'utf8')).toBe('users before\n');
+        expect(readdirSync(dir).filter((file) => file.includes('pre-restore'))).toEqual([]);
+    });
+});
+
+describe('snapshot --check', () => {
+    test('prints the kind, full unless --light', async () => {
+        const dir = server();
+        expect((await eigen(dir, 'snapshot', '--check')).stdout).toBe('kind=full\n');
+        expect((await eigen(dir, 'snapshot', '--check', '--light')).stdout).toBe('kind=light\n');
+        expect(readdirSync(join(dir, 'snapshots'))).toEqual([]);
+    });
+
+    test('--from makes it full after all when a release since that version is breaking', async () => {
+        const dir = server();
+        expect((await eigen(dir, 'snapshot', '--check', '--light', '--from', version)).stdout).toBe('kind=light\n');
+        expect((await eigen(dir, 'snapshot', '--check', '--light', '--from', '0.1.1')).stdout).toBe('kind=full\n');
+        expect((await eigen(dir, 'snapshot', '--check', '--from', 'latest')).stderr).toContain(
+            '--from takes a version',
+        );
     });
 });
 
@@ -533,6 +698,7 @@ describe('restore', () => {
     test.each([
         ['a garbled version', { version: 'garbage', createdAt: new Date().toISOString() }],
         ['a garbled date', { version, createdAt: 'yesterday' }],
+        ['a kind of snapshot there is not', { version, createdAt: new Date().toISOString(), kind: 'half' }],
     ])('refuses a snapshot with %s as not an Eigen snapshot', async (_, meta) => {
         const dir = install();
         await handMade(dir, 'eigen-20200101-000000.tar.gz', meta);
@@ -583,7 +749,7 @@ describe('restore', () => {
         const name = await snapshot(dir);
         const result = await runCli(['restore', name], { cwd: dir, env: TAR_ENV, input: 'n\n' });
         expect(result.code).toBe(3);
-        expect(result.stdout).toContain(`a snapshot of Eigen ${version}, made on `);
+        expect(result.stdout).toContain(`with ${name}, a full snapshot of Eigen ${version}, made on `);
         expect(result.stdout).toContain(', just now?');
         expect(result.stdout).toContain('kept aside as data.pre-restore-*');
         expect(result.stdout).toContain('Nothing was changed.');
@@ -621,6 +787,18 @@ describe('restore', () => {
         expect(existsSync(join(dir, '.eigen/restore'))).toBe(false);
     });
 
+    test('--checked prints the version and kind of the snapshot a --check run unpacked, and nothing else', async () => {
+        const dir = install();
+        const name = await snapshot(dir, '--light');
+        const before = await eigen(dir, 'restore', name, '--checked');
+        expect(before.code).toBe(1);
+        expect(before.stderr).toContain(`${name} is not checked yet.`);
+        expect((await eigen(dir, 'restore', name, '--check', '--yes')).code).toBe(0);
+        const checked = await eigen(dir, 'restore', name, '--checked');
+        expect(checked.stdout).toBe(`version=${version}\nkind=light\n`);
+        expect(readFileSync(join(dir, 'data/home/alice/notes.txt'), 'utf8')).toBe('original\n');
+    });
+
     test('the swap takes what the archive holds from the --check run instead of reading it again', async () => {
         const dir = install();
         const name = await snapshot(dir);
@@ -630,7 +808,7 @@ describe('restore', () => {
         const swap = await eigen(dir, 'restore', name, '--yes');
         expect(swap.stderr).toBe('');
         expect(swap.code).toBe(0);
-        expect(swap.stdout).toContain(`Restored ${name}, a snapshot of Eigen ${version}`);
+        expect(swap.stdout).toContain(`Restored ${name}, a full snapshot of Eigen ${version}`);
     });
 
     test('while another process holds data/, a backup and a swap are refused, and a check goes ahead', async () => {

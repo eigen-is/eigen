@@ -1,10 +1,9 @@
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import { parseBackupStamp } from '@workspace/lib/validation';
-import pkg from '../../../../package.json' with { type: 'json' };
 import type { ControlStatus } from '../lib/config/server-status';
 import { callControl } from './control-socket';
-import { VERSION } from './install';
+import { VERSION, VERSION_PATTERN } from './install';
 import { newestSnapshots, SNAPSHOT_NAME } from './snapshot';
 import { createUi, type Glyph, glyphLine } from './ui';
 
@@ -16,34 +15,46 @@ type StatusFlags = {
     'new-commits'?: string;
     'mail-queue'?: string;
     snapshots?: string;
+    'snapshots-kb'?: string;
+    files?: string;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CERT_WARN_DAYS = 14;
 
 // --latest is the newest release of a release install, --new-commits how far a checkout is behind: empty when the
-// check failed, left out when it could not run.
+// check failed, left out when it could not run. --files is the version the launcher and Compose files were last
+// written for, which differs from this one while an update that failed halfway is not finished.
 export const STATUS_OPTIONS = {
     services: { type: 'string' },
     latest: { type: 'string' },
     'new-commits': { type: 'string' },
     'mail-queue': { type: 'string' },
     snapshots: { type: 'string' },
+    'snapshots-kb': { type: 'string' },
+    files: { type: 'string' },
 } as const;
 export const STATUS_USAGE = `Usage: status [--services=…] [--latest=…] [--new-commits=…] [--mail-queue=…] [--snapshots=…]
+              [--snapshots-kb=…] [--files=…]
 
 Reports on the running server with what ./eigen status gathers from Docker and the host.`;
 
 // Without the API, the report holds what the launcher knows.
 function printReport(flags: StatusFlags, services: Service[], api: ControlStatus | null): void {
-    const { latest, 'new-commits': commits, 'mail-queue': queue } = flags;
+    const { latest, 'new-commits': commits, 'mail-queue': queue, files } = flags;
     const build: Row[] = api
         ? [{ level: 'ok', label: 'Version', value: `${api.version}${api.commit ? ` (${api.commit})` : ''}` }]
         : [];
     // Bun.semver.order throws on what is not a version.
-    if (commits === '' || (latest !== undefined && !VERSION.test(latest))) {
+    if (files && files !== VERSION) {
+        build.push({
+            level: 'warn',
+            label: 'Update',
+            value: `files of ${files}, running ${VERSION}: run ./eigen update`,
+        });
+    } else if (commits === '' || (latest !== undefined && !VERSION_PATTERN.test(latest))) {
         build.push({ level: 'warn', label: 'Update', value: 'could not check' });
-    } else if (latest && Bun.semver.order(latest, pkg.version) > 0) {
+    } else if (latest && Bun.semver.order(latest, VERSION) > 0) {
         build.push({ level: 'warn', label: 'Update', value: `Eigen ${latest} is out; ./eigen update installs it` });
     } else if (commits && commits !== '0') {
         const one = commits === '1';
@@ -65,14 +76,23 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
         }),
     );
 
-    const snapshot = newestSnapshots((flags.snapshots ?? '').split('\n'))[0];
-    const groups = SNAPSHOT_NAME.exec(snapshot ?? '')?.groups;
+    const snapshots = newestSnapshots((flags.snapshots ?? '').split('\n'));
+    const [snapshot = ''] = snapshots;
+    const groups = SNAPSHOT_NAME.exec(snapshot)?.groups;
     const snapshotAt = groups && parseBackupStamp(groups);
     const data: Row[] = [
         snapshotAt
             ? { level: 'ok', label: 'Last snapshot', value: `${snapshot}, ${formatTimeAgo(snapshotAt)}` }
             : { level: 'warn', label: 'Last snapshot', value: 'none yet; ./eigen backup makes one' },
     ];
+    const kb = Number(flags['snapshots-kb']);
+    if (snapshots.length && kb) {
+        data.push({
+            level: 'ok',
+            label: 'Snapshots',
+            value: `${snapshots.length} in snapshots/, ${formatFileSize(kb * 1024, 1)} on disk`,
+        });
+    }
     if (api) {
         data.unshift({
             level: api.diskFree < api.diskTotal / 10 ? 'warn' : 'ok',
