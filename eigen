@@ -219,7 +219,7 @@ api_cli() {
 # step <while running> <when done> <on failure> <command…>: one line per step, its output in $LOG, under a spinner on a
 # terminal. set -m gives the job its own process group, so Ctrl-C stops all of it.
 step() {
-    running=$1 done=$2 failed=$3
+    step_running=$1 step_done=$2 step_failed=$3
     shift 3
     code=0
     if [ -t 1 ]; then
@@ -228,7 +228,7 @@ step() {
         job=$!
         set +m
         trap 'kill -s TERM -- "-$job" 2>/dev/null || :; wait "$job" 2>/dev/null || :; printf "\r\033[K\033[1A\r\033[K\033[?25h"
-            say "$RED" "■" "$running: cancelled." >&2; exit 130' INT TERM
+            say "$RED" "■" "$step_running: cancelled." >&2; exit 130' INT TERM
         started=$(date +%s)
         frame=0
         printf '\033[?25l\n'
@@ -247,7 +247,7 @@ step() {
                 sub(/^#[0-9]+ ([0-9]+\.[0-9]+ )?/, "")
             } NF && !/^(DONE [0-9.]+s|CACHED)$/ { line = $0 } END { print substr(line, 1, width) }')
             printf '\r\033[K\033[1A\r\033[K%s%s%s  %s...  %s%s%s\n\033[K%s│  %s%s' "$ACCENT" "$glyph" "$RESET" \
-                "$running" "$GRAY" "$elapsed" "$RESET" "$GRAY" "$line" "$RESET"
+                "$step_running" "$GRAY" "$elapsed" "$RESET" "$GRAY" "$line" "$RESET"
             sleep "$TICK" 2>/dev/null || TICK=1
         done
         wait "$job" 2>/dev/null || code=$?
@@ -257,11 +257,11 @@ step() {
         "$@" >"$LOG" 2>&1 </dev/null || code=$?
     fi
     if [ "$code" = 0 ]; then
-        say "$GREEN" '◇' "$done"
+        say "$GREEN" '◇' "$step_done"
         return 0
     fi
     {
-        say "$RED" '■' "$failed"
+        say "$RED" '■' "$step_failed"
         tail -n 20 "$LOG" | sed "s/^/${GRAY}│${RESET}  /"
         say "$GRAY" '└' "Full output: $LOG. ${NEXT:-Fix what it says, then run ./eigen $COMMAND again.}"
     } >&2
@@ -686,20 +686,20 @@ restore() {
     preflight
     need_image "Run ./eigen setup first, then ./eigen restore <snapshot>."
     lock
-    running=$(env_value EIGEN_VERSION)
     check_snapshot "$@"
     # A snapshot is the whole server: a release install goes back to the version whose images it pins, got while Eigen
     # runs on. The checked copy's marker, root's alone, names that version.
-    restored=$running
+    switch_to=''
     if [ "$MODE" = release ]; then
         restored=$(cli_as 0 cat .eigen/restore/.snapshot </dev/null | sed -n 's/.*"version":"\([^"]*\)".*/\1/p')
+        if [ "$restored" != "$(env_value EIGEN_VERSION)" ]; then switch_to=$restored; fi
     fi
-    if [ "$restored" != "$running" ]; then
-        step "Getting Eigen $restored" "Eigen $restored is here" "Could not get Eigen $restored; Eigen runs on as it was" \
-            pull_images "$restored"
+    if [ -n "$switch_to" ]; then
+        step "Getting Eigen $switch_to" "Eigen $switch_to is here" "Could not get Eigen $switch_to; Eigen runs on as it was" \
+            pull_images "$switch_to"
     fi
     swap_snapshot "$@"
-    if [ "$restored" != "$running" ]; then write_bundle "$restored"; fi
+    if [ -n "$switch_to" ]; then write_bundle "$switch_to"; fi
     AT_EXIT=''
     restart
     say "$GRAY" '└' "Check that all is well, then delete what was kept aside."
