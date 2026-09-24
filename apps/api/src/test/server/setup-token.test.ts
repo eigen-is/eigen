@@ -341,8 +341,24 @@ describe('the /setup routes before setup', () => {
     );
 
     test(
+        'an install set up before the mail domain was recorded records none from a boot its owner is not on',
+        async () => {
+            const { mailDomain: _, ...config } = storedConfig();
+            writeFileSync(join(dataRoot, 'server/config.json'), JSON.stringify(config));
+            await startApi({ MAIL_DOMAIN: 'elsewhere.example', PRODUCTION: '1' });
+            expect(storedConfig().mailDomain).toBeFalsy();
+            expect(readFileSync(logPath, 'utf8')).toContain(
+                `The owner's address ${ADMIN_EMAIL} is not on the mail domain elsewhere.example.`,
+            );
+        },
+        LISTEN_TIMEOUT_MS + 5_000,
+    );
+
+    test(
         'an install set up before the mail domain was recorded records the one it runs on',
         async () => {
+            proc.kill('SIGTERM');
+            await proc.exited;
             const { mailDomain: _, ...config } = storedConfig();
             writeFileSync(join(dataRoot, 'server/config.json'), JSON.stringify(config));
             await startApi();

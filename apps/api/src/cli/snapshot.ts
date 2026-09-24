@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite';
 import {
     chmodSync,
+    type Dirent,
     existsSync,
     lstatSync,
     mkdirSync,
@@ -25,6 +26,7 @@ import { COLLAB_EPOCH_FILE } from '../lib/collab/epoch';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
 import { SERVER_DIR } from '../lib/config/paths';
 import { PATHS } from '../lib/core/constants';
+import { isEnoent } from '../lib/core/local-filesystem';
 import { readEnvFile } from './env-file';
 import { DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
 import { createUi, glyphLine, type Ui } from './ui';
@@ -144,11 +146,19 @@ async function refusal(): Promise<string | null> {
 }
 
 // data/ under `root` as a light snapshot sees it: the paths it holds, every folder before what is in it.
-function lightWalk(root = '.'): Held[] {
+export function lightWalk(root = '.'): Held[] {
     const held: Held[] = [];
     const walk = (dir: string) => {
+        let entries: Dirent[];
+        try {
+            entries = readdirSync(join(root, dir), { withFileTypes: true });
+        } catch (error) {
+            // A folder can go mid-walk while Eigen runs, like a -wal.
+            if (isEnoent(error)) return;
+            throw error;
+        }
         held.push({ path: dir, dir: true });
-        for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
+        for (const entry of entries) {
             const path = `${dir}/${entry.name}`;
             if (!entry.isDirectory()) held.push({ path, dir: false });
             else if (!LIGHT_SKIPS.test(path)) walk(path);
@@ -245,7 +255,7 @@ export async function snapshot(
             partial,
             '-S',
             '--numeric-owner',
-            // bsdtar reads -T before every other name, wherever it stands.
+            // -T comes first: GNU tar reads it where it stands, bsdtar before every other name.
             ...(kind === 'light'
                 ? ['--no-recursion', '--null', '-T', members, ENV_PATH, '-C', metaDir, META]
                 : ['-C', metaDir, META, '-C', process.cwd(), ENV_PATH, DATA]),

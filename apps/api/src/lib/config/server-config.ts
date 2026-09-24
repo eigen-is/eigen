@@ -75,10 +75,15 @@ export function getMailDomain(): string {
 // Every account's address was made on the recorded mail domain and never changes; on another one nobody can sign in.
 export async function assertMailDomainUnchanged(): Promise<void> {
     if (isSetupRequired()) return;
-    // Installs set up before the domain was recorded record the one they run on.
-    if (!store.get().mailDomain) await store.set({ mailDomain: getMailDomain() });
+    // Lazy import: user → auth → this module.
+    const { getOrgOwner } = await import('../user');
+    const ownerEmail = (await getOrgOwner())?.email;
+    // Installs set up before the domain was recorded record the one they run on, once the owner's address agrees.
+    if (!store.get().mailDomain && ownerEmail && isInternalAddress(ownerEmail)) {
+        await store.set({ mailDomain: getMailDomain() });
+    }
     const recorded = store.get().mailDomain;
-    if (recorded.toLowerCase() !== getMailDomain().toLowerCase()) {
+    if (recorded && recorded.toLowerCase() !== getMailDomain().toLowerCase()) {
         const mismatch = `MAIL_DOMAIN is ${getMailDomain()}, but the accounts on this server use ${recorded}.`;
         if (isProduction()) {
             console.error(mismatch);
@@ -87,9 +92,7 @@ export async function assertMailDomainUnchanged(): Promise<void> {
         }
         console.warn(mismatch);
     }
-    // Older setups took a free-form owner address. Lazy import: user → auth → this module.
-    const { getOrgOwner } = await import('../user');
-    const ownerEmail = (await getOrgOwner())?.email;
+    // Older setups took a free-form owner address.
     if (ownerEmail && !isInternalAddress(ownerEmail)) {
         console.warn(`The owner's address ${ownerEmail} is not on the mail domain ${getMailDomain()}.`);
     }

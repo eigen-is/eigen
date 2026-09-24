@@ -193,8 +193,11 @@ export const auth = betterAuth({
         before: createAuthMiddleware(async (ctx) => {
             const targetId = ctx.body?.userId;
             if (!ctx.path.startsWith('/admin/') || typeof targetId !== 'string') return;
+            // No session is the plugin's 401, before any lookup that would tell the owner's id apart.
+            const session = await getSessionFromCtx(ctx);
+            if (!session) return;
             if ((await getOrgRole(targetId)) !== 'owner') return;
-            if ((await getSessionFromCtx(ctx))?.user.id !== targetId) {
+            if (session.user.id !== targetId) {
                 throw new APIError('FORBIDDEN', { message: "Only the owner can change the owner's account" });
             }
         }),
