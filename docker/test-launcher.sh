@@ -4,8 +4,8 @@
 # commands and arguments, the preflight refusals, local-build and release mode, need_install, update and rollback
 # refused in a local build, a failing compose config, stop, what update asks the CLI and names the builds, on a release
 # and on the main channel, the tags it refuses, a build whose images differ, a tag that moves during an update, a pinned
-# api image that is not here, the files an unfinished update left, what setup downloads with and without pins, what
-# rollback names, a lock without a pid, and what status passes the CLI about the snapshots, the files of an unfinished
+# api image that is not here, the files an unfinished update left, which build's CLI the handed-over update saves the
+# snapshot with, what setup downloads with and without pins, what rollback names, a lock without a pid, and what status passes the CLI about the snapshots, the files of an unfinished
 # update and the newest build of main; setup in a folder that holds the launcher alone, with the registry or the build
 # .env.production names, and the installer script apps/index/public/install on this host, as a file and on stdin.
 #
@@ -27,8 +27,9 @@ trap 'rm -rf "$FIX"' EXIT
 # STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a dovecot
 # image, and STUB_MOVED that of any image once api was pulled twice, as a tag that moves; STUB_DIGEST the registry
 # digest of every local image; a docker run with STUB_RUN_FAIL among its arguments fails, and one with --checked also
-# prints STUB_CHECKED. A run of bootstrap writes a Compose file into this folder, the starter keys into .env.production
-# when it names no release, keeping the registry it names, and a launcher that prints STUB_LAUNCHER on stderr.
+# prints STUB_CHECKED, and one of snapshot --pre-update writes .eigen/last-update. A run of bootstrap writes a Compose
+# file into this folder, the starter keys into .env.production when it names no release, keeping the registry it
+# names, and a launcher that prints STUB_LAUNCHER on stderr.
 mkdir "$FIX/bin"
 cat >"$FIX/bin/docker" <<'EOF'
 #!/bin/sh
@@ -72,6 +73,11 @@ case $1 in
         echo "stub run: $*"
         case " $* " in *" ${STUB_RUN_FAIL:-none} "*) exit 1 ;; esac
         case " $* " in *" --checked "*) printf '%s\n' "${STUB_CHECKED:-}" ;; esac
+        case " $* " in *" snapshot --pre-update "*)
+            mkdir -p .eigen
+            echo eigen-pre-update-light-20260101-000000.tar.gz >.eigen/last-update
+            ;;
+        esac
         case " $* " in *" bootstrap "*)
             : >docker-compose.yml
             if ! grep -q '^EIGEN_VERSION=' .env.production 2>/dev/null; then
@@ -478,6 +484,21 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: update over the files of the pinned build: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
 
+    # The handover: the new launcher pins the tag, and the running build's CLI saves the snapshot before the switch.
+    mkdir "$FIX/release/data"
+    STUB_DIGEST=ddd launch release update --pulled 0.2.99
+    rm -r "$FIX/release/data" "$FIX/release/.eigen/last-update"
+    sequence=$(printf '%s\n' "$CALLS" | sed -n -e 's/^compose .* stop$/stop/p' -e 's/^compose .* up -d --wait$/up/p' \
+        -e 's/^run .* \([^ ]*\) snapshot --pre-update --light$/snapshot \1/p' \
+        -e 's/^run .* \([^ ]*\) configure --backfill$/configure \1/p' | tr '\n' '|')
+    if [ "$CODE" = 0 ] && [ "$sequence" = 'configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|snapshot ghcr.io/eigen-is/eigen/api:local|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
+        printf '%s\n' "$OUT" | grep -q '│  Saved before the update: snapshots/eigen-pre-update-light-20260101-000000.tar.gz, a light snapshot' &&
+        printf '%s\n' "$OUT" | grep -q '└  ./eigen rollback goes back to Eigen 0.2.99 (abc1234).'; then
+        ok "$SHELL_NAME: update --pulled saves the snapshot with the running build's CLI, switches with the new one, and names what it saved"
+    else
+        fail "$SHELL_NAME: update --pulled: exit $CODE, sequence '$sequence', '$OUT', '$ERR'"
+    fi
+
     STUB_FAIL=compose-config launch local restart
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Eigen did not start' &&
         printf '%s\n' "$CALLS" | grep -q ' config --services$' &&
@@ -533,16 +554,16 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     fi
     STUB_CHECKED=EIGEN_VERSION=0.2.98 launch release restore eigen-20260101-000000.tar.gz
     expect_error 1 '■  The snapshot pins no api image.' "a release restore of a snapshot that pins no images"
-    printf 'archive=eigen-pre-update-light-20260101-000000.tar.gz\nversion=0.2.98\ncommit=fff0000\nkind=light\n' \
-        >"$FIX/release/.eigen/last-update"
+    echo eigen-pre-update-light-20260101-000000.tar.gz >"$FIX/release/.eigen/last-update"
     mkdir "$FIX/release/snapshots"
     : >"$FIX/release/snapshots/eigen-pre-update-light-20260101-000000.tar.gz"
     STUB_CHECKED=$checked launch release rollback --yes
     rm -rf "$FIX/release/snapshots" "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
     if [ "$CODE" = 0 ] &&
-        printf '%s\n' "$OUT" | grep -q '◆  Back from Eigen 0.2.99 (abc1234) to Eigen 0.2.98 (fff0000), from a light snapshot' &&
+        printf '%s\n' "$OUT" | grep -q '◆  Back from Eigen 0.2.99 (abc1234) to the snapshot the last update saved' &&
+        printf '%s\n' "$CALLS" | grep -q ' restore eigen-pre-update-light-20260101-000000.tar.gz --yes$' &&
         printf '%s\n' "$OUT" | grep -q '◇  Eigen 0.2.99 (abc1234) → 0.2.99 (abc1234) is running at https://eigen.example.com/'; then
-        ok "$SHELL_NAME: rollback names the build it leaves and the one .eigen/last-update goes back to"
+        ok "$SHELL_NAME: rollback puts back the snapshot .eigen/last-update names, and names the builds it leaves and reaches"
     else
         fail "$SHELL_NAME: a release rollback: exit $CODE, '$OUT', '$ERR'"
     fi

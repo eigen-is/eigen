@@ -252,11 +252,10 @@ else
 fi
 archive=$(pre_updates)
 archive=${archive% }
-pointer=$(scratch_run cat "$INSTALL/.eigen/last-update" | tr '\n' ' ')
+pointer=$(scratch_run cat "$INSTALL/.eigen/last-update")
 meta=$(scratch_run tar -xzOf "$INSTALL/snapshots/$archive" eigen-snapshot.json || true)
-if [ "$pointer" = "archive=$archive version=$PREVIOUS commit=harness kind=light " ] && [[ $meta == *"\"version\":\"$PREVIOUS\""* ]] &&
-    [[ $archive == eigen-pre-update-light-* ]]; then
-    ok ".eigen/last-update names snapshots/$archive, a light snapshot of $PREVIOUS named for its kind"
+if [ "$pointer" = "$archive" ] && [[ $meta == *"\"version\":\"$PREVIOUS\""* ]] && [[ $archive == eigen-pre-update-light-* ]]; then
+    ok ".eigen/last-update names snapshots/$archive, a light snapshot made by $PREVIOUS and named for its kind"
 else
     fail ".eigen/last-update '$pointer', snapshot $meta"
 fi
@@ -408,7 +407,7 @@ else
     show
 fi
 
-snapshot=$(scratch_run sed -n 's/^archive=//p' "$INSTALL/.eigen/last-update")
+snapshot=$(scratch_run cat "$INSTALL/.eigen/last-update")
 # Only the registry has the images of $PREVIOUS now.
 for name in $IMAGES; do docker image rm "$REGISTRY/$name:$PREVIOUS" >/dev/null; done
 docker stop "eigentest-registry-$RUN" >/dev/null
@@ -494,7 +493,7 @@ fi
 
 eigen rollback --yes
 show
-if [ "$CODE" = 0 ] && says "Back from Eigen $NEW (main2) to Eigen $NEW (main1)" &&
+if [ "$CODE" = 0 ] && says "Back from Eigen $NEW (main2) to the snapshot the last update saved" &&
     says "◇  Eigen $NEW (main2) → $NEW (main1) is running at https://localhost/"; then
     ok "./eigen rollback went back to the previous build of main"
 else

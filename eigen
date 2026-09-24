@@ -364,8 +364,12 @@ cli_help() {
     exit
 }
 
-# A build is an api image, named by its labels as <version> (<revision>) on every install. EIGEN_VERSION says what an
-# install follows: main, the one channel, or the release it was pinned to, which follows latest.
+# A build is an api image, named by its labels as <version> (<revision>) on every install. Three files hold what an
+# install is. .env.production: what runs, EIGEN_VERSION for what the install follows (main, the one channel, or the
+# release it was pinned to, which follows latest) and every image by digest; the CLI's configure writes it from PINS.
+# .eigen/bundle: the api image the launcher and Compose files came from; write_bundle writes it, and status tells by it
+# the files of one build from a server that runs another. .eigen/last-update: the snapshot the last update saved; the
+# CLI's snapshot --pre-update writes it, and rollback, which goes back to it, removes it.
 
 # image_label <image> <version or revision>: that label of a local image.
 image_label() { docker image inspect --format "{{index .Config.Labels \"org.opencontainers.image.$2\"}}" "$1"; }
@@ -429,6 +433,14 @@ with_pins() (
         export "$pin"
         CLI_ENV="$CLI_ENV ${pin%%=*}"
     done
+    "$@"
+)
+
+# with_image <api image> <command…>: runs it with that image's CLI, for the one step of a command that another build
+# than the one it runs on must do.
+with_image() (
+    API_IMAGE=$1
+    shift
     "$@"
 )
 
@@ -591,15 +603,14 @@ prune_images() {
     docker image prune -f --filter "label=org.opencontainers.image.source=$REPO" || :
 }
 
-# write_bundle <api image>: a release install's launcher and Compose files, as that api image writes them. Written to
-# temporary files and renamed, so this running launcher reads on in its own copy. .eigen/bundle names the image first,
-# so status can tell files of one build from a server that still runs another.
+# write_bundle <api image>: a release install's launcher and Compose files, as that api image writes them, to temporary
+# files that are renamed, so this running launcher reads on in its own copy. .eigen/bundle names the image first, so
+# files written halfway are told apart too.
 write_bundle() {
     build=$(describe "$1")
-    API_IMAGE=$1
     echo "$1" >.eigen/bundle
     step "Writing the Eigen $build launcher and Compose files" "Eigen $build files written" \
-        "Could not write the Eigen $build files" cli bootstrap --force --out /install
+        "Could not write the Eigen $build files" with_image "$1" cli bootstrap --force --out /install
 }
 
 # The api image of the files an unfinished update or restore wrote, when .env.production pins another.
@@ -651,7 +662,6 @@ setup() {
         esac
         step "Downloading Eigen $version" "Eigen $version downloaded" "Could not download Eigen $version" $download
         case $download in pull_images*) pin_images "$version" ;; esac
-        API_IMAGE=$(image api)
     fi
 
     # configure picks a free subnet from this list; the CLI container cannot ask Docker itself.
@@ -837,11 +847,11 @@ update_get() {
             die "$REGISTRY/api:$tag names no version." "Name one: ./eigen update <version>. Releases: $REPO/releases"
         fi
     fi
-    # latest moves on, so the install records the release it names.
-    new="$version ($revision)" record=$tag
-    if [ "$tag" = latest ]; then record=$version; fi
+    # latest moves on: the release it names is what is pulled, pinned and recorded.
+    if [ "$tag" = latest ]; then tag=$version; fi
+    new="$version ($revision)"
     # Up to date: the same build, on the line the install already follows.
-    if [ "$new" = "$current" ] && [ "$record" = "$follows" ]; then
+    if [ "$new" = "$current" ] && [ "$tag" = "$follows" ]; then
         if [ "$check" = 1 ]; then
             say "$GRAY" '└' "Eigen $current is up to date."
             exit 0
@@ -853,10 +863,10 @@ update_get() {
         exit 0
     fi
     # The new version's CLI tells what changed since the old one, and refuses a downgrade.
-    API_IMAGE=$REGISTRY/api:$record
-    step "Getting the notes of Eigen $new" "Eigen $new is out" "Could not get Eigen $new" pull_images "$record" api
+    API_IMAGE=$REGISTRY/api:$tag
+    step "Getting the notes of Eigen $new" "Eigen $new is out" "Could not get Eigen $new" pull_images "$tag" api
     # The tag may have moved since the manifest was read.
-    new=$(describe "$REGISTRY/api:$record")
+    new=$(describe "$REGISTRY/api:$tag")
     if [ "$check" = 1 ]; then
         cli update-check --from "$old_version" --accept-breaking
         say "$GRAY" '└' "./eigen update installs it."
@@ -865,18 +875,19 @@ update_get() {
     checked=0
     cli update-check --from "$old_version" $accept || checked=$?
     case $checked in 0) ;; "$DECLINED") exit 0 ;; *) exit "$checked" ;; esac
-    step "Downloading Eigen $new" "Eigen $new downloaded" "Could not download Eigen $new" pull_images "$record"
-    downloaded=$(describe "$REGISTRY/api:$record")
+    step "Downloading Eigen $new" "Eigen $new downloaded" "Could not download Eigen $new" pull_images "$tag"
+    downloaded=$(describe "$REGISTRY/api:$tag")
     if [ "$downloaded" != "$new" ]; then
-        die "$record moved while downloading: the notes were of Eigen $new." "Run ./eigen update again."
+        die "$tag moved while downloading: the notes were of Eigen $new." "Run ./eigen update again."
     fi
     # Before the files of the new version, which a failure would leave with the old images. A breaking release gets a
     # full snapshot, since it may convert what a light one leaves out.
-    pin_images "$record"
+    pin_images "$tag"
     check_room $light --from "$old_version"
     if [ "$KIND" = full ]; then full=--full; fi
     write_bundle "$(answer EIGEN_API_IMAGE "$PINS")"
-    exec ./eigen update --pulled "$record" $full
+    # The new launcher gets the tag and --full as arguments and parses them as this one did; nothing else crosses.
+    exec ./eigen update --pulled "$tag" $full
 }
 
 # The part the launcher of the new version runs: stop, save a snapshot with the running version, switch and start.
@@ -885,7 +896,7 @@ update_apply() {
     if [ ! -d data ]; then die "There is no data/ in $PWD." "Run ./eigen update in the install folder."; fi
     pin_images "$target"
     api_here
-    old_image=$API_IMAGE new_image=$(answer EIGEN_API_IMAGE "$PINS")
+    old_image=$(image api) new_image=$(answer EIGEN_API_IMAGE "$PINS")
     old=$(describe "$old_image")
     new=$(describe "$new_image")
     # What .env.production pins before the switch is what the rollback snapshot pins.
@@ -898,19 +909,18 @@ update_apply() {
     # From the stop on, whatever ends the update starts Eigen again.
     AT_EXIT=restart
     stop
-    # The running version makes the snapshot, so it records that version for a rollback.
+    # The running build makes the snapshot, so it records that build for a rollback.
     kind=full
     if [ -n "$light" ]; then kind=light; fi
-    API_IMAGE=$old_image
-    step "Saving a $kind snapshot" "Snapshot saved" "Could not save the snapshot" cli_as 0 snapshot --pre-update $light
-    API_IMAGE=$new_image
+    step "Saving a $kind snapshot" "Snapshot saved" "Could not save the snapshot" \
+        with_image "$old_image" cli_as 0 snapshot --pre-update $light
     step "Switching to Eigen $new" "Switched to Eigen $new" "Could not write Eigen $new into .env.production" \
         with_pins cli configure --backfill
     AT_EXIT=''
     restart "Fix what it says, then run ./eigen restart, or ./eigen rollback to go back to Eigen $old."
     step "Removing old images" "Old images removed" "Could not remove the old images" prune_images $old_pins
     say "$GREEN" '◇' "Eigen $old → $new is running at https://$domain/"
-    say "$GRAY" '│' "Saved before the update: snapshots/$(answer archive "$(cat .eigen/last-update)"), a $kind snapshot"
+    say "$GRAY" '│' "Saved before the update: snapshots/$(cat .eigen/last-update), a $kind snapshot"
     say "$GRAY" '└' "./eigen rollback goes back to Eigen $old."
 }
 
@@ -936,10 +946,7 @@ rollback() {
     if [ ! -f .eigen/last-update ]; then
         die "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
     fi
-    # LAST_UPDATE in apps/api/src/cli/snapshot.ts: the CLI writes these keys.
-    last=$(cat .eigen/last-update)
-    archive=$(answer archive "$last") commit=$(answer commit "$last") kind=$(answer kind "$last")
-    back="$(answer version "$last") ($commit)"
+    archive=$(cat .eigen/last-update)
     if [ ! -f "snapshots/$archive" ]; then
         die "snapshots/$archive, saved before the update, is gone." "Restore another snapshot with ./eigen restore <snapshot>."
     fi
@@ -947,7 +954,7 @@ rollback() {
     lock
     api_here
     current=$(describe "$(image api)")
-    say "$ACCENT" '◆' "Back from Eigen $current to Eigen $back, from a $kind snapshot"
+    say "$ACCENT" '◆' "Back from Eigen $current to the snapshot the last update saved"
     check_snapshot "$archive" $yes
     pins=$(cli_as 0 restore "$archive" --checked </dev/null)
     pull_pinned "$pins"

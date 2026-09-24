@@ -37,8 +37,7 @@ const SNAPSHOTS = 'snapshots';
 const META = 'eigen-snapshot.json';
 // Next to data/, so the swap is two renames on one filesystem; root's alone while it holds what a snapshot brought.
 const STAGING = '.eigen/restore';
-// What ./eigen rollback goes back to, as key=value lines the launcher reads: the pre-update snapshot, its kind, and
-// the version and commit that made it.
+// The pre-update snapshot ./eigen rollback goes back to, by name.
 const LAST_UPDATE = '.eigen/last-update';
 const KEEP = 3;
 // A light snapshot leaves out the folders under every home that hold its files and mail: each mount's file tree, beside
@@ -276,8 +275,7 @@ export async function snapshot(
     console.log(glyphLine('ok', `Saved ${SNAPSHOTS}/${name} (${described}, ${size})`));
     if (flags['pre-update']) {
         mkdirSync(dirname(LAST_UPDATE), { recursive: true });
-        const commit = process.env['EIGEN_COMMIT'] ?? '';
-        writeFileSync(LAST_UPDATE, `archive=${name}\nversion=${VERSION}\ncommit=${commit}\nkind=${kind}\n`);
+        writeFileSync(LAST_UPDATE, `${name}\n`);
         ownAs(LAST_UPDATE, owner);
         return;
     }
