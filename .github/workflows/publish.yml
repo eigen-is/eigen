@@ -6,10 +6,11 @@ on:
     branches: [main]
     tags: ['v*']
 
-# A newer push to main replaces a build of main still running; a release always finishes.
+# GitHub keeps one pending run per group and lets the running one finish, so a cancel never leaves :main mixed: a
+# promote that stopped between two images.
 concurrency:
   group: publish-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref_type == 'branch' }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -100,7 +101,7 @@ jobs:
 
       # No provenance or SBOM: either makes a candidate an index of its own, and promote's index holds the two platform
       # images alone; the launcher pins that index's digest. An image ignores the build args it does not use. The
-      # candidate tags are no version and no channel, so no launcher resolves one.
+      # candidate tags are no version, latest or main, so the launcher refuses them.
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.image.context }}

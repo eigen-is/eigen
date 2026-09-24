@@ -366,7 +366,7 @@ cli_help() {
 }
 
 # A version is <n>.<n>.<n>, with an optional -suffix; VERSION_PATTERN in apps/api/src/cli/install.ts orders them. Any
-# other EIGEN_VERSION is a channel, main: a tag that moves with every build.
+# other EIGEN_VERSION is main, the one channel: a tag that moves with every build.
 is_version() {
     case $1 in [0-9]*.[0-9]*.[0-9]*) return 0 ;; esac
     return 1
@@ -389,9 +389,21 @@ pull_refs() {
     for ref in "$@"; do docker image inspect "$ref" >/dev/null 2>&1 || docker pull "$ref" || return 1; done
 }
 
-# pin_images <version>: PINS, the release as configure writes it, each image by its registry digest.
+# pin_images <version or channel>: PINS, the release as configure writes it, each image by its registry digest. A
+# channel's tag moves image by image while a build is published, so its five images must name one commit.
 PINS=''
 pin_images() {
+    if ! is_version "$1"; then
+        builds='' first='' mixed=''
+        for name in $IMAGES; do
+            revision=$(image_label "$REGISTRY/$name:$1" revision)
+            if [ -z "$builds" ]; then first=$revision; elif [ "$revision" != "$first" ]; then mixed=1; fi
+            builds="${builds:+$builds, }$name $revision"
+        done
+        if [ -n "$mixed" ]; then
+            die "The images of $1 are from different builds: $builds." "A build of $1 is being published; run ./eigen $COMMAND again in a few minutes."
+        fi
+    fi
     PINS="EIGEN_REGISTRY=$REGISTRY EIGEN_VERSION=$1"
     for name in $IMAGES; do
         digest=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' \
@@ -412,6 +424,13 @@ with_pins() (
     done
     "$@"
 )
+
+# The api image .env.production pins, downloaded when it is not here: a pull that moves a channel's tag leaves the
+# build it replaced without a local name.
+api_here() {
+    pull_refs "$(image api)" >"$LOG" 2>&1 ||
+        die "The image Eigen runs, $(image api), is not here and cannot be downloaded." "Check the network, then run ./eigen $COMMAND again."
+}
 
 # release_version <tag>: the version annotated on the registry's api:<tag>, without a pull; empty without one.
 release_version() {
@@ -640,10 +659,20 @@ setup() {
         if [ -z "$version" ]; then
             die ".env.production names no Eigen release." "Get one first: docker run --rm -v \"\$PWD:/out\" $REGISTRY/api bootstrap"
         fi
-        step "Downloading Eigen $version" "Eigen $version downloaded" "Could not download Eigen $version" \
-            pull_images "$version"
-        pin_images "$version"
-        API_IMAGE=$REGISTRY/api:$version
+        # A tag is resolved to digests once, by the first setup or by update: a rerun gets the images already pinned.
+        case $(image api) in
+            *@sha256:*)
+                refs=$(for name in $IMAGES; do image "$name"; done)
+                step "Downloading Eigen $version" "Eigen $version downloaded" "Could not download Eigen $version" \
+                    pull_refs $refs
+                ;;
+            *)
+                step "Downloading Eigen $version" "Eigen $version downloaded" "Could not download Eigen $version" \
+                    pull_images "$version"
+                pin_images "$version"
+                ;;
+        esac
+        API_IMAGE=$(image api)
     fi
 
     # configure picks a free subnet from this list; the CLI container cannot ask Docker itself.
@@ -838,8 +867,13 @@ update_get() {
         exec ./eigen update --pulled $full
     fi
 
+    # main is the only channel; any other tag, such as publish.yml's candidates, is no release.
+    if [ -n "$target" ] && [ "$target" != latest ] && [ "$target" != main ] && ! is_version "$target"; then
+        die "Eigen has no \"$target\"." "Name a version (./eigen update 0.3.1), latest, or the main channel (./eigen update main)."
+    fi
     old=$(env_value EIGEN_VERSION)
     if [ -z "$old" ]; then die ".env.production names no Eigen release." "Run ./eigen setup first."; fi
+    api_here
     current=$(describe "$old" "$(image api)")
     # Release notes and the breaking question go by version; a channel's api image names the version it was built as.
     old_version=$old
@@ -923,6 +957,7 @@ update_apply() {
         check_room $light
     else
         pin_images "$target"
+        api_here
         old_image=$API_IMAGE new_image=$REGISTRY/api:$target
         old=$(describe "$(env_value EIGEN_VERSION)" "$old_image") new=$(describe "$target" "$new_image")
         # What .env.production pins before the switch is what the rollback snapshot pins.
@@ -1003,6 +1038,7 @@ rollback() {
         fi
         current="$EIGEN_VERSION ($EIGEN_COMMIT)" back="$back ($commit)"
     else
+        api_here
         current=$(describe "$(env_value EIGEN_VERSION)" "$(image api)")
         if ! is_version "$(env_value EIGEN_VERSION)"; then back="$back ($commit)"; fi
     fi

@@ -49,10 +49,10 @@ export async function bootstrap(flags: { out?: string; force?: boolean }): Promi
     const starter = !existsSync(envPath);
     const existing = readEnvFile(envPath);
     // A source install's file names no release until it moves to one.
-    const pinned = !existing.has('EIGEN_VERSION');
+    const pin = !existing.has('EIGEN_VERSION');
     // A build of a channel pins the channel, which ./eigen update then follows.
     const version = process.env['EIGEN_CHANNEL'] || VERSION;
-    if (pinned) {
+    if (pin) {
         writeEnvFile(
             envPath,
             new Map([
@@ -64,10 +64,10 @@ export async function bootstrap(flags: { out?: string; force?: boolean }): Promi
         );
         ownAs(envPath, owner);
     }
-    const kept = pinned ? `pinned ${version} in the existing ${ENV_PATH}` : `kept the existing ${ENV_PATH}`;
+    const kept = pin ? `pinned ${version} in the existing ${ENV_PATH}` : `kept the existing ${ENV_PATH}`;
     ui.outro(
         flags.force
-            ? `Rewrote the Eigen ${VERSION} bundle files${pinned ? ` and pinned ${version} in ${ENV_PATH}` : ''}.`
+            ? `Rewrote the Eigen ${VERSION} bundle files${pin ? ` and pinned ${version} in ${ENV_PATH}` : ''}.`
             : `Wrote Eigen ${VERSION}${starter ? '' : ` (${kept})`}. Next: ./eigen setup`,
     );
 }

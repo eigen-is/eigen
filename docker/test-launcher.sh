@@ -2,8 +2,9 @@
 # The launcher alone, without a stack: under dash (debian:bookworm-slim), BusyBox sh and this host's /bin/sh, with a
 # stub docker on PATH that answers info and compose version and fails on demand. Covers every command's help, unknown
 # commands and arguments, the preflight refusals, source and release mode, need_install, a failing compose config, stop,
-# what update asks the CLI, on a release and on the main channel, and what status passes it about the snapshots, the
-# files of an unfinished update and the newest build of a channel.
+# what update asks the CLI, on a release and on the main channel, the tags it refuses, a build of main whose images
+# differ, a pinned api image that is not here, what setup downloads with and without pins, and what status passes the
+# CLI about the snapshots, the files of an unfinished update and the newest build of a channel.
 #
 # Usage:  ./docker/test-launcher.sh
 # Needs:  docker (pulls debian:bookworm-slim and busybox once).
@@ -19,8 +20,8 @@ trap 'rm -rf "$FIX"' EXIT
 # The stub logs every call to $STUB_LOG. STUB_INFO and STUB_COMPOSE answer info and compose version, empty for a
 # failure; STUB_FAIL names the compose subcommands and docker commands that fail; STUB_IMAGE=1 makes image inspect fail;
 # STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any api tag names;
-# STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image; a docker run with STUB_RUN_FAIL among its
-# arguments fails, and one with --checked also prints STUB_CHECKED.
+# STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a dovecot
+# image; a docker run with STUB_RUN_FAIL among its arguments fails, and one with --checked also prints STUB_CHECKED.
 mkdir "$FIX/bin"
 cat >"$FIX/bin/docker" <<'EOF'
 #!/bin/sh
@@ -47,6 +48,7 @@ case $1 in
         case $* in
             'image ls '*) ;;
             *Labels*image.version*) echo "${STUB_LABEL_VERSION:-0.2.99}" ;;
+            *Labels*image.revision*/dovecot*) echo "${STUB_LABEL_REVISION_DOVECOT:-${STUB_LABEL_REVISION:-abc1234}}" ;;
             *Labels*image.revision*) echo "${STUB_LABEL_REVISION:-abc1234}" ;;
             *) exit "${STUB_IMAGE:-0}" ;;
         esac
@@ -76,8 +78,11 @@ mkdir "$FIX/source/.git"
 : >"$FIX/source/docker-compose.build.yml"
 cp "$REPO_ROOT/.bun-version" "$REPO_ROOT/package.json" "$FIX/source/"
 for dir in source release; do printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=0.2.99\n' >"$FIX/$dir/.env.production"; done
-printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=main\nEIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api@sha256:aaa\n' \
-    >"$FIX/channel/.env.production"
+printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=main\n' >"$FIX/channel/.env.production"
+for name in api frontend postfix dovecot unbound; do
+    printf 'EIGEN_%s_IMAGE=ghcr.io/eigen-is/eigen/%s@sha256:aaa\n' "$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')" \
+        "$name" >>"$FIX/channel/.env.production"
+done
 
 docker pull -q debian:bookworm-slim >/dev/null
 docker pull -q busybox >/dev/null
@@ -90,7 +95,7 @@ launch() {
     shift
     : >"$FIX/calls.log"
     for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_REVISION STUB_LABEL_VERSION \
-        STUB_LABEL_REVISION STUB_RUN_FAIL STUB_CHECKED; do
+        STUB_LABEL_REVISION STUB_LABEL_REVISION_DOVECOT STUB_RUN_FAIL STUB_CHECKED; do
         if [ -n "${!name+set}" ]; then vars+=("$name=${!name}"); fi
     done
     CODE=0
@@ -270,6 +275,45 @@ for SHELL_NAME in dash busybox host; do
         ok "$SHELL_NAME: update <version> on main asks that version's CLI from the version of the running build"
     else
         fail "$SHELL_NAME: update 0.3.0 on main: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    STUB_IMAGE=1 STUB_REVISION=abc1234 STUB_LABEL_REVISION=abc1234 launch channel update --check
+    if [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$CALLS" | grep -m 1 '^pull ')" = 'pull ghcr.io/eigen-is/eigen/api@sha256:aaa' ]; then
+        ok "$SHELL_NAME: update --check without the pinned api image here downloads it first"
+    else
+        fail "$SHELL_NAME: update --check without the pinned api image: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    STUB_IMAGE=1 STUB_FAIL=pull launch channel update --check
+    expect_error 1 '■  The image Eigen runs, ghcr.io/eigen-is/eigen/api@sha256:aaa, is not here and cannot be downloaded.' \
+        "update --check when the pinned api image can be neither found nor downloaded"
+    STUB_REVISION=def5678 STUB_LABEL_REVISION=abc1234 STUB_LABEL_REVISION_DOVECOT=def5678 launch channel update
+    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  The images of main are from different builds: api abc1234, frontend abc1234, postfix abc1234, dovecot def5678, unbound abc1234.' &&
+        ! printf '%s\n' "$CALLS" | grep -q ' stop$'; then
+        ok "$SHELL_NAME: update refuses the images of main when they are of different builds, before anything stops"
+    else
+        fail "$SHELL_NAME: update to a mixed main: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    launch release update candidate-0.3.0-arm64
+    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Eigen has no "candidate-0.3.0-arm64".' &&
+        ! printf '%s\n' "$CALLS" | grep -q '^pull '; then
+        ok "$SHELL_NAME: update to a tag that is no version, latest or main is refused before anything is pulled"
+    else
+        fail "$SHELL_NAME: update candidate-0.3.0-arm64: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    # A tag is resolved to digests once: an install that pins them keeps them.
+    STUB_IMAGE=1 launch channel setup
+    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -q '^pull ghcr.io/eigen-is/eigen/api@sha256:aaa$' &&
+        ! printf '%s\n' "$CALLS" | grep -q '^pull ghcr.io/eigen-is/eigen/api:main$' &&
+        printf '%s\n' "$CALLS" | grep ' configure$' | grep -vq EIGEN_VERSION; then
+        ok "$SHELL_NAME: setup on an install that pins digests downloads those, and leaves the pins as they are"
+    else
+        fail "$SHELL_NAME: setup on main: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    STUB_IMAGE=1 launch release setup
+    if printf '%s\n' "$CALLS" | grep -q '^pull ghcr.io/eigen-is/eigen/api:0.2.99$' &&
+        printf '%s\n' "$ERR" | grep -q 'api:0.2.99 has no registry digest'; then
+        ok "$SHELL_NAME: setup on an install that pins no digests downloads its version and pins it"
+    else
+        fail "$SHELL_NAME: setup on 0.2.99: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     STUB_REVISION=def5678 launch channel status
     if printf '%s\n' "$CALLS" | grep -q ' --latest=def5678$'; then

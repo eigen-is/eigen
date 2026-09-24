@@ -8,8 +8,8 @@
 # build, and leave main for .10; install from main; install .9 twice, on one digest.
 #
 # Usage:  ./docker/test-release.sh
-# Needs:  docker, curl, git. Builds the API five times and the other images once (the first on a cold cache takes
-#         minutes).
+# Needs:  docker, curl, git. Builds the API five times and the other images three times, twice from the cache (the
+#         first on a cold cache takes minutes).
 
 set -euo pipefail
 
@@ -157,12 +157,22 @@ check_running() {
 # check_channel <commit>: check_running on the build of main at that commit, which is $NEW's code.
 check_channel() { check_running "$NEW ($1) on main" main; }
 
-# build_main <commit>: api:main from $NEW's code at that commit, pushed; the installs must pull it.
+# build_main <commit>: the five images of a build of main at that commit, api from $NEW's code, the others from
+# $PREVIOUS's cache, each labeled with the commit as publish.yml labels them. Pushed as :main and untagged, so the
+# installs pull what they run. Like an install's own pull of a new build, the tag moves off the build an install pins.
 build_main() {
+    local name
     build -f "$SCRATCH/src-$NEW/docker/api/Dockerfile" --build-arg "EIGEN_VERSION=$NEW" --build-arg "EIGEN_COMMIT=$1" \
         --build-arg EIGEN_CHANNEL=main --build-arg "EIGEN_REGISTRY=$REGISTRY" -t "$REGISTRY/api:main" "$SCRATCH/src-$NEW"
-    docker push -q "$REGISTRY/api:main" >/dev/null
-    docker image rm "$REGISTRY/api:main" >/dev/null
+    build -f "$SCRATCH/src-$PREVIOUS/docker/frontend/Dockerfile" --build-arg "EIGEN_COMMIT=$1" \
+        -t "$REGISTRY/frontend:main" "$SCRATCH/src-$PREVIOUS"
+    for name in postfix dovecot unbound; do
+        build --build-arg "EIGEN_COMMIT=$1" -t "$REGISTRY/$name:main" "$SCRATCH/src-$PREVIOUS/docker/$name"
+    done
+    for name in $IMAGES; do
+        docker push -q "$REGISTRY/$name:main" >/dev/null 2>&1
+        docker image rm "$REGISTRY/$name:main" >/dev/null
+    done
 }
 
 # The api image the install runs, by ID.
@@ -198,7 +208,7 @@ for name in $IMAGES; do
         docker tag "$REGISTRY/$name:$PREVIOUS" "$REGISTRY/$name:$BREAKING"
     fi
     docker tag "$REGISTRY/$name:$NEW" "$REGISTRY/$name:latest"
-    for tag in "$PREVIOUS" "$NEW" "$BREAKING" latest; do docker push -q "$REGISTRY/$name:$tag" >/dev/null; done
+    for tag in "$PREVIOUS" "$NEW" "$BREAKING" latest; do docker push -q "$REGISTRY/$name:$tag" >/dev/null 2>&1; done
 done
 # The installs must pull what they run.
 remove_registry_images
@@ -429,14 +439,6 @@ header "The main channel"
 # registry:2 over plain HTTP takes no annotations, so the launcher finds the commit of main's newest build by pulling
 # api:main and reading its label.
 build_main main1
-for name in $IMAGES; do
-    if [ "$name" != api ]; then
-        docker pull -q "$REGISTRY/$name:$PREVIOUS" >/dev/null
-        docker tag "$REGISTRY/$name:$PREVIOUS" "$REGISTRY/$name:main"
-        docker push -q "$REGISTRY/$name:main" >/dev/null
-        docker image rm "$REGISTRY/$name:main" >/dev/null
-    fi
-done
 eigen update main
 show
 if [ "$CODE" = 0 ] && says "◇  Eigen $PREVIOUS → main (main1) is running at https://localhost/"; then
