@@ -106,19 +106,13 @@ Eigen runs in Docker: **Caddy** (reverse proxy with automatic HTTPS), **Eigen AP
 
 ```bash
 mkdir -p /opt/eigen && cd /opt/eigen
-docker run --rm -v "$PWD:/out" ghcr.io/eigen-is/eigen/api:<version> bootstrap
+docker run --rm -v "$PWD:/out" ghcr.io/eigen-is/eigen/api:latest bootstrap
 ./eigen setup
 ```
 
-Or from source, which builds the images on the server:
+`bootstrap` writes the newest release's `eigen` command and Compose file, and pins that release. `./eigen setup` asks for your web address, mail domain, how HTTPS reaches Eigen and whether to host email, starts Eigen, and prints a one-time link that finishes the setup in your browser. The same command updates, backs up and restores: `./eigen help`. See the [Setup Guide](docker/SETUP-GUIDE.md) for step-by-step instructions.
 
-```bash
-git clone https://github.com/eigen-is/eigen.git /opt/eigen
-cd /opt/eigen
-./eigen setup
-```
-
-`./eigen setup` asks for your web address, mail domain, how HTTPS reaches Eigen and whether to host email, starts Eigen, and prints a one-time link that finishes the setup in your browser. The same command updates, backs up and restores: `./eigen help`. See the [Setup Guide](docker/SETUP-GUIDE.md) for step-by-step instructions.
+`./eigen` also runs in a clone of this repository, where it builds the images from source. That is for developing Eigen: see [CONTRIBUTING.md § Eigen in Docker](docs/CONTRIBUTING.md#eigen-in-docker).
 
 ### Development
 
