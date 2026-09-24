@@ -479,5 +479,5 @@ export async function configure(
             records.map(([type = '', name = '', value]) => `${type.padEnd(5)}${name.padEnd(width)}${value}`),
         );
     }
-    ui.outro(networksFile ? 'Configuration saved.' : 'Next: ./eigen setup builds and starts Eigen.');
+    ui.outro('Configuration saved.');
 }
