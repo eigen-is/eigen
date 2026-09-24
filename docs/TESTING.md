@@ -85,12 +85,11 @@ Run them one at a time: two started together can pick the same subnet. `./docker
 
 | Harness | What it proves |
 |---|---|
-| `docker/test-launcher.sh` | The launcher alone, under dash, BusyBox `sh` and the host's `/bin/sh` with a stub `docker`: every command's help, the refusals, source and release mode, the main channel, the lock, setup beside the launcher alone, and the installer script `apps/index/public/install`. No stack. |
+| `docker/test-launcher.sh` | The launcher alone, under dash, BusyBox `sh` and the host's `/bin/sh` with a stub `docker`: every command's help, the refusals, local-build and release mode (a local build refuses `update` and `rollback`), the main channel, the lock, setup beside the launcher alone, and the installer script `apps/index/public/install`. No stack. |
 | `docker/test-cli.sh` | The operator commands (`status`, the control socket, the setup link, `reset-password`, `backup`, `restore` and their refusals) on installs made as another uid and as root. |
 | `docker/test-interactive.sh` | The questions as a person answers them in a terminal, typed by `expect` (install it first), Ctrl-C included. |
 | `docker/test-deployments.sh` | Every `COMPOSE_PROFILES` shape (`edge,mail`, `static,mail`, `edge`, `static`) and a custom subnet: pages, app bundles, the API, WebSockets, the mail banners, and relay mail and collab sync without hosted mail. Run it before merging a change to `eigen`, `apps/api/src/cli/configure.ts`, a Compose file or a Caddyfile. |
 | `docker/test-host-proxies.sh` | nginx, Caddy and Apache in front of `eigen-static` with the snippets `./eigen setup` writes. |
-| `docker/test-update.sh` | A source install's update, a broken build and its fix, and the rollback. |
 | `docker/test-release.sh` | The release gate the publish workflow runs before it builds: releases in a registry of its own, update, rollback, a breaking release, the refused versions, restoring a snapshot of an older release, the main channel, and installing from the launcher alone. |
 | `docker/test-mail-hardening.sh` | The mail hardening of [SETUP-GUIDE.md § Mail abuse hardening](../docker/SETUP-GUIDE.md#mail-abuse-hardening): sender checks, the queue alert and the SASL failure limiters. About 6 minutes; `PROBES=2,3,4` runs a subset. Its comments explain the SMTP AUTH behavior that looks like a bug and is not. |
 

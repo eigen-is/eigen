@@ -111,7 +111,7 @@ curl -fsSL https://eigen.is/install | sh
 
 The script fetches the `eigen` command and runs `./eigen setup`. Setup downloads the newest release, asks for your web address, mail domain, how HTTPS reaches Eigen and whether to host email, starts Eigen, and prints a one-time link that finishes the setup in your browser. The same command updates, backs up and restores: `./eigen help`. Rather not pipe a script into `sh`? The [Setup Guide](docker/SETUP-GUIDE.md) shows the same install from the release image with one `docker run`, and every step after it.
 
-`./eigen` also runs in a clone of this repository, where it builds the images from source. That is for developing Eigen: see [CONTRIBUTING.md § Eigen in Docker](docs/CONTRIBUTING.md#eigen-in-docker).
+`./eigen setup` also builds the images from a clone of this repository. That is for developing Eigen: see [CONTRIBUTING.md § Eigen in Docker](docs/CONTRIBUTING.md#eigen-in-docker).
 
 ### Development
 

@@ -100,8 +100,8 @@ for row in 'Setup  *not finished' 'Disk  *[0-9]*\.[0-9] [KMGT]B free of [0-9]*\.
     'Last snapshot  *none yet' 'Mail queue  *empty'; do
     if says "$row"; then ok "status: $row"; else fail "status lacks: $row"; fi
 done
-# The scratch checkout has no upstream to compare with.
-if says 'Update  '; then fail "status has an Update row without an upstream"; else ok "status leaves out the update check it cannot make"; fi
+# A local build has no update to check for.
+if says 'Update  '; then fail "status has an Update row on a local build"; else ok "status on a local build checks for no update"; fi
 if printf '%s' "$OUT" | grep -q "$(printf '\033')"; then
     fail "status prints escape codes without a terminal"
 else
@@ -583,7 +583,7 @@ files() {
 before=$(files)
 api POST "$FOLDER/$root_id/create/doc" '{"fileName":"Made after the light snapshot"}' >/dev/null
 aside=$(aside_count)
-# As a snapshot from before setup always wrote the resolver address: a source install's Compose has no default for it.
+# As a snapshot from before setup always wrote the resolver address: a local build's Compose has no default for it.
 # Not the subnet, whose backfilled default another stack on this host may hold.
 unbound=$(scratch_run sed -n 's/^EIGEN_UNBOUND_IP=//p' "$INSTALL/.env.production")
 docker run --rm --user 0 -v "$SCRATCH:$SCRATCH" --entrypoint sh "$EIGEN_API_IMAGE" -c 'dir=$(mktemp -d) &&

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # The launcher alone, without a stack: under dash (debian:bookworm-slim), BusyBox sh and this host's /bin/sh, with a
 # stub docker on PATH that answers info and compose version and fails on demand. Covers every command's help, unknown
-# commands and arguments, the preflight refusals, source and release mode, need_install, a failing compose config, stop,
-# what update asks the CLI and names the builds, on a release and on the main channel, the tags it refuses, a build
-# whose images differ, a tag that moves during an update, a pinned api image that is not here, the files an unfinished
-# update left, what setup downloads with and without pins, what rollback names, a lock without a pid, and what status
-# passes the CLI about the snapshots, the files of an unfinished update and the newest build of main; setup in a folder
-# that holds the launcher alone, with the registry or the build .env.production names, and the installer script
-# apps/index/public/install on this host, as a file and on stdin.
+# commands and arguments, the preflight refusals, local-build and release mode, need_install, update and rollback
+# refused in a local build, a failing compose config, stop, what update asks the CLI and names the builds, on a release
+# and on the main channel, the tags it refuses, a build whose images differ, a tag that moves during an update, a pinned
+# api image that is not here, the files an unfinished update left, what setup downloads with and without pins, what
+# rollback names, a lock without a pid, and what status passes the CLI about the snapshots, the files of an unfinished
+# update and the newest build of main; setup in a folder that holds the launcher alone, with the registry or the build
+# .env.production names, and the installer script apps/index/public/install on this host, as a file and on stdin.
 #
 # Usage:  ./docker/test-launcher.sh
 # Needs:  docker (pulls debian:bookworm-slim and busybox once).
@@ -104,9 +104,9 @@ if [ "\${STUB_CURL_HTML:-0}" = 1 ]; then echo '<html>' >"\$2"; else cp "$REPO_RO
 EOF
 chmod 755 "$FIX/bin/curl"
 
-# A source checkout, a release folder and one on the main channel, each with the launcher and a set-up .env.production;
+# A local build, a release folder and one on the main channel, each with the launcher and a set-up .env.production;
 # bare/ has no install, and alone/ is the launcher alone, as the installer leaves it.
-for dir in source release channel bare; do
+for dir in local release channel bare; do
     mkdir "$FIX/$dir"
     cp "$REPO_ROOT/eigen" "$FIX/$dir/eigen"
 done
@@ -115,11 +115,10 @@ alone() {
     mkdir "$FIX/alone"
     cp "$REPO_ROOT/eigen" "$FIX/alone/eigen"
 }
-mkdir "$FIX/source/.git"
 for dir in release channel; do : >"$FIX/$dir/docker-compose.yml"; done
-: >"$FIX/source/docker-compose.build.yml"
-cp "$REPO_ROOT/.bun-version" "$REPO_ROOT/package.json" "$FIX/source/"
-for dir in source release; do printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=0.2.99\n' >"$FIX/$dir/.env.production"; done
+: >"$FIX/local/docker-compose.build.yml"
+cp "$REPO_ROOT/.bun-version" "$REPO_ROOT/package.json" "$FIX/local/"
+for dir in local release; do printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=0.2.99\n' >"$FIX/$dir/.env.production"; done
 printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=main\n' >"$FIX/channel/.env.production"
 for name in $IMAGES; do
     printf '%s=ghcr.io/eigen-is/eigen/%s@sha256:aaa\n' "$(image_key "$name")" "$name" >>"$FIX/channel/.env.production"
@@ -200,7 +199,7 @@ for SHELL_NAME in dash busybox host; do
     fi
     failed=''
     for command in setup restore reset-password; do
-        launch source "$command" --help
+        launch local "$command" --help
         cli=$command
         if [ "$command" = setup ]; then cli=configure; fi
         case $OUT in "stub run: "*" $cli --help") ;; *) failed="$failed $command" ;; esac
@@ -217,7 +216,7 @@ for SHELL_NAME in dash busybox host; do
     for args in 'status extra' 'backup extra' 'backup --keep 2 extra' 'restart extra' 'stop extra' 'logs a b' \
         'update --bogus' 'update 1 2' 'rollback --nope'; do
         # shellcheck disable=SC2086
-        launch source $args
+        launch local $args
         if [ "$CODE" != 2 ] || [ -n "$OUT" ] || ! printf '%s\n' "$ERR" | grep -q "^Unknown argument \"${args##* }\"\.$" ||
             ! printf '%s\n' "$ERR" | grep -q '^Usage: ./eigen'; then
             failed="$failed '$args' ($CODE)"
@@ -243,34 +242,48 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: need_install missing for:$failed"
     fi
 
-    STUB_INFO='' launch source restart
+    STUB_INFO='' launch local restart
     expect_error 1 '■  Docker is not running, or this user cannot use it.' "no Docker"
-    STUB_COMPOSE='' launch source restart
+    STUB_COMPOSE='' launch local restart
     expect_error 1 '■  Docker Compose is not installed.' "no Compose"
-    STUB_COMPOSE=2.19.3 launch source restart
+    STUB_COMPOSE=2.19.3 launch local restart
     expect_error 1 '■  Docker Compose 2.19.3 is too old for this install; it needs 2.20 or newer.' "Compose 2.19.3"
-    printf 'services:\n  caddy:\n    ports: !override []\n' >"$FIX/source/docker-compose.override.yml"
-    STUB_COMPOSE=2.24.3-desktop.1 launch source restart
-    rm "$FIX/source/docker-compose.override.yml"
+    printf 'services:\n  caddy:\n    ports: !override []\n' >"$FIX/local/docker-compose.override.yml"
+    STUB_COMPOSE=2.24.3-desktop.1 launch local restart
+    rm "$FIX/local/docker-compose.override.yml"
     expect_error 1 'it needs 2.24.4 or newer' "an override with !override and Compose 2.24.3"
-    STUB_INFO='27.3.1 aarch64' launch source restart
+    STUB_INFO='27.3.1 aarch64' launch local restart
     if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q '◇  Docker 27.3.1 on aarch64, Compose 2.29.1'; then
         ok "$SHELL_NAME: an aarch64 server goes through, its architecture named"
     else
         fail "$SHELL_NAME: aarch64: exit $CODE, '$OUT'"
     fi
 
-    launch source restart
-    source_calls=$CALLS
+    launch local restart
+    local_calls=$CALLS
     launch release restart
-    if printf '%s\n' "$source_calls" | grep -q '^compose .* -f docker-compose.build.yml .*up -d --wait$' &&
+    if printf '%s\n' "$local_calls" | grep -q '^compose .* -f docker-compose.build.yml .*up -d --wait$' &&
         printf '%s\n' "$CALLS" | grep -q '^compose .*up -d --wait$' && ! printf '%s\n' "$CALLS" | grep -q build.yml; then
-        ok "$SHELL_NAME: a checkout runs Compose with the build overlay, a release folder without"
+        ok "$SHELL_NAME: a folder with the build overlay runs Compose with it, a release folder without"
     else
-        fail "$SHELL_NAME: mode detection: source '$source_calls', release '$CALLS'"
+        fail "$SHELL_NAME: mode detection: local '$local_calls', release '$CALLS'"
     fi
-    STUB_IMAGE=1 launch source restore --help
-    expect_error 1 '■  Eigen is not built yet.' "restore --help in an unbuilt checkout"
+    STUB_IMAGE=1 launch local restore --help
+    expect_error 1 '■  Eigen is not built yet.' "restore --help in an unbuilt local build"
+    launch local update
+    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  A local build has no updates.' &&
+        printf '%s\n' "$ERR" | grep -q '└  Pull the code and run ./eigen setup again, which builds it.' && [ -z "$CALLS" ]; then
+        ok "$SHELL_NAME: update in a local build says setup builds it, without asking Docker"
+    else
+        fail "$SHELL_NAME: update in a local build: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    launch local rollback --yes
+    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  A local build has no update to roll back.' &&
+        printf '%s\n' "$ERR" | grep -q '└  Go back in the code and run ./eigen setup again, which builds it.' && [ -z "$CALLS" ]; then
+        ok "$SHELL_NAME: rollback in a local build says setup builds it, without asking Docker"
+    else
+        fail "$SHELL_NAME: rollback in a local build: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
     STUB_IMAGE=1 launch release restore --help
     case "$CODE $OUT" in
         "0 stub run: "*" -v $FIX/release:/install -w /install ghcr.io/eigen-is/eigen/api:local restore --help")
@@ -415,7 +428,7 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: status on main: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
 
-    launch source stop
+    launch local stop
     if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q '◇  Eigen stopped' &&
         printf '%s\n' "$CALLS" | grep -q '^compose .* stop$' && ! printf '%s\n' "$CALLS" | grep -q ' up '; then
         ok "$SHELL_NAME: stop stops Eigen and starts nothing"
@@ -465,7 +478,7 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: update over the files of the pinned build: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
 
-    STUB_FAIL=compose-config launch source restart
+    STUB_FAIL=compose-config launch local restart
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Eigen did not start' &&
         printf '%s\n' "$CALLS" | grep -q ' config --services$' &&
         ! printf '%s\n' "$CALLS" | grep -Eq '^(rm|stop) | (up|stop) '; then
@@ -474,10 +487,10 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: failing compose config: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
 
-    STUB_RUN_FAIL=--yes launch source restore eigen-20260101-000000.tar.gz
+    STUB_RUN_FAIL=--yes launch local restore eigen-20260101-000000.tar.gz
     if [ "$CODE" = 1 ] && printf '%s\n' "$CALLS" | grep -q ' restore eigen-20260101-000000.tar.gz --yes$' &&
         printf '%s\n' "$CALLS" | grep -q ' up -d --wait$' &&
-        printf '%s\n' "$CALLS" | tail -n 1 | grep -q ' rm -rf .eigen/restore$' && [ ! -e "$FIX/source/.eigen/lock" ]; then
+        printf '%s\n' "$CALLS" | tail -n 1 | grep -q ' rm -rf .eigen/restore$' && [ ! -e "$FIX/local/.eigen/lock" ]; then
         ok "$SHELL_NAME: a failed swap starts Eigen again, then removes the checked copy and the lock"
     else
         fail "$SHELL_NAME: a failed swap: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
@@ -488,13 +501,13 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: the project was asked $(printf '%s\n' "$CALLS" | grep -c ' config$') times"
     fi
 
-    # A source install runs today's Compose files on what an older snapshot's .env.production holds.
-    launch source restore eigen-20260101-000000.tar.gz
+    # A local build runs today's Compose files on what an older snapshot's .env.production holds.
+    launch local restore eigen-20260101-000000.tar.gz
     if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -A 1 ' restore eigen-20260101-000000.tar.gz --yes$' |
         grep -q ' configure --backfill$' && printf '%s\n' "$CALLS" | grep -q ' up -d --wait$'; then
-        ok "$SHELL_NAME: a source restore adds what is new to the restored .env.production, then starts Eigen"
+        ok "$SHELL_NAME: a local build's restore adds what is new to the restored .env.production, then starts Eigen"
     else
-        fail "$SHELL_NAME: a source restore: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+        fail "$SHELL_NAME: a local build's restore: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     STUB_CHECKED=EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:local launch release restore eigen-20260101-000000.tar.gz
     if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -q ' restore eigen-20260101-000000.tar.gz --yes$' &&
@@ -534,33 +547,33 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
         fail "$SHELL_NAME: a release rollback: exit $CODE, '$OUT', '$ERR'"
     fi
 
-    mkdir "$FIX/source/.eigen/lock"
-    echo 999999 >"$FIX/source/.eigen/lock/pid"
-    STUB_FAIL=compose-config launch source restart
-    if [ "$CODE" = 1 ] && printf '%s\n' "$CALLS" | grep -q ' config --services$' && [ ! -e "$FIX/source/.eigen/lock" ]; then
+    mkdir "$FIX/local/.eigen/lock"
+    echo 999999 >"$FIX/local/.eigen/lock/pid"
+    STUB_FAIL=compose-config launch local restart
+    if [ "$CODE" = 1 ] && printf '%s\n' "$CALLS" | grep -q ' config --services$' && [ ! -e "$FIX/local/.eigen/lock" ]; then
         ok "$SHELL_NAME: the lock of a process that is gone is taken over, and removed when the command fails"
     else
-        fail "$SHELL_NAME: a stale lock: exit $CODE, lock $(ls "$FIX/source/.eigen/lock" 2>&1)"
+        fail "$SHELL_NAME: a stale lock: exit $CODE, lock $(ls "$FIX/local/.eigen/lock" 2>&1)"
     fi
     # A launcher between its mkdir and its pid.
-    mkdir "$FIX/source/.eigen/lock"
-    : >"$FIX/source/.eigen/lock/pid"
-    launch source backup
+    mkdir "$FIX/local/.eigen/lock"
+    : >"$FIX/local/.eigen/lock/pid"
+    launch local backup
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Another ./eigen command is running.' && printf '%s\n' "$ERR" |
         grep -q '└  Wait for it to end, then run ./eigen backup again. If none runs, remove .eigen/lock.$' &&
-        [ -e "$FIX/source/.eigen/lock/pid" ]; then
+        [ -e "$FIX/local/.eigen/lock/pid" ]; then
         ok "$SHELL_NAME: a lock without a pid refuses a backup, says how to remove it, and stays"
     else
-        fail "$SHELL_NAME: a lock without a pid: exit $CODE, '$ERR', lock $(ls "$FIX/source/.eigen/lock" 2>&1)"
+        fail "$SHELL_NAME: a lock without a pid: exit $CODE, '$ERR', lock $(ls "$FIX/local/.eigen/lock" 2>&1)"
     fi
-    rm -rf "$FIX/source/.eigen/lock"
+    rm -rf "$FIX/local/.eigen/lock"
     # A container's own PID namespace cannot see this shell.
     if [ "$SHELL_NAME" = host ]; then
-        mkdir "$FIX/source/.eigen/lock"
-        echo $$ >"$FIX/source/.eigen/lock/pid"
-        launch source backup
+        mkdir "$FIX/local/.eigen/lock"
+        echo $$ >"$FIX/local/.eigen/lock/pid"
+        launch local backup
         expect_error 1 '■  Another ./eigen command is running.' "a running command's lock refuses a backup"
-        rm -r "$FIX/source/.eigen/lock"
+        rm -r "$FIX/local/.eigen/lock"
     fi
 done
 

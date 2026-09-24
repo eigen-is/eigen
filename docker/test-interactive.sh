@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # What only a terminal shows of ./eigen, typed by expect: the launcher runs under BusyBox sh in the no-Bun docker:cli
-# container, reached with docker exec -it, so both it and the CLI see a terminal. On a scratch checkout: Ctrl-C at the
-# first setup question, setup answering every question with hosted mail, reset-password typed twice, a restore answered
-# yes, Ctrl-C while a restore unpacks, ./eigen update from a remote one commit ahead, and Ctrl-C under the build
-# spinner. test-cli.sh and test-update.sh run the rest without a terminal. Asserts on exit codes, files and the stack.
+# container, reached with docker exec -it, so both it and the CLI see a terminal. On a scratch local build: Ctrl-C at
+# the first setup question, setup answering every question with hosted mail, reset-password typed twice, a restore
+# answered yes, Ctrl-C while a restore unpacks, and Ctrl-C under the build spinner. test-cli.sh runs the rest without a
+# terminal. Asserts on exit codes, files and the stack.
 #
 # Usage:  ./docker/test-interactive.sh
 # Needs:  docker, curl, git, expect. Builds every image in Docker (a few minutes on a cold cache).
@@ -62,10 +62,9 @@ EOF
 # The last lines of $SCREEN without escape codes, for a failure.
 screen_tail() { tr -d '\r' <"$SCREEN" | sed $'s/\033\\[[0-9;?]*[A-Za-z]//g' | grep . | tail -n 8 | sed 's/^/    │ /'; }
 
-# What still runs in the terminal besides its own tail and ps, and the maintenance git detaches after a fetch.
+# What still runs in the terminal besides its own tail and ps.
 leftovers() {
-    docker exec "$TERMINAL" ps -o pid,args |
-        awk 'NR > 1 && $2 != "tail" && $2 != "ps" && $2 !~ /init$/ && $2 !~ /git-core/' | tr '\n' ';'
+    docker exec "$TERMINAL" ps -o pid,args | awk 'NR > 1 && $2 != "tail" && $2 != "ps" && $2 !~ /init$/' | tr '\n' ';'
 }
 
 folder() {
@@ -219,31 +218,9 @@ fi
 scratch_run rm "$INSTALL/snapshots/$BIG"
 
 ##############################################################################
-header "update on a terminal"
-##############################################################################
-# A remote one commit ahead, outside the build context, so the build is cached.
-git_run clone -q --bare "$INSTALL" "$SCRATCH/remote.git"
-git_run clone -q "$SCRATCH/remote.git" "$SCRATCH/work"
-scratch_run sh -c 'echo "One more line." >>"$1/docs/TESTING.md"' sh "$SCRATCH/work"
-git_run -C "$SCRATCH/work" commit -qam "docs: one more line"
-git_run -C "$SCRATCH/work" push -q
-git_run -C "$INSTALL" remote add origin "$SCRATCH/remote.git"
-git_run -C "$INSTALL" fetch -q origin
-git_run -C "$INSTALL" branch -q --set-upstream-to "origin/$(git_run -C "$INSTALL" rev-parse --abbrev-ref HEAD)"
-NEW=$(git_run -C "$SCRATCH/work" rev-parse --short HEAD)
-type_into update update </dev/null
-revision=$(api_revision)
-if [ "$CODE" = 0 ] && [ "$revision" = "$NEW" ] && [ -e "$INSTALL/.eigen/last-update" ] && stack_up; then
-    ok "./eigen update on a terminal pulls, builds and runs $NEW"
-else
-    fail "./eigen update on a terminal: exit $CODE, eigen-api runs $revision, expected $NEW"
-    screen_tail
-fi
-
-##############################################################################
 header "Ctrl-C under the build spinner"
 ##############################################################################
-# A build step that outlasts the interrupt, in this scratch checkout only.
+# A build step that outlasts the interrupt, in this scratch install only.
 scratch_run sh -c 'echo "RUN sleep 600" >>"$1/docker/api/Dockerfile"' sh "$INSTALL"
 started=$(api_started)
 image=$(docker image inspect --format '{{.Id}}' "$EIGEN_API_IMAGE")

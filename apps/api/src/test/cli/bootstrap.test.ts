@@ -102,11 +102,11 @@ describe('bootstrap', () => {
     });
 
     test('--force adds the release pins to an env file that names none, and keeps its lines', async () => {
-        writeFileSync(join(out, '.env.production'), '# Source install\nDOMAIN=eigen.example.org\n', { mode: 0o600 });
+        writeFileSync(join(out, '.env.production'), '# Local build\nDOMAIN=eigen.example.org\n', { mode: 0o600 });
         const run = await runBootstrap(out, '--force');
         expect(run.code).toBe(0);
         expect(readFileSync(join(out, '.env.production'), 'utf8')).toBe(
-            `# Source install\nDOMAIN=eigen.example.org\nEIGEN_REGISTRY=${REGISTRY}\nEIGEN_VERSION=${version}\nEIGEN_API_IMAGE=${REGISTRY}/api:${version}\n`,
+            `# Local build\nDOMAIN=eigen.example.org\nEIGEN_REGISTRY=${REGISTRY}\nEIGEN_VERSION=${version}\nEIGEN_API_IMAGE=${REGISTRY}/api:${version}\n`,
         );
         expect(mode('.env.production')).toBe(0o600);
     });

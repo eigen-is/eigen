@@ -12,9 +12,9 @@ The work list for the weeks before the open-source repository is announced. One 
 
 ## 1. Install and update without host Bun
 
-[PROPOSAL_DOCKER_ONLY_SETUP.md](proposals/PROPOSAL_DOCKER_ONLY_SETUP.md) milestone 1. Built: `./eigen` and its CLI install, update and roll back a source install with no Bun on the host, and every profile combination passes `docker/test-deployments.sh`.
+[PROPOSAL_DOCKER_ONLY_SETUP.md](proposals/PROPOSAL_DOCKER_ONLY_SETUP.md) milestone 1. Built: `./eigen` and its CLI install, update and roll back Eigen with no Bun on the host, and every profile combination passes `docker/test-deployments.sh`.
 
-- [ ] eigen.is and demo.eigen.is become release installs on the `main` channel: `./eigen update main` migrates each, and source mode is deleted once both run there. The move is by hand (there is no shim for the deleted scripts): mail-off installs rename `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD` to `SMTP_RELAY_*` and drop `SMTP_SECURE`, `DOMAIN` must be the real web address, whole-server snapshots move from `backups/` to `snapshots/`, and the system sender moves from the env file to Admin → Settings → Mail, with **Relay sends as users** on for a mail-off install that relays through Brevo
+- [ ] eigen.is and demo.eigen.is become release installs on the `main` channel. The move is by hand (there is no shim for the deleted scripts): mail-off installs rename `SMTP_HOST`/`SMTP_PORT`/`SMTP_USER`/`SMTP_PASSWORD` to `SMTP_RELAY_*` and drop `SMTP_SECURE`, `DOMAIN` must be the real web address, whole-server snapshots move from `backups/` to `snapshots/`, and the system sender moves from the env file to Admin → Settings → Mail, with **Relay sends as users** on for a mail-off install that relays through Brevo
 
 Done when: eigen.is and demo.eigen.is update with `./eigen update`.
 

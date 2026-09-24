@@ -541,10 +541,10 @@ describe('restore', () => {
         expect(existsSync(join(dir, 'data/home/alice/notes.txt'))).toBe(true);
     });
 
-    // A release install runs the images its .env.production pins; a source install builds its own and pins none.
+    // A release install runs the images its .env.production pins; a local build builds its own and pins none.
     test.each([
-        ['a release install', 'a source install', `${ENV}EIGEN_VERSION=${version}\n`, ENV],
-        ['a source install', 'a release install', ENV, `${ENV}EIGEN_VERSION=${version}\n`],
+        ['a release install', 'a local build', `${ENV}EIGEN_VERSION=${version}\n`, ENV],
+        ['a local build', 'a release install', ENV, `${ENV}EIGEN_VERSION=${version}\n`],
     ])('refuses a snapshot of %s on %s before anything changes', async (theirs, ours, before, now) => {
         const dir = install();
         writeFileSync(join(dir, '.env.production'), before);

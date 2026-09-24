@@ -182,7 +182,7 @@ describe('eigen status', () => {
         const { stdout, stderr, code } = await runCli([
             'status',
             `--services=${SERVICES}`,
-            '--new-commits=3',
+            '--latest=99.0.0',
             '--mail-queue=-- 2 Kbytes in 2 Requests.',
             // The newest by the time in its name, not by the name.
             '--snapshots=eigen-20260101-120000.tar.gz\neigen-pre-update-20260301-080000.tar.gz\nnotes.txt',
@@ -195,7 +195,7 @@ describe('eigen status', () => {
         expect(stdout).toMatch(/■ {2}postfix +exited/);
         // In name order, whatever order Compose listed them in.
         expect(stdout).toMatch(/caddy .+\n.+eigen-api .+\n.+postfix /);
-        expect(stdout).toMatch(/▲ {2}Update +3 new commits; \.\/eigen update installs them/);
+        expect(stdout).toMatch(/▲ {2}Update +Eigen 99\.0\.0 is out; \.\/eigen update installs it/);
         expect(stdout).toMatch(/Disk +\d+\.\d [KMGT]B free of \d+\.\d [KMGT]B\n/);
         expect(stdout).toMatch(/Last snapshot +eigen-pre-update-20260301-080000\.tar\.gz, .+ ago\n/);
         expect(stdout).toMatch(/Mail queue +2 messages waiting/);
@@ -207,11 +207,6 @@ describe('eigen status', () => {
         const { stdout, code } = await runCli(['status', `--services=${SERVICES}`]);
         expect(code).toBe(0);
         expect(stdout).toMatch(/▲ {2}Last snapshot +none yet; \.\/eigen backup makes one/);
-    });
-
-    test('one new commit reads in the singular', async () => {
-        const { stdout } = await runCli(['status', `--services=${SERVICES}`, '--new-commits=1']);
-        expect(stdout).toMatch(/▲ {2}Update +1 new commit; \.\/eigen update installs it\n/);
     });
 
     test('names a newer release, and not an older one or its own', async () => {
@@ -235,7 +230,7 @@ describe('eigen status', () => {
     });
 
     test('colors the glyphs on a terminal, and not with NO_COLOR', async () => {
-        const args = ['status', `--services=${SERVICES}`, '--new-commits=0'];
+        const args = ['status', `--services=${SERVICES}`, `--latest=${pkg.version}`];
         const colored = await runInTerminal(args, { NO_COLOR: undefined });
         expect(colored.code).toBe(0);
         expect(colored.output).toContain('◇');
