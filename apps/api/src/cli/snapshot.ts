@@ -16,6 +16,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
+import type { parseArgs } from 'node:util';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import { BACKUP_STAMP_PATTERN, buildBackupStamp, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
@@ -25,13 +26,12 @@ import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
 import { SERVER_DIR } from '../lib/config/paths';
 import { PATHS } from '../lib/core/constants';
 import { readEnvFile } from './env-file';
-import { DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
+import { DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
 import { createUi, glyphLine, type Ui } from './ui';
 import { notesSince } from './update-check';
 
 // Both commands run as root in a container on the install folder (-w /install), so data/ keeps its mixed owners.
 const SNAPSHOTS = 'snapshots';
-const DATA = 'data';
 const META = 'eigen-snapshot.json';
 // Next to data/, so the swap is two renames on one filesystem; root's alone while it holds what a snapshot brought.
 const STAGING = '.eigen/restore';
@@ -158,13 +158,9 @@ function lightWalk(root = '.'): Held[] {
     return held;
 }
 
-export async function snapshot(flags: {
-    light?: boolean;
-    keep?: string;
-    'pre-update'?: boolean;
-    check?: boolean;
-    from?: string;
-}): Promise<void> {
+export async function snapshot(
+    flags: ReturnType<typeof parseArgs<{ options: typeof SNAPSHOT_OPTIONS }>>['values'],
+): Promise<void> {
     const ui = await createUi(true);
     if (!existsSync(ENV_PATH) || !existsSync(DATA)) {
         ui.fail(
@@ -301,7 +297,7 @@ function swapLight(staged: Held[], aside: string): void {
 
 export async function restore(
     archive = '',
-    flags: { yes?: boolean; check?: boolean; checked?: boolean },
+    flags: ReturnType<typeof parseArgs<{ options: typeof RESTORE_OPTIONS }>>['values'],
 ): Promise<void> {
     const ui = await createUi(flags.yes === true || flags.checked === true);
 

@@ -1,3 +1,4 @@
+import type { parseArgs } from 'node:util';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import { parseBackupStamp } from '@workspace/lib/validation';
@@ -9,15 +10,6 @@ import { createUi, type Glyph, glyphLine } from './ui';
 
 type Row = { level: Glyph; label: string; value: string };
 type Service = { service: string; state: string; health: string };
-type StatusFlags = {
-    services?: string;
-    latest?: string;
-    'new-commits'?: string;
-    'mail-queue'?: string;
-    snapshots?: string;
-    'snapshots-kb'?: string;
-    files?: string;
-};
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CERT_WARN_DAYS = 14;
@@ -38,6 +30,8 @@ export const STATUS_USAGE = `Usage: status [--services=…] [--latest=…] [--ne
               [--snapshots-kb=…] [--files=…]
 
 Reports on the running server with what ./eigen status gathers from Docker and the host.`;
+
+type StatusFlags = ReturnType<typeof parseArgs<{ options: typeof STATUS_OPTIONS }>>['values'];
 
 // Without the API, the report holds what the launcher knows.
 function printReport(flags: StatusFlags, services: Service[], api: ControlStatus | null): void {

@@ -4,8 +4,9 @@ import type { parseArgs } from 'node:util';
 import { APP_URLS } from '@workspace/lib/constants/app-urls';
 import { DEFAULT_RELAY_PORT } from '@workspace/lib/constants/mail';
 import { validateEmailAddress } from '@workspace/lib/validation';
+import { SERVER_DIR } from '../lib/config/paths';
 import { readEnvFile, writeEnvFile } from './env-file';
-import { ENV_PATH, IMAGE_NAMES, installOwner, ownAs, ROOT } from './install';
+import { DATA, ENV_PATH, IMAGE_NAMES, installOwner, ownAs, ROOT } from './install';
 import { createUi, type Ui } from './ui';
 
 export type ConfigureAnswers = {
@@ -126,10 +127,14 @@ function validateRelay(value: string): string | undefined {
     }
 }
 
-// Setup records the domain every account's address was made on; an unreadable data folder leaves the check to the API's boot.
+// config.json is what lib/config/server-config.ts names its JsonStore; that module exports no constant for it.
+const SERVER_CONFIG = join(DATA, SERVER_DIR, 'config.json');
+
+// Setup records the domain every account's address was made on; an unreadable data folder leaves the check to the
+// API's boot.
 function readSetMailDomain(): string | undefined {
     try {
-        return JSON.parse(readFileSync('data/server/config.json', 'utf8')).mailDomain || undefined;
+        return JSON.parse(readFileSync(SERVER_CONFIG, 'utf8')).mailDomain || undefined;
     } catch {
         return undefined;
     }

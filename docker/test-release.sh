@@ -179,6 +179,7 @@ for name in frontend postfix dovecot; do
     docker tag "$REGISTRY/$name:$PREVIOUS" "$REGISTRY/$name:$NEW"
     docker tag "$REGISTRY/$name:$PREVIOUS" "$REGISTRY/$name:$BREAKING"
 done
+# The four images docker-compose.yml runs.
 for name in api frontend postfix dovecot; do
     docker tag "$REGISTRY/$name:$NEW" "$REGISTRY/$name:latest"
     for tag in "$PREVIOUS" "$NEW" "$BREAKING" latest; do docker push -q "$REGISTRY/$name:$tag" >/dev/null; done
@@ -378,7 +379,7 @@ else
 fi
 
 snapshot=$(scratch_run sed -n 's/^archive=//p' "$INSTALL/.eigen/last-update")
-# Only the registry has the images of $PREVIOUS now.
+# Only the registry has the images of $PREVIOUS now: the four docker-compose.yml runs.
 for name in api frontend postfix dovecot; do docker image rm "$REGISTRY/$name:$PREVIOUS" >/dev/null; done
 docker stop "eigentest-registry-$RUN" >/dev/null
 eigen restore "$snapshot" --yes

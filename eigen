@@ -65,11 +65,11 @@ EOF
 Usage: ./eigen backup [--light] [--keep <n>]
 
 Stops Eigen, saves data/ and .env.production as a full snapshot in snapshots/, and starts
-Eigen again. Then deletes all but the newest three snapshots it made. Only the owner of this
-folder can read a snapshot.
+Eigen again. Then deletes the older snapshots of that kind it made; --keep says how many
+stay. Only the owner of this folder can read a snapshot.
 
   --light      Only the databases and config: every account's files and mail stay out
-  --keep <n>   Keep the newest <n> snapshots instead of three
+  --keep <n>   Keep the newest <n> snapshots of each kind
 EOF
             ;;
         logs)
@@ -505,7 +505,7 @@ check_snapshot() {
     cli_as 0 restore "$@" --check || checked=$?
     trap 'exit 130' INT TERM
     case $checked in 0) ;; "$DECLINED") exit 0 ;; *) exit "$checked" ;; esac
-    # Until the swap, root's checked copy of a whole data/ is for root to remove.
+    # Until the swap, root's checked copy of data/ is root's to remove: STAGING in apps/api/src/cli/snapshot.ts.
     AT_EXIT='cli_as 0 rm -rf .eigen/restore'
 }
 
@@ -931,6 +931,7 @@ rollback() {
     if [ ! -f .eigen/last-update ]; then
         die "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
     fi
+    # LAST_UPDATE in apps/api/src/cli/snapshot.ts: the CLI writes these keys.
     last=$(cat .eigen/last-update)
     archive=$(answer archive "$last") back=$(answer version "$last") commit=$(answer commit "$last")
     kind=$(answer kind "$last")

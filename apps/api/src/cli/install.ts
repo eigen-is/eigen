@@ -5,6 +5,7 @@ import pkg from '../../../../package.json' with { type: 'json' };
 // The repo root in a checkout, /app in the image.
 export const ROOT = join(import.meta.dir, '../../../..');
 export const ENV_PATH = '.env.production';
+export const DATA = 'data';
 export const VERSION = pkg.version;
 // The exit code of a question the operator said no to, which the launcher ends as a plain exit; DECLINED in ./eigen.
 export const DECLINED = 3;
