@@ -27,7 +27,7 @@ This section shows how the server is doing. You can't change anything here.
 | **Version** | The version of Eigen the server runs |
 | **Mail** | Whether this server hosts mailboxes, or sends its mail through your relay |
 | **Disk** | How much disk space is free |
-| **Certificate** | When the server's HTTPS certificate expires. A server behind your own web server has none here. |
+| **Certificate** | When the server's HTTPS certificate expires. Behind your own web server, it shows the mail certificate when this server hosts mail, and none otherwise. |
 
 ## Mail
 
