@@ -66,6 +66,13 @@ describe("better-auth's admin routes against the owner", () => {
         expect(await hasSession(ctx.alice.user.sessionToken)).toBe(true);
     });
 
+    test("an anonymous call cannot tell the owner's id from another's", async () => {
+        const onOwner = await adminCall('', 'set-role', { userId: ctx.alice.user.id, role: 'user' });
+        const onAdmin = await adminCall('', 'set-role', { userId: admin.id, role: 'user' });
+        expect(onOwner.status).toBe(401);
+        expect(onAdmin.status).toBe(401);
+    });
+
     test('an admin still acts on a member', async () => {
         const member = await createTestUser('max-admin-plugin@test.eigen.is', 'testpassword123', 'Max Plugin');
         const res = await adminCall(admin.sessionToken, 'update-user', { userId: member.id, data: { name: 'Max' } });
