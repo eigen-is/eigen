@@ -170,7 +170,10 @@ answer() { printf '%s\n' "$2" | sed -n "s/^$1=//p" | tail -n 1; }
 
 if [ -e .git ] && [ -f docker-compose.build.yml ]; then MODE=source; else MODE=release; fi
 
+# The environment serves the folder the installer just made, which has no .env.production yet; an install's file is
+# never overridden by a stray variable.
 registry=$(env_value EIGEN_REGISTRY)
+registry=${registry:-${EIGEN_REGISTRY:-}}
 REGISTRY=${registry:-$REGISTRY}
 
 image_key() { printf 'EIGEN_%s_IMAGE\n' "$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"; }
@@ -636,6 +639,18 @@ setup() {
     done
     CLI_ENV="EIGEN_PROJECT EIGEN_DOCKER_NETWORKS $relay"
 
+    version=$(env_value EIGEN_VERSION)
+    # The installer leaves the launcher alone here. The release .env.production names, else the newest, writes its
+    # files, and its launcher takes over, the lock with it, as update --pulled does.
+    if [ "$MODE" = release ] && [ ! -e docker-compose.yml ]; then
+        preflight >/dev/null
+        lock
+        API_IMAGE=$REGISTRY/api:${version:-latest}
+        step "Downloading Eigen" "Eigen downloaded" "Could not download Eigen" docker pull "$API_IMAGE"
+        step "Writing the Eigen files" "Eigen files written" "Could not write the Eigen files" \
+            cli bootstrap --force --out /install
+        exec ./eigen setup "$@"
+    fi
     wordmark setup
     preflight
     lock
@@ -644,9 +659,8 @@ setup() {
         if [ ! -e .env.production ]; then (umask 077 && : >.env.production); fi
         step "Building Eigen" "Eigen built" "Could not build Eigen" dc build eigen-api
     else
-        version=$(env_value EIGEN_VERSION)
         if [ -z "$version" ]; then
-            die ".env.production names no Eigen release." "Get one first: docker run --rm -v \"\$PWD:/out\" $REGISTRY/api bootstrap"
+            die ".env.production names no Eigen release." "Get one into it: docker run --rm -v \"\$PWD:/out\" $REGISTRY/api:latest bootstrap --force"
         fi
         # A tag is resolved to digests once, by the first setup or by update: a rerun gets the images already pinned.
         case $(image api) in

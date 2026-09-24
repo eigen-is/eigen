@@ -1,0 +1,38 @@
+#!/bin/sh
+# Installs Eigen into the current folder, where its data will live: downloads the eigen command and runs ./eigen setup.
+#   curl -fsSL https://eigen.is/install | sh
+#   curl -fsSL https://eigen.is/install | sh -s -- --domain eigen.example.com --yes
+set -eu
+
+if [ -e docker-compose.yml ] || [ -e .env.production ]; then
+    echo "This folder already has an Eigen install. Run ./eigen setup to change it, or ./eigen update." >&2
+    exit 1
+fi
+# The launcher checks the rest: Compose, access to Docker, the architecture.
+if ! command -v docker >/dev/null 2>&1; then
+    echo "Docker is not installed. Install it first: https://docs.docker.com/engine/install/" >&2
+    exit 1
+fi
+
+echo "Installing Eigen into $PWD. Its data will live in this folder."
+# The test harness serves a local copy.
+launcher=${EIGEN_LAUNCHER:-https://raw.githubusercontent.com/eigen-is/eigen/main/eigen}
+if command -v curl >/dev/null 2>&1; then
+    curl -fsSL -o eigen.tmp "$launcher"
+elif command -v wget >/dev/null 2>&1; then
+    wget -q -O eigen.tmp "$launcher"
+else
+    echo "Neither curl nor wget is installed. Install one of them first." >&2
+    exit 1
+fi
+if ! head -n 1 eigen.tmp | grep -q '^#!/bin/sh$'; then
+    echo "The download is not the eigen command; try again later." >&2
+    rm -f eigen.tmp
+    exit 1
+fi
+chmod 755 eigen.tmp
+mv eigen.tmp eigen
+
+# Under curl | sh, stdin is the script; the setup questions need the terminal.
+if [ -c /dev/tty ] && (exec </dev/tty) 2>/dev/null; then exec ./eigen setup "$@" </dev/tty; fi
+exec ./eigen setup "$@"

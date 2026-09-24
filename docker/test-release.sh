@@ -5,7 +5,7 @@
 # then accept the breaking release; refuse an unknown version and a downgrade; refuse a source install's snapshot, and a
 # snapshot of .8 while the registry is down, before anything stops; restore a snapshot of .8, which brings its
 # launcher and Compose files back; move .8 onto the main channel, update it to a second build of main, roll back one
-# build, and leave main for .10; install from main; install .9 twice, on one digest.
+# build, and leave main for .10; install from main; install .9 from the launcher alone; install .9 twice, on one digest.
 #
 # Usage:  ./docker/test-release.sh
 # Needs:  docker, curl, git. Builds the API five times and the other images three times, twice from the cache (the
@@ -526,6 +526,33 @@ if stack_up && [ "$(env_of EIGEN_VERSION)" = main ]; then
     ok "an install bootstrapped from api:main follows main and runs"
 else
     fail "the install from api:main: EIGEN_VERSION=$(env_of EIGEN_VERSION)"
+fi
+down_project "$PROJECT"
+
+##############################################################################
+header "Installing $NEW from the launcher alone"
+##############################################################################
+# The path eigen.is/install takes, whose script runs in test-launcher.sh: the no-Bun image has no curl or wget. Setup
+# beside the launcher alone bootstraps from api:latest, which is $NEW.
+register_install "eigentest-alone-$$" 0:0
+scratch_run mkdir "$INSTALL"
+scratch_run cp /repo/eigen "$INSTALL/eigen"
+assert_isolated
+write_override
+EIGEN_REGISTRY=$REGISTRY run_setup "$SCRATCH/setup-alone.log" "${SETUP_FLAGS[@]}" --domain localhost
+missing=''
+for file in docker-compose.yml .env.example docker/fail2ban; do
+    scratch_run test -e "$INSTALL/$file" || missing="$missing $file"
+done
+if [ -z "$missing" ]; then
+    ok "setup wrote the Compose file, .env.example and the fail2ban files beside the launcher"
+else
+    fail "setup beside the launcher alone left out:$missing"
+fi
+if stack_up && [ "$(env_of EIGEN_VERSION)" = "$NEW" ] && env_of EIGEN_API_IMAGE | grep -q "^$REGISTRY/api@sha256:"; then
+    ok "the install from the launcher alone runs, and .env.production pins $NEW by digest"
+else
+    fail "the install from the launcher alone: EIGEN_VERSION=$(env_of EIGEN_VERSION), $(env_of EIGEN_API_IMAGE)"
 fi
 down_project "$PROJECT"
 

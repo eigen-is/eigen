@@ -56,26 +56,22 @@ dig eigen.example.com A
 
 `./eigen setup` lists every record your answers need. The mail-related ones (MX, SPF, DKIM, DMARC, SRV) come in step 6, after the mail server has booted and generated its DKIM key.
 
-### 3. Get Eigen
+### 3. Install Eigen
 
-Eigen lives in one folder, `/opt/eigen` in this guide. Get the newest release:
+Eigen lives in one folder, `/opt/eigen` in this guide. Its data lives there too. Install the newest release:
 
 ```bash
 mkdir -p /opt/eigen && cd /opt/eigen
-docker run --rm -v "$PWD:/out" ghcr.io/eigen-is/eigen/api:latest bootstrap
+curl -fsSL https://eigen.is/install | sh
 ```
 
-This writes the `eigen` command, the Compose file, `.env.example`, the fail2ban files and a starter `.env.production` that names the release it came from, so the install stays on that version until `./eigen update`. For another release, name it instead of `latest`, like `api:0.3.0` (see the [releases](https://github.com/eigen-is/eigen/releases)).
+The script downloads the `eigen` command into the folder and runs `./eigen setup`. Setup downloads the newest release, asks the questions of step 4, starts Eigen and prints the link of step 5. The folder then holds the `eigen` command, the Compose file, `.env.example`, the fail2ban files and `.env.production`. That file names the release, so the install stays on that version until `./eigen update`.
 
 Developing Eigen? `./eigen` also runs in a clone of the repository, where it builds the images from source: see [CONTRIBUTING.md § Eigen in Docker](../docs/CONTRIBUTING.md#eigen-in-docker). On a server, run a release.
 
-### 4. Run setup
+### 4. Answer the setup questions
 
-```bash
-./eigen setup
-```
-
-It asks, in this order, and suggests an answer for each:
+`./eigen setup` asks, in this order, and suggests an answer for each:
 
 1. **Where will Eigen be hosted?** The web address, like `eigen.example.com`.
 2. **Which mail domain will you use?** Everyone's address and login is on it, like `jane@example.com`. It defaults to the web address. The mail domain cannot change after setup: every account is made on it. A later `./eigen setup` shows it instead of asking.
