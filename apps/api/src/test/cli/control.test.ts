@@ -192,6 +192,8 @@ describe('eigen status', () => {
         expect(stdout).toMatch(/◇ {2}eigen-api +running, healthy/);
         expect(stdout).toMatch(/caddy +running\n/);
         expect(stdout).toMatch(/■ {2}postfix +exited/);
+        // In name order, whatever order Compose listed them in.
+        expect(stdout).toMatch(/caddy .+\n.+eigen-api .+\n.+postfix /);
         expect(stdout).toMatch(/▲ {2}Update +3 new commits; \.\/eigen update installs them/);
         expect(stdout).toMatch(/Disk +\d+\.\d [KMGT]B free of \d+\.\d [KMGT]B\n/);
         expect(stdout).toMatch(/Last snapshot +eigen-pre-update-20260301-080000\.tar\.gz, .+ ago\n/);
@@ -204,6 +206,11 @@ describe('eigen status', () => {
         const { stdout, code } = await runCli(['status', `--services=${SERVICES}`]);
         expect(code).toBe(0);
         expect(stdout).toMatch(/▲ {2}Last snapshot +none yet; \.\/eigen backup makes one/);
+    });
+
+    test('one new commit reads in the singular', async () => {
+        const { stdout } = await runCli(['status', `--services=${SERVICES}`, '--new-commits=1']);
+        expect(stdout).toMatch(/▲ {2}Update +1 new commit; \.\/eigen update installs it\n/);
     });
 
     test('names a newer release, and not an older one or its own', async () => {
@@ -283,6 +290,7 @@ describe('eigen reset-password', () => {
         const hal = await createTestUser('hal-reset@test.eigen.is', OLD_PASSWORD, 'Hal Reset');
         const { stdout, code } = await runCli(['reset-password', hal.email, '--generate']);
         expect(code).toBe(0);
+        expect(stdout).toStartWith('┌  Reset a password\n│  New password: ');
         const password = stdout.match(/New password: (\S+)/)?.[1] ?? '';
         expect(password.length).toBeGreaterThanOrEqual(16);
         expect(stdout.split(password).length).toBe(2);
@@ -297,7 +305,8 @@ describe('eigen reset-password', () => {
         ]);
         expect(code).toBe(0);
         expect(output).toContain(`Password changed for ${ivy.email}. Signed out everywhere.`);
-        expect(output).not.toContain('Reset a password');
+        // Opens with its title, so the first question's bar hangs from it.
+        expect(output.split('\n')[0]).toContain('Reset a password');
         expect(await signsIn(ivy.email, 'typed-password-1')).toBe(true);
     });
 

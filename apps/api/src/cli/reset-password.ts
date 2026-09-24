@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import type { ResetPasswordResult } from '../lib/user/reset-password';
 import { callControl } from './control-socket';
-import { createUi } from './ui';
+import { createUi, glyphLine } from './ui';
 
 export const RESET_PASSWORD_OPTIONS = { generate: { type: 'boolean' } } as const;
 export const RESET_PASSWORD_USAGE = `Usage: ./eigen reset-password <email> [--generate]
@@ -16,6 +16,7 @@ It asks for the password, or reads one line from stdin when that is not a termin
 export async function resetPassword(email: string | undefined, flags: { generate?: boolean }): Promise<void> {
     const ui = await createUi(flags.generate === true);
     if (!email) return ui.fail('Name the account.', 'Run ./eigen reset-password <email>.');
+    ui.intro('Reset a password');
     let password = randomBytes(12).toString('base64url');
     if (!flags.generate) {
         password = await ui.password({
@@ -50,6 +51,6 @@ export async function resetPassword(email: string | undefined, flags: { generate
         );
     }
     const changed: ResetPasswordResult = await res.json();
-    if (flags.generate) console.log(`New password: ${password}`);
+    if (flags.generate) console.log(glyphLine('bar', `New password: ${password}`));
     ui.outro(`Password changed for ${changed.email}. Signed out everywhere.`);
 }

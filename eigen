@@ -751,7 +751,7 @@ update_get() {
             fi
             say "$YELLOW" '▲' "$behind new commit$([ "$behind" = 1 ] || echo s) on $upstream:"
             git log --format='%h %s' 'HEAD..@{upstream}' | head -n 10 | sed "s/^/${GRAY}│${RESET}  /"
-            say "$GRAY" '└' "./eigen update installs them."
+            say "$GRAY" '└' "./eigen update installs $([ "$behind" = 1 ] && echo it || echo them)."
             exit 0
         fi
         before=$(git rev-parse HEAD)

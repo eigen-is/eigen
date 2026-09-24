@@ -25,6 +25,7 @@ const GLYPHS = {
     warn: ['yellow', '▲'],
     bad: ['red', '■'],
     active: ['cyan', '◆'],
+    start: ['gray', '┌'],
     bar: ['gray', '│'],
     end: ['gray', '└'],
 } as const;
@@ -137,7 +138,7 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
         return line.value;
     };
     return {
-        intro: (title) => console.log(title),
+        intro: (title) => console.log(glyphLine('start', title)),
         explain: (text) => {
             if (interactive) console.log(wrap(text, 80).join('\n'));
         },
@@ -174,7 +175,12 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
             const error = validate(answer);
             return error ? fail(error, `Pass ${flag}.`) : answer;
         },
-        note: (title, lines) => console.log(`\n${title}\n${lines.map((line) => `  ${line}`).join('\n')}`),
+        note: (title, lines) =>
+            console.log(
+                [glyphLine('bar', ''), glyphLine('ok', title), ...lines.map((line) => glyphLine('bar', line))].join(
+                    '\n',
+                ),
+            ),
         outro: (message) => {
             reader?.close();
             console.log(glyphLine('end', message));

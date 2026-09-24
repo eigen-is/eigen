@@ -46,10 +46,11 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
     } else if (latest && Bun.semver.order(latest, pkg.version) > 0) {
         build.push({ level: 'warn', label: 'Update', value: `Eigen ${latest} is out; ./eigen update installs it` });
     } else if (commits && commits !== '0') {
+        const one = commits === '1';
         build.push({
             level: 'warn',
             label: 'Update',
-            value: `${commits} new commit${commits === '1' ? '' : 's'}; ./eigen update installs them`,
+            value: `${commits} new commit${one ? '' : 's'}; ./eigen update installs ${one ? 'it' : 'them'}`,
         });
     } else if (latest || commits) build.push({ level: 'ok', label: 'Update', value: 'up to date' });
     if (api?.setupRequired) {
@@ -146,7 +147,9 @@ export async function status(flags: StatusFlags): Promise<void> {
         .map((line): Service => {
             const [service = '', state = '', health = ''] = line.split('\t');
             return { service, state, health };
-        });
+        })
+        // Compose lists them in a different order from run to run.
+        .sort((a, b) => a.service.localeCompare(b.service));
     const ui = await createUi(true);
     if (!services.some(({ service, state }) => service === 'eigen-api' && state === 'running')) {
         printReport(flags, services, null);

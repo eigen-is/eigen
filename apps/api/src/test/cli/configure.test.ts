@@ -314,8 +314,8 @@ describe('configure command', () => {
         expect(run.stderr).toBe('');
         expect(run.code).toBe(0);
         expect(run.stdout.trim().split('\n')).toEqual([
-            'Configure Eigen',
-            expect.stringContaining('.env.production: set '),
+            '┌  Configure Eigen',
+            expect.stringContaining('└  .env.production: set '),
         ]);
         const written = readFileSync(join(dir, '.env.production'), 'utf8');
         expect(written.startsWith(original)).toBe(true);
@@ -453,6 +453,30 @@ describe('configure command', () => {
         expect(rerun.stdout).toContain('Configuration unchanged.');
         for (const box of ['No relay', 'Point your web server', 'DNS records']) expect(rerun.stdout).not.toContain(box);
         expect(statSync(join(dir, '.env.production')).ino).toBe(inode);
+    });
+
+    test('a flag-driven run prints its intro, notes and outro as glyph lines', async () => {
+        const run = await runConfigure(tempDir(), [
+            '--yes',
+            '--domain',
+            'localhost',
+            '--no-mail',
+            '--no-relay',
+            '--no-proxy',
+            '--contact-email',
+            'admin@example.org',
+        ]);
+        expect(run.code).toBe(0);
+        expect(run.stdout).toBe(
+            [
+                '┌  Configure Eigen',
+                '│',
+                '◇  No relay',
+                '│  Eigen sends no email. Run ./eigen setup again to add a relay.',
+                '└  Configuration saved.',
+                '',
+            ].join('\n'),
+        );
     });
 
     test('a local trial gets no DNS records', async () => {
