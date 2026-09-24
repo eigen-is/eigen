@@ -183,24 +183,18 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
 Hourly, on the hour, host-level (no in-app scheduler — swapping DB files under open handles is the
 `SQLITE_IOERR_VNODE` hazard, so the reset must live outside the app). Sequence:
 
-1. `docker compose stop eigen-api` — graceful SIGTERM within the 30 s `stop_grace_period`.
-2. `rm -rf data/server data/home data/team data/org data/guest` — an **explicit list, never a
+1. Take the launcher's lock, `.eigen/lock`, as `./eigen` does (a PID file; a dead holder's lock is taken over). While an `./eigen` command holds it, such as the nightly `./eigen backup` or an update, the reset refuses and the next hourly run retries, so it never wipes `data/` under a snapshot.
+2. `docker compose stop eigen-api` — graceful SIGTERM within the 30 s `stop_grace_period`.
+3. `rm -rf data/server data/home data/team data/org data/guest` — an **explicit list, never a
    wildcard**. `data/certs` (Caddy) and `data/dkim` (mail) survive.
-3. Reseed in a throwaway container off the current image (`run --rm --no-deps eigen-api ...`).
-4. Restart `eigen-api` — via a trap, but **only if `data/server/.demo-seeded` exists** (an empty
-   sentinel the seeder writes as its final step, so a crash mid-seed can't satisfy the gate — the
-   half-built world stays behind the stopped API). A failed seed leaves the API stopped rather than
-   serving the public first-run setup wizard to strangers; the next hourly run (or an operator) retries.
+4. Reseed in a throwaway container off the current image (`run --rm --no-deps eigen-api ...`).
+5. Restart `eigen-api` and release the lock, via a trap, but restart **only if `data/server/.demo-seeded` exists** (an empty sentinel the seeder writes as its final step, so a crash mid-seed can't satisfy the gate — the half-built world stays behind the stopped API). A failed seed leaves the API stopped rather than showing strangers the setup screen; the next hourly run (or an operator) retries.
 
 **Hard gate:** the script refuses to run unless `.env.production` contains `EIGEN_DEMO=1`, so it is
 physically unable to wipe a real box. The full-root wipe (rather than restoring a golden tarball)
 keeps every timestamp < 1 h old (rot immunity), rebuilds `users3.db` from current code each hour
 (schema-drift immunity), and heals every auth-DB tamper by construction (rogue orgs, minted keys,
 enrolled 2FA all vanish).
-
-Install the hourly run with the shipped systemd units (`scripts/systemd/eigen-demo-reset.{service,
-timer}`, `OnCalendar=hourly`, `Persistent=true` to catch a run missed while the box was down), or the
-one-line cron alternative in the setup guide.
 
 `./eigen backup` / `./eigen restore` are the general offline backup/restore on the same stop → copy-quiesced-tree → start sequence: `backup` archives the quiesced `data/` (WAL/`-shm` included, so the never-checkpointed server DBs restore crash-consistent) with `.env.production` into `snapshots/`, `restore` unpacks and checks a snapshot while Eigen runs, then stops it to swap the snapshot in and keeps the replaced tree aside. Both are production-usable, independent of demo mode.
 
@@ -212,7 +206,31 @@ one-line cron alternative in the setup guide.
 - `docker-compose.yml` passes `EIGEN_DEMO: ${EIGEN_DEMO:-0}` through to the API, so a `.env.production` without it runs with demo mode off; `./eigen update` keeps every key of the file, so an update never drops it.
 - The seeder sets the server settings (signups off, quotas) each run, so they can't drift.
 
-See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator walkthrough.
+## Running a demo instance
+
+A demo box wipes and reseeds itself every hour, so strangers can try the product without a login and without leaving anything behind. It needs a source install (`git clone`, then `./eigen setup`): `scripts/` is not in a release. Turn demo mode on in `.env.production` (any other value, or unset, keeps normal behavior), then run `./eigen setup` again:
+
+```
+EIGEN_DEMO=1
+```
+
+Reset the world once by hand, then let the timer keep it fresh:
+
+```bash
+./scripts/demo-reset.sh
+```
+
+Install the hourly reset with the shipped systemd units. `git pull` does not install them. `OnCalendar=hourly`, with `Persistent=true` to catch a run missed while the box was down:
+
+```bash
+cp scripts/systemd/eigen-demo-reset.service scripts/systemd/eigen-demo-reset.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now eigen-demo-reset.timer
+```
+
+The units assume the install lives at `/opt/eigen`; edit `WorkingDirectory` and `ExecStart` if yours differs. Check the schedule with `systemctl list-timers eigen-demo-reset.timer` and follow a run with `journalctl -u eigen-demo-reset.service -f`.
+
+A nightly `./eigen backup` at 03:00 meets the reset of that hour. Whichever takes `.eigen/lock` first runs; the other refuses. Schedule the backup off the hour, such as `30 3 * * *`, so both run.
 
 ## Accepted residuals and deferred items
 
