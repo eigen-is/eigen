@@ -381,6 +381,8 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         const orphan = join(m1.mount.stagingDir, `${randomUUID()}.db`);
         await Bun.write(orphan, 'garbage-referenced-by-no-row');
         expect(readdirSync(m1.mount.stagingDir)).toHaveLength(2);
+        // The dead process retries nothing (see 'startup reconcile resumes' above).
+        await m1.mount.closeAllDatabases();
 
         // Restart sharing the same baseDir: reconcile keeps the referenced staging, sweeps the orphan.
         const m2 = createS3Mount('reconcile-orphan');
