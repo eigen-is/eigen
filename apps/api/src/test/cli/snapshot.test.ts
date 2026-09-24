@@ -258,6 +258,45 @@ describe('snapshot', () => {
         expect(existsSync(join(dir, '.eigen/last-update'))).toBe(false);
     });
 
+    test('names a light snapshot eigen-light-<UTC stamp>, and a light pre-update one eigen-pre-update-light-', async () => {
+        const dir = server();
+        const light = await snapshot(dir, '--light');
+        expect(light).toMatch(/^eigen-light-\d{8}-\d{6}\.tar\.gz$/);
+        expect(SNAPSHOT_NAME.exec(light)?.groups?.['light']).toBe('light-');
+        const preUpdate = await snapshot(dir, '--pre-update', '--light');
+        expect(preUpdate).toMatch(/^eigen-pre-update-light-\d{8}-\d{6}\.tar\.gz$/);
+        expect(SNAPSHOT_NAME.exec(preUpdate)?.groups?.['preUpdate']).toBe('pre-update-');
+        const full = await snapshot(dir);
+        expect(SNAPSHOT_NAME.exec(full)?.groups?.['light']).toBeUndefined();
+    });
+
+    test('a light snapshot keeps the newest three light ones, and deletes no full one', async () => {
+        const dir = server();
+        const full = ['eigen-20190101-000000.tar.gz', 'eigen-20200101-000000.tar.gz'];
+        const light = [
+            'eigen-light-20210101-000000.tar.gz',
+            'eigen-light-20220101-000000.tar.gz',
+            'eigen-light-20230101-000000.tar.gz',
+        ];
+        for (const file of [...full, ...light]) writeFileSync(join(dir, 'snapshots', file), 'x');
+        const name = await snapshot(dir, '--light');
+        expect(readdirSync(join(dir, 'snapshots')).sort()).toEqual([...full, ...light.slice(1), name].sort());
+        const newer = await snapshot(dir, '--keep', '1');
+        expect(readdirSync(join(dir, 'snapshots')).sort()).toEqual([...light.slice(1), name, newer].sort());
+    });
+
+    test('--pre-update keeps the new archive and the one before of its own kind', async () => {
+        const dir = server();
+        const full = ['eigen-pre-update-20200101-000000.tar.gz', 'eigen-pre-update-20210101-000000.tar.gz'];
+        const light = [
+            'eigen-pre-update-light-20190101-000000.tar.gz',
+            'eigen-pre-update-light-20220101-000000.tar.gz',
+        ];
+        for (const file of [...full, ...light]) writeFileSync(join(dir, 'snapshots', file), 'x');
+        const name = await snapshot(dir, '--pre-update', '--light');
+        expect(readdirSync(join(dir, 'snapshots')).sort()).toEqual([...full, light[1], name].sort());
+    });
+
     test('--keep sets how many manual snapshots stay, and takes only a count', async () => {
         const dir = install();
         writeFileSync(join(dir, 'snapshots/eigen-20200101-000000.tar.gz'), 'x');

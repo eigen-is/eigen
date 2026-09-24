@@ -19,10 +19,16 @@ describe('status', () => {
     });
 
     test('counts the snapshots and what they take on disk', async () => {
-        const snapshots = ['eigen-20260101-000000.tar.gz', 'eigen-pre-update-20260102-000000.tar.gz', 'notes.txt'];
+        const snapshots = [
+            'eigen-20260101-000000.tar.gz',
+            'eigen-pre-update-light-20260103-000000.tar.gz',
+            'eigen-pre-update-20260102-000000.tar.gz',
+            'eigen-light-20260101-120000.tar.gz',
+            'notes.txt',
+        ];
         const result = await status(`--snapshots=${snapshots.join('\n')}`, '--snapshots-kb=2048');
-        expect(result.stdout).toMatch(/Last snapshot +eigen-pre-update-20260102-000000\.tar\.gz, /);
-        expect(result.stdout).toMatch(/◇ {2}Snapshots +2 in snapshots\/, 2\.0 MB on disk/);
+        expect(result.stdout).toMatch(/Last snapshot +eigen-pre-update-light-20260103-000000\.tar\.gz, /);
+        expect(result.stdout).toMatch(/◇ {2}Snapshots +4 in snapshots\/, 2\.0 MB on disk/);
         expect((await status('--snapshots=', '--snapshots-kb=4')).stdout).not.toContain('Snapshots');
     });
 });

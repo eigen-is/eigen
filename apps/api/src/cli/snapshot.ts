@@ -48,7 +48,10 @@ const LIGHT_SKIPS = new RegExp(
 type SnapshotKind = 'full' | 'light';
 type SnapshotMeta = { version: string; createdAt: string; kind: SnapshotKind };
 
-export const SNAPSHOT_NAME = new RegExp(`^eigen-(?<preUpdate>pre-update-)?${BACKUP_STAMP_PATTERN}\\.tar\\.gz$`);
+// The kind is in the name, so retention and status tell them apart without opening one; restore reads the archive's.
+export const SNAPSHOT_NAME = new RegExp(
+    `^eigen-(?<preUpdate>pre-update-)?(?<light>light-)?(?<stamp>${BACKUP_STAMP_PATTERN})\\.tar\\.gz$`,
+);
 
 export const SNAPSHOT_OPTIONS = {
     light: { type: 'boolean' },
@@ -62,10 +65,11 @@ export const SNAPSHOT_USAGE = `Usage: snapshot [--light] [--keep <n>] [--pre-upd
 Writes data/ and ${ENV_PATH} into ${SNAPSHOTS}/eigen-<UTC time>.tar.gz, a full snapshot. Stop Eigen first:
 ./eigen backup does.
 
-  --light            Only the databases and config: every home's files and mail stay out
-  --keep <n>         Then delete all but the newest <n> snapshots made without --pre-update (default ${KEEP})
-  --pre-update       Name it eigen-pre-update-<UTC time>.tar.gz, after deleting the pre-update snapshots
-                     older than the previous one, and write ${LAST_UPDATE} for ./eigen rollback
+  --light            Only the databases and config, as eigen-light-<UTC time>.tar.gz: every home's files and mail
+                     stay out
+  --keep <n>         Then delete all but the newest <n> of its kind made without --pre-update (default ${KEEP})
+  --pre-update       Name it eigen-pre-update-[light-]<UTC time>.tar.gz, after deleting the pre-update snapshots of
+                     its kind older than the previous one, and write ${LAST_UPDATE} for ./eigen rollback
   --check            Write nothing: check that ${SNAPSHOTS}/ has room for it, and print kind=full or kind=light
   --from <version>   With --check: full after all when a release since <version> has breaking changes`;
 // --check and --checked are the launcher's: it unpacks and checks while Eigen runs, so a refusal stops nothing, then
@@ -86,9 +90,9 @@ is kept aside.
 // What refusal() looks at; not a setgid folder, which a setgid install folder hands down to every folder in it.
 const SUSPECTS = '-type b -o -type c -o -type p -o -type s -o -type f ( -perm -4000 -o -perm -2000 ) -o -type l';
 
-// The snapshots among these file names, newest first by the time in the name, pre-update ones included.
+// The snapshots among these file names, newest first by the time in the name, of both kinds and pre-update ones too.
 export function newestSnapshots(names: string[]): string[] {
-    const stamp = (name: string) => name.replace('pre-update-', '');
+    const stamp = (name: string) => SNAPSHOT_NAME.exec(name)?.groups?.['stamp'] ?? '';
     return names.filter((name) => SNAPSHOT_NAME.test(name)).sort((a, b) => stamp(b).localeCompare(stamp(a)));
 }
 
@@ -202,12 +206,18 @@ export async function snapshot(flags: {
         return;
     }
     lockData(ui, 'backup');
+    // Retention counts per kind, so light backups never delete the last full one.
+    const alike = (file: string) => {
+        const groups = SNAPSHOT_NAME.exec(file)?.groups;
+        return (
+            Boolean(groups?.['preUpdate']) === Boolean(flags['pre-update']) &&
+            Boolean(groups?.['light']) === (kind === 'light')
+        );
+    };
 
     // The older pre-update snapshots go first, so the disk holds two while this one is written.
     if (flags['pre-update']) {
-        const older = newestSnapshots(readdirSync(SNAPSHOTS))
-            .filter((file) => SNAPSHOT_NAME.exec(file)?.groups?.['preUpdate'])
-            .slice(1);
+        const older = newestSnapshots(readdirSync(SNAPSHOTS)).filter(alike).slice(1);
         for (const file of older) rmSync(join(SNAPSHOTS, file));
         if (older.length) console.log(glyphLine('ok', `Removed the older pre-update snapshots: ${older.join(', ')}`));
     }
@@ -215,7 +225,8 @@ export async function snapshot(flags: {
     // The archive holds every secret of the server: nothing this writes is readable by others, not even briefly.
     process.umask(0o077);
     const createdAt = new Date();
-    const name = `eigen-${flags['pre-update'] ? 'pre-update-' : ''}${buildBackupStamp(createdAt)}.tar.gz`;
+    const prefix = `${flags['pre-update'] ? 'pre-update-' : ''}${kind === 'light' ? 'light-' : ''}`;
+    const name = `eigen-${prefix}${buildBackupStamp(createdAt)}.tar.gz`;
     const metaDir = mkdtempSync(join(tmpdir(), 'eigen-snapshot-'));
     const meta: SnapshotMeta = { version: VERSION, createdAt: createdAt.toISOString(), kind };
     writeFileSync(join(metaDir, META), JSON.stringify(meta));
@@ -260,9 +271,7 @@ export async function snapshot(flags: {
         return;
     }
     // After this one is written, so a failed snapshot never costs an older one.
-    const older = newestSnapshots(readdirSync(SNAPSHOTS))
-        .filter((file) => !SNAPSHOT_NAME.exec(file)?.groups?.['preUpdate'])
-        .slice(keep);
+    const older = newestSnapshots(readdirSync(SNAPSHOTS)).filter(alike).slice(keep);
     for (const file of older) rmSync(join(SNAPSHOTS, file));
     if (older.length) console.log(glyphLine('ok', `Removed the older snapshots: ${older.join(', ')}`));
 }
