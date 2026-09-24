@@ -98,7 +98,7 @@ describe('owner-only settings', () => {
             const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
                 method: 'PUT',
                 headers: JSON_HEADERS,
-                body: JSON.stringify({ mail: { senderAddress: 'not an address' } }),
+                body: JSON.stringify({ mail: { senderAddress: 'not-an-address' } }),
             });
             expect(res.status).toBe(400);
             expect(await res.text()).toContain('not a valid sender address');
@@ -174,12 +174,13 @@ describe('owner-only settings', () => {
         });
 
         test("returns the transport's error instead of swallowing it", async () => {
-            const transport = nodemailer.createTransport({ jsonTransport: true });
-            spyOn(transport, 'sendMail').mockRejectedValue(new Error('535 5.7.8 Authentication failed'));
-            spyOn(mailer, 'createTransport').mockReturnValue(transport);
+            // A relay that refuses the connection: port 1 on loopback has no listener.
+            spyOn(mailer, 'createTransport').mockReturnValue(
+                nodemailer.createTransport({ host: '127.0.0.1', port: 1 }),
+            );
             const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/mail/test', { method: 'POST' });
             expect(res.status).toBe(502);
-            expect(await res.text()).toContain('535 5.7.8 Authentication failed');
+            expect(await res.text()).toContain('ECONNREFUSED');
         });
 
         test('an admin cannot send it', async () => {

@@ -101,4 +101,4 @@ export function toS3Config(body: Static<typeof s3ConfigBody>): S3Config {
 
 // The system sender, where empty means the org name and noreply@ the mail domain; handlers check the address.
 export const senderNameSchema = t.String({ maxLength: 100, pattern: '^[^\\x00-\\x1f\\x7f]*$' });
-export const senderAddressSchema = t.String({ maxLength: MAX_EMAIL_LENGTH });
+export const senderAddressSchema = t.String({ maxLength: MAX_EMAIL_LENGTH, pattern: '^\\S*$' });
