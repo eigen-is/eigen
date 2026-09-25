@@ -22,7 +22,7 @@ Done when: eigen.is and demo.eigen.is update with `./eigen update`.
 
 Same proposal, milestone 2. Built: image-based Compose with the build overlay, `bootstrap`, release-mode `update` and `rollback`, the breaking-release stop, and `.github/workflows/publish.yml`, whose gate runs `docker/test-release.sh`. That gate builds its releases from the working tree into a registry of its own.
 
-- [ ] The first tagged release goes through `publish.yml`, and the packages are made public
+- [x] The first tagged release goes through `publish.yml`, and the packages are made public (v0.3.0, 2026-09-25)
 - [ ] The release gate installs the previous published release, not one built from the working tree, seeds it, updates to the new release, and rolls back
 
 Done when: the gate is green on a real previous-to-new upgrade and its rollback.
