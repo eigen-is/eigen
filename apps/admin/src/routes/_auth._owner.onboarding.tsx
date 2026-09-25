@@ -1,0 +1,15 @@
+import { createFileRoute } from '@tanstack/react-router';
+import { SettingsPage } from '@workspace/ui';
+import { OnboardingSettingsPage } from '../components/admin/onboarding-settings';
+
+export const Route = createFileRoute('/_auth/_owner/onboarding')({
+    component: OnboardingRoute,
+});
+
+function OnboardingRoute() {
+    return (
+        <SettingsPage title="Onboarding">
+            <OnboardingSettingsPage />
+        </SettingsPage>
+    );
+}

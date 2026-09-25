@@ -5,7 +5,6 @@ import { eq } from 'drizzle-orm';
 import { user as userSchema, verification as verificationSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { _resetOtpRateLimitForTests, MAX_OTP_GUESSES, MAX_OTP_REQUESTS_PER_EMAIL } from '../../lib/auth/otp-rate-limit';
-import { updateServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { getOrgRole } from '../../lib/user';
 import { assertJson, authedRequest, getTestContext } from '../setup';
@@ -19,16 +18,9 @@ describe('Guest Auth', () => {
     beforeAll(async () => {
         ctx = await getTestContext();
 
-        // Make sendMail skip so request-otp can return 200 in tests
-        await updateServerConfig({ domain: 'localhost' });
-
         const rootRes = await authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/default/root`);
         const root = await assertJson<DrivePath>(rootRes);
         aliceRootId = root.id;
-    });
-
-    afterAll(async () => {
-        await updateServerConfig({ domain: 'test.eigen.is' });
     });
 
     beforeEach(() => {

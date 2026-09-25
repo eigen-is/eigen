@@ -1,0 +1,9 @@
+# Eigen reverse-proxy snippet for Caddy. Import it in your host Caddyfile (import /path/to/eigen.Caddyfile),
+# then reload Caddy.
+{{DOMAIN}} {
+    reverse_proxy {{TARGET}} {
+        flush_interval -1
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Real-IP {remote_host}
+    }
+}

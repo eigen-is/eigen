@@ -1,5 +1,6 @@
 import { formatFileSize } from '@workspace/lib/format';
 import { useHomeSize } from '@workspace/lib/home';
+import { useHomeDataLabel } from '@workspace/lib/public';
 import { Progress } from '@workspace/ui/components/progress';
 import { cn } from '@workspace/ui/lib/utils';
 import { useState } from 'react';
@@ -28,6 +29,7 @@ export const getStorageUsageColor = (storageUsed: number): string => {
 export function StorageUsageBars({ data, className }: { data: StorageData; className?: string }) {
     // Clamp: over-quota users exist in prod, and Progress must not exceed 100%.
     const ratio = data.total.max > 0 ? Math.min(data.total.used / data.total.max, 1) : 0;
+    const homeDataLabel = useHomeDataLabel();
 
     return (
         <div className={cn('space-y-3', className)}>
@@ -45,7 +47,7 @@ export function StorageUsageBars({ data, className }: { data: StorageData; class
                 <span>{formatFileSize(data.drive.default.used)}</span>
             </div>
             <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Mail, contacts & calendar</span>
+                <span className="text-muted-foreground">{homeDataLabel}</span>
                 <span>{formatFileSize(data.homeData.used)}</span>
             </div>
         </div>
@@ -55,6 +57,7 @@ export function StorageUsageBars({ data, className }: { data: StorageData; class
 export function StorageUsage({ className = '', condensed = false }: StorageUsageProps) {
     const { data: storageData, isLoading: storageLoading } = useHomeSize();
     const [showDetails, setShowDetails] = useState(false);
+    const homeDataLabel = useHomeDataLabel();
 
     const totalUsed = storageData?.total.used ?? 0;
     const totalMax = storageData?.total.max ?? 1;
@@ -98,7 +101,7 @@ export function StorageUsage({ className = '', condensed = false }: StorageUsage
                 {storageData && (
                     <div className="space-y-2 mt-2 text-xs">
                         <div className="flex justify-between">
-                            <span className="text-muted-foreground">Mail, Contacts & Calendar</span>
+                            <span className="text-muted-foreground">{homeDataLabel}</span>
                             <span>{formatFileSize(storageData.homeData.used)}</span>
                         </div>
                         <div className="flex justify-between">

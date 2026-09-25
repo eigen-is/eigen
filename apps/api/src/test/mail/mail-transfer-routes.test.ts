@@ -11,6 +11,7 @@ import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getMailDomain } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home';
+import { restoreEnvAfterEach } from '../env-test-helpers';
 import {
     app,
     assertJson,
@@ -51,6 +52,8 @@ describe('Mail transfer routes', () => {
     let bobRootId: string;
     let guestToken: string;
     let guestId: string;
+
+    restoreEnvAfterEach(['MAIL_ENABLED']);
 
     const importRequest = (user: TestUser, body: BodyInit, headers: Record<string, string> = {}) =>
         authedRequest(user.sessionToken, `/mail/${user.id}/import`, {
@@ -319,6 +322,17 @@ describe('Mail transfer routes', () => {
             body: JSON.stringify({ sourceOwnerId: alice.id, sourceMountId: mountId, sourcePathId: rootId }),
         });
         expect(fromDrive.status).toBe(403);
+    });
+
+    test('a server without hosted mail refuses both import routes and writes nothing', async () => {
+        const uploaded = await uploadEml(message(`Mail off ${randomUUID()}`));
+        const before = (await inbox(alice)).length;
+        process.env['MAIL_ENABLED'] = '0';
+        for (const res of [await importRequest(alice, message('Mail off')), await importFromDrive(alice, uploaded)]) {
+            expect(res.status).toBe(403);
+            expect(await res.text()).toBe('Mail is turned off on this server');
+        }
+        expect((await inbox(alice)).length).toBe(before);
     });
 
     test('an import over the mail + contacts quota is 507 and nothing is written', async () => {

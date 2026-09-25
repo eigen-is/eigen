@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
 # MAIL_DOMAIN defaults to DOMAIN when not split. Used for envelope sender, virtual mailbox
@@ -33,21 +33,23 @@ if [ ! -f /certs/cert.pem ]; then
 fi
 
 # --- SMTP relay (optional) ---
+# The keys and rules the API follows when Eigen hosts no mail: port 465 is implicit TLS, any other port
+# STARTTLS, and credentials only go over TLS.
 if [ -n "${SMTP_RELAY_HOST}" ]; then
-    echo "Configuring SMTP relay: ${SMTP_RELAY_HOST}:${SMTP_RELAY_PORT:-587}"
-    cat >> /etc/postfix/main.cf <<EOF
-
-# SMTP relay
-relayhost = [${SMTP_RELAY_HOST}]:${SMTP_RELAY_PORT:-587}
-smtp_sasl_auth_enable = yes
-smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
-smtp_sasl_security_options = noanonymous
-smtp_use_tls = yes
-EOF
-    echo "[${SMTP_RELAY_HOST}]:${SMTP_RELAY_PORT:-587} ${SMTP_RELAY_USER}:${SMTP_RELAY_PASSWORD}" \
-        > /etc/postfix/sasl_passwd
-    postmap /etc/postfix/sasl_passwd
-    chmod 600 /etc/postfix/sasl_passwd /etc/postfix/sasl_passwd.db
+    port=${SMTP_RELAY_PORT:-587}
+    relay="[${SMTP_RELAY_HOST}]:${port}"
+    echo "Configuring SMTP relay: ${relay}"
+    postconf -e "relayhost = ${relay}"
+    if [ "$port" = 465 ]; then
+        postconf -e smtp_tls_wrappermode=yes smtp_tls_security_level=encrypt
+    fi
+    if [ -n "${SMTP_RELAY_USER}" ]; then
+        echo "${relay} ${SMTP_RELAY_USER}:${SMTP_RELAY_PASSWORD}" > /etc/postfix/sasl_passwd
+        postmap /etc/postfix/sasl_passwd
+        chmod 600 /etc/postfix/sasl_passwd /etc/postfix/sasl_passwd.db
+        postconf -e smtp_sasl_auth_enable=yes smtp_sasl_password_maps=hash:/etc/postfix/sasl_passwd \
+            smtp_sasl_security_options=noanonymous smtp_tls_security_level=encrypt
+    fi
 fi
 
 # --- DKIM ---

@@ -1,57 +1,31 @@
-# Dev overrides: HTTP-only, mailpit for catching mail, self-signed certs.
-# DOMAIN=localhost is the hostname for TLS certs and Postfix. Email addresses use a separate
-# domain configured during setup (e.g., eigen.localhost) — see LOCAL-TESTING.md.
-#
-# Dev runs all profiles by default: COMPOSE_PROFILES=edge,mail.
+# Eigen in Docker on a developer's machine. In a clone of its own, copy this file to docker-compose.override.yml, then
+# run ./eigen setup --domain localhost --yes. The API runs in development mode, Mailpit (http://localhost:8025) catches
+# the mail it sends, and postfix and dovecot make a self-signed certificate in data/certs/dev.
+
 services:
   caddy:
     environment:
-      DOMAIN: localhost
-      MAIL_DOMAIN: localhost
       CADDY_ACME_EMAIL: ""
-    ports:
-      - "80:80"
     command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
 
   eigen-api:
     user: ""
     environment:
       PRODUCTION: 0
-      # Override the base compose's NODE_ENV=production so local dev / test-deployments.sh keep
-      # dev behaviour (HTTP-only cookies, dev warnings, BA limiter off unless forced on).
+      # Plain-HTTP cookies, dev warnings, and better-auth's limiter off unless forced on.
       NODE_ENV: development
-      EIGEN_DATA_ROOT: /app/data
-      DOMAIN: localhost
-      # Email suffix is decoupled from the localhost web host — honor MAIL_DOMAIN from .env
-      # (e.g. a ./data set up with a real org domain), default localhost for a fresh stack.
-      MAIL_DOMAIN: ${MAIL_DOMAIN:-localhost}
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
-      COOKIE_DOMAIN: localhost
-      TRUSTED_NETWORKS: "127.0.0.0/8,::1,${EIGEN_SUBNET:-172.20.0.0/24}"
-
-  eigen-static:
-    environment:
-      DOMAIN: localhost
-      MAIL_DOMAIN: localhost
 
   postfix:
     volumes:
-      - ./data/dkim:/data/dkim
       - ./data/certs/dev:/certs:ro
-      - postfix-queue:/var/spool/postfix
     environment:
-      DOMAIN: localhost
-      MAIL_DOMAIN: localhost
       SMTP_RELAY_HOST: ""
 
   dovecot:
     volumes:
-      - ./data:/data
       - ./data/certs/dev:/certs
-    environment:
-      DOMAIN: localhost
-      MAIL_DOMAIN: localhost
 
   mailpit:
     image: axllent/mailpit

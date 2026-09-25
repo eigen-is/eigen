@@ -1,28 +1,45 @@
 .git
 .gitignore
-.env
-!.env.production
+# Secrets reach the API at runtime through env_file, never through an image layer.
+**/.env*
+!.env.example
 *.log
-.DS_Store
+**/.DS_Store
 coverage
 .vscode
 .idea
 *.md
 !README.md
-node_modules
+# The index changelog page and the update check read it.
+!CHANGELOG.md
+**/node_modules
+# Both images build the bundles themselves; a host dist/ would only be stale.
+dist/
 # Runtime data is bind-mounted at ./data:/app/data — never bake it into the image
 # (data/home alone is >1GB and would ship to the daemon on every build).
-data/
+data*/
 apps/api/data
 # Caddy's local state (certs, OCSP cache). Bind-mounted, and its churn made every `up --build`
 # see a changed context and recreate containers.
 caddy-data/
 # The image runs the API from source; never ship a stale local bundle.
 apps/api/build
-# Local-only trees the image never reads: the test data root, backup archives, agent state and
-# the docs' screenshots (well over a gigabyte together, all shipped to the daemon on every build).
-data-test/
+apps/index/src/content/.generated/
+# Local-only trees the image never reads: backup archives, snapshots, launcher state, agent state, worktrees
+# and the docs' screenshots (well over a gigabyte together, all shipped to the daemon on every build).
 backups/
+snapshots/
+.eigen/
 .claude/
 .superpowers/
+.worktrees/
 docs/
+# Operator files in the install dir: the override may hold inline secrets, and the proxy snippets
+# `./eigen setup` writes are for the host web server. The image reads none of them.
+docker-compose.override.yml
+eigen.nginx.conf
+eigen.Caddyfile
+eigen.apache.conf
+# The Docker harnesses run on the host against a scratch install; the image never reads them.
+docker/test-*
+docker/probe-lib.sh

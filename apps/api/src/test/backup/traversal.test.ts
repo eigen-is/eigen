@@ -5,9 +5,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { join, relative } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { auth } from '../../lib/auth/auth';
 import { packFolder, readArtifactManifest } from '../../lib/backup/archive';
-import { buildArtifactName, buildHomeFolderName, getBackupsDir, PRE_RESTORE_SUFFIX } from '../../lib/backup/paths';
+import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { deleteSafetyCopy } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';

@@ -1,0 +1,80 @@
+import { chmodSync, existsSync, mkdirSync, readdirSync, renameSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { readEnvFile, writeEnvFile } from './env-file';
+import { ENV_PATH, installOwner, ownAs, ROOT, VERSION } from './install';
+import { createUi } from './ui';
+
+const EXECUTABLES = ['eigen', 'scripts/demo-reset.sh'];
+const BUNDLE_FILES = [...EXECUTABLES, 'docker-compose.yml', '.env.example'];
+// The demo reset ships so a release install can be a demo box.
+const BUNDLE_DIRS = ['docker/fail2ban', 'scripts/systemd'];
+export const BOOTSTRAP_OPTIONS = { out: { type: 'string' }, force: { type: 'boolean' } } as const;
+export const BOOTSTRAP_USAGE = `Usage: bootstrap [--out <dir>] [--force]
+
+Writes the launcher, the Compose files, the demo reset and a starter ${ENV_PATH} into <dir> (default /out).
+
+  --out <dir>   Where to write, mounted as: docker run --rm -v "$PWD:/out" <image> bootstrap
+  --force       Rewrite the bundle files of an existing install; ${ENV_PATH} is left alone, or gains the
+                release pins when it names none`;
+
+export async function bootstrap(flags: { out?: string; force?: boolean }): Promise<void> {
+    const ui = await createUi(true);
+    const out = flags.out ?? '/out';
+    if (!existsSync(out)) ui.fail(`${out} does not exist.`, 'Mount the install folder: docker run -v "$PWD:/out" …');
+    if (!flags.force && BUNDLE_FILES.some((file) => existsSync(join(out, file)))) {
+        ui.fail(
+            'This folder already has an Eigen install.',
+            'Run ./eigen setup to configure it, or pass --force to rewrite its bundle files.',
+        );
+    }
+    const envPath = join(out, ENV_PATH);
+    const starter = !existsSync(envPath);
+    const existing = readEnvFile(envPath);
+    // A mirror or a private registry the operator wrote before the first setup.
+    const registry =
+        existing.get('EIGEN_REGISTRY') ||
+        process.env['EIGEN_REGISTRY'] ||
+        ui.fail('EIGEN_REGISTRY is not set.', 'Run bootstrap from the Eigen API image.');
+    const owner = installOwner(out);
+    const bundleDirFiles = BUNDLE_DIRS.flatMap((dir) =>
+        readdirSync(join(ROOT, dir), { recursive: true, encoding: 'utf8' })
+            .map((file) => join(dir, file))
+            .filter((file) => statSync(join(ROOT, file)).isFile()),
+    );
+    for (const file of [...BUNDLE_FILES, ...bundleDirFiles]) {
+        const target = join(out, file);
+        for (let dir = dirname(file); dir !== '.'; dir = dirname(dir)) {
+            if (!existsSync(join(out, dir))) mkdirSync(join(out, dir), { recursive: true });
+            ownAs(join(out, dir), owner);
+        }
+        const temp = `${target}.${process.pid}.tmp`;
+        await Bun.write(temp, Bun.file(join(ROOT, file)));
+        chmodSync(temp, EXECUTABLES.includes(file) ? 0o755 : 0o644);
+        ownAs(temp, owner);
+        renameSync(temp, target);
+    }
+
+    // A local build's file names no release until it moves to one: a file without a version is a file bootstrap owns
+    // the pins of.
+    const pin = !existing.has('EIGEN_VERSION');
+    // A build of a channel pins the channel, which ./eigen update then follows.
+    const version = process.env['EIGEN_CHANNEL'] || VERSION;
+    if (pin) {
+        writeEnvFile(
+            envPath,
+            new Map([
+                ...existing,
+                ['EIGEN_REGISTRY', registry],
+                ['EIGEN_VERSION', version],
+                ['EIGEN_API_IMAGE', `${registry}/api:${version}`],
+            ]),
+        );
+        ownAs(envPath, owner);
+    }
+    const kept = pin ? `pinned ${version} in the existing ${ENV_PATH}` : `kept the existing ${ENV_PATH}`;
+    ui.outro(
+        flags.force
+            ? `Rewrote the Eigen ${VERSION} bundle files${pin ? ` and pinned ${version} in ${ENV_PATH}` : ''}.`
+            : `Wrote Eigen ${VERSION}${starter ? '' : ` (${kept})`}. Next: ./eigen setup`,
+    );
+}

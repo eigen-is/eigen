@@ -19,11 +19,12 @@ export function useSetupStatus() {
     });
 }
 
-export function useCompleteSetup() {
+// setupToken is the one-time token from the link ./eigen setup printed; every /setup write needs it.
+export function useCompleteSetup(setupToken: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (input: Parameters<typeof setupApi.complete.post>[0]) => {
-            const res = await setupApi.complete.post(input);
+        mutationFn: async (input: Omit<Parameters<typeof setupApi.complete.post>[0], 'setupToken'>) => {
+            const res = await setupApi.complete.post({ ...input, setupToken });
             if (res.error) throw new AppError(res);
             return res.data;
         },
@@ -38,10 +39,10 @@ export function useCompleteSetup() {
 // Mirrors useCheckS3Connection but hits the unauthenticated /setup route, which only
 // answers while setup is still required. Returns the failure inline so the wizard can
 // show it next to the form; a thrown network error still surfaces as a toast.
-export function useCheckSetupS3() {
+export function useCheckSetupS3(setupToken: string) {
     return useMutation({
         mutationFn: async (config: S3Config): Promise<S3CheckResult> => {
-            const res = await setupApi.s3check.post(config);
+            const res = await setupApi.s3check.post({ ...config, setupToken });
             if (res.error) return { ok: false, message: new AppError(res).message };
             return res.data;
         },
@@ -51,10 +52,10 @@ export function useCheckSetupS3() {
 
 // The /setup twin of useHardenS3Bucket — hardening the bucket at the moment it is first
 // configured, on the same first-run gate the wizard's connection check already uses.
-export function useHardenSetupS3() {
+export function useHardenSetupS3(setupToken: string) {
     return useMutation({
         mutationFn: async (input: S3Config & { noncurrentDays: number }): Promise<S3HardenResult> => {
-            const res = await setupApi.s3harden.post(input);
+            const res = await setupApi.s3harden.post({ ...input, setupToken });
             if (res.error) return hardenFailure(new AppError(res).message);
             return res.data;
         },

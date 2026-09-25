@@ -1,16 +1,48 @@
 ---
 title: "Server settings"
-description: "A reference for every setting on the Settings page in Admin, covering storage quotas, default storage type, and email notifications."
+description: "A reference for the Settings page in Admin, covering your organization name, the server status, the sender of Eigen's mail, storage quotas, default storage type, and email notifications."
 type: reference
-tags: [admin, settings, quotas, storage, notifications]
+tags: [admin, settings, quotas, storage, notifications, mail]
 related: [admin/get-started, admin/storage-quotas]
 order: 80
-updated: 2026-09-21
+updated: 2026-09-24
 ---
 
-The **Settings** page in Admin lets the server owner control storage limits, how new users' files are stored, and which events trigger email notifications. Only the server owner sees this page in the sidebar.
+The **Settings** page in Admin lets the server owner rename the organization, check on the server, set the sender of Eigen's own mail, and control storage limits, how new users' files are stored, and which events trigger email notifications. Only the server owner sees this page in the sidebar.
 
 To open it, sign in to Eigen as the owner and go to [Admin](/admin), then click **Settings** in the sidebar.
+
+## General
+
+**Organization name** is the name people see in Eigen and in the mail it sends. You can change it here.
+
+**Web address** and **Mail domain** are shown but can't be changed. They were set when the server was first set up, and every account's address is on the mail domain.
+
+## Server
+
+This section shows how the server is doing. You can't change anything here.
+
+| Row | What it shows |
+|---|---|
+| **Version** | The version of Eigen the server runs |
+| **Mail** | Whether this server hosts mailboxes, sends its mail through your relay (named here), or has no relay and sends no email |
+| **Disk** | How much disk space is free |
+| **Certificate** | When the server's HTTPS certificate expires. **Managed by the bundled Caddy** means the web server that comes with Eigen holds it. A self-signed certificate is the one the mail server makes for itself when there is no other. Behind your own web server, it shows that mail certificate when this server hosts mail, and none otherwise. |
+
+## Mail
+
+The sender of the notifications, codes and invitations Eigen sends.
+
+| Field | What it controls | Default |
+|---|---|---|
+| **Sender name** | The name these emails come from | Your organization name |
+| **Sender address** | The address these emails come from. Your mail relay must allow it. | `noreply@` your mail domain |
+
+Leave a field empty to use the default. A default name follows the organization name when you rename it.
+
+On a server without mailboxes, a **Relay sends as users** switch appears. Turn it on if your mail relay allows sending from any address on your mail domain. Mail someone causes, like a share notification, then comes from their own address. Off, it comes from the sender address with their name, for example "Ada via Acme", and replies go to them.
+
+**Send test mail** sends one email from you to you, the same way a share notification goes out. If it fails, Eigen shows the relay's answer. Save your changes first: the test uses the saved sender.
 
 ## Storage quotas
 

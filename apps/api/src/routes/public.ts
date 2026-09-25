@@ -1,6 +1,6 @@
 import { MAX_PUBLIC_USERS_PER_BATCH } from '@workspace/lib/constants/public';
 import type { PublicUser } from '@workspace/lib/types/public';
-import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
+import { MAX_EMAIL_LENGTH, MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { isDemo, isMailEnabled } from '../lib/config/env';
 import { getPublicConfig } from '../lib/config/server-config';
@@ -77,7 +77,7 @@ export const publicRouter = new Elysia({ name: 'public' })
             body: t.Object({
                 name: t.String({ minLength: 1 }),
                 username: t.String({ minLength: 2 }),
-                password: t.String({ minLength: 8 }),
+                password: t.String({ minLength: MIN_PASSWORD_LENGTH }),
             }),
         },
     )

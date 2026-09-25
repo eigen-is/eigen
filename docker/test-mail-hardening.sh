@@ -1,24 +1,17 @@
 #!/usr/bin/env bash
-# Verify the outbound mail-relay hardening (2026-08-31 spam-incident fixes) against a running
-# local stack: sender/login binding on the submission ports, the per-IP SASL failure lockout, and
-# the queue-backlog alert.
+# Verify the outbound mail-relay hardening (2026-08-31 spam-incident fixes) against a scratch
+# edge,mail install of this working tree: sender/login binding on the submission ports, the per-IP
+# SASL failure lockout, and the queue-backlog alert.
 #
 # Usage:
-#   ALICE_EMAIL=admin@eigen.is ALICE_PASSWORD='...' ./docker/test-mail-hardening.sh
-#   PROBES=2,3,4 ALICE_EMAIL=... ALICE_PASSWORD=... ./docker/test-mail-hardening.sh   # subset
-#   KEEP_STACK=1 ...                                                                # leave it up
+#   ./docker/test-mail-hardening.sh
+#   PROBES=2,3,4 ./docker/test-mail-hardening.sh   # subset
+#   HARNESS_KEEP=1 ...                             # leave the scratch install up
 #
-# Needs:  docker, openssl, nc, and a `.env.production` whose MAIL_DOMAIN matches the accounts
-#         already in ./data. The script never creates accounts, it logs in as a real one. A host
-#         dev API on :8000 is fine to leave running: eigen-api has no host port binding. Without
-#         ALICE_EMAIL/ALICE_PASSWORD the probes that need a login are skipped and the rest still run.
+# Needs:  docker, openssl, nc, curl, git. The install is fresh, so the script creates the admin
+#         alice@eigen.test through the setup wizard's API and logs in as her.
 #
-# The dev overlay pins postfix and dovecot to MAIL_DOMAIN=localhost, so Postfix's own mail domain
-# can differ from the account's domain. The sender/login binding does not care: it compares the
-# login with the envelope sender, whatever the domain is.
-#
-# LOCAL DEV ONLY: probe 8 sets `defer_transports=smtp`, seeds queue files, and deletes the whole
-# Postfix queue afterwards. Never point this at a production stack.
+# Probe 8 sets `defer_transports=smtp` and seeds queue files; the scratch stack goes away afterwards.
 #
 # No message is ever delivered: the submission dialogs stop at RCPT TO and never send DATA.
 #
@@ -28,10 +21,8 @@
 
 set -euo pipefail
 
-# Counters, log helpers, the dc() compose wrapper and the Result summary.
 . "$(dirname "$0")/probe-lib.sh"
 
-cd "$(dirname "$0")/.."
 
 oneline() { printf '%s' "$1" | tr '\r\n' '  '; }
 
@@ -55,11 +46,11 @@ skip_login_probe() {
 # `-quiet` implies `-ign_eof`, so s_client keeps reading until the server closes after QUIT;
 # `-crlf` turns the \n in our scripted dialogs into the CRLF the protocol requires.
 smtp465() {
-    printf '%b' "$1" | openssl s_client -connect localhost:465 -quiet -crlf 2>/dev/null
+    printf '%b' "$1" | openssl s_client -connect "localhost:$PORT_SMTPS" -quiet -crlf 2>/dev/null
 }
 
 smtp25() {
-    printf '%b' "$1" | nc -w 10 localhost 25 2>/dev/null
+    printf '%b' "$1" | nc -w 10 localhost "$PORT_SMTP" 2>/dev/null
 }
 
 auth_plain() {
@@ -81,7 +72,7 @@ wait_api() {
 wait_smtps() {
     local banner
     for _ in $(seq 1 60); do
-        banner=$(printf 'QUIT\n' | openssl s_client -connect localhost:465 -quiet -crlf 2>/dev/null | head -1 || true)
+        banner=$(printf 'QUIT\n' | openssl s_client -connect "localhost:$PORT_SMTPS" -quiet -crlf 2>/dev/null | head -1 || true)
         printf '%s' "$banner" | grep -q '^220 ' && return 0
         sleep 1
     done
@@ -106,7 +97,7 @@ auth_once() {
         printf 'AUTH PLAIN %s\n' "$auth"
         sleep 2
         printf 'QUIT\n'
-    } | openssl s_client -connect localhost:465 -quiet -crlf 2>/dev/null || true
+    } | openssl s_client -connect "localhost:$PORT_SMTPS" -quiet -crlf 2>/dev/null || true
 }
 
 # Postfix caps AUTH commands per client IP per 60s (smtpd_client_auth_rate_limit=20), and every
@@ -181,51 +172,42 @@ echo 0
 
 # --- prerequisites ---------------------------------------------------------------------------
 
-if [ ! -f .env.production ]; then
-    echo ".env.production missing — see docker/LOCAL-TESTING.md" >&2
-    exit 1
-fi
-set -a; source .env.production; set +a
+scratch_init mailhard
+new_install "eigentestmailhard$$"
+write_override
+# The queue probe needs a threshold the seeded mail can cross. In the env file before setup, because
+# queue-monitor.sh reads its environment once, at container start; configure keeps both keys.
+printf 'QUEUE_ALERT_THRESHOLD=%s\nQUEUE_CHECK_INTERVAL=%s\n' "${QUEUE_ALERT_THRESHOLD:-3}" \
+    "${QUEUE_CHECK_INTERVAL:-10}" >"$INSTALL/.env.production"
+chmod 600 "$INSTALL/.env.production"
+
+header "Installing edge,mail"
+run_setup "$SCRATCH/setup.log" --user "$(id -u):$(id -g)" --yes --domain localhost --mail --mail-domain eigen.test \
+    --contact-email admin@eigen.test --no-proxy --no-relay
+set -a; source "$INSTALL/.env.production"; set +a
 MAIL_DOMAIN="${MAIL_DOMAIN:-$DOMAIN}"
 
-ALICE_EMAIL="${ALICE_EMAIL:-}"
-ALICE_PASSWORD="${ALICE_PASSWORD:-}"
+# A fresh install has no account: the admin comes from the link ./eigen setup printed.
+ALICE_EMAIL="alice@$MAIL_DOMAIN"
+ALICE_PASSWORD="probe-$RUN-password"
+ADMIN_EMAIL=$ALICE_EMAIL
+BASE="https://localhost:$PORT_HTTPS/eigen"
+JAR="$SCRATCH/session"
+if ! create_admin "$SCRATCH/setup.log" "$ALICE_PASSWORD"; then
+    fail "the setup link made no $ALICE_EMAIL who signs in"
+    header "Result"
+    probe_summary
+fi
 # A same-domain address the login does NOT own. It need not exist: the login/sender map is
 # consulted for the sender address, not the mailbox.
 SENDER_OTHER="${SENDER_OTHER:-someone-else@$MAIL_DOMAIN}"
 SENDER_FOREIGN="${SENDER_FOREIGN:-anne@pobox.com}"
 
-# The queue probe needs a threshold the seeded mail can cross. Exported before `up` because
-# queue-monitor.sh reads its environment once, at container start.
-export QUEUE_ALERT_THRESHOLD="${QUEUE_ALERT_THRESHOLD:-3}"
-export QUEUE_CHECK_INTERVAL="${QUEUE_CHECK_INTERVAL:-10}"
-
-cleanup() {
-    # Only undo what probe 8 did. Without the flag a PROBES=2,3 run would wipe a queue it never
-    # touched.
-    if [ "${STACK_UP:-0}" = 1 ] && [ "${QUEUE_PROBE_RAN:-0}" = 1 ]; then
-        dc exec -T postfix sh -c 'postconf -e defer_transports= && postfix reload && postsuper -d ALL' \
-            >/dev/null 2>&1 || true
-    fi
-    if [ "${KEEP_STACK:-0}" != 1 ]; then
-        COMPOSE_PROFILES=edge,static,mail dc down --remove-orphans >/dev/null 2>&1 || true
-    fi
-}
-trap cleanup EXIT
-
-header "Bringing up edge,mail (MAIL_DOMAIN=$MAIL_DOMAIN)"
-COMPOSE_PROFILES=edge,mail dc up -d --build --wait >/dev/null 2>&1 || {
-    log "× compose failed; recent logs:"
-    dc logs --tail=30
-    exit 1
-}
-STACK_UP=1
 log "up (queue alert threshold $QUEUE_ALERT_THRESHOLD, checked every ${QUEUE_CHECK_INTERVAL}s)"
-if wait_smtps; then
-    log "postfix is answering on :465"
-else
-    log "✗ postfix never answered on :465 within 60s; look at: dc logs postfix"
-    exit 1
+if ! wait_smtps; then
+    fail "postfix never answered on :465 within 60s; look at: dc logs postfix"
+    header "Result"
+    probe_summary
 fi
 
 # Login probes. Probe 1 is what proves the credentials and sets HAVE_LOGIN, so it is not optional
@@ -242,8 +224,6 @@ header "Probe 1 — credential sanity (/internal/auth/verify)"
 HAVE_LOGIN=0
 if ! should_run 1 && [ "$NEEDS_LOGIN" = 0 ]; then
     skip "probe 1 not selected"
-elif [ -z "$ALICE_EMAIL" ] || [ -z "$ALICE_PASSWORD" ]; then
-    skip "ALICE_EMAIL / ALICE_PASSWORD not set — every login probe will be skipped"
 else
     code=$(dc exec -T eigen-api curl -s -o /dev/null -w '%{http_code}' -X POST \
         -H 'Content-Type: application/json' \
@@ -253,7 +233,7 @@ else
         HAVE_LOGIN=1
         ok "the API accepts $ALICE_EMAIL"
     else
-        fail "the API rejected $ALICE_EMAIL → HTTP $code (wrong password, or no such account in ./data)"
+        fail "the API rejected $ALICE_EMAIL → HTTP $code (the account created at setup does not log in)"
     fi
 fi
 
@@ -319,8 +299,8 @@ header "Probe 7 — inbound port 25 never rejects a foreign sender"
 ##############################################################################
 # The sender/login rule lives on the submission services only. If it ever leaks into main.cf,
 # every message from the internet is refused, so this probe is the canary: a 553 here is the
-# failure. The recipient uses Postfix's own mydomain, which in the dev overlay is `localhost`
-# whatever MAIL_DOMAIN says, so a 550 unknown-user reply is fine. Sender restrictions run before
+# failure. The recipient uses Postfix's own mydomain, which may differ from MAIL_DOMAIN, so a 550
+# unknown-user reply is fine. Sender restrictions run before
 # recipient restrictions, so a leak would show up as a 553 first either way.
 if should_run 7; then
     postfix_domain=$(dc exec -T postfix postconf -h mydomain | tr -d '\r' || true)
@@ -363,11 +343,7 @@ console.log(newest);
 }
 
 if should_run 8; then
-    QUEUE_PROBE_RAN=1
     before=$(admin_alert_stamp)
-    # Restart postfix so queue-monitor.sh starts fresh: it holds its alert cooldown in memory, and
-    # a rerun against a kept stack would otherwise still be inside that 6 hour window.
-    dc restart postfix >/dev/null 2>&1
     # defer_transports parks every outbound message in the deferred queue without a delivery
     # attempt, so the backlog is deterministic instead of DNS-timing dependent.
     dc exec -T postfix sh -c 'postconf -e defer_transports=smtp && postfix reload' >/dev/null 2>&1
@@ -404,12 +380,8 @@ header "Probe 9 — per-IP SASL failure lockout"
 ##############################################################################
 # The route-level half of the story: drive it with a synthetic IP so the lockout is observable
 # without locking this host out. Probe 11 proves the real SMTP path actually delivers a client IP.
-# The assertion pins the 429 at exactly attempt 51, so the bucket has to start empty: a KEEP_STACK
-# rerun within the 15 minute window would otherwise still hold the previous run's failures.
+# The assertion pins the 429 at exactly attempt 51: no probe before this one fails a login from that address.
 if should_run 9; then
-    log "restarting eigen-api for a clean failure-bucket baseline..."
-    dc restart eigen-api >/dev/null 2>&1
-    wait_api || fail "eigen-api did not come back healthy"
     filled=$(fill_ip_bucket 198.51.100.10)
     if [ "${filled:-0}" -eq 51 ]; then
         ok "51st failure from one IP → 429 (per-IP bucket engaged)"
@@ -486,7 +458,7 @@ if should_run 11 && [ "$HAVE_LOGIN" = 1 ]; then
     # 1. A deliberate failure over real SMTP, then ask dovecot which client address it saw. Never
     # hardcode it: it is the docker gateway, and the value differs between Docker Desktop and Linux.
     # Retried, because this very attempt can be one postfix abandons (see the notes in
-    # LOCAL-TESTING.md), and an abandoned attempt reaches dovecot's log no more than the API.
+    # auth_once), and an abandoned attempt reaches dovecot's log no more than the API.
     discover_user="ip-discover@probe.invalid"
     client_ip=""
     anvil_reserve 8  # 4 discovery attempts at worst, plus the assertion and its retry
@@ -578,7 +550,7 @@ header "Result"
 ##############################################################################
 if [ "$FAIL" -eq 0 ] && [ "$PASS" -eq 0 ]; then
     # Green with nothing asserted is the worst outcome: it reads as a pass.
-    printf '✗ NOTHING RAN (%d probes skipped) — check PROBES and ALICE_EMAIL/ALICE_PASSWORD\n' "$SKIP"
+    printf '✗ NOTHING RAN (%d probes skipped) — check PROBES\n' "$SKIP"
     exit 1
 fi
 probe_summary

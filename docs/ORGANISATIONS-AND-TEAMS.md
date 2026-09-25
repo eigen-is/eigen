@@ -11,7 +11,7 @@ plugin.
 
 - All new users auto-joined as `member` (via `databaseHooks.user.create.after`)
 - Every sign-in re-attempts the join when the membership row is missing (`authEnsureDefaultOrgMembership`, called from `databaseHooks.session.create.after`), so an account whose sign-up join failed still reaches the org instead of staying invisible in Admin → Users; guests are skipped
-- Setup admin becomes `owner`
+- Setup admin becomes `owner`. The owner is out of reach of better-auth's admin plugin: `/admin/impersonate-user` is disabled, and a `hooks.before` on `/admin/*` (`apps/api/src/lib/auth/auth.ts`) refuses a call that targets the owner unless the owner makes it, so an admin can neither demote, delete, rename nor sign in as the owner
 - Config stored in `serverConfig` (`data/server/`)
 - New users also trigger share reconciliation (`reconcileSharesForNewUser`)
 
@@ -161,8 +161,7 @@ client API (`authClient.organization.*`) for org/team operations and Eden Treaty
 - **Team Detail**: List/add/remove team members, toggle team calendar on/off, set calendar member access
   (free-busy/read/write), manage mounts (add/edit/enable/disable), set quota overrides (mail & contacts, default
   mount), set/remove the team avatar (see [Team Avatars](#team-avatars))
-- **Settings**: Server-wide settings — quotas, storage defaults (incl. S3), email-notification toggles, landing
-  page links. See [SERVER-SETTINGS.md](SERVER-SETTINGS.md)
+- **Settings**: Server-wide settings — the organization name, the server's status, the system sender and test mail, quotas, storage defaults (incl. S3), email-notification toggles, landing page links. See [SERVER-SETTINGS.md](SERVER-SETTINGS.md)
 - **Guests**: guest accounts, with detail + delete — see [GUEST-ACCESS.md](GUEST-ACCESS.md) (the `/guest-settings`
   page next to it holds the guest toggles)
 - **Waitlist**: waitlist entries — accept, reject, resend invite, delete
@@ -170,8 +169,7 @@ client API (`authClient.organization.*`) for org/team operations and Eden Treaty
 
 ### Access
 
-Route guard in `_auth.tsx`: fetches org members, checks current user has role `admin` or `owner`. Non-admins see an access-denied
-`EmptyState`. Visible via "Admin" in app switcher.
+Route guard in `_auth.tsx`: fetches org members, checks current user has role `admin` or `owner`. Non-admins see an access-denied `EmptyState`. Settings, Onboarding, Guest settings and Waitlist sit under a second guard, `_auth._owner.tsx` (`useIsOrgOwner()`), since their routes are the owner's; the sidebar hides them from admins. Visible via "Admin" in app switcher.
 
 ### API
 
@@ -191,6 +189,7 @@ build the segment with `teamOwnerId(teamId)`.
 | `/team/:ownerId/mount/:mountId`  | PUT        | Update mount settings                     |
 | `/team/:ownerId/avatar`          | POST / DELETE | Set / remove the team avatar           |
 | `/settings/user/:userId`         | DELETE     | Delete user completely                    |
+| `/settings/user/:userId/password` | PUT      | Reset a user's password                   |
 | `/settings/users`                | GET        | Org members + orphans (`AdminUserRow[]`)  |
 | `/settings/users/usage`          | GET        | Per-user disk usage                       |
 | `/settings/users/guests`         | GET        | Guest accounts only                       |

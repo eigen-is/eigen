@@ -58,4 +58,6 @@ export type FileAction = {
     // The route behind the row refuses a guest, so the row is hidden for one. `applies` cannot answer
     // this: it is handed the file, never the user.
     guestDenied?: true;
+    // The row reaches the hosted mailbox, so a server without hosted mail hides it; the route refuses too.
+    mailOnly?: true;
 };

@@ -64,7 +64,7 @@ export const PERSONAS: Persona[] = [
 ];
 
 export const ADMIN_NAME = 'Tuimel Admin';
-export const ADMIN_LOCALPART = 'admin';
+export const ADMIN_LOCALPART = 'office';
 export const ADMIN_AVATAR = 'admin.jpg';
 export const ORG_NAME = 'Tuimel Festival';
 export const TEAM_NAME = 'festival crew';

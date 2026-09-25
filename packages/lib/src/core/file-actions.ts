@@ -54,6 +54,7 @@ export const FILE_ACTIONS: readonly FileAction[] = [
         icon: MailPlus,
         applies: (info) => !!info.downloadUrl && isEmlFile(info.mimeType, info.name) && info.size <= EML_MAX_BYTES,
         guestDenied: true,
+        mailOnly: true,
     },
     {
         id: 'import-calendar',

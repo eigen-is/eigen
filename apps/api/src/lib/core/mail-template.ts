@@ -47,6 +47,11 @@ function appUrl(name: string, fallback: string): string {
     return `${base}${value.startsWith('/') ? value : `/${value}`}`;
 }
 
+// The admin app, where setup finishes and the admins sign in.
+export function adminUrl(): string {
+    return appUrl('VITE_APP_ADMIN_URL', 'http://localhost:3009/admin');
+}
+
 function buildReferenceUrl(ref: AttachmentReference): string {
     const path = `${ref.ownerId}/${ref.mountId}/${ref.id}`;
     switch (ref.driveType) {

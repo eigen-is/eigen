@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useDeleteUser, useUpdateMemberRole } from '@workspace/lib/admin';
+import { useAuth } from '@workspace/lib/auth';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
@@ -23,11 +24,12 @@ type UserDetailToolbarProps = {
 
 export function UserDetailToolbar({ user, onClose }: UserDetailToolbarProps) {
     const { isMobile } = useLayout();
+    const { user: me } = useAuth();
     const [showResetPassword, setShowResetPassword] = useState(false);
 
     return (
         <div className="flex items-center gap-1 ml-auto">
-            {user.role !== 'owner' && (
+            {(user.role !== 'owner' || user.id === me?.id) && (
                 <>
                     <TooltipButton
                         icon={KeyRound}

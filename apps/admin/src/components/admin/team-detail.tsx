@@ -2,6 +2,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { useAddTeamMember, useMembers, useRemoveTeam, useRemoveTeamMember, useUpdateTeam } from '@workspace/lib/admin';
 import { useCalendars, useUpdateCalendar } from '@workspace/lib/calendar';
 import { STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
+import { useHomeDataLabel } from '@workspace/lib/public';
 import { useCheckS3Connection, useHardenS3Bucket, useServerSettings } from '@workspace/lib/settings';
 import {
     useAddTeamMount,
@@ -17,7 +18,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { type MountSettings, mapStorageType } from '@workspace/lib/types/settings';
-import { AvatarEditor, DeleteDialog, EmptyState, TooltipButton } from '@workspace/ui';
+import { AvatarEditor, DeleteDialog, EmptyState, SettingsSection, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -104,6 +105,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const { data: settings } = useTeamSettings(team.id);
     const updateSettings = useUpdateTeamSettings(team.id);
     const { data: serverSettings } = useServerSettings();
+    const homeDataLabel = useHomeDataLabel();
     const s3Check = useCheckS3Connection();
     const s3Harden = useHardenS3Bucket();
 
@@ -272,16 +274,13 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
 
                     <Separator />
 
-                    <div className="space-y-3">
-                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                            Quota Overrides
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
-                            Override server defaults for members of this team. Leave empty to inherit.
-                        </p>
+                    <SettingsSection
+                        title="Quota Overrides"
+                        description="Override server defaults for members of this team. Leave empty to inherit."
+                    >
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-1.5">
-                                <Label>Mail, Contacts & Calendar (MB)</Label>
+                                <Label>{homeDataLabel} (MB)</Label>
                                 <Input
                                     type="number"
                                     min={10}
@@ -301,7 +300,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                                 />
                             </div>
                         </div>
-                    </div>
+                    </SettingsSection>
 
                     <div className="flex items-center justify-end gap-2 pt-2">
                         <Button variant="outline" onClick={() => setShowSettingsForm(false)}>
@@ -324,7 +323,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                             <span className="text-sm text-muted-foreground">Quota overrides</span>
                             <span className="text-sm">
                                 {settings?.memberOverrides?.mailAndContactsMaxMB &&
-                                    `Mail, Contacts & Calendar: ${settings.memberOverrides.mailAndContactsMaxMB} MB`}
+                                    `${homeDataLabel}: ${settings.memberOverrides.mailAndContactsMaxMB} MB`}
                                 {settings?.memberOverrides?.mailAndContactsMaxMB &&
                                     settings?.memberOverrides?.defaultMountMaxSizeMB &&
                                     ' · '}

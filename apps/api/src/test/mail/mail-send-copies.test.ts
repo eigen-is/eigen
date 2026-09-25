@@ -2,6 +2,7 @@ import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { AddressObject, EmailDraft, SentMailResult } from '@workspace/lib/types/mail';
 import * as mailer from '../../lib/core/mailer';
+import { restoreEnvAfterEach } from '../env-test-helpers';
 import { assertJson, authedRequest, getTestContext } from '../setup';
 
 const isWindows = process.platform === 'win32';
@@ -106,6 +107,8 @@ async function sendDraftWithRef(
 const addresses = (list?: { address: string }[]) => (list ?? []).map((a) => a.address).sort();
 
 describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
+    restoreEnvAfterEach(['MAIL_ENABLED']);
+
     test('mixed recipients produce one internal copy plus one personalised copy per external', async () => {
         startCapture();
         const { draft, res } = await sendDraftWithRef('bob@test.eigen.is, ext1@x.com', { cc: 'ext2@y.com' });
@@ -118,7 +121,7 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
             expect(addresses(m.cc)).toEqual(['ext2@y.com']);
             expect(m.messageId).toBe(expectedId);
             expect(m.bcc).toBeUndefined();
-            expect(m.envelope?.from).toBe(ctx.alice.user.email);
+            expect(m.from?.address).toBe(ctx.alice.user.email);
         }
 
         const internal = sent.find((m) => m.envelope?.to.includes('bob@test.eigen.is'));
@@ -138,10 +141,19 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         expect(ext2!.html).toContain('email=ext2%40y.com');
         expect(ext2!.text).toContain('email=ext2%40y.com');
 
-        // The envelope + pinned Message-ID must land on the final nodemailer options.
+        // The envelope + pinned Message-ID must land on the final nodemailer options; hosting mail, Alice sends as herself.
         const options = mailer.buildMailOptions(ext1!);
         expect(options.envelope).toEqual({ from: ctx.alice.user.email, to: ['ext1@x.com'] });
         expect(options.messageId).toBe(expectedId);
+    });
+
+    test('a server without hosted mail refuses the send, and nothing goes out', async () => {
+        startCapture();
+        process.env['MAIL_ENABLED'] = '0';
+        const res = await sendMailBody({ subject: 'Mail off', to: addr('bob@test.eigen.is'), text: 'hi' });
+        expect(res.status).toBe(403);
+        expect(await res.text()).toBe('Mail is turned off on this server');
+        expect(sent.length).toBe(0);
     });
 
     test('the Sent EML stays bare — no per-recipient email prefill baked into it', async () => {

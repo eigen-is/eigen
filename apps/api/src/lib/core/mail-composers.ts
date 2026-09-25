@@ -108,7 +108,7 @@ export function composeCollaboratorsEmail(
     };
 }
 
-// System emails carry no from-address, so buildMailOptions stamps `noreply@` on them.
+// System emails carry no from-address, so buildMailOptions stamps the system sender on them.
 export function composeOtpEmail(
     recipient: { name: string; email: string },
     code: string,

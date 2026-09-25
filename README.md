@@ -45,12 +45,9 @@ the aim is to make Eigen reliable enough for mid-to-large organizations as well.
 Eigen is **pre-1.0 and actively developed**. The core works, but be deliberate about what you put on it:
 
 - **Breaking changes** are likely between minor versions until 1.0; expect occasional manual migration.
-- **You own your data, including the backups.** Use `scripts/backup.sh` (or your own routine) and verify
-  it restores. Eigen does not back up your data for you.
-- **You own your server's security.** Keep the host patched, lock down SSH, use strong passwords, and
-  watch your logs. A self-hosted server is your responsibility end-to-end.
-- **No warranty** — see [LICENSE.txt](LICENSE.txt). Eigen is built by a single developer in their spare
-  time. It's provided as-is, in good faith, with no SLA.
+- **You own your data, including the backups.** Use `./eigen backup` (or your own routine) and verify it restores. Eigen does not back up your data for you.
+- **You own your server's security.** Keep the host patched, lock down SSH, use strong passwords, and watch your logs. A self-hosted server is your responsibility end-to-end.
+- **No warranty**: see [LICENSE.txt](LICENSE.txt). Eigen is built by a single developer in their spare time. It's provided as-is, in good faith, with no SLA.
 
 If data loss in your workspace would be catastrophic, wait for 1.0. For personal use, hobbyists, and
 small teams comfortable with rough edges, the current build is functional and improving fast.
@@ -103,52 +100,48 @@ Eigen doesn't lock you into its web interface. Standard protocols let you use yo
 
 ## Getting started
 
-### Prerequisites
+### Install on a server
 
-- [Bun](https://bun.sh) (runtime for both server and client). The pinned version is in `.bun-version`; install it with `curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat .bun-version)"`
-- [Git](https://git-scm.com)
+Eigen runs in Docker: **Caddy** (reverse proxy with automatic HTTPS), **Eigen API** (Bun), **Postfix** (email), **Dovecot** (IMAP), and **Unbound** (DNS resolver for Postfix). The server needs Docker with Compose 2.20 or newer and curl for the one line below, nothing else. Install Docker, run it, open the printed link:
 
-### Quick start
+```bash
+mkdir -p /opt/eigen && cd /opt/eigen
+curl -fsSL https://eigen.is/install | sh
+```
+
+The script fetches the `eigen` command and runs `./eigen setup`. Setup downloads the newest release, asks for your web address, mail domain, how HTTPS reaches Eigen and whether to host email, starts Eigen, and prints a one-time link that finishes the setup in your browser. The same command updates, backs up and restores: `./eigen help`. Rather not pipe a script into `sh`? The [Setup Guide](docker/SETUP-GUIDE.md) shows the same install from the release image with one `docker run`, and every step after it.
+
+`./eigen setup` also builds the images from a clone of this repository. That is for developing Eigen: see [CONTRIBUTING.md § Eigen in Docker](docs/CONTRIBUTING.md#eigen-in-docker).
+
+### Development
+
+Needs [Bun](https://bun.sh) at the version in `.bun-version` (install it with `curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat .bun-version)"`) and [Git](https://git-scm.com). PDF export needs `weasyprint` on your PATH and video thumbnails need `ffmpeg`. Everything else works without them.
 
 ```bash
 git clone https://github.com/eigen-is/eigen.git
 cd eigen
-cp .env.development .env
 bun install
 bun run serve
 ```
 
-Open `http://localhost:3009/admin` to run the first-time setup wizard. It creates your admin account and configures
-storage.
+This starts the API on `localhost:8000` and every app on its own port. The API logs a one-time link, `Finish the setup at http://localhost:3009/admin/#setup=…`. Open it to create your admin account and choose where files are stored. Data lands in `data/` in the checkout.
 
-### Docker deployment
-
-For production, Eigen runs as five Docker containers: **Caddy** (reverse proxy with automatic HTTPS), **Eigen API** (Bun), **Postfix** (email), **Dovecot** (IMAP), and **Unbound** (DNS resolver for Postfix). See the [VPS Setup Guide](docker/SETUP-GUIDE.md) for step-by-step instructions, or the [Local Testing Guide](docker/LOCAL-TESTING.md) to try the full stack on your machine.
+The API reads `.env.development`. Put your own overrides in `.env`. Eigen sends no mail in development: the API logs each message's sender, recipient and subject instead. To read 2FA and guest codes, run [Mailpit](https://mailpit.axllent.org) and add `SMTP_HOST=localhost` and `SMTP_PORT=1025` to `.env`.
 
 ```bash
-git clone https://github.com/eigen-is/eigen.git /opt/eigen
-cd /opt/eigen
-bun install
-bun run setup
-```
-
-### Development
-
-```bash
-bun run serve          # All apps + API
-bun serve:mail         # Single app + API (works for any app name)
+bun run serve:mail     # One app + API (works for any app name)
 bun run lint           # Lint + format check (Biome)
 bun run lint:fix       # Auto-fix
 bun run typecheck      # Type check all packages
 bun run test           # Run all tests
-bun run check          # lint + typecheck + repo guards + tests
+bun run check          # lint + typecheck + repo guards + tests, before every PR
 ```
+
+Docker is only needed to test mail delivery, IMAP or the images: see [CONTRIBUTING.md](docs/CONTRIBUTING.md#eigen-in-docker).
 
 ## Architecture
 
-Each user gets their own directory on the server. SQLite databases (per user) store metadata and structured data.
-Files are stored separately. No shared database means no way to accidentally access someone else's data. Backups
-are trivial — just copy a user's directory.
+Each user gets their own directory on the server. SQLite databases (per user) store metadata and structured data. Files are stored separately. No shared database means no way to accidentally access someone else's data. `./eigen backup` saves the whole server as one snapshot; [docs/BACKUP.md](docs/BACKUP.md) covers it and the backup of one user.
 
 ```
 data/home/{userId}/
@@ -194,7 +187,7 @@ Architecture docs live in `docs/`:
 | Area | Docs |
 |------|------|
 | Architecture | [Storage](docs/STORAGE.md), [Database](docs/DATABASE.md), [SSE](docs/SSE.md), [ACL](docs/ACL.md), [Search](docs/SEARCH.md), [Scalability](docs/SCALABILITY.md) |
-| Deployment | [Docker Setup](docker/SETUP-GUIDE.md), [Local Testing](docker/LOCAL-TESTING.md), [S3 Sync](docs/SYNC.md), [Demo Mode](docs/DEMO_MODE.md), [Testing](docs/TESTING.md) |
+| Deployment | [Docker Setup](docker/SETUP-GUIDE.md), [S3 Sync](docs/SYNC.md), [Demo Mode](docs/DEMO_MODE.md), [Testing](docs/TESTING.md) |
 | Frontend | [Layout](docs/LAYOUT.md), [Clipboard](docs/CLIPBOARD.md), [Previews](docs/PREVIEWS.md) |
 | Features | [Mail](docs/MAIL.md), [Calendar](docs/CALENDAR.md), [Contacts](docs/CONTACTS.md), [Chat](docs/CHAT.md), [Notifications](docs/NOTIFICATION-CENTER.md), [IMAP](docs/IMAP.md), [WebDAV](docs/WEBDAV.md) |
 | Apps | [Sheets](docs/SHEETS.md), [Slides](docs/SLIDES.md), [Canvas engine (Vector + Slides)](docs/CANVAS.md), [Stickies](docs/STICKIES.md), [Comments](docs/COMMENTS.md) |

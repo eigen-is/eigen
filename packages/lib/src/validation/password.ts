@@ -1,3 +1,5 @@
+export const MIN_PASSWORD_LENGTH = 8;
+
 export function validatePasswordStrength(password: string): number {
     let score = 0.4 * Math.min((password.length - 1) / 8, 1.0);
 

@@ -60,6 +60,12 @@ export type S3HardenResult = S3CheckResult & {
     reason?: 'access-denied' | 'not-supported' | 'foreign-lifecycle' | 'error';
 };
 
+// The web address and the mail domain come from ./eigen setup; the wizard only shows the mail domain.
+export type SetupStatus = { setupRequired: boolean; mailDomain: string };
+
+// The admin account /setup/complete made.
+export type SetupResult = { user: { id: string; email: string; name: string } };
+
 export type LandingLink = {
     title: string;
     url: string;
@@ -108,6 +114,14 @@ export type ServerSettings = {
             userOnCalendarInvite: boolean;
             ownerOnAccessRequest: boolean;
         };
+    };
+    mail: {
+        // Empty: the organization name.
+        senderName: string;
+        // Empty: noreply@ the mail domain.
+        senderAddress: string;
+        // Without hosted mail, whether the relay accepts every address on the mail domain as a sender.
+        relaySendsAsUsers: boolean;
     };
 };
 

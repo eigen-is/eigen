@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { getSupportUrl } from '@workspace/lib/api';
-import { apps } from '@workspace/lib/apps';
+import { useEnabledApps } from '@workspace/lib/public';
 import { Column, ColumnLayout, EigenCyclingLogo, KetTile } from '@workspace/ui';
 import { LifeBuoy } from 'lucide-react';
 
@@ -9,6 +9,7 @@ export const Route = createFileRoute('/_auth/')({
 });
 
 function HomeComponent() {
+    const apps = useEnabledApps();
     return (
         <ColumnLayout>
             <Column id="detail" width="flex" onBack="sidebar">

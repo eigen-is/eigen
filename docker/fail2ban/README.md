@@ -1,6 +1,6 @@
 # Fail2ban for the bundled mail containers (opt-in)
 
-Bans IP addresses that flood Eigen's mail ports with failed logins — Postfix's submission ports and Dovecot's IMAPS. It is the outermost layer of the login-flood defense, after the API's per-IP failure limiter and Postfix's anvil rate limits, and the only one that stops the traffic before it reaches the container.
+Bans IP addresses that flood Eigen's mail ports with failed logins: Postfix's submission ports and Dovecot's IMAPS. It is the outermost layer of the login-flood defense, after the API's per-IP failure limiter and Postfix's anvil rate limits, and the only one that stops the traffic before it reaches the container.
 
 This ships as host config, not as a container. Fail2ban writes host firewall rules, and reading the container log through the journald driver would break the dev stack on Docker Desktop, so wiring it into `docker-compose.yml` would cost every local setup something to help one production host.
 
@@ -17,11 +17,11 @@ systemctl enable --now fail2ban
 systemctl restart fail2ban
 ```
 
-`scripts/update.sh` re-copies the two `filter.d` files on every update, so a filter fix in the repo reaches the host on its own; it never touches `jail.d`, so the tuning below stays yours.
+After a start that recreated the postfix or dovecot container, `./eigen` copies the two `filter.d` files again and reloads fail2ban, when the jail is installed, it can write it (as root, in practice) and `fail2ban-client` is there; otherwise it prints the command to run as root. It never touches `jail.d`, so the tuning below stays yours.
 
 ## Reload after container recreation
 
-Fail2ban expands the jail's log glob only when the jail starts. The Docker json-log path embeds the container ID, so any `docker compose up` that recreates the postfix or dovecot container leaves both jails polling deleted log files — `fail2ban-client status` still reports them up, but nothing matches and nobody gets banned. `scripts/update.sh` reloads the jails itself when it finds them installed, so the normal update path is covered; only when you recreate the mail containers by hand does the reload fall to you:
+Fail2ban expands the jail's log glob only when the jail starts. The Docker json-log path embeds the container ID, so any `docker compose up` that recreates the postfix or dovecot container leaves both jails polling deleted log files: `fail2ban-client status` still reports them up, but nothing matches and nobody gets banned. `./eigen` reloads the jails after every start of setup, restart, update, rollback, backup or restore that recreated them, so only a by-hand `docker compose up` that recreates the mail containers leaves the reload to you:
 
 ```bash
 fail2ban-client reload

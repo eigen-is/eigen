@@ -1,5 +1,5 @@
 # Static-only Eigen frontend. Serves the SPA bundles + proxies the API on plain HTTP :8080.
-# A host webserver (nginx, Caddy, Apache, Cloudflare Tunnel, Tailscale Funnel, ...) terminates
+# A host web server (nginx, Caddy, Apache, Cloudflare Tunnel, Tailscale Funnel, ...) terminates
 # HTTPS and forwards everything here. See docker/SETUP-GUIDE.md for wiring.
 
 {
@@ -14,104 +14,9 @@
     }
 }
 
-(app) {
-    redir /{args[0]} /{args[0]}/ 308
-    handle_path /{args[0]}/* {
-        root * /www/{args[0]}
-        try_files {path} /index.html
-        file_server
-    }
-}
+import site.Caddyfile
 
+# No HSTS: the host web server in front of this plain :8080 terminates HTTPS.
 :8080 {
-    encode gzip zstd
-
-    # Baseline security headers for every deployment shape (the CSP + referrer meta ride in each app's
-    # HTML). HSTS is intentionally absent: a host webserver terminates HTTPS in front of this plain :8080.
-    header X-Frame-Options SAMEORIGIN
-    header X-Content-Type-Options nosniff
-    header Referrer-Policy "strict-origin-when-cross-origin"
-    header Permissions-Policy "camera=(), microphone=(), geolocation=()"
-
-    @static path *.js *.css *.png *.jpg *.svg *.woff2 *.ttf *.woff *.eot
-    header @static Cache-Control "public, max-age=31536000, immutable"
-
-    # HTML shells revalidate so a deploy isn't masked by the browser's heuristic cache.
-    @html not path /eigen/* /dav/* /.well-known/* *.js *.css *.png *.jpg *.svg *.woff2 *.ttf *.woff *.eot
-    header @html Cache-Control "no-cache"
-
-    # Localhost-only API routes (mail delivery + credential verify) must not be internet-reachable;
-    # their real callers (Postfix/Dovecot) hit the API directly on the bridge, so 404 them here.
-    @internal_only path /eigen/internal/* /eigen/mail/deliver/*
-    handle @internal_only {
-        respond 404
-    }
-
-    # API + WebSocket (Caddy auto-detects upgrade requests and forwards them transparently)
-    handle_path /eigen/* {
-        reverse_proxy eigen-api:8000 {
-            flush_interval -1
-            header_up X-Real-IP {client_ip}
-            header_up X-Forwarded-For {client_ip}
-            header_up X-Forwarded-Proto {scheme}
-        }
-    }
-
-    # CalDAV + CardDAV — set X-Real-IP to the real client and drop inbound X-Forwarded-For so a DAV client
-    # can't spoof its rate-limit bucket (matches /eigen/*).
-    handle /dav/* {
-        reverse_proxy eigen-api:8000 {
-            header_up X-Real-IP {client_ip}
-            header_up -X-Forwarded-For
-        }
-    }
-    handle /.well-known/caldav {
-        redir * /dav/ 301
-    }
-    handle /.well-known/carddav {
-        redir * /dav/ 301
-    }
-
-    # Email autodiscovery — same template as the bundled Caddyfile, served at the apex
-    handle /.well-known/autoconfig/mail/config-v1.1.xml {
-        root * /etc/caddy
-        rewrite * /autoconfig.xml
-        templates
-        header Content-Type "application/xml"
-        file_server
-    }
-
-    # CalDAV root discovery — Apple Calendar PROPFIND/OPTIONS hits /
-    @caldav_root {
-        method PROPFIND OPTIONS
-        path /
-    }
-    handle @caldav_root {
-        rewrite * /dav/
-        reverse_proxy eigen-api:8000 {
-            header_up X-Real-IP {client_ip}
-            header_up -X-Forwarded-For
-        }
-    }
-
-    # Frontend apps
-    import app mail
-    import app drive
-    import app docs
-    import app contacts
-    import app calendar
-    import app chat
-    import app stickies
-    import app slides
-    import app sheets
-    import app vector
-    import app space
-    import app admin
-
-    # Landing page
-    handle {
-        root * /www/index
-        try_files {path} {path}/index.html /index.html
-        file_server
-    }
+    import site
 }

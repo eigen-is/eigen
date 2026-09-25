@@ -1,3 +1,4 @@
+import { isMailEnabled } from '../config/env';
 import type { User } from '../user';
 import { getMemberships, getOrgRole } from '../user';
 import { ApiError } from './errors';
@@ -73,6 +74,10 @@ export function requireNonGuest(user: Pick<User, 'role'>): void {
     }
 }
 
+export function requireMailEnabled(): void {
+    if (!isMailEnabled()) throw new ApiError(403, 'Mail is turned off on this server');
+}
+
 export async function requireTeamAccess(userId: string, teamId: string): Promise<'admin' | 'member'> {
     const role = await getOrgRole(userId);
     if (role === 'admin' || role === 'owner') return 'admin';
@@ -89,4 +94,8 @@ export async function requireTeamAdmin(userId: string, teamId: string): Promise<
 export async function requireAdmin(userId: string): Promise<void> {
     const role = await getOrgRole(userId);
     if (role !== 'admin' && role !== 'owner') throw new ApiError(403, 'Admin or owner role required');
+}
+
+export async function requireOwner(userId: string): Promise<void> {
+    if ((await getOrgRole(userId)) !== 'owner') throw new ApiError(403, 'Only the server owner can do this');
 }

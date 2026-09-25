@@ -20,6 +20,16 @@ COPY entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /usr/local/bin/eigen-deliver /usr/local/bin/queue-monitor.sh /entrypoint.sh
 
+ARG EIGEN_VERSION
+ARG EIGEN_COMMIT
+LABEL org.opencontainers.image.title="Eigen Postfix" \
+      org.opencontainers.image.description="Postfix SMTP relay that delivers Eigen mail in and out." \
+      org.opencontainers.image.url="https://github.com/eigen-is/eigen" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.source="https://github.com/eigen-is/eigen" \
+      org.opencontainers.image.version="${EIGEN_VERSION}" \
+      org.opencontainers.image.revision="${EIGEN_COMMIT}"
+
 EXPOSE 25 465 587
 
 ENTRYPOINT ["/entrypoint.sh"]

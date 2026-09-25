@@ -10,9 +10,13 @@ import { app } from '../app';
 import { auth } from '../lib/auth/auth';
 import { drainACLFanOuts } from '../lib/drive/acl-propagation';
 import { getHome } from '../lib/home';
+import { createSetupToken } from '../lib/setup/setup-token';
 import { TEST_DATA_DIR } from './test-env';
 
 type App = typeof app;
+
+// ./eigen setup sets DOMAIN; setup and every address here derive from it.
+process.env['DOMAIN'] = 'test.eigen.is';
 
 // Runs the setup wizard exactly once per worker process. No top-level await: under `bun test --parallel`
 // (which implies `--isolate`), a suspended setup module is observed mid-evaluation by the importing test
@@ -28,10 +32,10 @@ async function bootServer(): Promise<void> {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                domain: 'test.eigen.is',
+                setupToken: createSetupToken(),
                 orgName: 'Test Organization',
                 storageType: 'local-id',
-                adminEmail: 'alice@test.eigen.is',
+                adminUsername: 'alice',
                 adminPassword: 'testpassword123',
                 adminName: 'Alice Test',
             }),
@@ -120,6 +124,22 @@ export async function createTestUser(email: string, password: string, name: stri
         name: userName,
         sessionToken,
     };
+}
+
+export async function signsIn(email: string, password: string): Promise<boolean> {
+    try {
+        await auth.api.signInEmail({ body: { email, password } });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+export async function hasSession(sessionToken: string): Promise<boolean> {
+    const session = await auth.api.getSession({
+        headers: new Headers({ cookie: `better-auth.session_token=${sessionToken}` }),
+    });
+    return session !== null;
 }
 
 export async function getTestContext(): Promise<TestContext> {

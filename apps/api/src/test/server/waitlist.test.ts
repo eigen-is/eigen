@@ -112,7 +112,7 @@ describe('Waitlist', () => {
 
     // -- Admin list --
 
-    test('admin can list waitlist entries', async () => {
+    test('the owner can list waitlist entries', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, '/waitlist/entries?status=pending');
         const entries = await assertJson<WaitlistEntry[]>(res);
         expect(entries.length).toBeGreaterThanOrEqual(1);
@@ -123,14 +123,14 @@ describe('Waitlist', () => {
         entryId = entry!.id;
     });
 
-    test('non-admin cannot list waitlist', async () => {
+    test('a non-owner cannot list the waitlist', async () => {
         const res = await authedRequest(ctx.bob.user.sessionToken, '/waitlist/entries');
         expect(res.status).toBe(403);
     });
 
     // -- Admin accept --
 
-    test('admin can accept entry', async () => {
+    test('the owner can accept an entry', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, `/waitlist/entries/${entryId}/accept`, {
             method: 'PUT',
         });
@@ -175,7 +175,7 @@ describe('Waitlist', () => {
 
     // -- Resend invite --
 
-    test('admin can resend invite', async () => {
+    test('the owner can resend an invite', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, `/waitlist/entries/${entryId}/resend`, {
             method: 'PUT',
         });
@@ -271,7 +271,7 @@ describe('Waitlist', () => {
         );
     });
 
-    test('admin can reject entry', async () => {
+    test('the owner can reject an entry', async () => {
         const listRes = await authedRequest(ctx.alice.user.sessionToken, '/waitlist/entries?status=pending');
         const entries = await assertJson<WaitlistEntry[]>(listRes);
         const entry = entries.find((e) => e.email === 'reject-me@example.com');
@@ -295,7 +295,7 @@ describe('Waitlist', () => {
         expect(res.status).toBe(200);
     });
 
-    test('admin can delete entry', async () => {
+    test('the owner can delete an entry', async () => {
         const listRes = await authedRequest(ctx.alice.user.sessionToken, '/waitlist/entries?status=invited');
         const entries = await assertJson<WaitlistEntry[]>(listRes);
         const entry = entries.find((e) => e.email === 'reject-me@example.com');
@@ -307,9 +307,9 @@ describe('Waitlist', () => {
         expect(res.status).toBe(200);
     });
 
-    // -- Waitlist disabled guard on admin routes --
+    // -- Waitlist disabled guard on owner routes --
 
-    test('admin routes return 403 when waitlist is disabled', async () => {
+    test('owner routes return 403 when waitlist is disabled', async () => {
         await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },

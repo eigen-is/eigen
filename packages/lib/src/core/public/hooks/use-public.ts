@@ -1,5 +1,6 @@
 import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
 import { publicApi } from '@workspace/lib/api';
+import { apps, isMailApp } from '@workspace/lib/apps';
 import { parseOwnerId } from '@workspace/lib/types';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { toast } from 'sonner';
@@ -26,6 +27,17 @@ export function usePublicConfig() {
 export function useMailEnabled(): boolean {
     const { data } = usePublicConfig();
     return data?.mailEnabled !== false;
+}
+
+// The apps registry as this server offers it: without Mail when it hosts no mailboxes.
+export function useEnabledApps(): typeof apps {
+    const mailEnabled = useMailEnabled();
+    return apps.filter((app) => mailEnabled || !isMailApp(app));
+}
+
+// The name of the budget mail, contacts and calendar share, which leaves Mail out on a server without it.
+export function useHomeDataLabel(): string {
+    return useMailEnabled() ? 'Mail, Contacts & Calendar' : 'Contacts & Calendar';
 }
 
 export function useJoinWaitlist() {

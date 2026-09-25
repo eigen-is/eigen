@@ -48,6 +48,8 @@ verification too.
 - **Patience**: a first heavy render (sheets Workbook) can take 20–60 s cold — poll for the
   element (`canvas`), then settle a few seconds. The TanStack Router devtools button can
   overlay UI and intercept clicks — remove it from the DOM before clicking near it.
+- **A harness install over HTTPS**: a browser on `https://localhost:<harness port>` gets 403 on sign-in, because the Origin must be exactly `https://localhost`. Launch Chrome with `--host-resolver-rules="MAP localhost:443 127.0.0.1:<port>"` and open `https://localhost`, so it sends that Origin.
+- **A harness scratch install to drive**: make one with `docker/probe-lib.sh`'s helpers (`scratch_init`, `new_install`, `run_setup`, `stack_up`) and `HARNESS_KEEP=1`, which leaves it running when the script exits.
 
 ## Uploading and converting real documents
 

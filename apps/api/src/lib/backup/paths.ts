@@ -7,15 +7,17 @@ import {
     BACKUP_ARTIFACT_EXTENSION,
     BACKUP_HOME_PREFIX,
     BACKUP_STAMP_PATTERN,
+    buildBackupStamp,
+    FAILED_RESTORE_SUFFIX,
+    PRE_RESTORE_SUFFIX,
     parseBackupStamp,
 } from '@workspace/lib/validation';
 import { getDataRoot, getTeamDataPath, getUserHomePath } from '../config/paths';
 import { ApiError, PATHS } from '../core';
 import { getUserById } from '../user/user';
 
-// Where backup artifacts live. Outside `data/` on purpose — the same place scripts/backup.sh
-// writes on the host, so one wipe of the data directory can never take the backups with it. In the
-// container it is the `./backups` bind mount, named by EIGEN_BACKUPS_DIR.
+// Where backup artifacts live. Outside `data/` on purpose, so one wipe of the data directory can never
+// take the backups with it. In the container it is the `./backups` bind mount, named by EIGEN_BACKUPS_DIR.
 export function backupsDirPath(): string {
     return process.env['EIGEN_BACKUPS_DIR'] || path.join(getDataRoot(), '..', 'backups');
 }
@@ -128,18 +130,8 @@ export function buildHomeFolderName(ownerId: string): string {
     return `${BACKUP_HOME_PREFIX}${ownerId}`;
 }
 
-function pad(value: number, width: number): string {
-    return String(value).padStart(width, '0');
-}
-
-// The one timestamp shape in the backups folder: artifact names and the two safety copies a restore
-// leaves beside a home folder all read the same.
-export function buildStamp(at: Date): string {
-    return `${at.getUTCFullYear()}${pad(at.getUTCMonth() + 1, 2)}${pad(at.getUTCDate(), 2)}-${pad(at.getUTCHours(), 2)}${pad(at.getUTCMinutes(), 2)}${pad(at.getUTCSeconds(), 2)}`;
-}
-
 export function buildArtifactName(ownerId: string, at: Date): string {
-    return `${buildHomeFolderName(ownerId)}-${buildStamp(at)}${BACKUP_ARTIFACT_EXTENSION}`;
+    return `${buildHomeFolderName(ownerId)}-${buildBackupStamp(at)}${BACKUP_ARTIFACT_EXTENSION}`;
 }
 
 // The one collision rule these names have: a stamp is a second wide, and two of a home's artifacts
@@ -160,11 +152,6 @@ export function freeArtifactName(ownerId: string, at: Date): string {
     return buildArtifactName(ownerId, free);
 }
 
-// The home folder a restore moved aside (the state before it) and the incomplete folder a failed
-// restore left behind. Nothing deletes either automatically; the admin pane lists and removes them.
-export const PRE_RESTORE_SUFFIX = '.pre-restore-';
-export const FAILED_RESTORE_SUFFIX = '.failed-restore-';
-
 // `{homeFolderName}{suffix}{stamp}`. The caller compares `homeName` against the home it asked
 // about: that equality, not the character class, is what keeps a delete inside the right directory.
 const SAFETY_COPY_SUFFIXES = [PRE_RESTORE_SUFFIX, FAILED_RESTORE_SUFFIX]
@@ -183,9 +170,9 @@ export function buildSafetyCopyName(homeDir: string, kind: BackupSafetyCopy['kin
 // home already moved aside) AND must not hand a flat-key mount the fresh storage keys the first
 // restore just wrote (see materializeMount).
 export function freeSafetyCopyStamp(homeDir: string, at: Date): string {
-    return buildStamp(
+    return buildBackupStamp(
         freeAt(at, (candidate) => {
-            const stamp = buildStamp(candidate);
+            const stamp = buildBackupStamp(candidate);
             return (
                 fs.existsSync(buildSafetyCopyName(homeDir, 'pre-restore', stamp)) ||
                 fs.existsSync(buildSafetyCopyName(homeDir, 'failed-restore', stamp))

@@ -1,36 +1,48 @@
-import { useCheckSetupS3, useCompleteSetup, useHardenSetupS3, type useSetupStatus } from '@workspace/lib/admin';
+import { useCheckSetupS3, useCompleteSetup, useHardenSetupS3 } from '@workspace/lib/admin';
+import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import { EMPTY_S3 } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
-import type { ServerStorageType } from '@workspace/lib/types/settings';
-import { EigenLoader } from '@workspace/ui';
+import type { ServerStorageType, SetupStatus } from '@workspace/lib/types/settings';
+import { MIN_PASSWORD_LENGTH, validateEmailAddress, validateUsername } from '@workspace/lib/validation';
+import { EigenLoader, EmptyState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@workspace/ui/components/input-group';
 import { Label } from '@workspace/ui/components/label';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, KeyRound } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { StorageTypePicker } from './storage-type-picker';
 
-// The /setup/status shape the parent route already fetched and passes down.
-type SetupStatus = NonNullable<ReturnType<typeof useSetupStatus>['data']>;
+export function SetupWizard({ status, setupToken }: { status: SetupStatus; setupToken: string | undefined }) {
+    if (!setupToken) {
+        return (
+            <div className="h-screen bg-background">
+                <EmptyState
+                    icon={<KeyRound className="h-10 w-10" />}
+                    message="Open the setup link that ./eigen setup printed."
+                    hint="Lost it? Run ./eigen setup again on your server for a fresh one."
+                />
+            </div>
+        );
+    }
+    return <SetupForm status={status} setupToken={setupToken} />;
+}
 
-export function SetupWizard({ status }: { status: SetupStatus }) {
-    const completeSetup = useCompleteSetup();
-    const s3Check = useCheckSetupS3();
-    const s3Harden = useHardenSetupS3();
+function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: string }) {
+    const completeSetup = useCompleteSetup(setupToken);
+    const s3Check = useCheckSetupS3(setupToken);
+    const s3Harden = useHardenSetupS3(setupToken);
     const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
     const handleS3Harden = (config: S3Config, noncurrentDays: number) =>
         s3Harden.mutateAsync({ ...config, noncurrentDays });
 
     const [completed, setCompleted] = useState(false);
 
-    // A real DOMAIN env var is locked; the localhost default stays editable.
-    const domainFromEnv = !!status.domain && status.domain !== 'localhost';
-    const [domain, setDomain] = useState(() =>
-        status.domain ? (status.domain === 'localhost' ? 'eigen.localhost' : status.domain) : '',
-    );
     const [orgName, setOrgName] = useState('');
+    // Follows the org name until edited; the server stores only a sender that differs from the defaults.
+    const [senderName, setSenderName] = useState<string | null>(null);
+    const [senderAddress, setSenderAddress] = useState(defaultSenderAddress(status.mailDomain));
     const [storageType, setStorageType] = useState<ServerStorageType>('local-fullnames');
     const [s3Config, setS3Config] = useState<S3Config>(EMPTY_S3);
     const [adminUsername, setAdminUsername] = useState('');
@@ -39,19 +51,29 @@ export function SetupWizard({ status }: { status: SetupStatus }) {
     const [s3Verified, setS3Verified] = useState(true);
     const onS3Verified = useCallback((verified: boolean) => setS3Verified(verified), []);
 
-    // Mirrors backend getMailDomain(): MAIL_DOMAIN env → DOMAIN env → user-typed domain.
-    const effectiveMailDomain = (status.mailDomain ?? '') || domain;
-    const formReady = !!(domain && orgName && adminUsername && adminName && adminPassword.length >= 8 && s3Verified);
+    const username = adminUsername.trim().toLowerCase();
+    const usernameError = username ? validateUsername(username) : null;
+    const senderAddressValid = validateEmailAddress(senderAddress);
+    const formReady = !!(
+        orgName &&
+        senderAddressValid &&
+        username &&
+        !usernameError &&
+        adminName &&
+        adminPassword.length >= MIN_PASSWORD_LENGTH &&
+        s3Verified
+    );
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!formReady) return;
-        try {
-            await completeSetup.mutateAsync({
-                domain,
+        completeSetup.mutate(
+            {
                 orgName,
+                senderName: senderName ?? orgName,
+                senderAddress,
                 storageType,
-                adminEmail: `${adminUsername}@${effectiveMailDomain}`,
+                adminUsername: username,
                 adminPassword,
                 adminName,
                 ...(storageType === 's3'
@@ -63,11 +85,9 @@ export function SetupWizard({ status }: { status: SetupStatus }) {
                           s3SecretAccessKey: s3Config.secretAccessKey,
                       }
                     : {}),
-            });
-            setCompleted(true);
-        } catch {
-            // The mutation hook toasts the failure; stay on the form so the user can retry.
-        }
+            },
+            { onSuccess: () => setCompleted(true) },
+        );
     };
 
     if (completed) {
@@ -107,24 +127,6 @@ export function SetupWizard({ status }: { status: SetupStatus }) {
                             <h3 className="font-medium text-lg">Server Configuration</h3>
 
                             <div>
-                                <Label htmlFor="domain">Domain</Label>
-                                <Input
-                                    id="domain"
-                                    value={domain}
-                                    onChange={(e) => setDomain(e.target.value)}
-                                    placeholder="eigen.example.com"
-                                    required
-                                    readOnly={domainFromEnv}
-                                    className="mt-1.5"
-                                />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    {domainFromEnv
-                                        ? 'Set via DOMAIN environment variable'
-                                        : 'The domain where Eigen will be accessible'}
-                                </p>
-                            </div>
-
-                            <div>
                                 <Label htmlFor="orgName">Organization Name</Label>
                                 <Input
                                     id="orgName"
@@ -134,6 +136,40 @@ export function SetupWizard({ status }: { status: SetupStatus }) {
                                     required
                                     className="mt-1.5"
                                 />
+                            </div>
+
+                            <div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <Label htmlFor="senderName">Sender name</Label>
+                                        <Input
+                                            id="senderName"
+                                            value={senderName ?? orgName}
+                                            onChange={(e) => setSenderName(e.target.value)}
+                                            maxLength={100}
+                                            className="mt-1.5"
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="senderAddress">Sender address</Label>
+                                        <Input
+                                            id="senderAddress"
+                                            type="email"
+                                            value={senderAddress}
+                                            onChange={(e) => setSenderAddress(e.target.value.trim())}
+                                            required
+                                            className="mt-1.5"
+                                        />
+                                    </div>
+                                </div>
+                                {senderAddressValid ? (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Notifications, codes and invitations are sent from this address. Your mail relay
+                                        must be allowed to send from it.
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-destructive mt-1">This is not an email address</p>
+                                )}
                             </div>
 
                             <StorageTypePicker
@@ -168,13 +204,19 @@ export function SetupWizard({ status }: { status: SetupStatus }) {
                                         id="adminUsername"
                                         value={adminUsername}
                                         onChange={(e) => setAdminUsername(e.target.value)}
-                                        placeholder="admin"
+                                        placeholder="jane"
+                                        autoComplete="off"
                                         required
                                     />
                                     <InputGroupAddon align="inline-end">
-                                        <InputGroupText>@{effectiveMailDomain}</InputGroupText>
+                                        <InputGroupText>@{status.mailDomain}</InputGroupText>
                                     </InputGroupAddon>
                                 </InputGroup>
+                                {usernameError ? (
+                                    <p className="text-xs text-destructive mt-1">{usernameError}</p>
+                                ) : (
+                                    <p className="text-xs text-muted-foreground mt-1">You sign in with this address</p>
+                                )}
                             </div>
 
                             <div>
@@ -182,13 +224,16 @@ export function SetupWizard({ status }: { status: SetupStatus }) {
                                 <Input
                                     id="adminPassword"
                                     type="password"
+                                    autoComplete="new-password"
                                     value={adminPassword}
                                     onChange={(e) => setAdminPassword(e.target.value)}
-                                    minLength={8}
+                                    minLength={MIN_PASSWORD_LENGTH}
                                     required
                                     className="mt-1.5"
                                 />
-                                <p className="text-xs text-muted-foreground mt-1">At least 8 characters</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    At least {MIN_PASSWORD_LENGTH} characters
+                                </p>
                             </div>
                         </div>
 

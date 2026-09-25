@@ -1,0 +1,1018 @@
+#!/bin/sh
+# Eigen's launcher. No container gets the Docker socket, so every Docker step runs here; the CLI in the API image asks
+# the questions and writes the config. POSIX sh: runs under dash and BusyBox.
+set -eu
+
+# Through a symlink such as /usr/local/bin/eigen too, this runs in the install folder.
+cd "$(dirname "$(readlink -f "$0")")"
+
+REPO=https://github.com/eigen-is/eigen
+REGISTRY=ghcr.io/eigen-is/eigen
+# IMAGE_NAMES in apps/api/src/cli/install.ts. Not from compose config --images: that names the images of the
+# profiles in use, and a release pins every image in IMAGES.
+IMAGES='api frontend postfix dovecot unbound'
+# The CLI's exit code for a question answered no: DECLINED in apps/api/src/cli/install.ts.
+DECLINED=3
+LOG=.eigen/last-step.log
+# POSIX sleep only takes whole seconds; the spinner falls back to 1 where 0.2 fails.
+TICK=0.2
+
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+    ACCENT=$(printf '\033[1;36m') GREEN=$(printf '\033[32m') RED=$(printf '\033[31m')
+    YELLOW=$(printf '\033[33m') GRAY=$(printf '\033[90m') RESET=$(printf '\033[0m')
+else
+    ACCENT='' GREEN='' RED='' YELLOW='' GRAY='' RESET=''
+fi
+usage() {
+    cat <<EOF
+Usage: ./eigen <command>
+
+Commands:
+  setup            Configure Eigen, start it and print the link that finishes the setup
+  status           Report on Eigen, its services, disk space, snapshots and certificate
+  update           Update Eigen to the newest version
+  rollback         Go back to the version before the last update
+  restart          Start Eigen, and any part of it that stopped
+  stop             Stop Eigen; ./eigen restart starts it again
+  reset-password   Set a new password for an account
+  backup           Save Eigen as a snapshot in snapshots/
+  restore          Put a snapshot back
+  logs             Follow the logs
+  help             Show this help
+
+./eigen <command> --help tells more about one.
+
+Environment:
+  NO_COLOR=1       Plain output without color.
+EOF
+}
+
+# The usage of the commands the launcher runs alone; the CLI prints its own for the others.
+command_usage() {
+    case $1 in
+        status)
+            cat <<EOF
+Usage: ./eigen status
+
+Reports on the version, a pending update, the services, disk space, the snapshots,
+the certificate and the mail queue.
+EOF
+            ;;
+        backup)
+            cat <<EOF
+Usage: ./eigen backup [--light] [--keep <n>]
+
+Stops Eigen, saves data/ and .env.production as a full snapshot in snapshots/, and starts
+Eigen again. Then deletes the older snapshots of that kind it made; --keep says how many
+stay. Only the owner of this folder can read a snapshot.
+
+  --light      Only the databases and config: every account's files and mail stay out
+  --keep <n>   Keep the newest <n> snapshots of each kind
+EOF
+            ;;
+        logs)
+            cat <<EOF
+Usage: ./eigen logs [service]
+
+Follows the logs of every service, or of one.
+EOF
+            ;;
+        update)
+            cat <<EOF
+Usage: ./eigen update [version] [--check] [--accept-breaking] [--full]
+
+Updates Eigen to the newest release, or to <version>, and saves a snapshot first that
+./eigen rollback goes back to: a light one, of the databases and config, unless the new
+version lists breaking changes. ./eigen update main follows the main channel instead of
+releases.
+
+  --check             Only tell whether there is an update, and what it brings
+  --accept-breaking   Update even when the new version lists breaking changes
+  --full              Save a full snapshot, files and mail too
+EOF
+            ;;
+        rollback)
+            cat <<EOF
+Usage: ./eigen rollback [--yes]
+
+Goes back to the version before the last ./eigen update, with the data as it was then.
+The current data is kept aside.
+
+  --yes   Do not ask
+EOF
+            ;;
+        restart)
+            cat <<EOF
+Usage: ./eigen restart
+
+Starts Eigen, and any part of it that stopped.
+EOF
+            ;;
+        stop)
+            cat <<EOF
+Usage: ./eigen stop
+
+Stops Eigen. ./eigen restart starts it again.
+EOF
+            ;;
+    esac
+}
+
+# refuse <command> <argument>: an argument the command does not take, with its usage.
+refuse() {
+    printf 'Unknown argument "%s".\n\n' "$2" >&2
+    command_usage "$1" >&2
+    exit 2
+}
+
+# arguments <command> <how many it takes> <argument…>: --help prints its usage; one argument too many is refused.
+arguments() {
+    command=$1 takes=$2
+    shift 2
+    for arg in "$@"; do
+        case $arg in -h | --help)
+            command_usage "$command"
+            exit 0
+            ;;
+        esac
+    done
+    if [ $# -gt "$takes" ]; then
+        shift "$takes"
+        refuse "$command" "$1"
+    fi
+}
+
+# The glyphs are GLYPHS in apps/api/src/cli/ui.ts, so the CLI's lines read like these.
+# A write to a terminal that hung up fails; the command must not end with it.
+say() { printf '%s%s%s  %s\n' "$1" "$2" "$RESET" "$3" || :; }
+
+# die <what went wrong> <what to do next>
+die() {
+    say "$RED" '■' "$1" >&2
+    say "$GRAY" '└' "$2" >&2
+    exit 1
+}
+
+wordmark() { printf '\n%seigen|%s>%s\n\n' "$ACCENT" "$1" "$RESET"; }
+
+# The last KEY= line of .env.production, without its quotes: the launcher reads no value that needs unescaping.
+env_value() {
+    value=$(sed -n "s/^$1=//p" .env.production 2>/dev/null | tail -n 1)
+    case $value in
+        \'*) value=${value#?}; value=${value%%\'*} ;;
+        \"*) value=${value#?}; value=${value%%\"*} ;;
+        *) value=${value%% #*} ;;
+    esac
+    printf '%s\n' "$value"
+}
+
+# answer <key> <the CLI's key=value lines>: the value it gave for that key.
+answer() { printf '%s\n' "$2" | sed -n "s/^$1=//p" | tail -n 1; }
+
+# A folder with the build overlay, such as a clone of the repository, is a local build: setup builds its images.
+if [ -f docker-compose.build.yml ]; then MODE=local; else MODE=release; fi
+
+registry=$(env_value EIGEN_REGISTRY)
+REGISTRY=${registry:-$REGISTRY}
+
+image_key() { printf 'EIGEN_%s_IMAGE\n' "$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')"; }
+
+# image <name>: the image Compose runs for it, as the environment or .env.production names it, else a local build's.
+image() {
+    key=$(image_key "$1")
+    eval "ref=\${$key:-}"
+    ref=${ref:-$(env_value "$key")}
+    printf '%s\n' "${ref:-$REGISTRY/$1:local}"
+}
+
+API_IMAGE=$(image api)
+
+# build_env: what the build overlay interpolates, which Compose does for every command, so a local build always
+# exports it.
+build_env() {
+    BUN_VERSION=$(cat .bun-version)
+    EIGEN_VERSION=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' package.json | head -n 1)
+    EIGEN_COMMIT=$(git -c safe.directory="$PWD" rev-parse --short HEAD 2>/dev/null || true)
+    EIGEN_BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    export BUN_VERSION EIGEN_VERSION EIGEN_COMMIT EIGEN_BUILT_AT
+}
+if [ "$MODE" = local ]; then build_env; fi
+
+dc() {
+    if [ -f docker-compose.override.yml ]; then set -- -f docker-compose.override.yml "$@"; fi
+    if [ "$MODE" = local ]; then set -- -f docker-compose.build.yml "$@"; fi
+    docker compose --env-file .env.production -f docker-compose.yml "$@"
+}
+
+# PROJECT: the Compose project, named the way Compose names it. Asked once, before the steps that use it, which run in
+# subshells and would each ask again.
+PROJECT=''
+project() {
+    if [ -z "$PROJECT" ]; then PROJECT=$(dc config 2>/dev/null | sed -n 's/^name: //p'); fi
+}
+
+# Whom a root run of the CLI gives what it writes: through Docker Desktop's file share, root in a container sees root.
+EIGEN_OWNER=$(ls -ldn . | awk '{ print $3 ":" $4 }')
+export EIGEN_OWNER
+
+# cli_as <uid:gid> <command…>: the CLI in the API image on this folder, with the variables CLI_ENV names. A terminal on
+# stdin gets one in the container, or a typed password would echo; asked per call, as step runs its command on /dev/null.
+CLI_ENV=''
+cli_as() {
+    user=$1
+    shift
+    env='' tty=''
+    for name in $CLI_ENV; do env="$env -e $name"; done
+    if [ -t 0 ]; then tty=-t; fi
+    docker run --rm --init -i $tty -e TERM -e NO_COLOR -e EIGEN_OWNER $env --user "$user" -e HOME=/tmp \
+        -v "$PWD:/install" -w /install "$API_IMAGE" "$@"
+}
+
+# The CLI as the operator, so what it writes is theirs.
+cli() { cli_as "$(id -u):$(id -g)" "$@"; }
+
+# The CLI in the running API container, the only way to its control socket.
+api_cli() {
+    tty=''
+    if [ ! -t 0 ]; then tty=-T; fi
+    dc exec $tty -e TERM -e NO_COLOR eigen-api /app/docker/api/entrypoint.sh "$@"
+}
+
+# step <while running> <when done> <on failure> <command…>: one line per step, its output in $LOG, under a spinner on a
+# terminal. set -m gives the job its own process group, so Ctrl-C stops all of it.
+step() {
+    step_running=$1 step_done=$2 step_failed=$3
+    shift 3
+    code=0
+    if [ -t 1 ]; then
+        set -m
+        (set +e; "$@") >"$LOG" 2>&1 </dev/null &
+        job=$!
+        set +m
+        trap 'kill -s TERM -- "-$job" 2>/dev/null || :; wait "$job" 2>/dev/null || :; printf "\r\033[K\033[1A\r\033[K\033[?25h"
+            say "$RED" "■" "$step_running: cancelled." >&2; exit 130' INT TERM
+        started=$(date +%s)
+        frame=0
+        # After a hangup printf fails (EIO), and set -e would end the launcher while the job runs on.
+        printf '\033[?25l\n' || :
+        while kill -0 "$job" 2>/dev/null; do
+            case $((frame % 4)) in 0) glyph=◒ ;; 1) glyph=◐ ;; 2) glyph=◓ ;; *) glyph=◑ ;; esac
+            frame=$((frame + 1))
+            seconds=$(($(date +%s) - started))
+            elapsed=${seconds}s
+            if [ "$seconds" -ge 60 ]; then elapsed="$((seconds / 60))m $((seconds % 60))s"; fi
+            width=$(stty size </dev/tty 2>/dev/null || :)
+            width=${width#* }
+            case $width in '' | 0 | *[!0-9]*) width=80 ;; esac
+            # A wrapped line would break the redraw. BuildKit's "#12 3.45 …" loses its step number and timestamp.
+            line=$(tail -n 20 "$LOG" 2>/dev/null | awk -v width=$((width - 4)) '{
+                sub(/.*\r/, ""); gsub(/\033\[[0-9;?]*[A-Za-z]/, ""); gsub(/[[:cntrl:]]/, " ")
+                sub(/^#[0-9]+ ([0-9]+\.[0-9]+ )?/, "")
+            } NF && !/^(DONE [0-9.]+s|CACHED)$/ { line = $0 } END { print substr(line, 1, width) }')
+            printf '\r\033[K\033[1A\r\033[K%s%s%s  %s...  %s%s%s\n\033[K%s│  %s%s' "$ACCENT" "$glyph" "$RESET" \
+                "$step_running" "$GRAY" "$elapsed" "$RESET" "$GRAY" "$line" "$RESET" || :
+            sleep "$TICK" 2>/dev/null || TICK=1
+        done
+        wait "$job" 2>/dev/null || code=$?
+        trap 'exit 130' INT TERM
+        printf '\r\033[K\033[1A\r\033[K\033[?25h' || :
+    else
+        "$@" >"$LOG" 2>&1 </dev/null || code=$?
+    fi
+    if [ "$code" = 0 ]; then
+        say "$GREEN" '◇' "$step_done"
+        return 0
+    fi
+    {
+        say "$RED" '■' "$step_failed"
+        tail -n 20 "$LOG" | sed "s/^/${GRAY}│${RESET}  /"
+        say "$GRAY" '└' "Full output: $LOG. ${NEXT:-Fix what it says, then run ./eigen $COMMAND again.}"
+    } >&2
+    exit 1
+}
+
+# compose_at_least <have> <want>: Compose versions like 2.24.4, number by number. Eigen's own versions the CLI orders.
+compose_at_least() {
+    awk -v have="$1" -v want="$2" 'BEGIN {
+        split(have, h, "."); split(want, w, ".")
+        for (i = 1; i <= 3; i++) if (h[i] + 0 != w[i] + 0) exit !(h[i] + 0 > w[i] + 0)
+    }'
+}
+
+preflight() {
+    if [ -e .env.production ] && [ ! -r .env.production ]; then
+        die ".env.production is not readable by this user." "Run ./eigen as the user that owns it, or as root."
+    fi
+    server=$(docker info --format '{{.ServerVersion}} {{.Architecture}}' 2>/dev/null || true)
+    if [ -z "${server%% *}" ]; then
+        die "Docker is not running, or this user cannot use it." "Start Docker, or run ./eigen as root or a member of the docker group."
+    fi
+    compose=$(docker compose version --short 2>/dev/null || true)
+    compose=${compose#v}
+    if [ -z "$compose" ]; then
+        die "Docker Compose is not installed." "Install the Docker Compose plugin, version 2.20 or newer."
+    fi
+    need=2.20
+    if [ -f docker-compose.override.yml ] && grep -q '!override' docker-compose.override.yml; then need=2.24.4; fi
+    # Docker Desktop's 2.24.4-desktop.1 is 2.24.4, no prerelease.
+    if ! compose_at_least "${compose%%-*}" "$need"; then
+        die "Docker Compose $compose is too old for this install; it needs $need or newer." "Update the Docker Compose plugin, then run ./eigen $COMMAND again."
+    fi
+    arch=${server#* }
+    mkdir -p .eigen
+    say "$GREEN" '◇' "Docker ${server%% *} on $arch, Compose $compose"
+}
+
+# Configure always writes DOMAIN; an unreadable .env.production is for preflight to report.
+need_install() {
+    if [ ! -e .env.production ] || { [ -r .env.production ] && [ -z "$(env_value DOMAIN)" ]; }; then
+        die "Eigen is not set up in $PWD." "Run ./eigen setup first."
+    fi
+}
+
+# need_image <what to do>: the CLI comes with the API image, which a local build builds in ./eigen setup.
+need_image() {
+    if [ "$MODE" = local ] && ! docker image inspect "$API_IMAGE" >/dev/null 2>&1; then
+        die "Eigen is not built yet." "$1"
+    fi
+}
+
+# One command that changes Eigen at a time, or a nightly backup could stop Eigen in the middle of an update. The lock
+# goes when the command ends, after AT_EXIT; update --pulled finds its own, handed over by exec.
+AT_EXIT=''
+lock() {
+    if ! mkdir .eigen/lock 2>/dev/null; then
+        # Another user's process cannot be asked whether it runs, and their lock cannot be taken over.
+        if [ ! -w .eigen/lock ]; then
+            holder=$(ls -ld .eigen/lock | awk '{ print $3 }')
+            die "Another ./eigen command, run by $holder, holds .eigen/lock." "Wait for it to end, then run ./eigen $COMMAND again. If none runs, remove .eigen/lock as $holder or as root."
+        fi
+        pid=$(cat .eigen/lock/pid 2>/dev/null || :)
+        # No pid yet is a launcher between its mkdir and its echo; the lock of a process that is gone is taken over.
+        if [ -z "$pid" ] || { [ "$pid" != $$ ] && kill -0 "$pid" 2>/dev/null; }; then
+            die "Another ./eigen command is running." "Wait for it to end, then run ./eigen $COMMAND again. If none runs, remove .eigen/lock."
+        fi
+    fi
+    trap 'code=$?; (eval "$AT_EXIT") || code=$?; rm -rf .eigen/lock; exit "$code"' EXIT
+    echo $$ >.eigen/lock/pid
+}
+
+# cli_help <CLI command>: the usage of a command the CLI parses.
+cli_help() {
+    need_image "Run ./eigen setup first; ./eigen $COMMAND --help works after that."
+    cli "$1" --help
+    exit
+}
+
+# A build is an api image, named by its labels as <version> (<revision>) on every install. Three files hold what an
+# install is: .env.production pins what runs and what it follows (configure writes it from PINS), .eigen/bundle names
+# the api image the files came from (write_bundle), .eigen/last-update the snapshot the last update saved (snapshot).
+
+# image_label <image> <version or revision>: that label of a local image.
+image_label() { docker image inspect --format "{{index .Config.Labels \"org.opencontainers.image.$2\"}}" "$1"; }
+
+# release_labels <tag>: the org.opencontainers.image annotations of the registry's api:<tag>, such as version and
+# revision, as key=value lines for answer; without a pull, and none without annotations.
+release_labels() {
+    docker manifest inspect -v "$REGISTRY/api:$1" 2>/dev/null |
+        sed -n 's/.*"org\.opencontainers\.image\.\([a-z]*\)": *"\([^"]*\)".*/\1=\2/p'
+}
+
+# describe <api image>: the build it is, as every message names one. Its die ends only the $(…): assign it bare.
+describe() {
+    label=$(image_label "$1" version 2>/dev/null) ||
+        die "$1 is not here." "Run ./eigen update again; it downloads what it runs."
+    echo "$label ($(image_label "$1" revision))"
+}
+
+# pull_images <tag> [name…]: its images, every image by default.
+pull_images() {
+    pulling=$1
+    shift
+    for name in ${*:-$IMAGES}; do docker pull "$REGISTRY/$name:$pulling" || return 1; done
+}
+
+# pull_refs <image…>: those not here yet, such as the digests a snapshot pins.
+pull_refs() {
+    for ref in "$@"; do docker image inspect "$ref" >/dev/null 2>&1 || docker pull "$ref" || return 1; done
+}
+
+# pin_images <tag>: PINS, the release as configure writes it, a key=value line each, every image by its registry
+# digest. A tag moves image by image while a build is published, so its images must name one commit.
+PINS=''
+pin_images() {
+    builds='' first='' mixed=''
+    for name in $IMAGES; do
+        revision=$(image_label "$REGISTRY/$name:$1" revision)
+        if [ -z "$builds" ]; then first=$revision; elif [ "$revision" != "$first" ]; then mixed=1; fi
+        builds="${builds:+$builds, }$name $revision"
+    done
+    if [ -n "$mixed" ]; then
+        die "The images of $1 are from different builds: $builds." "A build of $1 is being published; run ./eigen $COMMAND again in a few minutes."
+    fi
+    PINS="EIGEN_REGISTRY=$REGISTRY
+EIGEN_VERSION=$1"
+    for name in $IMAGES; do
+        digest=$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+            "$REGISTRY/$name:$1" | grep -F "$REGISTRY/$name@" | head -n 1)
+        if [ -z "$digest" ]; then
+            die "$REGISTRY/$name:$1 has no registry digest." "Remove the local image (docker image rm $REGISTRY/$name:$1) and run ./eigen $COMMAND again."
+        fi
+        PINS="$PINS
+$(image_key "$name")=$digest"
+    done
+}
+
+# with_pins <command…>: runs it with PINS in its environment and the CLI's, where configure writes them from; out of
+# the launcher's own, since Compose prefers the environment to .env.production.
+with_pins() (
+    for pin in $PINS; do
+        export "$pin"
+        CLI_ENV="$CLI_ENV ${pin%%=*}"
+    done
+    "$@"
+)
+
+# with_image <api image> <command…>: runs it with that image's CLI, for the one step of a command that another build
+# than the one it runs on must do.
+with_image() (
+    API_IMAGE=$1
+    shift
+    "$@"
+)
+
+# The images .env.production pins, a line each.
+pinned_refs() { for name in $IMAGES; do image "$name"; done; }
+
+# The api image .env.production pins, downloaded when it is not here: a pull that moves main leaves the build it
+# replaced without a local name.
+api_here() {
+    pull_refs "$(image api)" >"$LOG" 2>&1 ||
+        die "The image Eigen runs, $(image api), is not here and cannot be downloaded." "Check the network, then run ./eigen $COMMAND again."
+}
+
+# Also removes this project's containers whose service the current profiles leave out, so a rerun that switches web
+# or mail mode converges. Runs under step with set -e off, so failures return explicitly.
+start() {
+    services=$(dc config --services) || return 1
+    active=" $(printf '%s ' $services)"
+    project
+    stale=$(docker ps -a --filter "label=com.docker.compose.project=$PROJECT" \
+        --format '{{.ID}} {{.Label "com.docker.compose.service"}}' | while read -r id service; do
+        case $active in (*" $service "*) ;; (*) echo "$id" ;; esac
+    done)
+    if [ -n "$stale" ]; then docker rm -f $stale || return 1; fi
+    dc up -d --wait
+}
+
+# restart [what to do on failure]: once a command has stopped Eigen or changed it, running it again would repeat that,
+# so a failed start points at ./eigen restart.
+restart() {
+    NEXT=${1:-Fix what it says, then run ./eigen restart.}
+    project
+    mail=$(mail_containers)
+    step "Starting Eigen" "Eigen is running" "Eigen did not start; ./eigen logs shows why" start
+    if [ "$(mail_containers)" != "$mail" ]; then refresh_fail2ban; fi
+}
+
+# Every container of this project, also those of services the current files no longer name.
+stop_containers() {
+    dc stop || return 1
+    project
+    ids=$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT")
+    if [ -n "$ids" ]; then docker stop $ids; fi
+}
+
+# From the stop on, a hangup must not end the command halfway: dash runs no EXIT trap on one.
+stop() {
+    trap '' HUP
+    project
+    step "Stopping Eigen" "Eigen stopped" "Could not stop Eigen" stop_containers
+}
+
+# check_room <snapshot flags…>: KIND, the snapshot those flags save, once the CLI found room for it. Asked while Eigen
+# runs, so a full disk stops nothing.
+KIND=''
+check_room() {
+    step "Checking the room for the snapshot" "Room for the snapshot" "The snapshot cannot be saved" \
+        cli_as 0 snapshot --check "$@"
+    KIND=$(answer kind "$(cat "$LOG")")
+}
+
+# The server runs as 1000:1000. Only an empty folder is handed over: an existing one keeps its owners.
+prepare_data() {
+    mkdir -p data backups || return 1
+    for dir in data backups; do
+        if [ -z "$(ls -A "$dir" 2>/dev/null || echo unreadable)" ]; then
+            docker run --rm --user 0 --entrypoint chown -v "$PWD/$dir:/$dir" "$API_IMAGE" 1000:1000 "/$dir" || return 1
+        fi
+    done
+    docker run --rm --user 1000:1000 --entrypoint sh -v "$PWD/data:/data" -v "$PWD/backups:/backups" "$API_IMAGE" \
+        -c 'for dir in /data /backups; do touch "$dir/.eigen-write-test" && rm "$dir/.eigen-write-test" || exit 1; done' || {
+        echo "Eigen runs as uid 1000 and cannot write here. Give it the folders: sudo chown 1000:1000 data backups"
+        return 1
+    }
+}
+
+# pull_pinned <restore --checked lines>: the images the checked snapshot pins, got while Eigen runs on.
+pull_pinned() {
+    refs=''
+    for name in $IMAGES; do
+        ref=$(answer "$(image_key "$name")" "$1")
+        if [ -z "$ref" ]; then
+            die "The snapshot pins no $name image." "Restore a snapshot made by ./eigen backup on a release install."
+        fi
+        refs="$refs $ref"
+    done
+    version=$(answer EIGEN_VERSION "$1")
+    step "Getting Eigen $version" "Eigen $version is here" "Could not get Eigen $version; Eigen runs on as it was" \
+        pull_refs $refs
+}
+
+# check_snapshot <restore arguments…>: while Eigen runs, the CLI asks, then unpacks and checks the snapshot into
+# .eigen/restore. A no ends the command; a refusal stops nothing.
+check_snapshot() {
+    # The CLI says how an interrupt ended it, so the launcher waits for it.
+    trap : INT TERM
+    checked=0
+    cli_as 0 restore "$@" --check || checked=$?
+    trap 'exit 130' INT TERM
+    case $checked in 0) ;; "$DECLINED") exit 0 ;; *) exit "$checked" ;; esac
+    # Until the swap, root's checked copy of data/ is root's to remove: STAGING in apps/api/src/cli/snapshot.ts.
+    AT_EXIT='cli_as 0 rm -rf .eigen/restore'
+}
+
+# swap_snapshot <restore arguments…>: stops Eigen and swaps the checked copy in. A failed swap starts Eigen on the data
+# it had and ends the command; after a swap, whatever ends the command starts Eigen.
+swap_snapshot() {
+    AT_EXIT='cli_as 0 rm -rf .eigen/restore; restart'
+    if [ -f .env.production ]; then stop; fi
+    trap : INT TERM
+    swapped=0
+    cli_as 0 restore "$@" --yes || swapped=$?
+    trap 'exit 130' INT TERM
+    if [ "$swapped" = 0 ]; then
+        AT_EXIT=restart
+        return
+    fi
+    AT_EXIT='cli_as 0 rm -rf .eigen/restore'
+    restart
+    if [ "$swapped" = 130 ]; then say "$GRAY" '└' "The restore was cancelled. Eigen runs on the data it had."; fi
+    exit "$swapped"
+}
+
+# The IDs of the mail containers, stopped ones too: fail2ban's jails follow their logs by container ID.
+mail_containers() {
+    docker ps -a --filter "label=com.docker.compose.project=$PROJECT" \
+        --format '{{.ID}} {{.Label "com.docker.compose.service"}}' | grep -E ' (postfix|dovecot)$' || :
+}
+
+# After a start that recreated the mail containers. The filters come with Eigen, the jail is the operator's.
+refresh_fail2ban() {
+    jail=/etc/fail2ban/jail.d/eigen-mail-sasl.conf
+    if [ ! -e "$jail" ]; then return 0; fi
+    filters="$PWD/docker/fail2ban/filter.d"
+    if [ -w "$jail" ] && command -v fail2ban-client >/dev/null && cp "$filters"/*.conf /etc/fail2ban/filter.d/ &&
+        fail2ban-client reload >/dev/null 2>&1; then
+        say "$GREEN" '◇' "Fail2ban filters refreshed and jails reloaded"
+    else
+        say "$YELLOW" '▲' "Fail2ban still watches the old mail containers. As root, run:"
+        say "$GRAY" '│' "cp $filters/*.conf /etc/fail2ban/filter.d/ && fail2ban-client reload"
+    fi
+}
+
+# prune_images [image…]: the images an update leaves behind. Keeps those, the rollback snapshot's, and the images PINS
+# names, and removes the rest by ID: an old build of main keeps no tag, only its digest, which no prune takes. Best
+# effort.
+prune_images() {
+    keep=' '
+    for ref in "$@" $PINS; do keep="$keep${ref#*=} "; done
+    for name in $IMAGES; do
+        remove=$(docker image ls "$REGISTRY/$name" --digests \
+            --format '{{.ID}} {{.Repository}}@{{.Digest}} {{.Repository}}:{{.Tag}}' | awk -v keep="$keep" '
+            { ids[$1]; if (index(keep, " " $2 " ") || index(keep, " " $3 " ")) kept[$1] }
+            END { for (id in ids) if (!(id in kept)) print id }')
+        for id in $remove; do
+            # The daemon is shared with other installs, and a stopped container keeps its image.
+            if [ -z "$(docker ps -aq --filter "ancestor=$id")" ]; then docker image rm -f "$id" || :; fi
+        done
+    done
+    docker image prune -f --filter "label=org.opencontainers.image.source=$REPO" || :
+}
+
+# write_bundle <api image>: a release install's launcher and Compose files, as that api image writes them, to temporary
+# files that are renamed, so this running launcher reads on in its own copy. .eigen/bundle names the image first, so
+# files written halfway are told apart too.
+write_bundle() {
+    build=$(describe "$1")
+    echo "$1" >.eigen/bundle
+    step "Writing the Eigen $build launcher and Compose files" "Eigen $build files written" \
+        "Could not write the Eigen $build files" with_image "$1" cli bootstrap --force --out /install
+}
+
+# The api image of the files an unfinished update or restore wrote, when .env.production pins another.
+stale_bundle() {
+    bundle=$(cat .eigen/bundle 2>/dev/null || :)
+    if [ -n "$bundle" ] && [ "$bundle" != "$(image api)" ]; then echo "$bundle"; fi
+}
+
+setup() {
+    case ${1:-} in -h | --help) cli_help configure ;; esac
+    # The variable --relay-password-env names goes into the CLI's container; the CLI refuses a name that is none.
+    relay=''
+    previous=''
+    for arg in "$@"; do
+        case $previous in --relay-password-env) relay=$arg ;; esac
+        case $arg in --relay-password-env=*) relay=${arg#*=} ;; esac
+        previous=$arg
+    done
+    CLI_ENV="EIGEN_PROJECT EIGEN_DOCKER_NETWORKS $relay"
+
+    # Beside the launcher alone: bootstrap the pinned build, else the newest release, and hand over to
+    # its launcher, lock included.
+    if [ "$MODE" = release ] && [ ! -e docker-compose.yml ]; then
+        preflight >/dev/null
+        lock
+        pinned=$(env_value EIGEN_API_IMAGE)
+        API_IMAGE=${pinned:-$REGISTRY/api:latest}
+        step "Downloading Eigen" "Eigen downloaded" "Could not download Eigen" docker pull "$API_IMAGE"
+        step "Writing the Eigen files" "Eigen files written" "Could not write the Eigen files" \
+            cli bootstrap --force --out /install
+        exec ./eigen setup "$@"
+    fi
+    wordmark setup
+    preflight
+    lock
+    if [ "$MODE" = local ]; then
+        # Compose loads env_file: even to build.
+        if [ ! -e .env.production ]; then (umask 077 && : >.env.production); fi
+        step "Building Eigen" "Eigen built" "Could not build Eigen" dc build eigen-api
+    else
+        version=$(env_value EIGEN_VERSION)
+        if [ -z "$version" ]; then
+            die ".env.production names no Eigen release." "Get one into it: docker run --rm -v \"\$PWD:/out\" $REGISTRY/api:latest bootstrap --force"
+        fi
+        # A tag is resolved to digests once, by the first setup or by update: a rerun gets the images already pinned.
+        case $(image api) in
+            *@sha256:*) download="pull_refs $(pinned_refs)" ;;
+            *) download="pull_images $version" ;;
+        esac
+        step "Downloading Eigen $version" "Eigen $version downloaded" "Could not download Eigen $version" $download
+        case $download in pull_images*) pin_images "$version" ;; esac
+    fi
+
+    # configure picks a free subnet from this list; the CLI container cannot ask Docker itself.
+    docker network inspect $(docker network ls -q) >.eigen/networks.json ||
+        die "Could not list the Docker networks." "Check that Docker is running, then run ./eigen setup again."
+    EIGEN_DOCKER_NETWORKS=/install/.eigen/networks.json
+    project
+    EIGEN_PROJECT=$PROJECT
+    export EIGEN_DOCKER_NETWORKS EIGEN_PROJECT
+    with_pins cli configure "$@" || exit
+
+    if [ "$MODE" = local ]; then
+        step "Building the web and mail images" "Images built" "Could not build the images" \
+            dc build $(dc config --services | grep -vx eigen-api)
+    fi
+    step "Preparing data/ and backups/" "Data folders ready" "The data folders are not writable" prepare_data
+    restart "Fix what it says, then run ./eigen setup again."
+    api_cli setup-link
+}
+
+# Only the launcher can ask Docker and read snapshots/; with Eigen down there is no socket, and the CLI runs on its own.
+status() {
+    arguments status 0 "$@"
+    need_install
+    wordmark status
+    preflight >/dev/null
+    # Empty when the check fails; a local build has none.
+    newer=''
+    if [ "$MODE" = release ]; then
+        if [ "$(env_value EIGEN_VERSION)" = main ]; then
+            newer="--latest=$(answer revision "$(release_labels main)")"
+        else
+            newer="--latest=$(answer version "$(release_labels latest)")"
+        fi
+    fi
+    tab=$(printf '\t')
+    listed=$(dc ps -a --format "{{.Service}}$tab{{.State}}$tab{{.Health}}") ||
+        die "Could not read the state of the services." "Fix what Docker Compose says above, then run ./eigen status again."
+    services=''
+    for service in $(dc config --services); do
+        line=$(printf '%s\n' "$listed" | grep "^$service$tab" | head -n 1)
+        services="$services${line:-$service${tab}missing$tab}
+"
+    done
+
+    # Empty when postqueue fails; the CLI tells that from a stopped postfix by the service list.
+    queue=''
+    case $services in *"postfix${tab}running$tab"*)
+        queue=$(dc exec -T postfix postqueue -p 2>/dev/null | tail -n 1)
+        ;;
+    esac
+
+    set -- --install="$PWD" --services="$services" --mail-queue="$queue" --snapshots="$(ls snapshots 2>/dev/null || :)" \
+        --snapshots-kb="$(du -sk snapshots 2>/dev/null | cut -f 1)" ${newer:+"$newer"}
+    bundle=$(stale_bundle)
+    if [ -n "$bundle" ]; then
+        files=$(describe "$bundle")
+        set -- "$@" --files="$files"
+    fi
+    case $services in
+        *"eigen-api${tab}running$tab"*) api_cli status "$@" ;;
+        *) cli status "$@" ;;
+    esac
+}
+
+# The snapshot is taken with every service stopped, since dovecot and postfix write to data/ too. The CLI reads the
+# flags, and refuses a --keep that is no count, before anything stops.
+backup() {
+    previous=''
+    for arg in "$@"; do
+        case $previous in --keep) previous='' && continue ;; esac
+        case $arg in
+            -h | --help)
+                command_usage backup
+                exit 0
+                ;;
+            --light | --keep | --keep=*) ;;
+            *) refuse backup "$arg" ;;
+        esac
+        previous=$arg
+    done
+    need_install
+    wordmark backup
+    preflight
+    lock
+    check_room "$@"
+    AT_EXIT=restart
+    stop
+    cli_as 0 snapshot "$@"
+}
+
+restore() {
+    case ${1:-} in -h | --help) cli_help restore ;; esac
+    # The CLI sees this folder as /install.
+    case ${1:-} in "$PWD"/snapshots/*)
+        snapshot=${1#"$PWD"/}
+        shift
+        set -- "$snapshot" "$@"
+        ;;
+    esac
+    wordmark restore
+    preflight
+    need_image "Run ./eigen setup first, then ./eigen restore <snapshot>."
+    if [ "$MODE" = release ]; then api_here; fi
+    lock
+    check_snapshot "$@"
+    # A snapshot holds the server's config and databases: a release install goes back to the images it pins.
+    pins=''
+    if [ "$MODE" = release ]; then
+        pins=$(cli_as 0 restore "$@" --checked </dev/null)
+        if [ "$(answer EIGEN_API_IMAGE "$pins")" = "$(image api)" ]; then pins=''; fi
+    fi
+    if [ -n "$pins" ]; then pull_pinned "$pins"; fi
+    swap_snapshot "$@"
+    # A release install runs the Compose files of the snapshot's version; a local build runs today's, which may need
+    # keys an older snapshot lacks.
+    if [ "$MODE" = local ]; then
+        step "Adding what is new to .env.production" ".env.production has what Eigen needs" \
+            "Could not update .env.production" cli configure --backfill
+    fi
+    if [ -n "$pins" ]; then write_bundle "$(answer EIGEN_API_IMAGE "$pins")"; fi
+    AT_EXIT=''
+    restart
+    say "$GRAY" '└' "Check that all is well, then delete what was kept aside."
+}
+
+update() {
+    target='' check=0 accept='' pulled=0 full='' light=--light
+    for arg in "$@"; do
+        case $arg in
+            -h | --help)
+                command_usage update
+                exit 0
+                ;;
+            --check) check=1 ;;
+            --accept-breaking) accept=--accept-breaking ;;
+            --full) full=--full light='' ;;
+            # The handover from the launcher that got the new version to the one that came with it.
+            --pulled) pulled=1 ;;
+            -*) refuse update "$arg" ;;
+            *) if [ -n "$target" ]; then refuse update "$arg"; fi; target=$arg ;;
+        esac
+    done
+    if [ "$MODE" = local ]; then
+        die "A local build has no updates." "Pull the code and run ./eigen setup again, which builds it."
+    fi
+    need_install
+    if [ "$pulled" = 1 ]; then
+        preflight >/dev/null
+    else
+        wordmark update
+        preflight
+    fi
+    if [ "$check" = 0 ]; then lock; fi
+    if [ "$pulled" = 1 ]; then update_apply; else update_get; fi
+}
+
+# The part the launcher the operator typed runs, while Eigen runs on: get the new version, check it, and hand over to
+# the launcher that came with it.
+update_get() {
+    # main is the only channel; any other tag, such as publish.yml's candidates, is no release. A version is
+    # VERSION_PATTERN in apps/api/src/cli/install.ts, loosely.
+    case $target in
+        '' | latest | main | [0-9]*.[0-9]*.[0-9]*) ;;
+        *) die "Eigen has no \"$target\"." "Name a version (./eigen update 0.3.1), latest, or the main channel (./eigen update main)." ;;
+    esac
+    follows=$(env_value EIGEN_VERSION)
+    if [ -z "$follows" ]; then die ".env.production names no Eigen release." "Run ./eigen setup first."; fi
+    api_here
+    current=$(describe "$(image api)")
+    # Release notes and the breaking question go by version.
+    old_version=$(image_label "$(image api)" version)
+    tag=${target:-latest}
+    if [ -z "$target" ] && [ "$follows" = main ]; then tag=main; fi
+    labels=$(release_labels "$tag")
+    version=$(answer version "$labels") revision=$(answer revision "$labels")
+    if [ -z "$version" ]; then
+        # Without the annotations, the image's labels name the build.
+        step "Looking for Eigen $tag" "Found Eigen $tag" "Could not get Eigen $tag. Releases: $REPO/releases" \
+            docker pull "$REGISTRY/api:$tag"
+        version=$(image_label "$REGISTRY/api:$tag" version) revision=$(image_label "$REGISTRY/api:$tag" revision)
+        if [ -z "$version" ]; then
+            die "$REGISTRY/api:$tag names no version." "Name one: ./eigen update <version>. Releases: $REPO/releases"
+        fi
+    fi
+    # latest moves on: the release it names is what is pulled, pinned and recorded.
+    if [ "$tag" = latest ]; then tag=$version; fi
+    new="$version ($revision)"
+    # Up to date: the same build, on the line the install already follows.
+    if [ "$new" = "$current" ] && [ "$tag" = "$follows" ]; then
+        if [ "$check" = 1 ]; then
+            say "$GRAY" '└' "Eigen $current is up to date."
+            exit 0
+        fi
+        # An update that stopped halfway, to whatever target, left the files of another build.
+        if [ -n "$(stale_bundle)" ]; then write_bundle "$(image api)"; fi
+        restart
+        say "$GRAY" '└' "Eigen $current is up to date and running at https://$(env_value DOMAIN)/"
+        exit 0
+    fi
+    # The new version's CLI tells what changed since the old one, and refuses a downgrade.
+    API_IMAGE=$REGISTRY/api:$tag
+    step "Getting the notes of Eigen $new" "Eigen $new is out" "Could not get Eigen $new" pull_images "$tag" api
+    # The tag may have moved since the manifest was read.
+    new=$(describe "$REGISTRY/api:$tag")
+    if [ "$check" = 1 ]; then
+        cli update-check --from "$old_version" --accept-breaking
+        say "$GRAY" '└' "./eigen update installs it."
+        exit 0
+    fi
+    checked=0
+    cli update-check --from "$old_version" $accept || checked=$?
+    case $checked in 0) ;; "$DECLINED") exit 0 ;; *) exit "$checked" ;; esac
+    step "Downloading Eigen $new" "Eigen $new downloaded" "Could not download Eigen $new" pull_images "$tag"
+    downloaded=$(describe "$REGISTRY/api:$tag")
+    if [ "$downloaded" != "$new" ]; then
+        die "$tag moved while downloading: the notes were of Eigen $new." "Run ./eigen update again."
+    fi
+    # Before the files of the new version, which a failure would leave with the old images. A breaking release gets a
+    # full snapshot, since it may convert what a light one leaves out.
+    pin_images "$tag"
+    check_room $light --from "$old_version"
+    if [ "$KIND" = full ]; then full=--full; fi
+    write_bundle "$(answer EIGEN_API_IMAGE "$PINS")"
+    # The new launcher gets the tag and --full as arguments and parses them as this one did; no variable crosses.
+    exec ./eigen update --pulled "$tag" $full
+}
+
+# The part the launcher of the new version runs: stop, save a snapshot with the running version, switch and start.
+update_apply() {
+    domain=$(env_value DOMAIN)
+    if [ ! -d data ]; then die "There is no data/ in $PWD." "Run ./eigen update in the install folder."; fi
+    pin_images "$target"
+    api_here
+    old_image=$(image api) new_image=$(answer EIGEN_API_IMAGE "$PINS")
+    old=$(describe "$old_image")
+    new=$(describe "$new_image")
+    # What .env.production pins before the switch is what the rollback snapshot pins.
+    old_pins=$(pinned_refs)
+
+    API_IMAGE=$new_image
+    step "Adding what is new to .env.production" ".env.production has what Eigen $new needs" \
+        "Could not update .env.production" cli configure --backfill
+
+    # From the stop on, whatever ends the update starts Eigen again.
+    AT_EXIT=restart
+    stop
+    # The running build makes the snapshot, so it records that build for a rollback.
+    kind=full
+    if [ -n "$light" ]; then kind=light; fi
+    step "Saving a $kind snapshot" "Snapshot saved" "Could not save the snapshot" \
+        with_image "$old_image" cli_as 0 snapshot --pre-update $light
+    step "Switching to Eigen $new" "Switched to Eigen $new" "Could not write Eigen $new into .env.production" \
+        with_pins cli configure --backfill
+    AT_EXIT=''
+    restart "Fix what it says, then run ./eigen restart, or ./eigen rollback to go back to Eigen $old."
+    step "Removing old images" "Old images removed" "Could not remove the old images" prune_images $old_pins
+    say "$GREEN" '◇' "Eigen $old → $new is running at https://$domain/"
+    say "$GRAY" '│' "Saved before the update: snapshots/$(cat .eigen/last-update), a $kind snapshot"
+    say "$GRAY" '└' "./eigen rollback goes back to Eigen $old."
+}
+
+# The pre-update snapshot brings back the data and .env.production, checked while Eigen runs, then the images it pins
+# and their bundle files.
+rollback() {
+    yes=''
+    for arg in "$@"; do
+        case $arg in
+            -h | --help)
+                command_usage rollback
+                exit 0
+                ;;
+            --yes) yes=--yes ;;
+            *) refuse rollback "$arg" ;;
+        esac
+    done
+    if [ "$MODE" = local ]; then
+        die "A local build has no update to roll back." "Go back in the code and run ./eigen setup again, which builds it."
+    fi
+    need_install
+    wordmark rollback
+    if [ ! -f .eigen/last-update ]; then
+        die "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
+    fi
+    archive=$(cat .eigen/last-update)
+    if [ ! -f "snapshots/$archive" ]; then
+        die "snapshots/$archive, saved before the update, is gone." "Restore another snapshot with ./eigen restore <snapshot>."
+    fi
+    preflight
+    lock
+    api_here
+    current=$(describe "$(image api)")
+    say "$ACCENT" '◆' "Back from Eigen $current to the snapshot the last update saved"
+    check_snapshot "$archive" $yes
+    pins=$(cli_as 0 restore "$archive" --checked </dev/null)
+    pull_pinned "$pins"
+    back=$(describe "$(answer EIGEN_API_IMAGE "$pins")")
+    swap_snapshot "$archive"
+    write_bundle "$(answer EIGEN_API_IMAGE "$pins")"
+    AT_EXIT=''
+    restart
+    rm -f .eigen/last-update
+    say "$GREEN" '◇' "Eigen $current → $back is running at https://$(env_value DOMAIN)/"
+    say "$GRAY" '└' "Check that all is well, then delete what was kept aside."
+}
+
+COMMAND=${1:-}
+if [ $# -gt 0 ]; then shift; fi
+# dash runs the EXIT trap on an exit, not on a signal.
+trap 'exit 130' INT TERM
+case $COMMAND in
+    setup) setup "$@" ;;
+    status) status "$@" ;;
+    update) update "$@" ;;
+    rollback) rollback "$@" ;;
+    restart)
+        arguments restart 0 "$@"
+        need_install
+        wordmark restart
+        preflight
+        lock
+        restart
+        ;;
+    stop)
+        arguments stop 0 "$@"
+        need_install
+        wordmark stop
+        preflight
+        lock
+        stop
+        ;;
+    reset-password)
+        case ${1:-} in -h | --help) cli_help reset-password ;; esac
+        need_install
+        wordmark reset-password
+        if ! dc ps --status running --services 2>/dev/null | grep -qx eigen-api; then
+            die "Eigen is not running." "Run ./eigen logs eigen-api to see why."
+        fi
+        api_cli reset-password "$@"
+        ;;
+    backup) backup "$@" ;;
+    restore) restore "$@" ;;
+    logs)
+        arguments logs 1 "$@"
+        need_install
+        if [ $# = 1 ] && ! dc config --services | grep -qx -- "$1"; then
+            die "Eigen has no service \"$1\"." "Pick one of: $(dc config --services | paste -s -d , - | sed 's/,/, /g')."
+        fi
+        dc logs -f --tail 200 "$@"
+        ;;
+    help | -h | --help) usage ;;
+    *)
+        if [ -n "$COMMAND" ]; then printf 'Unknown command "%s".\n\n' "$COMMAND" >&2; fi
+        usage >&2
+        exit 2
+        ;;
+esac

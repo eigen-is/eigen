@@ -5,7 +5,7 @@ type: faq
 tags: [calendar, invitations, external, imip, rsvp]
 related: [calendar/invite-people, calendar/respond-to-invitation, calendar/create-event]
 order: 70
-updated: 2026-09-13
+updated: 2026-09-24
 ---
 
 Eigen can exchange calendar invitations with people who use other calendar apps, such as Google Calendar,
@@ -31,14 +31,11 @@ External guests receive a plain invitation email with the event title, date and 
 and description. Their calendar app handles the rest: most will show an **Accept / Decline** prompt and,
 if accepted, add the event to their calendar.
 
-Their response comes back to you as a reply email. When that email arrives in Eigen Mail, Eigen reads
-the reply and updates the attendee's status on your event.
+Their response comes back to you as a reply email. When that email arrives in Eigen Mail, Eigen reads the reply and updates the attendee's status on your event. If your Eigen doesn't host your email, the reply lands in your usual mailbox instead, and your event doesn't show the answer.
 
 ## What happens when someone outside Eigen invites me?
 
-When an invitation email arrives in your Eigen mailbox, Mail shows a calendar card inside the message
-instead of a bare attachment. The card displays the event title, date and time, location, and the
-organizer's name. Click **View in Calendar** to open Calendar on that event.
+When an invitation email arrives in your Eigen mailbox, Mail shows a calendar card inside the message instead of a bare attachment. This needs an Eigen that hosts your email: otherwise the invitation arrives in your usual mail app. The card displays the event title, date and time, location, and the organizer's name. Click **View in Calendar** to open Calendar on that event.
 
 Eigen adds the event to your default calendar automatically, as long as your server can verify the sender
 of the email. If it cannot, the card still appears in Mail but nothing is added to your calendar.

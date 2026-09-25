@@ -1,16 +1,23 @@
+import { DEFAULT_RELAY_PORT, defaultSenderAddress } from '@workspace/lib/constants/mail';
 import type { ImipMethod } from '@workspace/lib/types/calendar';
 import { ICS_MIME } from '@workspace/lib/types/drive';
+import type { ServerSettings } from '@workspace/lib/types/settings';
+import { validateEmailAddress } from '@workspace/lib/validation';
 import nodemailer from 'nodemailer';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import type Mail from 'nodemailer/lib/mailer';
-import { isDemo, isProduction } from '../config/env';
-import { getMailDomain, getOrgName } from '../config/server-config';
+import { getRelayHost, isDemo, isMailEnabled, isProduction } from '../config/env';
+import { getMailDomain, getOrgName, isInternalAddress } from '../config/server-config';
+import { getServerSettings } from '../config/server-settings';
+import { ApiError } from './errors';
 
 // Outbound email types — the inbound parsing types live in packages/lib/types/mail.ts
 type OutboundAddress = {
     name: string;
     address: string;
 };
+
+type SenderFields = Partial<Pick<ServerSettings['mail'], 'senderName' | 'senderAddress'>>;
 
 export type OutboundAttachment = {
     filename: string;
@@ -24,8 +31,8 @@ export type OutboundICalEvent = {
 };
 
 export type OutboundMail = {
+    // The person the mail is from; absent, it is the system's own. The mailer decides what the headers say.
     from?: OutboundAddress;
-    replyTo?: OutboundAddress;
     to: OutboundAddress[];
     cc?: OutboundAddress[];
     bcc?: OutboundAddress[];
@@ -37,63 +44,101 @@ export type OutboundMail = {
     messageId?: string;
     inReplyTo?: string;
     references?: string | string[];
-    envelope?: { from: string; to: string[] };
+    // Recipients of this copy alone; the envelope sender follows the resolved From.
+    envelope?: { to: string[] };
 };
 
-function defaultFrom(): OutboundAddress {
-    return { name: getOrgName(), address: `noreply@${getMailDomain()}` };
+function systemSender(): OutboundAddress {
+    const { senderName, senderAddress } = getServerSettings().mail;
+    return { name: senderName || getOrgName(), address: senderAddress || defaultSenderAddress(getMailDomain()) };
+}
+
+// Stored only when it differs from what an empty field derives, so a later rename or domain still carries through.
+export function storedSender(sender: SenderFields, orgName: string): SenderFields {
+    const stored: SenderFields = {};
+    if (sender.senderName !== undefined) {
+        const name = sender.senderName.trim();
+        stored.senderName = name === orgName.trim() ? '' : name;
+    }
+    if (sender.senderAddress !== undefined) {
+        const address = sender.senderAddress.trim();
+        if (address && !validateEmailAddress(address)) {
+            throw new ApiError(400, `${address} is not a valid sender address`);
+        }
+        stored.senderAddress = address === defaultSenderAddress(getMailDomain()) ? '' : address;
+    }
+    return stored;
+}
+
+// Postfix sends as any address on the mail domain, a relay only when the admin says it may; everyone else goes out "via".
+function sendsAsThemselves(address: string): boolean {
+    return isInternalAddress(address) && (isMailEnabled() || getServerSettings().mail.relaySendsAsUsers);
+}
+
+// With hosted mail, through the bundled Postfix (SMTP_HOST), which relays; without, through SMTP_RELAY_* itself.
+function smtpHost(): string | undefined {
+    return isMailEnabled() ? process.env['SMTP_HOST'] || undefined : getRelayHost();
 }
 
 export function createTransport(): Mail {
-    const host = process.env['SMTP_HOST'];
-    if (host) {
-        const port = Number(process.env['SMTP_PORT'] || 25);
-        const user = process.env['SMTP_USER'];
-        const pass = process.env['SMTP_PASSWORD'];
-        if (user && !pass) {
-            throw new Error(
-                'SMTP_USER is set without SMTP_PASSWORD. ' +
-                    'Set both to authenticate to the relay, or neither for an anonymous hop.',
-            );
-        }
-        // Port 465 is implicit TLS; anything else starts plain and upgrades with STARTTLS.
-        const secureEnv = process.env['SMTP_SECURE'];
-        const secure = secureEnv ? secureEnv === '1' : port === 465;
+    const host = smtpHost();
+    if (!host) {
+        throw new Error(
+            isMailEnabled()
+                ? 'SMTP_HOST is unset: with hosted mail the API sends through the bundled Postfix.'
+                : 'No mail relay is configured: this server hosts no mailboxes and SMTP_RELAY_HOST is unset, so it cannot send email. Run ./eigen setup and name a relay.',
+        );
+    }
+    if (isMailEnabled()) {
+        // Postfix owns TLS toward the internet; its own certificate is self-signed or missing.
         return nodemailer.createTransport({
             host,
-            port,
-            secure,
-            auth: user && pass ? { user, pass } : undefined,
-            // An unauthenticated hop is the bundled postfix or a host-local relay (self-signed/no
-            // cert) and postfix owns TLS toward the internet, but credentials only go over a
-            // connection that is encrypted and whose certificate checks out — without
-            // requireTLS nodemailer skips STARTTLS when the server doesn't advertise it.
-            requireTLS: Boolean(user),
-            tls: { rejectUnauthorized: Boolean(user) },
+            port: Number(process.env['SMTP_PORT'] || 25),
+            secure: false,
+            requireTLS: false,
+            tls: { rejectUnauthorized: false },
         });
     }
+    const port = Number(process.env['SMTP_RELAY_PORT'] || DEFAULT_RELAY_PORT);
+    const user = process.env['SMTP_RELAY_USER'];
+    const pass = process.env['SMTP_RELAY_PASSWORD'];
+    if (user && !pass) {
+        throw new Error(
+            'SMTP_RELAY_USER is set without SMTP_RELAY_PASSWORD. ' +
+                'Set both to authenticate to the relay, or neither for an anonymous one.',
+        );
+    }
     return nodemailer.createTransport({
-        sendmail: true,
-        newline: 'unix',
-        path: '/usr/sbin/sendmail',
+        host,
+        port,
+        // Port 465 is implicit TLS; anything else starts plain and upgrades with STARTTLS.
+        secure: port === 465,
+        auth: user && pass ? { user, pass } : undefined,
+        // Credentials only over verified TLS: without requireTLS, a relay offering no STARTTLS gets them in the clear.
+        requireTLS: Boolean(user),
+        tls: { rejectUnauthorized: Boolean(user) },
     });
 }
 
 export function buildMailOptions(message: OutboundMail): Mail.Options {
+    const person = message.from;
+    let from = systemSender();
+    if (person && sendsAsThemselves(person.address)) from = person;
+    else if (person) from = { name: `${person.name || person.address} via ${getOrgName()}`, address: from.address };
     const options: Mail.Options = {
-        from: message.from ?? defaultFrom(),
+        from,
         to: message.to,
         subject: message.subject,
         text: message.text,
     };
-    if (message.replyTo) options.replyTo = message.replyTo;
+    if (person && from !== person) options.replyTo = person;
     if (message.cc?.length) options.cc = message.cc;
     if (message.bcc?.length) options.bcc = message.bcc;
     if (message.html) options.html = message.html;
     if (message.messageId) options.messageId = message.messageId;
     if (message.inReplyTo) options.inReplyTo = message.inReplyTo;
     if (message.references) options.references = message.references;
-    if (message.envelope) options.envelope = message.envelope;
+    if (message.envelope) options.envelope = { from: from.address, to: message.envelope.to };
     if (message.attachments?.length) options.attachments = message.attachments;
     if (message.icalEvent) {
         // Build iMIP MIME: text/calendar in multipart/alternative + application/ics attachment.
@@ -113,22 +158,26 @@ export function buildMailOptions(message: OutboundMail): Mail.Options {
     return options;
 }
 
+// Throws the transport's error, where sendMail logs it; for a caller that hands the relay's answer back.
+export async function sendMailOrThrow(message: OutboundMail): Promise<void> {
+    await createTransport().sendMail(buildMailOptions(message));
+}
+
 export async function sendMail(message: OutboundMail): Promise<boolean> {
     // Skip outbound delivery in dev/test unless an SMTP host is explicitly configured, and always
     // in demo mode (a demo box has no MTA — a real send would throw on every share/invite/iMIP).
-    if ((!isProduction() && !process.env['SMTP_HOST']) || isDemo()) {
-        console.log('[DEV] Skipping email:', {
-            from: message.from ?? defaultFrom(),
-            to: message.to,
-            subject: message.subject,
-        });
+    if ((!isProduction() && !smtpHost()) || isDemo()) {
+        const { from } = buildMailOptions(message);
+        console.log('[DEV] Skipping email:', { from, to: message.to, subject: message.subject });
         return true;
     }
     try {
-        await createTransport().sendMail(buildMailOptions(message));
+        await sendMailOrThrow(message);
         return true;
     } catch (error) {
-        console.error('Failed to send email:', error);
+        // nodemailer puts the server's own reply, like "553 5.7.1 Sender address rejected", on `response`.
+        const reason = error instanceof Error && 'response' in error ? error.response : error;
+        console.error(`[mailer] Sending "${message.subject}" failed:`, reason);
         return false;
     }
 }

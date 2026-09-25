@@ -1,47 +1,52 @@
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+# Bigger for postfix and dovecot: their logs are the record of an abuse run, and what a host-side fail2ban reads.
+# During the 2026-08-31 incident 3x10MB rotated away in about two hours and took the start of the run with it.
+x-mail-logging: &mail-logging
+  driver: json-file
+  options: { max-size: "50m", max-file: "10" }
+
+x-domains: &domains
+  DOMAIN: ${DOMAIN}
+  MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}
+
 services:
   caddy:
     profiles: ["edge"]
-    image: caddy:2-alpine
+    image: &frontend-image ${EIGEN_FRONTEND_IMAGE:-ghcr.io/eigen-is/eigen/frontend:local}
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./docker/caddy/export-certs.sh:/usr/local/bin/export-certs.sh:ro
-      - ./docker/caddy/autoconfig.xml:/etc/caddy/autoconfig.xml:ro
-      - ./dist:/www:ro
       - ./caddy-data:/data
       - ./data/certs:/shared-certs
-    env_file: .env.production
     environment:
-      DOMAIN: ${DOMAIN}
-      MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}
-      CADDY_ACME_EMAIL: "email ${ACME_EMAIL:-admin@${DOMAIN}}"
+      <<: *domains
+      CADDY_ACME_EMAIL: "email ${ACME_EMAIL:-admin@${MAIL_DOMAIN:-${DOMAIN}}}"
     command: sh -c "/usr/local/bin/export-certs.sh & caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"
     restart: unless-stopped
     networks: [eigen]
-    logging:
-      driver: json-file
-      options: { max-size: "10m", max-file: "3" }
+    logging: *logging
 
   eigen-api:
-    build:
-      context: .
-      dockerfile: docker/api/Dockerfile
+    image: ${EIGEN_API_IMAGE:-ghcr.io/eigen-is/eigen/api:local}
     user: "1000:1000"
+    # A real PID 1: forwards SIGTERM to bun and reaps its ffmpeg/weasyprint children.
+    init: true
     # No host port binding — caddy / eigen-static / postfix / dovecot all reach the API via
-    # the docker network as `eigen-api:8000`. For host-side debug access, layer the
-    # docker-compose.host-api.yml overlay (binds 127.0.0.1:${EIGEN_API_BIND_PORT:-8000}).
+    # the docker network as `eigen-api:8000`. A host port for debugging: docker/SETUP-GUIDE.md.
     volumes:
       - ./data:/app/data
       # Backup artifacts live outside data/ so a wipe of the data directory cannot take them with
-      # it — the same ./backups the offline scripts/backup.sh writes to. The API creates the folder
-      # only when the first backup runs; Docker creates the mount point itself.
+      # it. `./eigen backup` writes its whole-server snapshots to ./snapshots instead. The API creates
+      # the folder only when the first backup runs; Docker creates the mount point itself.
       - ./backups:/app/backups
-    # Lets the API reach a host-side mail server via SMTP_HOST=host.docker.internal in
-    # scenarios where the bundled postfix is off. Harmless when bundled postfix is on.
+    # Lets the API reach a relay on the host (SMTP_RELAY_HOST=host.docker.internal) when Eigen hosts no mail.
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    env_file: .env.production
     environment:
       PRODUCTION: 1
       # Conventional production signal for third-party libs that gate on it (e.g. better-auth
@@ -53,22 +58,15 @@ services:
       # Demo-instance mode (hourly wipe + reseed via scripts/demo-reset.sh). Unset on real
       # instances → 0, so the demo entry route + auth guards stay inert.
       EIGEN_DEMO: ${EIGEN_DEMO:-0}
-      DOMAIN: ${DOMAIN}
-      MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}
       # Off (0) on a deployment whose COMPOSE_PROFILES omits `mail`, so the apps hide every Mail entry point.
       MAIL_ENABLED: ${MAIL_ENABLED:-1}
-      SMTP_HOST: ${SMTP_HOST:-postfix}
-      SMTP_PORT: ${SMTP_PORT:-25}
-      # Empty unless the API relays through an authenticated third-party relay instead of postfix.
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_SECURE: ${SMTP_SECURE:-}
-      COOKIE_DOMAIN: .${DOMAIN}
+      # Hosting mail, the API hands its mail to postfix, which relays through SMTP_RELAY_*. With MAIL_ENABLED=0
+      # the API ignores these and sends through SMTP_RELAY_* (from env_file) itself.
+      SMTP_HOST: postfix
+      SMTP_PORT: 25
       # Loopback plus the docker bridge subnet (same EIGEN_SUBNET the network and postfix use), so
       # Postfix/Dovecot bridge callers are trusted without the whole 172.16/12 range.
-      TRUSTED_NETWORKS: "127.0.0.0/8,::1,${EIGEN_SUBNET:-172.20.0.0/24}"
-      EIGEN_COMMIT: ${EIGEN_COMMIT:-}
-      EIGEN_BUILT_AT: ${EIGEN_BUILT_AT:-}
+      TRUSTED_NETWORKS: "127.0.0.0/8,::1,${EIGEN_SUBNET}"
     restart: unless-stopped
     # On SIGTERM the API drains pending S3 uploads before exit (SHUTDOWN_DRAIN_BUDGET_MS=20s,
     # index.ts). Give it more than Docker's 10s default so a healthy drain completes; anything
@@ -88,15 +86,12 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
-    logging:
-      driver: json-file
-      options: { max-size: "10m", max-file: "3" }
+    logging: *logging
 
   eigen-static:
     profiles: ["static"]
-    build:
-      context: .
-      dockerfile: docker/static/Dockerfile
+    image: *frontend-image
+    command: caddy run --config /etc/caddy/Caddyfile.static --adapter caddyfile
     # Long-form bind so EIGEN_STATIC_HOST/PORT substitute cleanly. Avoid the short-form
     # `${IP}:${PORT}:8080` shape — the colon between vars confuses some Compose versions.
     ports:
@@ -104,64 +99,55 @@ services:
         published: "${EIGEN_STATIC_PORT:-8080}"
         host_ip: "${EIGEN_STATIC_HOST:-127.0.0.1}"
         protocol: tcp
-    environment:
-      DOMAIN: ${DOMAIN}
-      MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}
+    environment: *domains
     depends_on:
       eigen-api:
         condition: service_healthy
     restart: unless-stopped
     networks: [eigen]
-    logging:
-      driver: json-file
-      options: { max-size: "10m", max-file: "3" }
+    logging: *logging
 
   unbound:
     profiles: ["mail"]
-    image: mvance/unbound:latest
+    image: ${EIGEN_UNBOUND_IMAGE:-ghcr.io/eigen-is/eigen/unbound:local}
     restart: unless-stopped
     networks:
       eigen:
-        ipv4_address: ${EIGEN_UNBOUND_IP:-172.20.0.254}
+        ipv4_address: ${EIGEN_UNBOUND_IP}
     healthcheck:
       test: ["CMD", "drill", "@127.0.0.1", "cloudflare.com"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 15s
-    logging:
-      driver: json-file
-      options: { max-size: "10m", max-file: "3" }
+    logging: *logging
 
   postfix:
     profiles: ["mail"]
-    build:
-      context: docker/postfix
+    image: ${EIGEN_POSTFIX_IMAGE:-ghcr.io/eigen-is/eigen/postfix:local}
     ports:
       - "25:25"
       - "465:465"
       - "587:587"
-    dns: ["${EIGEN_UNBOUND_IP:-172.20.0.254}"]
+    dns: ["${EIGEN_UNBOUND_IP}"]
     volumes:
       - ./data/dkim:/data/dkim
       - ./data/certs:/certs:ro
       - postfix-queue:/var/spool/postfix
     environment:
-      DOMAIN: ${DOMAIN}
-      MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}
+      <<: *domains
       SMTP_RELAY_HOST: ${SMTP_RELAY_HOST:-}
-      SMTP_RELAY_PORT: ${SMTP_RELAY_PORT:-587}
+      SMTP_RELAY_PORT: ${SMTP_RELAY_PORT:-}
       SMTP_RELAY_USER: ${SMTP_RELAY_USER:-}
       SMTP_RELAY_PASSWORD: ${SMTP_RELAY_PASSWORD:-}
       # queue-monitor.sh: notify the org owner when the queue backs up (spam-run early warning).
       QUEUE_CHECK_INTERVAL: ${QUEUE_CHECK_INTERVAL:-300}
       QUEUE_ALERT_THRESHOLD: ${QUEUE_ALERT_THRESHOLD:-200}
       QUEUE_ALERT_COOLDOWN: ${QUEUE_ALERT_COOLDOWN:-21600}
-      # The docker bridge subnet, kept in lockstep with the `eigen` network below (same default).
-      # entrypoint.sh scopes Postfix `mynetworks` + OpenDKIM `InternalHosts` to loopback plus this
-      # value, so eigen-api (172.20.0.x by default) can submit and get its mail DKIM-signed without
-      # trusting the whole 172.16/12 range. Unset → loopback only (fail closed).
-      EIGEN_SUBNET: ${EIGEN_SUBNET:-172.20.0.0/24}
+      # The docker bridge subnet of the `eigen` network below. entrypoint.sh scopes Postfix `mynetworks` +
+      # OpenDKIM `InternalHosts` to loopback plus this value, so eigen-api can submit and get its mail
+      # DKIM-signed without trusting the whole 172.16/12 range. Unset → loopback only (fail closed).
+      EIGEN_SUBNET: ${EIGEN_SUBNET}
     depends_on:
       eigen-api:
         condition: service_healthy
@@ -171,35 +157,23 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks: [eigen]
-    # Bigger than the other services keep: this log is the record of an abuse run, and what a
-    # host-side fail2ban reads. During the 2026-08-31 incident 3x10MB rotated away in about two
-    # hours and took the start of the run with it.
-    logging:
-      driver: json-file
-      options: { max-size: "50m", max-file: "10" }
+    logging: *mail-logging
 
   dovecot:
     profiles: ["mail"]
-    build:
-      context: docker/dovecot
+    image: ${EIGEN_DOVECOT_IMAGE:-ghcr.io/eigen-is/eigen/dovecot:local}
     ports:
       - "993:993"
     volumes:
       - ./data:/data
       - ./data/certs:/certs
-    environment:
-      DOMAIN: ${DOMAIN}
-      MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}
+    environment: *domains
     depends_on:
       eigen-api:
         condition: service_healthy
     restart: unless-stopped
     networks: [eigen]
-    # Same size as postfix keeps, and for the same reason: dovecot's log is where an IMAP
-    # password-guessing run shows up, and what the host-side fail2ban jail reads.
-    logging:
-      driver: json-file
-      options: { max-size: "50m", max-file: "10" }
+    logging: *mail-logging
 
 volumes:
   postfix-queue:
@@ -209,6 +183,6 @@ networks:
     driver: bridge
     ipam:
       config:
-        # Override via EIGEN_SUBNET / EIGEN_UNBOUND_IP if 172.20.0.0/24 conflicts with your
-        # host. The two must stay consistent (unbound's IP must lie inside the subnet).
-        - subnet: ${EIGEN_SUBNET:-172.20.0.0/24}
+        # ./eigen setup writes EIGEN_SUBNET, a /24 no other Docker network uses, and EIGEN_UNBOUND_IP inside it. No
+        # default and no :?: setup asks Compose for the project, and a local build builds, before it writes them.
+        - subnet: ${EIGEN_SUBNET}

@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, onboarding, email, users, contacts]
 related: [admin/manage-members, admin/waitlist]
 order: 105
-updated: 2026-09-13
+updated: 2026-09-24
 ---
 
 When a new account is set up, Eigen can put a welcome message in that person's Inbox and add the owner to their contacts. You control both on the **Onboarding** page in Admin. Only the server owner sees that page.
@@ -14,7 +14,7 @@ To open it, sign in as the owner, go to [Admin](/admin), and click **Onboarding*
 
 ## Write the welcome email
 
-The **Welcome mail** section is near the bottom of the page.
+The **Welcome mail** section is near the bottom of the page. It appears only on a server that hosts mailboxes. Without them nobody would read the message, so Eigen doesn't write one.
 
 1. Check that **Send welcome email** is on. It is on by default, and turning it off means new users get nothing.
 2. Edit **Subject**. It starts as `Welcome to {orgName}!`.

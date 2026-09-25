@@ -1,6 +1,12 @@
 import { afterAll, afterEach, beforeEach, describe, expect, jest, mock, test } from 'bun:test';
+import * as decoding from 'lib0/decoding';
+import * as encoding from 'lib0/encoding';
 import type * as Y from 'yjs';
-import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_STORAGE_UNAVAILABLE_CLOSE } from '../../../../constants/collab';
+import {
+    COLLAB_EPOCH_MESSAGE,
+    COLLAB_HOME_REPLACED_CLOSE,
+    COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+} from '../../../../constants/collab';
 import type { CollabDoc, UseCollabDocOptions } from '../../../../core/collab/hooks/use-collab-doc';
 import { installHappyDom } from '../../../happy-dom';
 
@@ -15,6 +21,14 @@ class FakeProvider {
     wsconnected = false;
     synced = false;
     destroyed = false;
+    messageHandlers: ((encoder: unknown, decoder: decoding.Decoder) => void)[] = [];
+    params: Record<string, string> = {};
+    bcChannel: string;
+    disableBc = true;
+    bcConnects = 0;
+    connectBc() {
+        this.bcConnects++;
+    }
     private listeners = new Map<string, Set<Listener>>();
 
     constructor(
@@ -22,6 +36,7 @@ class FakeProvider {
         _room: string,
         public doc: Y.Doc,
     ) {
+        this.bcChannel = url;
         FakeProvider.instances.push(this);
     }
 
@@ -295,6 +310,53 @@ describe('useCollabDoc connection state', () => {
         expect(h.state.unsyncedEdits).toBe(false);
         // Not a storage outage and not a plain drop: nothing retries, nothing syncs this tab back.
         expect(h.state.storageUnavailable).toBe(false);
+    });
+
+    test('a replaced home reloads only once the guard has disarmed, so the reload meets no prompt', () => {
+        active = mount(OPTIONS);
+        const h = active;
+        act(() => {
+            h.provider.open();
+            h.provider.finishSync();
+            h.provider.close();
+        });
+        act(() => h.doc.getMap('items').set('offline', 1));
+        expect(h.state.unsyncedEdits).toBe(true);
+        const armedAtReload: boolean[] = [];
+        Object.defineProperty(window.location, 'reload', {
+            value: () => armedAtReload.push(h.state.unsyncedEdits),
+            configurable: true,
+        });
+
+        act(() => h.provider.open());
+        act(() => h.provider.close(COLLAB_HOME_REPLACED_CLOSE));
+        expect(armedAtReload).toEqual([false]);
+    });
+
+    test("the server's epoch frame names the epoch on every reconnect and opens a BroadcastChannel of it, once", () => {
+        active = mount(OPTIONS);
+        const h = active;
+        const frame = (epoch: string) => {
+            const encoder = encoding.createEncoder();
+            encoding.writeVarString(encoder, epoch);
+            return decoding.createDecoder(encoding.toUint8Array(encoder));
+        };
+        const handle = h.provider.messageHandlers[COLLAB_EPOCH_MESSAGE];
+        if (!handle) throw new Error('no epoch handler');
+        const channel = h.provider.bcChannel;
+        expect(h.provider.disableBc).toBe(true);
+
+        handle(null, frame('epoch-1'));
+        expect(h.provider.params).toEqual({ epoch: 'epoch-1' });
+        expect(h.provider.bcChannel).toBe(`${channel}#epoch-1`);
+        expect(h.provider.disableBc).toBe(false);
+        expect(h.provider.bcConnects).toBe(1);
+
+        // Every reconnect's open sends it again; the tab keeps the epoch it loaded under.
+        handle(null, frame('epoch-2'));
+        expect(h.provider.params).toEqual({ epoch: 'epoch-1' });
+        expect(h.provider.bcChannel).toBe(`${channel}#epoch-1`);
+        expect(h.provider.bcConnects).toBe(1);
     });
 
     test('teardown drops the provider listeners and resets the flags', () => {

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { MountInfo } from '@workspace/lib/types/mount';
-import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '../../lib/backup/paths';
+import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { TEST_DATA_DIR } from '../setup';
 
 // The backup promises only a real process can keep. Every test here spawns `bun src/index.ts` as a
@@ -65,6 +65,7 @@ async function startApi(dataRoot: string, backupsDir: string, label: string): Pr
             EIGEN_BACKUPS_DIR: backupsDir,
             EIGEN_API_PORT: String(port),
             API_URL: `http://localhost:${port}`,
+            DOMAIN: 'test.eigen.is',
         },
         stdin: 'ignore',
         stdout: logFd,
@@ -120,15 +121,18 @@ async function json<T>(res: Response): Promise<T> {
     return (await res.json()) as T;
 }
 
+// A development boot logs the one-time setup link, as `bun run dev` does.
 async function completeSetup(api: ApiProcess): Promise<void> {
+    const setupToken = api.log().match(/#setup=([\w-]+)/)?.[1];
+    if (!setupToken) throw new Error(`the API logged no setup link:\n${api.log()}`);
     const res = await fetch(`${api.base}/setup/complete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            domain: 'test.eigen.is',
+            setupToken,
             orgName: 'Test Organization',
             storageType: 'local-id',
-            adminEmail: ADMIN_EMAIL,
+            adminUsername: 'alice',
             adminPassword: PASSWORD,
             adminName: 'Alice Test',
         }),

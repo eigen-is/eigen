@@ -41,28 +41,26 @@ export function useMembers(organizationId?: string) {
     });
 }
 
+async function setMemberRole(
+    organizationId: string | undefined,
+    { memberId, userId, role }: { memberId: string; userId: string; role: 'admin' | 'member' | 'owner' },
+) {
+    const { data, error } = await authClient.organization.updateMemberRole({
+        memberId,
+        role,
+        organizationId,
+    });
+    if (error) throw new Error(error.message ?? 'Failed to update member role');
+    // Keep user.role in sync so useIsAdmin works without an API call
+    await authClient.admin.setRole({ userId, role: role === 'member' ? 'user' : 'admin' });
+    return data;
+}
+
 export function useUpdateMemberRole(organizationId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({
-            memberId,
-            userId,
-            role,
-        }: {
-            memberId: string;
-            userId: string;
-            role: 'admin' | 'member' | 'owner';
-        }) => {
-            const { data, error } = await authClient.organization.updateMemberRole({
-                memberId,
-                role,
-                organizationId,
-            });
-            if (error) throw new Error(error.message ?? 'Failed to update member role');
-            // Keep user.role in sync so useIsAdmin works without an API call
-            await authClient.admin.setRole({ userId, role: role === 'member' ? 'user' : 'admin' });
-            return data;
-        },
+        mutationFn: (member: { memberId: string; userId: string; role: 'admin' | 'member' | 'owner' }) =>
+            setMemberRole(organizationId, member),
         onSuccess: () => {
             invalidateAdminMembers(queryClient, organizationId ?? '');
             invalidateAdminUsers(queryClient);
@@ -91,12 +89,10 @@ export function useDeleteUser(organizationId?: string) {
 
 export function useResetUserPassword() {
     return useMutation({
-        mutationFn: async ({ userId, newPassword }: { userId: string; newPassword: string }) => {
-            const { error } = await authClient.admin.setUserPassword({
-                userId,
-                newPassword,
-            });
-            if (error) throw new Error(error.message ?? 'Failed to reset password');
+        mutationFn: async ({ userId, password }: { userId: string; password: string }) => {
+            const response = await settingsApi.user({ userId }).password.put({ password });
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         onSuccess: () => {
             toast.success('Password has been reset');
@@ -117,15 +113,19 @@ export function useCreateUser(organizationId?: string) {
             name: string;
             email: string;
             password: string;
-            role: 'admin' | 'user';
+            role: 'admin' | 'member';
         }) => {
-            const { data, error } = await authClient.admin.createUser({
-                name,
-                email,
-                password,
-                role,
-            });
+            const { data, error } = await authClient.admin.createUser({ name, email, password });
             if (error) throw new Error(error.message ?? 'Failed to create user');
+            // The user-create hook joins the organization as a member; an admin is then promoted like the Role select does.
+            if (role === 'admin') {
+                const { data: found, error: listError } = await authClient.organization.listMembers({
+                    query: { organizationId, filterField: 'userId', filterValue: data.user.id },
+                });
+                const member = found?.members[0];
+                if (!member) throw new Error(listError?.message ?? 'Failed to find the new member');
+                await setMemberRole(organizationId, { memberId: member.id, userId: data.user.id, role });
+            }
             return data;
         },
         onSuccess: () => {

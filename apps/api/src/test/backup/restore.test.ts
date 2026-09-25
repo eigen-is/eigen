@@ -6,21 +6,16 @@ import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON } from '@worksp
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
 import { apikey as apikeyScheme, user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import * as pathsModule from '../../lib/backup/paths';
-import {
-    ARCHIVE_AVATAR_DIR,
-    buildArtifactName,
-    buildHomeFolderName,
-    FAILED_RESTORE_SUFFIX,
-    getBackupsDir,
-    PRE_RESTORE_SUFFIX,
-} from '../../lib/backup/paths';
+import { ARCHIVE_AVATAR_DIR, buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
+import { getCollabEpoch } from '../../lib/collab/epoch';
 import { getAvatarsDir } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { avatarNameOf } from '../../lib/contacts/card-store';
@@ -463,6 +458,15 @@ describe('Backup restoreHome', () => {
         await restoreHome(artifact, target.id, `restore-ws-${Date.now()}`);
 
         expect(await closed).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: COLLAB_HOME_REPLACED_REASON });
+    });
+
+    // A tab offline through the restore holds no socket to close; its reconnect names the epoch it loaded under.
+    test('draws a new collab epoch for this home alone, so only its tabs that were offline reload', async () => {
+        const before = getCollabEpoch(target.id);
+        const other = getCollabEpoch(ctx.alice.user.id);
+        await restoreHome(artifact, target.id, `restore-epoch-${Date.now()}`);
+        expect(getCollabEpoch(target.id)).not.toBe(before);
+        expect(getCollabEpoch(ctx.alice.user.id)).toBe(other);
     });
 
     test('a socket that connects while the mark is set is closed 1012, never 1013', async () => {

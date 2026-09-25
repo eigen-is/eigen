@@ -19,6 +19,7 @@
     "better-auth": "^1.7.3",
     "es-toolkit": "^1.52.0",
     "immer": "^9.0.21",
+    "lib0": "^0.2.117",
     "nanoid": "^5.1.16",
     "perfect-freehand": "1.2.3",
     "roughjs": "4.6.4",

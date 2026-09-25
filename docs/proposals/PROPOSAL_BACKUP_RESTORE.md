@@ -20,7 +20,7 @@ Phase ② followed a signed-off implementation spec that supersedes this text wh
 
 ## Why
 
-Eigen's stated core weakness is "I would not yet trust it with data you cannot afford to lose". Today the only backup is `../../scripts/backup.sh`, an offline stop-and-tar of the whole `../../data` tree: it stops `eigen-api`, tars the quiesced tree with `-wal`/`-shm` intact (so the archive is crash-consistent), then restarts. That is safe but blunt — it requires a few seconds of downtime, nobody verifies the result, it is whole-server only, and there is no per-home restore. eigen.is runs on it right now.
+Eigen's stated core weakness is "I would not yet trust it with data you cannot afford to lose". The whole-server backup is `./eigen backup`, an offline stop-and-tar of the whole `../../data` tree plus `.env.production`: it stops the stack, tars the quiesced tree with `-wal`/`-shm` intact (so the archive is crash-consistent), then restarts. That is safe but blunt: Eigen is down while it archives, nobody verifies the result, and it is whole-server only, with no per-home restore.
 
 We also know from three production incidents ([PROPOSAL_DATA_INTEGRITY.md](PROPOSAL_DATA_INTEGRITY.md)) that a backup nobody has verified is not a backup: a faithful copy of a corrupt database is a faithful backup of garbage, discovered at restore time, which is the worst possible time.
 
@@ -103,7 +103,7 @@ Share-registry rows (`../../data/server/eigen.db`) where this user is the sharer
 
 ### A warning about credentials
 
-`home/settings.json` contains mount configs, and for S3 mounts that includes the access key and secret. An archive is therefore a secret: it holds every file, every mail, and live storage credentials. Artifacts live in a server-side directory outside `../../data` (default `./backups`, next to where `backup.sh` already writes), are admin-only to download, and should be treated like the `.env` file. We do not strip credentials from archives — a backup that cannot restore the mount config is not a complete backup — but the admin UI should say this plainly.
+`home/settings.json` contains mount configs, and for S3 mounts that includes the access key and secret. An archive is therefore a secret: it holds every file, every mail, and live storage credentials. Artifacts live in a server-side directory outside `../../data` (default `./backups`; `./eigen backup` writes its snapshots to `snapshots/` beside it), are admin-only to download, and should be treated like the `.env` file. We do not strip credentials from archives — a backup that cannot restore the mount config is not a complete backup — but the admin UI should say this plainly.
 
 ## Verification
 
@@ -160,7 +160,7 @@ With the primitive in place, whole-server backup is a loop plus scheduling:
 
 Two operational notes. The backups directory must live **outside** `../../data` (it does — `./backups`) so a server backup can never recursively include itself. And a backup on the same disk as the data only protects against software failure — the real disaster-recovery story is shipping the artifact off the machine, so the settings should optionally take an S3 destination (endpoint, bucket, credentials — the existing `S3Config` type) to upload finished artifacts to. That destination should be a different bucket/provider than the one the data lives on.
 
-This phase retires the offline `../../scripts/backup.sh`. It also supersedes PROPOSAL_DATA_INTEGRITY's open question D7 (which sketched keeping backup.sh as a copy-then-tar script): the agreed direction is API-driven, scheduled, verified, with an admin UI. The ROADMAP note stands: eigen.is currently lives on the offline stop-and-tar script (unverified, whole-server, requires downtime, no per-home restore), so phase ③ must not slip far behind phase ②.
+This phase swaps the engine under the offline `eigen backup`. It also supersedes PROPOSAL_DATA_INTEGRITY's open question D7 (which sketched keeping the whole-server backup a copy-then-tar script): the agreed direction is API-driven, scheduled, verified, with an admin UI. The ROADMAP note stands: eigen.is currently lives on the offline stop-and-tar script (unverified, whole-server, requires downtime, no per-home restore), so phase ③ must not slip far behind phase ②.
 
 Per-user restore from a server artifact falls out for free: a whole-server artifact contains one `snapshotHome` directory per home, so "restore just Alice from last night's server backup" is the phase-② restore fed from a different source.
 
@@ -195,7 +195,7 @@ The per-destination upload semaphores already exist precisely so that one user's
 ## Phasing
 
 1. **Phase ② — per-user backup/restore (M).** `snapshotHome` + archive format + verify pass (shared `verifySnapshotDb`), job runner + admin routes, restore-in-place with the safety net, Backup section in the Users detail pane. Team backup from the team view rides along since the primitive is owner-kind-agnostic.
-2. **Phase ③ — whole-server backup (S–M on top of ②).** The all-homes loop + server DBs, scheduler job + retention + admin Settings section, optional off-server S3 upload of artifacts. Retires the offline `backup.sh`. Must follow ② quickly.
+2. **Phase ③ — whole-server backup (S–M on top of ②).** The all-homes loop + server DBs, scheduler job + retention + admin Settings section, optional off-server S3 upload of artifacts. Swaps the engine under the offline `eigen backup`. Must follow ② quickly.
 3. **Phase ④ — migration (M).** Server-to-server restore polish (fresh-server bootstrap from a server artifact; single-user cross-server import) and the live mount storage-backend migration job.
 
 Each phase ships independently and each is useful on its own; nothing in ② needs rework for ③ or ④ — that is the point of making the archive self-contained and storage-independent.

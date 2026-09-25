@@ -5,6 +5,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig, mergeConfig, type Plugin, type UserConfig } from 'vite';
+import { APP_URLS } from './packages/lib/src/constants/app-urls.ts';
 import { buildSecurityMetaTags, THEME_FLASH_SCRIPT } from './vite.security-headers.ts';
 
 const sharedWebAssetDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'apps/index/public');
@@ -69,6 +70,18 @@ function securityAndThemePlugin(): Plugin {
     };
 }
 
+// A build without them in its environment, like the Docker one, gets the relative app URLs. Vite reads the
+// environment after the config hooks.
+function appUrlsPlugin(): Plugin {
+    return {
+        name: 'eigen-app-urls',
+        config(_, { command }) {
+            if (command !== 'build') return;
+            for (const [key, value] of Object.entries(APP_URLS)) process.env[key] ??= value;
+        },
+    };
+}
+
 const APP_PORTS: Record<string, number> = {
     index: 3000,
     mail: 3001,
@@ -93,6 +106,7 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
         base: basePath,
         envDir: './../../',
         plugins: [
+            appUrlsPlugin(),
             webAppMetadataPlugin(),
             securityAndThemePlugin(),
             tanstackRouter({

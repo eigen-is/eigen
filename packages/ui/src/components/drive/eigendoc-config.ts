@@ -24,7 +24,7 @@ export type EigenDocAppConfig = {
 // Sidebar/nav order — deliberately not registry order — mapped to the app that owns each
 // type's list view. `chat` has none: the chat app opens one conversation, so Drive hosts
 // "All chats". A new eigendoc type is a compile error until it's placed here.
-const APP_URLS: Record<EigenDocType, (() => string) | null> = {
+const EIGEN_DOC_APP_URLS: Record<EigenDocType, (() => string) | null> = {
     doc: getDocsAppUrl,
     stickies: getStickiesAppUrl,
     chat: null,
@@ -50,12 +50,12 @@ function buildConfig(type: EigenDocType): EigenDocAppConfig {
         allLabel: `All ${info.labelPlural.toLowerCase()}`,
         labelPlural: info.labelPlural,
         type: info.type,
-        appUrl: APP_URLS[type],
+        appUrl: EIGEN_DOC_APP_URLS[type],
     };
 }
 
 // Every type in nav order, for surfaces that list them all (the shared sidebar's filters).
-export const EIGEN_DOC_APP_CONFIGS: ReadonlyArray<EigenDocAppConfig> = Object.keys(APP_URLS).map((type) =>
+export const EIGEN_DOC_APP_CONFIGS: ReadonlyArray<EigenDocAppConfig> = Object.keys(EIGEN_DOC_APP_URLS).map((type) =>
     buildConfig(type as EigenDocType),
 );
 

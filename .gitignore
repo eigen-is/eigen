@@ -61,9 +61,17 @@ next-env.d.ts
 /caddy-data/
 # Docker deployment
 .env.production
+.env.production.pre-restore-*
+/data.pre-restore-*/
+/docker-compose.override.yml
+/eigen.Caddyfile
+/eigen.apache.conf
+/eigen.nginx.conf
 /data/certs/
 /data/dkim/
 /backups/
+/snapshots/
+/.eigen/
 /.superpowers/
 .worktrees/
 .claude/settings.local.json
@@ -76,3 +84,5 @@ next-env.d.ts
 /docs/plans/
 /data/guest/
 /apps/index/src/content/.generated/
+# TanStack router generator scratch
+.tanstack/

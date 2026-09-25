@@ -1,8 +1,9 @@
 import { Database } from 'bun:sqlite';
 import { apiKey } from '@better-auth/api-key';
+import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { APIError } from 'better-auth/api';
+import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
 import { and, eq, notInArray, or } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
@@ -21,12 +22,12 @@ import {
 } from '../../../auth-schema';
 import { isTest } from '../config/env';
 import { getServerDataPath } from '../config/paths';
-import { getDomain, getOrgName, getServerConfig, isRoleAddress } from '../config/server-config';
+import { getAuthSecret, getDomain, getOrgName, getServerConfig, isRoleAddress } from '../config/server-config';
 import { ApiError } from '../core';
 import { composeOtpEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from '../share';
-import type { User } from '../user';
+import { getOrgRole, type User } from '../user';
 
 const deploymentDomain = getDomain();
 export const trustedOrigins = [
@@ -176,8 +177,8 @@ export const auth = betterAuth({
                 // reference rows) runs here — the raw endpoint must not leave user data
                 // behind, and a leftover member row 500s listMembers org-wide. No extra
                 // guard needed: /admin/remove-user already rejects non-admins (403) and
-                // self-removal (400), matching the Eigen route's requireAdmin +
-                // own-account-400. Lazy import to avoid the static cycle
+                // self-removal (400), and hooks.before keeps it off the owner, matching the
+                // Eigen route's requireAdmin + own-account-400 + owner-400. Lazy import to avoid the static cycle
                 // (delete-user → home/get-home → … → auth).
                 before: async (hookUser) => {
                     const user = hookUser as User;
@@ -187,8 +188,23 @@ export const auth = betterAuth({
             },
         },
     },
+    hooks: {
+        // Every org admin also holds user.role 'admin', which lets the admin plugin act on the owner past requireOwner.
+        before: createAuthMiddleware(async (ctx) => {
+            const targetId = ctx.body?.userId;
+            if (!ctx.path.startsWith('/admin/') || typeof targetId !== 'string') return;
+            // No session is the plugin's 401, before any lookup that would tell the owner's id apart.
+            const session = await getSessionFromCtx(ctx);
+            if (!session) return;
+            if ((await getOrgRole(targetId)) !== 'owner') return;
+            if (session.user.id !== targetId) {
+                throw new APIError('FORBIDDEN', { message: "Only the owner can change the owner's account" });
+            }
+        }),
+    },
     emailAndPassword: {
         enabled: true,
+        minPasswordLength: MIN_PASSWORD_LENGTH,
     },
     advanced: {
         // Same X-Real-IP → X-Forwarded-For precedence as clientIpKey (lib/core/access); better-auth
@@ -259,10 +275,11 @@ export const auth = betterAuth({
     appName: 'eigen',
     baseURL: process.env['API_URL'],
     basePath: '/auth',
+    // set-user-password revokes no sessions or app passwords (admins reset through PUT
+    // /settings/user/:userId/password); impersonation would hand an admin any member's session.
+    disabledPaths: ['/admin/set-user-password', '/admin/impersonate-user'],
     logger: { disabled: isTest() },
-    // Falls back to random UUID before setup is completed — intentional since sessions don't
-    // need to persist across restarts during the pre-setup phase.
-    secret: getServerConfig()?.secret || crypto.randomUUID(),
+    secret: getAuthSecret(),
 });
 
 // Joins the default org (config.orgId, pinned at setup — not "the first org row", whose order is

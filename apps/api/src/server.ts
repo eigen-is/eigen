@@ -3,12 +3,16 @@ import { app } from './app';
 import { drainBackupJobs } from './lib/backup/jobs';
 import { wipeBackupStaging } from './lib/backup/paths';
 import { recoverInterruptedRestores } from './lib/backup/recovery';
+import { isProduction } from './lib/config/env';
+import { assertMailDomainUnchanged, isSetupRequired } from './lib/config/server-config';
 import { documentTransformRunner } from './lib/document/transform/runner';
 import { drainACLFanOuts } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';
 import { registerScheduledJobs } from './lib/scheduler/jobs';
 import { stopAllSchedules } from './lib/scheduler/scheduler';
+import { createSetupLink } from './lib/setup/setup-token';
 import { setShutdownDrainDeadline } from './lib/sync';
+import { startControlSocket } from './routes/control';
 
 // Wall-clock budget for flushing pending S3 uploads on shutdown. Must stay below
 // docker-compose's stop_grace_period so the drain finishes before SIGKILL; anything
@@ -22,6 +26,8 @@ const SHUTDOWN_DRAIN_BUDGET_MS = 20_000;
 // backup, verify or restore interrupted by a restart leaves a half-written folder nothing resumes.
 recoverInterruptedRestores();
 wipeBackupStaging();
+
+await assertMailDomainUnchanged();
 
 const server = app.listen({
     // 8000 in every deployment — Caddy, Dovecot and the container healthcheck all name it. The
@@ -43,12 +49,18 @@ const server = app.listen({
 
 console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
 
+const controlSocket = startControlSocket();
+
+// `bun run dev` has no ./eigen setup to print the link.
+if (!isProduction() && isSetupRequired()) console.log(`Finish the setup at ${createSetupLink().setupUrl}`);
+
 registerScheduledJobs();
 
 async function gracefulShutdown(signal: string) {
     console.log(`\n${signal} received, shutting down gracefully...`);
     stopAllSchedules();
     server.stop();
+    controlSocket.stop();
     // Stop transform admission and finish/terminate the active Worker before the
     // Mount/database teardown below — jobs hold no db leases, but their results
     // must not race the cache/mount shutdown.

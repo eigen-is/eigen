@@ -16,12 +16,20 @@ export function getDataRoot(): string {
     return './../../data';
 }
 
+// The server's own folder in data/, beside the homes.
+export const SERVER_DIR = 'server';
+
 export function getServerDataPath(filename?: string): string {
-    const serverData = path.join(getDataRoot(), 'server');
+    const serverData = path.join(getDataRoot(), SERVER_DIR);
     if (!fs.existsSync(serverData)) {
         fs.mkdirSync(serverData, { recursive: true });
     }
     return filename ? path.join(serverData, filename) : serverData;
+}
+
+// The image points this outside data/, so the socket never lands in a snapshot or on a host bind mount.
+export function getControlSocketPath(): string {
+    return process.env['EIGEN_CONTROL_SOCKET'] ?? getServerDataPath('control.sock');
 }
 
 export function getAvatarsDir(): string {

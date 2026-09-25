@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     composeAccessRequestEmail,
@@ -7,6 +7,13 @@ import {
     composeOtpEmail,
     composeShareEmail,
 } from '../../lib/core/mail-composers';
+import { restoreEnvAfterEach } from '../env-test-helpers';
+
+// Links for a recipient depend on which addresses are local, so every test pins the mail domain.
+restoreEnvAfterEach(['MAIL_DOMAIN']);
+beforeEach(() => {
+    process.env['MAIL_DOMAIN'] = 'test.eigen.is';
+});
 
 const PATH: DrivePath = {
     id: 'p1',

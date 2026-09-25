@@ -24,6 +24,20 @@ export function parseBackupStamp(groups: Record<string, string | undefined>): Da
     return Number.isNaN(at.getTime()) ? null : at;
 }
 
+function pad(value: number): string {
+    return String(value).padStart(2, '0');
+}
+
+// The home folder a restore moved aside (the state before it) and the incomplete folder a failed
+// restore left behind; ./eigen restore keeps data/ aside under the first too. Nothing deletes either automatically.
+export const PRE_RESTORE_SUFFIX = '.pre-restore-';
+export const FAILED_RESTORE_SUFFIX = '.failed-restore-';
+
+// UTC, so parseBackupStamp reads back the moment it was written.
+export function buildBackupStamp(at: Date): string {
+    return `${at.getUTCFullYear()}${pad(at.getUTCMonth() + 1)}${pad(at.getUTCDate())}-${pad(at.getUTCHours())}${pad(at.getUTCMinutes())}${pad(at.getUTCSeconds())}`;
+}
+
 // Owner ids contain dashes, so the stamp is matched from the end and the owner id is what is left.
 const ARTIFACT_EXTENSION_PATTERN = BACKUP_ARTIFACT_EXTENSION.replaceAll('.', String.raw`\.`);
 const ARTIFACT_NAME = new RegExp(

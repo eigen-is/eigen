@@ -1,21 +1,17 @@
 import { Database } from 'bun:sqlite';
-import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import type { S3Config } from '@workspace/lib/types/mount';
+import type { SetupResult, SetupStatus } from '@workspace/lib/types/settings';
+import { validateEmailAddress, validateUsername } from '@workspace/lib/validation';
 import { auth } from '../auth/auth';
 import { getServerDataPath } from '../config/paths';
-import {
-    isSetupRequired as checkSetupRequired,
-    getMailDomain,
-    getServerConfig,
-    type ServerConfig,
-    saveServerConfig,
-} from '../config/server-config';
+import { getMailDomain, isSetupRequired, updateServerConfig } from '../config/server-config';
 import { updateServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
+import { storedSender } from '../core/mailer';
 import { checkS3Connection } from '../storage/s3-storage';
-
-export const isSetupRequired = checkSetupRequired;
+import { clearSetupToken } from './setup-token';
 
 async function resetAuthDatabase(): Promise<void> {
     const dbPath = getServerDataPath('users3.db');
@@ -206,7 +202,7 @@ async function resetAuthDatabase(): Promise<void> {
     // UNIQUE constraint. But setupCompleted lives in config.json, a separate file: were
     // that lost or reset while users3.db survived, these rows would be real data — so
     // snapshot the database first. Clearing is then always recoverable, never destructive.
-    const { n: existingUsers } = db.query('SELECT count(*) AS n FROM "user"').get() as { n: number };
+    const { n: existingUsers } = db.query<{ n: number }, []>('SELECT count(*) AS n FROM "user"').get()!;
     if (existingUsers > 0) {
         const backupPath = getServerDataPath(`users3.backup-${Date.now()}.db`);
         writeFileSync(backupPath, db.serialize());
@@ -236,7 +232,6 @@ async function resetAuthDatabase(): Promise<void> {
 }
 
 export type SetupInput = {
-    domain: string;
     orgName: string;
     storageType: 'local-fullnames' | 'local-id' | 's3';
     s3Bucket?: string;
@@ -244,119 +239,99 @@ export type SetupInput = {
     s3AccessKeyId?: string;
     s3SecretAccessKey?: string;
     s3Endpoint?: string;
-    adminEmail: string;
+    adminUsername: string;
     adminPassword: string;
     adminName: string;
+    senderName?: string;
+    senderAddress?: string;
 };
 
-export async function getSetupStatus(): Promise<{
-    setupRequired: boolean;
-    domain?: string;
-    mailDomain?: string;
-}> {
-    const setupRequired = isSetupRequired();
-
-    if (!setupRequired) {
-        const config = getServerConfig();
-        return { setupRequired: false, domain: config?.domain, mailDomain: getMailDomain() };
-    }
-
-    const envDomain = process.env['DOMAIN'];
-    const envMailDomain = process.env['MAIL_DOMAIN'] || envDomain;
-    return {
-        setupRequired: true,
-        ...(envDomain ? { domain: envDomain } : {}),
-        ...(envMailDomain ? { mailDomain: envMailDomain } : {}),
-    };
+export function getSetupStatus(): SetupStatus {
+    return { setupRequired: isSetupRequired(), mailDomain: getMailDomain() };
 }
 
-export async function completeSetup(input: SetupInput): Promise<{ user: { id: string; email: string; name: string } }> {
-    if (!isSetupRequired()) throw new ApiError(400, 'Setup has already been completed');
-    if (!input.domain) throw new ApiError(400, 'Domain is required');
-    if (!input.orgName) throw new ApiError(400, 'Organization name is required');
-    if (!input.storageType) throw new ApiError(400, 'Storage type is required');
+// Two submits of the wizard would interleave resetAuthDatabase() with each other's admin creation.
+let setupRunning = false;
 
-    if (input.storageType === 's3') {
-        if (!input.s3Bucket || !input.s3AccessKeyId || !input.s3SecretAccessKey) {
-            throw new ApiError(400, 'S3 configuration requires bucket, access key, and secret key');
-        }
-        const s3Result = await checkS3Connection({
-            endpoint: input.s3Endpoint ?? '',
-            bucket: input.s3Bucket,
-            prefix: '',
-            accessKeyId: input.s3AccessKeyId,
-            secretAccessKey: input.s3SecretAccessKey,
-            region: input.s3Region,
-        });
-        if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
-    }
-
-    // Use DOMAIN env var if set to a real domain (not localhost)
-    const envDomain = process.env['DOMAIN'];
-    if (envDomain && envDomain !== 'localhost') input.domain = envDomain;
-
-    if (!input.adminEmail || !input.adminPassword || !input.adminName) {
-        throw new ApiError(400, 'Admin email, password, and name are required');
-    }
-    if (input.adminPassword.length < 8) {
-        throw new ApiError(400, 'Password must be at least 8 characters long');
-    }
-
-    await resetAuthDatabase();
-
-    // better-auth is the only external integration here; surface its errors as 400
-    // (e.g. duplicate email, invalid slug) so the wizard can show the real message.
-    // Subsequent config/filesystem writes are internal and bubble as 500 if they fail.
-    let user: Awaited<ReturnType<typeof auth.api.createUser>>;
-    let org: Awaited<ReturnType<typeof auth.api.createOrganization>>;
+// The route has checked the setup token and the shape of the input.
+export async function completeSetup(input: SetupInput): Promise<SetupResult> {
+    if (setupRunning) throw new ApiError(409, 'Setup is already running');
+    setupRunning = true;
     try {
-        user = await auth.api.createUser({
-            body: {
-                email: input.adminEmail,
-                password: input.adminPassword,
-                name: input.adminName,
-                role: 'admin',
-            },
+        let s3Config: S3Config | undefined;
+        if (input.storageType === 's3') {
+            if (!input.s3Bucket || !input.s3AccessKeyId || !input.s3SecretAccessKey) {
+                throw new ApiError(400, 'S3 configuration requires bucket, access key, and secret key');
+            }
+            s3Config = {
+                endpoint: input.s3Endpoint ?? '',
+                bucket: input.s3Bucket,
+                prefix: '',
+                accessKeyId: input.s3AccessKeyId,
+                secretAccessKey: input.s3SecretAccessKey,
+                region: input.s3Region,
+            };
+            const s3Result = await checkS3Connection(s3Config);
+            if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
+        }
+
+        const username = input.adminUsername.toLowerCase();
+        const usernameErr = validateUsername(username);
+        if (usernameErr) throw new ApiError(400, usernameErr);
+        const adminEmail = `${username}@${getMailDomain()}`;
+        if (!validateEmailAddress(adminEmail)) throw new ApiError(400, `${adminEmail} is not a valid email address`);
+        const mailSender = storedSender(
+            { senderName: input.senderName ?? '', senderAddress: input.senderAddress ?? '' },
+            input.orgName,
+        );
+
+        await resetAuthDatabase();
+
+        // better-auth's errors (a duplicate email, a bad slug) reach the wizard as 400s with their own message.
+        let user: Awaited<ReturnType<typeof auth.api.createUser>>;
+        let org: Awaited<ReturnType<typeof auth.api.createOrganization>>;
+        try {
+            user = await auth.api.createUser({
+                body: {
+                    email: adminEmail,
+                    password: input.adminPassword,
+                    name: input.adminName,
+                    role: 'admin',
+                },
+            });
+
+            const orgSlug = input.orgName
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-|-$/g, '');
+            org = await auth.api.createOrganization({
+                body: { name: input.orgName, slug: orgSlug, userId: user.user.id },
+            });
+        } catch (error) {
+            console.error('Setup failed during admin/org creation:', error);
+            throw new ApiError(400, error instanceof Error ? error.message : 'Setup failed');
+        }
+        if (!org) throw new Error('Failed to create default organization');
+
+        await updateServerSettings({
+            defaults: { mount: { storageType: input.storageType, s3Config } },
+            mail: mailSender,
         });
 
-        const orgSlug = input.orgName
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-|-$/g, '');
-        org = await auth.api.createOrganization({
-            body: { name: input.orgName, slug: orgSlug, userId: user.user.id },
+        // setupCompleted flips here — written last so a failure in any step above leaves
+        // setup re-runnable: isSetupRequired() stays true and resetAuthDatabase() clears
+        // the partial state on the next attempt.
+        await updateServerConfig({
+            orgName: input.orgName,
+            orgId: org.id,
+            setupCompleted: true,
+            setupCompletedAt: new Date().toISOString(),
+            mailDomain: getMailDomain(),
         });
-    } catch (error) {
-        console.error('Setup failed during admin/org creation:', error);
-        throw new ApiError(400, error instanceof Error ? error.message : 'Setup failed');
+        clearSetupToken();
+
+        return { user: { id: user.user.id, email: user.user.email, name: user.user.name } };
+    } finally {
+        setupRunning = false;
     }
-    if (!org) throw new Error('Failed to create default organization');
-
-    const s3Config =
-        input.storageType === 's3'
-            ? {
-                  bucket: input.s3Bucket!,
-                  region: input.s3Region!,
-                  accessKeyId: input.s3AccessKeyId!,
-                  secretAccessKey: input.s3SecretAccessKey!,
-                  endpoint: input.s3Endpoint ?? '',
-                  prefix: '',
-              }
-            : undefined;
-    await updateServerSettings({ defaults: { mount: { storageType: input.storageType, s3Config } } });
-
-    // setupCompleted flips here — written last so a failure in any step above leaves
-    // setup re-runnable: isSetupRequired() stays true and resetAuthDatabase() clears
-    // the partial state on the next attempt.
-    const serverConfig: ServerConfig = {
-        domain: input.domain,
-        orgName: input.orgName,
-        orgId: org.id,
-        secret: randomBytes(32).toString('base64'),
-        setupCompleted: true,
-        setupCompletedAt: new Date().toISOString(),
-    };
-    await saveServerConfig(serverConfig);
-
-    return { user: { id: user.user.id, email: user.user.email, name: user.user.name } };
 }

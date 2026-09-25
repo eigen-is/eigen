@@ -1,4 +1,5 @@
 import { escapeHtml, stripTagsServer } from '@workspace/lib/html';
+import { isMailEnabled } from '../config/env';
 import { getDomain, getOrgName } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { renderEigenEmail } from '../core/mail-template';
@@ -10,7 +11,8 @@ import { composeRfc822 } from '../core/mailer';
 // proper multipart boundaries, and per-part Content-Transfer-Encoding for free.
 export async function welcomeMail(name: string, email: string): Promise<Buffer | null> {
     const settings = getServerSettings();
-    if (!settings.onboarding.welcomeMail.enabled) return null;
+    // No hosted mailboxes, so nobody would ever read it.
+    if (!isMailEnabled() || !settings.onboarding.welcomeMail.enabled) return null;
 
     const domain = getDomain();
     const orgName = getOrgName();

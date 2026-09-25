@@ -137,7 +137,7 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
                         type="password"
                         value={value.secretAccessKey}
                         onChange={(e) => updateField('secretAccessKey', e.target.value)}
-                        placeholder="••••••••"
+                        placeholder="Enter the secret access key"
                     />
                 </div>
             </div>
