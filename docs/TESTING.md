@@ -91,7 +91,7 @@ Run them one at a time: two started together can pick the same subnet. `./docker
 | `docker/test-deployments.sh` | Every `COMPOSE_PROFILES` shape (`edge,mail`, `static,mail`, `edge`, `static`) and a custom subnet: pages, app bundles, the API, WebSockets, the mail banners, and relay mail and collab sync without hosted mail. Run it before merging a change to `eigen`, `apps/api/src/cli/configure.ts`, a Compose file or a Caddyfile. |
 | `docker/test-host-proxies.sh` | nginx, Caddy and Apache in front of `eigen-static` with the snippets `./eigen setup` writes. |
 | `docker/test-release.sh` | The release gate the publish workflow runs before it builds: releases in a registry of its own, update, rollback, a breaking release, the refused versions, restoring a snapshot of an older release, the main channel, and installing from the launcher alone. |
-| `docker/test-mail-hardening.sh` | The mail hardening of [SETUP-GUIDE.md § Mail abuse hardening](../docker/SETUP-GUIDE.md#mail-abuse-hardening): sender checks, the queue alert and the SASL failure limiters. About 6 minutes; `PROBES=2,3,4` runs a subset. Its comments explain the SMTP AUTH behavior that looks like a bug and is not. |
+| `docker/test-mail-hardening.sh` | The mail hardening of [SETUP-GUIDE.md § Mail hardening](../docker/SETUP-GUIDE.md#mail-hardening): sender checks, the queue alert and the SASL failure limiters. About 6 minutes; `PROBES=2,3,4` runs a subset. Its comments explain the SMTP AUTH behavior that looks like a bug and is not. |
 
 ## Key Details
 

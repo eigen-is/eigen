@@ -269,30 +269,21 @@ ufw allow 587/tcp    # SMTP submission
 ufw allow 993/tcp    # IMAP
 ```
 
-### Mail abuse hardening
+### Mail hardening
 
-A stolen password can turn any mail server into a spam relay. Three defenses are on by default:
+Out of the box, a user can only send mail as their own address, and failed logins are limited per account and per IP address. That stops most password guessing.
 
-- **People can only send as themselves.** On the submission ports (587 and 465), a logged-in user can only send from their own address. A forged sender is refused.
-- **Failed logins are limited.** Ten failed logins per address, or fifty per IP address, in fifteen minutes, and the address or IP is blocked for a while. Postfix also caps login attempts at 20 a minute per IP and hangs up on a client that keeps making errors.
-- **The mail queue is watched.** When more than 200 messages are waiting to go out, the owner gets a notification in the web UI. It repeats at most every six hours while the backlog lasts. Tune it in `.env.production` with `QUEUE_ALERT_THRESHOLD` (messages), `QUEUE_CHECK_INTERVAL` and `QUEUE_ALERT_COOLDOWN` (seconds).
-
-What you can add is **fail2ban**, which blocks the traffic at the firewall instead of answering it. Eigen ships two jails, one for Postfix's submission ports and one for Dovecot's IMAPS. Each bans an IP after five failed logins in ten minutes:
+To block the guessing at the firewall as well, install fail2ban with the two jails Eigen ships, one for Postfix and one for Dovecot. Each bans an IP after five failed logins in ten minutes:
 
 ```bash
 apt-get install fail2ban
-cp /opt/eigen/docker/fail2ban/filter.d/eigen-postfix-sasl.conf  /etc/fail2ban/filter.d/
-cp /opt/eigen/docker/fail2ban/filter.d/eigen-dovecot-auth.conf  /etc/fail2ban/filter.d/
-cp /opt/eigen/docker/fail2ban/jail.d/eigen-mail-sasl.conf       /etc/fail2ban/jail.d/
+cp /opt/eigen/docker/fail2ban/filter.d/*.conf /etc/fail2ban/filter.d/
+cp /opt/eigen/docker/fail2ban/jail.d/eigen-mail-sasl.conf /etc/fail2ban/jail.d/
 systemctl enable --now fail2ban
 systemctl restart fail2ban
-fail2ban-client status eigen-postfix-sasl
-fail2ban-client status eigen-dovecot-auth
 ```
 
-`./eigen` keeps the jails working: after a start that recreated the mail containers, it copies the filters again and reloads fail2ban (as root; otherwise it prints the command to run). Tuning, checks and the nftables variant: [docker/fail2ban/README.md](fail2ban/README.md).
-
-The postfix and dovecot logs keep ten files of 50 MB, where the other containers keep three of 10 MB, so a login flood is still in the logs a day later.
+`fail2ban-client status eigen-postfix-sasl` shows what it caught. `./eigen` reloads fail2ban after an update, so the jails keep watching the new containers. More in [docker/fail2ban/README.md](fail2ban/README.md).
 
 ### Troubleshooting
 
