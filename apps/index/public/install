@@ -8,6 +8,11 @@ if [ -e docker-compose.yml ] || [ -e .env.production ]; then
     echo "This folder already has an Eigen install. Run ./eigen setup to change it, or ./eigen update." >&2
     exit 1
 fi
+case $PWD in "${HOME:-}" | /)
+    echo "Eigen and its data get a folder of their own, not $PWD. Make one: mkdir -p /opt/eigen && cd /opt/eigen" >&2
+    exit 1
+    ;;
+esac
 # The launcher checks the rest: Compose and access to Docker.
 if ! command -v docker >/dev/null 2>&1; then
     echo "Docker is not installed. Install it first: https://docs.docker.com/engine/install/" >&2

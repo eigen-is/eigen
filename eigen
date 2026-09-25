@@ -711,7 +711,7 @@ status() {
         ;;
     esac
 
-    set -- --services="$services" --mail-queue="$queue" --snapshots="$(ls snapshots 2>/dev/null || :)" \
+    set -- --install="$PWD" --services="$services" --mail-queue="$queue" --snapshots="$(ls snapshots 2>/dev/null || :)" \
         --snapshots-kb="$(du -sk snapshots 2>/dev/null | cut -f 1)" ${newer:+"$newer"}
     bundle=$(stale_bundle)
     if [ -n "$bundle" ]; then

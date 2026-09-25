@@ -58,7 +58,7 @@ dig eigen.example.com A
 
 ### 3. Install Eigen
 
-Eigen lives in one folder, `/opt/eigen` in this guide. Its data lives there too. Install the newest release:
+Eigen lives in one folder, `/opt/eigen` in this guide, and its data lives there too; any folder of its own will do, and `./eigen status` names it. The install belongs to the user who runs it: root, or a user with access to Docker (a member of the `docker` group). Run `./eigen` as that user or as root; to call it from anywhere, link it: `ln -s /opt/eigen/eigen /usr/local/bin/eigen`. Install the newest release:
 
 ```bash
 mkdir -p /opt/eigen && cd /opt/eigen
@@ -90,8 +90,6 @@ Developing Eigen? `./eigen setup` also builds the images from a clone of the rep
 5. **Which mail relay should Eigen send through?** Optional with hosted mail, like `smtp-relay.brevo.com:587`, then its user name and password. With hosted mail, Postfix sends every user's mail through it as that user, so the relay must accept every address on your mail domain.
 
 Before the first question, it downloads the release. After the last, it writes the answers to `.env.production` (only its owner can read it), lists the DNS records to add, and starts Eigen. Run `./eigen setup` again at any time to change an answer: it keeps the others and every key it does not know. `./eigen setup --help` lists the flags for a run without questions.
-
-Run `./eigen` as the owner of the folder or as root, with access to Docker. To call it from anywhere, link it: `ln -s /opt/eigen/eigen /usr/local/bin/eigen`.
 
 Five containers start:
 
@@ -181,7 +179,7 @@ Everything runs through `./eigen` in the install folder. `./eigen help` lists th
 ./eigen reset-password <email>   # set a new password for an account
 ```
 
-`status` names the newest snapshot, and how many `snapshots/` holds and their size on disk. On a release install, an update that stopped halfway shows as `files of <new version> (<commit>), running <old version> (<commit>)`; `./eigen update` finishes it. On the main channel it shows a newer build as `a new build of main is out (<commit>)`.
+`status` names the install folder and the newest snapshot, and how many `snapshots/` holds and their size on disk. On a release install, an update that stopped halfway shows as `files of <new version> (<commit>), running <old version> (<commit>)`; `./eigen update` finishes it. On the main channel it shows a newer build as `a new build of main is out (<commit>)`.
 
 `./eigen` runs one command that changes Eigen at a time: while one runs, a second, like a nightly backup in the middle of an update, stops with "Another ./eigen command is running."
 

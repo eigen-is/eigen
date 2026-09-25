@@ -6,7 +6,7 @@
 # and on the main channel, the tags it refuses, a build whose images differ, a tag that moves during an update, a pinned
 # api image that is not here, the files an unfinished update left, which build's CLI the handed-over update saves the
 # snapshot with, what setup downloads with and without pins, what rollback names, a lock without a pid, and what status
-# passes the CLI about the snapshots, the files of an unfinished update and the newest build of main; setup in a folder
+# passes the CLI about the snapshots, the files of an unfinished update and the newest build of main, and its folder; setup in a folder
 # that holds the launcher alone, with the registry or the build .env.production names, and the installer script
 # apps/index/public/install on this host, as a file and on stdin.
 #
@@ -449,9 +449,10 @@ for SHELL_NAME in dash busybox host; do
     STUB_LATEST=0.2.99 STUB_LABEL_VERSION=0.2.100 launch release status
     rm -r "$FIX/release/snapshots" "$FIX/release/.eigen/bundle"
     # --services spans lines of the call log.
-    if printf '%s\n' "$CALLS" | grep -q ' --snapshots=eigen-20260101-000000.tar.gz --snapshots-kb=[1-9][0-9]* ' &&
+    if printf '%s\n' "$CALLS" | grep -q " status --install=$FIX/release --services=" &&
+        printf '%s\n' "$CALLS" | grep -q ' --snapshots=eigen-20260101-000000.tar.gz --snapshots-kb=[1-9][0-9]* ' &&
         printf '%s\n' "$CALLS" | grep -q ' --latest=0.2.99 --files=0.2.100 (abc1234)$'; then
-        ok "$SHELL_NAME: status passes the snapshots, their size, and the build the files were written from"
+        ok "$SHELL_NAME: status passes the folder, the snapshots, their size, and the build the files were written from"
     else
         fail "$SHELL_NAME: status: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
@@ -602,7 +603,7 @@ done
 # The installer under this host's /bin/sh; the launcher it hands over to runs under all three above.
 header "The installer"
 INSTALLER="$REPO_ROOT/apps/index/public/install"
-mkdir "$FIX/fresh" "$FIX/piped" "$FIX/taken" "$FIX/empty" "$FIX/nodocker" "$FIX/page"
+mkdir "$FIX/fresh" "$FIX/piped" "$FIX/taken" "$FIX/empty" "$FIX/nodocker" "$FIX/page" "$FIX/home"
 : >"$FIX/taken/docker-compose.yml"
 ln -s "$FIX/bin/curl" "$FIX/nodocker/curl"
 
@@ -647,6 +648,14 @@ if [ "$CODE" = 1 ] &&
     ok "the installer refuses a folder with an install, before it downloads anything"
 else
     fail "the installer in a folder with an install: exit $CODE, '$ERR'"
+fi
+HOME=$FIX/home run_installer home
+if [ "$CODE" = 1 ] &&
+    [ "$ERR" = "Eigen and its data get a folder of their own, not $FIX/home. Make one: mkdir -p /opt/eigen && cd /opt/eigen" ] &&
+    [ ! -e "$FIX/home/eigen" ] && [ -z "$CALLS" ]; then
+    ok "the installer refuses the home folder, before it downloads anything"
+else
+    fail "the installer in the home folder: exit $CODE, '$ERR'"
 fi
 STUB_CURL_HTML=1 run_installer page
 if [ "$CODE" = 1 ] && [ "$ERR" = 'The download is not the eigen command; try again later.' ] &&
