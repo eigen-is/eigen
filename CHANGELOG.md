@@ -3,6 +3,71 @@
 All notable user-visible changes to Eigen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.3.0] - 2026-09-25
+
+Self-hosting release. Eigen now installs from prebuilt images with one line, and the `./eigen` launcher updates, rolls back and backs up the server. Slides run on the canvas engine behind eigen|vector>. Mail, calendar and contacts store what a client wrote as the truth, and `.eml`, `.ics` and `.vcf` files open and import everywhere a file shows up. The findings of the September security audit are fixed.
+
+**Breaking** — calendars, contacts, slides and vector do not carry data over from 0.2.0 (breaking): events and contact books are dropped, decks open empty, and drawings lose their plain text and fills.
+
+### Added
+
+- **One-line install** — `curl -fsSL https://eigen.is/install | sh` downloads the `./eigen` launcher and runs setup. The host needs Docker and Compose, nothing else. Setup explains its questions, lists the DNS records you need, and ends with a one-time link to the wizard
+- **Release images** — five images on GHCR, for amd64 and arm64, pinned by digest in `.env.production`. The resolver is Eigen's own unbound image
+- **`./eigen` launcher** — `update` downloads while Eigen runs, takes a snapshot and switches; it shows the notes of a breaking release and asks first. `rollback` goes back one update. `status`, `logs`, `restart`, `stop` and `reset-password` do what they say. `update main` follows the main branch for people who develop Eigen
+- **Whole-server snapshots** — `./eigen backup` saves the server to `snapshots/`, in full or light (databases and settings only), and keeps the last three of each. `./eigen restore` swaps one in and keeps the old data aside
+- **Per-home backup and restore** — a Backup section on the admin Users and Teams pages backs up one user or team to a verified archive with no downtime. Verify, download, upload and restore from there; a restore keeps the old home as a safety copy
+- **Admin settings** — the organization name, a Server section with version, disk and certificate, and a Mail section with the system sender, **Relay sends as users** and **Send test mail**. Admin Users lists past 100 members
+- **Slides on the canvas engine** — every drawing element works on a slide: shapes, images, rich text, freehand, lines and arrows. Text is edited in place, and a box grows with its text. The properties panel offers gradient fills, corners, padding, typography and opacity, and with nothing selected it edits the slide background for this slide, this and following, or all. The slide always fits the window. Comments anchor to elements, `⌘F` searches text, and presence shows which slide each person is on. Links in present mode open in a new tab without advancing the deck
+- **Quick look for every file** — Drive items and the attachments in mail, chat and cards open in the same quick look with the same action menu. Clicking an attachment chip previews it next to the message's other parts, and a mailed video seeks
+- **`.eml`, `.ics` and `.vcf` files** — an `.eml` opens as the message it holds and imports into the inbox. An `.ics` opens as its events and imports into a calendar you own or a team calendar, from Drive, from a mail or from the calendar sidebar; each calendar exports as one `.ics`. A `.vcf` previews as its contacts and imports into Contacts. All three carry their app's icon in Drive
+- **Contacts** — Export vCard on any selection, and Import contacts and Export all contacts in the toolbar
+- **Mail** — folders an IMAP client created appear under Folders. A lone `from:` or `to:` filter searches on its own. `postmaster@`, `abuse@` and `noreply@` deliver to the org admins instead of bouncing
+- **Calendar (CalDAV)** — a calendar collection can be deleted, and Integrations lists one address per calendar, because Thunderbird subscribes per calendar. CalDAV is verified end-to-end against Thunderbird
+- **Offline indicator** — every collaborative editor shows when you are offline or the server's storage is out, and asks before you leave with edits that have not reached the server
+- **Sheets** — floating images appear in exports and previews. A progress dialog stays up while an Excel or Word file imports
+- **Canvas** — image and text boxes draw in the same hand-drawn style as shapes
+- **Keyboard** — Delete and Backspace act on the selection in Mail, Contacts and Drive, and document shortcuts pause while a dialog is open
+- **Help center** — 25 new articles and a Vector section, with Support links in the app switcher and on the Space landing page
+- **Demo** — seeded mail with real attachments and contact cards, chats and comments that link the documents they talk about, and the Mail app stays on without hosted mail
+
+### Changed
+
+- **Calendar and contacts storage (breaking)** — events and cards are stored exactly as a client wrote them and served back byte for byte. Calendar data counts toward the storage budget. Existing data is not converted
+- **Mail off is a complete product** — without hosted mail the Mail app and its settings disappear, and one `SMTP_RELAY_*` key set serves both modes: Postfix relays through it, or the API sends through it itself
+- **Owner-only administration** — only the owner sees server settings, onboarding, guest access, the waitlist and the S3 secret. The owner cannot be deleted. The wizard no longer asks for a domain
+- **eigen|vector>** — text elements are rich text; shapes get gradient fills, true rounded corners and an optional border; arrows dock on a shape's real outline; phones open a drawing view-only
+- **Canvas editing** — a run of nudges is one undo step, and so is a typed panel value. The aspect-ratio lock is remembered per element. Copy and paste between apps keep text as text
+- **Sheets numbers** — every number shows the way Excel's General format shows it: no rounding noise, long values cut to 11 characters, scientific notation past that. A typed number is stored as a number, and a copy keeps full precision
+- **Sheets** — pasted text is read like typed input, `Ctrl+D` and `Ctrl+R` copy the whole source cell, conditional-format rules follow Excel on case and blanks, and an imported Excel rule stays one rule. Exports lay out exactly as the screen does
+- **Sharing** — deleting an item shared directly with you leaves the share instead of trashing the owner's copy
+- **Activity** — a team shows its name instead of an id, links inside content open a new tab, and a file's creation and share rows are kept without an age cap
+- **Mail** — the linkifier is a single pass, so a body with thousands of addresses links instantly. Every Maildir write is fsynced. Junk is labeled Spam
+- **Copy** — American English, and dates read day-month-year
+
+### Fixed
+
+- **Calendar series** — an "all events" edit from a later occurrence shifts the series instead of moving it, a series edit reaches every override, a moved occurrence shows in its new week, and one occurrence deletes on one confirm
+- **Calendar invitations** — an edit of one occurrence reaches guests as that occurrence, a new guest gets the series' exceptions, and an event you organize is never locked as someone else's invitation
+- **Calendar time zones** — Windows zone names resolve, conversions near DST are correct, and an event without a zone shows in your own
+- **Contacts** — editing one value keeps its label, a duplicate card is refused with the holder's name, and one damaged card no longer blocks the address book
+- **Mail** — drafts keep nameless attachments and attached invites, a folder an IMAP client recreates gets live updates again, a message opened from a notification no longer stays unread, and a delivery no longer fails on a file system that refuses a directory fsync
+- **Sheets formulas** — inserting or deleting rows in one sheet no longer shifts formulas on the others, whole-column ranges survive a shift, errors propagate through operators and comparisons, an overflow is `#NUM!`, `TEXT` works, dates no longer land a day early west of Greenwich, and every edit recalculates its dependents
+- **Sheets editing** — fills shift formulas correctly and never write into a merged cell, switching sheets closes the editor, and the row and column limits match their message
+- **Canvas** — moving a shape re-docks both ends of its arrows, and a missing image draws a placeholder
+- **Collaboration** — opening a document on slow storage says so and retries calmly, and large documents sync over slow links because frames are compressed
+- **Drive** — a copy keeps its thumbnail, a read-only shared folder no longer offers actions it cannot do, and long copies no longer time out and duplicate the tree on retry
+- **WebDAV** — moving an item onto itself is refused instead of deleting it, and malformed requests get a 400
+- **Export** — a PDF render that hits its time limit returns an error instead of an empty reply
+- **Server** — a second API on the same data folder refuses to start, a session started right after setup survives a restart, sign-in retries a missed organization join, and the `static` gateway forwards the real client IP, so rate limiting is per visitor
+
+### Security
+
+- **Audit of 2026-09-06** — every code-level finding is fixed: self-registration is closed unless open signup is on, comment descriptions and sheet paste are sanitized, previews go through the export sanitizer, presence updates are bounded and bound to the session, HTML mail loses `<form>`, WebDAV and mail parts are served with `nosniff` and a sandbox CSP, and ffmpeg runs with a protocol whitelist
+- **iMIP** — invitations are processed only from senders whose DKIM signature Eigen verified itself
+- **Headers and trust** — every app carries a Content-Security-Policy, the edge sends the security headers, and the mail stack trusts only `EIGEN_SUBNET`
+- **Setup and relay** — the wizard runs only from a one-time link, relay credentials require STARTTLS, and admin impersonation is disabled
+- **Dependencies** — DOMPurify, markdown-it, linkify-it and xmldom patched; nodemailer 10, sharp 0.35, better-auth 1.7
+
 ## [0.2.0] - 2026-09-02
 
 Drawing, contacts sync, and hardening release. Eigen gains a new app, eigen|vector>, a collaborative whiteboard heavily inspired by Excalidraw's impressive work. Contacts are now stored as vCard files and served over CardDAV, so phones and desktops sync them the way they already sync calendars. Mail got its own parser, per-recipient document links, and a hardened outbound relay after an abuse incident. Under the hood, every collaborative editor now shares one document lifecycle, clipboard, presence layer, and canvas toolkit.
