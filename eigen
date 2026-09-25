@@ -582,13 +582,13 @@ refresh_fail2ban() {
 }
 
 # prune_images [image…]: the images an update leaves behind. Keeps those, the rollback snapshot's, and the images PINS
-# names, and removes the rest by ID: an old build of main keeps no tag, only its digest, which no prune takes. Best
-# effort.
+# names, and removes the rest by ID: an old build of main keeps no tag, only its digest, which no prune takes, and
+# which a CLI from 29 on hides without --all. Best effort.
 prune_images() {
     keep=' '
     for ref in "$@" $PINS; do keep="$keep${ref#*=} "; done
     for name in $IMAGES; do
-        remove=$(docker image ls "$REGISTRY/$name" --digests \
+        remove=$(docker image ls --all "$REGISTRY/$name" --digests \
             --format '{{.ID}} {{.Repository}}@{{.Digest}} {{.Repository}}:{{.Tag}}' | awk -v keep="$keep" '
             { ids[$1]; if (index(keep, " " $2 " ") || index(keep, " " $3 " ")) kept[$1] }
             END { for (id in ids) if (!(id in kept)) print id }')

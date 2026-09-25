@@ -33,7 +33,7 @@ REGISTRY_VOLUME="eigentest-registry-$RUN"
 
 # Every local image under $REGISTRY, by repository:tag or by ID.
 registry_images() {
-    docker image ls --format "{{.Repository}}:{{.Tag}} {{.ID}}" | awk -v repo="$REGISTRY/" 'index($1, repo) == 1'
+    docker image ls --all --format "{{.Repository}}:{{.Tag}} {{.ID}}" | awk -v repo="$REGISTRY/" 'index($1, repo) == 1'
 }
 
 # remove_registry_images: every local image under $REGISTRY, by ID, since a dangling one has no tag to name it by.
@@ -484,11 +484,15 @@ else
     fail "update to the new build of main: exit $CODE"
 fi
 check_channel main2
-kept=$(docker image ls "$REGISTRY/api" -q --no-trunc | sort -u | tr '\n' ' ')
+kept=$(docker image ls --all "$REGISTRY/api" -q --no-trunc | sort -u | tr '\n' ' ')
 if [ "$kept" = "$(printf '%s\n' "$main1" "$(api_image)" | sort -u | tr '\n' ' ')" ]; then
     ok "only the two builds of main are kept: the running one, and the one the rollback snapshot pins"
 else
     fail "api images kept: $kept"
+    for id in $kept; do
+        docker image inspect --format '    {{.Id}} tags={{.RepoTags}} digests={{.RepoDigests}} build={{index .Config.Labels "org.opencontainers.image.version"}} {{index .Config.Labels "org.opencontainers.image.revision"}}' "$id"
+        docker ps -a --filter "ancestor=$id" --format '      used by {{.Names}} ({{.Status}})'
+    done
 fi
 
 eigen rollback --yes
