@@ -19,11 +19,22 @@ Everything runs in Docker — isolated, reproducible, easy to update.
 - **Docker** with the **Docker Compose plugin 2.20 or newer**. No Bun or Node on the server.
 - A **domain** you control (e.g., `eigen.example.com`)
 - **SSH access** to your server
-- An **SMTP relay account** for outbound email (e.g. [Brevo](https://brevo.com)'s free tier — 300 emails/day)
 
-### Why an SMTP relay?
+That is all. You do not need a mail relay, but it can help.
 
-Most VPS providers (Hetzner, DigitalOcean) block outbound port 25 to prevent spam. A relay sends through trusted servers so your emails reach inboxes. You can skip this initially and add it later by running `./eigen setup` again.
+### Do I need a mail relay?
+
+No. Eigen comes with its own mail server. Postfix delivers your mail straight to the receiving server, the way every mail server does. eigen.is runs like that, without a relay. A relay is a mail server that takes your mail over an authenticated connection and delivers it for you. You want one in two cases:
+
+- **Your provider blocks outgoing port 25.** Hetzner and DigitalOcean do that on new accounts, to keep spam bots off their network. Ask them to open it, or send through a relay.
+- **You answered No to hosting mail.** Then there is no Postfix, and Eigen needs a relay for its own mail: sign-in codes, invitations and notifications. Without one, none of those go out.
+
+Anything that speaks SMTP with a user name and password works: a transactional mail service (Brevo, Postmark, Mailgun, SendGrid, Amazon SES, most with a free tier of a few hundred mails a day), the SMTP server of the mail provider you already use (a Google Workspace or Gmail account with an app password, Fastmail, your ISP), or a mail server you run yourself. Check one thing: which addresses the relay lets you send from.
+
+- **With hosted mail**, Postfix sends every user's mail through the relay from that user's own address. So the relay must accept every address on your mail domain. A transactional service does, once you have verified the domain. A personal Gmail account does not: Gmail rewrites the sender to the account itself, so mail from Jane would arrive as sent by you. Google Workspace has an SMTP relay service that sends for your whole domain.
+- **Without hosted mail**, everything Eigen sends comes from one address, the sender address you pick at setup. Mail about a person carries that person's name, `Jane via Acme <noreply@example.com>`, and replies go to Jane. One mailbox is enough for that, a Gmail account included, as long as the sender address is one that account may send from.
+
+Leave the relay empty at setup if you are not sure. Run `./eigen setup` again to add one later.
 
 ---
 
@@ -58,14 +69,20 @@ dig eigen.example.com A
 
 ### 3. Install Eigen
 
-Eigen lives in one folder, `/opt/eigen` in this guide, and its data lives there too; any folder of its own will do, and `./eigen status` names it. The install belongs to the user who runs it: root, or a user with access to Docker (a member of the `docker` group). Run `./eigen` as that user or as root; to call it from anywhere, link it: `ln -s /opt/eigen/eigen /usr/local/bin/eigen`. Install the newest release:
+Eigen lives in one folder. Everything is in there: the `eigen` command, the config, and all your data. I use `/opt/eigen` in this guide, but any folder will do.
+
+Whoever runs the install owns it. Root is fine. So is a normal user, as long as that user can use Docker (a member of the `docker` group). Use the same user every time you run `./eigen`.
+
+Make the folder and install the newest release:
 
 ```bash
 mkdir -p /opt/eigen && cd /opt/eigen
 curl -fsSL https://eigen.is/install | sh
 ```
 
-The script downloads the `eigen` command into the folder and runs `./eigen setup`. Setup downloads the newest release, asks the questions of step 4, starts Eigen and prints the link of step 5. The folder then holds the `eigen` command, the Compose file, `.env.example`, the fail2ban files, the demo reset under `scripts/` and `.env.production`. That file names the release, so the install stays on that version until `./eigen update`.
+The script downloads the `eigen` command and runs `./eigen setup`. Setup gets the newest release, asks a few questions (step 4), starts Eigen and prints a link (step 5). Your answers end up in `.env.production`. That file also names the release you run, so nothing changes until you run `./eigen update`.
+
+Want to type `eigen` from anywhere? Link it: `ln -s /opt/eigen/eigen /usr/local/bin/eigen`.
 
 Rather not pipe a script into `sh`? The same install, by hand, from the release image:
 
@@ -87,7 +104,7 @@ Developing Eigen? `./eigen setup` also builds the images from a clone of the rep
 2. **Which mail domain will you use?** Everyone's address and login is on it, like `jane@example.com`. It defaults to the web address. The mail domain cannot change after setup: every account is made on it. A later `./eigen setup` shows it instead of asking.
 3. **How do people reach Eigen over HTTPS?** Eigen handles it on ports 80 and 443, or your own web server forwards to it ([Behind your existing webserver](#behind-your-existing-webserver)). With Eigen's own, it asks which email address Let's Encrypt should use, `admin@<mail domain>` by default; with yours, where Eigen should listen for it.
 4. **Host email on this server?** Yes: Eigen hosts the mailboxes, on ports 25, 465, 587 and 993. No: see [Using your existing mail server](#using-your-existing-mail-server).
-5. **Which mail relay should Eigen send through?** Optional with hosted mail, like `smtp-relay.brevo.com:587`, then its user name and password. With hosted mail, Postfix sends every user's mail through it as that user, so the relay must accept every address on your mail domain.
+5. **Which mail relay should Eigen send through?** Optional. Leave it empty and Eigen's own mail server delivers directly. To use one, answer `host:port`, like `smtp-relay.brevo.com:587` or the SMTP server of your mail provider, and setup asks for its user name and password. When a relay helps and what it must allow: [Do I need a mail relay?](#do-i-need-a-mail-relay).
 
 Before the first question, it downloads the release. After the last, it writes the answers to `.env.production` (only its owner can read it), lists the DNS records to add, and starts Eigen. Run `./eigen setup` again at any time to change an answer: it keeps the others and every key it does not know. `./eigen setup --help` lists the flags for a run without questions.
 
@@ -418,7 +435,7 @@ Answer **No** to "Host email on this server?" in step 4 (`--no-mail`). Postfix, 
 
 Eigen still sends mail of its own: two-factor codes by email, guest sign-in codes, invitations, share and access-request notifications, calendar invitations and replies. Without hosted mail it sends them through a relay, the next question setup asks. Without a relay every one of those emails fails. Setup warns when you leave it empty.
 
-The relay is `host:port`, and one set of keys in `.env.production` holds it, `SMTP_RELAY_HOST`, `SMTP_RELAY_PORT`, `SMTP_RELAY_USER` and `SMTP_RELAY_PASSWORD`, whichever way mail is set up. A third-party relay (Brevo, SendGrid, Postmark) takes a user name and password; setup asks for both. Port 465 is implicit TLS, any other port STARTTLS. With a user name, the connection must be encrypted, so the password never goes over a plain connection; without hosted mail, the relay's certificate must check out too.
+The relay is `host:port`, and one set of keys in `.env.production` holds it, `SMTP_RELAY_HOST`, `SMTP_RELAY_PORT`, `SMTP_RELAY_USER` and `SMTP_RELAY_PASSWORD`, whichever way mail is set up. A mail service or your mail provider's SMTP server takes a user name and password; setup asks for both. Which ones work: [Do I need a mail relay?](#do-i-need-a-mail-relay). Port 465 is implicit TLS, any other port STARTTLS. With a user name, the connection must be encrypted, so the password never goes over a plain connection; without hosted mail, the relay's certificate must check out too.
 
 Your mail server on the same host works as a relay too: answer `host.docker.internal:25`. `host.docker.internal` is Docker's name for "the machine the container is running on". For this to work, your host postfix needs to:
 
