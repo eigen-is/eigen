@@ -299,3 +299,19 @@ export async function waitFor(cond: () => boolean | Promise<boolean>, timeoutMs 
         await Bun.sleep(5);
     }
 }
+
+// Bounded deadlock detector, not synchronization: on the green path the promises settle at once and
+// the timer is cleared; only a real wedge runs it out. A rejection propagates like a plain await.
+export async function settlesWithin(promises: Promise<unknown>[], ms: number): Promise<boolean> {
+    let timer: Timer | undefined;
+    try {
+        return await Promise.race([
+            Promise.all(promises).then(() => true),
+            new Promise<boolean>((r) => {
+                timer = setTimeout(() => r(false), ms);
+            }),
+        ]);
+    } finally {
+        clearTimeout(timer);
+    }
+}

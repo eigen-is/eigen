@@ -4,11 +4,11 @@ import { existsSync, mkdirSync, rmSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BunFile } from 'bun';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { type DatabaseConfig, ManagedDatabase } from '../../lib/core';
+import { ApiError, type DatabaseConfig, ManagedDatabase } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
-import { countRowsInFile, createGetLocalDatabase } from '../fault-storage-helpers';
+import { countRowsInFile, createGetLocalDatabase, settlesWithin } from '../fault-storage-helpers';
 import { createTestMountConfig } from '../mount-test-helpers';
 
 // Regression net for AUDIT_STORAGE item 4 (design note 2026-07-05): an openDatabase landing in
@@ -56,6 +56,7 @@ type Gate = { parked: Promise<void>; release: () => void };
 class GatedLocalStorage extends LocalStorage {
     private writeGate: { parked: () => void; released: Promise<void> } | null = null;
     private renameGate: { parked: () => void; released: Promise<void> } | null = null;
+    private existsGate: { parked: () => void; released: Promise<void> } | null = null;
 
     armWrite(): Gate {
         const parked = deferred();
@@ -69,6 +70,14 @@ class GatedLocalStorage extends LocalStorage {
         const released = deferred();
         this.renameGate = { parked: parked.resolve, released: released.promise };
         return { parked: parked.promise, release: released.resolve };
+    }
+
+    // Parks the probe each open makes right before its download, holding the open mid-load like a stalled GET.
+    armExists(): Gate & { fail: (err: Error) => void } {
+        const parked = deferred();
+        const released = Promise.withResolvers<void>();
+        this.existsGate = { parked: parked.resolve, released: released.promise };
+        return { parked: parked.promise, release: released.resolve, fail: released.reject };
     }
 
     override async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
@@ -89,6 +98,16 @@ class GatedLocalStorage extends LocalStorage {
             await gate.released;
         }
         return super.rename(oldKey, newKey);
+    }
+
+    override async exists(key: string): Promise<boolean> {
+        const gate = this.existsGate;
+        if (gate) {
+            this.existsGate = null;
+            gate.parked();
+            await gate.released;
+        }
+        return super.exists(key);
     }
 }
 
@@ -118,23 +137,6 @@ async function provisionDoc(
     const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
     const managed = await mount.createDatabase(config, dataDbId);
     return { containerId, dataDbId, managed };
-}
-
-// Bounded deadlock detector — NOT synchronization: on the green path the promises settle
-// immediately and the timer is cleared; only a genuine wedge runs it out. A rejection
-// propagates to the caller like a plain await would.
-async function settlesWithin(promises: Promise<unknown>[], ms: number): Promise<boolean> {
-    let timer: Timer | undefined;
-    try {
-        return await Promise.race([
-            Promise.all(promises).then(() => true),
-            new Promise<boolean>((r) => {
-                timer = setTimeout(() => r(false), ms);
-            }),
-        ]);
-    } finally {
-        clearTimeout(timer);
-    }
 }
 
 beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));
@@ -339,5 +341,73 @@ describe('nested close during an in-flight close', () => {
         third.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
         await third.flush();
         expect(await countStoredRows(mount, dataDbId)).toBe(2);
+    }, 10_000);
+});
+
+describe('an open still loading from storage', () => {
+    test('a close landing mid-load closes what the open built: no cached handle, no temp left', async () => {
+        const { mount, storage } = await createGatedLocalMount('close-mid-load');
+        const { dataDbId, managed } = await provisionDoc(mount, docConfig);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await mount.closeDatabase(dataDbId);
+
+        const gate = storage.armExists();
+        const openPromise = mount.openDatabase(docConfig, dataDbId);
+        try {
+            await gate.parked;
+            const closePromise = mount.closeDatabase(dataDbId);
+            gate.release();
+            const opened = await openPromise;
+            await closePromise;
+
+            expect(() => opened.db).toThrow('Database not open');
+            expect(mount.documentDbs.has(dataDbId)).toBe(false);
+            expect(mount.closingDocumentDbs.size).toBe(0);
+            expect(existsSync(mount.getTempPath(dataDbId))).toBe(false);
+            expect(await countStoredRows(mount, dataDbId)).toBe(1);
+        } finally {
+            gate.release();
+        }
+    }, 10_000);
+
+    // Gap CO-2: mount teardown awaits an open parked on storage, so a stalled GET holds the whole home's teardown.
+    test.failing('mount teardown settles while an open is parked on storage', async () => {
+        const { mount, storage } = await createGatedLocalMount('teardown-mid-load');
+        const { dataDbId } = await provisionDoc(mount, docConfig);
+        await mount.closeDatabase(dataDbId);
+
+        const gate = storage.armExists();
+        const openPromise = mount.openDatabase(docConfig, dataDbId).catch(() => null);
+        let teardown: Promise<void> | undefined;
+        try {
+            await gate.parked;
+            teardown = mount.closeAllDatabases();
+            expect(await settlesWithin([teardown], 1_000)).toBe(true);
+        } finally {
+            gate.release();
+            await teardown;
+            await (await openPromise)?.close();
+        }
+    }, 10_000);
+
+    // Gap CO-4: a failed open's cleanup deletes whichever getter holds its slot, even a successor's.
+    test.failing("an open that fails after a close took its slot leaves the successor's cache entry alone", async () => {
+        const { mount, storage } = await createGatedLocalMount('failed-open-successor');
+        const { dataDbId } = await provisionDoc(mount, docConfig);
+        await mount.closeDatabase(dataDbId);
+
+        const gate = storage.armExists();
+        const failing = mount.openDatabase(docConfig, dataDbId).catch(() => null);
+        await gate.parked;
+        // The close takes the in-flight entry out of the cache; the successor open waits on that close.
+        const closing = mount.closeDatabase(dataDbId).catch(() => {});
+        const successor = mount.openDatabase(docConfig, dataDbId);
+        gate.fail(new ApiError(503, 'storage unavailable'));
+        await Promise.all([failing, closing]);
+
+        const reopened = await successor;
+        const cached = mount.documentDbs.has(dataDbId);
+        if (!cached) await reopened.close();
+        expect(cached).toBe(true);
     }, 10_000);
 });
