@@ -14,10 +14,12 @@ type Service = { service: string; state: string; health: string };
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CERT_WARN_DAYS = 14;
 
-// --latest is the newest release of a release install, or on a channel the commit of its newest build: empty when the
-// check failed, left out on a local build. --files is the build the launcher and Compose files were last written from,
-// passed only while it is not the one .env.production pins: an update that failed halfway is not finished.
+// --install is the folder on the host, which the CLI sees as /install. --latest is the newest release of a release
+// install, or on a channel the commit of its newest build: empty when the check failed, left out on a local build.
+// --files is the build the launcher and Compose files were last written from, passed only while it is not the one
+// .env.production pins: an update that failed halfway is not finished.
 export const STATUS_OPTIONS = {
+    install: { type: 'string' },
     services: { type: 'string' },
     latest: { type: 'string' },
     'mail-queue': { type: 'string' },
@@ -25,8 +27,8 @@ export const STATUS_OPTIONS = {
     'snapshots-kb': { type: 'string' },
     files: { type: 'string' },
 } as const;
-export const STATUS_USAGE = `Usage: status [--services=…] [--latest=…] [--mail-queue=…] [--snapshots=…] [--snapshots-kb=…]
-              [--files=…]
+export const STATUS_USAGE = `Usage: status [--install=…] [--services=…] [--latest=…] [--mail-queue=…]
+              [--snapshots=…] [--snapshots-kb=…] [--files=…]
 
 Reports on the running server with what ./eigen status gathers from Docker and the host.`;
 
@@ -34,19 +36,18 @@ type StatusFlags = ReturnType<typeof parseArgs<{ options: typeof STATUS_OPTIONS 
 
 // Without the API, the report holds what the launcher knows.
 function printReport(flags: StatusFlags, services: Service[], api: ControlStatus | null): void {
-    const { latest, 'mail-queue': queue, files } = flags;
+    const { install, latest, 'mail-queue': queue, files } = flags;
     // The CLI runs in an api image: the running one, or the one .env.production pins.
     const channel = process.env['EIGEN_CHANNEL'];
     const commit = process.env['EIGEN_COMMIT'];
-    const build: Row[] = api
-        ? [
-              {
-                  level: 'ok',
-                  label: 'Version',
-                  value: `${api.version}${api.commit ? ` (${api.commit})` : ''}${channel ? ` on ${channel}` : ''}`,
-              },
-          ]
-        : [];
+    const build: Row[] = install ? [{ level: 'ok', label: 'Folder', value: install }] : [];
+    if (api) {
+        build.push({
+            level: 'ok',
+            label: 'Version',
+            value: `${api.version}${api.commit ? ` (${api.commit})` : ''}${channel ? ` on ${channel}` : ''}`,
+        });
+    }
     if (files) {
         build.push({
             level: 'warn',

@@ -12,6 +12,13 @@ const onMain = (...flags: string[]) =>
     });
 
 describe('status', () => {
+    test('names the install folder first, running or not', async () => {
+        const result = await status('--install=/opt/eigen');
+        expect(result.stdout.split('\n')[0]).toMatch(/^◇ {2}Folder +\/opt\/eigen$/);
+        expect(result.stderr).toContain('Eigen is not running.');
+        expect((await status()).stdout).not.toContain('Folder');
+    });
+
     test('a newest release that is not a version is reported as not checked', async () => {
         const result = await status('--latest=nightly');
         expect(result.stdout).toMatch(/Update +could not check/);
