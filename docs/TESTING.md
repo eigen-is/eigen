@@ -79,7 +79,7 @@ Not part of the suite either: the Docker harnesses below.
 
 ## Docker harnesses
 
-The scripts in `docker/` install Eigen the way a stranger does and probe it. Each copies the tracked files as the working tree has them (`git add` a new file to include it) into a scratch folder under `$TMPDIR`, runs `./eigen` there from a `docker:cli` container that has no Bun, as its own Compose project on `127.0.0.1` ports 18000-18999, and removes what it started on exit. They never touch your checkout's `data/` or a stack you run. `HARNESS_KEEP=1` leaves the scratch install up. They share `docker/probe-lib.sh`, so a new harness sources it first and adds only its own probes.
+The scripts in `docker/` install Eigen the way a stranger does and probe it. Each copies the tracked files as the working tree has them (`git add` a new file to include it) into a scratch folder under `$TMPDIR`, runs `./eigen` there from a `docker:cli` container that has no Bun, as its own Compose project on `127.0.0.1` ports 18000-18999, and removes what it started on exit. They never touch your checkout's `data/` or a stack you run. `HARNESS_KEEP=1` leaves the scratch install up. They share `docker/probe-lib.sh`, so a new harness sources it first and adds only its own probes. Its Compose view of the install (`dc`, `stack_up`) runs from that container too, as root, because a release install and its `.env.production` are root's and the harness user on a Linux host cannot read them; Docker Desktop hides that by mapping ownership to your user.
 
 Run them one at a time: two started together can pick the same subnet. `./docker/test-all.sh` runs them all, one after another, and prints one line per harness.
 

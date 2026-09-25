@@ -194,7 +194,7 @@ EOF
 
 # in_cli_container [--stdin] [--user uid:gid] <command…>: runs in $INSTALL inside the no-Bun docker:cli image, with
 # the Docker socket, and the scratch folder at its own path so the bind mounts Compose creates resolve on the host. The
-# EIGEN_*_IMAGE variables pass through when set.
+# EIGEN_*_IMAGE variables and COMPOSE_PROFILES pass through when set.
 # --stdin passes this script's stdin through, for a piped answer; without it the command reads nothing.
 in_cli_container() {
     local user=() stdin=()
@@ -208,7 +208,8 @@ in_cli_container() {
     fi
     docker run --rm ${stdin[@]+"${stdin[@]}"} --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
         -v /var/run/docker.sock:/var/run/docker.sock -v "$SCRATCH:$SCRATCH" -w "$INSTALL" ${IMAGE_FLAGS[@]+"${IMAGE_FLAGS[@]}"} \
-        -e NO_COLOR=1 -e HARNESS_PRUNE_LOG="$PRUNE_LOG" ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
+        -e NO_COLOR=1 -e HARNESS_PRUNE_LOG="$PRUNE_LOG" ${COMPOSE_PROFILES:+-e COMPOSE_PROFILES} \
+        ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
 }
 
 # eigen <args…>: the launcher in the no-Bun container, as $OPERATOR when set (else root); sets OUT (stdout and
@@ -255,13 +256,14 @@ run_setup() {
     probe_summary
 }
 
-# The harness's own view of the install's stack, from the host, with the files the launcher uses.
+# The harness's own view of the install's stack, with the files the launcher uses, from the no-Bun container as root:
+# a release install's .env.production is root's, mode 600, which the host user cannot read on Linux.
 dc() {
     local build=()
     assert_isolated
     if [ -f "$INSTALL/docker-compose.build.yml" ]; then build=(-f docker-compose.build.yml); fi
-    (cd "$INSTALL" && docker compose -p "$PROJECT" --env-file .env.production -f docker-compose.yml \
-        ${build[@]+"${build[@]}"} -f docker-compose.override.yml "$@")
+    in_cli_container docker compose -p "$PROJECT" --env-file .env.production -f docker-compose.yml \
+        ${build[@]+"${build[@]}"} -f docker-compose.override.yml "$@"
 }
 
 # Every service running and eigen-api healthy.
