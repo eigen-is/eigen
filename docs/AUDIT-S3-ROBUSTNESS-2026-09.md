@@ -2,6 +2,24 @@
 
 > **TLDR**: The write-behind queue for `data.db` holds up: edits coalesce, a stalled PUT loses no data, and a restart replays every staged copy. The real risk sits on the read side and around teardown. No S3 read has a deadline of Eigen's own, so a stalled GET waits about 6 minutes and a trickling one waits forever (DL-1). Home teardown awaits that GET, so one stuck document hangs every request for its owner (DL-2). A process killed mid-GET leaves a truncated working copy that every later open adopts and fails on (DL-6). A whole-server snapshot of an s3 install holds no bucket object at all (BK-1).
 
+## What to act on
+
+Most of the value sits in four findings; the rest is a work list to burn down when the code is touched, not a reference (the file:line pointers drift with every change).
+
+- **BK-1 first, and it is not about slow S3.** On an s3 install, `./eigen backup` saves metadata only, and no row records an object version. A restore or rollback on eigen.is does not bring content back to the snapshot state, although the docs say it does. The pre-update snapshot is not an undo for a bad release's effect on document content. Check what the nightly eigen.is backups actually hold before anything else.
+- **DL-6 is concrete and cheap.** A slow bucket plus `./eigen update` can leave a document that does not open until someone deletes a file on the server by hand. It reproduces on MinIO; the fix is download to a side file, then rename.
+- **DL-1 and DL-2 are real, and the fix is contained.** A Hetzner S3 hiccup shows up as users with a hung Home, not as lost data. One `S3Storage` wrapper with a deadline and the 503 mapping, plus teardown that stops awaiting a stuck load, covers it.
+- **The durable parts outlast this doc.** The measured Bun `S3Client` behavior (about 360 s, no timeout option, a trickle never times out), `test/fake-s3-server.ts`, and the `test.failing` tests, which turn the fix work into "make them go red, then change each to a plain `test`". "No steady-state data-loss path" is now backed by tests rather than assumed.
+
+What is weaker:
+
+- **The standards section is mostly low-severity volume** (comment hygiene, duplicated constants, test tidiness). ST-3 (a failed delete is silent) and ST-7 (a vacuous test assertion) are worth acting on; the rest can wait until someone touches those files.
+- **Several low findings are rare on eigen.is:** UP-4, UP-5, UP-7, BK-2.
+- **The simplification proposal is direction, not a plan.** Its keystone (aborting S3 requests through a presigned `fetch`) is unverified, routing every write through the queue changes what "uploaded" means, and step 6 of the order of work is the risky one.
+- **Nothing here is checked against production.** eigen.is logs for `SQLITE_CORRUPT`, S3 `Timeout` errors and hung Homes calibrate these severities better than any label in this doc.
+
+Order: check the eigen.is backups against BK-1 now; then DL-6; then the deadline wrapper with the 503 mapping (DL-1, DL-4); then the teardown bound (DL-2). That is two or three small PRs and covers nearly all of the real risk.
+
 This audit covers the S3 path when the bucket is slow, stalls or fails: every HEAD, GET, PUT and DELETE, what bounds it, what it pins while it waits, and what a restart, a backup, an update or a restore does with it. Each robustness gap has a test that asserts the correct behavior and runs as `test.failing`, so the suite stays green and the test flips when the gap is fixed. Stalls are injected in two ways: `FaultStorage` (with `parkWrites` and `waitForParked`) for queue and backup work, and a fake S3 endpoint on a raw socket that the real `S3Storage` and Bun's real `S3Client` talk to, for every read and wire-level fault (no answer, headers then silence, a body cut short, 5xx, an empty 200). Bucket-level behavior (a bucket that does not exist, key encoding) runs against a live MinIO.
 
 Verdict. What holds: a GET that fails in-process never leaves a working copy behind; an empty, cut-short or missing download is never opened as a fresh document and never uploaded back; a client never gets an editable blank document; the collab socket survives a load of any length; concurrent opens share one load; a streaming download releases its upstream GET when the client leaves; the upload semaphore and the thumbnail semaphore are never held across a read; the per-home restore is resumable by construction. What does not hold is every bound on time. Bun's `S3Client` is the only thing that ends a stalled request, its bound is an inactivity timeout, and the teardown, shutdown and backup paths all await S3 work without a deadline of their own. The four high findings are that one missing primitive (a deadline on an S3 call) and its consequences, plus the whole-server snapshot that silently holds none of an s3 install's bytes.
