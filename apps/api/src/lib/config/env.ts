@@ -16,6 +16,11 @@ export function isMailEnabled(): boolean {
     return process.env['MAIL_ENABLED'] !== '0';
 }
 
+// A demo box seeds mailboxes without an MTA: the Mail app stays while sendMail skips.
+export function isMailAppEnabled(): boolean {
+    return isMailEnabled() || isDemo();
+}
+
 // The `edge` docker profile runs the bundled Caddy; the API reads COMPOSE_PROFILES from .env.production through env_file.
 export function isBundledCaddy(): boolean {
     return (process.env['COMPOSE_PROFILES'] ?? '').split(',').includes('edge');

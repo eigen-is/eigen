@@ -1,4 +1,4 @@
-import { isMailEnabled } from '../config/env';
+import { isMailAppEnabled } from '../config/env';
 import type { User } from '../user';
 import { getMemberships, getOrgRole } from '../user';
 import { ApiError } from './errors';
@@ -75,7 +75,7 @@ export function requireNonGuest(user: Pick<User, 'role'>): void {
 }
 
 export function requireMailEnabled(): void {
-    if (!isMailEnabled()) throw new ApiError(403, 'Mail is turned off on this server');
+    if (!isMailAppEnabled()) throw new ApiError(403, 'Mail is turned off on this server');
 }
 
 export async function requireTeamAccess(userId: string, teamId: string): Promise<'admin' | 'member'> {
