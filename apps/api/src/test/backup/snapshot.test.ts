@@ -625,7 +625,13 @@ describe('Backup snapshotHome under contention', () => {
         // Close the handle first — with a live one the copy comes from VACUUM INTO and never reaches
         // storage. Then take the object away, leaving the paths row behind: a container deleted, or a
         // versions/ snapshot pruned, between the tree read and the copy looks exactly like this.
-        await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
+        // The close's final sync kicks a content reindex, which would open data.db again.
+        const kick = spyOn(mount.reindexQueue!, 'kick').mockImplementation(() => {});
+        try {
+            await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
+        } finally {
+            kick.mockRestore();
+        }
         await mount.storage.delete(await mount.getStorageKey(dataDb.id));
 
         const manifest = await snapshotHome(home, mkdtempSync(join(TEST_DATA_DIR, 'backup-gone-')));
