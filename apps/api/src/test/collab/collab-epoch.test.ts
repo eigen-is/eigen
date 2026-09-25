@@ -71,8 +71,9 @@ afterAll(() => {
 
 describe('Collab data epoch', () => {
     test('is kept in data/server/, so it outlives a restart', () => {
-        const server = readFileSync(join(TEST_DATA_DIR, 'server', COLLAB_EPOCH_FILE), 'utf8');
-        expect(getCollabEpoch(ownerId)).toStartWith(server);
+        // The first use draws it and writes the file, so read the file after.
+        const epoch = getCollabEpoch(ownerId);
+        expect(epoch).toStartWith(readFileSync(join(TEST_DATA_DIR, 'server', COLLAB_EPOCH_FILE), 'utf8'));
     });
 
     test('an open hands it out before the sync', async () => {

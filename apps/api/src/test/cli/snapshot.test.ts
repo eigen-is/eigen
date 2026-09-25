@@ -98,6 +98,11 @@ function tarEntry(name: string, type: string, target = ''): Buffer {
     header.write(type, 156);
     header.write(target, 157);
     header.write('ustar\x0000', 257);
+    // A device is /dev/null's 1,3: Linux lets anyone make a 0,0 one, the overlayfs whiteout.
+    if (type === '3') {
+        header.write('0000001\0', 329);
+        header.write('0000003\0', 337);
+    }
     header.write(
         `${header
             .reduce((sum, byte) => sum + byte, 0)
