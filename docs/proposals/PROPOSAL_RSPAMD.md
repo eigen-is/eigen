@@ -339,8 +339,7 @@ scripts. Each phase lands with its slice of:
   training never blocks a user action.
 - A quarantined invitation has no calendar effect; rescue produces exactly one; a second
   Junk round-trip does not duplicate it.
-- Fresh setup, a flag-driven `./eigen setup`, the `./eigen update` backfill, and a setup **rerun** all end
-  with the same non-empty `RSPAMD_PASSWORD` in `.env.production`.
+- Fresh setup, a flag-driven `./eigen setup`, the `./eigen update` backfill, and a setup **rerun** all end with the same non-empty `RSPAMD_PASSWORD` in `.env.production`.
 - OpenDKIM startup failure leaves rspamd filtering active.
 
 ## Risks and caveats

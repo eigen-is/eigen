@@ -65,7 +65,7 @@ mkdir -p /opt/eigen && cd /opt/eigen
 curl -fsSL https://eigen.is/install | sh
 ```
 
-The script downloads the `eigen` command into the folder and runs `./eigen setup`. Setup downloads the newest release, asks the questions of step 4, starts Eigen and prints the link of step 5. The folder then holds the `eigen` command, the Compose file, `.env.example`, the fail2ban files and `.env.production`. That file names the release, so the install stays on that version until `./eigen update`.
+The script downloads the `eigen` command into the folder and runs `./eigen setup`. Setup downloads the newest release, asks the questions of step 4, starts Eigen and prints the link of step 5. The folder then holds the `eigen` command, the Compose file, `.env.example`, the fail2ban files, the demo reset under `scripts/` and `.env.production`. That file names the release, so the install stays on that version until `./eigen update`.
 
 Rather not pipe a script into `sh`? The same install, by hand, from the release image:
 
@@ -198,8 +198,6 @@ The download happens while Eigen runs. Then Eigen stops, saves a snapshot in `sn
 `./eigen rollback` goes back to the version before the last update, with the data as it was then: it puts back the snapshot the update saved, with the images it pins, and starts Eigen. The current data is kept aside. After a light snapshot it puts back only the databases, settings and `.env.production`, so files and mail added since the update stay. It goes back one update only.
 
 **Following the newest code instead of releases.** `./eigen update main` puts a release install on the main channel. Every push to `main` builds new images; `./eigen update` then installs the newest build, and `./eigen status` names the build, like `0.3.0 (abc1234) on main`. While a build is still being published, `./eigen update` says so; run it again a few minutes later. Release notes and the (breaking) question apply only when the version number changes, so on the channel a breaking change can arrive unannounced. The channel is for the people who develop Eigen. `./eigen update <version>` returns to releases.
-
-On a version without light snapshots, the first `./eigen update` stops at the snapshot, because that version cannot save a light one. Run `./eigen update --full` then. `./eigen rollback` cannot undo that first update, because the older version records it in a form the new `./eigen` does not read. `./eigen restore` with its `eigen-pre-update-*` snapshot can.
 
 ### Backups
 

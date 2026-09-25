@@ -357,11 +357,7 @@ scoped, and regenerable from a full sweep.
 - **D6 — Reverse scan (stray objects)?** Needs `StorageBackend.list?()`. *Recommendation:* defer to
   the last phase; local mounts get the readdir version in the cheap tier for free, S3 listing lands
   with the optional interface method when the loss-direction checks are proven.
-- **D7 — Safe whole-server backup: keep it an offline stop-and-tar, or drive it from the API?**
-  `./eigen backup` is an offline stop-and-tar snapshot (crash-consistent via `-wal`/`-shm` capture),
-  so there is no live-tar problem; only the verify gap remains, and per §3 the home DBs have no
-  other backup artifact. Superseded: [PROPOSAL_BACKUP_RESTORE.md](PROPOSAL_BACKUP_RESTORE.md) settled
-  the direction (API-driven, scheduled, verified, per-home), so the copy-then-tar sketch below does not apply.
+- **D7 — Safe whole-server backup: keep it an offline stop-and-tar, or drive it from the API?** `./eigen backup` is an offline stop-and-tar snapshot (crash-consistent via `-wal`/`-shm` capture), so there is no live-tar problem; only the verify gap remains, and per §3 the home DBs have no other backup artifact. Superseded: [PROPOSAL_BACKUP_RESTORE.md](PROPOSAL_BACKUP_RESTORE.md) settled the direction (API-driven, scheduled, verified, per-home), so the copy-then-tar sketch below does not apply.
 - **D8 — Alert on semantic shrink of a live doc between sweeps?** *Recommendation:* no. Users
   legitimately delete content; version history + bucket versioning are the recovery net for that.
   Only decode/validity failures alert — alarm fatigue kills alerting systems faster than missed
@@ -386,9 +382,7 @@ Each phase ships independently; the cheapest highest-value check goes first.
 4. **Reverse scan (S).** Optional `StorageBackend.list?()` (Bun `S3Client` listing + local readdir);
    stray-object findings routed through the same alert state.
 5. **Verified whole-server backup (S–M).** ⚠️ Reviewer-driven scope addition (accepted by push,
-   2026-07-05) — **requires an explicit go from the owner before implementation starts.**
-   Add a verify pass on top of `eigen backup`'s already crash-consistent archive:
-   per-DB `VACUUM INTO` a staging dir, tar the staging dir, then a post-backup verify pass
+   2026-07-05) — **requires an explicit go from the owner before implementation starts.** Add a verify pass on top of `eigen backup`'s already crash-consistent archive: per-DB `VACUUM INTO` a staging dir, tar the staging dir, then a post-backup verify pass
    (`quickCheck` on every copied DB, sampled `verifySnapshotDb` over containers) — the home DBs'
    only backup artifact becomes a verified one (D7). Superseded by [PROPOSAL_BACKUP_RESTORE.md](PROPOSAL_BACKUP_RESTORE.md).
 

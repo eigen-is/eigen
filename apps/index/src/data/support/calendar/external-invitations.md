@@ -35,8 +35,7 @@ Their response comes back to you as a reply email. When that email arrives in Ei
 
 ## What happens when someone outside Eigen invites me?
 
-When an invitation email arrives in your Eigen mailbox, Mail shows a calendar card inside the message instead of a bare attachment. This needs an Eigen that hosts your email: otherwise the invitation arrives in your usual mail app. The card displays the event title, date and time, location, and the
-organizer's name. Click **View in Calendar** to open Calendar on that event.
+When an invitation email arrives in your Eigen mailbox, Mail shows a calendar card inside the message instead of a bare attachment. This needs an Eigen that hosts your email: otherwise the invitation arrives in your usual mail app. The card displays the event title, date and time, location, and the organizer's name. Click **View in Calendar** to open Calendar on that event.
 
 Eigen adds the event to your default calendar automatically, as long as your server can verify the sender
 of the email. If it cannot, the card still appears in Mail but nothing is added to your calendar.
