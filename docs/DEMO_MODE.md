@@ -20,6 +20,7 @@
 - **login-page conditional** (`packages/ui/.../pages/login-page.tsx`) — when `demoMode` is true the card is just an **Enter demo** button (linking to `/p/demo/enter`); there is no password sign-in and no Guest tab (guest signup is off in demo). The hourly wipe/reseed rebuilds the admin account each hour, so a demo box deliberately exposes no web credentials form to visitors.
 - **index-landing conditional** (`apps/index/.../routes/index.tsx`) — when `demoMode` is true the landing page's primary button reads **Enter demo** and points at `/p/demo/enter` instead of the normal **Login** button that goes to `/space`.
 - **`DemoBanner`** (`packages/ui/.../app/demo-banner.tsx`, mounted once in `AppShell`) — a warning-toned strip (`bg-warning`, `border-t`) pinned to the BOTTOM edge of the app shell: "Shared demo workspace. You are exploring as \<first name\>. Everything resets every hour." (the name-less fallback drops the middle sentence).
+- **Mail app without an MTA** (`lib/config/env.ts` `isMailAppEnabled`) — `/p/config` `mailEnabled` and the mail routes' guard read it, so a demo box answers No to hosting mail (no postfix, dovecot or unbound) and still shows the Mail app with the seeded mailboxes; the mailer keeps reading `isMailEnabled()`, and `sendMail` skips anyway.
 - **pass-through auth guard** (`routes/auth.ts`) — an `onBeforeHandle` that returns immediately when `!isDemo()`.
 - **inert `/p/demo/enter`** (`routes/demo.ts`) — the route is always registered but 404s when `!isDemo()`.
 
@@ -85,7 +86,7 @@ Hourly, on the hour, host-level (no in-app scheduler — swapping DB files under
 
 ## Deployment shape
 
-- `COMPOSE_PROFILES=edge` (no `mail`): no postfix/dovecot/unbound, no MX — outbound and inbound mail are physically absent, which is why `sendMail` skips.
+- `COMPOSE_PROFILES=edge` (no `mail`): answer No to "Host email on this server?" (`./eigen setup --no-mail`): no postfix/dovecot/unbound, no MX — outbound and inbound mail are physically absent, which is why `sendMail` skips. The Mail app stays: `isMailAppEnabled()` above.
 - Local mounts only — an `s3` mount stores bytes outside the data root and would desync from the wipe.
 - `docker-compose.yml` passes `EIGEN_DEMO: ${EIGEN_DEMO:-0}` through to the API, so a `.env.production` without it runs with demo mode off; `./eigen update` keeps every key of the file, so an update never drops it.
 - The seeder sets the server settings (signups off, quotas) each run, so they can't drift.

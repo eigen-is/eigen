@@ -5,6 +5,7 @@ import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getDemoPersonaPool } from '../../lib/auth/demo-persona-pool';
 import { signInWithScopedPassword } from '../../lib/auth/guest-auth';
 import { getServerConfig } from '../../lib/config/server-config';
+import { requireMailEnabled } from '../../lib/core/access';
 import { sendMail } from '../../lib/core/mailer';
 import { authedRequest, getTestContext } from '../setup';
 
@@ -92,6 +93,19 @@ describe('Demo mode', () => {
             const configRes = await ctx.app.handle(new Request('http://localhost/p/config'));
             const config = (await configRes.json()) as { demoMode: boolean };
             expect(config.demoMode).toBe(true);
+        });
+
+        test('the Mail app stays on without hosted mail: seeded mailboxes, no MTA', async () => {
+            process.env['EIGEN_DEMO'] = '1';
+            process.env['MAIL_ENABLED'] = '0';
+            try {
+                const configRes = await ctx.app.handle(new Request('http://localhost/p/config'));
+                const config = (await configRes.json()) as { mailEnabled: boolean };
+                expect(config.mailEnabled).toBe(true);
+                expect(() => requireMailEnabled()).not.toThrow();
+            } finally {
+                delete process.env['MAIL_ENABLED'];
+            }
         });
 
         test('GET /p/demo/enter signs in a random org member (never the owner)', async () => {
