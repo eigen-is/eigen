@@ -50,7 +50,11 @@ export async function consumeStream(
                 timer = setTimeout(stop, idleMs);
             }
             // A read pending when cancel() runs resolves done rather than throwing, hence the flag.
-            const { done, value } = await reader.read();
+            const { done, value } = await reader.read().catch((error: unknown) => {
+                if (idleMs === undefined || error instanceof ApiError) throw error;
+                console.error('Storage read failed:', error);
+                throw new ApiError(503, 'Storage unavailable');
+            });
             if (stopped) throw new ApiError(503, 'Storage unavailable');
             if (done) return size;
             size += value.byteLength;
@@ -59,9 +63,7 @@ export async function consumeStream(
         }
     } catch (error) {
         reader.cancel().catch(() => {});
-        if (idleMs === undefined || error instanceof ApiError) throw error;
-        console.error('Storage read failed:', error);
-        throw new ApiError(503, 'Storage unavailable');
+        throw error;
     } finally {
         clearTimeout(timer);
         signal?.removeEventListener('abort', stop);

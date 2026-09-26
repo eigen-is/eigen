@@ -7,7 +7,7 @@ import type { DatabaseConfig } from '../../lib/core';
 import { getHome } from '../../lib/home';
 import type { Mount } from '../../lib/mount/mount';
 import { extractText } from '../../lib/search/extract-text';
-import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
+import { consumeStream, STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { FakeS3Server } from '../fake-s3-server';
@@ -156,6 +156,18 @@ describe('Whole-body reads', () => {
         const { fileId, key } = await storedFile('f.bin');
         fake.faults.set(key, 'fail-get');
         await expect(mount.readBytes(fileId)).rejects.toMatchObject({ status: 503 });
+    });
+
+    test('a chunk handler that fails surfaces its own error, not a 503', async () => {
+        const local = new Error('ENOSPC');
+        const failing = consumeStream(
+            new Blob(['x']).stream(),
+            () => {
+                throw local;
+            },
+            { idleMs: 1_000 },
+        );
+        await expect(failing).rejects.toBe(local);
     });
 
     test('mount teardown does not wait on a text extraction whose GET stalls', async () => {

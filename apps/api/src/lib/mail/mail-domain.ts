@@ -49,6 +49,10 @@ function draftIdOf(email: NewDraft | EmailDraft): string | undefined {
     return id;
 }
 
+export function attachmentTooLarge(maxSize: number): ApiError {
+    return new ApiError(413, `Attachment exceeds ${Math.floor(maxSize / (1024 * 1024))}MB limit`);
+}
+
 function appendReferenceLinks(html: string, refs: AttachmentReference[], recipientEmail?: string): string {
     const refHtml = renderAttachmentPills(refs, recipientEmail);
     if (!refHtml) return html;
@@ -507,10 +511,7 @@ export class Mail {
                 );
             }
         } catch (e) {
-            if (e instanceof MaxFileSizeExceededError) {
-                const limitMB = Math.floor(maxSize / (1024 * 1024));
-                throw new ApiError(413, `Attachment exceeds ${limitMB}MB limit`);
-            }
+            if (e instanceof MaxFileSizeExceededError) throw attachmentTooLarge(maxSize);
             throw e;
         }
 
@@ -524,15 +525,20 @@ export class Mail {
         maxSize: number,
     ): Promise<DraftAttachmentUpload> {
         // The route already checked the drive size, so maxBytes is only for a source that grows mid-read.
-        return this.store.persistDraftTemp(
-            (writer) =>
-                consumeStream(source.stream(), (chunk) => writer.write(chunk), {
-                    idleMs: getStorageTimeoutMs(),
-                    maxBytes: maxSize,
-                }),
-            filename,
-            contentType,
-        );
+        try {
+            return await this.store.persistDraftTemp(
+                (writer) =>
+                    consumeStream(source.stream(), (chunk) => writer.write(chunk), {
+                        idleMs: getStorageTimeoutMs(),
+                        maxBytes: maxSize,
+                    }),
+                filename,
+                contentType,
+            );
+        } catch (e) {
+            if (e instanceof ApiError && e.status === 413) throw attachmentTooLarge(maxSize);
+            throw e;
+        }
     }
 
     async messageSend(

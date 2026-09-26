@@ -8,6 +8,7 @@ import { getSharedDrive } from '../drive';
 import { getHome } from '../home';
 import type { User } from '../user';
 import { getOrgAdmins, getUserByEmail } from '../user/';
+import { attachmentTooLarge } from './mail-domain';
 
 export async function getMailClient(user: User) {
     const home = await getHome(user.id);
@@ -61,10 +62,7 @@ export async function attachFromDrive(
     const drive = await getSharedDrive(sourceOwnerId, user);
     const sourcePath = await drive.getPath(sourceMountId, sourcePathId);
     if (!sourcePath) throw new ApiError(404, 'Source file not found');
-    if (sourcePath.size > maxSize) {
-        const limitMB = Math.floor(maxSize / (1024 * 1024));
-        throw new ApiError(413, `Attachment exceeds ${limitMB}MB limit`);
-    }
+    if (sourcePath.size > maxSize) throw attachmentTooLarge(maxSize);
 
     const sourceFile = await drive.downloadFile(sourceMountId, sourcePathId);
     if (!sourceFile) throw new ApiError(404, 'Source file missing on disk');

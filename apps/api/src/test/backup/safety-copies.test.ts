@@ -286,6 +286,7 @@ describe('Backup safety copies of an s3 home', () => {
         try {
             expect(await settlesWithin([deleting], SETTLE_BOUND_MS)).toBe(true);
             expect(existsSync(copyDir)).toBe(true);
+            expect(fake.heldCount + fake.abandoned).toBe(1);
         } finally {
             setStorageTimeoutMs(STORAGE_TIMEOUT_MS);
             // Never heal: an answered DELETE would take the objects the next test needs.
