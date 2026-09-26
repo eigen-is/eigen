@@ -11,7 +11,6 @@ import {
     answerPreview,
     contentDisposition,
     readBoundedBodyBytes,
-    readBoundedStreamBytes,
     scriptableInlineHeaders,
     setCacheHeaders,
 } from '../lib/core/http';
@@ -38,6 +37,7 @@ import {
     VCARD_FORMAT,
 } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
+import { readStorageFile } from '../lib/storage';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
 import { betterAuth } from './auth';
 import { clientFileEventBody, eigenDocTypeSchema, importFromDriveSchema } from './shared-schemas';
@@ -304,9 +304,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             if (!sourceFile) throw new ApiError(404, 'Source file not found');
             // The row's size is a claim: a source that grew since is cancelled as it is read, the way
             // every other import-from-drive route reads its source (lib/drive/import-source.ts).
-            const bytes = await readBoundedStreamBytes(sourceFile.stream(), maxSize);
-            if (bytes === null) throw new ApiError(413, 'Upload too large');
-            const buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            const buffer = Buffer.from(await readStorageFile(sourceFile, { maxBytes: maxSize }));
             await importIntoDocument(drive, mount, path, buffer, user, request.signal);
             return { success: true };
         },

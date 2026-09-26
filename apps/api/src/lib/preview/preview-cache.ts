@@ -334,10 +334,10 @@ export async function getScreenPreview(
             screenCacheName(drivePath, 'svg'),
             'image/svg+xml',
             async () => {
-                const file = await mount.readFile(drivePath.id);
-                if (!file) return null;
-                const bytes = Buffer.from(await file.arrayBuffer());
-                return drivePath.parentId ? inlineSvgMediaRefs(mount, drivePath.parentId, bytes) : bytes;
+                const bytes = await mount.readBytes(drivePath.id);
+                if (!bytes) return null;
+                const svg = Buffer.from(bytes);
+                return drivePath.parentId ? inlineSvgMediaRefs(mount, drivePath.parentId, svg) : svg;
             },
         );
     }
@@ -389,9 +389,9 @@ export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promis
 }
 
 async function generateFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<string | null> {
-    const file = await mount.readFile(drivePath.id);
-    if (!file) return null;
-    const preview = await getBytesTextPreview(await file.arrayBuffer(), drivePath.name, drivePath.mimeType || '');
+    const bytes = await mount.readBytes(drivePath.id);
+    if (!bytes) return null;
+    const preview = await getBytesTextPreview(bytes, drivePath.name, drivePath.mimeType || '');
     return preview?.body ?? null;
 }
 

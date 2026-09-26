@@ -174,9 +174,9 @@ async function resolveRef(
         // budget (the final URI is only charged after the nested resolve, but a too-big sibling should
         // degrade the pass without ever being read — mirrors the non-svg charge-before-read below).
         if (base64Len(child.size) > budget.remaining) throw new OutputTooLargeError();
-        const file = await mount.readFile(child.id);
-        if (!file) return null;
-        const bytes = Buffer.from(await file.arrayBuffer());
+        const stored = await mount.readBytes(child.id);
+        if (!stored) return null;
+        const bytes = Buffer.from(stored);
         const inner = bytes.includes(SNIFF)
             ? Buffer.from(await resolveSvgRefs(mount, parentId, bytes.toString('utf8'), depth + 1, budget), 'utf8')
             : bytes;
@@ -193,10 +193,9 @@ async function resolveRef(
     const mime = safeDataUriMime(child.mimeType);
     const projectedLen = `data:${mime};base64,`.length + base64Len(child.size);
     charge(budget, occurrences, projectedLen, tokenLen);
-    const file = await mount.readFile(child.id);
-    if (!file) return null;
-    const bytes = Buffer.from(await file.arrayBuffer());
-    return `data:${mime};base64,${bytes.toString('base64')}`;
+    const bytes = await mount.readBytes(child.id);
+    if (!bytes) return null;
+    return `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`;
 }
 
 // Deduct `occurrences` copies of the URI (net of the token each replaces) from the budget; a breach

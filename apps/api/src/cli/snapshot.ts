@@ -20,6 +20,7 @@ import { basename, dirname, join, relative } from 'node:path';
 import type { parseArgs } from 'node:util';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
+import type { UserSettings } from '@workspace/lib/types/settings';
 import { BACKUP_STAMP_PATTERN, buildBackupStamp, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import type { Subprocess } from 'bun';
 import { COLLAB_EPOCH_FILE } from '../lib/collab/epoch';
@@ -143,6 +144,20 @@ async function refusal(): Promise<string | null> {
     }
     return null;
 }
+
+// Whether any home keeps a drive in a bucket, whose objects no snapshot holds. A settings file that does not read is skipped.
+function holdsS3Mounts(): boolean {
+    for (const file of new Bun.Glob(`${DATA}/*/*/${PATHS.SETTINGS}`).scanSync()) {
+        try {
+            const settings: UserSettings = JSON.parse(readFileSync(file, 'utf8'));
+            if (Object.values(settings.mounts ?? {}).some((mount) => mount.storageType === 's3')) return true;
+        } catch {}
+    }
+    return false;
+}
+
+const S3_NOT_IN_SNAPSHOT =
+    'Files in S3 buckets are not in a snapshot: they stay as the bucket holds them, and only its versioning keeps their history';
 
 // data/ under `root` as a light snapshot sees it: the paths it holds, every folder before what is in it.
 export function lightWalk(root = '.'): Held[] {
@@ -277,12 +292,13 @@ export async function snapshot(
         mkdirSync(dirname(LAST_UPDATE), { recursive: true });
         writeFileSync(LAST_UPDATE, `${name}\n`);
         ownAs(LAST_UPDATE, owner);
-        return;
+    } else {
+        // After this one is written, so a failed snapshot never costs an older one.
+        const older = newestSnapshots(readdirSync(SNAPSHOTS)).filter(alike).slice(keep);
+        for (const file of older) rmSync(join(SNAPSHOTS, file));
+        if (older.length) console.log(glyphLine('ok', `Removed the older snapshots: ${older.join(', ')}`));
     }
-    // After this one is written, so a failed snapshot never costs an older one.
-    const older = newestSnapshots(readdirSync(SNAPSHOTS)).filter(alike).slice(keep);
-    for (const file of older) rmSync(join(SNAPSHOTS, file));
-    if (older.length) console.log(glyphLine('ok', `Removed the older snapshots: ${older.join(', ')}`));
+    if (holdsS3Mounts()) console.log(glyphLine('warn', S3_NOT_IN_SNAPSHOT));
 }
 
 // Every file of the light set here goes aside first, held by the snapshot or not: a database's -wal left beside the
@@ -494,4 +510,5 @@ export async function restore(
     );
     const aside = [dataAside, envAside].filter((file) => existsSync(file));
     if (aside.length) console.log(glyphLine('ok', `Kept aside: ${aside.join(', ')}`));
+    if (holdsS3Mounts()) console.log(glyphLine('warn', S3_NOT_IN_SNAPSHOT));
 }

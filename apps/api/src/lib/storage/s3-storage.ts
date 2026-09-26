@@ -4,6 +4,7 @@ import { escapeXml } from '@workspace/lib/html';
 import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
 import { type BunFile, S3Client, type S3File } from 'bun';
 import { ApiError } from '../core';
+import { withStorageDeadline } from './deadline';
 import type { S3Config, StorageBackend } from './types';
 
 export async function checkS3Connection(config: S3Config): Promise<S3CheckResult> {
@@ -270,25 +271,18 @@ export class S3Storage implements StorageBackend {
         return this.client.file(this.getKey(key));
     }
 
-    readRange(key: string, start: number, end: number): S3File {
-        return this.client.file(this.getKey(key)).slice(start, end);
-    }
-
-    async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
-        const file = this.read(key);
-        const written = await file.write(data);
-        return written;
+    write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+        return this.read(key).write(data);
     }
 
     async delete(key: string): Promise<boolean> {
+        // S3 answers a DELETE of a missing key with success, so no HEAD first.
         try {
-            const file = this.read(key);
-            if (await file.exists()) {
-                await file.delete();
-                return true;
-            }
-            return false;
+            await withStorageDeadline(this.read(key).delete());
+            return true;
         } catch (error) {
+            // A bucket that is gone holds none of its keys.
+            if (error instanceof Error && 'code' in error && error.code === 'NoSuchBucket') return true;
             console.error(`Failed to delete S3 file ${key}:`, error);
             return false;
         }
@@ -298,18 +292,19 @@ export class S3Storage implements StorageBackend {
         // A missing object resolves false; a throw is the provider failing. 503 is the shape the
         // create (rollback) and open (1013 close) paths speak, so the outage reads as one and not as a 500.
         try {
-            return await this.read(key).exists();
+            return await withStorageDeadline(this.read(key).exists());
         } catch (error) {
             console.error(`S3 exists probe failed for ${key}:`, error);
-            throw new ApiError(503, 'Storage unavailable');
+            throw error instanceof ApiError ? error : new ApiError(503, 'Storage unavailable', { cause: error });
         }
     }
 
     async size(key: string): Promise<number | null> {
-        // stat() throws on a missing object with no distinguishable code — map any failure to null like LocalStorage.
+        // stat() throws on a missing object with no distinguishable code — map any failure but the deadline to null like LocalStorage.
         try {
-            return (await this.read(key).stat()).size;
-        } catch {
+            return (await withStorageDeadline(this.read(key).stat())).size;
+        } catch (error) {
+            if (error instanceof ApiError) throw error;
             return null;
         }
     }

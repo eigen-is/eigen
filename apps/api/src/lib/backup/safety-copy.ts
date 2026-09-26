@@ -137,7 +137,6 @@ async function deleteRemoteObjects(folder: string, homeDir: string): Promise<voi
         return;
     }
     const referencing = foldersReferencingObjects(homeDir, folder);
-    let failures = 0;
     for (const [id, mount] of Object.entries(mounts)) {
         if (mount.storageType !== 's3') continue;
         // settings.json came from an archive, so its keys are untrusted: a mount id that resolves
@@ -170,19 +169,12 @@ async function deleteRemoteObjects(folder: string, homeDir: string): Promise<voi
         );
         for (const key of storageKeysIn(copyDb)) {
             if (referenced.has(key)) continue;
-            try {
-                // Both backends answer false for "not there" as well as for "could not", so the probe
-                // is what tells a no-op — a failed restore's keys were staged, never uploaded — from
-                // an outage, a 403, a rotated key.
-                if ((await storage.exists(key)) && !(await storage.delete(key))) failures++;
-            } catch (error) {
-                console.error(`[backup] could not delete ${id}/${key}:`, error);
-                failures++;
+            // A missing key answers true (a failed restore's keys were staged, never uploaded); false is
+            // an outage, a 403, a rotated key, and the copy stays anyway, so the rest can wait.
+            if (!(await storage.delete(key))) {
+                throw new ApiError(503, 'An object could not be deleted; the safety copy was kept');
             }
         }
-    }
-    if (failures > 0) {
-        throw new ApiError(503, `${failures} objects could not be deleted; the safety copy was kept`);
     }
 }
 

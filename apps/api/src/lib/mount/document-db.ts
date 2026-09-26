@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { createAsyncSingleton } from '../../utils/singleton';
@@ -53,11 +54,11 @@ async function openDocumentDb<S extends SchemaType>(
             // Clean up the map entry if the factory throws — otherwise a
             // failed createDatabase leaves a getter behind whose closed-over
             // `mode` would silently steer the next openDatabase down the
-            // create path.
+            // create path. Only our own entry: a close may have handed the slot on.
             try {
                 return await buildDocumentDb(mount, config, pathId, mode);
             } catch (err) {
-                mount.documentDbs.delete(pathId);
+                if (mount.documentDbs.get(pathId) === getter) mount.documentDbs.delete(pathId);
                 throw err;
             }
         });
@@ -141,15 +142,21 @@ async function buildDocumentDb<S extends SchemaType>(
                           if (staged && fs.existsSync(staged)) {
                               console.log(`[Mount] Recovering from staged upload for ${pathId}`);
                               await mount.cleanupTemp(pathId);
-                              await Bun.write(tempPath, Bun.file(staged));
+                              // Side file + rename, as in downloadKeyToTemp: never a partial file at tempPath.
+                              const sideId = randomUUID();
+                              try {
+                                  await Bun.write(mount.getTempPath(sideId), Bun.file(staged));
+                              } catch (err) {
+                                  await mount.cleanupTemp(sideId);
+                                  throw err;
+                              }
+                              fs.renameSync(mount.getTempPath(sideId), tempPath);
                               return;
                           }
                       }
-                      if (!(await mount.storage.exists(storageKey))) {
-                          throw new ApiError(503, `Storage object for ${pathId} not available`);
-                      }
+                      // A missing object fails the GET, which answers the same 503 a HEAD would.
                       await mount.downloadKeyToTemp(storageKey, pathId);
-                      // No empty-check here: a 0-byte/partial GET is caught by ManagedDatabase's
+                      // No empty-check here: an empty 200 is caught by ManagedDatabase's
                       // mustExist guard (openCold refuses to open an empty working copy as a fresh db).
                   },
                   // isRemote: stage a frozen copy + enqueue, off the request/close path.
@@ -276,6 +283,10 @@ export async function closeCachedDbsUnder(mount: Mount, rootId: string): Promise
 }
 
 export async function closeAllDatabases(mount: Mount): Promise<void> {
+    // First, so neither the reindex drain nor a close below waits on a download. The mount is not
+    // reused after this, so the abort is for good.
+    mount.downloads.abort();
+
     // Cancel the init-scheduled history prune so a fast teardown doesn't fire it against a
     // metadata.db the Home is about to close (the mount stops its own timers here — the same seam
     // as the upload/reindex queues below).
@@ -299,10 +310,11 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
 
     // Snapshot + clear + register a closing deferred for EVERY pathId in one synchronous
     // block — per-iteration registration would leave later pathIds raceable during the
-    // earlier closes' awaits.
+    // earlier closes' awaits. Each build is taken here too: one the abort rejects during an
+    // earlier close would otherwise re-run on its getter and wait on its own closing entry.
     const closes: {
         pathId: string;
-        getter: () => Promise<ManagedDatabase<SchemaType>>;
+        build: Promise<ManagedDatabase<SchemaType>>;
         closing: Promise<void>;
         settle: () => void;
     }[] = [];
@@ -312,12 +324,14 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
             settle = r;
         });
         mount.closingDocumentDbs.set(pathId, closing);
-        closes.push({ pathId, getter, closing, settle });
+        const build = getter();
+        build.catch(() => {}); // awaited in the loop below
+        closes.push({ pathId, build, closing, settle });
     }
     mount.documentDbs.clear();
-    for (const { pathId, getter, closing, settle } of closes) {
+    for (const { pathId, build, closing, settle } of closes) {
         try {
-            const db = await getter();
+            const db = await build;
             await db.close(); // isRemote: onClose-time sync stages + enqueues the final state
         } catch (err) {
             console.error(`[Mount] closeAllDatabases close failed for ${pathId}:`, err);
@@ -331,15 +345,22 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
     }
 
     if (mount.uploadQueue) {
-        // Process shutdown only: flush the queue (bounded by the global deadline) AFTER the
-        // final close-time enqueues, so healthy uploads finish before metadata.db closes.
-        // Idle teardown leaves the deadline null and skips the flush — leftover pending rows
-        // replay on the next mount open. Then stop the queue (cancels its retry timer).
+        // Process shutdown only: flush the queue AFTER the final close-time enqueues, so healthy
+        // uploads finish before metadata.db closes. The wait ends at the global deadline even with a
+        // PUT or a semaphore slot stalled; close() then stops the loop and a late PUT skips its ack,
+        // so leftover rows replay on boot. Idle teardown leaves the deadline null and skips the flush.
         const deadline = getShutdownDrainDeadline();
         if (deadline !== null) {
-            await mount.uploadQueue
-                .drain({ flushNow: true, deadline })
-                .catch((e) => console.error(`[Mount] shutdown drain failed:`, e));
+            let timer: ReturnType<typeof setTimeout> | undefined;
+            await Promise.race([
+                mount.uploadQueue
+                    .drain({ flushNow: true })
+                    .catch((e) => console.error(`[Mount] shutdown drain failed:`, e)),
+                new Promise<void>((resolve) => {
+                    timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
+                }),
+            ]);
+            clearTimeout(timer);
         }
         mount.uploadQueue.close();
     }

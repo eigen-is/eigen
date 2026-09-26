@@ -3,7 +3,8 @@
 > **TLDR**: Every document/chat/sheet `data.db` is a local temp file uploaded whole to S3 on sync.
 > Uploads are **write-behind** — a sync stages a frozen `VACUUM INTO` copy and enqueues it; a per-mount
 > `UploadQueue` drains it in the background with retry + backoff. A slow/failing S3 backend becomes
-> background lag, never a request hang or data loss. Crash-recovered temps re-sync, queued bytes survive
+> background lag for these uploads, never a request hang or data loss; reads and plain-file PUTs still wait on
+> S3 (reads under the storage deadline, see [STORAGE.md](STORAGE.md)). Crash-recovered temps re-sync, queued bytes survive
 > restarts. **S3 mounts only** — `local`/`local-key` write synchronously.
 
 Motivated by a Hetzner Object Storage incident where creating a chat synchronously PUT a fresh `data.db`
@@ -20,8 +21,8 @@ write → ManagedDatabase (WAL, local temp)
 
 A sync no longer awaits the PUT. It writes a **frozen, WAL-complete** `VACUUM INTO` copy to a per-mount
 `staging/` dir and records a durable row in the mount's `metadata.db` (`pending_uploads`). The
-`UploadQueue` uploads that copy in the background and clears the row on ack. So `create`, `close`, and the
-30 s auto-sync tick all return after the *local* write.
+`UploadQueue` uploads that copy in the background and clears the row on ack. So `close` and the 30 s
+auto-sync tick return after the *local* write; `create` first checks that the key is free, a HEAD under the storage deadline.
 
 ## Durability
 
@@ -43,7 +44,10 @@ A sync no longer awaits the PUT. It writes a **frozen, WAL-complete** `VACUUM IN
   and **refuses a missing or 0-byte working copy** in `openCold`, and `buildDocumentDb` (`lib/mount/document-db.ts`) adopts a
   surviving temp only if it's a valid, non-collapsed SQLite, its `-wal` counted toward the size (else it discards it through `Mount.cleanupTemp`, journals included, and re-fetches the authoritative object; a `-wal` left beside the re-fetched file would be replayed into it).
   **Invariant: an empty/invalid working copy can never overwrite a non-trivial
-  stored object — worst case a transient 503, never a wipe.**
+  stored object — worst case a transient 503, never a wipe.** A download or a staged-copy recovery
+  writes a `tmp/<uuid>` side file and renames it onto the working-copy path, so a process killed mid-GET
+  leaves no partial temp for the next open to adopt. A failed GET, including a missing object, answers 503
+  (the open sends no HEAD first).
 - **Freshest-first reads** — `Mount.readFile` serves a pending staged copy before the storage object, so
   reopen, copy/duplicate, and copy-across all read the newest bytes during an outage, never a stale/absent
   S3 object.
@@ -86,7 +90,7 @@ fix (Phase 1a) · §2 upload pipeline (Phase 1b) · §3 staging + consistent ver
 - **One `Semaphore` per S3 destination** (`endpoint+bucket`), not one per process (`lib/sync/index.ts` →
   `getUploadSemaphore`). A slow or down provider only backs up its own uploads and never blocks uploads to
   other destinations — important once team mounts and user-owned endpoints point at different buckets.
-  Each PUT is raced against a **~120 s client-side ceiling** (`S3Storage` can't abort); a timeout counts as
+  Each queued PUT is raced against a **~120 s client-side ceiling** (`S3Storage` can't abort); a timeout counts as
   a failure, so backoff takes over instead of a black-holed request parking the drain and its semaphore.
 
 - **Orphan repair.** A timed-out request may still land server-side later, so the queue tracks it as an
@@ -95,7 +99,7 @@ fix (Phase 1a) · §2 upload pipeline (Phase 1b) · §3 staging + consistent ver
   landing would regress the object **permanently if no further sync occurs**. A cancel re-issues the object
   delete on settlement, so invariant 7 holds through timeouts whichever of cancel and timeout comes first.
   Residual: an orphan whose fully-transmitted body the server commits after process death or queue teardown
-  lands unrepaired (logged when detectable; bucket versioning is the recovery).
+  lands unrepaired, with no log line (bucket versioning is the recovery).
 
 - **Commit order is distrusted.** An ack whose orphans all settled while its own PUT was in flight re-PUTs
   immediately. A staged copy of a database that fails the SQLite magic check (`isSqliteFile`) is dropped
@@ -112,8 +116,9 @@ fix (Phase 1a) · §2 upload pipeline (Phase 1b) · §3 staging + consistent ver
 
 - **Idle teardown** — the queue stops; leftover pending rows + staged copies replay on the next open.
 - **Process shutdown** — `server.ts` sets a deadline before `shutdownAllHomes`; each mount flushes its queue
-  (bounded by `SHUTDOWN_DRAIN_BUDGET_MS`) after the final close-time enqueues, then closes. Anything
-  undrained replays on boot.
+  after the final close-time enqueues and stops waiting at the deadline (`SHUTDOWN_DRAIN_BUDGET_MS`), even
+  with a PUT or a destination semaphore slot stalled, then closes the queue: no PUT starts after that, and
+  one still in flight leaves its row. Anything undrained replays on boot.
 
 ## Scope
 
@@ -134,7 +139,8 @@ temp-copy backend.
 ## Ops
 
 - **`stop_grace_period: 30s`** on the `eigen-api` service (`docker-compose.yml`) so the shutdown drain
-  (`SHUTDOWN_DRAIN_BUDGET_MS = 20 s`) can finish before SIGKILL; undrained uploads replay on boot.
+  (`SHUTDOWN_DRAIN_BUDGET_MS = 20 s`) can finish before SIGKILL; undrained uploads replay on boot. The budget
+  starts after the transform runner closes and running backup jobs settle, so a stop during a backup job can still end in SIGKILL.
 - **Enable bucket versioning + a noncurrent-version expiry rule** on the S3 bucket. Versioning makes
   accidental overwrites recoverable; because the pipeline re-PUTs whole files, a lifecycle rule expires old
   versions so they don't accumulate forever. The admin app does both from the S3 config card ("Bucket safety" →

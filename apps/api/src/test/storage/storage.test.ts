@@ -101,9 +101,9 @@ describe('LocalStorage', () => {
         expect(p).toContain('data');
     });
 
-    test('delete returns false for missing file', async () => {
-        const deleted = await storage.delete('nonexistent');
-        expect(deleted).toBe(false);
+    // Same contract as S3Storage: true once the key is gone, false only for a failed call.
+    test('delete returns true for a missing file', async () => {
+        expect(await storage.delete('nonexistent')).toBe(true);
     });
 
     test('size returns correct value', async () => {

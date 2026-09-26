@@ -139,10 +139,10 @@ export async function runFileTransformToText(
     documentTransformRunner.assertAdmissible(priority);
 
     const captureStart = performance.now();
-    const file = await mount.readFile(drivePath.id);
-    if (!file) return null;
+    const bytes = await mount.readBytes(drivePath.id);
+    if (!bytes) return null;
 
-    return runBytesTransformToText(job, await file.arrayBuffer(), {
+    return runBytesTransformToText(job, bytes, {
         ...opts,
         priority,
         captureMs: performance.now() - captureStart,

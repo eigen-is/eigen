@@ -6,7 +6,7 @@ import { type DrivePathType, isCollabType, isDocumentType } from '@workspace/lib
 import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import { CHAT_ROOM_DB_CONFIG } from '../chat/db-config';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
-import type { DatabaseConfig, SchemaType } from '../core';
+import { ApiError, type DatabaseConfig, type SchemaType } from '../core';
 import { buildStorageKey, isUsableName } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
@@ -219,9 +219,13 @@ const LOCAL_FAILURE_CODE = /^(SQLITE_[A-Z]+|ENOSPC|EACCES|EDQUOT|EROFS|EIO|ENOEN
 // Only that shape is rewritten, and it names the object it was reading; anything else is rethrown
 // untouched.
 function rethrowStorageFailure(mountId: string, storageKey: string, error: unknown): never {
-    const code = errnoOf(error);
-    if (!code || LOCAL_FAILURE_CODE.test(code)) throw error;
-    throw new Error(`mount ${mountId}: storage unreachable (${code}) reading ${storageKey}`);
+    // A failed storage call answers 503 with the provider's error or the local errno as its cause; a timeout has none.
+    const unavailable = error instanceof ApiError && error.status === 503;
+    const failure = unavailable ? error.cause : error;
+    const code = errnoOf(failure);
+    if (code && LOCAL_FAILURE_CODE.test(code)) throw failure;
+    if (!code && !unavailable) throw error;
+    throw new Error(`mount ${mountId}: storage unreachable${code ? ` (${code})` : ''} reading ${storageKey}`);
 }
 
 // One mount's data tree in an archive: the entries written, how many of them are Eigen's own
@@ -238,7 +242,10 @@ export async function snapshotMountData(
     relPrefix: string,
     onProgress: SnapshotProgress,
 ): Promise<MountSnapshot> {
-    const rows = await mount.db.select(MOUNT_PATH_COLUMNS).from(paths).all();
+    const rows = await mount.db
+        .select({ ...MOUNT_PATH_COLUMNS, size: paths.size })
+        .from(paths)
+        .all();
     const byId = new Map(rows.map((row) => [row.id, row]));
 
     const fileRows = rows.filter((row) => row.type === 'file');
@@ -268,15 +275,29 @@ export async function snapshotMountData(
                 databases++;
             }
         } else {
-            // readKey is freshest-first (pending staged copy, then the stored object). Null means the
-            // row has no bytes yet (a touched file whose upload never landed); the archive mirrors
-            // that absence rather than inventing an empty object. Only the read is judged as a
-            // storage failure: the copy that follows writes to the archive folder, and a disk that
-            // fills up there is not the bucket being unreachable.
+            // readKey is freshest-first (pending staged copy, then the stored object). Null for a
+            // row with no bytes on record (a touched file) mirrors that absence; null for a row with
+            // a size is a lost object and fails the backup, unless the row was deleted or moved since
+            // the tree read. A disk that fills up in the archive folder keeps its own errno
+            // (LOCAL_FAILURE_CODE): it is not the bucket being unreachable.
             const file = await mount
                 .readKey(storageKey)
                 .catch((error: unknown) => rethrowStorageFailure(mount.id, storageKey, error));
-            if (file) entries.push(await captureFile(file, destPath, entryPath));
+            if (file) {
+                entries.push(
+                    await captureFile(file, destPath, entryPath).catch((error: unknown) =>
+                        rethrowStorageFailure(mount.id, storageKey, error),
+                    ),
+                );
+            } else if (
+                row.size &&
+                (await mount.getPath(row.id)) &&
+                (await mount.getStorageKey(row.id)) === storageKey
+            ) {
+                throw new Error(
+                    `mount ${mount.id}: ${relPath} has ${row.size} bytes on record but no object at ${storageKey}`,
+                );
+            }
         }
         onProgress('mount files', index + 1, fileRows.length);
     }

@@ -3,10 +3,11 @@ import * as fs from 'node:fs';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
 import { ApiError } from '../core';
-import { writeTempWithHash } from '../drive/streaming';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { markContainerContentDirty } from '../mount/search-index';
+import { writeTempWithHash } from '../storage';
+import { getShutdownDrainDeadline } from '../sync';
 import { type RetentionPolicy, selectSnapshotsToPrune } from './retention';
 import { formatSnapshotTimestamp } from './timestamp';
 import { VERSIONS_FOLDER_NAME } from './versions-folder';
@@ -98,6 +99,9 @@ async function takeSnapshot(
         ? await snapshotDataDbToVersionStaged(mount, dataDb, versions.id, snapshotName)
         : await mount.copyPath(dataDb.id, versions.id, snapshotName);
 
+    // Process shutdown skips the prune: a stalled DELETE would eat the drain budget, and the next snapshot prunes.
+    if (getShutdownDrainDeadline() !== null) return copy;
+
     // Prune. Exclude the just-written copy: retention keeps the newest per
     // hour bucket, and excluding the fresh one lets a second snapshot taken
     // within the same hour preserve the first until the hour rolls over.
@@ -174,9 +178,8 @@ export async function stageManagedDbCopy(
         cached.stageCopy(destPath);
         return true;
     }
-    const stored = mount.storage.read(storageKey);
-    if (!(await stored.exists())) return false;
-    await Bun.write(destPath, stored);
+    if (!(await mount.storage.exists(storageKey))) return false;
+    await writeTempWithHash(destPath, mount.storage.read(storageKey));
     return true;
 }
 

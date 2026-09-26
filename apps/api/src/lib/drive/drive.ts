@@ -49,7 +49,7 @@ import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
 import { validateName } from '../mount/helpers';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
-import type { StorageFile } from '../storage';
+import { type StorageFile, writeTempWithHash } from '../storage';
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, type Memberships } from '../user/';
 import { listVersions } from '../versioning/list';
@@ -83,7 +83,7 @@ import {
 } from './shared-with-me';
 import type * as sharedSchema from './sharedschema';
 import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
-import { streamFilesToTemp, writeTempWithHash } from './streaming';
+import { streamFilesToTemp } from './streaming';
 import { deletePath, permanentlyDelete, restorePath } from './trash';
 import { finalizeUpload, regenerateThumbnailAsync } from './upload';
 
@@ -409,7 +409,7 @@ export default class Drive {
         const streamed = await streamFilesToTemp(mount, request, maxSize);
         const uploaded: DrivePath[] = [];
 
-        for (const result of streamed) {
+        for (const [index, result] of streamed.entries()) {
             try {
                 uploaded.push(
                     await finalizeUpload(this, mount, {
@@ -423,7 +423,8 @@ export default class Drive {
                     }),
                 );
             } catch (e) {
-                await mount.cleanupTemp(result.tempId);
+                // This file's temp and every one streamed after it.
+                await Promise.all(streamed.slice(index).map((r) => mount.cleanupTemp(r.tempId)));
                 throw e;
             }
         }
@@ -1267,7 +1268,9 @@ export default class Drive {
         // Order matters: Yjs documents must be destructed before their underlying mount
         // databases are closed. Yjs may flush pending changes during destruct(), which
         // requires the database to still be open. This mirrors closeCollabDocument() which
-        // calls doc.destruct() then mount.closeDatabase().
+        // calls doc.destruct() then mount.closeDatabase(). A document still loading would hold
+        // destructAll on its download, so every mount's downloads abort first.
+        for (const mount of this.mounts.values()) mount.downloads.abort();
         await this.documents.destructAll();
 
         // Close remaining mount databases (chat rooms, plus any collab databases whose

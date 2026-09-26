@@ -45,6 +45,7 @@
     "iconv-lite": "^0.7.3",
     "immer": "^9.0.21",
     "isomorphic-dompurify": "^3.23.0",
+    "jsdom": "^29.1.1",
     "jszip": "^3.10.1",
     "lib0": "^0.2.117",
     "libmime": "^5.4.3",
@@ -64,8 +65,7 @@
     "@types/jsdom": "^28.0.3",
     "@types/markdown-it": "^14.2.0",
     "bun-types": "latest",
-    "drizzle-kit": "^0.31.10",
-    "jsdom": "^29.1.1"
+    "drizzle-kit": "^0.31.10"
   },
   "trustedDependencies": [],
   "module": "src/index.js",

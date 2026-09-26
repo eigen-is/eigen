@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { DriveContainerType, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
-import { writeTempWithHash } from '../drive/streaming';
 import { copyThumbnail } from '../shared/thumbnails';
+import { writeTempWithHash } from '../storage';
 import { isVersionsFolder } from '../versioning/versions-folder';
 import type { Mount } from './mount';
 import { markContentDirty } from './search-index';
@@ -57,8 +57,8 @@ export async function copyPath(
     const srcFile = await mount.readFile(srcPathId);
     if (!srcFile) throw new ApiError(404, 'Source file missing on storage');
     const tempId = randomUUID();
-    const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), srcFile);
     try {
+        const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), srcFile);
         const newId = await mount.createFileFromTemp(destParentId, name, src.mimeType, size, hash, tempId);
         // The media facts the upload path derives from the bytes travel with them, thumbnail or not.
         // The rest of details stays behind: originalName names the source's own downloads and

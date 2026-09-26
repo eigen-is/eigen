@@ -4,7 +4,7 @@ import type { BunFile } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
 import { isVideoCandidate } from '../preview/video-preview';
-import type { StorageFile } from '../storage';
+import { readStorageFile, type StorageFile } from '../storage';
 import type { ImageResult, WorkerInput, WorkerOutput } from './thumbnail-worker';
 
 // Each generateImagePreview spawns a Worker that loads sharp; export/media.ts fans out
@@ -49,7 +49,7 @@ export async function generateImagePreview(
         resolvedSource = source.name;
     } else {
         // S3File — download to buffer, transfer zero-copy to worker
-        resolvedSource = await source.arrayBuffer();
+        resolvedSource = await readStorageFile(source);
     }
 
     if (tmpDir) {

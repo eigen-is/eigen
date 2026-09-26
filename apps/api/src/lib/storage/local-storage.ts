@@ -23,22 +23,15 @@ export class LocalStorage implements StorageBackend {
         return Bun.file(this.resolve(key));
     }
 
-    readRange(key: string, start: number, end: number): BunFile {
-        return Bun.file(this.resolve(key)).slice(start, end);
-    }
-
     async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         return await Bun.write(this.resolve(key), data, { createPath: true });
     }
 
+    // true once the key is gone, a missing one included; false only for a failed call, as S3Storage.
     async delete(key: string): Promise<boolean> {
         try {
-            const file = this.read(key);
-            if (await file.exists()) {
-                await file.delete();
-                return true;
-            }
-            return false;
+            await fsPromises.rm(this.resolve(key), { force: true });
+            return true;
         } catch (error) {
             console.error(`Failed to delete file ${key}:`, error);
             return false;

@@ -44,38 +44,24 @@ shared `resolveWithinBase` guard (`apps/api/src/lib/core/path-utils.ts`). `S3Sto
 prevent escaping the configured prefix.
 
 **`StorageFile` type** (`types.ts`): `BunFile | S3File` — a lazy file reference. `read()` returns a `StorageFile`
-without reading data into memory. Callers stream or buffer as needed (e.g., `file.arrayBuffer()`,
-`new Response(file)`). This keeps large file serving zero-copy on local storage.
+without reading data into memory. Callers stream it (an `S3File` goes to a `Response` as `file.stream()`, never as itself)
+or read it whole through `readStorageFile` (`Mount.readBytes` for a file of a mount). This keeps large file serving zero-copy on local storage.
+
+**Deadlines** (`deadline.ts`): Bun's `S3Client` takes no timeout or signal, and gives up on a silent request only after about 360 s. Eigen's own bound is `STORAGE_TIMEOUT_MS` (30 s; `setStorageTimeoutMs` in tests). `S3Storage` races `exists` and `size` against it, and a timeout answers `ApiError(503)`; it races `delete` too, and a timeout returns `false` like any failed delete (a missing key or a missing bucket returns `true`). Every storage read the server consumes itself runs through the one stream loop, `consumeStream`: a read that delivers no byte for that long, or whose signal aborts, is cancelled, and that or any failed read answers 503, with the provider's error or the local errno as its `cause`. `writeTempWithHash` uses it for a `StorageFile` (downloads, copy, backup capture, version snapshots; a request body streamed through it has no such bound), `readStorageFile` for a body read whole into memory (thumbnails, import from Drive), `Mail.stageDriveAttachment` directly for a mail attachment from Drive, and `Mount.readBytes`, the freshest-first whole read of a file (previews, import, inline edit, transforms, content extraction), which passes the mount's `downloads` signal. `Mount.downloadKeyToTemp` streams into a `tmp/<uuid>` side file and renames it onto the working-copy path on success, maps any failure to 503, and takes the same signal. `closeAllDatabases` and `Drive.destruct` abort it, so no teardown waits on a download or an extraction read. Copy and version snapshots run without it, since a close-time snapshot runs after the abort, and a close during process shutdown skips the version prune, so a stalled DELETE cannot eat the drain budget (the next snapshot prunes). A file served to a client (`/download`, `/embed` in `serve-file.ts`) is the exception: its `file.stream()` goes straight into the Response, so a stalled body there is bounded only by the server's 200 s `idleTimeout`. It holds no lock and no Home while it waits.
 
 **`StorageBackend` interface** (`types.ts`):
 
 | Method      | Returns             | Notes                                        |
 |-------------|---------------------|----------------------------------------------|
-| `read`      | `StorageFile`       | Lazy reference (BunFile or S3File)           |
-| `readRange?`| `StorageFile`       | Optional — byte range `[start, end)` for ranged serving; the 416/206/200 response around it is the shared `rangeResponse` (`lib/core/http.ts`) |
+| `read`      | `StorageFile`       | Lazy reference (BunFile or S3File); `.slice(start, end)` is a ranged read (a Range GET on S3), which `Mount.readRange` serves inside the shared `rangeResponse` (`lib/core/http.ts`) |
 | `write`     | `Promise<number>`   | Accepts Buffer, Uint8Array, ArrayBuffer, BunFile |
-| `delete`    | `Promise<boolean>`  |                                               |
+| `delete`    | `Promise<boolean>`  | `true` once the key is gone, a missing key included; `false` only when the call failed |
 | `exists`    | `Promise<boolean>`  |                                               |
 | `size`      | `Promise<number \| null>` |                                         |
 | `getPath?`  | `string`            | Local backends only — absolute filesystem path |
 | `mkdir?`    | `Promise<void>`     | LocalStorage only                            |
 | `rename?`   | `Promise<void>`     | LocalStorage only                            |
 | `deleteDir?`| `Promise<boolean>`  | LocalStorage only                            |
-
-### Storage fault injection (dev only)
-
-`EIGEN_STORAGE_FAULT` (`apps/api/src/lib/storage/fault-storage.ts`) wraps every mount's backend with a delegating one that injects a single fault, so create/open behavior can be verified against degraded storage without a real outage.
-
-| Value | Effect |
-|-------|--------|
-| `exists-throw` | every `exists()` rejects with `ApiError(503, 'storage unavailable')` — the shape `mount/document-db.ts` raises for an unreachable object |
-| `exists-delay=<ms>` | every `exists()` resolves after `<ms>` |
-
-`read()`/`readRange()` return lazy handles, so the GET itself happens outside the backend and can't be delayed there. The wrapper returns the backend unchanged when the variable is unset, and it stays inert in production (`PRODUCTION=1` / `NODE_ENV=production`) regardless of what the variable says.
-
-```bash
-EIGEN_STORAGE_FAULT=exists-delay=45000 bun --filter '*' dev
-```
 
 **LocalFilesystem** (`apps/api/src/lib/core/local-filesystem.ts`): Separate class for Mail, Contacts and Calendar,
 with the fs methods those domains need — `list`, `readdir`, `stat`, `dirSize`, `dirExists`, `watch`, and the

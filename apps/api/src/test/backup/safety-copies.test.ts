@@ -5,6 +5,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { auth } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
+import { withBackupJobSlot } from '../../lib/backup/jobs';
 import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
 import { restoreHome, restoreSafetyCopy } from '../../lib/backup/restore';
 import { deleteSafetyCopy, listSafetyCopies } from '../../lib/backup/safety-copy';
@@ -12,11 +13,16 @@ import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getHome } from '../../lib/home/get-home';
 import * as mountHelpers from '../../lib/mount/helpers';
 import type { Mount } from '../../lib/mount/mount';
+import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
+import { FakeS3Server } from '../fake-s3-server';
 import {
     createHomeFaultMount,
     registerFaultMount,
+    SETTLE_BOUND_MS,
+    SHRUNK_STORAGE_TIMEOUT_MS,
     settleContainer,
+    settlesWithin,
     unregisterFaultMount,
 } from '../fault-storage-helpers';
 import {
@@ -261,6 +267,31 @@ describe('Backup safety copies of an s3 home', () => {
             for (const key of objectKeysAfter) expect(await bytesInBucket(mount, key)).not.toBeNull();
         } finally {
             spy.mockRestore();
+        }
+    });
+
+    // The delete stops at the first key the storage deadline gives up on.
+    test('a delete against a bucket that never answers gives the home slot back', async () => {
+        const [copy] = safetyCopies(userId);
+        const copyDir = join(TEST_DATA_DIR, 'home', copy);
+        const fake = new FakeS3Server(new LocalStorage(join(BACKING, MOUNT_ID)));
+        const s3Config = await fake.start();
+        for (const key of keysAfter) fake.faults.set(key, 'stall');
+        writeFileSync(
+            join(copyDir, 'settings.json'),
+            JSON.stringify({ mounts: { [MOUNT_ID]: { storageType: 's3', enabled: true, s3Config } } }),
+        );
+        setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
+        const deleting = withBackupJobSlot(userId, () => deleteSafetyCopy(copyDir, homeDir)).catch(() => {});
+        try {
+            expect(await settlesWithin([deleting], SETTLE_BOUND_MS)).toBe(true);
+            expect(existsSync(copyDir)).toBe(true);
+            expect(fake.heldCount + fake.abandoned).toBe(1);
+        } finally {
+            setStorageTimeoutMs(STORAGE_TIMEOUT_MS);
+            // Never heal: an answered DELETE would take the objects the next test needs.
+            await fake.stop();
+            await deleting;
         }
     });
 

@@ -59,8 +59,8 @@ export async function extractText(mount: Mount, path: DrivePath): Promise<string
     if (containerMime === DRIVE_MIME_CHAT) return readChatContent(mount, path, CONTENT_INDEX_MAX_BYTES);
     if (!isSearchableTextFile(path.mimeType, path.name)) return '';
     if (isVCardFile(path.mimeType, path.name)) return extractVCardText(mount, path);
-    const file = await mount.readRange(path.id, 0, CONTENT_INDEX_MAX_BYTES);
-    return file ? await file.text() : '';
+    const bytes = await mount.readBytes(path.id, CONTENT_INDEX_MAX_BYTES);
+    return bytes ? Buffer.from(bytes).toString() : '';
 }
 
 // A .vcf indexes by the contacts it holds: its raw body is mostly base64 photo, and a name folded across

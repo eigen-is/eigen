@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/restore-home, admin/backup-contents]
 order: 90
-updated: 2026-09-11
+updated: 2026-09-26
 ---
 
 You can make a backup of a single user or a single team from the admin panel. The backup is one archive file that holds everything in that account: files, mail, documents, and settings. It covers one user or one team at a time, not the whole server.
@@ -21,6 +21,8 @@ Only admins can do this. The **Backup** section lives inside a user's or a team'
 4. Click **Create backup**.
 
 The backup runs in the background, so you can keep working. The section shows its progress while it runs: first **Creating backup**, then **Verifying archive**, each with the current step and a progress bar. When it finishes, you see **Backup created** with the name of the new archive, and the archive appears in the list below.
+
+The backup stops if a file Eigen has on record is gone from its disk or bucket, for example because someone deleted it outside Eigen. The section then shows **Creating backup failed** and names the file. A document whose data is gone is left out of the backup instead.
 
 Each archive is one file named `home-<id>-<date>.tar.zst`. Its row shows the date and size, and a badge:
 
