@@ -20,6 +20,7 @@ import { basename, dirname, join, relative } from 'node:path';
 import type { parseArgs } from 'node:util';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
+import type { UserSettings } from '@workspace/lib/types/settings';
 import { BACKUP_STAMP_PATTERN, buildBackupStamp, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import type { Subprocess } from 'bun';
 import { COLLAB_EPOCH_FILE } from '../lib/collab/epoch';
@@ -143,6 +144,18 @@ async function refusal(): Promise<string | null> {
     }
     return null;
 }
+
+// Whether any home keeps a drive in a bucket, whose objects no snapshot holds.
+function holdsS3Mounts(): boolean {
+    for (const file of new Bun.Glob(`${DATA}/*/*/${PATHS.SETTINGS}`).scanSync()) {
+        const settings: UserSettings = JSON.parse(readFileSync(file, 'utf8'));
+        if (Object.values(settings.mounts ?? {}).some((mount) => mount.storageType === 's3')) return true;
+    }
+    return false;
+}
+
+const S3_NOT_IN_SNAPSHOT =
+    'Files in S3 buckets are not in a snapshot: they stay as the bucket holds them, and only its versioning keeps their history';
 
 // data/ under `root` as a light snapshot sees it: the paths it holds, every folder before what is in it.
 export function lightWalk(root = '.'): Held[] {
@@ -273,6 +286,7 @@ export async function snapshot(
     const size = formatFileSize(statSync(join(SNAPSHOTS, name)).size);
     const described = kind === 'light' ? 'light: databases and config' : 'full';
     console.log(glyphLine('ok', `Saved ${SNAPSHOTS}/${name} (${described}, ${size})`));
+    if (holdsS3Mounts()) console.log(glyphLine('warn', S3_NOT_IN_SNAPSHOT));
     if (flags['pre-update']) {
         mkdirSync(dirname(LAST_UPDATE), { recursive: true });
         writeFileSync(LAST_UPDATE, `${name}\n`);
@@ -494,4 +508,5 @@ export async function restore(
     );
     const aside = [dataAside, envAside].filter((file) => existsSync(file));
     if (aside.length) console.log(glyphLine('ok', `Kept aside: ${aside.join(', ')}`));
+    if (holdsS3Mounts()) console.log(glyphLine('warn', S3_NOT_IN_SNAPSHOT));
 }

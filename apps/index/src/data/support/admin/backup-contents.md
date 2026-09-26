@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/back-up-home, admin/restore-home]
 order: 92
-updated: 2026-09-24
+updated: 2026-09-26
 ---
 
 A backup made from the **Backup** section in Admin is a single archive of one user or one team. This page lists what goes into that archive, what stays out, how Eigen checks it, and where the panel's limits are. To make or restore a backup, see [Back up a user or team](/support/admin/back-up-home) and [Restore a user or team](/support/admin/restore-home).
@@ -84,5 +84,7 @@ Click **Verify** on any archive to run the checks again and update its badge.
 ## Whole-server backup
 
 The panel covers one user or team at a time. To back up the whole server, run `./eigen backup` in the install folder on the server. It stops Eigen, saves the whole data directory plus the production environment file as one snapshot in the `snapshots/` folder of the install folder, and starts Eigen again. `./eigen backup --light` saves only the databases and settings, leaving out files and mail, and has `light` in its name. Then it deletes all but the three newest snapshots of that kind, so light ones never push out the last full one. Eigen is down while the snapshot is written, and the snapshot is not verified. Only the owner of the install folder can read a snapshot. It leaves out mail still waiting to be sent, the web server's certificates (which the server gets again), the `backups/` folder with the archives this panel makes, and `docker-compose.override.yml`. `./eigen restore` checks a snapshot before it stops Eigen, puts it back, and keeps the data it replaces aside. A light snapshot puts back only the databases and settings, and leaves files and mail as they are.
+
+Files stored in an S3 bucket are not in a snapshot. It holds the list of those files, not the files themselves, so a restore brings the list back and leaves the bucket as it is now. A file changed since the snapshot shows its new content. To keep older copies of those files, turn on versioning for the bucket, as described in [Make an S3 bucket safe for Eigen](/support/admin/s3-bucket-safety). When you need a copy with the files in it, use the **Backup** panel, which downloads them.
 
 Use `./eigen backup` for disaster recovery of the entire server. Use the **Backup** panel when you want a verified copy of a single user or team, or a restore that does not take the server down.

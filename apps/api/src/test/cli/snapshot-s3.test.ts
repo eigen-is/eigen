@@ -17,6 +17,7 @@ const MOUNT_ID = 'snapshot-s3';
 const TAR_ENV = { COPYFILE_DISABLE: '1' };
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
+const S3_NOTE = 'Files in S3 buckets are not in a snapshot';
 
 const dirs: string[] = [];
 afterAll(() => {
@@ -31,6 +32,10 @@ function install(): Install {
     writeFileSync(join(dir, '.env.production'), 'DOMAIN=eigen.example.org\n', { mode: 0o600 });
     const homeDir = join(dir, 'data/home', OWNER);
     mkdirSync(homeDir, { recursive: true });
+    writeFileSync(
+        join(homeDir, 'settings.json'),
+        JSON.stringify({ mounts: { [MOUNT_ID]: createS3MountConfig(MOUNT_ID) } }),
+    );
     mkdirSync(join(dir, 'snapshots'), { mode: 0o700 });
     return { dir, homeDir, bucket: join(dir, 'bucket') };
 }
@@ -63,6 +68,7 @@ async function start({ homeDir, bucket }: Install): Promise<Running> {
 async function snapshot(dir: string, ...args: string[]): Promise<string> {
     const result = await runCli(['snapshot', ...args], { cwd: dir, env: TAR_ENV });
     expect(result.code).toBe(0);
+    expect(result.stdout).toContain(S3_NOTE);
     const name = /snapshots\/(\S+)/.exec(result.stdout)?.[1];
     if (!name) throw new Error(`no snapshot named in: ${result.stdout}`);
     return name;
@@ -71,6 +77,7 @@ async function snapshot(dir: string, ...args: string[]): Promise<string> {
 async function restore(dir: string, name: string): Promise<void> {
     const result = await runCli(['restore', name, '--yes'], { cwd: dir, env: TAR_ENV });
     expect(result.code).toBe(0);
+    expect(result.stdout).toContain(S3_NOTE);
 }
 
 // A document database as the upload queue stages it: SQLite, holding one marker row.

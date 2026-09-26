@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
@@ -321,8 +321,7 @@ describe('Backup freshest-first on an s3 mount', () => {
         await staleMount.deletePath(containerId);
     });
 
-    // Gap BK-3: an object gone from the bucket reads as a row with no bytes yet, so the backup verifies without it.
-    test.failing('a plain file whose object is gone from the bucket fails the backup', async () => {
+    test('a plain file whose object is gone from the bucket fails the backup', async () => {
         const rootId = (await staleMount.getRootFolder())!.id;
         const fileId = await staleMount.createFile(
             rootId,
@@ -331,11 +330,45 @@ describe('Backup freshest-first on an s3 mount', () => {
             TEST_PNG_BYTES.byteLength,
             TEST_PNG_BYTES,
         );
+        const storageKey = await staleMount.getStorageKey(fileId);
         try {
-            await staleFault.inner.delete(await staleMount.getStorageKey(fileId));
-            await expect(snapshot()).rejects.toThrow(STALE_MOUNT_ID);
+            await staleFault.inner.delete(storageKey);
+            await expect(snapshot()).rejects.toThrow(
+                `mount ${STALE_MOUNT_ID}: lost.png has ${TEST_PNG_BYTES.byteLength} bytes on record but no object at ${storageKey}`,
+            );
         } finally {
             await staleMount.deletePath(fileId);
+        }
+    });
+
+    test('a file with no object passes when it has no bytes on record or is deleted mid-walk', async () => {
+        const rootId = (await staleMount.getRootFolder())!.id;
+        const touchedId = await staleMount.touchFile(rootId, 'touched.txt', 'text/plain');
+        const deletedId = await staleMount.createFile(
+            rootId,
+            'deleted.png',
+            'image/png',
+            TEST_PNG_BYTES.byteLength,
+            TEST_PNG_BYTES,
+        );
+        const deletedKey = await staleMount.getStorageKey(deletedId);
+        await staleFault.inner.delete(deletedKey);
+        // The row goes after the tree read and before the backup judges the missing object.
+        const readKey = staleMount.readKey.bind(staleMount);
+        const spy = spyOn(staleMount, 'readKey').mockImplementation(async (key) => {
+            const file = await readKey(key);
+            if (key === deletedKey) await staleMount.deletePath(deletedId);
+            return file;
+        });
+        try {
+            const { manifest } = await snapshot();
+            const paths = manifest.entries.map((e) => e.path);
+            expect(paths).not.toContain(`home/mounts/${STALE_MOUNT_ID}/data/touched.txt`);
+            expect(paths).not.toContain(`home/mounts/${STALE_MOUNT_ID}/data/deleted.png`);
+        } finally {
+            spy.mockRestore();
+            await staleMount.deletePath(touchedId);
+            await staleMount.deletePath(deletedId);
         }
     });
 
