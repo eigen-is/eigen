@@ -2,10 +2,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BunFile } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
-import { readStorageFile } from '../drive/streaming';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
 import { isVideoCandidate } from '../preview/video-preview';
-import type { StorageFile } from '../storage';
+import { readStorageFile, type StorageFile } from '../storage';
 import type { ImageResult, WorkerInput, WorkerOutput } from './thumbnail-worker';
 
 // Each generateImagePreview spawns a Worker that loads sharp; export/media.ts fans out

@@ -1,13 +1,14 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { S3Config } from '@workspace/lib/types';
+import type { MountConfig, S3Config } from '@workspace/lib/types';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig } from '../../lib/core';
 import { getHome } from '../../lib/home';
 import type { Mount } from '../../lib/mount/mount';
+import { extractText } from '../../lib/search/extract-text';
+import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
-import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/s3-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { FakeS3Server } from '../fake-s3-server';
 import {
@@ -16,6 +17,7 @@ import {
     FaultMount,
     provisionDoc,
     registerFaultMount,
+    SETTLE_BOUND_MS,
     SHRUNK_STORAGE_TIMEOUT_MS,
     STALL_BOUND_MS,
     settleContainer,
@@ -52,8 +54,17 @@ async function storedDoc(mount: Mount, rows = 1): Promise<{ containerId: string;
     return { ...doc, dataKey: await mount.getStorageKey(doc.dataDbId) };
 }
 
+// A plain file already in the bucket, big enough that a stall-body GET holds after its first half.
+async function storedFile(name: string): Promise<{ fileId: string; key: string }> {
+    const rootId = (await mount.getRootFolder())!.id;
+    const bytes = new Uint8Array(256 * 1024).fill(7);
+    const fileId = await mount.createFile(rootId, name, 'application/octet-stream', bytes.length, bytes);
+    return { fileId, key: await mount.getStorageKey(fileId) };
+}
+
 let fake: FakeS3Server;
 let s3Config: S3Config;
+let mountConfig: MountConfig;
 let mount: Mount;
 
 beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));
@@ -61,12 +72,8 @@ beforeEach(async () => {
     const id = `slow-${Math.random().toString(36).slice(2)}`;
     fake = new FakeS3Server(new LocalStorage(join(TEST_DIR, `bucket-${id}`)));
     s3Config = await fake.start();
-    mount = new FaultMount(
-        OWNER_ID,
-        TEST_DIR,
-        { ...createS3MountConfig(id), s3Config },
-        createGetLocalDatabase(TEST_DIR),
-    );
+    mountConfig = { ...createS3MountConfig(id), s3Config };
+    mount = new FaultMount(OWNER_ID, TEST_DIR, mountConfig, createGetLocalDatabase(TEST_DIR));
     await mount.init();
 });
 afterEach(async () => {
@@ -132,6 +139,36 @@ describe('Stalled S3 reads', () => {
             fake.heal();
             await open;
         }
+    });
+});
+
+describe('Whole-body reads', () => {
+    test('a whole-body read whose GET stalls mid-body answers 503', async () => {
+        setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
+        const { fileId, key } = await storedFile('e.bin');
+        fake.faults.set(key, 'stall-body');
+        const failure = mount.readBytes(fileId).catch((error: unknown) => error);
+        expect(await settlesWithin([failure], STALL_BOUND_MS)).toBe(true);
+        expect(await failure).toMatchObject({ status: 503 });
+    });
+
+    test('a whole-body read whose GET fails answers 503, not the raw S3 error', async () => {
+        const { fileId, key } = await storedFile('f.bin');
+        fake.faults.set(key, 'fail-get');
+        await expect(mount.readBytes(fileId)).rejects.toMatchObject({ status: 503 });
+    });
+
+    test('mount teardown does not wait on a text extraction whose GET stalls', async () => {
+        setStorageTimeoutMs(3_000);
+        const rootId = (await mount.getRootFolder())!.id;
+        const fileId = await mount.createFile(rootId, 'notes.txt', 'text/plain', 5, new TextEncoder().encode('notes'));
+        fake.faults.set(await mount.getStorageKey(fileId), 'stall-body');
+        // The same mount restarted with an extractor: its reindex queue replays the dirty row at init.
+        await mount.closeAllDatabases();
+        mount = new FaultMount(OWNER_ID, TEST_DIR, mountConfig, createGetLocalDatabase(TEST_DIR), extractText);
+        await mount.init();
+        await waitFor(() => fake.heldCount > 0);
+        expect(await settlesWithin([mount.closeAllDatabases()], SETTLE_BOUND_MS)).toBe(true);
     });
 });
 

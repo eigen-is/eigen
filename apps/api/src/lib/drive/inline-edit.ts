@@ -3,7 +3,6 @@ import { DRIVE_TYPE_FILE } from '@workspace/lib/types';
 import type { DrivePath, FileEditorContent } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
 import type { Mount } from '../mount';
-import { readStorageFile } from './streaming';
 
 export const MAX_INLINE_EDIT_SIZE = 5 * 1024 * 1024;
 
@@ -27,12 +26,12 @@ export async function getEditableContent(mount: Mount, path: DrivePath): Promise
     if (!editMode) throw new ApiError(400, 'File type not supported for inline editing');
     if (path.size > MAX_INLINE_EDIT_SIZE) throw new ApiError(413, 'File too large for inline editing');
 
-    const file = await mount.readFile(path.id);
-    if (!file) throw new ApiError(404, 'File content not found');
+    const bytes = await mount.readBytes(path.id);
+    if (!bytes) throw new ApiError(404, 'File content not found');
 
     let content: string;
     try {
-        content = new TextDecoder('utf-8', { fatal: true }).decode(await readStorageFile(file));
+        content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
     } catch {
         throw new ApiError(400, 'File contains invalid UTF-8 encoding');
     }

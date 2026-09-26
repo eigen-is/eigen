@@ -18,7 +18,6 @@ import {
 import { runImportToDocumentUpdate, runImportToSnapshotJson } from '../document/transform/run-transform';
 import { documentTransformRunner } from '../document/transform/runner';
 import type { DriveLike } from '../drive/get-drive';
-import { readStorageFile } from '../drive/streaming';
 import type { Mount } from '../mount';
 import type { User } from '../user';
 
@@ -80,9 +79,9 @@ export async function convertToDocument(
     // is the costliest preparation here. run() rechecks authoritatively.
     documentTransformRunner.assertAdmissible('foreground');
 
-    const file = await mount.readFile(sourcePath.id);
-    if (!file) throw new ApiError(404, 'File not found');
-    const buffer = Buffer.from(await readStorageFile(file));
+    const bytes = await mount.readBytes(sourcePath.id);
+    if (!bytes) throw new ApiError(404, 'File not found');
+    const buffer = Buffer.from(bytes);
 
     if (targetType === 'eigensheets') {
         if (!sourcePath.name.toLowerCase().endsWith('.xlsx')) {

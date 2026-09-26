@@ -308,6 +308,9 @@ export async function waitFor(cond: () => boolean | Promise<boolean>, timeoutMs 
 // Past this, a call on storage that stopped answering counts as wedged.
 export const STALL_BOUND_MS = 250;
 
+// The same for a settle of several steps (a mount teardown, a backup job and its cleanup) on a slow CI runner.
+export const SETTLE_BOUND_MS = 1_500;
+
 // The storage deadline a test shrinks to (setStorageTimeoutMs), so it fires inside STALL_BOUND_MS.
 export const SHRUNK_STORAGE_TIMEOUT_MS = 100;
 

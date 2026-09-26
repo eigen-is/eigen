@@ -11,8 +11,8 @@ import type { DatabaseConfig } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
+import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
-import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/s3-storage';
 import { FakeS3Server } from '../fake-s3-server';
 import {
     countBackingRows,
@@ -22,8 +22,8 @@ import {
     type FaultStorage,
     provisionDoc,
     registerFaultMount,
+    SETTLE_BOUND_MS,
     SHRUNK_STORAGE_TIMEOUT_MS,
-    STALL_BOUND_MS,
     settleContainer,
     settlesWithin,
     unregisterFaultMount,
@@ -446,7 +446,7 @@ describe('Backup job on an s3 mount whose bucket stalls', () => {
                 runHomeBackup(home, job, onProgress),
             ).id;
             await waitFor(() => fake.gets.has(storageKey), 10_000);
-            expect(await settlesWithin([drainBackupJobs()], STALL_BOUND_MS)).toBe(true);
+            expect(await settlesWithin([drainBackupJobs()], SETTLE_BOUND_MS)).toBe(true);
             expect(getBackupJob(jobId)?.state).toBe('failed');
         } finally {
             setStorageTimeoutMs(STORAGE_TIMEOUT_MS);

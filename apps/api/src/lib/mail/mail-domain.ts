@@ -27,7 +27,7 @@ import { renderAttachmentLinksText, renderAttachmentPills } from '../core/mail-t
 import { type OutboundMail, sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
-import type { StorageFile } from '../storage';
+import { consumeStream, getStorageTimeoutMs, type StorageFile } from '../storage';
 import { grantAccessForReferences } from './access-grants';
 import { verifyImipSender } from './imip-auth';
 import { type PartHeaders, parseMail, splitMime } from './mail-parser';
@@ -523,23 +523,13 @@ export class Mail {
         contentType: string,
         maxSize: number,
     ): Promise<DraftAttachmentUpload> {
-        // The route already checked the drive size, so this guard is only for a source that grows mid-read.
+        // The route already checked the drive size, so maxBytes is only for a source that grows mid-read.
         return this.store.persistDraftTemp(
-            async (writer) => {
-                let size = 0;
-                const reader = source.stream().getReader();
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    size += value.byteLength;
-                    if (size > maxSize) {
-                        const limitMB = Math.floor(maxSize / (1024 * 1024));
-                        throw new ApiError(413, `Attachment exceeds ${limitMB}MB limit`);
-                    }
-                    writer.write(value);
-                }
-                return size;
-            },
+            (writer) =>
+                consumeStream(source.stream(), (chunk) => writer.write(chunk), {
+                    idleMs: getStorageTimeoutMs(),
+                    maxBytes: maxSize,
+                }),
             filename,
             contentType,
         );

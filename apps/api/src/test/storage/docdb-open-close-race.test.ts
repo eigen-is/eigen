@@ -8,7 +8,7 @@ import { ApiError, type DatabaseConfig, ManagedDatabase } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
-import { countRowsInFile, createGetLocalDatabase, STALL_BOUND_MS, settlesWithin } from '../fault-storage-helpers';
+import { countRowsInFile, createGetLocalDatabase, SETTLE_BOUND_MS, settlesWithin } from '../fault-storage-helpers';
 import { createTestMountConfig } from '../mount-test-helpers';
 
 // Regression net for the open/close serialization in docs/SYNC.md: an openDatabase landing in
@@ -403,7 +403,7 @@ describe('an open still loading from storage', () => {
         try {
             await gate.parked;
             teardown = mount.closeAllDatabases();
-            expect(await settlesWithin([teardown], STALL_BOUND_MS)).toBe(true);
+            expect(await settlesWithin([teardown], SETTLE_BOUND_MS)).toBe(true);
         } finally {
             gate.release();
             await teardown;
@@ -422,7 +422,7 @@ describe('an open still loading from storage', () => {
         const failing = mount.openDatabase(docConfig, dataDbId).catch(() => null);
         await gate.parked;
         try {
-            expect(await settlesWithin([mount.closeAllDatabases()], STALL_BOUND_MS)).toBe(true);
+            expect(await settlesWithin([mount.closeAllDatabases()], SETTLE_BOUND_MS)).toBe(true);
         } finally {
             gate.release();
             await failing;

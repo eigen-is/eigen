@@ -12,7 +12,7 @@ import {
     createFaultMount,
     type FaultStorage,
     provisionDoc,
-    STALL_BOUND_MS,
+    SETTLE_BOUND_MS,
     settlesWithin,
     waitFor,
 } from '../fault-storage-helpers';
@@ -78,7 +78,7 @@ describe('shutdown drain with a stalled PUT', () => {
         setShutdownDrainDeadline(Date.now() + 50);
         const closing = mount.closeAllDatabases();
         try {
-            expect(await settlesWithin([closing], STALL_BOUND_MS)).toBe(true);
+            expect(await settlesWithin([closing], SETTLE_BOUND_MS)).toBe(true);
         } finally {
             await fault.landAllRemaining();
             await closing;
@@ -111,7 +111,7 @@ describe('shutdown drain with a stalled PUT', () => {
         setShutdownDrainDeadline(Date.now() + 50);
         const closing = mount.closeAllDatabases();
         try {
-            expect(await settlesWithin([closing], STALL_BOUND_MS)).toBe(true);
+            expect(await settlesWithin([closing], SETTLE_BOUND_MS)).toBe(true);
         } finally {
             for (const holder of holders) await holder.landAllRemaining();
             await closing;

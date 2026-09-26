@@ -13,14 +13,14 @@ import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getHome } from '../../lib/home/get-home';
 import * as mountHelpers from '../../lib/mount/helpers';
 import type { Mount } from '../../lib/mount/mount';
+import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
-import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/s3-storage';
 import { FakeS3Server } from '../fake-s3-server';
 import {
     createHomeFaultMount,
     registerFaultMount,
+    SETTLE_BOUND_MS,
     SHRUNK_STORAGE_TIMEOUT_MS,
-    STALL_BOUND_MS,
     settleContainer,
     settlesWithin,
     unregisterFaultMount,
@@ -270,7 +270,7 @@ describe('Backup safety copies of an s3 home', () => {
         }
     });
 
-    // The delete takes one key at a time, each bounded by the storage deadline.
+    // The delete stops at the first key the storage deadline gives up on.
     test('a delete against a bucket that never answers gives the home slot back', async () => {
         const [copy] = safetyCopies(userId);
         const copyDir = join(TEST_DATA_DIR, 'home', copy);
@@ -284,7 +284,7 @@ describe('Backup safety copies of an s3 home', () => {
         setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
         const deleting = withBackupJobSlot(userId, () => deleteSafetyCopy(copyDir, homeDir)).catch(() => {});
         try {
-            expect(await settlesWithin([deleting], keysAfter.length * STALL_BOUND_MS)).toBe(true);
+            expect(await settlesWithin([deleting], SETTLE_BOUND_MS)).toBe(true);
             expect(existsSync(copyDir)).toBe(true);
         } finally {
             setStorageTimeoutMs(STORAGE_TIMEOUT_MS);

@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
@@ -68,6 +68,7 @@ async function start({ homeDir, bucket }: Install): Promise<Running> {
 async function snapshot(dir: string, ...args: string[]): Promise<string> {
     const result = await runCli(['snapshot', ...args], { cwd: dir, env: TAR_ENV });
     expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
     expect(result.stdout).toContain(S3_NOTE);
     const name = /snapshots\/(\S+)/.exec(result.stdout)?.[1];
     if (!name) throw new Error(`no snapshot named in: ${result.stdout}`);
@@ -77,6 +78,7 @@ async function snapshot(dir: string, ...args: string[]): Promise<string> {
 async function restore(dir: string, name: string): Promise<void> {
     const result = await runCli(['restore', name, '--yes'], { cwd: dir, env: TAR_ENV });
     expect(result.code).toBe(0);
+    expect(result.stderr).toBe('');
     expect(result.stdout).toContain(S3_NOTE);
 }
 
@@ -130,6 +132,16 @@ describe('Whole-server snapshot of an s3 mount', () => {
         // Neither holds the object itself: it is in the bucket.
         expect(await members(await snapshot(target.dir))).toEqual(['metadata.db', 'staging/<staged copy>']);
         expect(await members(await snapshot(target.dir, '--light'))).toEqual(['metadata.db']);
+    });
+
+    test('a settings.json that does not parse neither fails a pre-update snapshot nor warns', async () => {
+        const target = install();
+        writeFileSync(join(target.homeDir, 'settings.json'), '{');
+        const result = await runCli(['snapshot', '--pre-update'], { cwd: target.dir, env: TAR_ENV });
+        expect(result.code).toBe(0);
+        expect(result.stderr).toBe('');
+        expect(result.stdout).not.toContain(S3_NOTE);
+        expect(existsSync(join(target.dir, '.eigen/last-update'))).toBe(true);
     });
 
     // Gap BK-2: the snapshot's staged uploads replay over the keys the kept-aside data/ still names.

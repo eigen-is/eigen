@@ -70,15 +70,7 @@ export async function readBoundedBodyBytes(request: Request, maxBytes: number): 
     const len = request.headers.get('Content-Length');
     if (len !== null && Number(len) > maxBytes) return null;
     if (!request.body) return new Uint8Array();
-    return readBoundedStreamBytes(request.body, maxBytes);
-}
-
-// Also over a stored file, whose recorded size may be stale; null means the cap was exceeded and the stream is cancelled.
-export async function readBoundedStreamBytes(
-    stream: ReadableStream<Uint8Array>,
-    maxBytes: number,
-): Promise<Uint8Array | null> {
-    const reader = stream.getReader();
+    const reader = request.body.getReader();
     const chunks: Uint8Array[] = [];
     let total = 0;
     while (true) {
@@ -91,13 +83,7 @@ export async function readBoundedStreamBytes(
         }
         chunks.push(value);
     }
-    const merged = new Uint8Array(total);
-    let offset = 0;
-    for (const c of chunks) {
-        merged.set(c, offset);
-        offset += c.byteLength;
-    }
-    return merged;
+    return new Uint8Array(Bun.concatArrayBuffers(chunks));
 }
 
 // Lenient UTF-8 decode, which is what an XML body wants; a caller holding a user's file decodes it itself.

@@ -1,7 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError } from '../../core/errors';
-import { readStorageFile } from '../../drive/streaming';
 import type { Mount } from '../../mount';
 import { captureCollabSource } from './collab-source';
 import type {
@@ -140,10 +139,10 @@ export async function runFileTransformToText(
     documentTransformRunner.assertAdmissible(priority);
 
     const captureStart = performance.now();
-    const file = await mount.readFile(drivePath.id);
-    if (!file) return null;
+    const bytes = await mount.readBytes(drivePath.id);
+    if (!bytes) return null;
 
-    return runBytesTransformToText(job, await readStorageFile(file), {
+    return runBytesTransformToText(job, bytes, {
         ...opts,
         priority,
         captureMs: performance.now() - captureStart,

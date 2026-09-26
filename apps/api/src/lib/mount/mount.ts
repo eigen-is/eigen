@@ -21,7 +21,7 @@ import { ApiError, type DatabaseConfig, type ManagedDatabase, PATHS, type Schema
 import { FileHistory } from '../drive/history';
 import { writeTempWithHash } from '../drive/streaming';
 import { deleteThumbnail } from '../shared/thumbnails';
-import type { StorageBackend, StorageFile } from '../storage';
+import { readStorageFile, type StorageBackend, type StorageFile } from '../storage';
 import type { RetentionPolicy } from '../versioning/retention';
 import * as snapshot from '../versioning/snapshot';
 import { type ContentExtractor, ContentReindexQueue } from './content-reindex-queue';
@@ -88,8 +88,8 @@ export class Mount {
     // worker or row update outlives the mount's metadata.db.
     thumbnailJobs = new Set<Promise<void>>(); // internal — used by drive/upload.ts + mount/*.ts
 
-    // Aborted at teardown so no close or Home shutdown waits on a download. internal — used by
-    // mount/*.ts + drive/drive.ts
+    // Aborted at teardown so no close or Home shutdown waits on a download or an extraction read.
+    // internal — used by mount/*.ts + drive/drive.ts
     readonly downloads = new AbortController();
 
     public history!: FileHistory;
@@ -885,6 +885,12 @@ export class Mount {
         if (staged) return Bun.file(staged).slice(start, end);
         if (!(await this.storage.exists(storageKey))) return null;
         return this.storage.read(storageKey).slice(start, end);
+    }
+
+    // A file's bytes, the first `limit` with one, freshest-first; the teardown abort ends the read too.
+    async readBytes(pathId: string, limit?: number): Promise<ArrayBuffer | null> {
+        const file = limit === undefined ? await this.readFile(pathId) : await this.readRange(pathId, 0, limit);
+        return file ? readStorageFile(file, { signal: this.downloads.signal }) : null;
     }
 
     // Overwrites aren't handed mimeType/name like createFile — resolve the searchable gate from the row.

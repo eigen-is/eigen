@@ -4,6 +4,7 @@ import { escapeXml } from '@workspace/lib/html';
 import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
 import { type BunFile, S3Client, type S3File } from 'bun';
 import { ApiError } from '../core';
+import { withStorageDeadline } from './deadline';
 import type { S3Config, StorageBackend } from './types';
 
 export async function checkS3Connection(config: S3Config): Promise<S3CheckResult> {
@@ -237,19 +238,6 @@ function hmac(key: string | Buffer, data: string): Buffer {
     return createHmac('sha256', key).update(data).digest();
 }
 
-// Eigen's own bound on an S3 metadata call and on a storage read that stops delivering bytes: Bun's
-// S3Client gives up only after about 360 s of silence. A setter so tests can shrink it.
-export const STORAGE_TIMEOUT_MS = 30_000;
-let storageTimeoutMs = STORAGE_TIMEOUT_MS;
-
-export function setStorageTimeoutMs(ms: number): void {
-    storageTimeoutMs = ms;
-}
-
-export function getStorageTimeoutMs(): number {
-    return storageTimeoutMs;
-}
-
 export class S3Storage implements StorageBackend {
     private client: S3Client;
     private prefix: string;
@@ -293,6 +281,8 @@ export class S3Storage implements StorageBackend {
             await withStorageDeadline(this.read(key).delete());
             return true;
         } catch (error) {
+            // A bucket that is gone holds none of its keys.
+            if (error instanceof Error && 'code' in error && error.code === 'NoSuchBucket') return true;
             console.error(`Failed to delete S3 file ${key}:`, error);
             return false;
         }
@@ -318,15 +308,4 @@ export class S3Storage implements StorageBackend {
             return null;
         }
     }
-}
-
-// A request Bun's S3Client cannot abort keeps running in the background; only the caller stops waiting.
-function withStorageDeadline<T>(request: Promise<T>): Promise<T> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    return Promise.race([
-        request,
-        new Promise<never>((_, reject) => {
-            timer = setTimeout(() => reject(new ApiError(503, 'Storage unavailable')), storageTimeoutMs);
-        }),
-    ]).finally(() => clearTimeout(timer));
 }

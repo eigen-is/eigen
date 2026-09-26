@@ -145,11 +145,13 @@ async function refusal(): Promise<string | null> {
     return null;
 }
 
-// Whether any home keeps a drive in a bucket, whose objects no snapshot holds.
+// Whether any home keeps a drive in a bucket, whose objects no snapshot holds. A settings file that does not read is skipped.
 function holdsS3Mounts(): boolean {
     for (const file of new Bun.Glob(`${DATA}/*/*/${PATHS.SETTINGS}`).scanSync()) {
-        const settings: UserSettings = JSON.parse(readFileSync(file, 'utf8'));
-        if (Object.values(settings.mounts ?? {}).some((mount) => mount.storageType === 's3')) return true;
+        try {
+            const settings: UserSettings = JSON.parse(readFileSync(file, 'utf8'));
+            if (Object.values(settings.mounts ?? {}).some((mount) => mount.storageType === 's3')) return true;
+        } catch {}
     }
     return false;
 }
@@ -286,17 +288,17 @@ export async function snapshot(
     const size = formatFileSize(statSync(join(SNAPSHOTS, name)).size);
     const described = kind === 'light' ? 'light: databases and config' : 'full';
     console.log(glyphLine('ok', `Saved ${SNAPSHOTS}/${name} (${described}, ${size})`));
-    if (holdsS3Mounts()) console.log(glyphLine('warn', S3_NOT_IN_SNAPSHOT));
     if (flags['pre-update']) {
         mkdirSync(dirname(LAST_UPDATE), { recursive: true });
         writeFileSync(LAST_UPDATE, `${name}\n`);
         ownAs(LAST_UPDATE, owner);
-        return;
+    } else {
+        // After this one is written, so a failed snapshot never costs an older one.
+        const older = newestSnapshots(readdirSync(SNAPSHOTS)).filter(alike).slice(keep);
+        for (const file of older) rmSync(join(SNAPSHOTS, file));
+        if (older.length) console.log(glyphLine('ok', `Removed the older snapshots: ${older.join(', ')}`));
     }
-    // After this one is written, so a failed snapshot never costs an older one.
-    const older = newestSnapshots(readdirSync(SNAPSHOTS)).filter(alike).slice(keep);
-    for (const file of older) rmSync(join(SNAPSHOTS, file));
-    if (older.length) console.log(glyphLine('ok', `Removed the older snapshots: ${older.join(', ')}`));
+    if (holdsS3Mounts()) console.log(glyphLine('warn', S3_NOT_IN_SNAPSHOT));
 }
 
 // Every file of the light set here goes aside first, held by the snapshot or not: a database's -wal left beside the
