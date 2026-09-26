@@ -74,4 +74,4 @@ browser/fetch-generated `multipart/form-data` read from a web `ReadableStream` o
 ## Out of Scope
 
 - **Resumable uploads** (tus protocol) — can be layered on later.
-- **S3 multipart upload API** — needed for files > 5GB on S3 backends.
+- **S3 multipart upload API** of our own. Bun's `S3Client` already sends a body over 5 MiB as a multipart upload; an interrupted one stays in the bucket until the `AbortIncompleteMultipartUpload` rule that "Enable safe defaults" writes removes it.

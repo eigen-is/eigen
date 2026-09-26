@@ -10,8 +10,8 @@ export const CONTENT_REINDEX_CAP_SECONDS = 120;
 // container + text file dirty) flowing in steady batches instead of one giant query.
 const REINDEX_BATCH = 100;
 
-// Ceiling on awaiting the in-flight drain at close. The current extract does unbounded storage GETs
-// via the doc loaders, so a black-holed backend would otherwise park teardown forever — and
+// Ceiling on awaiting the in-flight drain at close. The extract's storage reads carry only an idle
+// deadline, so a trickling backend would otherwise park teardown indefinitely — and
 // idle-home eviction has no SIGKILL backstop (process shutdown does). Mirrors the upload queue's
 // per-PUT ceiling (UPLOAD_PUT_TIMEOUT_MS); generous so a genuinely slow extract still finishes.
 const REINDEX_CLOSE_TIMEOUT_MS = 120_000;

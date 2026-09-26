@@ -44,8 +44,8 @@ shared `resolveWithinBase` guard (`apps/api/src/lib/core/path-utils.ts`). `S3Sto
 prevent escaping the configured prefix.
 
 **`StorageFile` type** (`types.ts`): `BunFile | S3File` — a lazy file reference. `read()` returns a `StorageFile`
-without reading data into memory. Callers stream or buffer as needed (e.g., `file.arrayBuffer()`,
-`new Response(file)`). This keeps large file serving zero-copy on local storage.
+without reading data into memory. Callers stream it (an `S3File` goes to a `Response` as `file.stream()`, never as itself)
+or read it whole through `readStorageFile`. This keeps large file serving zero-copy on local storage.
 
 **Deadlines**: Bun's `S3Client` takes no timeout or signal, and gives up on a silent request only after about 360 s. `S3Storage` races `exists`, `size` and `delete` against the storage deadline (`STORAGE_TIMEOUT_MS`, 30 s; `setStorageTimeoutMs` in tests), and a timeout answers `ApiError(503)`. A `StorageFile` streamed through `writeTempWithHash` (downloads, copy, backup capture, version snapshots) is cancelled and answers 503 once it delivers no byte for that long; a request body streamed through it has no such bound. A body read whole into memory (previews, thumbnails, import, inline edit, content extraction) goes through `readStorageFile` (`lib/drive/streaming.ts`), under the same idle deadline. `Mount.downloadKeyToTemp` streams into a `tmp/<uuid>` side file and renames it onto the working-copy path on success, maps any failure to 503, and takes the mount's `downloads` signal, which `closeAllDatabases` and `Drive.destruct` abort so no teardown waits on a download.
 
