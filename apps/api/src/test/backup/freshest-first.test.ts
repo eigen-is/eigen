@@ -1,23 +1,31 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { buildHomeFolderName } from '../../lib/backup/paths';
+import { drainBackupJobs, getBackupJob, runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
+import { buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import type { DatabaseConfig } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
+import { LocalStorage } from '../../lib/storage/local-storage';
+import { FakeS3Server } from '../fake-s3-server';
 import {
     countBackingRows,
     createHomeFaultMount,
+    createS3MountConfig,
+    FaultMount,
     type FaultStorage,
     provisionDoc,
     registerFaultMount,
+    STALL_BOUND_MS,
     settleContainer,
+    settlesWithin,
     unregisterFaultMount,
+    waitFor,
 } from '../fault-storage-helpers';
 import { createTestUser, findOrFail, getTestContext, TEST_DATA_DIR, TEST_PNG_BYTES } from '../setup';
 
@@ -27,6 +35,7 @@ import { createTestUser, findOrFail, getTestContext, TEST_DATA_DIR, TEST_PNG_BYT
 
 const STALE_MOUNT_ID = 'backup-s3-stale';
 const FULL_MOUNT_ID = 'backup-s3-full';
+const STALLED_MOUNT_ID = 'backup-s3-stalled';
 
 const docSchema = { items: sqliteTable('items', { id: integer('id').primaryKey(), data: text('data') }) };
 // No snapshot config: a close-time version enqueue would be noise for these tests.
@@ -48,12 +57,14 @@ let docFolderName: string;
 let nestedFileBytes: Uint8Array;
 let trashedFileId: string;
 
-// A real, minimal SQLite database at `filePath`, holding one marker row. Staged copies have to be
+// A real, minimal SQLite database at `filePath`, one row per marker. Staged copies have to be
 // SQLite: the upload queue drops one without the magic header as a poisoned payload.
-async function writeMarkerDb(filePath: string, marker: string): Promise<Uint8Array> {
+async function writeMarkerDb(filePath: string, ...markers: string[]): Promise<Uint8Array> {
     const db = new Database(filePath, { create: true });
     db.run('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)');
-    db.run('INSERT INTO items (id, data) VALUES (1, ?)', [marker]);
+    for (const [index, marker] of markers.entries()) {
+        db.run('INSERT INTO items (id, data) VALUES (?, ?)', [index + 1, marker]);
+    }
     db.close(true);
     return new Uint8Array(await Bun.file(filePath).arrayBuffer());
 }
@@ -308,6 +319,42 @@ describe('Backup freshest-first on an s3 mount', () => {
         await staleMount.deletePath(containerId);
     });
 
+    // Gap BK-3: an object gone from the bucket reads as a row with no bytes yet, so the backup verifies without it.
+    test.failing('a plain file whose object is gone from the bucket fails the backup', async () => {
+        const rootId = (await staleMount.getRootFolder())!.id;
+        const fileId = await staleMount.createFile(
+            rootId,
+            'lost.png',
+            'image/png',
+            TEST_PNG_BYTES.byteLength,
+            TEST_PNG_BYTES,
+        );
+        try {
+            await staleFault.inner.delete(await staleMount.getStorageKey(fileId));
+            await expect(snapshot()).rejects.toThrow(STALE_MOUNT_ID);
+        } finally {
+            await staleMount.deletePath(fileId);
+        }
+    });
+
+    // Gap BK-5: freshest-first never looks at the crash temp an unclean shutdown leaves behind.
+    test.failing('a document whose last edits survive only in its crash temp is archived with them', async () => {
+        const { containerId, dataDbId } = await provisionDoc(staleMount);
+        const containerName = (await staleMount.getPath(containerId))!.name;
+        const managed = await staleMount.createDatabase(docConfig, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'settled' }).run();
+        await settleContainer(staleMount, containerId);
+        try {
+            // What a SIGKILL leaves: tmp/ holds a commit the bucket never got, which the next open adopts.
+            await writeMarkerDb(staleMount.getTempPath(dataDbId), 'settled', 'crash tail');
+            const { folder } = await snapshot();
+            const relPath = `home/mounts/${STALE_MOUNT_ID}/data/${containerName}/data.db`;
+            expect(readMarkers(join(folder, relPath))).toEqual(['settled', 'crash tail']);
+        } finally {
+            await staleMount.deletePath(containerId);
+        }
+    });
+
     test('a settled s3 mount is materialized into data/ by path', async () => {
         const { manifest, folder } = await snapshot();
         const prefix = `home/mounts/${FULL_MOUNT_ID}/data/`;
@@ -334,4 +381,49 @@ describe('Backup freshest-first on an s3 mount', () => {
         expect(summary.files).toBe(archived.length);
         expect(summary.bytes).toBeGreaterThan(0);
     });
+});
+
+describe('Backup job on an s3 mount whose bucket stalls', () => {
+    // Gap BK-4: a stalled GET holds the job and the home's job slot; flips once the S3 GET deadline is below STALL_BOUND_MS.
+    test.failing('a GET that stalls ends the backup job, so the home can be restored again', async () => {
+        const fake = new FakeS3Server(new LocalStorage(join(backingRoot, STALLED_MOUNT_ID)));
+        const mount = new FaultMount(
+            home.user.id,
+            home.homeDir,
+            { ...createS3MountConfig(STALLED_MOUNT_ID), s3Config: await fake.start() },
+            home.getLocalDatabase.bind(home),
+        );
+        await mount.init();
+        registerFaultMount(home.drive, mount);
+        let jobId: string | undefined;
+        try {
+            const rootId = (await mount.getRootFolder())!.id;
+            const fileId = await mount.createFile(
+                rootId,
+                'stalled.png',
+                'image/png',
+                TEST_PNG_BYTES.byteLength,
+                TEST_PNG_BYTES,
+            );
+            const storageKey = await mount.getStorageKey(fileId);
+            fake.faults.set(storageKey, 'stall-body');
+            jobId = startBackupJob('backup', home.user.id, home.user.id, (job, onProgress) =>
+                runHomeBackup(home, job, onProgress),
+            ).id;
+            await waitFor(() => fake.gets.has(storageKey), 10_000);
+            expect(await settlesWithin([drainBackupJobs()], STALL_BOUND_MS)).toBe(true);
+            expect(getBackupJob(jobId)?.state).toBe('failed');
+        } finally {
+            fake.heal();
+            await drainBackupJobs();
+            const artifact = jobId && getBackupJob(jobId)?.artifact;
+            if (artifact) {
+                rmSync(join(getBackupsDir(), artifact), { force: true });
+                rmSync(join(getBackupsDir(), `${artifact}.manifest.json`), { force: true });
+            }
+            unregisterFaultMount(home.drive, STALLED_MOUNT_ID);
+            await mount.closeAllDatabases();
+            await fake.stop();
+        }
+    }, 20_000);
 });

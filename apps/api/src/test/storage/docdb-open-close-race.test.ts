@@ -8,10 +8,10 @@ import { ApiError, type DatabaseConfig, ManagedDatabase } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
-import { countRowsInFile, createGetLocalDatabase, settlesWithin } from '../fault-storage-helpers';
+import { countRowsInFile, createGetLocalDatabase, STALL_BOUND_MS, settlesWithin } from '../fault-storage-helpers';
 import { createTestMountConfig } from '../mount-test-helpers';
 
-// Regression net for AUDIT_STORAGE item 4 (design note 2026-07-05): an openDatabase landing in
+// Regression net for the open/close serialization in docs/SYNC.md: an openDatabase landing in
 // closeDatabase's async close window built a fresh ManagedDatabase over the closing instance's
 // live files — on `local` it adopted the doomed temp as crash recovery, and the old close's
 // cleanupTemp then unlinked it under the adopted connection (every later sync throws
@@ -382,7 +382,7 @@ describe('an open still loading from storage', () => {
         try {
             await gate.parked;
             teardown = mount.closeAllDatabases();
-            expect(await settlesWithin([teardown], 1_000)).toBe(true);
+            expect(await settlesWithin([teardown], STALL_BOUND_MS)).toBe(true);
         } finally {
             gate.release();
             await teardown;

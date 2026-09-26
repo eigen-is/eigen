@@ -4,8 +4,9 @@ import type { StorageBackend } from '../lib/storage';
 
 // A local S3 for the real S3Storage: faults on the lazy S3File's HEAD and GET, which FaultStorage never sees.
 
-// stall-body: headers and half the body, then silence; cut: half, then close. HEAD honors only stall and fail.
-export type S3Fault = 'stall' | 'stall-body' | 'cut' | 'empty' | 'fail';
+// stall-body: headers and half the body, then silence; cut: half, then close; fail-get: a 500 on GET only.
+// HEAD honors only stall and fail.
+export type S3Fault = 'stall' | 'stall-body' | 'cut' | 'empty' | 'fail' | 'fail-get';
 
 export class FakeS3Server {
     // Keyed by object key.
@@ -111,7 +112,7 @@ export class FakeS3Server {
         head: string,
         fault: S3Fault | undefined,
     ): Promise<void> {
-        if (fault === 'fail') {
+        if (fault === 'fail' || (fault === 'fail-get' && method === 'GET')) {
             reply(socket, method, '500 Internal Server Error', 'InternalError');
             return;
         }

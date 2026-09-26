@@ -85,6 +85,8 @@ describe('Backup restore of an s3 mount', () => {
     let trashedKey: string;
     let versionKey: string;
     let dataDbId: string;
+    let pngId: string;
+    let textId: string;
     let thumbPath: string;
 
     beforeAll(async () => {
@@ -153,6 +155,8 @@ describe('Backup restore of an s3 mount', () => {
         await mount.drainPendingUploads({ flushNow: true });
 
         dataDbId = (await mount.getChildByName(doc.id, 'data.db'))!.id;
+        pngId = png.id;
+        textId = text.id;
         expect(await bytesInBucket(mount, await mount.getStorageKey(png.id))).not.toBeNull();
 
         const staging = mkdtempSync(join(TEST_DATA_DIR, 'restore-s3-backup-'));
@@ -222,6 +226,26 @@ describe('Backup restore of an s3 mount', () => {
             expect(dataDb).not.toBeNull();
             expect(new TextDecoder().decode(dataDb!.subarray(0, 15))).toBe('SQLite format 3');
             expect(pendingUploadsOf(metadataPath)).toEqual([]);
+        } finally {
+            await restored.closeAllDatabases();
+        }
+    });
+
+    test('a restore that failed midway runs again from the same artifact', async () => {
+        await expect(
+            restoreHome(artifact, userId, `restore-s3-fail-${Date.now()}`, (step) => {
+                if (step === 'mounts') throw new Error('interrupted mid-install');
+            }),
+        ).rejects.toThrow('interrupted mid-install');
+
+        await restoreHome(artifact, userId, `restore-s3-again-${Date.now()}`);
+        const { mount: restored } = createHomeFaultMount(await getHome(userId), MOUNT_ID, BACKING);
+        await restored.init();
+        try {
+            await restored.drainPendingUploads({ flushNow: true });
+            expect(pendingUploadsOf(metadataPath)).toEqual([]);
+            expect(await bytesInBucket(restored, keyOf(metadataPath, pngId))).toEqual(TEST_PNG_BYTES);
+            expect(await bytesInBucket(restored, keyOf(metadataPath, textId))).toEqual(TEXT_BYTES);
         } finally {
             await restored.closeAllDatabases();
         }

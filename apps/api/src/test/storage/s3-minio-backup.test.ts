@@ -17,7 +17,6 @@ import { registerFaultMount, unregisterFaultMount } from '../fault-storage-helpe
 import {
     assertJson,
     authedRequest,
-    createTestUser,
     driveUpload,
     getTestContext,
     openMountMetadata,
@@ -227,59 +226,6 @@ describe.skipIf(!live)('Backup round trip on a real S3 mount (MinIO)', () => {
             expect(await bytesInBucket(storage, restoredTextKey)).toEqual(TEXT_BYTES);
         } finally {
             await restored.closeAllDatabases();
-        }
-    });
-});
-
-describe.skipIf(!live)('Backup of an s3 mount whose bucket is gone (MinIO)', () => {
-    const mountId = 'backup-minio-gone';
-    const goneConfig: S3Config = { ...s3Config, prefix: `test-backup-bk-${randomUUID()}` };
-    let userId: string;
-    let mount: Mount;
-    let storage: S3Storage;
-    let objectKey: string;
-
-    beforeAll(async () => {
-        await getTestContext();
-        ({ id: userId } = await createTestUser(
-            `backup-minio-gone-${randomUUID().slice(0, 8)}@test.eigen.is`,
-            PASSWORD,
-            'Backup MinIO Gone',
-        ));
-        const home = await getHome(userId);
-        storage = new S3Storage(goneConfig);
-        const config: MountConfig = {
-            id: mountId,
-            name: mountId,
-            storageType: 's3',
-            isDefault: false,
-            s3Config: goneConfig,
-        };
-        mount = new Mount(userId, home.homeDir, config, home.getLocalDatabase.bind(home));
-        await mount.init();
-        registerFaultMount(home.drive, mount);
-        const rootId = (await mount.getRootFolder())!.id;
-        const fileId = await mount.createFile(rootId, 'notes.txt', 'text/plain', TEXT_BYTES.byteLength, TEXT_BYTES);
-        objectKey = await mount.getStorageKey(fileId);
-        expect(await bytesInBucket(storage, objectKey)).toEqual(TEXT_BYTES);
-    });
-
-    afterAll(async () => {
-        if (!live) return;
-        const home = await getHome(userId).catch(() => null);
-        if (home) unregisterFaultMount(home.drive, mountId);
-        await mount?.closeAllDatabases();
-        if (objectKey) await storage.delete(objectKey);
-    });
-
-    // Gap BK-3: HEAD on a bucket that does not exist answers 404, which the backup reads as a row with no bytes.
-    test.failing('a bucket that no longer exists fails the backup instead of archiving the mount empty', async () => {
-        mount.storage = new S3Storage({ ...goneConfig, bucket: `eigen-missing-${randomUUID().slice(0, 8)}` });
-        try {
-            const staging = mkdtempSync(join(TEST_DATA_DIR, 'minio-backup-gone-'));
-            await expect(snapshotHome(await getHome(userId), staging)).rejects.toThrow(mountId);
-        } finally {
-            mount.storage = storage;
         }
     });
 });

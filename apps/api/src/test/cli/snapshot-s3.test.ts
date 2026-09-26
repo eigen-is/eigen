@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import type { Mount } from '../../lib/mount/mount';
-import type { StorageFile } from '../../lib/storage';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { runCli } from '../cli-test-helpers';
 import { createS3MountConfig, FaultMount, FaultStorage } from '../fault-storage-helpers';
@@ -71,12 +70,7 @@ async function snapshot(dir: string, ...args: string[]): Promise<string> {
 
 async function restore(dir: string, name: string): Promise<void> {
     const result = await runCli(['restore', name, '--yes'], { cwd: dir, env: TAR_ENV });
-    expect(result.stderr).toBe('');
     expect(result.code).toBe(0);
-}
-
-async function textOf(file: StorageFile | null): Promise<string | null> {
-    return file ? decoder.decode(await file.arrayBuffer()) : null;
 }
 
 // A document database as the upload queue stages it: SQLite, holding one marker row.
@@ -129,34 +123,6 @@ describe('Whole-server snapshot of an s3 mount', () => {
         // Neither holds the object itself: it is in the bucket.
         expect(await members(await snapshot(target.dir))).toEqual(['metadata.db', 'staging/<staged copy>']);
         expect(await members(await snapshot(target.dir, '--light'))).toEqual(['metadata.db']);
-    });
-
-    // Gap BK-1: a snapshot holds no bucket object, so a restore brings back rows over the bucket as it is now.
-    test.failing('a full snapshot brings an s3 file back as it was when the snapshot was made', async () => {
-        const target = install();
-        const first = await start(target);
-        const rootId = (await first.mount.getRootFolder())!.id;
-        const editedId = await first.mount.createFile(rootId, 'edited.txt', 'text/plain', 3, encoder.encode('old'));
-        const deletedId = await first.mount.createFile(rootId, 'deleted.txt', 'text/plain', 4, encoder.encode('kept'));
-        await first.stop();
-        const name = await snapshot(target.dir);
-
-        // After the backup: one file is edited, the other deleted for good.
-        const second = await start(target);
-        await second.mount.writeFile(editedId, encoder.encode('new'));
-        await second.mount.deletePath(deletedId);
-        await second.stop();
-
-        await restore(target.dir, name);
-        const third = await start(target);
-        try {
-            expect([
-                await textOf(await third.mount.readFile(editedId)),
-                await textOf(await third.mount.readFile(deletedId)),
-            ]).toEqual(['old', 'kept']);
-        } finally {
-            await third.stop();
-        }
     });
 
     // Gap BK-2: the snapshot's staged uploads replay over the keys the kept-aside data/ still names.

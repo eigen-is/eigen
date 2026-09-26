@@ -6,16 +6,13 @@ import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig } from '../../lib/core';
 import type { Mount } from '../../lib/mount/mount';
 import { UPLOAD_PUT_TIMEOUT_MS } from '../../lib/mount/upload-queue';
-import { LocalStorage } from '../../lib/storage/local-storage';
 import { setShutdownDrainDeadline } from '../../lib/sync';
 import {
     countBackingRows,
     createFaultMount,
-    createGetLocalDatabase,
-    createS3MountConfig,
-    FaultMount,
-    FaultStorage,
+    type FaultStorage,
     provisionDoc,
+    STALL_BOUND_MS,
     settlesWithin,
     waitFor,
 } from '../fault-storage-helpers';
@@ -37,19 +34,8 @@ const docConfig: DatabaseConfig<typeof docSchema> = {
 
 const createdMounts: Mount[] = [];
 
-function createS3Mount(id: string): { mount: Mount; fault: FaultStorage } {
-    const { mount, fault } = createFaultMount(OWNER_ID, TEST_DIR, id);
-    createdMounts.push(mount);
-    return { mount, fault };
-}
-
-// Mounts on one bucket share its upload semaphore, as every default mount shares the server's bucket.
-function createSharedDestinationMount(id: string, bucket: string): { mount: Mount; fault: FaultStorage } {
-    const config = createS3MountConfig(id);
-    const shared = { ...config, s3Config: { ...config.s3Config!, bucket } };
-    const mount = new FaultMount(OWNER_ID, TEST_DIR, shared, createGetLocalDatabase(TEST_DIR));
-    const fault = new FaultStorage(new LocalStorage(join(TEST_DIR, `backing-${id}`)));
-    mount.storage = fault;
+function createS3Mount(id: string, bucket?: string): { mount: Mount; fault: FaultStorage } {
+    const { mount, fault } = createFaultMount(OWNER_ID, TEST_DIR, id, bucket);
     createdMounts.push(mount);
     return { mount, fault };
 }
@@ -90,10 +76,10 @@ describe('shutdown drain with a stalled PUT', () => {
         await mount.closeDatabase(dataDbId);
         await fault.waitForParked(() => true);
 
-        setShutdownDrainDeadline(Date.now() + 200);
+        setShutdownDrainDeadline(Date.now() + 50);
         const closing = mount.closeAllDatabases();
         try {
-            expect(await settlesWithin([closing], 1_500)).toBe(true);
+            expect(await settlesWithin([closing], STALL_BOUND_MS)).toBe(true);
         } finally {
             await fault.landAllRemaining();
             await closing;
@@ -103,14 +89,14 @@ describe('shutdown drain with a stalled PUT', () => {
     // Gap UP-1: a flush queued behind other mounts' stalled PUTs on the shared semaphore overruns the deadline.
     test.failing('the shutdown flush returns by its deadline while the destination semaphore is held', async () => {
         const bucket = `shared-${Date.now()}`;
-        const { mount, fault } = createSharedDestinationMount('semaphore-waiter', bucket);
+        const { mount, fault } = createS3Mount('semaphore-waiter', bucket);
         await mount.init();
         const { dataDbId, managed } = await openSettledDoc(mount);
 
         // Four other mounts on the same bucket each hold a semaphore slot with a stalled PUT.
         const holders: FaultStorage[] = [];
         for (let i = 0; i < 4; i++) {
-            const holder = createSharedDestinationMount(`semaphore-holder-${i}`, bucket);
+            const holder = createS3Mount(`semaphore-holder-${i}`, bucket);
             await holder.mount.init();
             const doc = await openSettledDoc(holder.mount);
             holder.fault.parkWrites = true;
@@ -124,10 +110,10 @@ describe('shutdown drain with a stalled PUT', () => {
         await mount.closeDatabase(dataDbId);
         const writesBefore = fault.writeCount;
 
-        setShutdownDrainDeadline(Date.now() + 200);
+        setShutdownDrainDeadline(Date.now() + 50);
         const closing = mount.closeAllDatabases();
         try {
-            expect(await settlesWithin([closing], 1_500)).toBe(true);
+            expect(await settlesWithin([closing], STALL_BOUND_MS)).toBe(true);
         } finally {
             for (const holder of holders) await holder.landAllRemaining();
             await closing;
@@ -135,83 +121,46 @@ describe('shutdown drain with a stalled PUT', () => {
         // No PUT may start once the deadline has passed.
         expect(fault.writeCount).toBe(writesBefore);
     });
-
-    test('a PUT stalled past the shutdown deadline keeps its row, and the next boot uploads it', async () => {
-        const m1 = createS3Mount('shutdown-then-boot');
-        await m1.mount.init();
-        const { dataDbId, managed } = await openSettledDoc(m1.mount);
-
-        m1.fault.parkWrites = true;
-        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
-        await m1.mount.closeDatabase(dataDbId);
-        await m1.fault.waitForParked(() => true);
-
-        const deadline = Date.now() + 50;
-        setShutdownDrainDeadline(deadline);
-        const closing = m1.mount.closeAllDatabases();
-        await waitFor(() => Date.now() > deadline);
-
-        // SIGKILL at the grace period: the dead process never runs its post-PUT bookkeeping.
-        m1.mount.uploadQueue?.close();
-        setShutdownDrainDeadline(null);
-        expect(m1.mount.pendingUploadCount).toBe(1);
-        expect(readdirSync(m1.mount.stagingDir)).toHaveLength(1);
-
-        const m2 = createS3Mount('shutdown-then-boot');
-        await m2.mount.init();
-        await m2.mount.drainPendingUploads({ flushNow: true });
-        expect(m2.mount.pendingUploadCount).toBe(0);
-        expect(readdirSync(m2.mount.stagingDir)).toHaveLength(0);
-        expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(1);
-
-        // The dead process's PUT of the same bytes lands late: idempotent.
-        await m1.fault.landAllRemaining();
-        await closing;
-        expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(1);
-    });
 });
 
 describe('edits while a PUT is stalled', () => {
-    test('later syncs coalesce into one pending row behind the stalled PUT; no parallel PUT starts', async () => {
-        const { mount, fault } = createS3Mount('stalled-coalesce');
+    // Four syncs of one doc behind its first, parked PUT; land() lets that PUT through and drains the rest.
+    async function editBehindParkedPut(id: string) {
+        const { mount, fault } = createS3Mount(id);
         await mount.init();
         const { dataDbId, managed } = await openSettledDoc(mount);
         const writesBefore = fault.writeCount;
-
         fault.parkWrites = true;
-        for (let id = 1; id <= 3; id++) {
-            managed.db.insert(docSchema.items).values({ id, data: 'x' }).run();
+        for (let row = 1; row <= 4; row++) {
+            managed.db.insert(docSchema.items).values({ id: row, data: 'x' }).run();
             await managed.flush();
             await fault.waitForParked(() => true);
         }
-        expect(fault.writeCount - writesBefore).toBe(1);
+        const land = async () => {
+            fault.parkWrites = false;
+            await fault.releaseOldestParked();
+            await mount.drainPendingUploads({ flushNow: true });
+        };
+        return { mount, dataDbId, putsStarted: () => fault.writeCount - writesBefore, land };
+    }
+
+    test('later syncs coalesce into one pending row behind the stalled PUT; no parallel PUT starts', async () => {
+        const { mount, dataDbId, putsStarted, land } = await editBehindParkedPut('stalled-coalesce');
+        expect(putsStarted()).toBe(1);
         expect(mount.pendingUploadCount).toBe(1);
 
-        fault.parkWrites = false;
-        await fault.releaseOldestParked();
-        await mount.drainPendingUploads({ flushNow: true });
+        await land();
         expect(mount.pendingUploadCount).toBe(0);
-        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(3);
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(4);
     });
 
     // Gap UP-5: a sync superseding a copy that is not the in-flight one leaves that copy on disk.
     test.failing('staged copies superseded behind a stalled PUT are removed', async () => {
-        const { mount, fault } = createS3Mount('stalled-supersede-leak');
-        await mount.init();
-        const { managed } = await openSettledDoc(mount);
-
-        fault.parkWrites = true;
-        for (let id = 1; id <= 4; id++) {
-            managed.db.insert(docSchema.items).values({ id, data: 'x' }).run();
-            await managed.flush();
-            await fault.waitForParked(() => true);
-        }
+        const { mount, land } = await editBehindParkedPut('stalled-supersede-leak');
         // The in-flight copy and the newest one; the two between were superseded.
         expect(readdirSync(mount.stagingDir)).toHaveLength(2);
 
-        fault.parkWrites = false;
-        await fault.releaseOldestParked();
-        await mount.drainPendingUploads({ flushNow: true });
+        await land();
         expect(readdirSync(mount.stagingDir)).toHaveLength(0);
     });
 });

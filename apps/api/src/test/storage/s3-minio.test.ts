@@ -97,11 +97,14 @@ describe.skipIf(!live)('S3Storage (MinIO)', () => {
         expect(echoed).toEqual(data);
     });
 
-    test('exists is true for a written key, false for a missing one', async () => {
+    test('exists is true for a written key, false for a missing one or a missing bucket', async () => {
         createdKeys.push('direct/exists.txt');
         await storage.write('direct/exists.txt', Buffer.from('here'));
         expect(await storage.exists('direct/exists.txt')).toBe(true);
         expect(await storage.exists('direct/never-written.txt')).toBe(false);
+        expect(
+            await new S3Storage({ ...s3Config, bucket: `missing-${randomUUID()}` }).exists('direct/exists.txt'),
+        ).toBe(false);
     });
 
     test('readRange returns the exact end-exclusive slice', async () => {

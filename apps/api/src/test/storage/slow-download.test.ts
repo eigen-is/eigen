@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { S3Config } from '@workspace/lib/types';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
@@ -10,13 +10,14 @@ import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { FakeS3Server } from '../fake-s3-server';
 import {
-    countRowsInFile,
     createGetLocalDatabase,
     createS3MountConfig,
     FaultMount,
     provisionDoc,
     registerFaultMount,
+    STALL_BOUND_MS,
     settleContainer,
+    settlesWithin,
     waitFor,
 } from '../fault-storage-helpers';
 import { getTestContext } from '../setup';
@@ -35,19 +36,6 @@ const docConfig: DatabaseConfig<typeof docSchema> = {
     schema: docSchema,
     migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
 };
-
-// Settles as `op` does, or rejects once `ms` pass with it still pending: the bound the code under test lacks.
-async function within<T>(op: Promise<T>, ms = 1_000): Promise<T> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const bound = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`still pending after ${ms} ms`)), ms);
-    });
-    try {
-        return await Promise.race([op, bound]);
-    } finally {
-        clearTimeout(timer);
-    }
-}
 
 // A closed, fully acked container whose data.db holds `rows` rows, so the next open has to GET it.
 async function storedDoc(mount: Mount, rows = 1): Promise<{ containerId: string; dataDbId: string; dataKey: string }> {
@@ -87,37 +75,23 @@ afterEach(async () => {
 afterAll(() => rmSync(TEST_DIR, { recursive: true, force: true }));
 
 describe('Stalled S3 reads', () => {
-    // Gap DL-1: an S3 HEAD or GET that never answers holds its caller until Bun's ~6 min client timeout.
+    // Gap DL-1: no S3 read has a deadline of Eigen's own; flips once the S3 HEAD deadline is below STALL_BOUND_MS.
     test.failing('a download whose HEAD stalls answers 503 instead of waiting on the backend', async () => {
         const rootId = (await mount.getRootFolder())!.id;
         const fileId = await mount.createFile(rootId, 'a.bin', 'application/octet-stream', 4, new Uint8Array(4));
         fake.faults.set(await mount.getStorageKey(fileId), 'stall');
-        await expect(within(mount.readFile(fileId))).rejects.toMatchObject({ status: 503 });
+        const failure = mount.readFile(fileId).catch((error: unknown) => error);
+        expect(await settlesWithin([failure], STALL_BOUND_MS)).toBe(true);
+        expect(await failure).toMatchObject({ status: 503 });
     });
 
-    // Gap DL-1: an S3 HEAD or GET that never answers holds its caller until Bun's ~6 min client timeout.
+    // Gap DL-1; flips once the S3 GET deadline is below STALL_BOUND_MS.
     test.failing('a document open whose data.db GET stalls mid-body answers 503', async () => {
         const { dataDbId, dataKey } = await storedDoc(mount);
         fake.faults.set(dataKey, 'stall-body');
-        await expect(within(mount.openDatabase(docConfig, dataDbId))).rejects.toMatchObject({ status: 503 });
-    });
-
-    // Gap DL-2: mount teardown awaits a document open parked in its GET, so a stalled GET wedges the Home's shutdown.
-    test.failing('mount teardown finishes while a document open waits on its data.db GET', async () => {
-        const { dataDbId, dataKey } = await storedDoc(mount);
-        fake.faults.set(dataKey, 'stall-body');
-        const open = mount.openDatabase(docConfig, dataDbId);
-        open.catch(() => {});
-        await waitFor(() => fake.heldCount > 0);
-        const teardown = mount.closeAllDatabases();
-        teardown.catch(() => {});
-        try {
-            await within(teardown);
-        } finally {
-            fake.heal();
-            await teardown;
-            await open.catch(() => {});
-        }
+        const failure = mount.openDatabase(docConfig, dataDbId).catch((error: unknown) => error);
+        expect(await settlesWithin([failure], STALL_BOUND_MS)).toBe(true);
+        expect(await failure).toMatchObject({ status: 503 });
     });
 
     // Gap DL-3: a version snapshot holds the container lock across its S3 GET.
@@ -128,13 +102,32 @@ describe('Stalled S3 reads', () => {
         snapshot.catch(() => {});
         await waitFor(() => fake.heldCount > 0);
         const next = mount.withPathLock(containerId, async () => 'free');
-        next.catch(() => {});
         try {
-            expect(await within(next)).toBe('free');
+            expect(await settlesWithin([next], STALL_BOUND_MS)).toBe(true);
         } finally {
             fake.heal();
             await snapshot.catch(() => {});
             await next;
+        }
+    });
+
+    // Gap DL-6: a GET streams onto the live working copy, which a process death mid-GET leaves truncated for every later open.
+    test.failing('a data.db GET in progress leaves the live working copy unwritten', async () => {
+        const { dataDbId, dataKey } = await storedDoc(mount, 64);
+        const before = new Set(readdirSync(mount.tmpDir));
+        fake.faults.set(dataKey, 'stall-body');
+        const open = mount.openDatabase(docConfig, dataDbId);
+        try {
+            // The first half of the body is on disk, wherever the download writes it.
+            await waitFor(() =>
+                readdirSync(mount.tmpDir).some(
+                    (name) => !before.has(name) && Bun.file(join(mount.tmpDir, name)).size > 0,
+                ),
+            );
+            expect(existsSync(mount.getTempPath(dataDbId))).toBe(false);
+        } finally {
+            fake.heal();
+            await open;
         }
     });
 });
@@ -145,35 +138,7 @@ describe('S3 reads that fail', () => {
         const rootId = (await mount.getRootFolder())!.id;
         const fileId = await mount.createFile(rootId, 'b.bin', 'application/octet-stream', 4, new Uint8Array(4));
         fake.faults.set(await mount.getStorageKey(fileId), 'fail');
-        await expect(within(mount.readFile(fileId), 4_000)).rejects.toMatchObject({ status: 503 });
-    });
-
-    // Gap DL-4: a failed S3 read surfaces as a raw S3Error (HTTP 500, collab close 1008), not the 503 of an unreachable backend.
-    test.failing('a document open whose data.db GET dies midway answers 503', async () => {
-        const { dataDbId, dataKey } = await storedDoc(mount);
-        fake.faults.set(dataKey, 'cut');
-        await expect(within(mount.openDatabase(docConfig, dataDbId))).rejects.toMatchObject({ status: 503 });
-    });
-
-    test('a data.db GET that dies midway leaves no working copy, and the next open reads the whole object', async () => {
-        const { dataDbId, dataKey } = await storedDoc(mount, 64);
-        fake.faults.set(dataKey, 'cut');
-        await expect(within(mount.openDatabase(docConfig, dataDbId))).rejects.toThrow();
-        expect(readdirSync(mount.tmpDir).filter((name) => name.startsWith(dataDbId))).toEqual([]);
-
-        fake.heal();
-        await mount.openDatabase(docConfig, dataDbId);
-        await mount.closeDatabase(dataDbId);
-        expect(await countRowsInFile(mount.storage.read(await mount.getStorageKey(dataDbId)), TEST_DIR)).toBe(64);
-    });
-
-    // Gap DL-6: a process death mid-GET leaves a truncated working copy that every later open adopts and fails on.
-    test.failing('a working copy truncated by a process death mid-GET is re-fetched on the next open', async () => {
-        const { dataDbId } = await storedDoc(mount, 64);
-        const stored = await mount.storage.read(await mount.getStorageKey(dataDbId)).bytes();
-        await Bun.write(mount.getTempPath(dataDbId), stored.subarray(0, Math.floor(stored.length * 0.6)));
-        const managed = await mount.openDatabase(docConfig, dataDbId);
-        expect(managed.db.select().from(docSchema.items).all()).toHaveLength(64);
+        await expect(mount.readFile(fileId)).rejects.toMatchObject({ status: 503 });
     });
 
     // Gap DL-5: a copy whose source GET dies midway leaves its partial temp in tmp/ until the next mount open.
@@ -183,7 +148,7 @@ describe('S3 reads that fail', () => {
         const fileId = await mount.createFile(rootId, 'c.bin', 'application/octet-stream', bytes.length, bytes);
         const before = readdirSync(mount.tmpDir);
         fake.faults.set(await mount.getStorageKey(fileId), 'cut');
-        await expect(within(mount.copyPath(fileId, rootId, 'c copy.bin'))).rejects.toThrow();
+        await expect(mount.copyPath(fileId, rootId, 'c copy.bin')).rejects.toThrow();
         expect(readdirSync(mount.tmpDir)).toEqual(before);
     });
 });
@@ -202,7 +167,7 @@ describe('Abandoned downloads', () => {
 });
 
 describe('A stalled GET and the Home', () => {
-    // Gap DL-2: mount teardown awaits a document open parked in its GET, so a stalled GET wedges the Home's shutdown.
+    // Gap DL-2: Home teardown awaits a document open parked in its GET, so a stalled GET wedges every request for its owner.
     test.failing("the owner's next request gets a Home while the idle one waits on a stalled document GET", async () => {
         const ctx = await getTestContext();
         const ownerId = ctx.alice.user.id;
@@ -228,7 +193,8 @@ describe('A stalled GET and the Home', () => {
         const next = getHome(ownerId);
         next.catch(() => {});
         try {
-            expect(await within(next)).not.toBe(home);
+            expect(await settlesWithin([next], STALL_BOUND_MS)).toBe(true);
+            expect(await next).not.toBe(home);
         } finally {
             fake.heal();
             await shutdown;

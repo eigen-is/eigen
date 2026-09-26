@@ -155,14 +155,14 @@ const DUMMY_S3: S3Config = {
 };
 
 // A distinct bucket per id gives each mount its own destination semaphore (matching the
-// per-destination design).
-export function createS3MountConfig(id: string): MountConfig {
+// per-destination design); mounts given one bucket share it, as every default mount shares the server's.
+export function createS3MountConfig(id: string, bucket = `bucket-${id}`): MountConfig {
     return {
         id,
         name: id,
         storageType: 's3',
         isDefault: false,
-        s3Config: { ...DUMMY_S3, bucket: `bucket-${id}` },
+        s3Config: { ...DUMMY_S3, bucket },
     };
 }
 
@@ -192,8 +192,13 @@ export class FaultMount extends Mount {
 // An s3-type mount backed by a FaultStorage over a local directory. Same `id` ⇒ same baseDir +
 // backing dir ⇒ a second call simulates a process restart that shares the prior mount's
 // metadata.db, staging dir, and "S3" object store. The caller still owns init().
-export function createFaultMount(ownerId: string, baseDir: string, id: string): { mount: Mount; fault: FaultStorage } {
-    const mount = new FaultMount(ownerId, baseDir, createS3MountConfig(id), createGetLocalDatabase(baseDir));
+export function createFaultMount(
+    ownerId: string,
+    baseDir: string,
+    id: string,
+    bucket?: string,
+): { mount: Mount; fault: FaultStorage } {
+    const mount = new FaultMount(ownerId, baseDir, createS3MountConfig(id, bucket), createGetLocalDatabase(baseDir));
     const fault = new FaultStorage(new LocalStorage(join(baseDir, `backing-${id}`)));
     mount.storage = fault;
     return { mount, fault };
@@ -299,6 +304,9 @@ export async function waitFor(cond: () => boolean | Promise<boolean>, timeoutMs 
         await Bun.sleep(5);
     }
 }
+
+// Past this, a call on storage that stopped answering counts as wedged.
+export const STALL_BOUND_MS = 250;
 
 // Bounded deadlock detector, not synchronization: on the green path the promises settle at once and
 // the timer is cleared; only a real wedge runs it out. A rejection propagates like a plain await.
