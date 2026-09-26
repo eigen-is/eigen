@@ -108,7 +108,7 @@ Nothing deletes either automatically. Both are listed in the admin pane with the
 
 A safety copy is complete on S3 homes too. A restore onto a remote mount gives every restored row a storage key of its own and never writes over a bucket object, so the safety copy's `metadata.db` still points at objects that hold its bytes. Two consequences worth knowing:
 
-- **Delete** removes the bucket objects that only that copy references, and leaves anything the live home or another safety copy still points at. If any object cannot be deleted the whole folder is kept and the request answers 503, because the folder is the only record of which objects those bytes belong to. So the bucket holds two generations of the home's bytes until you delete the safety copy.
+- **Delete** removes the bucket objects that only that copy references, and leaves anything the live home or another safety copy still points at. If an object cannot be deleted, the delete stops there, the whole folder is kept and the request answers 503, because the folder is the only record of which objects those bytes belong to. So the bucket holds two generations of the home's bytes until you delete the safety copy.
 - **Restore** on a pre-restore copy evicts the home, moves the home as it stands aside as a new pre-restore copy, and renames the chosen copy back. No bytes are written and none are deleted, which is what makes a restore of a restore reversible by hand.
 
 A safety copy of a user who has since been deleted can only be deleted, not restored: the folder on its own would leave a home nobody can sign in to. Restoring a deleted user goes through an artifact, which carries their auth rows.

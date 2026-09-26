@@ -107,7 +107,7 @@ append-heavy chat re-indexing a big body on every 30-second sync. A successful e
 generation, bumped by every producer before the bit-setting write, fences the clear, so the newer
 content keeps the bit and re-extracts after the cap window. A throw is logged, stamps
 `contentIndexedAt` and **keeps** the bit, so a transient storage hiccup retries after the cap instead
-of dropping the doc from body search. Mount teardown awaits the in-flight extract with a bounded timeout; leftover dirty rows
+of dropping the doc from body search. Mount teardown aborts the in-flight extract's storage read (`Mount.readBytes` takes the mount's `downloads` signal) and awaits the extract with a bounded timeout; leftover dirty rows
 replay on the next mount open.
 
 ## Route and frontend
