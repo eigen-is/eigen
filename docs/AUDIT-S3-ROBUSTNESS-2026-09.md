@@ -57,6 +57,7 @@ The as-built description lives in [STORAGE.md](STORAGE.md) (Deadlines) and [SYNC
 - **UP-3**: overlapping overwrites of one plain file are not serialized; *failing* `two overlapping overwrites of one file end on the bytes of the later write`.
 - **UP-4**: a delete during a direct overwrite PUT leaves the bytes behind; *failing* `a permanent delete during a stalled overwrite PUT leaves no object behind`.
 - **Trickle**: the idle deadline does not catch a body that sends a byte every few seconds, so such a read still has no bound.
+- **Served files**: `/download` and `/embed` (`serve-file.ts`) stream `file.stream()` straight into the Response, outside `consumeStream`, so a stalled body is cut only by the server's 200 s `idleTimeout`; no lock or Home is held.
 - **DL-3**: the version snapshot still holds the container lock across its GET, now for at most one idle deadline per stall.
 - **Permanent miss**: a 404 on a `data.db` answers 503, so the client retries under "Storage is temporarily unavailable" every 5 s forever; `collab/collab-storage-unavailable.test.ts`: `a document whose storage object is gone closes 1013 storage-unavailable` pins today's behavior.
 - **BK-2**: a whole-server restore replays staged uploads over the keys the kept-aside `data/` names; *failing* `a restore leaves the bucket objects of the data/ it keeps aside as they were`.
