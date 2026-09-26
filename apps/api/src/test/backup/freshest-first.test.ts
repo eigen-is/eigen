@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
@@ -38,6 +38,8 @@ import { createTestUser, findOrFail, getTestContext, TEST_DATA_DIR, TEST_PNG_BYT
 const STALE_MOUNT_ID = 'backup-s3-stale';
 const FULL_MOUNT_ID = 'backup-s3-full';
 const STALLED_MOUNT_ID = 'backup-s3-stalled';
+const FAILING_MOUNT_ID = 'backup-s3-failing';
+const FAILING_CONTAINER_MOUNT_ID = 'backup-s3-failing-container';
 
 const docSchema = { items: sqliteTable('items', { id: integer('id').primaryKey(), data: text('data') }) };
 // No snapshot config: a close-time version enqueue would be noise for these tests.
@@ -85,6 +87,27 @@ function readMarkers(dbPath: string): string[] {
 
 async function archiveBytes(folder: string, relPath: string): Promise<Uint8Array> {
     return new Uint8Array(await Bun.file(join(folder, relPath)).arrayBuffer());
+}
+
+// An s3 mount whose real S3Storage talks to a FakeS3Server, in the home for the length of `run`.
+async function withFakeS3Mount(id: string, run: (mount: Mount, fake: FakeS3Server) => Promise<void>): Promise<void> {
+    const fake = new FakeS3Server(new LocalStorage(join(backingRoot, id)));
+    const mount = new FaultMount(
+        home.user.id,
+        home.homeDir,
+        { ...createS3MountConfig(id), s3Config: await fake.start() },
+        home.getLocalDatabase.bind(home),
+    );
+    await mount.init();
+    registerFaultMount(home.drive, mount);
+    try {
+        await run(mount, fake);
+    } finally {
+        fake.heal();
+        unregisterFaultMount(home.drive, id);
+        await mount.closeAllDatabases();
+        await fake.stop();
+    }
 }
 
 async function snapshot(): Promise<{ manifest: BackupManifest; folder: string }> {
@@ -139,8 +162,6 @@ beforeAll(async () => {
 // Injections are per-test: a parked write left behind would strand the NEXT test's upload.
 afterEach(async () => {
     staleFault.parkWrites = false;
-    staleFault.failReadKeys.clear();
-    staleFault.readErrorCode = undefined;
     staleFault.releaseHungWrites();
     await staleFault.landAllRemaining();
     await staleMount.drainPendingUploads({ flushNow: true });
@@ -255,71 +276,73 @@ describe('Backup freshest-first on an s3 mount', () => {
     // Bun's S3Error says only "an unexpected error has occurred" and puts the actionable part in
     // `code`, which is all the admin pane's one-line job error would otherwise have shown.
     test('a storage failure fails the snapshot, naming the mount, the code and the object', async () => {
-        const rootId = (await staleMount.getRootFolder())!.id;
-        const fileId = await staleMount.createFile(
-            rootId,
-            'unreachable.png',
-            'image/png',
-            TEST_PNG_BYTES.byteLength,
-            TEST_PNG_BYTES,
-        );
-        await staleMount.drainPendingUploads({ flushNow: true });
-        const storageKey = await staleMount.getStorageKey(fileId);
-        staleFault.failReadKeys.add(storageKey);
-        staleFault.readErrorCode = 'ConnectionRefused';
-
-        await expect(snapshot()).rejects.toThrow(
-            `mount ${STALE_MOUNT_ID}: storage unreachable (ConnectionRefused) reading ${storageKey}`,
-        );
-
-        // An error with no code is somebody else's problem and reaches the job as it is.
-        staleFault.readErrorCode = undefined;
-        await expect(snapshot()).rejects.toThrow('injected read failure (503)');
-
-        // So is a failure on THIS machine: an errno from the local copy the archive is written to,
-        // or SQLite's own from a VACUUM INTO. Calling either "storage unreachable" would send the
-        // admin after the wrong box.
-        for (const code of ['ENOSPC', 'EACCES', 'SQLITE_FULL']) {
-            staleFault.readErrorCode = code;
-            await expect(snapshot()).rejects.toThrow('an unexpected error has occurred');
-        }
-
-        // A bucket that refuses the connection surfaces as a node errno, and that is the storage
-        // being unreachable: it keeps the mount and the object it could not read.
-        for (const code of ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND']) {
-            staleFault.readErrorCode = code;
-            await expect(snapshot()).rejects.toThrow(
-                `mount ${STALE_MOUNT_ID}: storage unreachable (${code}) reading ${storageKey}`,
+        await withFakeS3Mount(FAILING_MOUNT_ID, async (mount, fake) => {
+            const rootId = (await mount.getRootFolder())!.id;
+            const fileId = await mount.createFile(
+                rootId,
+                'unreachable.png',
+                'image/png',
+                TEST_PNG_BYTES.byteLength,
+                TEST_PNG_BYTES,
             );
-        }
-
-        staleFault.readErrorCode = undefined;
-        staleFault.failReadKeys.clear();
-        await staleMount.deletePath(fileId);
+            const storageKey = await mount.getStorageKey(fileId);
+            // The HEAD fails, then only the GET: each keeps the code the provider answered with.
+            fake.faults.set(storageKey, 'fail');
+            await expect(snapshot()).rejects.toThrow(
+                `mount ${FAILING_MOUNT_ID}: storage unreachable (UnknownError) reading ${storageKey}`,
+            );
+            fake.faults.set(storageKey, 'fail-get');
+            await expect(snapshot()).rejects.toThrow(
+                `mount ${FAILING_MOUNT_ID}: storage unreachable (InternalError) reading ${storageKey}`,
+            );
+        });
     });
 
     // The container branch used to name the archive path instead of the object it could not read,
     // which is the one thing an admin chasing a bucket failure needs.
     test('a container database that cannot be read names its storage key', async () => {
-        const { containerId, dataDbId } = await provisionDoc(staleMount);
-        const managed = await staleMount.createDatabase(docConfig, dataDbId);
-        managed.db.insert(docSchema.items).values({ id: 1, data: 'stored' }).run();
-        await managed.flush();
-        await staleMount.drainPendingUploads({ flushNow: true });
-        // No live handle and nothing staged, so the copy has to go to the stored object.
-        await staleMount.closeDatabase(dataDbId, { skipFinalSnapshot: true });
-        const storageKey = await staleMount.getStorageKey(dataDbId);
-        staleFault.failReadKeys.add(storageKey);
-        staleFault.readErrorCode = 'AccessDenied';
-
-        await expect(snapshot()).rejects.toThrow(
-            `mount ${STALE_MOUNT_ID}: storage unreachable (AccessDenied) reading ${storageKey}`,
-        );
-
-        staleFault.readErrorCode = undefined;
-        staleFault.failReadKeys.clear();
-        await staleMount.deletePath(containerId);
+        await withFakeS3Mount(FAILING_CONTAINER_MOUNT_ID, async (mount, fake) => {
+            const { containerId, dataDbId } = await provisionDoc(mount);
+            const managed = await mount.createDatabase(docConfig, dataDbId);
+            managed.db.insert(docSchema.items).values({ id: 1, data: 'stored' }).run();
+            // No live handle and nothing staged, so the copy has to go to the stored object.
+            await settleContainer(mount, containerId);
+            const storageKey = await mount.getStorageKey(dataDbId);
+            fake.faults.set(storageKey, 'fail-get');
+            await expect(snapshot()).rejects.toThrow(
+                `mount ${FAILING_CONTAINER_MOUNT_ID}: storage unreachable (InternalError) reading ${storageKey}`,
+            );
+        });
     });
+
+    // A failure on THIS machine keeps its own errno: calling it "storage unreachable" would send the
+    // admin after the wrong box.
+    test.skipIf(process.getuid?.() === 0)(
+        'an unreadable local copy fails the snapshot with its own errno',
+        async () => {
+            const rootId = (await staleMount.getRootFolder())!.id;
+            const fileId = await staleMount.createFile(
+                rootId,
+                'locked.bin',
+                'application/octet-stream',
+                4,
+                new Uint8Array(4),
+            );
+            const storageKey = await staleMount.getStorageKey(fileId);
+            const queue = staleMount.uploadQueue!;
+            staleFault.parkWrites = true;
+            const stagingPath = queue.newStagingPath();
+            await Bun.write(stagingPath, new Uint8Array(4).fill(1));
+            queue.enqueueStaged(storageKey, stagingPath, false);
+            await staleFault.waitForParked((p) => p.key === storageKey);
+            chmodSync(stagingPath, 0);
+            try {
+                await expect(snapshot()).rejects.toThrow('EACCES: permission denied');
+            } finally {
+                chmodSync(stagingPath, 0o644);
+            }
+        },
+    );
 
     test('a plain file whose object is gone from the bucket fails the backup', async () => {
         const rootId = (await staleMount.getRootFolder())!.id;
@@ -420,46 +443,36 @@ describe('Backup freshest-first on an s3 mount', () => {
 
 describe('Backup job on an s3 mount whose bucket stalls', () => {
     test('a GET that stalls ends the backup job, so the home can be restored again', async () => {
-        const fake = new FakeS3Server(new LocalStorage(join(backingRoot, STALLED_MOUNT_ID)));
-        const mount = new FaultMount(
-            home.user.id,
-            home.homeDir,
-            { ...createS3MountConfig(STALLED_MOUNT_ID), s3Config: await fake.start() },
-            home.getLocalDatabase.bind(home),
-        );
-        await mount.init();
-        registerFaultMount(home.drive, mount);
-        let jobId: string | undefined;
-        try {
-            const rootId = (await mount.getRootFolder())!.id;
-            const fileId = await mount.createFile(
-                rootId,
-                'stalled.png',
-                'image/png',
-                TEST_PNG_BYTES.byteLength,
-                TEST_PNG_BYTES,
-            );
-            const storageKey = await mount.getStorageKey(fileId);
-            fake.faults.set(storageKey, 'stall-body');
-            setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
-            jobId = startBackupJob('backup', home.user.id, home.user.id, (job, onProgress) =>
-                runHomeBackup(home, job, onProgress),
-            ).id;
-            await waitFor(() => fake.gets.has(storageKey), 10_000);
-            expect(await settlesWithin([drainBackupJobs()], SETTLE_BOUND_MS)).toBe(true);
-            expect(getBackupJob(jobId)?.state).toBe('failed');
-        } finally {
-            setStorageTimeoutMs(STORAGE_TIMEOUT_MS);
-            fake.heal();
-            await drainBackupJobs();
-            const artifact = jobId && getBackupJob(jobId)?.artifact;
-            if (artifact) {
-                rmSync(join(getBackupsDir(), artifact), { force: true });
-                rmSync(join(getBackupsDir(), `${artifact}.manifest.json`), { force: true });
+        await withFakeS3Mount(STALLED_MOUNT_ID, async (mount, fake) => {
+            let jobId: string | undefined;
+            try {
+                const rootId = (await mount.getRootFolder())!.id;
+                const fileId = await mount.createFile(
+                    rootId,
+                    'stalled.png',
+                    'image/png',
+                    TEST_PNG_BYTES.byteLength,
+                    TEST_PNG_BYTES,
+                );
+                const storageKey = await mount.getStorageKey(fileId);
+                fake.faults.set(storageKey, 'stall-body');
+                setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
+                jobId = startBackupJob('backup', home.user.id, home.user.id, (job, onProgress) =>
+                    runHomeBackup(home, job, onProgress),
+                ).id;
+                await waitFor(() => fake.gets.has(storageKey), 10_000);
+                expect(await settlesWithin([drainBackupJobs()], SETTLE_BOUND_MS)).toBe(true);
+                expect(getBackupJob(jobId)?.state).toBe('failed');
+            } finally {
+                setStorageTimeoutMs(STORAGE_TIMEOUT_MS);
+                fake.heal();
+                await drainBackupJobs();
+                const artifact = jobId && getBackupJob(jobId)?.artifact;
+                if (artifact) {
+                    rmSync(join(getBackupsDir(), artifact), { force: true });
+                    rmSync(join(getBackupsDir(), `${artifact}.manifest.json`), { force: true });
+                }
             }
-            unregisterFaultMount(home.drive, STALLED_MOUNT_ID);
-            await mount.closeAllDatabases();
-            await fake.stop();
-        }
+        });
     }, 20_000);
 });

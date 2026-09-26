@@ -295,7 +295,7 @@ export class S3Storage implements StorageBackend {
             return await withStorageDeadline(this.read(key).exists());
         } catch (error) {
             console.error(`S3 exists probe failed for ${key}:`, error);
-            throw new ApiError(503, 'Storage unavailable');
+            throw error instanceof ApiError ? error : new ApiError(503, 'Storage unavailable', { cause: error });
         }
     }
 

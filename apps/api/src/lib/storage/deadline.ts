@@ -53,7 +53,7 @@ export async function consumeStream(
             const { done, value } = await reader.read().catch((error: unknown) => {
                 if (idleMs === undefined || error instanceof ApiError) throw error;
                 console.error('Storage read failed:', error);
-                throw new ApiError(503, 'Storage unavailable');
+                throw new ApiError(503, 'Storage unavailable', { cause: error });
             });
             if (stopped) throw new ApiError(503, 'Storage unavailable');
             if (done) return size;
@@ -78,4 +78,57 @@ export async function readStorageFile(
     const chunks: Uint8Array[] = [];
     await consumeStream(file.stream(), (chunk) => chunks.push(chunk), { ...opts, idleMs: storageTimeoutMs });
     return Bun.concatArrayBuffers(chunks);
+}
+
+// Stream a buffer, StorageFile (BunFile/S3File), or ReadableStream into a temp path while
+// computing the sha256 hash in a single pass. Avoids holding the full payload in memory twice.
+// A StorageFile read carries the storage idle deadline; a request body is the client's to pace.
+export async function writeTempWithHash(
+    tempPath: string,
+    data: Buffer | Uint8Array | StorageFile | ReadableStream<Uint8Array>,
+    signal?: AbortSignal,
+): Promise<{ size: number; hash: string }> {
+    const hasher = new Bun.CryptoHasher('sha256');
+
+    if (data instanceof Uint8Array) {
+        await Bun.write(tempPath, data);
+        hasher.update(data);
+        return { size: data.byteLength, hash: hasher.digest('hex') };
+    }
+
+    const isBody = data instanceof ReadableStream;
+    const stream = isBody ? data : data.stream();
+    const writer = Bun.file(tempPath).writer({ highWaterMark: 256 * 1024 });
+    let failed = false;
+    try {
+        const size = await consumeStream(
+            stream,
+            (chunk) => {
+                hasher.update(chunk);
+                writer.write(chunk);
+            },
+            isBody ? {} : { idleMs: storageTimeoutMs, signal },
+        );
+        return { size, hash: hasher.digest('hex') };
+    } catch (error) {
+        failed = true;
+        throw error;
+    } finally {
+        // The handle closes either way. On the way out from a failure that close is best-effort — it
+        // must not replace the error that brought us here — but on a clean finish the flush is part
+        // of the answer, so its failure is the caller's. A half-written temp is the caller's to delete.
+        if (!failed) await writer.end();
+        else {
+            try {
+                await writer.end();
+            } catch {}
+        }
+    }
+}
+
+// Read-only twin of writeTempWithHash, for bytes something else produced (a VACUUM INTO copy).
+export async function hashFile(filePath: string): Promise<{ size: number; hash: string }> {
+    const hasher = new Bun.CryptoHasher('sha256');
+    const size = await consumeStream(Bun.file(filePath).stream(), (chunk) => hasher.update(chunk));
+    return { size, hash: hasher.digest('hex') };
 }

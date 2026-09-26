@@ -275,6 +275,8 @@ export class UploadQueue {
             return;
         }
 
+        // close() may have run during the awaits above; no PUT starts after it.
+        if (this.closing) return;
         // Orphans present when this PUT is issued: if they all settle while it is in flight, the
         // commit order against a landed one is unknown (see the ack branch below).
         const orphansAtStart = this.orphans.get(storageKey);

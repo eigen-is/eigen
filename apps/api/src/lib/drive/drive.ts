@@ -49,7 +49,7 @@ import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
 import { validateName } from '../mount/helpers';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
-import type { StorageFile } from '../storage';
+import { type StorageFile, writeTempWithHash } from '../storage';
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, type Memberships } from '../user/';
 import { listVersions } from '../versioning/list';
@@ -83,7 +83,7 @@ import {
 } from './shared-with-me';
 import type * as sharedSchema from './sharedschema';
 import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
-import { streamFilesToTemp, writeTempWithHash } from './streaming';
+import { streamFilesToTemp } from './streaming';
 import { deletePath, permanentlyDelete, restorePath } from './trash';
 import { finalizeUpload, regenerateThumbnailAsync } from './upload';
 

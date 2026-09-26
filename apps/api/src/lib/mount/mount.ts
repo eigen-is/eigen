@@ -19,9 +19,8 @@ import type { AsyncSingleton } from '../../utils/singleton';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, PATHS, type SchemaType } from '../core';
 import { FileHistory } from '../drive/history';
-import { writeTempWithHash } from '../drive/streaming';
 import { deleteThumbnail } from '../shared/thumbnails';
-import { readStorageFile, type StorageBackend, type StorageFile } from '../storage';
+import { readStorageFile, type StorageBackend, type StorageFile, writeTempWithHash } from '../storage';
 import type { RetentionPolicy } from '../versioning/retention';
 import * as snapshot from '../versioning/snapshot';
 import { type ContentExtractor, ContentReindexQueue } from './content-reindex-queue';
@@ -983,7 +982,7 @@ export class Mount {
         } catch (err) {
             await this.cleanupTemp(sideId);
             console.error(`[Mount] download ${storageKey} failed:`, err);
-            throw err instanceof ApiError ? err : new ApiError(503, 'Storage unavailable');
+            throw err instanceof ApiError ? err : new ApiError(503, 'Storage unavailable', { cause: err });
         }
         fs.renameSync(this.getTempPath(sideId), tempPath);
         const ms = (Bun.nanoseconds() - start) / 1_000_000;

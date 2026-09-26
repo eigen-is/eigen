@@ -112,16 +112,21 @@ export class ContentReindexQueue {
         }
     }
 
+    // Teardown aborts the mount's reads before it closes this queue; the backlog waits for the next open.
+    private get stopped(): boolean {
+        return this.closing || this.mount.downloads.signal.aborted;
+    }
+
     private async runDrainLoop(): Promise<void> {
         if (this.retryTimer) {
             clearTimeout(this.retryTimer);
             this.retryTimer = null;
         }
-        while (!this.closing) {
+        while (!this.stopped) {
             const batch = this.mount.getContentDirtyPaths(CONTENT_REINDEX_CAP_SECONDS, REINDEX_BATCH);
             if (batch.length === 0) break;
             for (const path of batch) {
-                if (this.closing) return;
+                if (this.stopped) return;
                 // Read before the extract: the body this job returns is the document as of now.
                 const generation = this.generations.get(path.id) ?? 0;
                 try {
@@ -139,6 +144,8 @@ export class ContentReindexQueue {
                         this.mount.markContentIndexAttempted(path.id);
                     }
                 } catch (err) {
+                    // An aborted read says nothing about the body: leave the row due.
+                    if (this.stopped) return;
                     // The index is regenerable — log and move on so one bad body never stalls the loop.
                     // Stamp the attempt but keep contentDirty = 1: the cap defers the retry to a later
                     // drain, so a transient S3 hiccup re-extracts instead of dropping until the next write.
@@ -147,7 +154,7 @@ export class ContentReindexQueue {
                 }
             }
         }
-        if (this.closing) return;
+        if (this.stopped) return;
         // Rows re-dirtied inside the cap window aren't due yet — re-drive exactly when the earliest
         // becomes due (our own timer, no poll). A freshly-dirtied row reads as due-now.
         const dueAt = this.mount.earliestPendingReindexAt(CONTENT_REINDEX_CAP_SECONDS);

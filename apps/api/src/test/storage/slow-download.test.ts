@@ -5,11 +5,14 @@ import type { MountConfig, S3Config } from '@workspace/lib/types';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig } from '../../lib/core';
 import { getHome } from '../../lib/home';
+import { CONTENT_REINDEX_CAP_SECONDS } from '../../lib/mount/content-reindex-queue';
 import type { Mount } from '../../lib/mount/mount';
 import { extractText } from '../../lib/search/extract-text';
 import { consumeStream, STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
-import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
+import { setShutdownDrainDeadline } from '../../lib/sync';
+import { DEFAULT_RETENTION, HOUR_MS } from '../../lib/versioning/retention';
+import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
 import { FakeS3Server } from '../fake-s3-server';
 import {
     createGetLocalDatabase,
@@ -181,6 +184,54 @@ describe('Whole-body reads', () => {
         await mount.init();
         await waitFor(() => fake.heldCount > 0);
         expect(await settlesWithin([mount.closeAllDatabases()], SETTLE_BOUND_MS)).toBe(true);
+    });
+
+    test('the teardown abort stops the reindex drain and leaves its backlog due', async () => {
+        const rootId = (await mount.getRootFolder())!.id;
+        for (let i = 0; i < 20; i++) {
+            const fileId = await mount.createFile(
+                rootId,
+                `n${i}.txt`,
+                'text/plain',
+                5,
+                new TextEncoder().encode('notes'),
+            );
+            fake.faults.set(await mount.getStorageKey(fileId), 'stall-body');
+        }
+        await mount.closeAllDatabases();
+        mount = new FaultMount(OWNER_ID, TEST_DIR, mountConfig, createGetLocalDatabase(TEST_DIR), extractText);
+        await mount.init();
+        await waitFor(() => fake.heldCount > 0);
+        mount.downloads.abort();
+        await mount.flushContentReindex();
+        expect(mount.getContentDirtyPaths(CONTENT_REINDEX_CAP_SECONDS, 100)).toHaveLength(20);
+    });
+});
+
+describe('A stalled DELETE', () => {
+    test('a shutdown close does not wait on pruning a version whose DELETE stalls', async () => {
+        const policy = { buckets: [{ intervalMs: HOUR_MS, count: 1 }] };
+        const { containerId, dataDbId } = await storedDoc(mount);
+        // Two versions, so the close-time snapshot's prune has the older one to delete.
+        await mount.snapshotContainerDataDb(containerId, policy);
+        await Bun.sleep(2);
+        await mount.snapshotContainerDataDb(containerId, policy);
+        await mount.drainPendingUploads({ flushNow: true });
+        const versions = (await mount.getChildByName(containerId, VERSIONS_FOLDER_NAME))!;
+        for (const version of await mount.listFolder(versions.id)) {
+            fake.faults.set(await mount.getStorageKey(version.id), 'stall');
+        }
+        const managed = await mount.openDatabase(
+            { ...docConfig, snapshot: { policy, writesPerSnapshot: 1_000 } },
+            dataDbId,
+        );
+        managed.db.insert(docSchema.items).values({ id: 2, data: 'y' }).run();
+        setShutdownDrainDeadline(Date.now() + SETTLE_BOUND_MS);
+        try {
+            expect(await settlesWithin([mount.closeAllDatabases()], SETTLE_BOUND_MS)).toBe(true);
+        } finally {
+            setShutdownDrainDeadline(null);
+        }
     });
 });
 

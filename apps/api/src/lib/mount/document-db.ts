@@ -143,9 +143,14 @@ async function buildDocumentDb<S extends SchemaType>(
                               console.log(`[Mount] Recovering from staged upload for ${pathId}`);
                               await mount.cleanupTemp(pathId);
                               // Side file + rename, as in downloadKeyToTemp: never a partial file at tempPath.
-                              const sidePath = mount.getTempPath(randomUUID());
-                              await Bun.write(sidePath, Bun.file(staged));
-                              fs.renameSync(sidePath, tempPath);
+                              const sideId = randomUUID();
+                              try {
+                                  await Bun.write(mount.getTempPath(sideId), Bun.file(staged));
+                              } catch (err) {
+                                  await mount.cleanupTemp(sideId);
+                                  throw err;
+                              }
+                              fs.renameSync(mount.getTempPath(sideId), tempPath);
                               return;
                           }
                       }
@@ -352,7 +357,7 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
                     .drain({ flushNow: true })
                     .catch((e) => console.error(`[Mount] shutdown drain failed:`, e)),
                 new Promise<void>((resolve) => {
-                    timer = setTimeout(resolve, deadline - Date.now());
+                    timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
                 }),
             ]);
             clearTimeout(timer);
