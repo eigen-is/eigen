@@ -174,9 +174,8 @@ export async function stageManagedDbCopy(
         cached.stageCopy(destPath);
         return true;
     }
-    const stored = mount.storage.read(storageKey);
-    if (!(await stored.exists())) return false;
-    await Bun.write(destPath, stored);
+    if (!(await mount.storage.exists(storageKey))) return false;
+    await writeTempWithHash(destPath, mount.storage.read(storageKey));
     return true;
 }
 

@@ -19,6 +19,7 @@ import type { AsyncSingleton } from '../../utils/singleton';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, PATHS, type SchemaType } from '../core';
 import { FileHistory } from '../drive/history';
+import { writeTempWithHash } from '../drive/streaming';
 import { deleteThumbnail } from '../shared/thumbnails';
 import type { StorageBackend, StorageFile } from '../storage';
 import type { RetentionPolicy } from '../versioning/retention';
@@ -86,6 +87,10 @@ export class Mount {
     // Fire-and-forget thumbnail jobs (drive/upload.ts); closeAllDatabases awaits them so no sharp
     // worker or row update outlives the mount's metadata.db.
     thumbnailJobs = new Set<Promise<void>>(); // internal — used by drive/upload.ts + mount/*.ts
+
+    // Aborted at teardown so no close or Home shutdown waits on a download. internal — used by
+    // mount/*.ts + drive/drive.ts
+    readonly downloads = new AbortController();
 
     public history!: FileHistory;
 
@@ -867,9 +872,8 @@ export class Mount {
     async readKey(storageKey: string): Promise<StorageFile | null> {
         const staged = this.pendingStagedCopy(storageKey);
         if (staged) return Bun.file(staged);
-        const file = this.storage.read(storageKey);
-        if (await file.exists()) {
-            return file;
+        if (await this.storage.exists(storageKey)) {
+            return this.storage.read(storageKey);
         }
         return null;
     }
@@ -879,10 +883,9 @@ export class Mount {
         // Freshest-first, same as readFile: a Range GET or content extraction must not read the stale object.
         const staged = this.pendingStagedCopy(storageKey);
         if (staged) return Bun.file(staged).slice(start, end);
-        const probe = this.storage.read(storageKey);
-        if (!(await probe.exists())) return null;
+        if (!(await this.storage.exists(storageKey))) return null;
         if (this.storage.readRange) return this.storage.readRange(storageKey, start, end);
-        return probe.slice(start, end);
+        return this.storage.read(storageKey).slice(start, end);
     }
 
     // Overwrites aren't handed mimeType/name like createFile — resolve the searchable gate from the row.
@@ -962,18 +965,24 @@ export class Mount {
         // A -wal that survived cleanup would be replayed into the fresh main file.
         if (fs.existsSync(`${tempPath}-wal`))
             throw new Error(`[Mount] download ${storageKey}: stale ${tempPath}-wal could not be removed`);
+        // Into a side file, renamed on success: a process death mid-GET must not leave a truncated
+        // file at tempPath, which the next open would adopt as crash recovery.
+        const sideId = randomUUID();
+        let size: number;
         try {
-            await Bun.write(tempPath, this.storage.read(storageKey));
+            ({ size } = await writeTempWithHash(
+                this.getTempPath(sideId),
+                this.storage.read(storageKey),
+                this.downloads.signal,
+            ));
         } catch (err) {
-            // A failed/partial GET can leave a truncated or 0-byte temp behind. Remove it so a later
-            // crash-recovery open can't adopt those bytes as a fresh empty doc.
-            await this.cleanupTemp(tempId);
-            throw err;
+            await this.cleanupTemp(sideId);
+            console.error(`[Mount] download ${storageKey} failed:`, err);
+            throw err instanceof ApiError ? err : new ApiError(503, 'Storage unavailable');
         }
+        fs.renameSync(this.getTempPath(sideId), tempPath);
         const ms = (Bun.nanoseconds() - start) / 1_000_000;
-        console.log(
-            `[timing] Mount.download ${storageKey} ${(Bun.file(tempPath).size / 1024) | 0}KB ${ms.toFixed(1)}ms`,
-        );
+        console.log(`[timing] Mount.download ${storageKey} ${(size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
         return tempPath;
     }
 

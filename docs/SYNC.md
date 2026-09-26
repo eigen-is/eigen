@@ -43,7 +43,10 @@ A sync no longer awaits the PUT. It writes a **frozen, WAL-complete** `VACUUM IN
   and **refuses a missing or 0-byte working copy** in `openCold`, and `buildDocumentDb` (`lib/mount/document-db.ts`) adopts a
   surviving temp only if it's a valid, non-collapsed SQLite, its `-wal` counted toward the size (else it discards it through `Mount.cleanupTemp`, journals included, and re-fetches the authoritative object; a `-wal` left beside the re-fetched file would be replayed into it).
   **Invariant: an empty/invalid working copy can never overwrite a non-trivial
-  stored object — worst case a transient 503, never a wipe.**
+  stored object — worst case a transient 503, never a wipe.** A download or a staged-copy recovery
+  writes a `tmp/<uuid>` side file and renames it onto the working-copy path, so a process killed mid-GET
+  leaves no partial temp for the next open to adopt. A failed GET, including a missing object, answers 503
+  (the open sends no HEAD first).
 - **Freshest-first reads** — `Mount.readFile` serves a pending staged copy before the storage object, so
   reopen, copy/duplicate, and copy-across all read the newest bytes during an outage, never a stale/absent
   S3 object.

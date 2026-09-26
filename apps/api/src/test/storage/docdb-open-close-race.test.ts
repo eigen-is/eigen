@@ -56,7 +56,7 @@ type Gate = { parked: Promise<void>; release: () => void };
 class GatedLocalStorage extends LocalStorage {
     private writeGate: { parked: () => void; released: Promise<void> } | null = null;
     private renameGate: { parked: () => void; released: Promise<void> } | null = null;
-    private existsGate: { parked: () => void; released: Promise<void> } | null = null;
+    private readGate: { parked: () => void; released: Promise<void> } | null = null;
 
     armWrite(): Gate {
         const parked = deferred();
@@ -72,11 +72,11 @@ class GatedLocalStorage extends LocalStorage {
         return { parked: parked.promise, release: released.resolve };
     }
 
-    // Parks the probe each open makes right before its download, holding the open mid-load like a stalled GET.
-    armExists(): Gate & { fail: (err: Error) => void } {
+    // Parks the next download before its first byte, holding the open mid-load like a stalled GET.
+    armRead(): Gate & { fail: (err: Error) => void } {
         const parked = deferred();
         const released = Promise.withResolvers<void>();
-        this.existsGate = { parked: parked.resolve, released: released.promise };
+        this.readGate = { parked: parked.resolve, released: released.promise };
         return { parked: parked.promise, release: released.resolve, fail: released.reject };
     }
 
@@ -100,14 +100,36 @@ class GatedLocalStorage extends LocalStorage {
         return super.rename(oldKey, newKey);
     }
 
-    override async exists(key: string): Promise<boolean> {
-        const gate = this.existsGate;
-        if (gate) {
-            this.existsGate = null;
-            gate.parked();
-            await gate.released;
-        }
-        return super.exists(key);
+    // Gated at stream() rather than read(): exists() and size() read the same handle.
+    override read(key: string): BunFile {
+        const file = super.read(key);
+        const stream = file.stream.bind(file);
+        return Object.assign(file, {
+            stream: () => {
+                const gate = this.readGate;
+                if (!gate) return stream();
+                this.readGate = null;
+                gate.parked();
+                let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+                let cancelled = false;
+                return new ReadableStream<Uint8Array>({
+                    async pull(controller) {
+                        if (!reader) {
+                            await gate.released;
+                            if (cancelled) return;
+                            reader = stream().getReader();
+                        }
+                        const { done, value } = await reader.read();
+                        if (done) controller.close();
+                        else controller.enqueue(value);
+                    },
+                    cancel: async () => {
+                        cancelled = true;
+                        await reader?.cancel();
+                    },
+                });
+            },
+        });
     }
 }
 
@@ -351,7 +373,7 @@ describe('an open still loading from storage', () => {
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mount.closeDatabase(dataDbId);
 
-        const gate = storage.armExists();
+        const gate = storage.armRead();
         const openPromise = mount.openDatabase(docConfig, dataDbId);
         try {
             await gate.parked;
@@ -370,13 +392,12 @@ describe('an open still loading from storage', () => {
         }
     }, 10_000);
 
-    // Gap CO-2: mount teardown awaits an open parked on storage, so a stalled GET holds the whole home's teardown.
-    test.failing('mount teardown settles while an open is parked on storage', async () => {
+    test('mount teardown settles while an open is parked on storage', async () => {
         const { mount, storage } = await createGatedLocalMount('teardown-mid-load');
         const { dataDbId } = await provisionDoc(mount, docConfig);
         await mount.closeDatabase(dataDbId);
 
-        const gate = storage.armExists();
+        const gate = storage.armRead();
         const openPromise = mount.openDatabase(docConfig, dataDbId).catch(() => null);
         let teardown: Promise<void> | undefined;
         try {
@@ -396,7 +417,7 @@ describe('an open still loading from storage', () => {
         const { dataDbId } = await provisionDoc(mount, docConfig);
         await mount.closeDatabase(dataDbId);
 
-        const gate = storage.armExists();
+        const gate = storage.armRead();
         const failing = mount.openDatabase(docConfig, dataDbId).catch(() => null);
         await gate.parked;
         // The close takes the in-flight entry out of the cache; the successor open waits on that close.

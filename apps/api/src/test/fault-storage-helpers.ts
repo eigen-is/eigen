@@ -308,6 +308,9 @@ export async function waitFor(cond: () => boolean | Promise<boolean>, timeoutMs 
 // Past this, a call on storage that stopped answering counts as wedged.
 export const STALL_BOUND_MS = 250;
 
+// The storage deadline a test shrinks to (setStorageTimeoutMs), so it fires inside STALL_BOUND_MS.
+export const SHRUNK_STORAGE_TIMEOUT_MS = 100;
+
 // Bounded deadlock detector, not synchronization: on the green path the promises settle at once and
 // the timer is cleared; only a real wedge runs it out. A rejection propagates like a plain await.
 export async function settlesWithin(promises: Promise<unknown>[], ms: number): Promise<boolean> {

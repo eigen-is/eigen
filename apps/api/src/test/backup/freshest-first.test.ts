@@ -12,6 +12,7 @@ import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
 import { LocalStorage } from '../../lib/storage/local-storage';
+import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/s3-storage';
 import { FakeS3Server } from '../fake-s3-server';
 import {
     countBackingRows,
@@ -21,6 +22,7 @@ import {
     type FaultStorage,
     provisionDoc,
     registerFaultMount,
+    SHRUNK_STORAGE_TIMEOUT_MS,
     STALL_BOUND_MS,
     settleContainer,
     settlesWithin,
@@ -384,8 +386,7 @@ describe('Backup freshest-first on an s3 mount', () => {
 });
 
 describe('Backup job on an s3 mount whose bucket stalls', () => {
-    // Gap BK-4: a stalled GET holds the job and the home's job slot; flips once the S3 GET deadline is below STALL_BOUND_MS.
-    test.failing('a GET that stalls ends the backup job, so the home can be restored again', async () => {
+    test('a GET that stalls ends the backup job, so the home can be restored again', async () => {
         const fake = new FakeS3Server(new LocalStorage(join(backingRoot, STALLED_MOUNT_ID)));
         const mount = new FaultMount(
             home.user.id,
@@ -407,6 +408,7 @@ describe('Backup job on an s3 mount whose bucket stalls', () => {
             );
             const storageKey = await mount.getStorageKey(fileId);
             fake.faults.set(storageKey, 'stall-body');
+            setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
             jobId = startBackupJob('backup', home.user.id, home.user.id, (job, onProgress) =>
                 runHomeBackup(home, job, onProgress),
             ).id;
@@ -414,6 +416,7 @@ describe('Backup job on an s3 mount whose bucket stalls', () => {
             expect(await settlesWithin([drainBackupJobs()], STALL_BOUND_MS)).toBe(true);
             expect(getBackupJob(jobId)?.state).toBe('failed');
         } finally {
+            setStorageTimeoutMs(STORAGE_TIMEOUT_MS);
             fake.heal();
             await drainBackupJobs();
             const artifact = jobId && getBackupJob(jobId)?.artifact;

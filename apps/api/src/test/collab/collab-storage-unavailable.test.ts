@@ -135,8 +135,7 @@ describe('Collab WS open under unreachable storage', () => {
 });
 
 describe('Collab WS open whose download fails', () => {
-    // Gap CO-3: a GET that fails after exists() succeeded closes 1008, not storage-unavailable.
-    test.failing('a 5xx on the GET closes with storage-unavailable, like an unreachable exists()', async () => {
+    test('a 5xx on the GET closes with storage-unavailable, like an unreachable exists()', async () => {
         const { docId, dataKey } = await createDoc('Get500');
         fakeS3.faults.set(dataKey, 'fail-get');
         expect(await openCollabClient(docId).closed).toEqual({

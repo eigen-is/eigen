@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { createAsyncSingleton } from '../../utils/singleton';
@@ -141,15 +142,16 @@ async function buildDocumentDb<S extends SchemaType>(
                           if (staged && fs.existsSync(staged)) {
                               console.log(`[Mount] Recovering from staged upload for ${pathId}`);
                               await mount.cleanupTemp(pathId);
-                              await Bun.write(tempPath, Bun.file(staged));
+                              // Side file + rename, as in downloadKeyToTemp: never a partial file at tempPath.
+                              const sidePath = mount.getTempPath(randomUUID());
+                              await Bun.write(sidePath, Bun.file(staged));
+                              fs.renameSync(sidePath, tempPath);
                               return;
                           }
                       }
-                      if (!(await mount.storage.exists(storageKey))) {
-                          throw new ApiError(503, `Storage object for ${pathId} not available`);
-                      }
+                      // A missing object fails the GET, which answers the same 503 a HEAD would.
                       await mount.downloadKeyToTemp(storageKey, pathId);
-                      // No empty-check here: a 0-byte/partial GET is caught by ManagedDatabase's
+                      // No empty-check here: an empty 200 is caught by ManagedDatabase's
                       // mustExist guard (openCold refuses to open an empty working copy as a fresh db).
                   },
                   // isRemote: stage a frozen copy + enqueue, off the request/close path.
@@ -276,6 +278,10 @@ export async function closeCachedDbsUnder(mount: Mount, rootId: string): Promise
 }
 
 export async function closeAllDatabases(mount: Mount): Promise<void> {
+    // First, so neither the reindex drain nor a close below waits on a download. The mount is not
+    // reused after this, so the abort is for good.
+    mount.downloads.abort();
+
     // Cancel the init-scheduled history prune so a fast teardown doesn't fire it against a
     // metadata.db the Home is about to close (the mount stops its own timers here — the same seam
     // as the upload/reindex queues below).

@@ -741,7 +741,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         await plantStaleWal(tempPath);
         const storageKey = await mount.getStorageKey(dataDbId);
         fault.failReadKeys.add(storageKey);
-        await expect(mount.openDatabase(docConfigNoSnap, dataDbId)).rejects.toThrow('injected read failure');
+        await expect(mount.openDatabase(docConfigNoSnap, dataDbId)).rejects.toMatchObject({ status: 503 });
         fault.failReadKeys.delete(storageKey);
 
         const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);

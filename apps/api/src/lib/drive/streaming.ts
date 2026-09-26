@@ -3,7 +3,7 @@ import type { CryptoHasher, FileSink } from 'bun';
 import { ApiError } from '../core';
 import type { Mount } from '../mount';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
-import type { StorageFile } from '../storage';
+import { getStorageTimeoutMs, type StorageFile } from '../storage';
 
 export type StreamResult = {
     tempId: string;
@@ -81,27 +81,50 @@ export async function streamFilesToTemp(
 }
 
 // The one streaming loop behind writeTempWithHash and hashFile: pulls the stream chunk by chunk
-// and reports the total, so neither of them holds the payload in memory.
+// and reports the total, so neither of them holds the payload in memory. With a bound, a stream that
+// stays silent for idleMs, or whose signal aborts, is cancelled and answers 503.
 async function consumeStream(
     stream: ReadableStream<Uint8Array>,
     onChunk: (chunk: Uint8Array) => void,
+    bound?: { idleMs: number; signal?: AbortSignal },
 ): Promise<number> {
     const reader = stream.getReader();
-    let size = 0;
-    while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        onChunk(value);
-        size += value.byteLength;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const stop = () => {
+        stopped = true;
+        reader.cancel().catch(() => {});
+    };
+    bound?.signal?.addEventListener('abort', stop);
+    if (bound?.signal?.aborted) stop();
+    try {
+        let size = 0;
+        while (true) {
+            if (bound) {
+                clearTimeout(timer);
+                timer = setTimeout(stop, bound.idleMs);
+            }
+            // A read pending when cancel() runs resolves done rather than throwing, hence the flag.
+            const { done, value } = await reader.read();
+            if (stopped) throw new ApiError(503, 'Storage unavailable');
+            if (done) break;
+            onChunk(value);
+            size += value.byteLength;
+        }
+        return size;
+    } finally {
+        clearTimeout(timer);
+        bound?.signal?.removeEventListener('abort', stop);
     }
-    return size;
 }
 
 // Stream a buffer, StorageFile (BunFile/S3File), or ReadableStream into a temp path while
 // computing the sha256 hash in a single pass. Avoids holding the full payload in memory twice.
+// A StorageFile read carries the storage idle deadline; a request body is the client's to pace.
 export async function writeTempWithHash(
     tempPath: string,
     data: Buffer | Uint8Array | StorageFile | ReadableStream<Uint8Array>,
+    signal?: AbortSignal,
 ): Promise<{ size: number; hash: string }> {
     const hasher = new Bun.CryptoHasher('sha256');
 
@@ -111,14 +134,19 @@ export async function writeTempWithHash(
         return { size: data.byteLength, hash: hasher.digest('hex') };
     }
 
-    const stream = data instanceof ReadableStream ? data : data.stream();
+    const isBody = data instanceof ReadableStream;
+    const stream = isBody ? data : data.stream();
     const writer = Bun.file(tempPath).writer({ highWaterMark: 256 * 1024 });
     let failed = false;
     try {
-        const size = await consumeStream(stream, (chunk) => {
-            hasher.update(chunk);
-            writer.write(chunk);
-        });
+        const size = await consumeStream(
+            stream,
+            (chunk) => {
+                hasher.update(chunk);
+                writer.write(chunk);
+            },
+            isBody ? undefined : { idleMs: getStorageTimeoutMs(), signal },
+        );
         return { size, hash: hasher.digest('hex') };
     } catch (error) {
         failed = true;

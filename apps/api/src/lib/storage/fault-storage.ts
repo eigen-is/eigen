@@ -5,8 +5,8 @@ import type { StorageBackend, StorageFile } from './types';
 
 type FaultKind = 'exists-throw' | 'exists-delay';
 
-// Dev-only: fails or stalls the exists() probe every create/open makes, so degraded storage is
-// reproducible without an outage. read()/readRange() hand out lazy handles, so nothing to inject there.
+// Dev-only: fails or stalls the exists() probe every create and file read makes, so degraded storage
+// is reproducible without an outage. read()/readRange() hand out lazy handles, so nothing to inject there.
 class StorageFaultInjector implements StorageBackend {
     // Present exactly when the inner backend has them — Mount branches on getPath's presence.
     readonly readRange: StorageBackend['readRange'];

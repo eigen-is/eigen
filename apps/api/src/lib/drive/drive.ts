@@ -1267,7 +1267,9 @@ export default class Drive {
         // Order matters: Yjs documents must be destructed before their underlying mount
         // databases are closed. Yjs may flush pending changes during destruct(), which
         // requires the database to still be open. This mirrors closeCollabDocument() which
-        // calls doc.destruct() then mount.closeDatabase().
+        // calls doc.destruct() then mount.closeDatabase(). A document still loading would hold
+        // destructAll on its download, so every mount's downloads abort first.
+        for (const mount of this.mounts.values()) mount.downloads.abort();
         await this.documents.destructAll();
 
         // Close remaining mount databases (chat rooms, plus any collab databases whose

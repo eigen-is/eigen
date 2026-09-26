@@ -6,7 +6,7 @@ import { type DrivePathType, isCollabType, isDocumentType } from '@workspace/lib
 import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import { CHAT_ROOM_DB_CONFIG } from '../chat/db-config';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
-import type { DatabaseConfig, SchemaType } from '../core';
+import { ApiError, type DatabaseConfig, type SchemaType } from '../core';
 import { buildStorageKey, isUsableName } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
@@ -219,6 +219,10 @@ const LOCAL_FAILURE_CODE = /^(SQLITE_[A-Z]+|ENOSPC|EACCES|EDQUOT|EROFS|EIO|ENOEN
 // Only that shape is rewritten, and it names the object it was reading; anything else is rethrown
 // untouched.
 function rethrowStorageFailure(mountId: string, storageKey: string, error: unknown): never {
+    // S3Storage answers a failed or timed-out call with a bare 503 and logs the provider's code itself.
+    if (error instanceof ApiError && error.status === 503) {
+        throw new Error(`mount ${mountId}: storage unreachable reading ${storageKey}`);
+    }
     const code = errnoOf(error);
     if (!code || LOCAL_FAILURE_CODE.test(code)) throw error;
     throw new Error(`mount ${mountId}: storage unreachable (${code}) reading ${storageKey}`);

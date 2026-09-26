@@ -113,12 +113,13 @@ describe.skipIf(!live)('S3Storage (MinIO)', () => {
         expect(await storage.readRange('direct/range.txt', 2, 6).text()).toBe('2345');
     });
 
-    test('delete returns true once, then exists false, then delete false', async () => {
+    // S3 answers a DELETE of a missing key with success, so false only ever means a failed call.
+    test('delete returns true, then exists false, and a second delete still returns true', async () => {
         createdKeys.push('direct/delete.txt');
         await storage.write('direct/delete.txt', Buffer.from('bye'));
         expect(await storage.delete('direct/delete.txt')).toBe(true);
         expect(await storage.exists('direct/delete.txt')).toBe(false);
-        expect(await storage.delete('direct/delete.txt')).toBe(false);
+        expect(await storage.delete('direct/delete.txt')).toBe(true);
     });
 
     // Pins the audit item-7 fix: size() goes through stat() — S3File.size is a synchronous NaN.

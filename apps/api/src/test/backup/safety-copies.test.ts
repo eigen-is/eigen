@@ -14,10 +14,12 @@ import { getHome } from '../../lib/home/get-home';
 import * as mountHelpers from '../../lib/mount/helpers';
 import type { Mount } from '../../lib/mount/mount';
 import { LocalStorage } from '../../lib/storage/local-storage';
+import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/s3-storage';
 import { FakeS3Server } from '../fake-s3-server';
 import {
     createHomeFaultMount,
     registerFaultMount,
+    SHRUNK_STORAGE_TIMEOUT_MS,
     STALL_BOUND_MS,
     settleContainer,
     settlesWithin,
@@ -268,8 +270,8 @@ describe('Backup safety copies of an s3 home', () => {
         }
     });
 
-    // Gap BK-4: a HEAD that never answers holds the delete and the job slot; flips once a HEAD deadline per key fits in STALL_BOUND_MS.
-    test.failing('a delete against a bucket that never answers gives the home slot back', async () => {
+    // The delete probes one key at a time, each bounded by the storage deadline.
+    test('a delete against a bucket that never answers gives the home slot back', async () => {
         const [copy] = safetyCopies(userId);
         const copyDir = join(TEST_DATA_DIR, 'home', copy);
         const fake = new FakeS3Server(new LocalStorage(join(BACKING, MOUNT_ID)));
@@ -279,11 +281,13 @@ describe('Backup safety copies of an s3 home', () => {
             join(copyDir, 'settings.json'),
             JSON.stringify({ mounts: { [MOUNT_ID]: { storageType: 's3', enabled: true, s3Config } } }),
         );
+        setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
         const deleting = withBackupJobSlot(userId, () => deleteSafetyCopy(copyDir, homeDir)).catch(() => {});
         try {
-            expect(await settlesWithin([deleting], STALL_BOUND_MS)).toBe(true);
+            expect(await settlesWithin([deleting], keysAfter.length * STALL_BOUND_MS)).toBe(true);
             expect(existsSync(copyDir)).toBe(true);
         } finally {
+            setStorageTimeoutMs(STORAGE_TIMEOUT_MS);
             // Never heal: an answered HEAD would let the delete take the objects the next test needs.
             await fake.stop();
             await deleting;

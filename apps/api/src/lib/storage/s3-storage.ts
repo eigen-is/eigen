@@ -237,6 +237,19 @@ function hmac(key: string | Buffer, data: string): Buffer {
     return createHmac('sha256', key).update(data).digest();
 }
 
+// Eigen's own bound on an S3 metadata call and on a storage read that stops delivering bytes: Bun's
+// S3Client gives up only after about 360 s of silence. A setter so tests can shrink it.
+export const STORAGE_TIMEOUT_MS = 30_000;
+let storageTimeoutMs = STORAGE_TIMEOUT_MS;
+
+export function setStorageTimeoutMs(ms: number): void {
+    storageTimeoutMs = ms;
+}
+
+export function getStorageTimeoutMs(): number {
+    return storageTimeoutMs;
+}
+
 export class S3Storage implements StorageBackend {
     private client: S3Client;
     private prefix: string;
@@ -274,20 +287,15 @@ export class S3Storage implements StorageBackend {
         return this.client.file(this.getKey(key)).slice(start, end);
     }
 
-    async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
-        const file = this.read(key);
-        const written = await file.write(data);
-        return written;
+    write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+        return this.read(key).write(data);
     }
 
     async delete(key: string): Promise<boolean> {
+        // S3 answers a DELETE of a missing key with success, so no HEAD first.
         try {
-            const file = this.read(key);
-            if (await file.exists()) {
-                await file.delete();
-                return true;
-            }
-            return false;
+            await withStorageDeadline(this.read(key).delete());
+            return true;
         } catch (error) {
             console.error(`Failed to delete S3 file ${key}:`, error);
             return false;
@@ -298,7 +306,7 @@ export class S3Storage implements StorageBackend {
         // A missing object resolves false; a throw is the provider failing. 503 is the shape the
         // create (rollback) and open (1013 close) paths speak, so the outage reads as one and not as a 500.
         try {
-            return await this.read(key).exists();
+            return await withStorageDeadline(this.read(key).exists());
         } catch (error) {
             console.error(`S3 exists probe failed for ${key}:`, error);
             throw new ApiError(503, 'Storage unavailable');
@@ -306,11 +314,23 @@ export class S3Storage implements StorageBackend {
     }
 
     async size(key: string): Promise<number | null> {
-        // stat() throws on a missing object with no distinguishable code — map any failure to null like LocalStorage.
+        // stat() throws on a missing object with no distinguishable code — map any failure but the deadline to null like LocalStorage.
         try {
-            return (await this.read(key).stat()).size;
-        } catch {
+            return (await withStorageDeadline(this.read(key).stat())).size;
+        } catch (error) {
+            if (error instanceof ApiError) throw error;
             return null;
         }
     }
+}
+
+// A request Bun's S3Client cannot abort keeps running in the background; only the caller stops waiting.
+function withStorageDeadline<T>(request: Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    return Promise.race([
+        request,
+        new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new ApiError(503, 'Storage unavailable')), storageTimeoutMs);
+        }),
+    ]).finally(() => clearTimeout(timer));
 }
