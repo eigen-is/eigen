@@ -143,8 +143,7 @@ describe('S3 reads that fail', () => {
         await expect(mount.readFile(fileId)).rejects.toMatchObject({ status: 503 });
     });
 
-    // Gap DL-5: a copy whose source GET dies midway leaves its partial temp in tmp/ until the next mount open.
-    test.failing('a copy whose source GET dies midway leaves nothing in tmp/', async () => {
+    test('a copy whose source GET dies midway leaves nothing in tmp/', async () => {
         const rootId = (await mount.getRootFolder())!.id;
         const bytes = new Uint8Array(256 * 1024).fill(7);
         const fileId = await mount.createFile(rootId, 'c.bin', 'application/octet-stream', bytes.length, bytes);

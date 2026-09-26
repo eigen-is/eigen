@@ -179,8 +179,7 @@ describe('Collab WS open whose download fails', () => {
         expect(reopened.doc.getMap('probe').get('kept')).toBe('yes');
     }, 10_000);
 
-    // Gap CO-5: a failed load stays registered as an open document.
-    test.failing('a load that failed leaves no open-document entry behind', async () => {
+    test('a load that failed leaves no open-document entry behind', async () => {
         const { docId, dataKey } = await createDoc('FailedEntry');
         fakeS3.faults.set(dataKey, 'fail-get');
         await drive.getCollabDocument(MOUNT_ID, docId).catch(() => {});

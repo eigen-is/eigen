@@ -3,6 +3,7 @@ import { DRIVE_TYPE_FILE } from '@workspace/lib/types';
 import type { DrivePath, FileEditorContent } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
 import type { Mount } from '../mount';
+import { readStorageFile } from './streaming';
 
 export const MAX_INLINE_EDIT_SIZE = 5 * 1024 * 1024;
 
@@ -31,7 +32,7 @@ export async function getEditableContent(mount: Mount, path: DrivePath): Promise
 
     let content: string;
     try {
-        content = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
+        content = new TextDecoder('utf-8', { fatal: true }).decode(await readStorageFile(file));
     } catch {
         throw new ApiError(400, 'File contains invalid UTF-8 encoding');
     }

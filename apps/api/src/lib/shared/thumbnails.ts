@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BunFile } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
+import { readStorageFile } from '../drive/streaming';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
 import { isVideoCandidate } from '../preview/video-preview';
 import type { StorageFile } from '../storage';
@@ -49,7 +50,7 @@ export async function generateImagePreview(
         resolvedSource = source.name;
     } else {
         // S3File — download to buffer, transfer zero-copy to worker
-        resolvedSource = await source.arrayBuffer();
+        resolvedSource = await readStorageFile(source);
     }
 
     if (tmpDir) {

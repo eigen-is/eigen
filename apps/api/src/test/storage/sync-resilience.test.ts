@@ -281,10 +281,8 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         const elapsedMs = (Bun.nanoseconds() - start) / 1_000_000;
         setShutdownDrainDeadline(null);
 
-        // The deadline bounds when the loop STARTS new PUTs; an already-in-flight PUT still runs
-        // to completion, so the bound is ≈ deadline + one PUT (~2s here), never N×PUT. A PUT that
-        // overruns the process grace period is SIGKILLed and replays on boot — no data loss.
-        expect(elapsedMs).toBeLessThan(4_000);
+        // The flush stops waiting at the deadline, not after the 2 s PUT in flight; that row replays on boot.
+        expect(elapsedMs).toBeLessThan(2_000);
         expect(mount.pendingUploadCount).toBeGreaterThan(0); // left queued for boot replay
     });
 

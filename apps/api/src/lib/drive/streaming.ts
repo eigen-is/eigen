@@ -164,6 +164,13 @@ export async function writeTempWithHash(
     }
 }
 
+// file.arrayBuffer() under the storage idle deadline, for a body read whole into memory.
+export async function readStorageFile(file: StorageFile): Promise<ArrayBuffer> {
+    const chunks: Uint8Array[] = [];
+    await consumeStream(file.stream(), (chunk) => chunks.push(chunk), { idleMs: getStorageTimeoutMs() });
+    return Bun.concatArrayBuffers(chunks);
+}
+
 // Read-only twin of writeTempWithHash, for bytes something else produced (a VACUUM INTO copy).
 export async function hashFile(filePath: string): Promise<{ size: number; hash: string }> {
     const hasher = new Bun.CryptoHasher('sha256');

@@ -65,8 +65,7 @@ afterAll(() => {
 });
 
 describe('shutdown drain with a stalled PUT', () => {
-    // Gap UP-1: the shutdown flush waits out an in-flight PUT past its deadline.
-    test.failing('the shutdown flush returns by its deadline while a PUT is stalled', async () => {
+    test('the shutdown flush returns by its deadline while a PUT is stalled', async () => {
         const { mount, fault } = createS3Mount('shutdown-stalled-put');
         await mount.init();
         const { dataDbId, managed } = await openSettledDoc(mount);
@@ -86,8 +85,7 @@ describe('shutdown drain with a stalled PUT', () => {
         }
     });
 
-    // Gap UP-1: a flush queued behind other mounts' stalled PUTs on the shared semaphore overruns the deadline.
-    test.failing('the shutdown flush returns by its deadline while the destination semaphore is held', async () => {
+    test('the shutdown flush returns by its deadline while the destination semaphore is held', async () => {
         const bucket = `shared-${Date.now()}`;
         const { mount, fault } = createS3Mount('semaphore-waiter', bucket);
         await mount.init();
@@ -154,8 +152,7 @@ describe('edits while a PUT is stalled', () => {
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(4);
     });
 
-    // Gap UP-5: a sync superseding a copy that is not the in-flight one leaves that copy on disk.
-    test.failing('staged copies superseded behind a stalled PUT are removed', async () => {
+    test('staged copies superseded behind a stalled PUT are removed', async () => {
         const { mount, land } = await editBehindParkedPut('stalled-supersede-leak');
         // The in-flight copy and the newest one; the two between were superseded.
         expect(readdirSync(mount.stagingDir)).toHaveLength(2);

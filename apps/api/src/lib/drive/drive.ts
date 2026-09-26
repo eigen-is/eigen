@@ -409,7 +409,7 @@ export default class Drive {
         const streamed = await streamFilesToTemp(mount, request, maxSize);
         const uploaded: DrivePath[] = [];
 
-        for (const result of streamed) {
+        for (const [index, result] of streamed.entries()) {
             try {
                 uploaded.push(
                     await finalizeUpload(this, mount, {
@@ -423,7 +423,8 @@ export default class Drive {
                     }),
                 );
             } catch (e) {
-                await mount.cleanupTemp(result.tempId);
+                // This file's temp and every one streamed after it.
+                await Promise.all(streamed.slice(index).map((r) => mount.cleanupTemp(r.tempId)));
                 throw e;
             }
         }

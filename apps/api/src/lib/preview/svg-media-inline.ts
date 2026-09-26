@@ -1,6 +1,7 @@
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '../document/media';
+import { readStorageFile } from '../drive/streaming';
 import { getFontFaceCSSForFamilies } from '../export/fonts';
 import type { Mount } from '../mount';
 
@@ -176,7 +177,7 @@ async function resolveRef(
         if (base64Len(child.size) > budget.remaining) throw new OutputTooLargeError();
         const file = await mount.readFile(child.id);
         if (!file) return null;
-        const bytes = Buffer.from(await file.arrayBuffer());
+        const bytes = Buffer.from(await readStorageFile(file));
         const inner = bytes.includes(SNIFF)
             ? Buffer.from(await resolveSvgRefs(mount, parentId, bytes.toString('utf8'), depth + 1, budget), 'utf8')
             : bytes;
@@ -195,7 +196,7 @@ async function resolveRef(
     charge(budget, occurrences, projectedLen, tokenLen);
     const file = await mount.readFile(child.id);
     if (!file) return null;
-    const bytes = Buffer.from(await file.arrayBuffer());
+    const bytes = Buffer.from(await readStorageFile(file));
     return `data:${mime};base64,${bytes.toString('base64')}`;
 }
 

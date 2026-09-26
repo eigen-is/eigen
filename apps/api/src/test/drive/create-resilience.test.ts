@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
@@ -18,7 +18,7 @@ import {
 import { collectSSE, getTestContext } from '../setup';
 
 // Drive.create over a FaultStorage mount: a provisioning failure must leave no container row, since a
-// surviving row occupies the name and 503s on every later open.
+// surviving row occupies the name and 503s on every later open. A failed upload leaves no temp behind.
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-create-resilience-${Date.now()}`);
 const MOUNT_ID = 'fault-create';
@@ -46,6 +46,7 @@ beforeAll(async () => {
 // Injections are per-test: a leaked one would fail the NEXT test's teardown, not its assertions.
 afterEach(() => {
     fault.failNextExists = 0;
+    fault.failNextWrites = 0;
     fault.failReadKeys.clear();
 });
 
@@ -110,5 +111,19 @@ describe('Drive.create is atomic under degraded storage', () => {
         const empty = await mount.openDatabase(COLLAB_DB_CONFIG, dataDb.id).catch((e: unknown) => e);
         expect(empty).toBeInstanceOf(ApiError);
         expect(empty).toMatchObject({ status: 503 });
+    });
+});
+
+describe('Drive.uploadFiles under degraded storage', () => {
+    test('a failed PUT removes the temp of every file streamed after it', async () => {
+        const form = new FormData();
+        form.append('file', new File(['a'], 'first.txt'));
+        form.append('file', new File(['b'], 'second.txt'));
+        const request = new Request('http://localhost/upload', { method: 'POST', body: form });
+        const before = new Set(readdirSync(mount.tmpDir));
+
+        fault.failNextWrites = 1;
+        await expect(drive.uploadFiles(MOUNT_ID, rootId, request, 1024, user)).rejects.toThrow();
+        expect(readdirSync(mount.tmpDir).filter((entry) => !before.has(entry))).toEqual([]);
     });
 });

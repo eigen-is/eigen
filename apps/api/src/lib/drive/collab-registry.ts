@@ -26,12 +26,18 @@ export class CollabRegistry {
         let getter = this.documents.get(key);
         if (!getter) {
             getter = createAsyncSingleton(async () => {
-                const path = await mount.getActivePath(pathId);
-                if (!isCollabType(path.type)) {
-                    throw new ApiError(404, 'Document not found');
+                try {
+                    const path = await mount.getActivePath(pathId);
+                    if (!isCollabType(path.type)) {
+                        throw new ApiError(404, 'Document not found');
+                    }
+                    const document = new CollabDocument(drive, path);
+                    return await document.init();
+                } catch (err) {
+                    // A failed load is not an open document; only our own entry, as in openDocumentDb.
+                    if (this.documents.get(key) === getter) this.documents.delete(key);
+                    throw err;
                 }
-                const document = new CollabDocument(drive, path);
-                return document.init();
             });
             this.documents.set(key, getter);
         }

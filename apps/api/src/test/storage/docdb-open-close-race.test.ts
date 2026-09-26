@@ -411,8 +411,25 @@ describe('an open still loading from storage', () => {
         }
     }, 10_000);
 
-    // Gap CO-4: a failed open's cleanup deletes whichever getter holds its slot, even a successor's.
-    test.failing("an open that fails after a close took its slot leaves the successor's cache entry alone", async () => {
+    // The abort fails the parked open while teardown is closing the doc ahead of it.
+    test('mount teardown settles when an open it aborts fails during an earlier close', async () => {
+        const { mount, storage } = await createGatedLocalMount('teardown-abort-mid-close');
+        await provisionDoc(mount, docConfig, 'chat');
+        const { dataDbId } = await provisionDoc(mount, docConfig);
+        await mount.closeDatabase(dataDbId);
+
+        const gate = storage.armRead();
+        const failing = mount.openDatabase(docConfig, dataDbId).catch(() => null);
+        await gate.parked;
+        try {
+            expect(await settlesWithin([mount.closeAllDatabases()], STALL_BOUND_MS)).toBe(true);
+        } finally {
+            gate.release();
+            await failing;
+        }
+    }, 10_000);
+
+    test("an open that fails after a close took its slot leaves the successor's cache entry alone", async () => {
         const { mount, storage } = await createGatedLocalMount('failed-open-successor');
         const { dataDbId } = await provisionDoc(mount, docConfig);
         await mount.closeDatabase(dataDbId);

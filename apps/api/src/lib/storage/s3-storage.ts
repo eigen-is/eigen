@@ -283,10 +283,6 @@ export class S3Storage implements StorageBackend {
         return this.client.file(this.getKey(key));
     }
 
-    readRange(key: string, start: number, end: number): S3File {
-        return this.client.file(this.getKey(key)).slice(start, end);
-    }
-
     write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         return this.read(key).write(data);
     }

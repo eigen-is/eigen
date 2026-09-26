@@ -884,7 +884,6 @@ export class Mount {
         const staged = this.pendingStagedCopy(storageKey);
         if (staged) return Bun.file(staged).slice(start, end);
         if (!(await this.storage.exists(storageKey))) return null;
-        if (this.storage.readRange) return this.storage.readRange(storageKey, start, end);
         return this.storage.read(storageKey).slice(start, end);
     }
 
@@ -1065,7 +1064,7 @@ export class Mount {
     // Force a drain of this mount's pending uploads. The queue otherwise self-drives (on enqueue +
     // backoff), and process shutdown flushes via uploadQueue.drain() directly (see closeAllDatabases),
     // so this thin facade exists only for tests and ad-hoc ops. No-op for non-S3 mounts.
-    drainPendingUploads(opts?: { flushNow?: boolean; deadline?: number }): Promise<void> {
+    drainPendingUploads(opts?: { flushNow?: boolean }): Promise<void> {
         return this.uploadQueue?.drain(opts) ?? Promise.resolve();
     }
 

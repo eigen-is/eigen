@@ -170,15 +170,9 @@ async function deleteRemoteObjects(folder: string, homeDir: string): Promise<voi
         );
         for (const key of storageKeysIn(copyDb)) {
             if (referenced.has(key)) continue;
-            try {
-                // Both backends answer false for "not there" as well as for "could not", so the probe
-                // is what tells a no-op — a failed restore's keys were staged, never uploaded — from
-                // an outage, a 403, a rotated key.
-                if ((await storage.exists(key)) && !(await storage.delete(key))) failures++;
-            } catch (error) {
-                console.error(`[backup] could not delete ${id}/${key}:`, error);
-                failures++;
-            }
+            // A missing key answers true (a failed restore's keys were staged, never uploaded); false is
+            // an outage, a 403, a rotated key.
+            if (!(await storage.delete(key))) failures++;
         }
     }
     if (failures > 0) {

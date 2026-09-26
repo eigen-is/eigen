@@ -2,10 +2,10 @@ import * as net from 'node:net';
 import type { S3Config } from '@workspace/lib/types';
 import type { StorageBackend } from '../lib/storage';
 
-// A local S3 for the real S3Storage: faults on the lazy S3File's HEAD and GET, which FaultStorage never sees.
+// A local S3 for the real S3Storage: faults on the lazy S3File's HEAD, GET and DELETE, which FaultStorage never sees.
 
 // stall-body: headers and half the body, then silence; cut: half, then close; fail-get: a 500 on GET only.
-// HEAD honors only stall and fail.
+// HEAD and DELETE honor only stall and fail.
 export type S3Fault = 'stall' | 'stall-body' | 'cut' | 'empty' | 'fail' | 'fail-get';
 
 export class FakeS3Server {
@@ -89,11 +89,6 @@ export class FakeS3Server {
             reply(socket, method, '200 OK');
             return;
         }
-        if (method === 'DELETE') {
-            await this.store.delete(key);
-            reply(socket, method, '204 No Content');
-            return;
-        }
         if (method === 'GET') this.gets.set(key, (this.gets.get(key) ?? 0) + 1);
         const fault = this.faults.get(key);
         if (fault === 'stall') {
@@ -114,6 +109,11 @@ export class FakeS3Server {
     ): Promise<void> {
         if (fault === 'fail' || (fault === 'fail-get' && method === 'GET')) {
             reply(socket, method, '500 Internal Server Error', 'InternalError');
+            return;
+        }
+        if (method === 'DELETE') {
+            await this.store.delete(key);
+            reply(socket, method, '204 No Content');
             return;
         }
         const size = await this.store.size(key);

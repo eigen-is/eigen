@@ -13,6 +13,7 @@ import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
 import type { EmlPreviewJob, IcsPreviewJob, VCardPreviewJob } from '../document/transform/protocol';
 import { runBytesTransformToText, runFileTransformToText } from '../document/transform/run-transform';
 import type { TransformPriority } from '../document/transform/runner';
+import { readStorageFile } from '../drive/streaming';
 import { decodeCharset } from '../mail/mail-parser/decode';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
@@ -336,7 +337,7 @@ export async function getScreenPreview(
             async () => {
                 const file = await mount.readFile(drivePath.id);
                 if (!file) return null;
-                const bytes = Buffer.from(await file.arrayBuffer());
+                const bytes = Buffer.from(await readStorageFile(file));
                 return drivePath.parentId ? inlineSvgMediaRefs(mount, drivePath.parentId, bytes) : bytes;
             },
         );
@@ -391,7 +392,7 @@ export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promis
 async function generateFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<string | null> {
     const file = await mount.readFile(drivePath.id);
     if (!file) return null;
-    const preview = await getBytesTextPreview(await file.arrayBuffer(), drivePath.name, drivePath.mimeType || '');
+    const preview = await getBytesTextPreview(await readStorageFile(file), drivePath.name, drivePath.mimeType || '');
     return preview?.body ?? null;
 }
 

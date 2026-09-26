@@ -270,7 +270,7 @@ describe('Backup safety copies of an s3 home', () => {
         }
     });
 
-    // The delete probes one key at a time, each bounded by the storage deadline.
+    // The delete takes one key at a time, each bounded by the storage deadline.
     test('a delete against a bucket that never answers gives the home slot back', async () => {
         const [copy] = safetyCopies(userId);
         const copyDir = join(TEST_DATA_DIR, 'home', copy);
@@ -288,7 +288,7 @@ describe('Backup safety copies of an s3 home', () => {
             expect(existsSync(copyDir)).toBe(true);
         } finally {
             setStorageTimeoutMs(STORAGE_TIMEOUT_MS);
-            // Never heal: an answered HEAD would let the delete take the objects the next test needs.
+            // Never heal: an answered DELETE would take the objects the next test needs.
             await fake.stop();
             await deleting;
         }

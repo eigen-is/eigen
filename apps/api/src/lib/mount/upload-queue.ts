@@ -41,8 +41,8 @@ export type UploadQueueDeps = {
 // in-process orphans and repaired when they settle (trackOrphan). Producers (sync/close/create,
 // snapshots) stage a copy then call enqueueStaged; a home restore writes its rows into
 // pending_uploads directly and lets mount init pick them up (lib/backup/materialize.ts);
-// delete/restore call cancel; mount init calls reconcile; shutdown calls drain({flushNow,deadline})
-// then close.
+// delete/restore call cancel; mount init calls reconcile; shutdown races drain({flushNow}) against
+// its deadline, then calls close.
 export class UploadQueue {
     private readonly db: Db;
     private readonly storage: StorageBackend;
@@ -50,16 +50,14 @@ export class UploadQueue {
     private readonly destinationKey: string;
     private readonly label: string;
 
-    // inFlight: keys whose staged copy is mid-PUT, so enqueueStaged won't delete it from under the
-    // worker. draining: one drain loop at a time (concurrent calls coalesce). deadline: read each loop
-    // iteration so a flush can bound an already-running loop. closing: one-way teardown gate.
+    // inFlight: staged copies mid-PUT, so enqueueStaged won't delete one from under the worker.
+    // draining: one drain loop at a time (concurrent calls coalesce). closing: one-way teardown gate.
     // orphans: timed-out PUTs that may still land server-side later (see trackOrphan) — in-process
     // only, which is sound because an orphan's request (barring a fully-transmitted body the server
     // commits late) dies with the process.
     private readonly inFlight = new Set<string>();
     private readonly orphans = new Map<string, OrphanState>();
     private draining: Promise<void> | null = null;
-    private deadline: number | null = null;
     private closing = false;
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
     // Per-PUT client-side deadline (see UPLOAD_PUT_TIMEOUT_MS). A field so tests can shrink it.
@@ -126,7 +124,7 @@ export class UploadQueue {
                 set: { stagingPath: stored, attempt: 0, enqueuedAt: now, nextAttemptAt: now, isDatabase },
             })
             .run();
-        if (prevStaging && prevStaging !== stagingPath && !this.inFlight.has(storageKey)) {
+        if (prevStaging && prevStaging !== stagingPath && !this.inFlight.has(prevStaging)) {
             void bestEffortUnlink(prevStaging);
         }
         this.drain().catch((err) => console.error(`[sync] drain failed for ${this.label}:`, err));
@@ -176,7 +174,7 @@ export class UploadQueue {
     }
 
     // Stop the queue (mount teardown): no more drains, cancel the pending retry. Leftover rows replay
-    // on the next mount open. For a graceful shutdown, call drain({flushNow,deadline}) first.
+    // on the next mount open. For a graceful shutdown, call drain({flushNow}) first.
     close(): void {
         this.closing = true;
         if (this.retryTimer) {
@@ -188,14 +186,12 @@ export class UploadQueue {
     // Drain due pending uploads through the destination's concurrency limiter. One loop at a time;
     // concurrent calls coalesce. A failed PUT backs its row off into the future, so the due-selection
     // drops it and the loop never spins on a dead backend. flushNow resets every backoff so the
-    // shutdown flush + tests get one immediate attempt at each; deadline bounds the flush.
-    async drain(opts: { flushNow?: boolean; deadline?: number } = {}): Promise<void> {
-        if (opts.deadline !== undefined) this.deadline = opts.deadline;
+    // shutdown flush + tests get one immediate attempt at each.
+    async drain(opts: { flushNow?: boolean } = {}): Promise<void> {
         if (opts.flushNow) this.db.update(pendingUploads).set({ nextAttemptAt: Date.now() }).run();
         if (this.draining) return this.draining;
         this.draining = this.runDrainLoop().finally(() => {
             this.draining = null;
-            this.deadline = null;
         });
         return this.draining;
     }
@@ -207,7 +203,6 @@ export class UploadQueue {
         }
         const semaphore = getUploadSemaphore(this.destinationKey);
         while (!this.closing) {
-            if (this.deadline !== null && Date.now() >= this.deadline) break;
             const row = this.db
                 .select()
                 .from(pendingUploads)
@@ -283,7 +278,7 @@ export class UploadQueue {
         // Orphans present when this PUT is issued: if they all settle while it is in flight, the
         // commit order against a landed one is unknown (see the ack branch below).
         const orphansAtStart = this.orphans.get(storageKey);
-        this.inFlight.add(storageKey);
+        this.inFlight.add(stagingPath);
         let putOk = false;
         let timeout: ReturnType<typeof setTimeout> | undefined;
         try {
@@ -322,7 +317,7 @@ export class UploadQueue {
             );
         } finally {
             if (timeout) clearTimeout(timeout);
-            this.inFlight.delete(storageKey);
+            this.inFlight.delete(stagingPath);
         }
 
         // Tearing down — leave the row + staged copy untouched for boot replay (metadata.db may be

@@ -107,10 +107,10 @@ describe.skipIf(!live)('S3Storage (MinIO)', () => {
         ).toBe(false);
     });
 
-    test('readRange returns the exact end-exclusive slice', async () => {
+    test('a sliced read returns the exact end-exclusive range', async () => {
         createdKeys.push('direct/range.txt');
         await storage.write('direct/range.txt', Buffer.from('0123456789'));
-        expect(await storage.readRange('direct/range.txt', 2, 6).text()).toBe('2345');
+        expect(await storage.read('direct/range.txt').slice(2, 6).text()).toBe('2345');
     });
 
     // S3 answers a DELETE of a missing key with success, so false only ever means a failed call.
