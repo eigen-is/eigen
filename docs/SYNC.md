@@ -132,7 +132,7 @@ temp-copy backend.
 |---|---|
 | `lib/mount/upload-queue.ts` | The per-mount `UploadQueue` — enqueue / drain / backoff / cancel / reconcile + staging + orphan tracking |
 | `lib/sync/index.ts` | Process-global bits: per-destination semaphore map, backoff, shutdown deadline |
-| `lib/mount/document-db.ts` | The `onSync` / `onOpen` / `onClose` callbacks + snapshot wiring. One slot per pathId (`Mount.documentDbs`) serializes open, create and close in call order, so a fresh instance never shares a closing one's temp/journal files; the slot holds the live instance while open and nothing else. Lock order is container path lock → slot, and a close-time snapshot try-locks |
+| `lib/mount/document-db.ts` | The `onSync` / `onOpen` / `onClose` callbacks + snapshot wiring. One slot per pathId (`Mount.documentDbs`) serializes open, create and close in call order, so a fresh instance never shares a closing one's temp/journal files; the slot holds the live instance while open and nothing else; once teardown starts, a new open is refused with a 503. Lock order is container path lock → slot, and a close-time snapshot try-locks |
 | `lib/core/managed-database.ts` | `markDirty` (crash recovery), `stageCopy` (`VACUUM INTO`), `mustExist` open guard (refuse a missing/0-byte working copy) |
 | `lib/mount/schema.ts` + `db-config.ts` | The `pending_uploads` table (additive migration v4; `isDatabase` in v8) |
 

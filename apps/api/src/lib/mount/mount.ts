@@ -62,6 +62,8 @@ export class Mount {
     private ownerId: string;
     // internal — used by mount/*.ts + versioning/snapshot.ts
     documentDbs: Map<string, DocumentDbSlot> = new Map();
+    // One-way teardown gate: set by closeAllDatabases, it refuses every later document-db open.
+    closing = false; // internal — used by mount/*.ts
     private pathLocks: Map<string, Promise<void>> = new Map();
 
     // Write-behind upload queue (Phase 1b) — only for isRemote (s3) mounts; undefined otherwise.

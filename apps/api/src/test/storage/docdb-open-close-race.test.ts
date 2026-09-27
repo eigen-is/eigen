@@ -350,6 +350,70 @@ describe('unchanged paths', () => {
         const reopened = await mount.openDatabase(docConfig, dataDbId);
         expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(1);
     });
+
+    test('a close whose final sync fails writes no version entry from the stale storage copy', async () => {
+        const { mount, storage } = await createGatedLocalMount('failed-close-no-snapshot');
+        const { containerId, dataDbId, managed } = await provisionDoc(mount, snapshotDocConfig);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'synced' }).run();
+        await managed.flush(); // syncs without snapshotting
+        managed.db.insert(docSchema.items).values({ id: 2, data: 'unsynced' }).run();
+        expect(await mount.getChildByName(containerId, 'versions')).toBeNull();
+
+        const gate = storage.armWrite();
+        const closing = mount.closeDatabase(dataDbId);
+        await gate.parked;
+        gate.fail(new ApiError(503, 'storage unavailable'));
+        await expect(closing).rejects.toThrow();
+
+        // Pre-fix the close snapshotted the storage object: row 1 only, stamped now.
+        expect(await mount.getChildByName(containerId, 'versions')).toBeNull();
+
+        await mount.openDatabase(snapshotDocConfig, dataDbId);
+        await mount.closeDatabase(dataDbId);
+        expect(await countStoredRows(mount, dataDbId)).toBe(2);
+    });
+
+    test('a create whose initial flush fails closes what it opened', async () => {
+        const { mount, storage } = await createGatedLocalMount('failed-create-flush');
+        const rootId = (await mount.getRootFolder())!.id;
+        const containerId = await mount.createFolder(rootId, 'container-doc', 'doc');
+        const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+
+        // A sustained outage: the create's flush and the cleanup close's final sync both fail.
+        storage.write = () => Promise.reject(new ApiError(503, 'storage unavailable'));
+        await expect(mount.createDatabase(docConfig, dataDbId)).rejects.toThrow('storage unavailable');
+
+        // Pre-fix the connection stayed open (30s timer, fd, -wal/-shm) with no slot pointing at it.
+        const tempPath = mount.getTempPath(dataDbId);
+        expect(mount.documentDbs.has(dataDbId)).toBe(false);
+        expect(existsSync(`${tempPath}-wal`)).toBe(false);
+        expect(existsSync(`${tempPath}-shm`)).toBe(false);
+        expect(existsSync(tempPath)).toBe(true); // the failed close keeps it as the crash marker
+        expect(await settlesWithin([mount.closeAllDatabases()], SETTLE_BOUND_MS)).toBe(true);
+    });
+});
+
+describe('mount teardown', () => {
+    test('an open queued behind a teardown close whose sync fails is refused; nothing outlives teardown', async () => {
+        const { mount, storage } = await createGatedLocalMount('teardown-queued-open');
+        const { dataDbId, managed } = await provisionDoc(mount, docConfig);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'unsynced' }).run();
+
+        const gate = storage.armWrite();
+        const teardown = mount.closeAllDatabases();
+        await gate.parked;
+        // Queues on the slot the sweep already visited; pre-fix it adopted the failed close's temp.
+        const queued = mount.openDatabase(docConfig, dataDbId).then(
+            () => null,
+            (err: unknown) => err,
+        );
+        gate.fail(new ApiError(503, 'storage unavailable'));
+
+        expect(await settlesWithin([teardown], SETTLE_BOUND_MS)).toBe(true);
+        expect(await queued).toMatchObject({ status: 503 });
+        expect(mount.documentDbs.size).toBe(0);
+        expect(existsSync(mount.getTempPath(dataDbId))).toBe(true);
+    }, 10_000);
 });
 
 describe('nested close during an in-flight close', () => {

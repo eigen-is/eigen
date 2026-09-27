@@ -286,9 +286,8 @@ export class ManagedDatabase<S extends SchemaType> {
             if (!this.rawDb) return; // a concurrent close reached the teardown first
 
             // The teardown runs even when onSync throws (the error still propagates to the caller) —
-            // aborting before it leaked the raw db handle + working copy. Checkpoint and snapshot stay
-            // correct after a failed sync: they copy the locally-committed on-disk bytes. onClose is
-            // told about the failure so it can leave the working copy as the crash-recovery marker.
+            // aborting before it leaked the raw db handle + working copy. onClose is told about the
+            // failure so it can leave the working copy as the crash-recovery marker.
             let syncFailed = true;
             try {
                 await this.syncLock.run(() => this.sync());
@@ -298,7 +297,8 @@ export class ManagedDatabase<S extends SchemaType> {
                 // this on-disk file (TRUNCATE makes it complete), remote backends copy the
                 // object sync() uploaded. A snapshot failure is caught so it can't block close.
                 this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
-                if (!opts.skipFinalSnapshot) {
+                // After a failed sync a path-based snapshot copies storage, which lacks the tail.
+                if (!opts.skipFinalSnapshot && !syncFailed) {
                     await this.snapshotIfDue(true).catch((err) =>
                         console.error(`[${this.config.name}] close snapshot failed:`, err),
                     );

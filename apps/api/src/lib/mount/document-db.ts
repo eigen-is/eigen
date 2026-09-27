@@ -69,6 +69,7 @@ async function openDocumentDb<S extends SchemaType>(
     // Seam: documentDbs is one heterogeneous cache (ManagedDatabase<SchemaType>), so the caller's
     // schema S can only be re-attached here — the config that built the entry carries it.
     return withDocumentDb(mount, pathId, async (slot) => {
+        if (mount.closing) throw new ApiError(503, `Mount is closing: ${pathId}`);
         if (slot.db) {
             if (mode === 'create') throw new Error(`Mount.createDatabase ${pathId}: already in cache`);
             return slot.db as ManagedDatabase<S>;
@@ -235,7 +236,13 @@ async function buildDocumentDb<S extends SchemaType>(
     // storage object only appears on the next 30s sync — and an API restart in that window would make
     // subsequent strict openDatabase calls throw.
     if (mode === 'create' && mount.needsTempCopy) {
-        await managed.flush();
+        try {
+            await managed.flush();
+        } catch (err) {
+            // No slot holds it yet: close it here or its connection, timer and journals leak.
+            await managed.close({ skipFinalSnapshot: true }).catch(() => {});
+            throw err;
+        }
     }
 
     return managed;
@@ -290,9 +297,9 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
     // Reindex FIRST, awaiting its in-flight drain: an extract mid-await opens a doc DB via
     // openDatabase and leaves it for the mount lifecycle to close. Draining before the sweep below
     // means that last-extract DB lands in the map and is closed by it — an open landing after the
-    // sweep would leak (30s timer, fd, temp; dirty syncs into a closed metadata.db). Leftover dirty
-    // rows still replay on the next open (only the current extract is drained, not the backlog).
-    // The await is deadline-bounded so a black-holed extract can't park teardown (see
+    // gate below is refused (else 30s timer, fd, temp; dirty syncs into a closed metadata.db).
+    // Leftover dirty rows still replay on the next open (only the current extract is drained, not
+    // the backlog). The await is deadline-bounded so a black-holed extract can't park teardown (see
     // ContentReindexQueue.close).
     await mount.reindexQueue?.close();
 
@@ -300,7 +307,9 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
     // bounded by the worker's own timeout (see thumbnails.ts).
     await Promise.allSettled(mount.thumbnailJobs);
 
-    // The live map, not a copy: an open that lands on a new slot mid-sweep is closed too.
+    mount.closing = true;
+    // The live map, not a copy, so a slot added mid-sweep is visited; an open that queues behind a
+    // swept close is refused by the gate.
     for (const pathId of mount.documentDbs.keys()) {
         try {
             await closeDatabase(mount, pathId); // isRemote: onClose-time sync stages + enqueues the final state
