@@ -192,8 +192,7 @@ describe('direct (non-queued) PUTs', () => {
         }
     });
 
-    // Gap UP-3: an older overwrite PUT landing after a newer one leaves the older bytes.
-    test.failing('two overlapping overwrites of one file end on the bytes of the later write', async () => {
+    test('two overlapping overwrites of one file end on the bytes of the later write', async () => {
         const { mount, fault } = createS3Mount('direct-overwrite-order');
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
@@ -204,8 +203,8 @@ describe('direct (non-queued) PUTs', () => {
         const first = mount.writeFile(fileId, Buffer.from('v1'));
         await fault.waitForParked((p) => p.key === key);
         const second = mount.writeFile(fileId, Buffer.from('v2'));
-        // Tolerates a fix that serializes the second write behind the first.
-        await waitFor(() => fault.parkedCount === 2, 300).catch(() => {});
+        // The path lock holds the second write behind the first, so only one PUT parks at a time.
+        expect(fault.parkedCount).toBe(1);
 
         // Land the newest parked PUT first, as a stalled older request would.
         let settled = false;
@@ -222,8 +221,7 @@ describe('direct (non-queued) PUTs', () => {
         expect(await fault.inner.read(key).text()).toBe('v2');
     });
 
-    // Gap UP-4: a permanent delete during an overwrite PUT leaves the deleted bytes in the bucket.
-    test.failing('a permanent delete during a stalled overwrite PUT leaves no object behind', async () => {
+    test('a permanent delete during a stalled overwrite PUT leaves no object behind', async () => {
         const { mount, fault } = createS3Mount('direct-overwrite-delete');
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;

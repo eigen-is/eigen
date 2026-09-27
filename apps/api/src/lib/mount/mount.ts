@@ -903,35 +903,41 @@ export class Mount {
     }
 
     async writeFile(pathId: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
-        const storageKey = await this.getStorageKey(pathId);
-        const written = await this.storage.write(storageKey, data);
+        return this.withPathLock(pathId, async () => {
+            const storageKey = await this.getStorageKey(pathId);
+            const written = await this.storage.write(storageKey, data);
 
-        let size: number;
-        if (Buffer.isBuffer(data) || data instanceof Uint8Array) {
-            size = data.length;
-        } else if (data instanceof ArrayBuffer) {
-            size = data.byteLength;
-        } else {
-            size = data.size;
-        }
+            let size: number;
+            if (Buffer.isBuffer(data) || data instanceof Uint8Array) {
+                size = data.length;
+            } else if (data instanceof ArrayBuffer) {
+                size = data.byteLength;
+            } else {
+                size = data.size;
+            }
 
-        const hash = await this.computeHash(data);
-        const searchable = await this.isSearchableRow(pathId);
-        if (searchable) this.reindexQueue?.bumpGeneration(pathId);
-        await this.db
-            .update(paths)
-            .set({ size, hash, updatedAt: new Date(), contentDirty: searchable ? 1 : 0 })
-            .where(eq(paths.id, pathId));
-        await this.invalidateAncestorsOf(pathId);
-        if (searchable) this.reindexQueue?.kick();
-        return written;
+            await this.commitOverwrite(pathId, storageKey, size, await this.computeHash(data));
+            return written;
+        });
     }
 
     // Overwrite using a temp file with size+hash already known (from writeTempWithHash).
     // Mirrors createFileFromTemp on the create side and avoids re-hashing.
     async writeFileFromTemp(pathId: string, tempId: string, size: number, hash: string): Promise<void> {
-        const storageKey = await this.getStorageKey(pathId);
-        await this.uploadFromTemp(storageKey, tempId);
+        await this.withPathLock(pathId, async () => {
+            const storageKey = await this.getStorageKey(pathId);
+            await this.uploadFromTemp(storageKey, tempId);
+            await this.commitOverwrite(pathId, storageKey, size, hash);
+        });
+    }
+
+    // Runs under the path lock after the PUT landed. deletePath doesn't wait on that lock, so a
+    // delete that ran during the PUT left the bytes behind.
+    private async commitOverwrite(pathId: string, storageKey: string, size: number, hash: string): Promise<void> {
+        if (!(await this.getPath(pathId))) {
+            await this.storage.delete(storageKey);
+            throw new ApiError(404, 'File not found');
+        }
         const searchable = await this.isSearchableRow(pathId);
         if (searchable) this.reindexQueue?.bumpGeneration(pathId);
         await this.db

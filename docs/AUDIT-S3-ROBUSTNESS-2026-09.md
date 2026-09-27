@@ -21,8 +21,8 @@ Test paths are relative to `apps/api/src/test/`. A test marked *failing* runs as
 | CO-6 | `closeAllDatabases` deadlocked when the download abort failed a build during an earlier close: the getter re-ran and waited on its own closing entry (found while fixing DL-2) | medium | fixed | `storage/docdb-open-close-race.test.ts`: `mount teardown settles when an open it aborts fails during an earlier close` |
 | UP-1 | The shutdown flush read its deadline only at the loop top, so a stalled PUT or semaphore slot ran past it | low | fixed | `storage/upload-queue-stall.test.ts`: `the shutdown flush returns by its deadline while a PUT is stalled`, `the shutdown flush returns by its deadline while the destination semaphore is held` |
 | UP-2 | Direct (non-queued) PUTs (uploads, editor saves, WebDAV) have no ceiling and skip the destination semaphore | medium | open | *failing* `storage/upload-queue-stall.test.ts`: `a stalled upload PUT settles within the PUT ceiling the queue uses` |
-| UP-3 | Overlapping overwrites of one plain file are not serialized, so an older PUT that lands last wins | low-medium | open | *failing* `storage/upload-queue-stall.test.ts`: `two overlapping overwrites of one file end on the bytes of the later write` |
-| UP-4 | A permanent delete during a direct overwrite PUT leaves the deleted bytes in the bucket | low | open | *failing* `storage/upload-queue-stall.test.ts`: `a permanent delete during a stalled overwrite PUT leaves no object behind` |
+| UP-3 | Overlapping overwrites of one plain file are not serialized, so an older PUT that lands last wins | low-medium | fixed: overwrites of a path run under its lock | `storage/upload-queue-stall.test.ts`: `two overlapping overwrites of one file end on the bytes of the later write` |
+| UP-4 | A permanent delete during a direct overwrite PUT leaves the deleted bytes in the bucket | low | fixed: an overwrite whose row is gone when its PUT lands deletes the object again | `storage/upload-queue-stall.test.ts`: `a permanent delete during a stalled overwrite PUT leaves no object behind` |
 | UP-5 | Staged copies superseded behind a stalled PUT leaked until the Home re-inited | low | fixed | `storage/upload-queue-stall.test.ts`: `staged copies superseded behind a stalled PUT are removed` |
 | UP-6 | Create reconcile (15 s) can report success for a container whose provisioning later rolls back | low | open | none |
 | UP-7 | An interrupted multipart upload (Bun uses multipart above 5 MiB) stays in the bucket until the lifecycle rule's 7 days | low | open | none |
@@ -54,8 +54,6 @@ The as-built description lives in [STORAGE.md](STORAGE.md) (Deadlines) and [SYNC
 
 - **UP-2**: a direct PUT has no ceiling and skips the destination semaphore; *failing* `a stalled upload PUT settles within the PUT ceiling the queue uses`.
 - **Upload retries**: Bun retries a failed upload up to 3 times (`retry` default), so a stalled direct PUT's real bound is several times 360 s.
-- **UP-3**: overlapping overwrites of one plain file are not serialized; *failing* `two overlapping overwrites of one file end on the bytes of the later write`.
-- **UP-4**: a delete during a direct overwrite PUT leaves the bytes behind; *failing* `a permanent delete during a stalled overwrite PUT leaves no object behind`.
 - **Trickle**: the idle deadline does not catch a body that sends a byte every few seconds, so such a read still has no bound.
 - **Served files**: `/download` and `/embed` (`serve-file.ts`) stream `file.stream()` straight into the Response, outside `consumeStream`, so a stalled body is cut only by the server's 200 s `idleTimeout`; no lock or Home is held.
 - **DL-3**: the version snapshot still holds the container lock across its GET, now for at most one idle deadline per stall.
