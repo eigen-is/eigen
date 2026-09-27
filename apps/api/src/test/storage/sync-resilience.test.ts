@@ -802,9 +802,9 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
 });
 
 describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-timer race, PUT timeout)', () => {
-    // Finding 1: closeAllDatabases must AWAIT the reindex drain before it clears documentDbs. A late
+    // Finding 1: closeAllDatabases must AWAIT the reindex drain before its close sweep. A late
     // extract opens a doc DB via mount.openDatabase and relies on the mount lifecycle to close it; if
-    // teardown returns before that open, the DB lands in the just-cleared cache and leaks forever.
+    // teardown returns before that open, the DB lands in the cache after the sweep and leaks forever.
     test('closeAllDatabases awaits the reindex drain so a late extract-opened DB is not leaked', async () => {
         let extractEntered!: () => void;
         const entered = new Promise<void>((r) => (extractEntered = r));

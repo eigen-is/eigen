@@ -178,7 +178,7 @@ Trigger: opt-in `snapshot` config fires `ManagedDatabase.snapshotIfDue()` from `
 Mechanics in `versioning/snapshot.ts` — plain functions over the mount, `Mount` keeps the facades:
 `snapshotContainerDataDb` is self-locked on the container (save/pre-restore paths block on the
 lock), while the timer/close paths go through `trySnapshotContainerDataDb` (skip-if-contended, so a
-close can never park on a held container lock). `replaceContainerDataDb` overwrites chat `data.db`
+close can never park on a held container lock). The manual save, the pre-restore snapshot, the backup's `open-handle-first` copy and the pre-copy `Mount.flushContainerDb` wait on the data.db's `documentDbs` slot, so an in-flight open or close lands first; the tick/close path reads the slot's live db without waiting, since it runs inside that very close. `replaceContainerDataDb` overwrites chat `data.db`
 bytes in place. Restore orchestration in `versioning/restore.ts`: grab the target into the OS temp
 dir, take a pre-restore snapshot, then Yjs surgery (collab docs) vs chat byte-overwrite — no lock
 held across steps, nothing staged inside the container. Routes live in the drive router

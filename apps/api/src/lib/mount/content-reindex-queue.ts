@@ -82,8 +82,8 @@ export class ContentReindexQueue {
 
     // Mount teardown: stop scheduling and AWAIT the in-flight drain so the current extract finishes.
     // That extract opens a doc DB via mount.openDatabase and leaves it for the mount lifecycle to
-    // close; awaiting here lets closeAllDatabases close it before it clears documentDbs — otherwise
-    // the post-clear open leaks. Only the current extract is drained: leftover dirty rows replay on
+    // close; awaiting here lets closeAllDatabases close it in its sweep — otherwise an open landing
+    // after the sweep leaks. Only the current extract is drained: leftover dirty rows replay on
     // the next mount open (the bit is the durable queue). The await is BOUNDED (see
     // REINDEX_CLOSE_TIMEOUT_MS): past the deadline teardown proceeds and the hung extract is accepted
     // as leaked — the pre-await class, now confined to the black-holed-backend tail.
