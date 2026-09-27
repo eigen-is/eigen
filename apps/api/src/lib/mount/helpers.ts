@@ -175,9 +175,8 @@ export function createMountConfig(id: string, settings: MountSettings): MountCon
 // the presence of a key is also what stands up the write-behind queue at all (Mount.init). Gated on
 // the storage TYPE, not on the credentials: `createMountConfig` passes a settings `s3Config` through
 // whatever the backend is, and a local mount carrying a stale one must not get a queue over its
-// LocalStorage. An s3 mount with no credentials never reaches this — createMountStorage refuses to
-// build one a line earlier — so the second half of the condition narrows the type, it is not a
-// second answer to the same question. Infra strings only, never user data.
+// LocalStorage. `!config.s3Config` only narrows the type: createMountStorage refuses an s3 mount
+// without one. Infra strings only, never user data.
 export function buildUploadDestinationKey(config: MountConfig): string | undefined {
     if (config.storageType !== 's3' || !config.s3Config) return undefined;
     return `${config.s3Config.endpoint}/${config.s3Config.bucket}`;

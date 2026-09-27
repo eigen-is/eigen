@@ -98,17 +98,7 @@ bit-setting write plus `kick()` after it):
 - `copyPath`, because a byte-copied container fires no `onSync`;
 - the v6 migration itself, which marks every existing container and text file.
 
-`ContentReindexQueue` (`apps/api/src/lib/mount/content-reindex-queue.ts`) is the read-side mirror of
-the S3 `UploadQueue`: one drain loop per mount, batches of 100, self-timed to when the earliest
-capped row comes due — no process-wide poll. A container is re-extracted at most once per
-`CONTENT_REINDEX_CAP_SECONDS` (120 s), which is what stops a two-hour edit session or an
-append-heavy chat re-indexing a big body on every 30-second sync. A successful extract upserts
-`path_content` and clears the bit — unless a write landed while the extract ran: a per-path in-memory
-generation, bumped by every producer before the bit-setting write, fences the clear, so the newer
-content keeps the bit and re-extracts after the cap window. A throw is logged, stamps
-`contentIndexedAt` and **keeps** the bit, so a transient storage hiccup retries after the cap instead
-of dropping the doc from body search. Mount teardown aborts the in-flight extract's storage read (`Mount.readBytes` takes the mount's `downloads` signal) and awaits the extract with a bounded timeout. The drain stops at that abort without stamping the aborted row, so leftover dirty rows
-replay on the next mount open.
+`ContentReindexQueue` (`apps/api/src/lib/mount/content-reindex-queue.ts`) is the read-side mirror of the S3 `UploadQueue`: one drain loop per mount, batches of 100, self-timed to when the earliest capped row comes due — no process-wide poll. A container is re-extracted at most once per `CONTENT_REINDEX_CAP_SECONDS` (120 s), which is what stops a two-hour edit session or an append-heavy chat re-indexing a big body on every 30-second sync. A successful extract upserts `path_content` and clears the bit — unless a write landed while the extract ran: a per-path in-memory generation, bumped by every producer before the bit-setting write, fences the clear, so the newer content keeps the bit and re-extracts after the cap window. A throw is logged, stamps `contentIndexedAt` and **keeps** the bit, so a transient storage hiccup retries after the cap instead of dropping the doc from body search. Mount teardown aborts the in-flight extract's storage read (`Mount.readBytes` takes the mount's `downloads` signal) and awaits the extract with a bounded timeout. The drain stops at that abort without stamping the aborted row, so leftover dirty rows replay on the next mount open.
 
 ## Route and frontend
 

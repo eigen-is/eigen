@@ -27,7 +27,7 @@ import { renderAttachmentLinksText, renderAttachmentPills } from '../core/mail-t
 import { type OutboundMail, sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
-import { consumeStream, getStorageTimeoutMs, type StorageFile } from '../storage';
+import { type StorageFile, streamStorageFile } from '../storage';
 import { grantAccessForReferences } from './access-grants';
 import { verifyImipSender } from './imip-auth';
 import { type PartHeaders, parseMail, splitMime } from './mail-parser';
@@ -524,21 +524,19 @@ export class Mail {
         contentType: string,
         maxSize: number,
     ): Promise<DraftAttachmentUpload> {
-        // The route already checked the drive size, so maxBytes is only for a source that grows mid-read.
-        try {
-            return await this.store.persistDraftTemp(
-                (writer) =>
-                    consumeStream(source.stream(), (chunk) => writer.write(chunk), {
-                        idleMs: getStorageTimeoutMs(),
-                        maxBytes: maxSize,
-                    }),
-                filename,
-                contentType,
-            );
-        } catch (e) {
-            if (e instanceof ApiError && e.status === 413) throw attachmentTooLarge(maxSize);
-            throw e;
-        }
+        // The route already checked the drive size, so the cap is only for a source that grows mid-read.
+        return this.store.persistDraftTemp(
+            (writer) => {
+                let size = 0;
+                return streamStorageFile(source, (chunk) => {
+                    size += chunk.byteLength;
+                    if (size > maxSize) throw attachmentTooLarge(maxSize);
+                    writer.write(chunk);
+                });
+            },
+            filename,
+            contentType,
+        );
     }
 
     async messageSend(

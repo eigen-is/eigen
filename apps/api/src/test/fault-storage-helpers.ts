@@ -9,6 +9,7 @@ import { Mount } from '../lib/mount/mount';
 import { UPLOAD_PUT_TIMEOUT_MS } from '../lib/mount/upload-queue';
 import type { StorageBackend, StorageFile } from '../lib/storage';
 import { LocalStorage } from '../lib/storage/local-storage';
+import * as timing from '../utils/timing';
 
 // Shared storage double for the resilience suites (upload queue, mutation sync, create/open paths):
 // a StorageBackend over a real LocalStorage whose writes can fail, be delayed, hang or be parked,
@@ -139,7 +140,7 @@ export class FaultStorage implements StorageBackend {
     }
 }
 
-const DUMMY_S3: S3Config = {
+export const DUMMY_S3: S3Config = {
     endpoint: 'http://127.0.0.1:1',
     bucket: 'test',
     accessKeyId: 'x',
@@ -311,15 +312,8 @@ export const SHRUNK_STORAGE_TIMEOUT_MS = 100;
 // Bounded deadlock detector, not synchronization: on the green path the promises settle at once and
 // the timer is cleared; only a real wedge runs it out. A rejection propagates like a plain await.
 export async function settlesWithin(promises: Promise<unknown>[], ms: number): Promise<boolean> {
-    let timer: Timer | undefined;
-    try {
-        return await Promise.race([
-            Promise.all(promises).then(() => true),
-            new Promise<boolean>((r) => {
-                timer = setTimeout(() => r(false), ms);
-            }),
-        ]);
-    } finally {
-        clearTimeout(timer);
-    }
+    const all = Promise.all(promises);
+    if (!(await timing.settlesWithin(all, ms))) return false;
+    await all;
+    return true;
 }

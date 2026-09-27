@@ -1,6 +1,7 @@
 import * as net from 'node:net';
 import type { S3Config } from '@workspace/lib/types';
 import type { StorageBackend } from '../lib/storage';
+import { DUMMY_S3 } from './fault-storage-helpers';
 
 // A local S3 for the real S3Storage: faults on the lazy S3File's HEAD, GET and DELETE, which FaultStorage never sees.
 
@@ -28,14 +29,7 @@ export class FakeS3Server {
     async start(): Promise<S3Config> {
         await new Promise<void>((resolve) => this.server.listen(0, '127.0.0.1', resolve));
         const { port } = this.server.address() as net.AddressInfo;
-        return {
-            endpoint: `http://127.0.0.1:${port}`,
-            bucket: 'eigen',
-            accessKeyId: 'x',
-            secretAccessKey: 'y',
-            region: 'us-east-1',
-            prefix: '',
-        };
+        return { ...DUMMY_S3, endpoint: `http://127.0.0.1:${port}`, bucket: 'eigen' };
     }
 
     // Clear every fault and answer every held request in full, as a provider recovering would.

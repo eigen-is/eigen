@@ -139,8 +139,7 @@ See [SYNC.md](SYNC.md).
 
 ### Singleton pattern
 
-Both `Home` and `Mount` use `createAsyncSingleton()` (`apps/api/src/utils/singleton.ts`) to ensure each database opens
-only once.
+`Home` uses `createAsyncSingleton()` (`apps/api/src/utils/singleton.ts`) to ensure each database opens only once. A `Mount`'s document databases use one slot per pathId instead (`withDocumentDb` in `apps/api/src/lib/mount/document-db.ts`), which serializes every open, create and close of that database in call order.
 
 ## Schema Tables
 

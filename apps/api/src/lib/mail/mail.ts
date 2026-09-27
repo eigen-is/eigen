@@ -8,9 +8,9 @@ import { getSharedDrive } from '../drive';
 import { getHome } from '../home';
 import type { User } from '../user';
 import { getOrgAdmins, getUserByEmail } from '../user/';
-import { attachmentTooLarge } from './mail-domain';
+import { attachmentTooLarge, type Mail } from './mail-domain';
 
-export async function getMailClient(user: User) {
+export async function getMailClient(user: User): Promise<Mail> {
     const home = await getHome(user.id);
     return home.mail;
 }
@@ -39,12 +39,12 @@ export async function messageGet(user: User, messageId: string): Promise<Email> 
     return message;
 }
 
-export async function messageMoveToTrash(user: User, messageId: string) {
+export async function messageMoveToTrash(user: User, messageId: string): Promise<void> {
     const mail = await getMailClient(user);
     return await mail.messageMove(messageId, MAILBOX_TRASH);
 }
 
-export async function uploadDraftAttachment(user: User, request: Request) {
+export async function uploadDraftAttachment(user: User, request: Request): Promise<DraftAttachmentUpload> {
     const maxSize = await getMailUploadMaxSize(user.id);
     const mailClient = await getMailClient(user);
     return await mailClient.uploadDraftAttachment(request, maxSize);
@@ -100,10 +100,7 @@ export async function saveAttachmentsToDrive(
         const att = attachments[index];
         const filename = mailAttachmentName(att, index);
         const content = Buffer.from(att.content);
-        if (content.byteLength > maxSize) {
-            const limitMB = Math.floor(maxSize / (1024 * 1024));
-            throw new ApiError(413, `Attachment "${filename}" exceeds ${limitMB}MB drive limit`);
-        }
+        if (content.byteLength > maxSize) throw attachmentTooLarge(maxSize);
         return { filename, contentType: att.contentType, content };
     });
 

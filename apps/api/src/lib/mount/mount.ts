@@ -19,7 +19,13 @@ import { getServerSettings } from '../config/server-settings';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, PATHS, type SchemaType } from '../core';
 import { FileHistory } from '../drive/history';
 import { deleteThumbnail } from '../shared/thumbnails';
-import { readStorageFile, type StorageBackend, type StorageFile, writeTempWithHash } from '../storage';
+import {
+    readStorageFile,
+    type StorageBackend,
+    type StorageFile,
+    storageUnavailable,
+    writeTempWithHash,
+} from '../storage';
 import type { RetentionPolicy } from '../versioning/retention';
 import * as snapshot from '../versioning/snapshot';
 import { type ContentExtractor, ContentReindexQueue } from './content-reindex-queue';
@@ -365,9 +371,7 @@ export class Mount {
     // so those must compare equal too. JS toLowerCase() is the stricter fold; only consulted for
     // non-ASCII names on path-based mounts, keeping ASCII lookups and id-keyed backends at
     // today's exact semantics. The v7 unique index stays the ASCII race net.
-    // Accepted residual: an ASCII query never scans, so a stored-side-only alias (U+212A 'K'.txt
-    // vs ASCII k.txt) still clobbers; pairs JS can't fold either way (ſ/s) likewise. Both are
-    // single-codepoint oddities far rarer than the é/É class this closes.
+    // An ASCII query never scans, so a stored-side-only alias (U+212A 'K') or an unfoldable pair (ſ/s) is not caught.
     private async findCaseFoldedChild(parentId: string, name: string): Promise<{ id: string } | null> {
         if (!this.isPathBased || !/\P{ASCII}/u.test(name)) return null;
         const folded = name.toLowerCase();
@@ -587,9 +591,8 @@ export class Mount {
 
     // The frozen staged copy of a pending (un-acked) upload for storageKey holds bytes newer than
     // the storage object; returns its on-disk path, or null when there's nothing fresher than
-    // storage: local mounts (no queue), regular files (only managed data.db/comments.db/version
-    // snapshots are ever staged), or an already-acked upload. Synchronous, so a caller can copy the
-    // returned path with no await before a concurrent enqueue could unlink it.
+    // storage: local mounts (no queue), a key nothing staged, or an already-acked upload. Synchronous,
+    // so a caller can copy the returned path with no await before a concurrent enqueue could unlink it.
     // internal — used by mount/*.ts + versioning/snapshot.ts
     pendingStagedCopy(storageKey: string): string | null {
         const staged = this.uploadQueue?.getPendingStagingPath(storageKey) ?? null;
@@ -773,7 +776,9 @@ export class Mount {
             // deletes (recursive deletePath), provisionManagedDbs rollback, and the chat-restore
             // replace, which all route data.db deletion through here.
             if (this.uploadQueue) await this.uploadQueue.cancel(storageKey);
-            await this.storage.delete(storageKey);
+            if (!(await this.storage.delete(storageKey))) {
+                console.warn(`[Mount] deleted ${pathId}, but its object ${storageKey} stays behind`);
+            }
         } else if (this.isPathBased && this.storage.deleteDir) {
             const storageKey = await this.getStorageKey(pathId);
             // Collected before the rows go: only files own a thumbnail, so folder ids are no-ops.
@@ -785,8 +790,8 @@ export class Mount {
             for (const id of descendantIds) {
                 await deleteThumbnail(this.thumbsDir, id);
             }
-            if (storageKey) {
-                await this.storage.deleteDir(storageKey);
+            if (storageKey && !(await this.storage.deleteDir(storageKey))) {
+                console.warn(`[Mount] deleted ${pathId}, but its folder ${storageKey} stays behind`);
             }
         } else {
             const children = await this.listFolderAll(pathId);
@@ -934,9 +939,14 @@ export class Mount {
     // delete that ran during the PUT left the bytes behind.
     private async commitOverwrite(pathId: string, storageKey: string, size: number, hash: string): Promise<void> {
         if (!(await this.getPath(pathId))) {
-            await this.storage.delete(storageKey);
+            if (!(await this.storage.delete(storageKey))) {
+                console.warn(`[Mount] overwrite of deleted ${pathId} left its object ${storageKey} behind`);
+            }
             throw new ApiError(404, 'File not found');
         }
+        // A path-based key follows an ancestor renamed or trashed during the write; the bytes follow it too.
+        const currentKey = await this.getStorageKey(pathId);
+        if (currentKey !== storageKey) await this.storage.rename?.(storageKey, currentKey);
         const searchable = await this.isSearchableRow(pathId);
         if (searchable) this.reindexQueue?.bumpGeneration(pathId);
         await this.db
@@ -974,25 +984,32 @@ export class Mount {
         // A -wal that survived cleanup would be replayed into the fresh main file.
         if (fs.existsSync(`${tempPath}-wal`))
             throw new Error(`[Mount] download ${storageKey}: stale ${tempPath}-wal could not be removed`);
-        // Into a side file, renamed on success: a process death mid-GET must not leave a truncated
-        // file at tempPath, which the next open would adopt as crash recovery.
-        const sideId = randomUUID();
         let size: number;
         try {
-            ({ size } = await writeTempWithHash(
-                this.getTempPath(sideId),
-                this.storage.read(storageKey),
-                this.downloads.signal,
-            ));
+            size = await this.replaceTempFrom(tempId, this.storage.read(storageKey));
         } catch (err) {
-            await this.cleanupTemp(sideId);
             console.error(`[Mount] download ${storageKey} failed:`, err);
-            throw err instanceof ApiError ? err : new ApiError(503, 'Storage unavailable', { cause: err });
+            throw storageUnavailable(err);
         }
-        fs.renameSync(this.getTempPath(sideId), tempPath);
         const ms = (Bun.nanoseconds() - start) / 1_000_000;
         console.log(`[timing] Mount.download ${storageKey} ${(size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
         return tempPath;
+    }
+
+    // Into a side file, renamed on success: a process death mid-read must not leave a truncated file
+    // at the temp path, which the next open would adopt as crash recovery. Returns the byte count.
+    // internal — used by mount/*.ts
+    async replaceTempFrom(tempId: string, source: StorageFile): Promise<number> {
+        const sideId = randomUUID();
+        let size: number;
+        try {
+            ({ size } = await writeTempWithHash(this.getTempPath(sideId), source, this.downloads.signal));
+        } catch (err) {
+            await this.cleanupTemp(sideId);
+            throw err;
+        }
+        fs.renameSync(this.getTempPath(sideId), this.getTempPath(tempId));
+        return size;
     }
 
     // internal — used by mount/*.ts

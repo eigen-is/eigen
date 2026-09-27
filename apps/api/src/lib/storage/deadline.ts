@@ -10,8 +10,10 @@ export function setStorageTimeoutMs(ms: number): void {
     storageTimeoutMs = ms;
 }
 
-export function getStorageTimeoutMs(): number {
-    return storageTimeoutMs;
+// The one 503 a storage outage answers; an ApiError already on its way out passes through.
+export function storageUnavailable(cause?: unknown): ApiError {
+    if (cause instanceof ApiError) return cause;
+    return new ApiError(503, 'Storage unavailable', cause === undefined ? undefined : { cause });
 }
 
 // A request Bun's S3Client cannot abort keeps running in the background; only the caller stops waiting.
@@ -20,13 +22,13 @@ export function withStorageDeadline<T>(request: Promise<T>): Promise<T> {
     return Promise.race([
         request,
         new Promise<never>((_, reject) => {
-            timer = setTimeout(() => reject(new ApiError(503, 'Storage unavailable')), storageTimeoutMs);
+            timer = setTimeout(() => reject(storageUnavailable()), storageTimeoutMs);
         }),
     ]).finally(() => clearTimeout(timer));
 }
 
-// The one stream loop: pulls chunk by chunk and reports the total, past maxBytes a 413. With idleMs it is
-// a storage read: silence for idleMs, an aborted signal or a failed read cancels it and answers 503.
+// The one storage stream loop: pulls chunk by chunk and reports the total, past maxBytes a 413. With
+// idleMs it is a storage read: silence for idleMs, an aborted signal or a failed read cancels it and answers 503.
 export async function consumeStream(
     stream: ReadableStream<Uint8Array>,
     onChunk: (chunk: Uint8Array) => void,
@@ -35,27 +37,24 @@ export async function consumeStream(
     const { idleMs, maxBytes = Number.POSITIVE_INFINITY, signal } = opts;
     const reader = stream.getReader();
     let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const stop = () => {
         stopped = true;
         reader.cancel().catch(() => {});
     };
+    const timer = idleMs === undefined ? undefined : setTimeout(stop, idleMs);
     signal?.addEventListener('abort', stop);
     if (signal?.aborted) stop();
     let size = 0;
     try {
         while (true) {
-            if (idleMs !== undefined) {
-                clearTimeout(timer);
-                timer = setTimeout(stop, idleMs);
-            }
+            timer?.refresh();
             // A read pending when cancel() runs resolves done rather than throwing, hence the flag.
             const { done, value } = await reader.read().catch((error: unknown) => {
                 if (idleMs === undefined || error instanceof ApiError) throw error;
                 console.error('Storage read failed:', error);
-                throw new ApiError(503, 'Storage unavailable', { cause: error });
+                throw storageUnavailable(error);
             });
-            if (stopped) throw new ApiError(503, 'Storage unavailable');
+            if (stopped) throw storageUnavailable();
             if (done) return size;
             size += value.byteLength;
             if (size > maxBytes) throw new ApiError(413, 'Upload too large');
@@ -70,13 +69,22 @@ export async function consumeStream(
     }
 }
 
+// consumeStream over a StorageFile, under the storage idle deadline.
+export function streamStorageFile(
+    file: StorageFile,
+    onChunk: (chunk: Uint8Array) => void,
+    opts: { maxBytes?: number; signal?: AbortSignal } = {},
+): Promise<number> {
+    return consumeStream(file.stream(), onChunk, { ...opts, idleMs: storageTimeoutMs });
+}
+
 // file.arrayBuffer() as a storage read, for a body held whole in memory.
 export async function readStorageFile(
     file: StorageFile,
     opts: { maxBytes?: number; signal?: AbortSignal } = {},
 ): Promise<ArrayBuffer> {
     const chunks: Uint8Array[] = [];
-    await consumeStream(file.stream(), (chunk) => chunks.push(chunk), { ...opts, idleMs: storageTimeoutMs });
+    await streamStorageFile(file, (chunk) => chunks.push(chunk), opts);
     return Bun.concatArrayBuffers(chunks);
 }
 
@@ -96,34 +104,25 @@ export async function writeTempWithHash(
         return { size: data.byteLength, hash: hasher.digest('hex') };
     }
 
-    const isBody = data instanceof ReadableStream;
-    const stream = isBody ? data : data.stream();
     const writer = Bun.file(tempPath).writer({ highWaterMark: 256 * 1024 });
-    let failed = false;
+    const onChunk = (chunk: Uint8Array) => {
+        hasher.update(chunk);
+        writer.write(chunk);
+    };
+    let size: number;
     try {
-        const size = await consumeStream(
-            stream,
-            (chunk) => {
-                hasher.update(chunk);
-                writer.write(chunk);
-            },
-            isBody ? {} : { idleMs: storageTimeoutMs, signal },
-        );
-        return { size, hash: hasher.digest('hex') };
+        size =
+            data instanceof ReadableStream
+                ? await consumeStream(data, onChunk)
+                : await streamStorageFile(data, onChunk, { signal });
     } catch (error) {
-        failed = true;
+        try {
+            await writer.end();
+        } catch {}
         throw error;
-    } finally {
-        // The handle closes either way. On the way out from a failure that close is best-effort — it
-        // must not replace the error that brought us here — but on a clean finish the flush is part
-        // of the answer, so its failure is the caller's. A half-written temp is the caller's to delete.
-        if (!failed) await writer.end();
-        else {
-            try {
-                await writer.end();
-            } catch {}
-        }
     }
+    await writer.end();
+    return { size, hash: hasher.digest('hex') };
 }
 
 // Read-only twin of writeTempWithHash, for bytes something else produced (a VACUUM INTO copy).

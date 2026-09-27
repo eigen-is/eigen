@@ -334,7 +334,9 @@ export class UploadQueue {
             // the PUT just resurrected a deleted object. Delete it (invariant 7). The key is a dead
             // UUID — never reused — so this can't clobber a fresh object. (A row that merely changed
             // stagingPath was superseded, not canceled: leave it, the newer staging overwrites it.)
-            await this.storage.delete(storageKey).catch(() => {});
+            if (!(await this.storage.delete(storageKey))) {
+                console.warn(`[sync] PUT for cancelled ${storageKey} landed and its object stays behind`);
+            }
         }
         if (!putOk && stillCurrent) {
             // Failed and still the current pending row → back off for a retry; keep the staged copy.
@@ -416,7 +418,9 @@ export class UploadQueue {
             if (landed) {
                 console.error(`[sync] orphaned PUT for ${storageKey} landed after cancel — re-deleting the object`);
             }
-            void this.storage.delete(storageKey).catch(() => {});
+            void this.storage.delete(storageKey).then((gone) => {
+                if (!gone) console.warn(`[sync] orphaned PUT for cancelled ${storageKey}: its object stays behind`);
+            });
             return;
         }
         // No ack was retained: either nothing was acked over the orphans (a landed orphan

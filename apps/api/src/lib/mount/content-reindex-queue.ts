@@ -1,4 +1,5 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { settlesWithin } from '../../utils/timing';
 import type { Mount } from './mount';
 
 // Re-extract any one container at most once per window: an append-heavy chat or a long edit
@@ -84,9 +85,8 @@ export class ContentReindexQueue {
     // That extract opens a doc DB via mount.openDatabase and leaves it for the mount lifecycle to
     // close; awaiting here lets closeAllDatabases close it in its sweep — otherwise an open landing
     // after the sweep leaks. Only the current extract is drained: leftover dirty rows replay on
-    // the next mount open (the bit is the durable queue). The await is BOUNDED (see
-    // REINDEX_CLOSE_TIMEOUT_MS): past the deadline teardown proceeds and the hung extract is accepted
-    // as leaked — the pre-await class, now confined to the black-holed-backend tail.
+    // the next mount open (the bit is the durable queue). The await is bounded by
+    // REINDEX_CLOSE_TIMEOUT_MS: past it teardown proceeds and a hung extract leaks.
     async close(): Promise<void> {
         this.closing = true;
         if (this.retryTimer) {
@@ -94,21 +94,8 @@ export class ContentReindexQueue {
             this.retryTimer = null;
         }
         if (!this.draining) return;
-        let timeout: ReturnType<typeof setTimeout> | undefined;
-        try {
-            await Promise.race([
-                this.draining,
-                new Promise<void>((resolve) => {
-                    timeout = setTimeout(() => {
-                        console.error(
-                            `[content-reindex] close for ${this.label} exceeded ${this.closeTimeoutMs}ms; proceeding`,
-                        );
-                        resolve();
-                    }, this.closeTimeoutMs);
-                }),
-            ]);
-        } finally {
-            if (timeout) clearTimeout(timeout);
+        if (!(await settlesWithin(this.draining, this.closeTimeoutMs))) {
+            console.error(`[content-reindex] close for ${this.label} exceeded ${this.closeTimeoutMs}ms; proceeding`);
         }
     }
 

@@ -93,13 +93,7 @@ fix (Phase 1a) · §2 upload pipeline (Phase 1b) · §3 staging + consistent ver
   Each queued PUT is raced against a **~120 s client-side ceiling** (`S3Storage` can't abort); a timeout counts as
   a failure, so backoff takes over instead of a black-holed request parking the drain and its semaphore.
 
-- **Orphan repair.** A timed-out request may still land server-side later, so the queue tracks it as an
-  **in-process orphan** (`trackOrphan`). An ack while an orphan is unsettled retains the acked bytes in
-  memory and re-uploads them through the guarded path once the orphan settles — without this the late
-  landing would regress the object **permanently if no further sync occurs**. A cancel re-issues the object
-  delete on settlement, so invariant 7 holds through timeouts whichever of cancel and timeout comes first.
-  Residual: an orphan whose fully-transmitted body the server commits after process death or queue teardown
-  lands unrepaired, with no log line (bucket versioning is the recovery).
+- **Orphan repair.** A timed-out request may still land server-side later, so the queue tracks it as an **in-process orphan** (`trackOrphan`). An ack while an orphan is unsettled retains the acked bytes in memory and re-uploads them through the guarded path once the orphan settles — without this the late landing would regress the object **permanently if no further sync occurs**. A cancel re-issues the object delete on settlement, so invariant 7 holds through timeouts whichever of cancel and timeout comes first. Residual: an orphan that settles after the queue's `close()` is not repaired but is logged (`landed after a newer upload acked`, `cannot re-upload … queue closed`); only one whose fully-transmitted body the server commits after process death lands unrepaired with no log line. Bucket versioning is the recovery for both.
 
 - **Commit order is distrusted.** An ack whose orphans all settled while its own PUT was in flight re-PUTs
   immediately. A staged copy of a database that fails the SQLite magic check (`isSqliteFile`) is dropped
@@ -132,7 +126,7 @@ temp-copy backend.
 |---|---|
 | `lib/mount/upload-queue.ts` | The per-mount `UploadQueue` — enqueue / drain / backoff / cancel / reconcile + staging + orphan tracking |
 | `lib/sync/index.ts` | Process-global bits: per-destination semaphore map, backoff, shutdown deadline |
-| `lib/mount/document-db.ts` | The `onSync` / `onOpen` / `onClose` callbacks + snapshot wiring. One slot per pathId (`Mount.documentDbs`) serializes open, create and close in call order, so a fresh instance never shares a closing one's temp/journal files; the slot holds the live instance while open and nothing else; once teardown starts, a new open is refused with a 503. Lock order is container path lock → slot, and a close-time snapshot try-locks |
+| `lib/mount/document-db.ts` | The `onSync` / `onOpen` / `onClose` callbacks + snapshot wiring. One slot per pathId (`Mount.documentDbs`) serializes open, create and close in call order, so a fresh instance never shares a closing one's temp/journal files; the slot holds the live instance while open and nothing else; once the teardown sweep starts (after the downloads abort, the reindex drain and the thumbnail wait), a new open is refused with a 503. Lock order is container path lock → slot, and a close-time snapshot try-locks |
 | `lib/core/managed-database.ts` | `markDirty` (crash recovery), `stageCopy` (`VACUUM INTO`), `mustExist` open guard (refuse a missing/0-byte working copy) |
 | `lib/mount/schema.ts` + `db-config.ts` | The `pending_uploads` table (additive migration v4; `isDatabase` in v8) |
 

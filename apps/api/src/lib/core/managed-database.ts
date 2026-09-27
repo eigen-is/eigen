@@ -198,7 +198,7 @@ export class ManagedDatabase<S extends SchemaType> {
     }
 
     // Force the next sync() to run even though total_changes() looks unchanged.
-    // Crash recovery: Mount.buildDocumentDb reuses a temp file that survived an
+    // Crash recovery: buildDocumentDb (mount/document-db.ts) reuses a temp file that survived an
     // unclean shutdown, but total_changes() resets to 0 on the fresh connection, so
     // isDirty would read false and the close-time cleanupTemp would silently drop the
     // unsynced bytes. Marking dirty guarantees they re-reach storage. Cleared on sync.
@@ -285,9 +285,7 @@ export class ManagedDatabase<S extends SchemaType> {
         await this.lifecycleLock.run(async () => {
             if (!this.rawDb) return; // a concurrent close reached the teardown first
 
-            // The teardown runs even when onSync throws (the error still propagates to the caller) —
-            // aborting before it leaked the raw db handle + working copy. onClose is told about the
-            // failure so it can leave the working copy as the crash-recovery marker.
+            // The teardown runs even when the final sync throws; onClose learns of the failure.
             let syncFailed = true;
             try {
                 await this.syncLock.run(() => this.sync());

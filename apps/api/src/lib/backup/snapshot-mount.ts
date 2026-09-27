@@ -213,19 +213,29 @@ function normalizeArchiveDatabase(destPath: string): void {
 // (`ECONNREFUSED`, `ETIMEDOUT`, `ENOTFOUND`), and that IS the storage being unreachable.
 const LOCAL_FAILURE_CODE = /^(SQLITE_[A-Z]+|ENOSPC|EACCES|EDQUOT|EROFS|EIO|ENOENT)$/;
 
-// A storage failure must fail the whole backup — an archive silently missing a mount's objects is
-// worse than no archive — but Bun's S3Error puts the actionable part in `code` and leaves `message`
-// as "an unexpected error has occurred", which is all the job's one-line error would have shown.
-// Only that shape is rewritten, and it names the object it was reading; anything else is rethrown
-// untouched.
+// A storage failure fails the whole backup — an archive silently missing a mount's objects is worse
+// than no archive. A failed storage call is a 503 carrying the provider's error or the local errno as
+// its cause (a timeout carries none), and Bun's S3Error hides the actionable part in `code` behind
+// "an unexpected error has occurred". So a local errno is rethrown as itself, a 503 or a coded error
+// as one line naming the code and the object, anything else untouched.
 function rethrowStorageFailure(mountId: string, storageKey: string, error: unknown): never {
-    // A failed storage call answers 503 with the provider's error or the local errno as its cause; a timeout has none.
     const unavailable = error instanceof ApiError && error.status === 503;
     const failure = unavailable ? error.cause : error;
     const code = errnoOf(failure);
     if (code && LOCAL_FAILURE_CODE.test(code)) throw failure;
     if (!code && !unavailable) throw error;
     throw new Error(`mount ${mountId}: storage unreachable${code ? ` (${code})` : ''} reading ${storageKey}`);
+}
+
+// How S3 and the local disk answer a read of an object deleted after its HEAD.
+function isMissingObject(error: unknown): boolean {
+    const code = error instanceof ApiError && error.status === 503 ? errnoOf(error.cause) : null;
+    return code === 'NoSuchKey' || code === 'ENOENT';
+}
+
+// False once the row was deleted, or moved to another key, since the tree read.
+async function isStillAt(mount: Mount, pathId: string, storageKey: string): Promise<boolean> {
+    return Boolean(await mount.getPath(pathId)) && (await mount.getStorageKey(pathId)) === storageKey;
 }
 
 // One mount's data tree in an archive: the entries written, how many of them are Eigen's own
@@ -258,14 +268,17 @@ export async function snapshotMountData(
         const storageKey = storageKeyOf(row, byId, mount.isPathBased);
 
         const container = managedDbContainer(row, byId);
+        // A row with bytes on record and none anywhere is a lost object, unless the row went since the tree read.
+        const lostObject = () =>
+            new Error(`mount ${mount.id}: ${relPath} has ${row.size} bytes on record but no object at ${storageKey}`);
         if (container) {
             fs.mkdirSync(path.dirname(destPath), { recursive: true });
             // Blocking lock, like snapshotContainerDataDb: a contended lock must never degrade to a
             // raw read of the live main file, which would drop every commit still sitting in the WAL.
-            // Deadlock-safe by the same argument — a close never parks on the container lock (its own
-            // snapshot try-locks and skips) and the backup holds no closing slot of its own.
-            // False = the container was deleted, or the version pruned, since the tree read above; the
-            // entry drops out of the archive rather than costing the home its whole backup.
+            // Deadlock-safe: a close never parks on the container lock (its own snapshot try-locks and
+            // skips), and the backup is never inside a close of this doc when it waits on its slot.
+            // False = no bytes anywhere: skipped when the container was deleted, or the version pruned,
+            // since the tree read; a live row with bytes on record fails the backup.
             const copied = await mount
                 .withPathLock(container.id, () => stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'))
                 .catch((error: unknown) => rethrowStorageFailure(mount.id, storageKey, error));
@@ -273,30 +286,30 @@ export async function snapshotMountData(
                 normalizeArchiveDatabase(destPath);
                 entries.push(await captureWrittenFile(destPath, entryPath));
                 databases++;
+            } else if (row.size && (await isStillAt(mount, row.id, storageKey))) {
+                throw lostObject();
             }
         } else {
             // readKey is freshest-first (pending staged copy, then the stored object). Null for a
             // row with no bytes on record (a touched file) mirrors that absence; null for a row with
-            // a size is a lost object and fails the backup, unless the row was deleted or moved since
-            // the tree read. A disk that fills up in the archive folder keeps its own errno
-            // (LOCAL_FAILURE_CODE): it is not the bucket being unreachable.
+            // a size is a lost object. A delete landing between readKey's HEAD and the GET fails the
+            // read with NoSuchKey/ENOENT. Either drops out of the archive when the row was deleted or
+            // moved since the tree read. A disk that fills up in the archive folder keeps its own
+            // errno (LOCAL_FAILURE_CODE): it is not the bucket being unreachable.
             const file = await mount
                 .readKey(storageKey)
                 .catch((error: unknown) => rethrowStorageFailure(mount.id, storageKey, error));
             if (file) {
-                entries.push(
-                    await captureFile(file, destPath, entryPath).catch((error: unknown) =>
-                        rethrowStorageFailure(mount.id, storageKey, error),
-                    ),
-                );
-            } else if (
-                row.size &&
-                (await mount.getPath(row.id)) &&
-                (await mount.getStorageKey(row.id)) === storageKey
-            ) {
-                throw new Error(
-                    `mount ${mount.id}: ${relPath} has ${row.size} bytes on record but no object at ${storageKey}`,
-                );
+                const entry = await captureFile(file, destPath, entryPath).catch(async (error: unknown) => {
+                    if (!isMissingObject(error) || (await isStillAt(mount, row.id, storageKey))) {
+                        rethrowStorageFailure(mount.id, storageKey, error);
+                    }
+                    fs.rmSync(destPath, { force: true });
+                    return null;
+                });
+                if (entry) entries.push(entry);
+            } else if (row.size && (await isStillAt(mount, row.id, storageKey))) {
+                throw lostObject();
             }
         }
         onProgress('mount files', index + 1, fileRows.length);

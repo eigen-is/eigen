@@ -53,7 +53,7 @@ export async function copyPath(
     // Freshest-first source: readFile surfaces an un-acked pending upload's staged bytes (a
     // just-created / outage-staged data.db) rather than the possibly-stale-or-absent storage
     // object. The container branch above flushed the doc first, so its pending staging holds the
-    // current bytes; a regular file is never staged, so this is a plain storage read for it.
+    // current bytes; a regular file is staged only by a home restore whose upload has not acked yet.
     const srcFile = await mount.readFile(srcPathId);
     if (!srcFile) throw new ApiError(404, 'Source file missing on storage');
     const tempId = randomUUID();

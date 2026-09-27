@@ -32,11 +32,11 @@ export async function snapshotContainerDataDb(
     return mount.withPathLock(containerId, () => takeSnapshot(mount, containerId, policy, { awaitSlot: true }));
 }
 
-// The tick/close (ManagedDatabase onSnapshot) twin: those snapshots must never PARK on the
-// container lock — a close already holds the doc's closing slot, so waiting on a lock whose
-// holder waits on that same close deadlocks (the H→F→C cycle in the design note). A skip
-// forgoes at most one version-history entry, never bytes (the sync already staged them);
-// a tick-path skip retries next tick because snapshotIfDue doesn't advance on 'skipped'.
+// The tick/close (ManagedDatabase onSnapshot) twin: it runs inside a close that holds the doc's
+// slot (or a tick that close waits on), and a container-lock holder may be waiting on that slot,
+// so it try-locks rather than parks. A skip forgoes at most one version-history entry, never
+// bytes (the sync already staged them); a tick-path skip retries next tick because snapshotIfDue
+// doesn't advance on 'skipped'.
 export async function trySnapshotContainerDataDb(
     mount: Mount,
     containerId: string,
@@ -63,8 +63,7 @@ async function takeSnapshot(
             await slot.db?.flush();
         });
     } else {
-        const cached = mount.documentDbs.get(dataDb.id)?.db;
-        if (cached) await cached.flush();
+        await mount.documentDbs.get(dataDb.id)?.db?.flush();
     }
 
     let versions = await mount.getChildByName(containerId, VERSIONS_FOLDER_NAME);
@@ -103,8 +102,8 @@ async function takeSnapshot(
     return copy;
 }
 
-// isRemote version snapshot: create the version metadata row, source its bytes from the
-// freshest LOCAL copy of data.db, and enqueue the upload (so a close-time snapshot never
+// isRemote version snapshot: source the bytes from the freshest LOCAL copy of data.db, then
+// create the version metadata row and enqueue the upload (so a close-time snapshot never
 // blocks on the backend). Caller holds the container lock.
 async function snapshotDataDbToVersionStaged(
     mount: Mount,
@@ -112,13 +111,20 @@ async function snapshotDataDbToVersionStaged(
     versionsId: string,
     snapshotName: string,
 ): Promise<DrivePath> {
-    const versionPathId = await mount.touchFile(versionsId, snapshotName, dataDb.mimeType);
-    const versionKey = await mount.getStorageKey(versionPathId);
     const queue = mount.uploadQueue!; // isRemote-only path (snapshotContainerDataDb branch)
     const versionStaging = queue.newStagingPath();
-    if (!(await stageManagedDbCopy(mount, dataDb.id, versionStaging, 'staged-first'))) {
+    const staged = await stageManagedDbCopy(mount, dataDb.id, versionStaging, 'staged-first').catch(
+        (error: unknown) => {
+            // A failed read leaves a half-written copy no pending upload references.
+            fs.rmSync(versionStaging, { force: true });
+            throw error;
+        },
+    );
+    if (!staged) {
         throw new ApiError(503, `Cannot snapshot ${dataDb.id}: its stored object is not available`);
     }
+    const versionPathId = await mount.touchFile(versionsId, snapshotName, dataDb.mimeType);
+    const versionKey = await mount.getStorageKey(versionPathId);
     const size = fs.statSync(versionStaging).size;
     await mount.db.update(paths).set({ size, updatedAt: new Date() }).where(eq(paths.id, versionPathId));
     await mount.invalidateAncestorsOf(versionPathId);

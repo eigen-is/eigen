@@ -27,7 +27,6 @@ export class LocalStorage implements StorageBackend {
         return await Bun.write(this.resolve(key), data, { createPath: true });
     }
 
-    // true once the key is gone, a missing one included; false only for a failed call, as S3Storage.
     async delete(key: string): Promise<boolean> {
         try {
             await fsPromises.rm(this.resolve(key), { force: true });
@@ -75,13 +74,9 @@ export class LocalStorage implements StorageBackend {
     }
 
     async deleteDir(key: string): Promise<boolean> {
-        const dirPath = this.resolve(key);
         try {
-            if (fs.existsSync(dirPath)) {
-                await fsPromises.rm(dirPath, { recursive: true });
-                return true;
-            }
-            return false;
+            await fsPromises.rm(this.resolve(key), { recursive: true, force: true });
+            return true;
         } catch (error) {
             console.error(`Failed to delete directory ${key}:`, error);
             return false;

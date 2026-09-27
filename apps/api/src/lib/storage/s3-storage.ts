@@ -4,7 +4,7 @@ import { escapeXml } from '@workspace/lib/html';
 import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
 import { type BunFile, S3Client, type S3File } from 'bun';
 import { ApiError } from '../core';
-import { withStorageDeadline } from './deadline';
+import { storageUnavailable, withStorageDeadline } from './deadline';
 import type { S3Config, StorageBackend } from './types';
 
 export async function checkS3Connection(config: S3Config): Promise<S3CheckResult> {
@@ -276,12 +276,10 @@ export class S3Storage implements StorageBackend {
     }
 
     async delete(key: string): Promise<boolean> {
-        // S3 answers a DELETE of a missing key with success, so no HEAD first.
         try {
             await withStorageDeadline(this.read(key).delete());
             return true;
         } catch (error) {
-            // A bucket that is gone holds none of its keys.
             if (error instanceof Error && 'code' in error && error.code === 'NoSuchBucket') return true;
             console.error(`Failed to delete S3 file ${key}:`, error);
             return false;
@@ -295,7 +293,7 @@ export class S3Storage implements StorageBackend {
             return await withStorageDeadline(this.read(key).exists());
         } catch (error) {
             console.error(`S3 exists probe failed for ${key}:`, error);
-            throw error instanceof ApiError ? error : new ApiError(503, 'Storage unavailable', { cause: error });
+            throw storageUnavailable(error);
         }
     }
 

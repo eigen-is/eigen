@@ -325,8 +325,7 @@ export async function getScreenPreview(
     // inline each sibling's bytes as a data: URI at serve time so <img> renders them (an <img> SVG
     // never fetches external refs). The inlined result rides this same versioned cache key — a sibling
     // edit does not bump the svg's updatedAt, so a stale sibling can outlive the cached preview until
-    // the svg itself changes (accepted; a media rename already breaks name refs everywhere today). The
-    // content type stays image/svg+xml, so the route keeps serving it under the sandbox CSP.
+    // the svg itself changes. The content type stays image/svg+xml, so the route keeps the sandbox CSP.
     if (mime === 'image/svg+xml') {
         return getOrCacheImage(
             mount.previewsDir,

@@ -74,9 +74,8 @@ describe('LocalStorage', () => {
         expect(await storage.exists('tree/sub/b.txt')).toBe(false);
     });
 
-    test('deleteDir returns false for missing directory', async () => {
-        const deleted = await storage.deleteDir('nonexistent-dir');
-        expect(deleted).toBe(false);
+    test('deleteDir answers true for a missing directory, as delete does for a missing key', async () => {
+        expect(await storage.deleteDir('nonexistent-dir')).toBe(true);
     });
 
     test('path traversal with .. is rejected', () => {

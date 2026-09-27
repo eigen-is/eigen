@@ -9,6 +9,7 @@ export interface StorageBackend {
 
     write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number>;
 
+    // true once the key is gone, a missing one included; false only when the call failed.
     delete(key: string): Promise<boolean>;
 
     exists(key: string): Promise<boolean>;

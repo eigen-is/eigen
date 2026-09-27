@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { chmodSync, mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
@@ -40,6 +40,8 @@ const FULL_MOUNT_ID = 'backup-s3-full';
 const STALLED_MOUNT_ID = 'backup-s3-stalled';
 const FAILING_MOUNT_ID = 'backup-s3-failing';
 const FAILING_CONTAINER_MOUNT_ID = 'backup-s3-failing-container';
+const RACING_DELETE_MOUNT_ID = 'backup-s3-racing-delete';
+const VANISHING_OBJECT_MOUNT_ID = 'backup-s3-vanishing-object';
 
 const docSchema = { items: sqliteTable('items', { id: integer('id').primaryKey(), data: text('data') }) };
 // No snapshot config: a close-time version enqueue would be noise for these tests.
@@ -393,6 +395,64 @@ describe('Backup freshest-first on an s3 mount', () => {
             await staleMount.deletePath(touchedId);
             await staleMount.deletePath(deletedId);
         }
+    });
+
+    // The object goes after readKey's HEAD answered 200, so the GET that captures it answers NoSuchKey.
+    async function snapshotWithObjectGoneAfterHead(
+        mount: Mount,
+        fileId: string,
+        removeObject: () => Promise<unknown>,
+    ): Promise<{ manifest: BackupManifest; folder: string }> {
+        const storageKey = await mount.getStorageKey(fileId);
+        const readKey = mount.readKey.bind(mount);
+        const spy = spyOn(mount, 'readKey').mockImplementation(async (key) => {
+            const file = await readKey(key);
+            if (key === storageKey) await removeObject();
+            return file;
+        });
+        try {
+            return await snapshot();
+        } finally {
+            spy.mockRestore();
+        }
+    }
+
+    test('a file deleted between the HEAD and the GET drops out of the archive', async () => {
+        await withFakeS3Mount(RACING_DELETE_MOUNT_ID, async (mount) => {
+            const rootId = (await mount.getRootFolder())!.id;
+            const fileId = await mount.createFile(
+                rootId,
+                'raced.png',
+                'image/png',
+                TEST_PNG_BYTES.byteLength,
+                TEST_PNG_BYTES,
+            );
+            const { manifest, folder } = await snapshotWithObjectGoneAfterHead(mount, fileId, () =>
+                mount.deletePath(fileId),
+            );
+            const relPath = `home/mounts/${RACING_DELETE_MOUNT_ID}/data/raced.png`;
+            expect(manifest.entries.map((e) => e.path)).not.toContain(relPath);
+            expect(existsSync(join(folder, relPath))).toBe(false);
+        });
+    });
+
+    test('a live file whose object vanishes between the HEAD and the GET fails the backup', async () => {
+        await withFakeS3Mount(VANISHING_OBJECT_MOUNT_ID, async (mount, fake) => {
+            const rootId = (await mount.getRootFolder())!.id;
+            const fileId = await mount.createFile(
+                rootId,
+                'lost.png',
+                'image/png',
+                TEST_PNG_BYTES.byteLength,
+                TEST_PNG_BYTES,
+            );
+            const storageKey = await mount.getStorageKey(fileId);
+            await expect(
+                snapshotWithObjectGoneAfterHead(mount, fileId, () => fake.store.delete(storageKey)),
+            ).rejects.toThrow(
+                `mount ${VANISHING_OBJECT_MOUNT_ID}: storage unreachable (NoSuchKey) reading ${storageKey}`,
+            );
+        });
     });
 
     // Gap BK-5: freshest-first never looks at the crash temp an unclean shutdown leaves behind.

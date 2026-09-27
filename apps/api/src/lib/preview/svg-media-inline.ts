@@ -19,9 +19,7 @@ import type { Mount } from '../mount';
 //
 // The result rides the existing `{pathId}-{updatedAt}.screen.svg` cache key, so every display surface
 // and the export path (export/media.ts prepareMedia calls getScreenPreview too) get it for free.
-// Accepted staleness: a sibling edit/rename/delete does not bump the svg's own updatedAt, so a cached
-// preview can outlive the swap until the svg itself changes — a media rename already breaks every name
-// reference in the suite today.
+// A sibling edit, rename or delete leaves the svg's updatedAt alone: a cached preview outlives it until the svg changes.
 
 // ~16MB served-output ceiling. base64 inflates ~1.37x, so a few MB of siblings fit; a hostile blow-up
 // (one big sibling referenced many times, or deep nesting) trips this and degrades to a stripped svg.
@@ -38,9 +36,7 @@ const SNIFF = Buffer.from(EIGEN_MEDIA_SCHEME);
 // already inlined (an export path injected them, or this is our own cached output) — skip re-injecting
 // so the block is never doubled.
 const FONT_FAMILY_SNIFF = Buffer.from('font-family');
-// Accepted limitation: this is a whole-file sniff, so a foreign svg that carries its OWN @font-face
-// while also naming an EIGEN family gets no faces injected for that eigen family. Our own pasted
-// vectors never embed faces, so in practice this only defers to an svg that already declares its fonts.
+// Whole-file sniff: an svg that declares its own @font-face gets no EIGEN faces injected.
 const FONT_FACE_SNIFF = Buffer.from('@font-face');
 
 // Thrown when the running output would exceed the ceiling; caught at the top to serve a stripped svg.
@@ -58,8 +54,7 @@ type Budget = { remaining: number };
 export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgBytes: Buffer): Promise<Buffer> {
     const hasMedia = svgBytes.includes(SNIFF);
     const needsFonts = svgBytes.includes(FONT_FAMILY_SNIFF) && !svgBytes.includes(FONT_FACE_SNIFF);
-    // Cheap byte-level sniff: a drawing with no name-refs and no fonts to inject takes today's path,
-    // byte-identical (no utf8 round-trip).
+    // Nothing to inline or inject: serve the bytes untouched, without a utf8 round-trip.
     if (!hasMedia && !needsFonts) return svgBytes;
 
     const original = svgBytes.toString('utf8');

@@ -20,8 +20,12 @@ import { basename, dirname, join, relative } from 'node:path';
 import type { parseArgs } from 'node:util';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
-import type { UserSettings } from '@workspace/lib/types/settings';
-import { BACKUP_STAMP_PATTERN, buildBackupStamp, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
+import {
+    BACKUP_STAMP_PATTERN,
+    buildBackupStamp,
+    PRE_RESTORE_SUFFIX,
+    parseHomeMountSettings,
+} from '@workspace/lib/validation';
 import type { Subprocess } from 'bun';
 import { COLLAB_EPOCH_FILE } from '../lib/collab/epoch';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
@@ -148,10 +152,14 @@ async function refusal(): Promise<string | null> {
 // Whether any home keeps a drive in a bucket, whose objects no snapshot holds. A settings file that does not read is skipped.
 function holdsS3Mounts(): boolean {
     for (const file of new Bun.Glob(`${DATA}/*/*/${PATHS.SETTINGS}`).scanSync()) {
+        let text: string;
         try {
-            const settings: UserSettings = JSON.parse(readFileSync(file, 'utf8'));
-            if (Object.values(settings.mounts ?? {}).some((mount) => mount.storageType === 's3')) return true;
-        } catch {}
+            text = readFileSync(file, 'utf8');
+        } catch {
+            continue;
+        }
+        const mounts = parseHomeMountSettings(text);
+        if (mounts && Object.values(mounts).some((mount) => mount.storageType === 's3')) return true;
     }
     return false;
 }

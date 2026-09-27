@@ -1,6 +1,6 @@
-import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import { eq } from 'drizzle-orm';
+import { settlesWithin } from '../../utils/timing';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType, type SyncCallbacks } from '../core';
 import { getShutdownDrainDeadline } from '../sync';
 import { isViableRecoveryTemp } from './helpers';
@@ -69,7 +69,7 @@ async function openDocumentDb<S extends SchemaType>(
     // Seam: documentDbs is one heterogeneous cache (ManagedDatabase<SchemaType>), so the caller's
     // schema S can only be re-attached here — the config that built the entry carries it.
     return withDocumentDb(mount, pathId, async (slot) => {
-        if (mount.closing) throw new ApiError(503, `Mount is closing: ${pathId}`);
+        if (mount.closing) throw new ApiError(503, 'Mount is closing');
         if (slot.db) {
             if (mode === 'create') throw new Error(`Mount.createDatabase ${pathId}: already in cache`);
             return slot.db as ManagedDatabase<S>;
@@ -148,22 +148,12 @@ async function buildDocumentDb<S extends SchemaType>(
                       // Clean close during an outage: the live temp was cleaned but a staged
                       // copy holds bytes newer than storage (upload not yet acked). Recover
                       // from it rather than downloading a stale object.
-                      if (mount.uploadQueue) {
-                          const staged = mount.uploadQueue.getPendingStagingPath(storageKey);
-                          if (staged && fs.existsSync(staged)) {
-                              console.log(`[Mount] Recovering from staged upload for ${pathId}`);
-                              await mount.cleanupTemp(pathId);
-                              // Side file + rename, as in downloadKeyToTemp: never a partial file at tempPath.
-                              const sideId = randomUUID();
-                              try {
-                                  await Bun.write(mount.getTempPath(sideId), Bun.file(staged));
-                              } catch (err) {
-                                  await mount.cleanupTemp(sideId);
-                                  throw err;
-                              }
-                              fs.renameSync(mount.getTempPath(sideId), tempPath);
-                              return;
-                          }
+                      const staged = mount.pendingStagedCopy(storageKey);
+                      if (staged) {
+                          console.log(`[Mount] Recovering from staged upload for ${pathId}`);
+                          await mount.cleanupTemp(pathId);
+                          await mount.replaceTempFrom(pathId, Bun.file(staged));
+                          return;
                       }
                       // A missing object fails the GET, which answers the same 503 a HEAD would.
                       await mount.downloadKeyToTemp(storageKey, pathId);
@@ -257,7 +247,7 @@ export async function closeDatabase(
     await withDocumentDb(mount, pathId, async (slot) => {
         const db = slot.db;
         if (!db) return;
-        // Delete BEFORE closing: a snapshot read mid-close must not see the closing instance.
+        // Cleared BEFORE closing: a snapshot read mid-close must not see the closing instance.
         slot.db = null;
         await db.close(opts);
     });
@@ -325,16 +315,12 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
         // so leftover rows replay on boot. Idle teardown leaves the deadline null and skips the flush.
         const deadline = getShutdownDrainDeadline();
         if (deadline !== null) {
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            await Promise.race([
+            await settlesWithin(
                 mount.uploadQueue
                     .drain({ flushNow: true })
                     .catch((e) => console.error(`[Mount] shutdown drain failed:`, e)),
-                new Promise<void>((resolve) => {
-                    timer = setTimeout(resolve, Math.max(0, deadline - Date.now()));
-                }),
-            ]);
-            clearTimeout(timer);
+                Math.max(0, deadline - Date.now()),
+            );
         }
         mount.uploadQueue.close();
     }
