@@ -191,8 +191,8 @@ that already resolved it. `getHome` already handles the converse: a cached home 
 The residual window — a request holding a `Home` reference across an eviction hits
 `'Database not open'` — exists today with the idle destruct; the 30-second min-idle
 guard makes it rarer, and it fails loud (500 + log), not silent. Two audit fixes (2026-07-06)
-already hardened the close path eviction rides: document-DB open now waits on any in-flight
-close of the same `pathId` (`closingDocumentDbs`, `mount/document-db.ts`), so an eviction
+already hardened the close path eviction rides: document-DB open now queues behind any in-flight
+close of the same `pathId` (the `Mount.documentDbs` slot, `withDocumentDb` in `mount/document-db.ts`), so an eviction
 closing a container's `data.db` cannot interleave with a concurrent reopen; and
 `ManagedDatabase.close()` tears down unconditionally (try/finally), so a home whose close-sync
 throws still releases its fds — which is the whole point of a pressure valve.

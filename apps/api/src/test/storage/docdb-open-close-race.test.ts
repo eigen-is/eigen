@@ -8,17 +8,18 @@ import { ApiError, type DatabaseConfig, ManagedDatabase } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
-import { countRowsInFile, createGetLocalDatabase, SETTLE_BOUND_MS, settlesWithin } from '../fault-storage-helpers';
+import {
+    countRowsInFile,
+    createGetLocalDatabase,
+    SETTLE_BOUND_MS,
+    STALL_BOUND_MS,
+    settlesWithin,
+} from '../fault-storage-helpers';
 import { createTestMountConfig } from '../mount-test-helpers';
 
-// Regression net for the open/close serialization in docs/SYNC.md: an openDatabase landing in
-// closeDatabase's async close window built a fresh ManagedDatabase over the closing instance's
-// live files — on `local` it adopted the doomed temp as crash recovery, and the old close's
-// cleanupTemp then unlinked it under the adopted connection (every later sync throws
-// 'tempfile missing' until reopen — the tail is lost). The fix: opens wait on
-// mount.closingDocumentDbs, tick/close snapshots skip when the container lock is contended
-// (never park — the H→F→C deadlock), and snapshot reads peek() the documentDbs getter instead
-// of awaiting an unresolved factory (the C→F→C wedge).
+// Regression net for the open/close serialization in docs/SYNC.md: every open, create and close of
+// one pathId queues on its mount.documentDbs slot, and tick/close snapshots never park on the
+// container lock (the H→F→C deadlock).
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-docdb-open-close-race-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
@@ -49,20 +50,20 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 
 type Gate = { parked: Promise<void>; release: () => void };
 
-// LocalStorage whose next write()/rename() after arm parks on a test-controlled gate — freezes a
-// close mid-final-sync (or a trash mid-rename) so a concurrent open lands deterministically in
-// the close window. One-shot: the arm is consumed synchronously at park time, so every other
+// LocalStorage whose next write()/rename() after arm parks on a test-controlled gate (a write can
+// also be failed) — freezes a close mid-final-sync (or a trash mid-rename) so a concurrent open
+// lands deterministically in the close window. One-shot: the arm is consumed synchronously at park time, so every other
 // call passes straight through. No sleeps anywhere — pure deferreds.
 class GatedLocalStorage extends LocalStorage {
     private writeGate: { parked: () => void; released: Promise<void> } | null = null;
     private renameGate: { parked: () => void; released: Promise<void> } | null = null;
     private readGate: { parked: () => void; released: Promise<void> } | null = null;
 
-    armWrite(): Gate {
+    armWrite(): Gate & { fail: (err: Error) => void } {
         const parked = deferred();
-        const released = deferred();
+        const released = Promise.withResolvers<void>();
         this.writeGate = { parked: parked.resolve, released: released.promise };
-        return { parked: parked.promise, release: released.resolve };
+        return { parked: parked.promise, release: released.resolve, fail: released.reject };
     }
 
     armRename(): Gate {
@@ -208,7 +209,7 @@ describe('open during close waits for the close to settle', () => {
         await reopened.flush();
 
         expect(await countStoredRows(mount, dataDbId)).toBe(3);
-        expect(mount.closingDocumentDbs.size).toBe(0);
+        expect(mount.documentDbs.get(dataDbId)?.db).toBeDefined();
     }, 10_000);
 });
 
@@ -259,7 +260,7 @@ describe('snapshot skip semantics (tick/close snapshots never park on the contai
         expect(closed).toBe(true);
 
         expect(await mount.getChildByName(containerId, 'versions')).toBeNull();
-        expect(mount.closingDocumentDbs.size).toBe(0);
+        expect(mount.documentDbs.has(dataDbId)).toBe(false);
     }, 10_000);
 
     test('(iii) a close-time snapshot that WINS the lock + a concurrent reopen: both settle', async () => {
@@ -270,10 +271,8 @@ describe('snapshot skip semantics (tick/close snapshots never park on the contai
         const gate = storage.armWrite();
         const closePromise = mount.closeDatabase(dataDbId);
         await gate.parked;
-        // The reopen lands mid-close: its factory awaits the closing deferred. The close's own
-        // snapshot then wins the (free) container lock, and its flush/stage step finds THIS
-        // unresolved factory in documentDbs — awaiting it instead of peek()ing it wedges the
-        // pathId permanently (C→F→C: the deferred never resolves).
+        // The reopen lands mid-close and queues behind it. The close's own snapshot then wins the
+        // (free) container lock; waiting on the slot there would wedge the pathId on its own close.
         const openPromise = mount.openDatabase(snapshotDocConfig, dataDbId);
         gate.release();
 
@@ -282,14 +281,13 @@ describe('snapshot skip semantics (tick/close snapshots never park on the contai
         if (!bothSettled) createdMounts.splice(createdMounts.indexOf(mount), 1);
         expect(bothSettled).toBe(true);
 
-        // The snapshot was taken (it won the lock), the reopen rebuilt from storage, and the
-        // closing registry drained.
+        // The snapshot was taken (it won the lock) and the reopen rebuilt from storage.
         const versions = await mount.getChildByName(containerId, 'versions');
         expect(versions).not.toBeNull();
         expect(await mount.listFolder(versions!.id)).toHaveLength(1);
         const reopened = await openPromise;
         expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(1);
-        expect(mount.closingDocumentDbs.size).toBe(0);
+        expect(mount.documentDbs.get(dataDbId)?.db).toBeDefined();
     }, 15_000);
 });
 
@@ -300,7 +298,7 @@ describe('unchanged paths', () => {
 
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await mount.closeDatabase(dataDbId);
-        expect(mount.closingDocumentDbs.size).toBe(0);
+        expect(mount.documentDbs.has(dataDbId)).toBe(false);
 
         const reopened = await mount.openDatabase(docConfig, dataDbId);
         expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(1);
@@ -336,10 +334,90 @@ describe('unchanged paths', () => {
         // Without the adoption + markDirty, the reopened DB looked clean and row 2 was dropped.
         expect(await countStoredRows(mount, dataDbId)).toBe(2);
     });
+
+    test('a close whose final sync fails leaves no handle behind; the next open adopts the temp', async () => {
+        const { mount, storage } = await createGatedLocalMount('failed-close');
+        const { dataDbId, managed } = await provisionDoc(mount, docConfig);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'unsynced' }).run();
+
+        const gate = storage.armWrite();
+        const closing = mount.closeDatabase(dataDbId);
+        await gate.parked;
+        gate.fail(new ApiError(503, 'storage unavailable'));
+        await expect(closing).rejects.toThrow();
+        expect(mount.documentDbs.has(dataDbId)).toBe(false);
+
+        const reopened = await mount.openDatabase(docConfig, dataDbId);
+        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(1);
+    });
+
+    test('a close whose final sync fails writes no version entry from the stale storage copy', async () => {
+        const { mount, storage } = await createGatedLocalMount('failed-close-no-snapshot');
+        const { containerId, dataDbId, managed } = await provisionDoc(mount, snapshotDocConfig);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'synced' }).run();
+        await managed.flush(); // syncs without snapshotting
+        managed.db.insert(docSchema.items).values({ id: 2, data: 'unsynced' }).run();
+        expect(await mount.getChildByName(containerId, 'versions')).toBeNull();
+
+        const gate = storage.armWrite();
+        const closing = mount.closeDatabase(dataDbId);
+        await gate.parked;
+        gate.fail(new ApiError(503, 'storage unavailable'));
+        await expect(closing).rejects.toThrow();
+
+        // Pre-fix the close snapshotted the storage object: row 1 only, stamped now.
+        expect(await mount.getChildByName(containerId, 'versions')).toBeNull();
+
+        await mount.openDatabase(snapshotDocConfig, dataDbId);
+        await mount.closeDatabase(dataDbId);
+        expect(await countStoredRows(mount, dataDbId)).toBe(2);
+    });
+
+    test('a create whose initial flush fails closes what it opened', async () => {
+        const { mount, storage } = await createGatedLocalMount('failed-create-flush');
+        const rootId = (await mount.getRootFolder())!.id;
+        const containerId = await mount.createFolder(rootId, 'container-doc', 'doc');
+        const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+
+        // A sustained outage: the create's flush and the cleanup close's final sync both fail.
+        storage.write = () => Promise.reject(new ApiError(503, 'storage unavailable'));
+        await expect(mount.createDatabase(docConfig, dataDbId)).rejects.toThrow('storage unavailable');
+
+        // Pre-fix the connection stayed open (30s timer, fd, -wal/-shm) with no slot pointing at it.
+        const tempPath = mount.getTempPath(dataDbId);
+        expect(mount.documentDbs.has(dataDbId)).toBe(false);
+        expect(existsSync(`${tempPath}-wal`)).toBe(false);
+        expect(existsSync(`${tempPath}-shm`)).toBe(false);
+        expect(existsSync(tempPath)).toBe(true); // the failed close keeps it as the crash marker
+        expect(await settlesWithin([mount.closeAllDatabases()], SETTLE_BOUND_MS)).toBe(true);
+    });
+});
+
+describe('mount teardown', () => {
+    test('an open queued behind a teardown close whose sync fails is refused; nothing outlives teardown', async () => {
+        const { mount, storage } = await createGatedLocalMount('teardown-queued-open');
+        const { dataDbId, managed } = await provisionDoc(mount, docConfig);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'unsynced' }).run();
+
+        const gate = storage.armWrite();
+        const teardown = mount.closeAllDatabases();
+        await gate.parked;
+        // Queues on the slot the sweep already visited; pre-fix it adopted the failed close's temp.
+        const queued = mount.openDatabase(docConfig, dataDbId).then(
+            () => null,
+            (err: unknown) => err,
+        );
+        gate.fail(new ApiError(503, 'storage unavailable'));
+
+        expect(await settlesWithin([teardown], SETTLE_BOUND_MS)).toBe(true);
+        expect(await queued).toMatchObject({ status: 503 });
+        expect(mount.documentDbs.size).toBe(0);
+        expect(existsSync(mount.getTempPath(dataDbId))).toBe(true);
+    }, 10_000);
 });
 
 describe('nested close during an in-flight close', () => {
-    test('close → open → close chain settles; a third open syncs; closing registry ends empty', async () => {
+    test('close → open → close chain settles; no slot is left behind; a third open syncs', async () => {
         const { mount, storage } = await createGatedLocalMount('nested-close');
         const { dataDbId, managed } = await provisionDoc(mount, docConfig);
 
@@ -350,14 +428,12 @@ describe('nested close during an in-flight close', () => {
         await gate.parked;
 
         const openPromise = mount.openDatabase(docConfig, dataDbId); // waits on close1
-        const close2 = mount.closeDatabase(dataDbId); // nested: overwrites the closing slot
+        const close2 = mount.closeDatabase(dataDbId); // nested: queues behind the open
         gate.release();
 
         await Promise.all([close1, openPromise, close2]);
 
-        // Identity-guarded delete: close1's finally must not clobber close2's registration, and
-        // close2's own settle must leave the registry empty.
-        expect(mount.closingDocumentDbs.size).toBe(0);
+        expect(mount.documentDbs.has(dataDbId)).toBe(false);
 
         const third = await mount.openDatabase(docConfig, dataDbId);
         third.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
@@ -384,7 +460,6 @@ describe('an open still loading from storage', () => {
 
             expect(() => opened.db).toThrow('Database not open');
             expect(mount.documentDbs.has(dataDbId)).toBe(false);
-            expect(mount.closingDocumentDbs.size).toBe(0);
             expect(existsSync(mount.getTempPath(dataDbId))).toBe(false);
             expect(await countStoredRows(mount, dataDbId)).toBe(1);
         } finally {
@@ -437,7 +512,7 @@ describe('an open still loading from storage', () => {
         const gate = storage.armRead();
         const failing = mount.openDatabase(docConfig, dataDbId).catch(() => null);
         await gate.parked;
-        // The close takes the in-flight entry out of the cache; the successor open waits on that close.
+        // The close and the successor open queue behind the parked open.
         const closing = mount.closeDatabase(dataDbId).catch(() => {});
         const successor = mount.openDatabase(docConfig, dataDbId);
         gate.fail(new ApiError(503, 'storage unavailable'));
@@ -447,5 +522,67 @@ describe('an open still loading from storage', () => {
         const cached = mount.documentDbs.has(dataDbId);
         if (!cached) await reopened.close();
         expect(cached).toBe(true);
+    }, 10_000);
+
+    test('two concurrent opens of one pathId build once and share the instance', async () => {
+        const { mount, storage } = await createGatedLocalMount('concurrent-opens');
+        const { dataDbId } = await provisionDoc(mount, docConfig);
+        await mount.closeDatabase(dataDbId);
+
+        const gate = storage.armRead();
+        const first = mount.openDatabase(docConfig, dataDbId);
+        await gate.parked;
+        const second = mount.openDatabase(docConfig, dataDbId);
+        gate.release();
+
+        const [a, b] = await Promise.all([first, second]);
+        expect(a).toBe(b);
+    }, 10_000);
+
+    test('a blocking snapshot landing during an in-flight open waits for the open to land', async () => {
+        const { mount, storage } = await createGatedLocalMount('snap-mid-load');
+        const { containerId, dataDbId } = await provisionDoc(mount, docConfig);
+        await mount.closeDatabase(dataDbId);
+
+        const gate = storage.armRead();
+        const order: string[] = [];
+        const openPromise = mount.openDatabase(docConfig, dataDbId).then((db) => {
+            order.push('open');
+            return db;
+        });
+        try {
+            await gate.parked;
+            // The manual-save path: it must flush what the open builds, not copy storage around it.
+            const snapshotPromise = mount
+                .snapshotContainerDataDb(containerId, DEFAULT_RETENTION)
+                .then(() => order.push('snapshot'));
+            const landedEarly = await settlesWithin([snapshotPromise], STALL_BOUND_MS);
+            gate.release();
+            await Promise.all([openPromise, snapshotPromise]);
+
+            expect(landedEarly).toBe(false);
+            expect(order).toEqual(['open', 'snapshot']);
+            const versions = await mount.getChildByName(containerId, 'versions');
+            expect(await mount.listFolder(versions!.id)).toHaveLength(1);
+        } finally {
+            gate.release();
+        }
+    }, 10_000);
+
+    test('an open that fails leaves no slot behind', async () => {
+        const { mount, storage } = await createGatedLocalMount('failed-open-no-slot');
+        const { dataDbId, managed } = await provisionDoc(mount, docConfig);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await mount.closeDatabase(dataDbId);
+
+        const gate = storage.armRead();
+        const failing = mount.openDatabase(docConfig, dataDbId);
+        await gate.parked;
+        gate.fail(new ApiError(503, 'storage unavailable'));
+        await expect(failing).rejects.toThrow();
+        expect(mount.documentDbs.has(dataDbId)).toBe(false);
+
+        const reopened = await mount.openDatabase(docConfig, dataDbId);
+        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(1);
     }, 10_000);
 });

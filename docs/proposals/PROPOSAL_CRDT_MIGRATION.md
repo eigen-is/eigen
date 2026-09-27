@@ -89,7 +89,7 @@ copies under the container's `versions/` folder (`../../apps/api/src/lib/version
 `owner.mount.path` — **concurrent opens of the same doc coalesce into a single `init()`**; a second
 opener awaits the first. `CollabDocument.init` opens `data.db` via `Drive.openDatabase` →
 `Mount.openDatabase` (`../../apps/api/src/lib/mount/document-db.ts`, which runs `ManagedDatabase` SQLite
-migrations; open and close are serialized per pathId via `closingDocumentDbs` — a 2026-07
+migrations; open and close are serialized per pathId on the `Mount.documentDbs` slot — a 2026-07
 storage-audit change), then `DbProvider` hydrates a `Y.Doc` via `loadYjsState`
 (`../../apps/api/src/lib/collab/yjs-loader.ts`: latest snapshot + tail updates, corrupted rows skipped).
 
@@ -267,7 +267,7 @@ client subscribes) and the dormant-doc sweep. It is deliberately *not* wired int
 `Mount.openDatabase`/`buildDocumentDb`: that seam is config-generic (the same factory serves
 `comments.db` and chat's `data.db`) and doesn't know the container's `EigenDocType`; and inside a
 still-unresolved factory the pre-migration snapshot would capture lagged bytes — `takeSnapshot`/
-`stageDataDbSnapshot` deliberately `peek()` the `documentDbs` cache and never await the getter (the
+`stageDataDbSnapshot` deliberately read the slot's `db` field and never enter the slot's section (the
 storage-audit close-wedge fix), so an unresolved entry falls through to staged-copy/storage bytes
 instead of the live working copy. Also: never wrap the helper in `withPathLock` —
 `snapshotContainerDataDb` self-locks there and the lock is not reentrant. The sequence:

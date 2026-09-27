@@ -15,7 +15,6 @@ import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import type { AsyncSingleton } from '../../utils/singleton';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, PATHS, type SchemaType } from '../core';
 import { FileHistory } from '../drive/history';
@@ -26,6 +25,7 @@ import * as snapshot from '../versioning/snapshot';
 import { type ContentExtractor, ContentReindexQueue } from './content-reindex-queue';
 import * as copy from './copy';
 import { MOUNT_DB_CONFIG } from './db-config';
+import type { DocumentDbSlot } from './document-db';
 import * as documentDb from './document-db';
 import {
     ancestorIds,
@@ -61,12 +61,10 @@ export class Mount {
     private getLocalDatabase: LocalDatabaseGetter;
     private ownerId: string;
     // internal — used by mount/*.ts + versioning/snapshot.ts
-    documentDbs: Map<string, AsyncSingleton<ManagedDatabase<SchemaType>>> = new Map();
+    documentDbs: Map<string, DocumentDbSlot> = new Map();
+    // One-way teardown gate: set by closeAllDatabases, it refuses every later document-db open.
+    closing = false; // internal — used by mount/*.ts
     private pathLocks: Map<string, Promise<void>> = new Map();
-    // In-flight document-db closes by pathId — a concurrent open of the same pathId waits on
-    // this before building, so a fresh instance never shares the closing one's temp/journal
-    // files (see mount/document-db.ts). internal — used by mount/*.ts
-    closingDocumentDbs: Map<string, Promise<void>> = new Map();
 
     // Write-behind upload queue (Phase 1b) — only for isRemote (s3) mounts; undefined otherwise.
     uploadQueue?: UploadQueue; // internal — used by mount/*.ts + versioning/snapshot.ts
@@ -342,8 +340,9 @@ export class Mount {
     async flushContainerDb(containerId: string): Promise<void> {
         const dataDb = await this.getChildByName(containerId, 'data.db');
         if (!dataDb) return;
-        const cached = this.documentDbs.get(dataDb.id);
-        if (cached) await (await cached()).flush();
+        await documentDb.withDocumentDb(this, dataDb.id, async (slot) => {
+            await slot.db?.flush();
+        });
     }
 
     async getChildByName(parentId: string, name: string): Promise<DrivePath | null> {

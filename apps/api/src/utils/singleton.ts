@@ -1,5 +1,5 @@
-// peek(): the built instance or null — never triggers the factory. Callers that must not
-// wait on an in-flight build (versioning/snapshot.ts mid-close) read through it.
+// peek(): the built instance or null — never triggers the factory. get-home.ts reads through it
+// so a keepalive touches a loaded home without resurrecting an evicted one.
 export type AsyncSingleton<T> = (() => Promise<T>) & { peek: () => T | null };
 
 export function createAsyncSingleton<T>(factoryFn: () => Promise<T>): AsyncSingleton<T> {
