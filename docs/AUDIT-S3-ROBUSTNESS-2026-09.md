@@ -53,6 +53,7 @@ The as-built description lives in [STORAGE.md](STORAGE.md) (Deadlines) and [SYNC
 ## Open
 
 - **UP-2**: a direct PUT has no ceiling and skips the destination semaphore, and `writeFile` holds the file's path lock across that PUT, so a trash of the same file waits with it (a rename takes that lock only on a `local` mount); *failing* `a stalled upload PUT settles within the PUT ceiling the queue uses`.
+- **Ancestor move during an overwrite** (`local` path-based mounts only): `writeFile` locks the file, `updatePath`/`trashPath` lock the folder, so a parent renamed or trashed while a child's PUT is in flight leaves the new bytes at the old path (`Bun.write` recreates the tree) while the row points at the new one; a commit-side rename does not fix it, since a move that lands after the PUT has already carried the bytes. Needs the child write and the ancestor move made mutually exclusive. *failing* `storage/overwrite-ancestor-move.test.ts`: `a parent renamed during the write leaves the bytes at the new key only`, `a parent trashed during the write leaves the bytes at the trashed key only`.
 - **Delete markers**: a DELETE of a key that never existed (a cancelled orphan's re-delete runs whether or not the PUT landed) writes a delete marker on a versioned bucket; clutter only.
 - **Upload retries**: Bun retries a failed upload up to 3 times (`retry` default), so a stalled direct PUT's real bound is several times 360 s.
 - **Trickle**: the idle deadline does not catch a body that sends a byte every few seconds, so such a read still has no bound.

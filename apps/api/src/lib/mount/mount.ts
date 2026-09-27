@@ -944,9 +944,6 @@ export class Mount {
             }
             throw new ApiError(404, 'File not found');
         }
-        // A path-based key follows an ancestor renamed or trashed during the write; the bytes follow it too.
-        const currentKey = await this.getStorageKey(pathId);
-        if (currentKey !== storageKey) await this.storage.rename?.(storageKey, currentKey);
         const searchable = await this.isSearchableRow(pathId);
         if (searchable) this.reindexQueue?.bumpGeneration(pathId);
         await this.db

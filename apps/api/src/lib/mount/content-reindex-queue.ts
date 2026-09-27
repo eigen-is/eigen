@@ -94,6 +94,7 @@ export class ContentReindexQueue {
             this.retryTimer = null;
         }
         if (!this.draining) return;
+        this.draining.catch((err) => console.error(`[content-reindex] drain failed for ${this.label} at close:`, err));
         if (!(await settlesWithin(this.draining, this.closeTimeoutMs))) {
             console.error(`[content-reindex] close for ${this.label} exceeded ${this.closeTimeoutMs}ms; proceeding`);
         }
