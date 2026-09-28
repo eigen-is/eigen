@@ -9,3 +9,7 @@ export const COLLAB_HOME_REPLACED_REASON = 'home-replaced';
 // Collab WS frame type, outside y-websocket's 0-3, that hands a tab the data epoch it reconnects with: a tab naming
 // another epoch loaded its document before a whole-server restore, and is closed like a home replaced.
 export const COLLAB_EPOCH_MESSAGE = 100;
+// Collab WS close for a document whose stored data is gone (4400-4499 is y-websocket's own terminal band, mirroring
+// HTTP 4xx): the client stops reconnecting and shows the recoveries instead of retrying an object that will not return.
+export const COLLAB_STORAGE_GONE_CLOSE = 4410;
+export const COLLAB_STORAGE_GONE_REASON = 'storage-gone';
