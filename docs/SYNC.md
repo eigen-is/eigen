@@ -32,6 +32,7 @@ auto-sync tick return after the *local* write; `create` first checks that the ke
   resumes un-acked uploads (`UploadQueue.reconcile`, before the stale-temp sweep). `stagingPath` stores a
   **basename**, resolved against the mount's `staging/` dir at read time (legacy absolute rows pass
   through), so a host migration / restore-from-backup / bind-mount change doesn't drop pending rows.
+  A whole-server restore (`./eigen restore`) drops the snapshot's staged copies instead of replaying them ([BACKUP.md § The whole-server stopgap](BACKUP.md#the-whole-server-stopgap)), and reconcile logs each row whose staged copy is missing before it drops the row.
 - **Crash recovery (Phase 1a)** — a temp that survived an unclean shutdown is force-dirtied on reopen
   (`ManagedDatabase.markDirty`) so its unsynced bytes re-reach storage instead of being dropped by the
   close-time cleanup. Closes the original data-loss bug; needs no queue. (It also *introduced* one — see

@@ -158,7 +158,10 @@ export class UploadQueue {
             if (fs.existsSync(staging)) {
                 referenced.add(path.basename(staging));
             } else {
-                // staged copy gone (crash between deleting it and deleting the row on ack) — drop the row
+                // staged copy gone (crash between deleting it and deleting the row on ack, or a whole-server restore) — drop the row
+                console.warn(
+                    `[sync] dropping pending upload for ${row.storageKey}: staged copy ${path.basename(staging)} is gone`,
+                );
                 this.db.delete(pendingUploads).where(eq(pendingUploads.storageKey, row.storageKey)).run();
             }
         }
