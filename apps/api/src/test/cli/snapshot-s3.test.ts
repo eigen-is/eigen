@@ -334,11 +334,13 @@ describe('Whole-server snapshot of an s3 mount', () => {
         }
     });
 
-    test('a restore onto a host with no data/ replays the pending uploads of the snapshot', async () => {
+    test('a restore onto a fresh host replays the pending uploads of the snapshot', async () => {
         const target = install();
         const { storageKey } = await stopWithPending(target);
         const name = await snapshot(target.dir);
+        // What ./eigen setup leaves: a data/ the server started on, holding none of the snapshot's homes.
         rmSync(join(target.dir, 'data'), { recursive: true });
+        mkdirSync(join(target.dir, 'data/server'), { recursive: true });
 
         expect(await restore(target.dir, name)).not.toContain(NOT_REPLAYED);
         await expectReplayed(target, storageKey);

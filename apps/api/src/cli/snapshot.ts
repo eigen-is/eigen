@@ -512,11 +512,11 @@ export async function restore(
     // Without it the next start draws a new collab epoch: a tab that loaded a document before reloads, not merges back.
     rmSync(join(STAGING, DATA, SERVER_DIR, COLLAB_EPOCH_FILE), { force: true });
     // One the data/ here lacks acked, was superseded or cancelled since: replayed, it would put older bytes on the key.
-    // With no data/, or one that never ran since, the snapshot's copy is the only one. A light snapshot holds none.
+    // No data/ or live staging/ (Mount.init makes it): the mount never ran on this tree, so the copy is the only one.
     let notReplayed = 0;
     if (existsSync(DATA)) {
         for (const path of new Bun.Glob(STAGED_UPLOADS).scanSync({ cwd: STAGING, dot: true })) {
-            if (existsSync(path)) continue;
+            if (!existsSync(dirname(path)) || existsSync(path)) continue;
             rmSync(join(STAGING, path));
             notReplayed++;
         }
