@@ -53,10 +53,13 @@ export function VersionHistoryMenu({
 export function RestoreVersionDialog({
     path,
     snapshot,
+    storageGone,
     onClose,
 }: {
     path: DrivePath;
     snapshot: Snapshot | null;
+    // The document's stored data is missing: there is no current state to save first, and nothing loaded to update.
+    storageGone?: boolean;
     onClose: () => void;
 }) {
     const restore = useRestoreVersion(path.ownerId, path.mountId, path.id);
@@ -67,16 +70,20 @@ export function RestoreVersionDialog({
             onOpenChange={(open) => !open && onClose()}
             title="Restore this version?"
             description={
-                snapshot
-                    ? `Replace current contents with the ${formatDateTime(snapshot.createdAt)} version. ` +
-                      `Comments and attachments are not rolled back. The current state is saved as a new ` +
-                      `version first, so you can undo this by restoring it.`
-                    : ''
+                !snapshot
+                    ? ''
+                    : storageGone
+                      ? `Rebuild the document from the ${formatDateTime(snapshot.createdAt)} version. ` +
+                        `Comments and attachments are not rolled back.`
+                      : `Replace current contents with the ${formatDateTime(snapshot.createdAt)} version. ` +
+                        `Comments and attachments are not rolled back. The current state is saved as a new ` +
+                        `version first, so you can undo this by restoring it.`
             }
             confirmText="Restore"
-            onConfirm={() => {
+            onConfirm={async () => {
                 if (!snapshot) return;
-                return restore.mutateAsync(snapshot.name);
+                await restore.mutateAsync(snapshot.name);
+                if (storageGone) window.location.reload();
             }}
         />
     );

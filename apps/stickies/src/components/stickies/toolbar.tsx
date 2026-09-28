@@ -21,6 +21,7 @@ type ToolbarProps = {
     canWrite: boolean;
     offline: boolean;
     storageUnavailable: boolean;
+    storageGone: boolean;
     undoManager: Y.UndoManager | null;
     onAccessDialogOpen: () => void;
     onAddColumn: () => void;
@@ -36,6 +37,7 @@ export function Toolbar({
     canWrite,
     offline,
     storageUnavailable,
+    storageGone,
     undoManager,
     onAccessDialogOpen,
     onAddColumn,
@@ -125,6 +127,7 @@ export function Toolbar({
                         canWrite={canWrite}
                         offline={offline}
                         storageUnavailable={storageUnavailable}
+                        storageGone={storageGone}
                         onAccessDialogOpen={onAccessDialogOpen}
                         onToggleActivityPanel={onToggleActivityPanel}
                         activityPanelOpen={activityPanelOpen}

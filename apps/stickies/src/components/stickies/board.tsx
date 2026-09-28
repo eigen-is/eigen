@@ -98,6 +98,7 @@ export function StickiesBoard({
         offline,
         loaded,
         storageUnavailable,
+        storageGone,
         unsyncedEdits,
         yjsDoc,
         undoManager,
@@ -314,7 +315,16 @@ export function StickiesBoard({
     };
 
     // Latched: a WS blip keeps the board mounted; `isSynced` still gates presence + seeding. See useCollabDoc.
-    if (!loaded) return <CollabLoadingState storageUnavailable={storageUnavailable} />;
+    if (!loaded) {
+        return (
+            <CollabLoadingState
+                storageUnavailable={storageUnavailable}
+                storageGone={storageGone}
+                path={path}
+                canWrite={canWrite}
+            />
+        );
+    }
 
     return (
         <MediaResolverProvider
@@ -342,6 +352,7 @@ export function StickiesBoard({
                                     canWrite={canWrite}
                                     offline={offline}
                                     storageUnavailable={storageUnavailable}
+                                    storageGone={storageGone}
                                     undoManager={undoManager}
                                     onAccessDialogOpen={onAccessDialogOpen}
                                     onAddColumn={() => setIsAddColumnDialogOpen(true)}

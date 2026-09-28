@@ -6,7 +6,7 @@ category: Basics
 tags: [offline, sync, editing, troubleshooting, getting-started]
 related: [getting-started/your-first-steps, drive/file-versions]
 order: 7
-updated: 2026-09-13
+updated: 2026-09-28
 ---
 
 Documents, spreadsheets, presentations, drawings, and boards save themselves as you type, which means they need
@@ -59,8 +59,15 @@ tell whoever runs your Eigen.
 can take a moment. If it takes more than 10 seconds, the spinner adds "Storage is responding slowly, still
 connecting…" so you know it has not given up.
 
-**What to do:** wait. If the server cannot reach your storage at all, the message changes to "Storage is
-temporarily unavailable, retrying automatically" and the editor keeps trying until it can open.
+**What to do:** wait. If the server cannot reach your storage at all, the message changes to "Storage is temporarily unavailable, retrying automatically" and the editor keeps trying until it can open. If the document's stored data cannot be found, it stops trying instead: see the next section.
+
+## The stored data could not be found
+
+**What it means:** the server reached your storage, but the document's saved data is not there. Instead of the editor, you see "The stored data for this document could not be found." Waiting will not bring it back, so Eigen stops trying.
+
+If the document was already open, it stays on screen, but the red wifi icon says "The stored data for this document is gone. Edits cannot be saved." Reload the page to get the message above.
+
+**What to do:** restore a saved version. In a file you can edit, the versions are listed under the message: click one, then **Restore**, and the page reloads onto it. If there is no version to go back to, ask whoever runs your Eigen to restore a backup.
 
 ## The page reloads by itself
 

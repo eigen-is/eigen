@@ -175,6 +175,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         offline,
         loaded,
         storageUnavailable,
+        storageGone,
         unsyncedEdits,
     } = useCollabDoc({
         ownerId,
@@ -383,6 +384,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         // WS blip never unmounts the canvas (transient selection/preview state survives).
         loaded,
         storageUnavailable,
+        storageGone,
         unsyncedEdits,
     };
 };

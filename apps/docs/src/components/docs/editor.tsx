@@ -210,6 +210,7 @@ export const CollaborativeEditor = ({
         offline,
         loaded,
         storageUnavailable,
+        storageGone,
         unsyncedEdits,
     } = useCollabDoc({
         ownerId: path.ownerId,
@@ -221,7 +222,14 @@ export const CollaborativeEditor = ({
     // TiptapEditor (y-prosemirror's undo history is destroyed on unmount); the mounted editor
     // converges on reconnect.
     if (!loaded || !provider || !yDoc) {
-        return <CollabLoadingState storageUnavailable={storageUnavailable} />;
+        return (
+            <CollabLoadingState
+                storageUnavailable={storageUnavailable}
+                storageGone={storageGone}
+                path={path}
+                canWrite={canWrite}
+            />
+        );
     }
 
     return (
@@ -240,6 +248,7 @@ export const CollaborativeEditor = ({
                 canWrite={canWrite}
                 offline={offline}
                 storageUnavailable={storageUnavailable}
+                storageGone={storageGone}
                 mediaFolderId={mediaFolderId}
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={onAccessDialogOpen}
@@ -257,6 +266,7 @@ const TiptapEditor = ({
     canWrite,
     offline,
     storageUnavailable,
+    storageGone,
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
@@ -269,6 +279,7 @@ const TiptapEditor = ({
     canWrite: boolean;
     offline: boolean;
     storageUnavailable: boolean;
+    storageGone: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
@@ -892,6 +903,7 @@ const TiptapEditor = ({
                                     canWrite={canWrite}
                                     offline={offline}
                                     storageUnavailable={storageUnavailable}
+                                    storageGone={storageGone}
                                     canUndo={canUndo}
                                     canRedo={canRedo}
                                     onAccessDialogOpen={onAccessDialogOpen}
