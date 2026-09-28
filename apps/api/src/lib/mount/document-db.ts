@@ -38,7 +38,7 @@ export async function createDatabase<S extends SchemaType>(
 }
 
 // Every open, create and close of one pathId runs here, one at a time, in call order.
-// Lock order: container path lock → slot, never the reverse; the close-time snapshot try-locks.
+// Lock order: container path lock → slot → tree lock, never the reverse; the close-time snapshot try-locks.
 // A chain rather than withPathLock: `has` must also see queued opens and closes.
 export async function withDocumentDb<T>(
     mount: Mount,
@@ -163,29 +163,29 @@ async function buildDocumentDb<S extends SchemaType>(
                   // isRemote: stage a frozen copy + enqueue, off the request/close path.
                   // Local path-based: keep the synchronous local copy (Bun.write never 503s,
                   // and async-queuing it would only weaken its on-completion durability).
-                  onSync: async () => {
-                      // Resolve the key on EVERY sync, never the once-captured one: on `local` it
-                      // is the hierarchical path, so a move/rename since open would otherwise write
-                      // data.db to the pre-move location (a zombie tree, silently rebuilt via
-                      // createPath:true) and orphan every post-move edit. A vanished row means the
-                      // doc was deleted — skip, so a stale sync can't resurrect a dead key.
-                      // (s3/local-key keys are id-stable, so this re-resolves to the same value.)
-                      if (!(await mount.getPath(pathId))) return;
-                      const currentKey = await mount.getStorageKey(pathId);
-                      if (mount.uploadQueue) {
-                          const stagingPath = mount.uploadQueue.newStagingPath();
-                          managed.stageCopy(stagingPath);
-                          // A VACUUM INTO copy of a managed database, so the queue holds it to the
-                          // SQLite header check before the PUT (schema.ts, `isDatabase`).
-                          mount.uploadQueue.enqueueStaged(currentKey, stagingPath, true);
-                          // The staged copy is the object ranges and HEAD are served against; the queue unlinks it only after its PUT.
-                          await syncDocumentDbSize(mount, pathId, stagingPath);
-                      } else {
-                          await mount.uploadFromTemp(currentKey, pathId);
-                          await syncDocumentDbSize(mount, pathId, localPath);
-                      }
-                      await markContainerContentDirty(mount, pathId);
-                  },
+                  onSync: () =>
+                      mount.withTreeShared(async () => {
+                          // Resolve the key on EVERY sync and under the mount's tree lock: on `local`
+                          // it is the hierarchical path, so a move since open, or one landing between
+                          // the resolve and the write, would rebuild the old tree and orphan the sync.
+                          // A vanished row means the doc was deleted — skip, so a stale sync can't
+                          // resurrect a dead key. (s3/local-key keys are id-stable and take no lock.)
+                          if (!(await mount.getPath(pathId))) return;
+                          const currentKey = await mount.getStorageKey(pathId);
+                          if (mount.uploadQueue) {
+                              const stagingPath = mount.uploadQueue.newStagingPath();
+                              managed.stageCopy(stagingPath);
+                              // A VACUUM INTO copy of a managed database, so the queue holds it to the
+                              // SQLite header check before the PUT (schema.ts, `isDatabase`).
+                              mount.uploadQueue.enqueueStaged(currentKey, stagingPath, true);
+                              // The staged copy is the object ranges and HEAD are served against; the queue unlinks it only after its PUT.
+                              await syncDocumentDbSize(mount, pathId, stagingPath);
+                          } else {
+                              await mount.uploadFromTemp(currentKey, pathId);
+                              await syncDocumentDbSize(mount, pathId, localPath);
+                          }
+                          await markContainerContentDirty(mount, pathId);
+                      }),
                   // Re-stat only where the live file is the object; a queued row already matches its staged copy.
                   onClose: async (syncFailed) => {
                       if (!mount.uploadQueue) await syncDocumentDbSize(mount, pathId, localPath);
