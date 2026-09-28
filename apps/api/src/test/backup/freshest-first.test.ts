@@ -1,4 +1,4 @@
-import { Database } from 'bun:sqlite';
+import { constants, Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { chmodSync, existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -147,7 +147,6 @@ async function expectWalTailArchived(mount: Mount): Promise<void> {
         const { folder } = await snapshot();
         const archived = join(folder, `home/mounts/${mount.id}/data/${containerName}/data.db`);
         expect(readMarkers(archived)).toEqual(['settled', 'crash tail']);
-        expect(existsSync(`${archived}-wal`)).toBe(false);
     } finally {
         writer.close();
         await mount.deletePath(containerId);
@@ -510,6 +509,28 @@ describe('Backup freshest-first on an s3 mount', () => {
 
     test('a crash temp whose last edits sit in an uncheckpointed WAL tail is archived with them', async () => {
         await expectWalTailArchived(staleMount);
+    });
+
+    // What a failed final sync leaves: a WAL-mode main file with no -wal or -shm, which a readonly open cannot read.
+    test('a crash temp with no WAL sidecars is archived with its last edits', async () => {
+        const { containerId, dataDbId } = await provisionDoc(staleMount);
+        const containerName = (await staleMount.getPath(containerId))!.name;
+        const managed = await staleMount.createDatabase(docConfig, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'settled' }).run();
+        await settleContainer(staleMount, containerId);
+        try {
+            const temp = staleMount.getTempPath(dataDbId);
+            const writer = writeWalTailDb(temp, 'settled', 'unsynced');
+            writer.fileControl(constants.SQLITE_FCNTL_PERSIST_WAL, 0);
+            writer.close(true);
+            expect(existsSync(`${temp}-wal`)).toBe(false);
+            expect(existsSync(`${temp}-shm`)).toBe(false);
+            const { folder } = await snapshot();
+            const relPath = `home/mounts/${STALE_MOUNT_ID}/data/${containerName}/data.db`;
+            expect(readMarkers(join(folder, relPath))).toEqual(['settled', 'unsynced']);
+        } finally {
+            await staleMount.deletePath(containerId);
+        }
     });
 
     // What a SIGKILL during create leaves; the next open discards it, so the backup does too.

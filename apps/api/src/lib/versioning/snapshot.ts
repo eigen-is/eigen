@@ -165,8 +165,15 @@ export async function stageManagedDbCopy(
             // Read-write: a readonly open of a WAL database with no -wal and no -shm fails.
             const db = new Database(temp, { readwrite: true, create: false });
             db.fileControl(constants.SQLITE_FCNTL_PERSIST_WAL, 0);
-            db.run('VACUUM INTO ?', [destPath]);
-            db.close(true);
+            try {
+                db.run('VACUUM INTO ?', [destPath]);
+            } catch (error) {
+                throw new Error(`mount ${mount.id}: crash temp of ${pathId} at ${temp} cannot be copied`, {
+                    cause: error,
+                });
+            } finally {
+                db.close(true);
+            }
             return true;
         });
         if (staged) return true;
