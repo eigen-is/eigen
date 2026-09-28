@@ -210,6 +210,7 @@ export const CollaborativeEditor = ({
         offline,
         loaded,
         storageUnavailable,
+        storageGone,
         unsyncedEdits,
     } = useCollabDoc({
         ownerId: path.ownerId,
@@ -221,7 +222,14 @@ export const CollaborativeEditor = ({
     // TiptapEditor (y-prosemirror's undo history is destroyed on unmount); the mounted editor
     // converges on reconnect.
     if (!loaded || !provider || !yDoc) {
-        return <CollabLoadingState storageUnavailable={storageUnavailable} />;
+        return (
+            <CollabLoadingState
+                storageUnavailable={storageUnavailable}
+                storageGone={storageGone}
+                path={path}
+                canWrite={canWrite}
+            />
+        );
     }
 
     return (

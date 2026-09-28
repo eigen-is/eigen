@@ -2,6 +2,7 @@ import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import {
     COLLAB_EPOCH_MESSAGE,
     COLLAB_HOME_REPLACED_CLOSE,
+    COLLAB_STORAGE_GONE_CLOSE,
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
 } from '@workspace/lib/constants/collab';
 import * as decoding from 'lib0/decoding';
@@ -66,6 +67,8 @@ export type CollabDoc = {
     loaded: boolean;
     // The server closed with COLLAB_STORAGE_UNAVAILABLE_CLOSE and the hook is retrying; cleared on sync.
     storageUnavailable: boolean;
+    // The server closed with COLLAB_STORAGE_GONE_CLOSE: the stored data is missing, so the hook stopped reconnecting.
+    storageGone: boolean;
     // Edits may not have reached the server; render `<UnsyncedEditsGuard active>` so leaving warns first.
     unsyncedEdits: boolean;
 };
@@ -80,6 +83,7 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
     const [connected, setConnected] = useState(false);
     const [loaded, setLoaded] = useState(false);
     const [storageUnavailable, setStorageUnavailable] = useState(false);
+    const [storageGone, setStorageGone] = useState(false);
     const [unsyncedEdits, setUnsyncedEdits] = useState(false);
     const [homeReplaced, setHomeReplaced] = useState(false);
 
@@ -162,10 +166,9 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         };
         nextDoc.on('update', handleUpdate);
 
-        // y-websocket only backs off for sockets that never opened; ours did (the route closes from
-        // inside open()), so it would retry every 100ms against the failing storage. It emits this
-        // event before arming that timer, so disconnect() here cancels it and we reconnect after a
-        // pause. disconnect() re-enters with a null event, which the code check ignores.
+        // y-websocket reconnects after every close with a backoff capped at 2.5s (4400-4499 stops it on its own).
+        // It emits this event before arming that timer, so disconnect() here cancels it and we reconnect after a
+        // pause. disconnect() re-enters with a null event, which the code checks ignore.
         let retryTimer: ReturnType<typeof setTimeout> | undefined;
         const handleConnectionClose = (event: CloseEvent | null) => {
             if (event?.code === COLLAB_HOME_REPLACED_CLOSE) {
@@ -179,6 +182,13 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
                 setUnsyncedEdits(false);
                 nextProvider.disconnect();
                 setHomeReplaced(true);
+                return;
+            }
+            if (event?.code === COLLAB_STORAGE_GONE_CLOSE) {
+                clearTimeout(retryTimer);
+                nextProvider.disconnect();
+                setStorageUnavailable(false);
+                setStorageGone(true);
                 return;
             }
             if (event?.code !== COLLAB_STORAGE_UNAVAILABLE_CLOSE) return;
@@ -199,6 +209,7 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
             // Reset the latch so a pathId swap re-shows the loading screen for the new doc.
             setLoaded(false);
             setStorageUnavailable(false);
+            setStorageGone(false);
             setUnsyncedEdits(false);
             pendingUpdateRef.current = false;
             nextDoc.off('update', handleUpdate);
@@ -235,6 +246,7 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         offline: loaded && !connected && !storageUnavailable,
         loaded,
         storageUnavailable,
+        storageGone,
         unsyncedEdits,
     };
 }

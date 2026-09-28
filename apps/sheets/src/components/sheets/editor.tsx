@@ -94,6 +94,7 @@ function SheetEditorInner({
         synced,
         offline,
         storageUnavailable,
+        storageGone,
         unsyncedEdits,
         handleOp,
         onDataChange,
@@ -338,7 +339,14 @@ function SheetEditorInner({
     // drop the engine undo stack and any in-progress cell edit. The mounted workbook catches up via
     // the op-log observer (and a remote snapshot flush remounts through snapshotVersion).
     if (!initialData) {
-        return <CollabLoadingState storageUnavailable={storageUnavailable} />;
+        return (
+            <CollabLoadingState
+                storageUnavailable={storageUnavailable}
+                storageGone={storageGone}
+                path={path}
+                canWrite={canWrite}
+            />
+        );
     }
 
     return (
