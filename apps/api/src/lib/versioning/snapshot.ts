@@ -1,9 +1,11 @@
+import { constants, Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { withDocumentDb } from '../mount/document-db';
+import { isViableRecoveryTemp } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { markContainerContentDirty } from '../mount/search-index';
@@ -147,10 +149,31 @@ export async function stageManagedDbCopy(
     destPath: string,
     order: 'staged-first' | 'open-handle-first',
 ): Promise<boolean> {
+    // 'staged-first' never reads the crash temp: it runs inside a close that holds the slot, mid-teardown of that temp.
     if (order === 'open-handle-first') {
         const staged = await withDocumentDb(mount, pathId, async (slot) => {
-            if (!slot.db) return false;
-            slot.db.stageCopy(destPath);
+            if (slot.db) {
+                slot.db.stageCopy(destPath);
+                return true;
+            }
+            if (!mount.needsTempCopy) return false;
+            // Inside the slot: an open adopts, rewrites or cleans up this temp, and only the slot orders it against us.
+            const row = await mount.getPath(pathId);
+            if (!row) return false;
+            const temp = mount.getTempPath(pathId);
+            if (!isViableRecoveryTemp(temp, row.size ?? 0)) return false;
+            // Read-write: a readonly open of a WAL database with no -wal and no -shm fails.
+            const db = new Database(temp, { readwrite: true, create: false });
+            db.fileControl(constants.SQLITE_FCNTL_PERSIST_WAL, 0);
+            try {
+                db.run('VACUUM INTO ?', [destPath]);
+            } catch (error) {
+                throw new Error(`mount ${mount.id}: crash temp of ${pathId} at ${temp} cannot be copied`, {
+                    cause: error,
+                });
+            } finally {
+                db.close(true);
+            }
             return true;
         });
         if (staged) return true;
