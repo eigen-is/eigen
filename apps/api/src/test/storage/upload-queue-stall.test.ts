@@ -156,7 +156,9 @@ describe('edits while a PUT is stalled', () => {
 
     test('staged copies superseded behind a stalled PUT are removed', async () => {
         const { mount, land } = await editBehindParkedPut('stalled-supersede-leak');
-        // The in-flight copy and the newest one; the two between were superseded.
+        // The in-flight copy and the newest one; the two between were superseded. A superseded copy is
+        // unlinked best-effort off the enqueue path, so wait for it rather than count at once.
+        await waitFor(() => readdirSync(mount.stagingDir).length === 2);
         expect(readdirSync(mount.stagingDir)).toHaveLength(2);
 
         await land();
