@@ -1,6 +1,9 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { FileSink } from 'bun';
+import { getHome } from '../../lib/home';
+import { MaildirStore } from '../../lib/mail/maildir-store';
 import { mailRootOf } from '../mail-test-helpers';
 import { assertJson, authedRequest, getTestContext, putDraft, uploadDraftAttachment } from '../setup';
 
@@ -728,6 +731,40 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         // Stale file should be gone
         expect(existsSync(join(homeDir, staleId))).toBe(false);
         expect(existsSync(join(homeDir, `${staleId}.json`))).toBe(false);
+    });
+
+    test('a failed staging write keeps its error and its cleanup when closing the writer throws too', async () => {
+        const store = new MaildirStore(await getHome(ctx.alice.user.id));
+        const dir = join(mailRootOf(ctx.alice.user.id), 'draft-attachments');
+        const before = readdirSync(dir).sort();
+        const file = store.storage.file.bind(store.storage);
+        // FileSink.end is non-writable, so the failing end lives on an object that inherits the real sink.
+        const failingEnd = () => {
+            throw new Error('end failed');
+        };
+        let sink: FileSink | undefined;
+        const spy = spyOn(store.storage, 'file').mockImplementationOnce((p) => {
+            const real = file(p);
+            const writer = () => {
+                sink = real.writer();
+                return Object.create(sink, { end: { value: failingEnd } });
+            };
+            return Object.create(real, { writer: { value: writer } });
+        });
+        try {
+            const staged = store.persistDraftTemp(
+                async () => {
+                    throw new Error('write failed');
+                },
+                'partial.txt',
+                'text/plain',
+            );
+            await expect(staged).rejects.toThrow('write failed');
+        } finally {
+            spy.mockRestore();
+            await sink?.end();
+        }
+        expect(readdirSync(dir).sort()).toEqual(before);
     });
 
     test('threading headers survive a fast-save then a sidecar-driven full save', async () => {

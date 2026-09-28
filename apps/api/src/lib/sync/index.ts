@@ -24,8 +24,8 @@ export function getUploadSemaphore(destinationKey: string): Semaphore {
 }
 
 // Process shutdown only. Set before shutdownAllHomes; read by Mount.closeAllDatabases, which bounds
-// its queue flush by this absolute wall-clock deadline. Idle teardown leaves it null (no flush) — the
-// leftover pending rows replay on the next mount open.
+// its queue flush by this absolute wall-clock deadline, and by the version snapshot, which skips its
+// close-time prune. Idle teardown leaves it null (no flush) — leftover pending rows replay on the next mount open.
 let shutdownDrainDeadline: number | null = null;
 
 export function setShutdownDrainDeadline(deadline: number | null): void {

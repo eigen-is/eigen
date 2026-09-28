@@ -74,9 +74,8 @@ describe('LocalStorage', () => {
         expect(await storage.exists('tree/sub/b.txt')).toBe(false);
     });
 
-    test('deleteDir returns false for missing directory', async () => {
-        const deleted = await storage.deleteDir('nonexistent-dir');
-        expect(deleted).toBe(false);
+    test('deleteDir answers true for a missing directory, as delete does for a missing key', async () => {
+        expect(await storage.deleteDir('nonexistent-dir')).toBe(true);
     });
 
     test('path traversal with .. is rejected', () => {
@@ -101,9 +100,9 @@ describe('LocalStorage', () => {
         expect(p).toContain('data');
     });
 
-    test('delete returns false for missing file', async () => {
-        const deleted = await storage.delete('nonexistent');
-        expect(deleted).toBe(false);
+    // Same contract as S3Storage: true once the key is gone, false only for a failed call.
+    test('delete returns true for a missing file', async () => {
+        expect(await storage.delete('nonexistent')).toBe(true);
     });
 
     test('size returns correct value', async () => {

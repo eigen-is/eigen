@@ -7,7 +7,7 @@ import { parseBackupManifest } from '@workspace/lib/validation';
 import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { PATHS } from '../core';
-import { hashFile } from '../drive/streaming';
+import { hashFile } from '../storage';
 import { describeError } from './errors';
 import { ARCHIVE_HOME_DIR, ARCHIVE_MANIFEST_FILE, archiveHomePath, archiveMountPath, resolveInside } from './paths';
 import { HOME_DATABASE_PATHS, type SnapshotProgress } from './snapshot-home';

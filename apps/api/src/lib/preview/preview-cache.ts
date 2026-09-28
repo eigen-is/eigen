@@ -325,8 +325,7 @@ export async function getScreenPreview(
     // inline each sibling's bytes as a data: URI at serve time so <img> renders them (an <img> SVG
     // never fetches external refs). The inlined result rides this same versioned cache key — a sibling
     // edit does not bump the svg's updatedAt, so a stale sibling can outlive the cached preview until
-    // the svg itself changes (accepted; a media rename already breaks name refs everywhere today). The
-    // content type stays image/svg+xml, so the route keeps serving it under the sandbox CSP.
+    // the svg itself changes. The content type stays image/svg+xml, so the route keeps the sandbox CSP.
     if (mime === 'image/svg+xml') {
         return getOrCacheImage(
             mount.previewsDir,
@@ -334,10 +333,10 @@ export async function getScreenPreview(
             screenCacheName(drivePath, 'svg'),
             'image/svg+xml',
             async () => {
-                const file = await mount.readFile(drivePath.id);
-                if (!file) return null;
-                const bytes = Buffer.from(await file.arrayBuffer());
-                return drivePath.parentId ? inlineSvgMediaRefs(mount, drivePath.parentId, bytes) : bytes;
+                const bytes = await mount.readBytes(drivePath.id);
+                if (!bytes) return null;
+                const svg = Buffer.from(bytes);
+                return drivePath.parentId ? inlineSvgMediaRefs(mount, drivePath.parentId, svg) : svg;
             },
         );
     }
@@ -389,9 +388,9 @@ export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promis
 }
 
 async function generateFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<string | null> {
-    const file = await mount.readFile(drivePath.id);
-    if (!file) return null;
-    const preview = await getBytesTextPreview(await file.arrayBuffer(), drivePath.name, drivePath.mimeType || '');
+    const bytes = await mount.readBytes(drivePath.id);
+    if (!bytes) return null;
+    const preview = await getBytesTextPreview(bytes, drivePath.name, drivePath.mimeType || '');
     return preview?.body ?? null;
 }
 

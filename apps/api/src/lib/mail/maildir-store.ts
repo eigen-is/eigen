@@ -563,7 +563,9 @@ export class MaildirStore implements MailStore {
             size = await write(writer);
             await writer.end();
         } catch (e) {
-            await writer.end();
+            try {
+                await writer.end();
+            } catch {}
             await this.cleanupDraftTemp(tempId);
             throw e;
         }

@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import type { BackupArtifact } from '@workspace/lib/types/backup';
 import { BACKUP_ARTIFACT_EXTENSION, parseBackupArtifactName } from '@workspace/lib/validation';
 import { ApiError } from '../core';
-import { writeTempWithHash } from '../drive/streaming';
+import { writeTempWithHash } from '../storage';
 import { readArtifactManifest, readSidecar, sidecarPath, writeSidecar } from './archive';
 import { errnoOf } from './errors';
 import { backupsDirPath, getBackupTempPath } from './paths';

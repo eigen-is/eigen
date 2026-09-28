@@ -79,9 +79,9 @@ export async function convertToDocument(
     // is the costliest preparation here. run() rechecks authoritatively.
     documentTransformRunner.assertAdmissible('foreground');
 
-    const file = await mount.readFile(sourcePath.id);
-    if (!file) throw new ApiError(404, 'File not found');
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const bytes = await mount.readBytes(sourcePath.id);
+    if (!bytes) throw new ApiError(404, 'File not found');
+    const buffer = Buffer.from(bytes);
 
     if (targetType === 'eigensheets') {
         if (!sourcePath.name.toLowerCase().endsWith('.xlsx')) {

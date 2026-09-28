@@ -27,7 +27,7 @@ import { renderAttachmentLinksText, renderAttachmentPills } from '../core/mail-t
 import { type OutboundMail, sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
-import type { StorageFile } from '../storage';
+import { type StorageFile, streamStorageFile } from '../storage';
 import { grantAccessForReferences } from './access-grants';
 import { verifyImipSender } from './imip-auth';
 import { type PartHeaders, parseMail, splitMime } from './mail-parser';
@@ -47,6 +47,10 @@ function draftIdOf(email: NewDraft | EmailDraft): string | undefined {
     const id = email.id?.trim().normalize('NFC') || undefined;
     if (id && !isSafePathSegment(id)) throw new ApiError(400, `Invalid draft id: ${id}`);
     return id;
+}
+
+export function attachmentTooLarge(maxSize: number): ApiError {
+    return new ApiError(413, `Attachment exceeds ${Math.floor(maxSize / (1024 * 1024))}MB limit`);
 }
 
 function appendReferenceLinks(html: string, refs: AttachmentReference[], recipientEmail?: string): string {
@@ -507,10 +511,7 @@ export class Mail {
                 );
             }
         } catch (e) {
-            if (e instanceof MaxFileSizeExceededError) {
-                const limitMB = Math.floor(maxSize / (1024 * 1024));
-                throw new ApiError(413, `Attachment exceeds ${limitMB}MB limit`);
-            }
+            if (e instanceof MaxFileSizeExceededError) throw attachmentTooLarge(maxSize);
             throw e;
         }
 
@@ -523,22 +524,15 @@ export class Mail {
         contentType: string,
         maxSize: number,
     ): Promise<DraftAttachmentUpload> {
-        // The route already checked the drive size, so this guard is only for a source that grows mid-read.
+        // The route already checked the drive size, so the cap is only for a source that grows mid-read.
         return this.store.persistDraftTemp(
-            async (writer) => {
+            (writer) => {
                 let size = 0;
-                const reader = source.stream().getReader();
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    size += value.byteLength;
-                    if (size > maxSize) {
-                        const limitMB = Math.floor(maxSize / (1024 * 1024));
-                        throw new ApiError(413, `Attachment exceeds ${limitMB}MB limit`);
-                    }
-                    writer.write(value);
-                }
-                return size;
+                return streamStorageFile(source, (chunk) => {
+                    size += chunk.byteLength;
+                    if (size > maxSize) throw attachmentTooLarge(maxSize);
+                    writer.write(chunk);
+                });
             },
             filename,
             contentType,

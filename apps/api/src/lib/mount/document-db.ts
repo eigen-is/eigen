@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import { eq } from 'drizzle-orm';
-import { createAsyncSingleton } from '../../utils/singleton';
+import { settlesWithin } from '../../utils/timing';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType, type SyncCallbacks } from '../core';
 import { getShutdownDrainDeadline } from '../sync';
 import { isViableRecoveryTemp } from './helpers';
@@ -11,6 +11,12 @@ import { markContainerContentDirty } from './search-index';
 // Managed document-DB lifecycle: the cached working copies behind every container's
 // data.db/comments.db — open/create, the onOpen/onSync/onClose callbacks (crash
 // recovery Phase 1a, write-behind staging Phase 1b — see docs/SYNC.md), and teardown.
+
+export type DocumentDbSlot = {
+    db: ManagedDatabase<SchemaType> | null; // the live instance while open; null while a build or a close is in flight
+    tail: Promise<void>; // the lifecycle op in flight; the next op on this pathId queues behind it
+    pending: number; // queued + running ops; the slot is dropped when it reaches 0 with db null
+};
 
 export async function openDatabase<S extends SchemaType>(
     mount: Mount,
@@ -31,41 +37,47 @@ export async function createDatabase<S extends SchemaType>(
     return openDocumentDb(mount, config, pathId, 'create');
 }
 
+// Every open, create and close of one pathId runs here, one at a time, in call order.
+// Lock order: container path lock → slot → tree lock, never the reverse; the close-time snapshot try-locks.
+// A chain rather than withPathLock: `has` must also see queued opens and closes.
+export async function withDocumentDb<T>(
+    mount: Mount,
+    pathId: string,
+    fn: (slot: DocumentDbSlot) => Promise<T>,
+): Promise<T> {
+    const slot = mount.documentDbs.get(pathId) ?? { db: null, tail: Promise.resolve(), pending: 0 };
+    mount.documentDbs.set(pathId, slot);
+    slot.pending++;
+    const run = slot.tail.then(() => fn(slot));
+    slot.tail = run.then(
+        () => {},
+        () => {},
+    );
+    try {
+        return await run;
+    } finally {
+        if (--slot.pending === 0 && slot.db === null) mount.documentDbs.delete(pathId);
+    }
+}
+
 async function openDocumentDb<S extends SchemaType>(
     mount: Mount,
     config: DatabaseConfig<S>,
     pathId: string,
     mode: 'open' | 'create',
 ): Promise<ManagedDatabase<S>> {
-    let getter = mount.documentDbs.get(pathId);
-    if (!getter) {
-        getter = createAsyncSingleton(async () => {
-            // Captured synchronously with the map-set and first getter() call below (one
-            // synchronous block): any close that grabs THIS factory as its getter registers
-            // strictly after this capture, so the captured close can never transitively
-            // await this factory — exactly one entry to wait on, no loop, no cycle.
-            const closing = mount.closingDocumentDbs.get(pathId);
-            // An in-flight close of the same pathId still owns files the fresh instance
-            // would share — the live temp (local/s3) or the backing file's journals
-            // (local-key) — so building over it loses the tail. Backend-unconditional.
-            // The close's error stays with its own caller; the open builds regardless.
-            if (closing) await closing.catch(() => {});
-            // Clean up the map entry if the factory throws — otherwise a
-            // failed createDatabase leaves a getter behind whose closed-over
-            // `mode` would silently steer the next openDatabase down the
-            // create path.
-            try {
-                return await buildDocumentDb(mount, config, pathId, mode);
-            } catch (err) {
-                mount.documentDbs.delete(pathId);
-                throw err;
-            }
-        });
-        mount.documentDbs.set(pathId, getter);
-    }
     // Seam: documentDbs is one heterogeneous cache (ManagedDatabase<SchemaType>), so the caller's
     // schema S can only be re-attached here — the config that built the entry carries it.
-    return getter() as Promise<ManagedDatabase<S>>;
+    return withDocumentDb(mount, pathId, async (slot) => {
+        if (mount.closing) throw new ApiError(503, 'Mount is closing');
+        if (slot.db) {
+            if (mode === 'create') throw new Error(`Mount.createDatabase ${pathId}: already in cache`);
+            return slot.db as ManagedDatabase<S>;
+        }
+        const db = await buildDocumentDb(mount, config, pathId, mode);
+        slot.db = db;
+        return db;
+    });
 }
 
 async function buildDocumentDb<S extends SchemaType>(
@@ -136,48 +148,44 @@ async function buildDocumentDb<S extends SchemaType>(
                       // Clean close during an outage: the live temp was cleaned but a staged
                       // copy holds bytes newer than storage (upload not yet acked). Recover
                       // from it rather than downloading a stale object.
-                      if (mount.uploadQueue) {
-                          const staged = mount.uploadQueue.getPendingStagingPath(storageKey);
-                          if (staged && fs.existsSync(staged)) {
-                              console.log(`[Mount] Recovering from staged upload for ${pathId}`);
-                              await mount.cleanupTemp(pathId);
-                              await Bun.write(tempPath, Bun.file(staged));
-                              return;
-                          }
+                      const staged = mount.pendingStagedCopy(storageKey);
+                      if (staged) {
+                          console.log(`[Mount] Recovering from staged upload for ${pathId}`);
+                          await mount.cleanupTemp(pathId);
+                          await mount.replaceTempFrom(pathId, Bun.file(staged));
+                          return;
                       }
-                      if (!(await mount.storage.exists(storageKey))) {
-                          throw new ApiError(503, `Storage object for ${pathId} not available`);
-                      }
+                      // A missing object fails the GET, which answers the same 503 a HEAD would.
                       await mount.downloadKeyToTemp(storageKey, pathId);
-                      // No empty-check here: a 0-byte/partial GET is caught by ManagedDatabase's
+                      // No empty-check here: an empty 200 is caught by ManagedDatabase's
                       // mustExist guard (openCold refuses to open an empty working copy as a fresh db).
                   },
                   // isRemote: stage a frozen copy + enqueue, off the request/close path.
                   // Local path-based: keep the synchronous local copy (Bun.write never 503s,
                   // and async-queuing it would only weaken its on-completion durability).
-                  onSync: async () => {
-                      // Resolve the key on EVERY sync, never the once-captured one: on `local` it
-                      // is the hierarchical path, so a move/rename since open would otherwise write
-                      // data.db to the pre-move location (a zombie tree, silently rebuilt via
-                      // createPath:true) and orphan every post-move edit. A vanished row means the
-                      // doc was deleted — skip, so a stale sync can't resurrect a dead key.
-                      // (s3/local-key keys are id-stable, so this re-resolves to the same value.)
-                      if (!(await mount.getPath(pathId))) return;
-                      const currentKey = await mount.getStorageKey(pathId);
-                      if (mount.uploadQueue) {
-                          const stagingPath = mount.uploadQueue.newStagingPath();
-                          managed.stageCopy(stagingPath);
-                          // A VACUUM INTO copy of a managed database, so the queue holds it to the
-                          // SQLite header check before the PUT (schema.ts, `isDatabase`).
-                          mount.uploadQueue.enqueueStaged(currentKey, stagingPath, true);
-                          // The staged copy is the object ranges and HEAD are served against; the queue unlinks it only after its PUT.
-                          await syncDocumentDbSize(mount, pathId, stagingPath);
-                      } else {
-                          await mount.uploadFromTemp(currentKey, pathId);
-                          await syncDocumentDbSize(mount, pathId, localPath);
-                      }
-                      await markContainerContentDirty(mount, pathId);
-                  },
+                  onSync: () =>
+                      mount.withTreeShared(async () => {
+                          // Resolve the key on EVERY sync and under the mount's tree lock: on `local`
+                          // it is the hierarchical path, so a move since open, or one landing between
+                          // the resolve and the write, would rebuild the old tree and orphan the sync.
+                          // A vanished row means the doc was deleted — skip, so a stale sync can't
+                          // resurrect a dead key. (s3/local-key keys are id-stable and take no lock.)
+                          if (!(await mount.getPath(pathId))) return;
+                          const currentKey = await mount.getStorageKey(pathId);
+                          if (mount.uploadQueue) {
+                              const stagingPath = mount.uploadQueue.newStagingPath();
+                              managed.stageCopy(stagingPath);
+                              // A VACUUM INTO copy of a managed database, so the queue holds it to the
+                              // SQLite header check before the PUT (schema.ts, `isDatabase`).
+                              mount.uploadQueue.enqueueStaged(currentKey, stagingPath, true);
+                              // The staged copy is the object ranges and HEAD are served against; the queue unlinks it only after its PUT.
+                              await syncDocumentDbSize(mount, pathId, stagingPath);
+                          } else {
+                              await mount.uploadFromTemp(currentKey, pathId);
+                              await syncDocumentDbSize(mount, pathId, localPath);
+                          }
+                          await markContainerContentDirty(mount, pathId);
+                      }),
                   // Re-stat only where the live file is the object; a queued row already matches its staged copy.
                   onClose: async (syncFailed) => {
                       if (!mount.uploadQueue) await syncDocumentDbSize(mount, pathId, localPath);
@@ -218,7 +226,13 @@ async function buildDocumentDb<S extends SchemaType>(
     // storage object only appears on the next 30s sync — and an API restart in that window would make
     // subsequent strict openDatabase calls throw.
     if (mode === 'create' && mount.needsTempCopy) {
-        await managed.flush();
+        try {
+            await managed.flush();
+        } catch (err) {
+            // No slot holds it yet: close it here or its connection, timer and journals leak.
+            await managed.close({ skipFinalSnapshot: true }).catch(() => {});
+            throw err;
+        }
     }
 
     return managed;
@@ -229,32 +243,14 @@ export async function closeDatabase(
     pathId: string,
     opts?: { skipFinalSnapshot?: boolean },
 ): Promise<void> {
-    const getter = mount.documentDbs.get(pathId);
-    if (!getter) return;
-    // Delete BEFORE closing — a concurrent openDatabase() during the async
-    // close must create a fresh ManagedDatabase, not reuse the closing one.
-    mount.documentDbs.delete(pathId);
-    // Registered synchronously (before the first await) so the fresh open that
-    // delete-before-close enables waits for this close's file teardown instead of
-    // adopting the live temp / sharing its journals (see openDocumentDb).
-    let settle!: () => void;
-    const closing = new Promise<void>((r) => {
-        settle = r;
-    });
-    mount.closingDocumentDbs.set(pathId, closing);
-    try {
-        const db = await getter();
+    if (!mount.documentDbs.has(pathId)) return;
+    await withDocumentDb(mount, pathId, async (slot) => {
+        const db = slot.db;
+        if (!db) return;
+        // Cleared BEFORE closing: a snapshot read mid-close must not see the closing instance.
+        slot.db = null;
         await db.close(opts);
-    } finally {
-        // Resolve in finally: a throwing close must not wedge waiters (the error still
-        // propagates to this close's caller). Delete only our own registration — a nested
-        // close may have overwritten the slot, and clobbering its entry would reopen the
-        // unguarded window.
-        settle();
-        if (mount.closingDocumentDbs.get(pathId) === closing) {
-            mount.closingDocumentDbs.delete(pathId);
-        }
-    }
+    });
 }
 
 // Flush + close every cached document DB at or below `rootId` (the container's own data.db, its
@@ -276,6 +272,10 @@ export async function closeCachedDbsUnder(mount: Mount, rootId: string): Promise
 }
 
 export async function closeAllDatabases(mount: Mount): Promise<void> {
+    // First, so neither the reindex drain nor a close below waits on a download. The mount is not
+    // reused after this, so the abort is for good.
+    mount.downloads.abort();
+
     // Cancel the init-scheduled history prune so a fast teardown doesn't fire it against a
     // metadata.db the Home is about to close (the mount stops its own timers here — the same seam
     // as the upload/reindex queues below).
@@ -285,61 +285,42 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
     }
 
     // Reindex FIRST, awaiting its in-flight drain: an extract mid-await opens a doc DB via
-    // openDatabase and leaves it for the mount lifecycle to close. Draining before we snapshot
-    // documentDbs means that last-extract DB lands in the map and is closed by the pass below —
-    // closing the queue last (after the clear) would let the post-clear open leak (30s timer, fd,
-    // temp; dirty syncs into a closed metadata.db). Leftover dirty rows still replay on the next
-    // open (only the current extract is drained, not the backlog). The await is deadline-bounded
-    // so a black-holed extract can't park teardown (see ContentReindexQueue.close).
+    // openDatabase and leaves it for the mount lifecycle to close. Draining before the sweep below
+    // means that last-extract DB lands in the map and is closed by it — an open landing after the
+    // gate below is refused (else 30s timer, fd, temp; dirty syncs into a closed metadata.db).
+    // Leftover dirty rows still replay on the next open (only the current extract is drained, not
+    // the backlog). The await is deadline-bounded so a black-holed extract can't park teardown (see
+    // ContentReindexQueue.close).
     await mount.reindexQueue?.close();
 
     // Thumbnail jobs end with getPath/updatePath on metadata.db and hold a sharp worker; each is
     // bounded by the worker's own timeout (see thumbnails.ts).
     await Promise.allSettled(mount.thumbnailJobs);
 
-    // Snapshot + clear + register a closing deferred for EVERY pathId in one synchronous
-    // block — per-iteration registration would leave later pathIds raceable during the
-    // earlier closes' awaits.
-    const closes: {
-        pathId: string;
-        getter: () => Promise<ManagedDatabase<SchemaType>>;
-        closing: Promise<void>;
-        settle: () => void;
-    }[] = [];
-    for (const [pathId, getter] of mount.documentDbs) {
-        let settle!: () => void;
-        const closing = new Promise<void>((r) => {
-            settle = r;
-        });
-        mount.closingDocumentDbs.set(pathId, closing);
-        closes.push({ pathId, getter, closing, settle });
-    }
-    mount.documentDbs.clear();
-    for (const { pathId, getter, closing, settle } of closes) {
+    mount.closing = true;
+    // The live map, not a copy, so a slot added mid-sweep is visited; an open that queues behind a
+    // swept close is refused by the gate.
+    for (const pathId of mount.documentDbs.keys()) {
         try {
-            const db = await getter();
-            await db.close(); // isRemote: onClose-time sync stages + enqueues the final state
+            await closeDatabase(mount, pathId); // isRemote: onClose-time sync stages + enqueues the final state
         } catch (err) {
             console.error(`[Mount] closeAllDatabases close failed for ${pathId}:`, err);
-        } finally {
-            // Resolve in finally + identity-guarded delete, as in closeDatabase.
-            settle();
-            if (mount.closingDocumentDbs.get(pathId) === closing) {
-                mount.closingDocumentDbs.delete(pathId);
-            }
         }
     }
 
     if (mount.uploadQueue) {
-        // Process shutdown only: flush the queue (bounded by the global deadline) AFTER the
-        // final close-time enqueues, so healthy uploads finish before metadata.db closes.
-        // Idle teardown leaves the deadline null and skips the flush — leftover pending rows
-        // replay on the next mount open. Then stop the queue (cancels its retry timer).
+        // Process shutdown only: flush the queue AFTER the final close-time enqueues, so healthy
+        // uploads finish before metadata.db closes. The wait ends at the global deadline even with a
+        // PUT or a semaphore slot stalled; close() then stops the loop and a late PUT skips its ack,
+        // so leftover rows replay on boot. Idle teardown leaves the deadline null and skips the flush.
         const deadline = getShutdownDrainDeadline();
         if (deadline !== null) {
-            await mount.uploadQueue
-                .drain({ flushNow: true, deadline })
-                .catch((e) => console.error(`[Mount] shutdown drain failed:`, e));
+            await settlesWithin(
+                mount.uploadQueue
+                    .drain({ flushNow: true })
+                    .catch((e) => console.error(`[Mount] shutdown drain failed:`, e)),
+                Math.max(0, deadline - Date.now()),
+            );
         }
         mount.uploadQueue.close();
     }

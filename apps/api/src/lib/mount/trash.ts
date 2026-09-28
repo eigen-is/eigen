@@ -24,39 +24,41 @@ export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath
     // sync writes a data.db outside .trash/ (a chat's data.db is never closed by the collab path).
     await closeCachedDbsUnder(mount, pathId);
 
-    return mount.withPathLock(pathId, async () => {
-        let trashKey: string | undefined;
-        if (mount.isPathBased && mount.storage.rename) {
-            const oldKey = await mount.resolveStoragePath(pathId);
-            trashKey = `.trash/${buildStorageKey(pathId, item.name)}`;
-            await mount.storage.rename(oldKey, trashKey);
-        }
+    return mount.withPathLock(pathId, () =>
+        mount.withTreeExclusive(async () => {
+            let trashKey: string | undefined;
+            if (mount.isPathBased && mount.storage.rename) {
+                const oldKey = await mount.resolveStoragePath(pathId);
+                trashKey = `.trash/${buildStorageKey(pathId, item.name)}`;
+                await mount.storage.rename(oldKey, trashKey);
+            }
 
-        // Not updatePath(): it validates the name, asserts uniqueness against active siblings and
-        // renames storage — none of which a trash write wants.
-        const now = new Date();
-        await mount.db
-            .update(paths)
-            .set({
-                trashedAt: now,
-                trashedFrom: item.parentId,
-                parentId: root.id,
-                ...(trashKey !== undefined ? { file: trashKey } : {}),
-                updatedAt: now,
-            })
-            .where(eq(paths.id, pathId));
+            // Not updatePath(): it validates the name, asserts uniqueness against active siblings and
+            // renames storage — none of which a trash write wants.
+            const now = new Date();
+            await mount.db
+                .update(paths)
+                .set({
+                    trashedAt: now,
+                    trashedFrom: item.parentId,
+                    parentId: root.id,
+                    ...(trashKey !== undefined ? { file: trashKey } : {}),
+                    updatedAt: now,
+                })
+                .where(eq(paths.id, pathId));
 
-        if (item.type !== 'file') {
-            trashDescendants(mount, pathId, now);
-        }
+            if (item.type !== 'file') {
+                trashDescendants(mount, pathId, now);
+            }
 
-        await mount.invalidateSizesFrom(item.parentId);
+            await mount.invalidateSizesFrom(item.parentId);
 
-        // getPath, not getActivePath: the row this returns is the trashed one.
-        const updated = await mount.getPath(pathId);
-        if (!updated) throw new ApiError(500, 'Path not found after update');
-        return updated;
-    });
+            // getPath, not getActivePath: the row this returns is the trashed one.
+            const updated = await mount.getPath(pathId);
+            if (!updated) throw new ApiError(500, 'Path not found after update');
+            return updated;
+        }),
+    );
 }
 
 export async function listTrash(mount: Mount): Promise<DrivePath[]> {
@@ -105,44 +107,47 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
         restoreName = getUniqueFileName(row.name, usedNames);
     }
 
-    return mount.withPathLock(pathId, async () => {
-        if (mount.isPathBased && mount.storage.rename) {
-            const currentKey = await mount.resolveStoragePath(pathId);
-            const parentPath = await mount.resolveStoragePath(targetParentId);
-            const targetKey = parentPath ? `${parentPath}/${restoreName}` : restoreName;
-            await mount.storage.rename(currentKey, targetKey);
-        }
+    return mount.withPathLock(pathId, () =>
+        mount.withTreeExclusive(async () => {
+            // A create raced past the pre-lock check may own this key on `local`, and a storage rename replaces.
+            await mount.assertUniqueName(targetParentId, restoreName);
+            if (mount.isPathBased && mount.storage.rename) {
+                const currentKey = await mount.resolveStoragePath(pathId);
+                const parentPath = await mount.resolveStoragePath(targetParentId);
+                const targetKey = parentPath ? `${parentPath}/${restoreName}` : restoreName;
+                await mount.storage.rename(currentKey, targetKey);
+            }
 
-        // The conflict-free restoreName was computed outside this lock, so a raced same-name
-        // create can still trip the unique index here → the same 409 as create.
-        const now = new Date();
-        try {
-            await mount.db
-                .update(paths)
-                .set({
-                    parentId: targetParentId,
-                    trashedAt: null,
-                    trashedFrom: null,
-                    name: restoreName,
-                    ...(mount.isPathBased ? { file: restoreName } : {}),
-                    updatedAt: now,
-                })
-                .where(eq(paths.id, pathId));
-        } catch (e) {
-            rethrowDuplicateActiveName(e, restoreName);
-        }
+            // On `local` the re-check above 409'd a raced create before any bytes moved; elsewhere the index does.
+            const now = new Date();
+            try {
+                await mount.db
+                    .update(paths)
+                    .set({
+                        parentId: targetParentId,
+                        trashedAt: null,
+                        trashedFrom: null,
+                        name: restoreName,
+                        ...(mount.isPathBased ? { file: restoreName } : {}),
+                        updatedAt: now,
+                    })
+                    .where(eq(paths.id, pathId));
+            } catch (e) {
+                rethrowDuplicateActiveName(e, restoreName);
+            }
 
-        if (row.type !== 'file') {
-            restoreDescendants(mount, pathId, now);
-        }
+            if (row.type !== 'file') {
+                restoreDescendants(mount, pathId, now);
+            }
 
-        await mount.invalidateSizesFrom(targetParentId);
+            await mount.invalidateSizesFrom(targetParentId);
 
-        // Rows trashed while contentDirty=1 were skipped by the drain (trashedAt filter) — re-drive it.
-        mount.reindexQueue?.kick();
+            // Rows trashed while contentDirty=1 were skipped by the drain (trashedAt filter) — re-drive it.
+            mount.reindexQueue?.kick();
 
-        return mount.getActivePath(pathId);
-    });
+            return mount.getActivePath(pathId);
+        }),
+    );
 }
 
 // Every descendant of parentId, transitively. sql.raw emits a bare column name — an

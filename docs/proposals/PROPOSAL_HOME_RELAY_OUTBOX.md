@@ -316,9 +316,9 @@ not a redesign.
 
 - **Graceful shutdown** — `gracefulShutdown` in `../../apps/api/src/server.ts` currently calls
   `drainACLFanOuts()` before `shutdownAllHomes()` because deliveries reopen recipient homes. The
-  outbox slots into the same position: `outbox.drain({ flushNow, deadline })` (UploadQueue's
-  flush signature) bounded by the existing `SHUTDOWN_DRAIN_BUDGET_MS` discipline; whatever misses
-  the deadline stays in the table.
+  outbox slots into the same position: `outbox.drain({ flushNow })` raced against the existing
+  `SHUTDOWN_DRAIN_BUDGET_MS` deadline, as the UploadQueue flush is; whatever misses the deadline
+  stays in the table.
 - **Hard crash** — rows are already committed; nothing to do.
 - **Boot** — `index.ts` kicks `outbox.drain()` right after `registerScheduledJobs()`. This is the
   server-start answer that the server-level storage decision implies (a per-home table would have

@@ -281,10 +281,8 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         const elapsedMs = (Bun.nanoseconds() - start) / 1_000_000;
         setShutdownDrainDeadline(null);
 
-        // The deadline bounds when the loop STARTS new PUTs; an already-in-flight PUT still runs
-        // to completion, so the bound is ≈ deadline + one PUT (~2s here), never N×PUT. A PUT that
-        // overruns the process grace period is SIGKILLed and replays on boot — no data loss.
-        expect(elapsedMs).toBeLessThan(4_000);
+        // The flush stops waiting at the deadline, not after the 2 s PUT in flight; that row replays on boot.
+        expect(elapsedMs).toBeLessThan(2_000);
         expect(mount.pendingUploadCount).toBeGreaterThan(0); // left queued for boot replay
     });
 
@@ -741,7 +739,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         await plantStaleWal(tempPath);
         const storageKey = await mount.getStorageKey(dataDbId);
         fault.failReadKeys.add(storageKey);
-        await expect(mount.openDatabase(docConfigNoSnap, dataDbId)).rejects.toThrow('injected read failure');
+        await expect(mount.openDatabase(docConfigNoSnap, dataDbId)).rejects.toMatchObject({ status: 503 });
         fault.failReadKeys.delete(storageKey);
 
         const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
@@ -804,9 +802,9 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
 });
 
 describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-timer race, PUT timeout)', () => {
-    // Finding 1: closeAllDatabases must AWAIT the reindex drain before it clears documentDbs. A late
+    // Finding 1: closeAllDatabases must AWAIT the reindex drain before its close sweep. A late
     // extract opens a doc DB via mount.openDatabase and relies on the mount lifecycle to close it; if
-    // teardown returns before that open, the DB lands in the just-cleared cache and leaks forever.
+    // teardown returns before that open, the DB lands in the cache after the sweep and leaks forever.
     test('closeAllDatabases awaits the reindex drain so a late extract-opened DB is not leaked', async () => {
         let extractEntered!: () => void;
         const entered = new Promise<void>((r) => (extractEntered = r));

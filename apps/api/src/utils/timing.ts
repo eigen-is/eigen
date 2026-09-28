@@ -11,3 +11,22 @@ export async function time<T>(label: string, fn: () => Promise<T> | T): Promise<
         }
     }
 }
+
+// Whether `promise` settles (a rejection counts) within `ms`; the timer never outlives the answer.
+export async function settlesWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const settled = promise.then(
+        () => true,
+        () => true,
+    );
+    try {
+        return await Promise.race([
+            settled,
+            new Promise<boolean>((resolve) => {
+                timer = setTimeout(() => resolve(false), ms);
+            }),
+        ]);
+    } finally {
+        clearTimeout(timer);
+    }
+}

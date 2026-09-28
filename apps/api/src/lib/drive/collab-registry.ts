@@ -26,12 +26,18 @@ export class CollabRegistry {
         let getter = this.documents.get(key);
         if (!getter) {
             getter = createAsyncSingleton(async () => {
-                const path = await mount.getActivePath(pathId);
-                if (!isCollabType(path.type)) {
-                    throw new ApiError(404, 'Document not found');
+                try {
+                    const path = await mount.getActivePath(pathId);
+                    if (!isCollabType(path.type)) {
+                        throw new ApiError(404, 'Document not found');
+                    }
+                    const document = new CollabDocument(drive, path);
+                    return await document.init();
+                } catch (err) {
+                    // A failed load is not an open document: delete only our own entry, never a newer get's.
+                    if (this.documents.get(key) === getter) this.documents.delete(key);
+                    throw err;
                 }
-                const document = new CollabDocument(drive, path);
-                return document.init();
             });
             this.documents.set(key, getter);
         }
@@ -42,9 +48,8 @@ export class CollabRegistry {
         const key = this.key(mount.id, pathId);
         const documentFn = this.documents.get(key);
         if (!documentFn) return;
-        // Delete BEFORE the async destruct so a concurrent get() builds a fresh singleton
-        // instead of receiving the doc that is closing (a closing doc never sends
-        // sync-step-1, stalling the client). Mirrors Mount.closeDatabase's delete-before-close.
+        // Remove from the registry before the async close so a concurrent get() builds fresh
+        // instead of receiving the doc that is closing (it never sends sync-step-1, stalling the client).
         this.documents.delete(key);
         const doc = await documentFn();
         doc.destruct();

@@ -34,6 +34,8 @@ import { teamRouter } from './routes/team';
 import { waitlistRouter } from './routes/waitlist';
 
 const SLOW_REQUEST_MS = 200;
+// Per request: Elysia's store is shared, so concurrent requests would overwrite one start time.
+const requestStarts = new WeakMap<Request, number>();
 
 // The /dav tree serves both CalDAV and CardDAV: class-3, calendar-access + addressbook, REPORT, MKCALENDAR on
 // top of WebDAV. Clients check for the `addressbook` token before trusting the account (sabre/Radicale shape).
@@ -97,12 +99,13 @@ export const app = new Elysia({
             },
         }),
     )
-    .state('requestStart', 0)
-    .onBeforeHandle(({ store }) => {
-        store.requestStart = Bun.nanoseconds();
+    .onBeforeHandle(({ request }) => {
+        requestStarts.set(request, Bun.nanoseconds());
     })
-    .onAfterResponse(({ store, request, set }) => {
-        const ms = (Bun.nanoseconds() - store.requestStart) / 1_000_000;
+    .onAfterResponse(({ request, set }) => {
+        const start = requestStarts.get(request);
+        if (start === undefined) return;
+        const ms = (Bun.nanoseconds() - start) / 1_000_000;
         if (ms > SLOW_REQUEST_MS) {
             console.warn(
                 `[slow] ${request.method} ${new URL(request.url).pathname} ${ms.toFixed(1)}ms → ${set.status}`,

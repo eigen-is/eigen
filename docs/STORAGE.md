@@ -44,38 +44,24 @@ shared `resolveWithinBase` guard (`apps/api/src/lib/core/path-utils.ts`). `S3Sto
 prevent escaping the configured prefix.
 
 **`StorageFile` type** (`types.ts`): `BunFile | S3File` — a lazy file reference. `read()` returns a `StorageFile`
-without reading data into memory. Callers stream or buffer as needed (e.g., `file.arrayBuffer()`,
-`new Response(file)`). This keeps large file serving zero-copy on local storage.
+without reading data into memory. Callers stream it (an `S3File` goes to a `Response` as `file.stream()`, never as itself)
+or read it whole through `readStorageFile` (`Mount.readBytes` for a file of a mount). This keeps large file serving zero-copy on local storage.
+
+**Deadlines** (`deadline.ts`): Bun's `S3Client` takes no timeout or signal, and gives up on a silent request only after about 360 s. Eigen's own bound is `STORAGE_TIMEOUT_MS` (30 s; `setStorageTimeoutMs` in tests). `S3Storage` races `exists` and `size` against it, and a timeout answers `ApiError(503)`; it races `delete` too, and a timeout returns `false` like any failed delete (a missing key or a missing bucket returns `true`). Every storage read the server consumes itself runs through `streamStorageFile`, the storage-read form of the one stream loop `consumeStream`, which carries the idle deadline: a read that delivers no byte for that long, or whose signal aborts, is cancelled with a 503 that carries no `cause`; a read that fails answers 503 with the provider's error or the local errno as its `cause`. `writeTempWithHash` uses it for a `StorageFile` (downloads, copy, backup capture, version snapshots; a request body streamed through it has no such bound), `readStorageFile` for a body read whole into memory (thumbnails, import from Drive), `Mail.stageDriveAttachment` for a mail attachment from Drive, and `Mount.readBytes`, the freshest-first whole read of a file (previews, import, inline edit, transforms, content extraction), which passes the mount's `downloads` signal. `Mount.replaceTempFrom(tempId, source)` streams a source into a `tmp/<uuid>` side file and renames it onto the working-copy path on success, under the same signal; `Mount.downloadKeyToTemp` uses it for the stored object and maps any failure to 503, and the staged-copy crash recovery in `mount/document-db.ts` uses it for a pending staged copy. `closeAllDatabases` and `Drive.destruct` abort it, so no teardown waits on a download or an extraction read. Copy and version snapshots run without it, since a close-time snapshot runs after the abort, and a close during process shutdown skips the version prune, so a stalled DELETE cannot eat the drain budget (the next snapshot prunes). A file served to a client (`/download` and `/embed` in `serve-file.ts`, WebDAV GET in `webdav/resource.ts`) is the exception: its `file.stream()` goes straight into the Response, so a stalled body there is bounded only by the server's 200 s `idleTimeout`. It holds no lock and no Home while it waits.
 
 **`StorageBackend` interface** (`types.ts`):
 
 | Method      | Returns             | Notes                                        |
 |-------------|---------------------|----------------------------------------------|
-| `read`      | `StorageFile`       | Lazy reference (BunFile or S3File)           |
-| `readRange?`| `StorageFile`       | Optional — byte range `[start, end)` for ranged serving; the 416/206/200 response around it is the shared `rangeResponse` (`lib/core/http.ts`) |
+| `read`      | `StorageFile`       | Lazy reference (BunFile or S3File); `.slice(start, end)` is a ranged read (a Range GET on S3), which `Mount.readRange` serves inside the shared `rangeResponse` (`lib/core/http.ts`) |
 | `write`     | `Promise<number>`   | Accepts Buffer, Uint8Array, ArrayBuffer, BunFile |
-| `delete`    | `Promise<boolean>`  |                                               |
+| `delete`    | `Promise<boolean>`  | `true` once the key is gone, a missing key included; `false` only when the call failed |
 | `exists`    | `Promise<boolean>`  |                                               |
 | `size`      | `Promise<number \| null>` |                                         |
 | `getPath?`  | `string`            | Local backends only — absolute filesystem path |
 | `mkdir?`    | `Promise<void>`     | LocalStorage only                            |
 | `rename?`   | `Promise<void>`     | LocalStorage only                            |
-| `deleteDir?`| `Promise<boolean>`  | LocalStorage only                            |
-
-### Storage fault injection (dev only)
-
-`EIGEN_STORAGE_FAULT` (`apps/api/src/lib/storage/fault-storage.ts`) wraps every mount's backend with a delegating one that injects a single fault, so create/open behavior can be verified against degraded storage without a real outage.
-
-| Value | Effect |
-|-------|--------|
-| `exists-throw` | every `exists()` rejects with `ApiError(503, 'storage unavailable')` — the shape `mount/document-db.ts` raises for an unreachable object |
-| `exists-delay=<ms>` | every `exists()` resolves after `<ms>` |
-
-`read()`/`readRange()` return lazy handles, so the GET itself happens outside the backend and can't be delayed there. The wrapper returns the backend unchanged when the variable is unset, and it stays inert in production (`PRODUCTION=1` / `NODE_ENV=production`) regardless of what the variable says.
-
-```bash
-EIGEN_STORAGE_FAULT=exists-delay=45000 bun --filter '*' dev
-```
+| `deleteDir?`| `Promise<boolean>`  | LocalStorage only; `true` once the directory is gone, a missing one included; `false` only when the call failed |
 
 **LocalFilesystem** (`apps/api/src/lib/core/local-filesystem.ts`): Separate class for Mail, Contacts and Calendar,
 with the fs methods those domains need — `list`, `readdir`, `stat`, `dirSize`, `dirExists`, `watch`, and the
@@ -98,6 +84,8 @@ A Mount bundles Drive file storage (`apps/api/src/lib/mount/mount.ts`):
 
 Eigen containers keep one more directory of their own: `versions/`, inside the container, holding the
 file-level snapshots described below. Both collab docs and chats opt into it.
+
+**Locks.** Writes to an existing row run under its path lock (`Mount.withPathLock(pathId)`, one entry per row id): overwrites, renames and moves, trash and restore, version snapshots on the container, the chat-restore replace; a create takes none, the unique index on the name closes its race. A `local` mount adds one reader/writer lock for the whole tree (`Mount.withTreeShared` / `Mount.withTreeExclusive`, backed by `utils/rw-lock.ts`), because there a row's storage key is its name path and `LocalStorage.write` recreates a directory that moved away (`createPath: true`). Every write to a key resolved from the paths table holds the shared side from the key resolution through the storage call and the row write, so the row and the bytes agree: `writeFile`, `writeFileFromTemp`, `createFile`, `createFileFromTemp`, `createFolder`, the file branch of `deletePath`, and a managed database's `onSync` (copy and version snapshots reach these and take nothing of their own). Every storage rename, of a file or a directory, and every directory removal holds the exclusive side around its key resolution, the storage call and the row write: the rename/move branch of `updatePath`, `trashPath`, `restorePath` (which re-checks the restored name under the lock before the rename, since a storage rename replaces an existing destination) and the folder branch of `deletePath`. Waiters are served in arrival order, so a rename queued behind a stream of saves runs after the saves in flight and before the saves that arrived after it. `s3` and `local-key` keys are id-stable, and both methods pass straight through on those backends. Lock order is path lock → document-db slot → tree lock, and a tree-lock holder takes no lock at all (a shared region inside a shared region deadlocks once an exclusive is queued); `closeCachedDbsUnder`, whose final syncs take the shared side, runs before either lock in trash and delete. Reads take nothing: a read racing a move answers a transient 404, a document-db open a 503.
 
 **Document types**: `folder`, `file`, `doc`, `stickies`, `slides`, `sheets`, `vector`, `chat`
 
@@ -187,16 +175,7 @@ See: [SOFT-DELETE.md](SOFT-DELETE.md) for full design.
 
 ## File Versioning
 
-File-level snapshots live in `<container>/versions/<iso-ts>.db` (`apps/api/src/lib/versioning/`).
-Trigger: opt-in `snapshot` config fires `ManagedDatabase.snapshotIfDue()` from `tick()`/`close()`.
-Mechanics in `versioning/snapshot.ts` — plain functions over the mount, `Mount` keeps the facades:
-`snapshotContainerDataDb` is self-locked on the container (save/pre-restore paths block on the
-lock), while the timer/close paths go through `trySnapshotContainerDataDb` (skip-if-contended, so a
-close can never park on a held container lock). `replaceContainerDataDb` overwrites chat `data.db`
-bytes in place. Restore orchestration in `versioning/restore.ts`: grab the target into the OS temp
-dir, take a pre-restore snapshot, then Yjs surgery (collab docs) vs chat byte-overwrite — no lock
-held across steps, nothing staged inside the container. Routes live in the drive router
-(`routes/drive.ts`): `/drive/:o/:m/file/:p/versions[/save | /:name/restore]`.
+File-level snapshots live in `<container>/versions/<iso-ts>.db` (`apps/api/src/lib/versioning/`). Trigger: opt-in `snapshot` config fires `ManagedDatabase.snapshotIfDue()` from `tick()`/`close()`. Mechanics in `versioning/snapshot.ts` — plain functions over the mount, `Mount` keeps the facades: `snapshotContainerDataDb` is self-locked on the container (save/pre-restore paths block on the lock), while the timer/close paths go through `trySnapshotContainerDataDb` (skip-if-contended, so a close can never park on a held container lock). The manual save, the pre-restore snapshot, the backup's `open-handle-first` copy and the pre-copy `Mount.flushContainerDb` wait on the data.db's `documentDbs` slot, so an in-flight open or close lands first; the tick/close path reads the slot's live db without waiting, since it runs inside that very close. `replaceContainerDataDb` overwrites chat `data.db` bytes in place. Restore orchestration in `versioning/restore.ts`: grab the target into the OS temp dir, take a pre-restore snapshot, then Yjs surgery (collab docs) vs chat byte-overwrite — no lock held across steps, nothing staged inside the container. Routes live in the drive router (`routes/drive.ts`): `/drive/:o/:m/file/:p/versions[/save | /:name/restore]`.
 
 ## Copy / Move
 
@@ -208,8 +187,8 @@ design — eigen-doc containers reference internal children by NAME, not pathId,
 valid independent doc; copy flushes the live `data.db` first and skips the `versions/` snapshot
 folder. A copied file carries the source's media facts (`details.width/height/duration`) and, when its file still exists, its thumbnail, copied as `<thumbsDir>/<thumbnail>` under the new id; `originalName` and `webdavProps` stay with the source. The bridge re-uploads and gets a fresh thumbnail from the upload path. Route `POST /drive/:o/:m/path/:p/copy` (body `{targetOwnerId, targetMountId, targetParentId,
 name?}`) picks fast-path vs bridge, dedups the destination name at the route level (kept out of
-`Drive.copyPath` so WebDAV COPY keeps overwrite/409 semantics), and rejects copying/moving a folder
-into its own subtree via `Mount.isSelfOrDescendant`. That route and WebDAV COPY both stream nothing while the tree copies, so each exempts its request from the server-wide `idleTimeout` with `server.timeout(request, 0)`; otherwise a copy past 200s reaches the client as an empty reply it would retry into a duplicate tree. Cross-mount MOVE is deferred — it would change
+`Drive.copyPath` so WebDAV COPY keeps overwrite/409 semantics), and rejects copying a folder
+into its own subtree via `Mount.isSelfOrDescendant`. A move rejects it inside `Mount.updatePath`, where the ancestry walk and the row update share one synchronous SQLite transaction, so two concurrent moves cannot form a cycle between the check and the write (a cycle would spin every recursive walk over the tree). That route and WebDAV COPY both stream nothing while the tree copies, so each exempts its request from the server-wide `idleTimeout` with `server.timeout(request, 0)`; otherwise a copy past 200s reaches the client as an empty reply it would retry into a duplicate tree. Cross-mount MOVE is deferred — it would change
 `ownerId/mountId/pathId`, breaking shares, links, and history.
 
 See: [DATABASE.md](DATABASE.md) for schema details, [ACL.md](ACL.md) for permissions

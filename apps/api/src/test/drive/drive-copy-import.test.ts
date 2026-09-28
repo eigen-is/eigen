@@ -230,6 +230,22 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             expect(res.status).toBe(404);
         });
 
+        test('returns 400 for a folder source', async () => {
+            const folder = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `folder/${aliceRootId}`,
+                { folderName: 'not-a-source.docx' },
+            );
+            const res = await importFromDrive(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, targetDocId, {
+                sourceOwnerId: folder.ownerId,
+                sourceMountId: folder.mountId,
+                sourcePathId: folder.id,
+            });
+            expect(res.status).toBe(400);
+        });
+
         test('returns 413 when the source file exceeds the target quota', async () => {
             const content = 'x'.repeat(2 * 1024 * 1024);
             const file = new File([content], 'big.docx', {

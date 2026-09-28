@@ -1,27 +1,16 @@
 services:
   minio:
-    image: minio/minio
+    # No mc in this image: a top-level folder under /data is a bucket, so the entrypoint creates `eigen`.
+    image: cgr.dev/chainguard/minio
     ports:
       - "9000:9000"
       - "9001:9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
-    command: server /data --console-address ":9001"
+    entrypoint: ["/bin/sh", "-c", "mkdir -p /data/eigen && exec minio server /data --console-address :9001"]
     volumes:
       - minio-data:/data
-
-  minio-setup:
-    image: minio/mc
-    depends_on:
-      - minio
-    entrypoint: >
-      /bin/sh -c "
-        sleep 2;
-        mc alias set local http://minio:9000 minioadmin minioadmin;
-        mc mb --ignore-existing local/eigen;
-        echo 'Bucket eigen created';
-      "
 
 volumes:
   minio-data:

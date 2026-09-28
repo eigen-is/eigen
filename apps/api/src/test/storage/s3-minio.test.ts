@@ -97,25 +97,30 @@ describe.skipIf(!live)('S3Storage (MinIO)', () => {
         expect(echoed).toEqual(data);
     });
 
-    test('exists is true for a written key, false for a missing one', async () => {
+    test('exists is true for a written key, false for a missing one or a missing bucket', async () => {
         createdKeys.push('direct/exists.txt');
         await storage.write('direct/exists.txt', Buffer.from('here'));
         expect(await storage.exists('direct/exists.txt')).toBe(true);
         expect(await storage.exists('direct/never-written.txt')).toBe(false);
+        expect(
+            await new S3Storage({ ...s3Config, bucket: `missing-${randomUUID()}` }).exists('direct/exists.txt'),
+        ).toBe(false);
     });
 
-    test('readRange returns the exact end-exclusive slice', async () => {
+    test('a sliced read returns the exact end-exclusive range', async () => {
         createdKeys.push('direct/range.txt');
         await storage.write('direct/range.txt', Buffer.from('0123456789'));
-        expect(await storage.readRange('direct/range.txt', 2, 6).text()).toBe('2345');
+        expect(await storage.read('direct/range.txt').slice(2, 6).text()).toBe('2345');
     });
 
-    test('delete returns true once, then exists false, then delete false', async () => {
+    // S3 answers a DELETE of a missing key with success, so false only ever means a failed call.
+    test('delete returns true, then exists false, and a second delete or one against a missing bucket still returns true', async () => {
         createdKeys.push('direct/delete.txt');
         await storage.write('direct/delete.txt', Buffer.from('bye'));
         expect(await storage.delete('direct/delete.txt')).toBe(true);
         expect(await storage.exists('direct/delete.txt')).toBe(false);
-        expect(await storage.delete('direct/delete.txt')).toBe(false);
+        expect(await storage.delete('direct/delete.txt')).toBe(true);
+        expect(await new S3Storage({ ...s3Config, bucket: `missing-${randomUUID()}` }).delete('direct/x')).toBe(true);
     });
 
     // Pins the audit item-7 fix: size() goes through stat() — S3File.size is a synchronous NaN.

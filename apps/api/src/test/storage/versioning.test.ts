@@ -386,12 +386,9 @@ describe('versions HTTP routes', () => {
         // CollabDocument singleton purely to run the surgery. With no subscriber,
         // nothing calls unsubscribe → closeCollabDocument, so the doc + its
         // data.db would leak in Drive.documents until the Home is destructed.
-        // restoreYjsContainer must close the doc it opened. Observe Drive.documents
-        // directly (private — no production accessor exists just for this).
+        // restoreYjsContainer must close the doc it opened.
         const { getHome } = await import('../../lib/home');
-        const home = await getHome(ctx.alice.user.id);
-        const drive = home.drive;
-        const documents = (drive as unknown as { documents: Map<string, unknown> }).documents;
+        const drive = (await getHome(ctx.alice.user.id)).drive;
 
         // Create + save through the HTTP surface so no CollabDocument is opened
         // in-process before the restore — restore is the first (and only) opener.
@@ -403,12 +400,10 @@ describe('versions HTTP routes', () => {
         const saved = await saveVersion(token, ownerId, aliceMountId, sheets.id);
 
         expect(drive.hasCollabDocument(aliceMountId, sheets.id)).toBe(false);
-        const openBefore = documents.size;
 
         await restoreVersion(token, ownerId, aliceMountId, sheets.id, saved.name);
 
         expect(drive.hasCollabDocument(aliceMountId, sheets.id)).toBe(false);
-        expect(documents.size).toBe(openBefore);
     });
 
     test('eigendoc: doc (Tiptap XmlFragment) restore applies to the live Y.Doc', async () => {

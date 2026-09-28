@@ -89,7 +89,7 @@ copies under the container's `versions/` folder (`../../apps/api/src/lib/version
 `owner.mount.path` — **concurrent opens of the same doc coalesce into a single `init()`**; a second
 opener awaits the first. `CollabDocument.init` opens `data.db` via `Drive.openDatabase` →
 `Mount.openDatabase` (`../../apps/api/src/lib/mount/document-db.ts`, which runs `ManagedDatabase` SQLite
-migrations; open and close are serialized per pathId via `closingDocumentDbs` — a 2026-07
+migrations; open and close are serialized per pathId on the `Mount.documentDbs` slot — a 2026-07
 storage-audit change), then `DbProvider` hydrates a `Y.Doc` via `loadYjsState`
 (`../../apps/api/src/lib/collab/yjs-loader.ts`: latest snapshot + tail updates, corrupted rows skipped).
 
@@ -261,16 +261,7 @@ Consequences, stated plainly:
 
 ### Lazy migrate-on-open
 
-`ensureCollabFormat` is a plain helper in `lib/collab/migrations.ts` with **exactly two callers**:
-`CollabDocument.init` (after `Drive.openDatabase` resolves, before `DbProvider` hydrates or any
-client subscribes) and the dormant-doc sweep. It is deliberately *not* wired into
-`Mount.openDatabase`/`buildDocumentDb`: that seam is config-generic (the same factory serves
-`comments.db` and chat's `data.db`) and doesn't know the container's `EigenDocType`; and inside a
-still-unresolved factory the pre-migration snapshot would capture lagged bytes — `takeSnapshot`/
-`stageDataDbSnapshot` deliberately `peek()` the `documentDbs` cache and never await the getter (the
-storage-audit close-wedge fix), so an unresolved entry falls through to staged-copy/storage bytes
-instead of the live working copy. Also: never wrap the helper in `withPathLock` —
-`snapshotContainerDataDb` self-locks there and the lock is not reentrant. The sequence:
+`ensureCollabFormat` is a plain helper in `lib/collab/migrations.ts` with **exactly two callers**: `CollabDocument.init` (after `Drive.openDatabase` resolves, before `DbProvider` hydrates or any client subscribes) and the dormant-doc sweep. It is deliberately *not* wired into `Mount.openDatabase`/`buildDocumentDb`: that seam is config-generic (the same factory serves `comments.db` and chat's `data.db`) and doesn't know the container's `EigenDocType`; and the blocking snapshot paths enter the data.db's `documentDbs` slot (`takeSnapshot` with `awaitSlot`, `stageManagedDbCopy(…, 'open-handle-first')`), so a pre-migration snapshot taken from inside a still-unresolved open of the same document would queue behind its own slot op and never run. It must run once the open has resolved, outside it, never inside the factory; only the tick/close path reads the slot's `db` without waiting, because it runs inside that very close. Also: never wrap the helper in `withPathLock` — `snapshotContainerDataDb` self-locks there and the lock is not reentrant. The sequence:
 
 1. Read `doc_format` (missing ⇒ 1). If equal to `EIGEN_DOC_TYPE_INFO[type].collabFormatVersion`,
    continue as today — one cheap SELECT on the hot path.

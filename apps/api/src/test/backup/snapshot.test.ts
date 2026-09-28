@@ -610,7 +610,7 @@ describe('Backup snapshotHome under contention', () => {
         }
     });
 
-    test('skips a container database whose stored bytes are gone and finishes the snapshot', async () => {
+    test('a container database whose stored bytes are gone fails the snapshot', async () => {
         const alice = owner;
         const root = await assertJson<DrivePath>(
             await authedRequest(alice.sessionToken, `/drive/${alice.id}/${mountId}/root`),
@@ -623,21 +623,49 @@ describe('Backup snapshotHome under contention', () => {
         const mount = findOrFail(home.drive.getMounts(), (m) => m.id === mountId);
         const dataDb = (await mount.getChildByName(doc.id, 'data.db'))!;
         // Close the handle first — with a live one the copy comes from VACUUM INTO and never reaches
-        // storage. Then take the object away, leaving the paths row behind: a container deleted, or a
-        // versions/ snapshot pruned, between the tree read and the copy looks exactly like this.
+        // storage. Then take the object away, leaving the live row behind: bytes on record, none anywhere.
         // The close's final sync kicks a content reindex, which would open data.db again.
         const kick = spyOn(mount.reindexQueue!, 'kick').mockImplementation(() => {});
         try {
             await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
+            const storageKey = await mount.getStorageKey(dataDb.id);
+            const size = (await mount.getPath(dataDb.id))!.size;
+            expect(size).toBeGreaterThan(0);
+            await mount.storage.delete(storageKey);
+
+            await expect(snapshotHome(home, mkdtempSync(join(TEST_DATA_DIR, 'backup-gone-')))).rejects.toThrow(
+                `mount ${mountId}: ${docName}.eigendoc/data.db has ${size} bytes on record but no object at ${storageKey}`,
+            );
         } finally {
             kick.mockRestore();
+            await mount.deletePath(doc.id);
         }
-        await mount.storage.delete(await mount.getStorageKey(dataDb.id));
+    });
 
-        const manifest = await snapshotHome(home, mkdtempSync(join(TEST_DATA_DIR, 'backup-gone-')));
-        const prefix = `home/mounts/${mountId}/data/${docName}.eigendoc`;
-        expect(manifest.entries.some((e) => e.path === `${prefix}/data.db`)).toBe(false);
-        expect(manifest.entries.some((e) => e.path === `${prefix}/comments.db`)).toBe(true);
+    test('skips a container deleted between the tree read and its copy, and finishes the snapshot', async () => {
+        const alice = owner;
+        const root = await assertJson<DrivePath>(
+            await authedRequest(alice.sessionToken, `/drive/${alice.id}/${mountId}/root`),
+        );
+        const docName = `Backup Deleted ${Date.now()}`;
+        const doc = await drivePost(alice.sessionToken, alice.id, mountId, `folder/${root.id}/create/doc`, {
+            fileName: docName,
+        });
+
+        const mount = findOrFail(home.drive.getMounts(), (m) => m.id === mountId);
+        // The container goes when the backup first locks it, after the tree read.
+        const withPathLock = mount.withPathLock.bind(mount);
+        const spy = spyOn(mount, 'withPathLock').mockImplementation(async (pathId, fn) => {
+            if (pathId === doc.id) await mount.deletePath(doc.id);
+            return withPathLock(pathId, fn);
+        });
+        try {
+            const manifest = await snapshotHome(home, mkdtempSync(join(TEST_DATA_DIR, 'backup-deleted-')));
+            const prefix = `home/mounts/${mountId}/data/${docName}.eigendoc/`;
+            expect(manifest.entries.some((e) => e.path.startsWith(prefix))).toBe(false);
+        } finally {
+            spy.mockRestore();
+        }
     });
 
     test('tolerates a home file that vanishes between the listing and the read', async () => {

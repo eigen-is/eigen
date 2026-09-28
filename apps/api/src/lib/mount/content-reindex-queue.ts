@@ -1,4 +1,5 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { settlesWithin } from '../../utils/timing';
 import type { Mount } from './mount';
 
 // Re-extract any one container at most once per window: an append-heavy chat or a long edit
@@ -10,10 +11,10 @@ export const CONTENT_REINDEX_CAP_SECONDS = 120;
 // container + text file dirty) flowing in steady batches instead of one giant query.
 const REINDEX_BATCH = 100;
 
-// Ceiling on awaiting the in-flight drain at close. The current extract does unbounded storage GETs
-// via the doc loaders, so a black-holed backend would otherwise park teardown forever — and
-// idle-home eviction has no SIGKILL backstop (process shutdown does). Mirrors the upload queue's
-// per-PUT ceiling (UPLOAD_PUT_TIMEOUT_MS); generous so a genuinely slow extract still finishes.
+// Ceiling on awaiting the in-flight drain at close. Teardown aborts the extract's storage reads, but
+// the rest of an extract has no bound of its own, and idle-home eviction has no SIGKILL backstop
+// (process shutdown does). Mirrors the upload queue's per-PUT ceiling (UPLOAD_PUT_TIMEOUT_MS);
+// generous so a genuinely slow extract still finishes.
 const REINDEX_CLOSE_TIMEOUT_MS = 120_000;
 
 export type ContentExtractor = (mount: Mount, path: DrivePath) => Promise<string>;
@@ -82,11 +83,10 @@ export class ContentReindexQueue {
 
     // Mount teardown: stop scheduling and AWAIT the in-flight drain so the current extract finishes.
     // That extract opens a doc DB via mount.openDatabase and leaves it for the mount lifecycle to
-    // close; awaiting here lets closeAllDatabases close it before it clears documentDbs — otherwise
-    // the post-clear open leaks. Only the current extract is drained: leftover dirty rows replay on
-    // the next mount open (the bit is the durable queue). The await is BOUNDED (see
-    // REINDEX_CLOSE_TIMEOUT_MS): past the deadline teardown proceeds and the hung extract is accepted
-    // as leaked — the pre-await class, now confined to the black-holed-backend tail.
+    // close; awaiting here lets closeAllDatabases close it in its sweep — otherwise an open landing
+    // after the sweep leaks. Only the current extract is drained: leftover dirty rows replay on
+    // the next mount open (the bit is the durable queue). The await is bounded by
+    // REINDEX_CLOSE_TIMEOUT_MS: past it teardown proceeds and a hung extract leaks.
     async close(): Promise<void> {
         this.closing = true;
         if (this.retryTimer) {
@@ -94,22 +94,15 @@ export class ContentReindexQueue {
             this.retryTimer = null;
         }
         if (!this.draining) return;
-        let timeout: ReturnType<typeof setTimeout> | undefined;
-        try {
-            await Promise.race([
-                this.draining,
-                new Promise<void>((resolve) => {
-                    timeout = setTimeout(() => {
-                        console.error(
-                            `[content-reindex] close for ${this.label} exceeded ${this.closeTimeoutMs}ms; proceeding`,
-                        );
-                        resolve();
-                    }, this.closeTimeoutMs);
-                }),
-            ]);
-        } finally {
-            if (timeout) clearTimeout(timeout);
+        this.draining.catch((err) => console.error(`[content-reindex] drain failed for ${this.label} at close:`, err));
+        if (!(await settlesWithin(this.draining, this.closeTimeoutMs))) {
+            console.error(`[content-reindex] close for ${this.label} exceeded ${this.closeTimeoutMs}ms; proceeding`);
         }
+    }
+
+    // Teardown aborts the mount's reads before it closes this queue; the backlog waits for the next open.
+    private get stopped(): boolean {
+        return this.closing || this.mount.downloads.signal.aborted;
     }
 
     private async runDrainLoop(): Promise<void> {
@@ -117,11 +110,11 @@ export class ContentReindexQueue {
             clearTimeout(this.retryTimer);
             this.retryTimer = null;
         }
-        while (!this.closing) {
+        while (!this.stopped) {
             const batch = this.mount.getContentDirtyPaths(CONTENT_REINDEX_CAP_SECONDS, REINDEX_BATCH);
             if (batch.length === 0) break;
             for (const path of batch) {
-                if (this.closing) return;
+                if (this.stopped) return;
                 // Read before the extract: the body this job returns is the document as of now.
                 const generation = this.generations.get(path.id) ?? 0;
                 try {
@@ -139,6 +132,8 @@ export class ContentReindexQueue {
                         this.mount.markContentIndexAttempted(path.id);
                     }
                 } catch (err) {
+                    // An aborted read says nothing about the body: leave the row due.
+                    if (this.stopped) return;
                     // The index is regenerable — log and move on so one bad body never stalls the loop.
                     // Stamp the attempt but keep contentDirty = 1: the cap defers the retry to a later
                     // drain, so a transient S3 hiccup re-extracts instead of dropping until the next write.
@@ -147,7 +142,7 @@ export class ContentReindexQueue {
                 }
             }
         }
-        if (this.closing) return;
+        if (this.stopped) return;
         // Rows re-dirtied inside the cap window aren't due yet — re-drive exactly when the earliest
         // becomes due (our own timer, no poll). A freshly-dirtied row reads as due-now.
         const dueAt = this.mount.earliestPendingReindexAt(CONTENT_REINDEX_CAP_SECONDS);

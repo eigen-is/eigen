@@ -60,6 +60,7 @@ async function snapshot(dir: string, ...args: string[]): Promise<string> {
     const result = await eigen(dir, 'snapshot', ...args);
     expect(result.stderr).toBe('');
     expect(result.code).toBe(0);
+    expect(result.stdout).not.toContain('S3 buckets');
     const name = /snapshots\/(\S+)/.exec(result.stdout)?.[1];
     if (!name) throw new Error(`no snapshot named in: ${result.stdout}`);
     expect(name).toMatch(SNAPSHOT_NAME);

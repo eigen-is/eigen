@@ -213,12 +213,14 @@ Saves all data (mail, files, contacts, calendars, settings, the server databases
 
 `./eigen backup --light` saves a light snapshot, `snapshots/eigen-light-<UTC time>.tar.gz`: the databases, the settings and `.env.production`, without the files and the mail.
 
-Only the owner of the install folder can read a snapshot. Not in any snapshot: `caddy-data/` (Caddy gets its certificates again by itself), the Postfix queue of mail still waiting to go out, `backups/` with the per-home archives, and `docker-compose.override.yml`. Copy snapshots off the server, and run the backup every night:
+Only the owner of the install folder can read a snapshot. Not in any snapshot: `caddy-data/` (Caddy gets its certificates again by itself), the Postfix queue of mail still waiting to go out, `backups/` with the per-home archives, `docker-compose.override.yml`, and the files of drives stored in an S3 bucket. Copy snapshots off the server, and run the backup every night:
 
 ```bash
 crontab -e
 # 0 3 * * * /opt/eigen/eigen backup
 ```
+
+When a drive stores its files in an S3 bucket, a snapshot holds the list of those files but not the files. A restore or a rollback brings the list back and leaves the bucket as it is now, so a file changed since shows its new content. Turn on versioning and a cleanup rule for old versions on that bucket (the Bucket safety panel in the admin settings does both), and use a per-home backup when you need a copy with the files in it.
 
 Put a snapshot back with `./eigen restore`. It unpacks and checks the snapshot while Eigen runs, and asks. Then it stops Eigen, moves the current `data/` and `.env.production` aside to `data.pre-restore-<UTC time>` and `.env.production.pre-restore-<UTC time>` (never deleted), puts the snapshot in their place and starts Eigen again. A light snapshot puts back only the databases, the settings and `.env.production`, moves those aside into `data.pre-restore-<UTC time>`, and leaves files and mail as they are.
 

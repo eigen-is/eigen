@@ -7,10 +7,9 @@ export type StorageFile = BunFile | S3File;
 export interface StorageBackend {
     read(key: string): StorageFile;
 
-    readRange?(key: string, start: number, end: number): StorageFile; // end is exclusive
-
     write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number>;
 
+    // true once the key is gone, a missing one included; false only when the call failed.
     delete(key: string): Promise<boolean>;
 
     exists(key: string): Promise<boolean>;

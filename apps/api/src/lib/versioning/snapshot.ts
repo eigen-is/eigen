@@ -3,10 +3,12 @@ import * as fs from 'node:fs';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
 import { ApiError } from '../core';
-import { writeTempWithHash } from '../drive/streaming';
+import { withDocumentDb } from '../mount/document-db';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { markContainerContentDirty } from '../mount/search-index';
+import { writeTempWithHash } from '../storage';
+import { getShutdownDrainDeadline } from '../sync';
 import { type RetentionPolicy, selectSnapshotsToPrune } from './retention';
 import { formatSnapshotTimestamp } from './timestamp';
 import { VERSIONS_FOLDER_NAME } from './versions-folder';
@@ -27,16 +29,14 @@ export async function snapshotContainerDataDb(
     containerId: string,
     policy: RetentionPolicy,
 ): Promise<DrivePath> {
-    return mount.withPathLock(containerId, () =>
-        takeSnapshot(mount, containerId, policy, { awaitInFlightClose: true }),
-    );
+    return mount.withPathLock(containerId, () => takeSnapshot(mount, containerId, policy, { awaitSlot: true }));
 }
 
-// The tick/close (ManagedDatabase onSnapshot) twin: those snapshots must never PARK on the
-// container lock — a close already holds the doc's closing slot, so waiting on a lock whose
-// holder waits on that same close deadlocks (the H→F→C cycle in the design note). A skip
-// forgoes at most one version-history entry, never bytes (the sync already staged them);
-// a tick-path skip retries next tick because snapshotIfDue doesn't advance on 'skipped'.
+// The tick/close (ManagedDatabase onSnapshot) twin: it runs inside a close that holds the doc's
+// slot (or a tick that close waits on), and a container-lock holder may be waiting on that slot,
+// so it try-locks rather than parks. A skip forgoes at most one version-history entry, never
+// bytes (the sync already staged them); a tick-path skip retries next tick because snapshotIfDue
+// doesn't advance on 'skipped'.
 export async function trySnapshotContainerDataDb(
     mount: Mount,
     containerId: string,
@@ -50,32 +50,21 @@ async function takeSnapshot(
     mount: Mount,
     containerId: string,
     policy: RetentionPolicy,
-    opts?: { awaitInFlightClose?: boolean },
+    opts?: { awaitSlot?: boolean },
 ): Promise<DrivePath> {
     const dataDb = await mount.getChildByName(containerId, 'data.db');
     if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
 
-    // A registry close never takes the container lock, and delete-before-close empties
-    // the documentDbs slot — mid-close the peek below finds nothing, so the copy would
-    // source staged/storage bytes predating the close's final sync (or, on local
-    // backends, overlap its checkpoint: a torn versions/ entry). The blocking path
-    // (manual save, pre-restore snapshot) waits out such an in-flight close: that close
-    // is never its own, and a close never parks on this container lock (its own snapshot
-    // try-locks and skips), so there is no cycle. The tick/close path must NOT wait —
-    // a close-time snapshot runs inside the very close that registered the slot, and
-    // awaiting it would wedge on itself. The close's error stays with its own caller.
-    if (opts?.awaitInFlightClose) {
-        const closing = mount.closingDocumentDbs.get(dataDb.id);
-        if (closing) await closing.catch(() => {});
+    // Flush the cached db so the copy below reads its pending writes. The blocking path (manual
+    // save, pre-restore) waits out an in-flight open or close of it; the tick/close path must not
+    // wait, as it runs inside that very close, and mid-close the slot holds no db.
+    if (opts?.awaitSlot) {
+        await withDocumentDb(mount, dataDb.id, async (slot) => {
+            await slot.db?.flush();
+        });
+    } else {
+        await mount.documentDbs.get(dataDb.id)?.db?.flush();
     }
-
-    // Flush any cached managedDb so the on-storage data.db reflects pending
-    // writes. No-op if not cached, or cached and not dirty. peek(), never the
-    // getter: mid-close the map holds an unresolved factory awaiting this very
-    // close's deferred (C→F→C wedge), and an unresolved getter has no live db
-    // with pending writes — the staged-copy/storage fallback reads current bytes.
-    const cached = mount.documentDbs.get(dataDb.id)?.peek();
-    if (cached) await cached.flush();
 
     let versions = await mount.getChildByName(containerId, VERSIONS_FOLDER_NAME);
     if (!versions) {
@@ -98,6 +87,9 @@ async function takeSnapshot(
         ? await snapshotDataDbToVersionStaged(mount, dataDb, versions.id, snapshotName)
         : await mount.copyPath(dataDb.id, versions.id, snapshotName);
 
+    // Process shutdown skips the prune: a stalled DELETE would eat the drain budget, and the next snapshot prunes.
+    if (getShutdownDrainDeadline() !== null) return copy;
+
     // Prune. Exclude the just-written copy: retention keeps the newest per
     // hour bucket, and excluding the fresh one lets a second snapshot taken
     // within the same hour preserve the first until the hour rolls over.
@@ -110,8 +102,8 @@ async function takeSnapshot(
     return copy;
 }
 
-// isRemote version snapshot: create the version metadata row, source its bytes from the
-// freshest LOCAL copy of data.db, and enqueue the upload (so a close-time snapshot never
+// isRemote version snapshot: source the bytes from the freshest LOCAL copy of data.db, then
+// create the version metadata row and enqueue the upload (so a close-time snapshot never
 // blocks on the backend). Caller holds the container lock.
 async function snapshotDataDbToVersionStaged(
     mount: Mount,
@@ -119,13 +111,20 @@ async function snapshotDataDbToVersionStaged(
     versionsId: string,
     snapshotName: string,
 ): Promise<DrivePath> {
-    const versionPathId = await mount.touchFile(versionsId, snapshotName, dataDb.mimeType);
-    const versionKey = await mount.getStorageKey(versionPathId);
     const queue = mount.uploadQueue!; // isRemote-only path (snapshotContainerDataDb branch)
     const versionStaging = queue.newStagingPath();
-    if (!(await stageManagedDbCopy(mount, dataDb.id, versionStaging, 'staged-first'))) {
+    const staged = await stageManagedDbCopy(mount, dataDb.id, versionStaging, 'staged-first').catch(
+        (error: unknown) => {
+            // A failed read leaves a half-written copy no pending upload references.
+            fs.rmSync(versionStaging, { force: true });
+            throw error;
+        },
+    );
+    if (!staged) {
         throw new ApiError(503, `Cannot snapshot ${dataDb.id}: its stored object is not available`);
     }
+    const versionPathId = await mount.touchFile(versionsId, snapshotName, dataDb.mimeType);
+    const versionKey = await mount.getStorageKey(versionPathId);
     const size = fs.statSync(versionStaging).size;
     await mount.db.update(paths).set({ size, updatedAt: new Date() }).where(eq(paths.id, versionPathId));
     await mount.invalidateAncestorsOf(versionPathId);
@@ -141,8 +140,7 @@ async function snapshotDataDbToVersionStaged(
 // 'staged-first' is the version-snapshot order: its caller flushed the cached db into the pending
 // staged copy already, so reusing that copy beats a second VACUUM INTO. 'open-handle-first' is the
 // backup order: nothing flushed, so a live handle is the only source holding writes made since the
-// last stage — and a close mid-flight is waited out (a backup holds no closing slot of its own, so
-// unlike takeSnapshot's tick path this can't wedge on itself).
+// last stage; it waits out an in-flight open or close of that handle first.
 export async function stageManagedDbCopy(
     mount: Mount,
     pathId: string,
@@ -150,17 +148,14 @@ export async function stageManagedDbCopy(
     order: 'staged-first' | 'open-handle-first',
 ): Promise<boolean> {
     if (order === 'open-handle-first') {
-        const closing = mount.closingDocumentDbs.get(pathId);
-        if (closing) await closing.catch(() => {});
+        const staged = await withDocumentDb(mount, pathId, async (slot) => {
+            if (!slot.db) return false;
+            slot.db.stageCopy(destPath);
+            return true;
+        });
+        if (staged) return true;
     }
     const storageKey = await mount.getStorageKey(pathId);
-    // peek() as in takeSnapshot's flush step: awaiting an unresolved factory mid-close wedges on
-    // the close's own deferred (C→F→C), and an unresolved getter has no live db with pending writes.
-    const cached = mount.documentDbs.get(pathId)?.peek();
-    if (cached && order === 'open-handle-first') {
-        cached.stageCopy(destPath);
-        return true;
-    }
     // Copy SYNCHRONOUSLY: with no await between pendingStagedCopy's existsSync and the copy, a
     // concurrent enqueue can't unlink it mid-read.
     const pendingStaging = mount.pendingStagedCopy(storageKey);
@@ -170,13 +165,13 @@ export async function stageManagedDbCopy(
     }
     // Nothing pending: a live VACUUM INTO if the doc is open, else the storage object — which is
     // current because every upload acked (§3).
+    const cached = mount.documentDbs.get(pathId)?.db;
     if (cached) {
         cached.stageCopy(destPath);
         return true;
     }
-    const stored = mount.storage.read(storageKey);
-    if (!(await stored.exists())) return false;
-    await Bun.write(destPath, stored);
+    if (!(await mount.storage.exists(storageKey))) return false;
+    await writeTempWithHash(destPath, mount.storage.read(storageKey));
     return true;
 }
 
