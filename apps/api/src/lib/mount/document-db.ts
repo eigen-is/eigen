@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { settlesWithin } from '../../utils/timing';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType, type SyncCallbacks } from '../core';
-import { isMissingObjectCause, storageGone } from '../storage';
+import { errnoOf, storageGone, storageUnavailable } from '../storage';
 import { getShutdownDrainDeadline } from '../sync';
 import { isViableRecoveryTemp } from './helpers';
 import type { Mount } from './mount';
@@ -99,8 +99,13 @@ async function buildDocumentDb<S extends SchemaType>(
         if (await mount.storage.exists(storageKey)) {
             throw new Error(`Mount.createDatabase ${pathId}: storage object ${storageKey} already exists`);
         }
-    } else if (!mount.needsTempCopy && !(await mount.storage.exists(storageKey))) {
-        throw storageGone();
+    } else if (!mount.needsTempCopy) {
+        // Only absence is gone: EACCES or EIO (a volume gone away) is an outage the client retries.
+        try {
+            fs.statSync(localPath);
+        } catch (error) {
+            throw errnoOf(error) === 'ENOENT' ? storageGone(error) : storageUnavailable(error);
+        }
     }
 
     const snapshot = config.snapshot;
@@ -146,7 +151,8 @@ async function buildDocumentDb<S extends SchemaType>(
                           );
                           await mount.cleanupTemp(pathId);
                       }
-                      // Under the tree lock, as onSync: on `local` an ancestor rename racing the download would read as a miss.
+                      // Under the tree lock, as onSync: on `local` an ancestor rename racing the download
+                      // would read as a miss.
                       await mount.withTreeShared(async () => {
                           const currentKey = await mount.getStorageKey(pathId);
                           // Clean close during an outage: the live temp was cleaned but a staged
@@ -159,10 +165,8 @@ async function buildDocumentDb<S extends SchemaType>(
                               await mount.replaceTempFrom(pathId, Bun.file(staged));
                               return;
                           }
-                          // The open sends no HEAD: only the GET body tells a gone object (410) from an outage (503).
-                          await mount.downloadKeyToTemp(currentKey, pathId).catch((error: unknown) => {
-                              throw isMissingObjectCause(error) ? storageGone(error.cause) : error;
-                          });
+                          // The open sends no HEAD: the GET itself answers a gone object (410).
+                          await mount.downloadKeyToTemp(currentKey, pathId);
                           // No empty-check here: an empty 200 is caught by ManagedDatabase's
                           // mustExist guard (openCold refuses to open an empty working copy as a fresh db).
                       });

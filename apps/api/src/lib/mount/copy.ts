@@ -1,15 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { DriveContainerType, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
-import { ApiError } from '../core';
 import { copyThumbnail } from '../shared/thumbnails';
-import { writeTempWithHash } from '../storage';
+import { storageGone, writeTempWithHash } from '../storage';
 import { isVersionsFolder } from '../versioning/versions-folder';
 import type { Mount } from './mount';
 import { markContentDirty } from './search-index';
-
-// Version restore matches it: on local and local-key it is how a gone data.db surfaces.
-export const SOURCE_MISSING_ON_STORAGE = 'Source file missing on storage';
 
 // Recursive same-mount copy on one storage backend — the fast path next to the
 // cross-mount bridge in drive/copy-across.ts. Containers are recreated (typed) and
@@ -58,7 +54,7 @@ export async function copyPath(
     // object. The container branch above flushed the doc first, so its pending staging holds the
     // current bytes; a regular file is staged only by a home restore whose upload has not acked yet.
     const srcFile = await mount.readFile(srcPathId);
-    if (!srcFile) throw new ApiError(404, SOURCE_MISSING_ON_STORAGE);
+    if (!srcFile) throw storageGone();
     const tempId = randomUUID();
     try {
         const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), srcFile);

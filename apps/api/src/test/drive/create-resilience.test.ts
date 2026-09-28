@@ -6,16 +6,19 @@ import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { ApiError } from '../../lib/core';
 import type Drive from '../../lib/drive/drive';
 import { getHome } from '../../lib/home';
+import { createMountConfig } from '../../lib/mount';
 import type { Mount } from '../../lib/mount/mount';
 import type { User } from '../../lib/user';
+import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
 import {
     createFaultMount,
     type FaultStorage,
     registerFaultMount,
     settleContainer,
     unregisterFaultMount,
+    waitFor,
 } from '../fault-storage-helpers';
-import { collectSSE, getTestContext } from '../setup';
+import { collectSSE, findOrFail, getTestContext } from '../setup';
 
 // Drive.create over a FaultStorage mount: a provisioning failure must leave no container row, since a
 // surviving row occupies the name and 503s on every later open. A failed upload leaves no temp behind.
@@ -111,6 +114,49 @@ describe('Drive.create is atomic under degraded storage', () => {
         const empty = await mount.openDatabase(COLLAB_DB_CONFIG, dataDb.id).catch((e: unknown) => e);
         expect(empty).toBeInstanceOf(ApiError);
         expect(empty).toMatchObject({ status: 503 });
+    });
+
+    test('a data.db file deleted from a local mount 410s on open', async () => {
+        const home = await getHome(ownerId);
+        const settings = await home.settings.set({
+            mounts: { 'local-gone': { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Local' } },
+        });
+        await drive.addMount(createMountConfig('local-gone', settings.mounts!['local-gone']));
+        const localMount = findOrFail(drive.getMounts(), (m) => m.id === 'local-gone');
+        const localRoot = (await localMount.getRootFolder())!;
+        const doc = await drive.create('local-gone', localRoot.id, 'Vanishing', 'doc', user);
+        const dataDb = (await localMount.getChildByName(doc.id, 'data.db'))!;
+        await settleContainer(localMount, doc.id);
+
+        rmSync(localMount.storage.getPath!(await localMount.getStorageKey(dataDb.id)));
+        const missing = await localMount.openDatabase(COLLAB_DB_CONFIG, dataDb.id).catch((e: unknown) => e);
+        expect(missing).toBeInstanceOf(ApiError);
+        expect(missing).toMatchObject({ status: 410 });
+    });
+});
+
+describe('Version restore under degraded storage', () => {
+    test('a version saved while its upload fails restores from its staged copy', async () => {
+        const doc = await drive.create(MOUNT_ID, rootId, 'Outage Version', 'sheets', user);
+        const seeded = await drive.getCollabDocument(MOUNT_ID, doc.id);
+        seeded.doc.getMap('state').set('marker', 'saved');
+        await drive.closeCollabDocument(MOUNT_ID, doc.id);
+        await settleContainer(mount, doc.id);
+
+        // The version's PUT is the only write; retries are held (FaultMount), so it stays a staged copy.
+        fault.failNextWrites = 1;
+        const saved = await drive.saveVersion(MOUNT_ID, doc.id);
+        await waitFor(() => fault.failNextWrites === 0);
+        const versions = (await mount.getChildByName(doc.id, VERSIONS_FOLDER_NAME))!;
+        const versionKey = await mount.getStorageKey((await mount.getChildByName(versions.id, saved.name))!.id);
+        expect(await fault.inner.exists(versionKey)).toBe(false);
+
+        const document = await drive.getCollabDocument(MOUNT_ID, doc.id);
+        document.doc.getMap('state').set('marker', 'later');
+        await drive.restoreContainer(MOUNT_ID, doc.id, saved.name);
+        expect(document.doc.getMap('state').get('marker')).toBe('saved');
+        await drive.closeCollabDocument(MOUNT_ID, doc.id);
+        await settleContainer(mount, doc.id);
     });
 });
 

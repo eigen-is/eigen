@@ -135,12 +135,14 @@ async function snapshotDataDbToVersionStaged(
 }
 
 // Produce a local copy of a managed container db's current bytes at destPath, freshest source first.
-// False when there is nothing left to copy: no live handle, nothing staged, and no stored object —
-// the container was deleted, or a versions/ snapshot pruned, since the caller read the paths table.
+// False when there is nothing left to copy: no live handle, no viable crash temp (backup order only),
+// nothing staged, and a GET that answers the object missing. The container was deleted or a versions/
+// snapshot pruned since the caller read the paths table, or the data.db object is gone, which the
+// version snapshot answers with a 410.
 // 'staged-first' is the version-snapshot order: its caller flushed the cached db into the pending
 // staged copy already, so reusing that copy beats a second VACUUM INTO. 'open-handle-first' is the
-// backup order: nothing flushed, so a live handle is the only source holding writes made since the
-// last stage; it waits out an in-flight open or close of that handle first.
+// backup order: nothing flushed, so a live handle, or else the crash temp an unclean shutdown left,
+// holds the writes made since the last stage; it waits out an in-flight open or close of that handle first.
 export async function stageManagedDbCopy(
     mount: Mount,
     pathId: string,

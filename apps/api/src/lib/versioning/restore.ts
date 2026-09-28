@@ -3,7 +3,6 @@ import { type DrivePath, isCollabType } from '@workspace/lib/types/drive';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { ApiError } from '../core';
 import type Drive from '../drive/drive';
-import { SOURCE_MISSING_ON_STORAGE } from '../mount/copy';
 import type { Mount } from '../mount/mount';
 import { DEFAULT_RETENTION, type RetentionPolicy } from './retention';
 import { VERSIONS_FOLDER_NAME } from './versions-folder';
@@ -30,15 +29,12 @@ export async function restoreContainer(
     const tempId = randomUUID();
     const tempPath = await mount.downloadToTemp(target.id, tempId);
     try {
-        // A gone data.db has no bytes to preserve and no live Y.Doc to converge. s3 answers 410 once the temp
-        // and staged copy were checked; local and local-key answer copyPath's own 404.
+        // A gone data.db (410, once the temp and staged copy were checked) has no bytes to preserve and no
+        // live Y.Doc to converge.
         const gone = await mount.snapshotContainerDataDb(container.id, policy).then(
             () => false,
             (error: unknown) => {
-                const missing =
-                    error instanceof ApiError &&
-                    (error.status === 410 || (error.status === 404 && error.message === SOURCE_MISSING_ON_STORAGE));
-                if (!missing) throw error;
+                if (!(error instanceof ApiError && error.status === 410)) throw error;
                 return true;
             },
         );

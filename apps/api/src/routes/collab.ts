@@ -4,6 +4,7 @@ import {
     COLLAB_STORAGE_GONE_CLOSE,
     COLLAB_STORAGE_GONE_REASON,
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+    COLLAB_STORAGE_UNAVAILABLE_REASON,
 } from '@workspace/lib/constants/collab';
 import { commentAssignedTag } from '@workspace/lib/notification/tags';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
@@ -252,7 +253,7 @@ export const collabRouter = new Elysia({
                 if (err instanceof HomeRestoringError) {
                     ws.close(COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON);
                 } else if (err instanceof ApiError && err.status === 503) {
-                    ws.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, 'storage-unavailable');
+                    ws.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON);
                 } else if (err instanceof ApiError && err.status === 410) {
                     // Terminal: the stored object is gone, so the client stops retrying.
                     ws.close(COLLAB_STORAGE_GONE_CLOSE, COLLAB_STORAGE_GONE_REASON);

@@ -16,7 +16,8 @@ export function storageUnavailable(cause?: unknown): ApiError {
     return new ApiError(503, 'Storage unavailable', cause === undefined ? undefined : { cause });
 }
 
-// A stored object that is gone for good, after the temp and the staged copy were checked: 410, as the row still resolves.
+// A stored object that is gone for good, after the temp and the staged copy were checked: 410, as the row
+// still resolves.
 export function storageGone(cause?: unknown): ApiError {
     return new ApiError(410, 'Stored data not found', cause === undefined ? undefined : { cause });
 }

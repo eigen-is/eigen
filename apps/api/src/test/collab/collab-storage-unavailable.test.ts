@@ -5,6 +5,7 @@ import {
     COLLAB_STORAGE_GONE_CLOSE,
     COLLAB_STORAGE_GONE_REASON,
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+    COLLAB_STORAGE_UNAVAILABLE_REASON,
 } from '@workspace/lib/constants/collab';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import * as decoding from 'lib0/decoding';
@@ -26,8 +27,8 @@ import {
 import { authedRequest, getTestContext } from '../setup';
 
 // Unreachable storage closes the collab WS with 1013 'storage-unavailable', a stored object that is gone
-// with 4410 'storage-gone', every other failed open with 1008. The mount's real S3Storage talks to a FakeS3Server. Needs a real listening server:
-// app.handle() never completes the upgrade.
+// with 4410 'storage-gone', every other failed open with 1008. The mount's real S3Storage talks to a
+// FakeS3Server. Needs a real listening server: app.handle() never completes the upgrade.
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-collab-unavailable-${Date.now()}`);
 const MOUNT_ID = 'fault-collab';
@@ -95,11 +96,6 @@ async function saveVersion(docId: string): Promise<Snapshot> {
     return saved;
 }
 
-async function listVersionNames(docId: string): Promise<string[]> {
-    const res = await authedRequest(token, versionsUrl(docId));
-    return ((await res.json()) as Snapshot[]).map((version) => version.name);
-}
-
 function restoreVersion(docId: string, name: string): Promise<Response> {
     return authedRequest(token, versionsUrl(docId, encodeURIComponent(name), 'restore'), { method: 'POST' });
 }
@@ -163,7 +159,7 @@ describe('Collab WS open under unreachable storage', () => {
         try {
             expect(await openCollabClient(docId).closed).toEqual({
                 code: COLLAB_STORAGE_UNAVAILABLE_CLOSE,
-                reason: 'storage-unavailable',
+                reason: COLLAB_STORAGE_UNAVAILABLE_REASON,
             });
         } finally {
             rmSync(mount.tmpDir, { recursive: true, force: true });
@@ -216,12 +212,12 @@ describe('Collab WS open under unreachable storage', () => {
         const { docId, dataDbId, dataKey } = await createDoc('RestoreNoBucket');
         await seedStoredDoc(docId);
         const saved = await saveVersion(docId);
-        const versionsBefore = await listVersionNames(docId);
+        const versionsBefore = await (await authedRequest(token, versionsUrl(docId))).json();
         fakeS3.faults.set(dataKey, 'no-bucket');
 
         expect((await restoreVersion(docId, saved.name)).status).toBe(503);
         expect((await mount.getChildByName(docId, 'data.db'))?.id).toBe(dataDbId);
-        expect(await listVersionNames(docId)).toEqual(versionsBefore);
+        expect(await (await authedRequest(token, versionsUrl(docId))).json()).toEqual(versionsBefore);
         fakeS3.faults.delete(dataKey);
         expect(await fakeS3.store.exists(dataKey)).toBe(true);
     }, 10_000);
@@ -237,7 +233,7 @@ describe('Collab WS open whose download fails', () => {
         fakeS3.faults.set(dataKey, 'fail-get');
         expect(await openCollabClient(docId).closed).toEqual({
             code: COLLAB_STORAGE_UNAVAILABLE_CLOSE,
-            reason: 'storage-unavailable',
+            reason: COLLAB_STORAGE_UNAVAILABLE_REASON,
         });
     }, 10_000);
 
@@ -249,7 +245,7 @@ describe('Collab WS open whose download fails', () => {
             fakeS3.faults.set(dataKey, fault);
             expect(await openCollabClient(docId).closed).toEqual({
                 code: COLLAB_STORAGE_UNAVAILABLE_CLOSE,
-                reason: 'storage-unavailable',
+                reason: COLLAB_STORAGE_UNAVAILABLE_REASON,
             });
         },
         10_000,

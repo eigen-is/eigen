@@ -220,7 +220,7 @@ crontab -e
 # 0 3 * * * /opt/eigen/eigen backup
 ```
 
-When a drive stores its files in an S3 bucket, a snapshot holds the list of those files but not the files. A restore or a rollback brings the list back and leaves the bucket as it is now, so a file changed since shows its new content, and uploads the changes that were still on their way to the bucket at the snapshot, unless Eigen ran since. Turn on versioning and a cleanup rule for old versions on that bucket (the Bucket safety panel in the admin settings does both), and use a per-home backup when you need a copy with the files in it.
+When a drive stores its files in an S3 bucket, a snapshot holds the list of those files but not the files. A restore or a rollback brings the list back and leaves the bucket as it is now, so a file changed since shows its new content. A restore also uploads what was still on its way to the bucket at the snapshot, unless the install it replaces had already uploaded, replaced or deleted it. Turn on versioning and a cleanup rule for old versions on that bucket (the Bucket safety panel in the admin settings does both), and use a per-home backup when you need a copy with the files in it.
 
 Put a snapshot back with `./eigen restore`. It unpacks and checks the snapshot while Eigen runs, and asks. Then it stops Eigen, moves the current `data/` and `.env.production` aside to `data.pre-restore-<UTC time>` and `.env.production.pre-restore-<UTC time>` (never deleted), puts the snapshot in their place and starts Eigen again. A light snapshot puts back only the databases, the settings and `.env.production`, moves those aside into `data.pre-restore-<UTC time>`, and leaves files and mail as they are.
 

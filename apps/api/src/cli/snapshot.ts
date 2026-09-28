@@ -170,7 +170,7 @@ function holdsS3Mounts(): boolean {
 const S3_NOT_IN_SNAPSHOT =
     'Files in S3 buckets are not in a snapshot: they stay as the bucket holds them, and only its versioning keeps their history';
 const PENDING_NOT_REPLAYED =
-    'pending upload(s) in the snapshot were not replayed: the data/ kept aside had already uploaded, replaced or deleted them; the snapshot still holds them.';
+    'pending upload(s) in the snapshot were not replayed: the data/ kept aside had already uploaded, replaced or deleted them; the snapshot still holds them';
 
 // data/ under `root` as a light snapshot sees it: the paths it holds, every folder before what is in it.
 export function lightWalk(root = '.'): Held[] {
@@ -511,15 +511,13 @@ export async function restore(
     chmodSync(staged, 0o600);
     // Without it the next start draws a new collab epoch: a tab that loaded a document before reloads, not merges back.
     rmSync(join(STAGING, DATA, SERVER_DIR, COLLAB_EPOCH_FILE), { force: true });
-    // One the data/ here lacks acked, was superseded or cancelled since: replayed, it would put older bytes on the key.
-    // No data/ or live staging/ (Mount.init makes it): the mount never ran on this tree, so the copy is the only one.
+    // A staged upload the live data/ no longer holds was acked, superseded or canceled: replaying it puts older
+    // bytes on the key. No live staging/ (Mount.init makes it): the mount never ran here, so the copy is the only one.
     let notReplayed = 0;
-    if (existsSync(DATA)) {
-        for (const path of new Bun.Glob(STAGED_UPLOADS).scanSync({ cwd: STAGING, dot: true })) {
-            if (!existsSync(dirname(path)) || existsSync(path)) continue;
-            rmSync(join(STAGING, path));
-            notReplayed++;
-        }
+    for (const path of new Bun.Glob(STAGED_UPLOADS).scanSync({ cwd: STAGING, dot: true })) {
+        if (!existsSync(dirname(path)) || existsSync(path)) continue;
+        rmSync(join(STAGING, path));
+        notReplayed++;
     }
     const stamp = buildBackupStamp(new Date());
     const [dataAside, envAside] = [DATA, ENV_PATH].map((current) => `${current}${PRE_RESTORE_SUFFIX}${stamp}`);
