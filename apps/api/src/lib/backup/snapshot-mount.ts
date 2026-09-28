@@ -10,10 +10,10 @@ import { ApiError, type DatabaseConfig, type SchemaType } from '../core';
 import { buildStorageKey, isUsableName } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
+import { errnoOf, isMissingObjectCause } from '../storage';
 import { stageManagedDbCopy } from '../versioning/snapshot';
 import { VERSIONS_FOLDER_NAME } from '../versioning/versions-folder';
 import { captureFile, captureWrittenFile } from './capture';
-import { errnoOf } from './errors';
 import type { SnapshotProgress } from './snapshot-home';
 
 // The columns every reader of a mount's paths table wants, spelled once: snapshotMountData selects
@@ -227,12 +227,6 @@ function rethrowStorageFailure(mountId: string, storageKey: string, error: unkno
     throw new Error(`mount ${mountId}: storage unreachable${code ? ` (${code})` : ''} reading ${storageKey}`);
 }
 
-// How S3 and the local disk answer a read of an object deleted after its HEAD.
-function isMissingObject(error: unknown): boolean {
-    const code = error instanceof ApiError && error.status === 503 ? errnoOf(error.cause) : null;
-    return code === 'NoSuchKey' || code === 'ENOENT';
-}
-
 // False once the row was deleted, or moved to another key, since the tree read.
 async function isStillAt(mount: Mount, pathId: string, storageKey: string): Promise<boolean> {
     return Boolean(await mount.getPath(pathId)) && (await mount.getStorageKey(pathId)) === storageKey;
@@ -301,7 +295,7 @@ export async function snapshotMountData(
                 .catch((error: unknown) => rethrowStorageFailure(mount.id, storageKey, error));
             if (file) {
                 const entry = await captureFile(file, destPath, entryPath).catch(async (error: unknown) => {
-                    if (!isMissingObject(error) || (await isStillAt(mount, row.id, storageKey))) {
+                    if (!isMissingObjectCause(error) || (await isStillAt(mount, row.id, storageKey))) {
                         rethrowStorageFailure(mount.id, storageKey, error);
                     }
                     fs.rmSync(destPath, { force: true });

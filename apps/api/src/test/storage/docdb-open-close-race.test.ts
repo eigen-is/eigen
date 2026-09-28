@@ -187,9 +187,8 @@ describe('open during close waits for the close to settle', () => {
         managed.db.insert(docSchema.items).values({ id: 2, data: 'dirty' }).run(); // close's final sync writes this
 
         // Park the close's final sync (trashPath → closeCachedDbsUnder → close → onSync →
-        // uploadFromTemp → storage.write) and land an open in the window. The rename gate keeps
-        // the post-close rebuild reading the pre-trash location deterministically (open-vs-trash
-        // row racing is a separate, pre-existing story).
+        // uploadFromTemp → storage.write) and land an open in the window. Keys resolve under the tree lock, so
+        // the assertion holds whether the open takes it before the trash's rename (its sync resolves the trashed key) or after.
         const writeGate = storage.armWrite();
         const trashPromise = mount.trashPath(containerId);
         await writeGate.parked;
@@ -197,9 +196,10 @@ describe('open during close waits for the close to settle', () => {
         const openPromise = mount.openDatabase(docConfig, dataDbId);
         const renameGate = storage.armRename();
         writeGate.release();
+        await renameGate.parked;
+        renameGate.release();
 
         const reopened = await openPromise; // pre-fix: adopts the closing instance's live temp
-        renameGate.release();
         await trashPromise;
 
         // Pre-fix the old close's cleanupTemp unlinked the adopted temp: this flush throws

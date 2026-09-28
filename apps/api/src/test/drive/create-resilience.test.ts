@@ -94,7 +94,7 @@ describe('Drive.create is atomic under degraded storage', () => {
         expect(card.name).toBe('Card 1.eigenchat');
     });
 
-    test('a data.db row whose storage object is gone still 503s on open (mustExist stays strict)', async () => {
+    test('a data.db row whose storage object is gone 410s on open, and an empty one 503s (mustExist stays strict)', async () => {
         const doc = await drive.create(MOUNT_ID, rootId, 'Vanishing', 'doc', user);
         const dataDb = (await mount.getChildByName(doc.id, 'data.db'))!;
         await settleContainer(mount, doc.id);
@@ -103,7 +103,7 @@ describe('Drive.create is atomic under degraded storage', () => {
         await fault.inner.delete(key);
         const missing = await mount.openDatabase(COLLAB_DB_CONFIG, dataDb.id).catch((e: unknown) => e);
         expect(missing).toBeInstanceOf(ApiError);
-        expect(missing).toMatchObject({ status: 503 });
+        expect(missing).toMatchObject({ status: 410 });
 
         // A 0-byte object is the same refusal one layer down: ManagedDatabase's mustExist guard
         // must not open an empty working copy as a fresh database.

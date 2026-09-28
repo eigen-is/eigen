@@ -3,6 +3,7 @@ import { type DrivePath, isCollabType } from '@workspace/lib/types/drive';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { ApiError } from '../core';
 import type Drive from '../drive/drive';
+import { SOURCE_MISSING_ON_STORAGE } from '../mount/copy';
 import type { Mount } from '../mount/mount';
 import { DEFAULT_RETENTION, type RetentionPolicy } from './retention';
 import { VERSIONS_FOLDER_NAME } from './versions-folder';
@@ -29,14 +30,25 @@ export async function restoreContainer(
     const tempId = randomUUID();
     const tempPath = await mount.downloadToTemp(target.id, tempId);
     try {
-        await mount.snapshotContainerDataDb(container.id, policy);
-        if (isCollabType(container.type)) {
+        // A gone data.db has no bytes to preserve and no live Y.Doc to converge. s3 answers 410 once the temp
+        // and staged copy were checked; local and local-key answer copyPath's own 404.
+        const gone = await mount.snapshotContainerDataDb(container.id, policy).then(
+            () => false,
+            (error: unknown) => {
+                const missing =
+                    error instanceof ApiError &&
+                    (error.status === 410 || (error.status === 404 && error.message === SOURCE_MISSING_ON_STORAGE));
+                if (!missing) throw error;
+                return true;
+            },
+        );
+        if (!gone && isCollabType(container.type)) {
             // Yjs (doc/sheets/slides/stickies): replay the snapshot's state into the
             // live Y.Doc so connected editors converge with no reload.
             const state = readYjsStateFromFile(tempPath, { label: `restore:${target.name}` });
             await restoreYjsContainer(drive, mount, container.id, state);
         } else {
-            // Chat has no live Y.Doc: overwrite data.db's bytes with the snapshot's.
+            // Chat, or a gone data.db: overwrite data.db's bytes with the snapshot's.
             await mount.replaceContainerDataDb(container.id, tempPath);
         }
     } finally {

@@ -46,7 +46,7 @@ auto-sync tick return after the *local* write; `create` first checks that the ke
   **Invariant: an empty/invalid working copy can never overwrite a non-trivial
   stored object — worst case a transient 503, never a wipe.** A download or a staged-copy recovery
   writes a `tmp/<uuid>` side file and renames it onto the working-copy path, so a process killed mid-GET
-  leaves no partial temp for the next open to adopt. A failed GET, including a missing object, answers 503
+  leaves no partial temp for the next open to adopt. A GET whose body says the object is gone (`NoSuchKey`, or `ENOENT` on local) answers 410 once the crash temp and the staged copy were checked; every other failure, a missing or refused bucket included, answers 503
   (the open sends no HEAD first).
 - **Freshest-first reads** — `Mount.readFile` serves a pending staged copy before the storage object, so
   reopen, copy/duplicate, and copy-across all read the newest bytes during an outage, never a stale/absent

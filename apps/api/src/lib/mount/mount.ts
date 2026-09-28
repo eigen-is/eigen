@@ -1042,7 +1042,8 @@ export class Mount {
             size = await this.replaceTempFrom(tempId, this.storage.read(storageKey));
         } catch (err) {
             console.error(`[Mount] download ${storageKey} failed:`, err);
-            throw storageUnavailable(err);
+            // The read's own failures arrive as ApiErrors; a raw one is local (tmp/ write or rename), and its ENOENT must not read as a gone object.
+            throw err instanceof ApiError ? err : storageUnavailable();
         }
         const ms = (Bun.nanoseconds() - start) / 1_000_000;
         console.log(`[timing] Mount.download ${storageKey} ${(size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
@@ -1109,7 +1110,7 @@ export class Mount {
 
     // ---- Managed document-DB facade — implementation in mount/document-db.ts ----
 
-    // Open an EXISTING managed document database. Throws ApiError(503) if the
+    // Open an EXISTING managed document database. Throws ApiError(410) if the
     // backing storage object isn't there — never silently creates fresh.
     // Use createDatabase for the first-time provisioning instead.
     async openDatabase<S extends SchemaType>(config: DatabaseConfig<S>, pathId: string): Promise<ManagedDatabase<S>> {

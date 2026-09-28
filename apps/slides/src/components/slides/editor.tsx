@@ -319,6 +319,7 @@ function SlideEditorInner({
                     canEdit={canEdit}
                     offline={doc.offline}
                     storageUnavailable={doc.loaded && doc.storageUnavailable}
+                    storageGone={doc.loaded && doc.storageGone}
                     undoManager={doc.undoManager}
                     tool={tool}
                     setTool={setTool}
