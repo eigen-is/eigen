@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import {
     COLLAB_STORAGE_GONE_CLOSE,
@@ -156,6 +156,31 @@ describe('Collab WS open under unreachable storage', () => {
         });
     });
 
+    test('a failed local temp write on an intact object closes storage-unavailable, not storage-gone', async () => {
+        const { docId } = await createDoc('TmpGone');
+        const parked = `${mount.tmpDir}.parked`;
+        renameSync(mount.tmpDir, parked);
+        try {
+            expect(await openCollabClient(docId).closed).toEqual({
+                code: COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+                reason: 'storage-unavailable',
+            });
+        } finally {
+            rmSync(mount.tmpDir, { recursive: true, force: true });
+            renameSync(parked, mount.tmpDir);
+        }
+    }, 10_000);
+
+    test('a gone object with a viable crash temp opens from the temp', async () => {
+        const { docId, dataDbId, dataKey } = await createDoc('CrashTempWins');
+        await seedStoredDoc(docId);
+        await mount.downloadKeyToTemp(dataKey, dataDbId);
+        await fakeS3.store.delete(dataKey);
+
+        const reopened = await drive.getCollabDocument(MOUNT_ID, docId);
+        expect(reopened.doc.getMap('probe').get('kept')).toBe('yes');
+    }, 10_000);
+
     test('a gone object with a pending staged copy opens from the staged copy', async () => {
         const { docId, dataKey } = await createDoc('StagedWins');
         await seedStoredDoc(docId);
@@ -198,6 +223,7 @@ describe('Collab WS open under unreachable storage', () => {
         expect((await mount.getChildByName(docId, 'data.db'))?.id).toBe(dataDbId);
         expect(await listVersionNames(docId)).toEqual(versionsBefore);
         fakeS3.faults.delete(dataKey);
+        expect(await fakeS3.store.exists(dataKey)).toBe(true);
     }, 10_000);
 
     test('an ordinary failed open still closes 1008', async () => {
