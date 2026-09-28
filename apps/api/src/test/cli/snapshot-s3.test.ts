@@ -18,7 +18,7 @@ const TAR_ENV = { COPYFILE_DISABLE: '1' };
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const S3_NOTE = 'Files in S3 buckets are not in a snapshot';
-const NOT_REPLAYED = 'Pending uploads in the snapshot were not replayed; the snapshot still holds them.';
+const NOT_REPLAYED = 'in the snapshot were not replayed';
 const MOUNT_DIR = `home/${OWNER}/mounts/${MOUNT_ID}`;
 
 const dirs: string[] = [];
@@ -110,6 +110,32 @@ function markerIn(dbPath: string): string {
     }
 }
 
+// Eigen stops while the bucket is slow: the document's last upload is still pending, its staged copy the only one.
+async function stopWithPending(target: Install): Promise<{ storageKey: string; staged: string }> {
+    const eigen = await start(target);
+    const rootId = (await eigen.mount.getRootFolder())!.id;
+    const docId = await eigen.mount.createFile(rootId, 'ledger.db', 'application/x-sqlite3', 0, undefined);
+    const storageKey = await eigen.mount.getStorageKey(docId);
+    eigen.fault.failNextWrites = 1;
+    const staged = stageMarkerDb(eigen.mount, 'pending at the stop');
+    eigen.mount.uploadQueue!.enqueueStaged(storageKey, staged, true);
+    await eigen.mount.drainPendingUploads();
+    expect(eigen.mount.pendingUploadCount).toBe(1);
+    await eigen.stop();
+    return { storageKey, staged };
+}
+
+async function expectReplayed(target: Install, storageKey: string): Promise<void> {
+    const eigen = await start(target);
+    try {
+        await eigen.mount.drainPendingUploads({ flushNow: true });
+        expect(eigen.mount.pendingUploadCount).toBe(0);
+        expect(await bucketMarker(target, storageKey)).toBe('pending at the stop');
+    } finally {
+        await eigen.stop();
+    }
+}
+
 async function bucketMarker({ dir, bucket }: Install, storageKey: string): Promise<string> {
     const object = join(dir, 'object.db');
     await Bun.write(object, new LocalStorage(bucket).read(storageKey));
@@ -181,7 +207,7 @@ describe('Whole-server snapshot of an s3 mount', () => {
         expect(second.mount.pendingUploadCount).toBe(0);
         await second.stop();
 
-        expect(await restore(target.dir, name)).toContain(NOT_REPLAYED);
+        expect(await restore(target.dir, name)).toContain(`1 pending upload(s) ${NOT_REPLAYED}`);
         keptAside(target.dir);
         expect(Array.from(new Bun.Glob('data/*/*/mounts/*/staging/*').scanSync(target.dir))).toEqual([]);
         const third = await start(target);
@@ -244,7 +270,7 @@ describe('Whole-server snapshot of an s3 mount', () => {
         }
     });
 
-    test('a light restore keeps the pending uploads of the data/ it replaces aside with their database', async () => {
+    test('a light restore keeps a copy of the pending uploads of the data/ it replaces aside with their database', async () => {
         const target = install();
         const first = await start(target);
         const rootId = (await first.mount.getRootFolder())!.id;
@@ -272,6 +298,7 @@ describe('Whole-server snapshot of an s3 mount', () => {
         const aside = keptAside(target.dir);
         expect(existsSync(join(aside, MOUNT_DIR, 'metadata.db'))).toBe(true);
         expect(existsSync(join(aside, MOUNT_DIR, 'staging', basename(pending)))).toBe(true);
+        expect(existsSync(join(target.dir, 'data', MOUNT_DIR, 'staging', basename(pending)))).toBe(true);
 
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         const restored = await start(target);
@@ -305,6 +332,51 @@ describe('Whole-server snapshot of an s3 mount', () => {
         } finally {
             await rolledBack.stop();
         }
+    });
+
+    test('a restore onto a host with no data/ replays the pending uploads of the snapshot', async () => {
+        const target = install();
+        const { storageKey } = await stopWithPending(target);
+        const name = await snapshot(target.dir);
+        rmSync(join(target.dir, 'data'), { recursive: true });
+
+        expect(await restore(target.dir, name)).not.toContain(NOT_REPLAYED);
+        await expectReplayed(target, storageKey);
+    });
+
+    test('a full restore of a snapshot the data/ it replaces never ran past replays its pending uploads', async () => {
+        const target = install();
+        const { storageKey, staged } = await stopWithPending(target);
+        // ./eigen rollback after an update that failed at boot: the snapshot is restored over the tree it was taken of.
+        const name = await snapshot(target.dir);
+
+        expect(await restore(target.dir, name)).not.toContain(NOT_REPLAYED);
+        expect(existsSync(join(keptAside(target.dir), MOUNT_DIR, 'staging', basename(staged)))).toBe(true);
+        await expectReplayed(target, storageKey);
+    });
+
+    test('a light restore of a snapshot the data/ it replaces never ran past replays its pending uploads', async () => {
+        const target = install();
+        const { storageKey, staged } = await stopWithPending(target);
+        const name = await snapshot(target.dir, '--light');
+
+        await restore(target.dir, name);
+        expect(existsSync(join(target.dir, 'data', MOUNT_DIR, 'staging', basename(staged)))).toBe(true);
+        expect(existsSync(join(keptAside(target.dir), MOUNT_DIR, 'staging', basename(staged)))).toBe(true);
+        await expectReplayed(target, storageKey);
+    });
+
+    test('a full restore of a snapshot with no pending uploads prints no line about them', async () => {
+        const target = install();
+        const eigen = await start(target);
+        const rootId = (await eigen.mount.getRootFolder())!.id;
+        await eigen.mount.createFile(rootId, 'object.txt', 'text/plain', 3, encoder.encode('obj'));
+        await eigen.mount.drainPendingUploads({ flushNow: true });
+        await eigen.stop();
+        expect(readdirSync(join(target.dir, 'data', MOUNT_DIR, 'staging'))).toEqual([]);
+        const name = await snapshot(target.dir);
+
+        expect(await restore(target.dir, name)).not.toContain(NOT_REPLAYED);
     });
 
     test('with no restore, the pending uploads a snapshot was taken with land on the next start', async () => {

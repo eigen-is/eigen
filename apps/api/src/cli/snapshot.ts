@@ -1,6 +1,7 @@
 import type { Database } from 'bun:sqlite';
 import {
     chmodSync,
+    copyFileSync,
     type Dirent,
     existsSync,
     lstatSync,
@@ -50,8 +51,8 @@ const KEEP = 3;
 const LIGHT_SKIPS = new RegExp(
     `^${DATA}/(?!${SERVER_DIR}/)[^/]+/[^/]+/(?:${PATHS.DRIVE.ROOT}/[^/]+/[^/]+|${PATHS.MAIL.ROOT}/${PATHS.MAIL.MAILDIR})$`,
 );
-// Every s3 mount's staged uploads. They go wherever the metadata.db whose pending rows name them goes.
-const STAGED_UPLOADS = `${DATA}/*/*/${PATHS.DRIVE.ROOT}/*/${PATHS.DRIVE.STAGING_DIR}`;
+// Every s3 mount's staged uploads: the pending rows of the metadata.db beside it name them.
+const STAGED_UPLOADS = `${DATA}/*/*/${PATHS.DRIVE.ROOT}/*/${PATHS.DRIVE.STAGING_DIR}/*`;
 
 type SnapshotKind = 'full' | 'light';
 type SnapshotMeta = { version: string; createdAt: string; kind: SnapshotKind };
@@ -168,7 +169,8 @@ function holdsS3Mounts(): boolean {
 
 const S3_NOT_IN_SNAPSHOT =
     'Files in S3 buckets are not in a snapshot: they stay as the bucket holds them, and only its versioning keeps their history';
-const PENDING_NOT_REPLAYED = 'Pending uploads in the snapshot were not replayed; the snapshot still holds them.';
+const PENDING_NOT_REPLAYED =
+    'pending upload(s) in the snapshot were not replayed: the data/ kept aside had already uploaded, replaced or deleted them; the snapshot still holds them.';
 
 // data/ under `root` as a light snapshot sees it: the paths it holds, every folder before what is in it.
 export function lightWalk(root = '.'): Held[] {
@@ -315,11 +317,19 @@ export async function snapshot(
 // Every file of the light set here goes aside first, held by the snapshot or not: a database's -wal left beside the
 // one it came with would be replayed onto another. A folder only here stays; one only in the snapshot moves in whole.
 function swapLight(staged: Held[], aside: string): void {
-    const files = lightWalk().flatMap(({ path, dir }) => (dir ? [] : [path]));
-    for (const path of [...files, ...new Bun.Glob(STAGED_UPLOADS).scanSync({ onlyFiles: false })]) {
+    for (const { path, dir } of lightWalk()) {
+        if (dir) continue;
         const target = join(aside, relative(DATA, path));
         mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
         renameSync(path, target);
+    }
+    // Staged uploads stay for the restored rows naming them; reconcile sweeps the rest, so a copy goes aside.
+    for (const path of new Bun.Glob(STAGED_UPLOADS).scanSync({ dot: true })) {
+        const target = join(aside, relative(DATA, path));
+        mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
+        ownAs(dirname(target), statSync(dirname(path)));
+        copyFileSync(path, target);
+        ownAs(target, statSync(path));
     }
     let moved = '';
     for (const { path, dir } of staged) {
@@ -501,9 +511,16 @@ export async function restore(
     chmodSync(staged, 0o600);
     // Without it the next start draws a new collab epoch: a tab that loaded a document before reloads, not merges back.
     rmSync(join(STAGING, DATA, SERVER_DIR, COLLAB_EPOCH_FILE), { force: true });
-    // Replayed, they would overwrite keys the data/ kept aside names with older bytes. A light snapshot holds none.
-    const stagedUploads = Array.from(new Bun.Glob(STAGED_UPLOADS).scanSync({ cwd: STAGING, onlyFiles: false }));
-    for (const folder of stagedUploads) rmSync(join(STAGING, folder), { recursive: true });
+    // One the data/ here lacks acked, was superseded or cancelled since: replayed, it would put older bytes on the key.
+    // With no data/, or one that never ran since, the snapshot's copy is the only one. A light snapshot holds none.
+    let notReplayed = 0;
+    if (existsSync(DATA)) {
+        for (const path of new Bun.Glob(STAGED_UPLOADS).scanSync({ cwd: STAGING, dot: true })) {
+            if (existsSync(path)) continue;
+            rmSync(join(STAGING, path));
+            notReplayed++;
+        }
+    }
     const stamp = buildBackupStamp(new Date());
     const [dataAside, envAside] = [DATA, ENV_PATH].map((current) => `${current}${PRE_RESTORE_SUFFIX}${stamp}`);
     if (meta.kind === 'light') swapLight(lightWalk(STAGING), dataAside);
@@ -525,5 +542,5 @@ export async function restore(
     const aside = [dataAside, envAside].filter((file) => existsSync(file));
     if (aside.length) console.log(glyphLine('ok', `Kept aside: ${aside.join(', ')}`));
     if (holdsS3Mounts()) console.log(glyphLine('warn', S3_NOT_IN_SNAPSHOT));
-    if (stagedUploads.length) console.log(glyphLine('warn', PENDING_NOT_REPLAYED));
+    if (notReplayed) console.log(glyphLine('warn', `${notReplayed} ${PENDING_NOT_REPLAYED}`));
 }
