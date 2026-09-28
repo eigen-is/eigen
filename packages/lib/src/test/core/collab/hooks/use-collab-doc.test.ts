@@ -328,10 +328,10 @@ describe('useCollabDoc connection state', () => {
         expect(h.state.storageGone).toBe(true);
         expect(h.state.offline).toBe(false);
 
-        // Those edits can never be saved, so the leave guard stays down for a restore's reload.
+        // The tab holds the only copy of these edits, so the leave guard stays armed.
         const doc = h.doc;
         act(() => doc.getMap('items').set('b', 2));
-        expect(h.state.unsyncedEdits).toBe(false);
+        expect(h.state.unsyncedEdits).toBe(true);
     });
 
     test('a home replaced by a restore reloads the page instead of syncing back', () => {
