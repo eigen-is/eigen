@@ -1634,7 +1634,7 @@ describe('Managed-db open vs create', () => {
         // touchFile created the metadata row but no actual storage object — the
         // exact state the old openDatabase would have masked by silently
         // creating a fresh DB.
-        await expect(mount.openDatabase(minimalConfig, dataDbId)).rejects.toThrow('not available');
+        await expect(mount.openDatabase(minimalConfig, dataDbId)).rejects.toThrow('Stored data not found');
     });
 
     test('createDatabase provisions a real storage object', async () => {
@@ -1643,7 +1643,7 @@ describe('Managed-db open vs create', () => {
 
         // Pre-condition: touchFile creates the metadata row but no storage
         // object — openDatabase must reject.
-        await expect(mount.openDatabase(minimalConfig, dataDbId)).rejects.toThrow('not available');
+        await expect(mount.openDatabase(minimalConfig, dataDbId)).rejects.toThrow('Stored data not found');
 
         await mount.createDatabase(minimalConfig, dataDbId);
         await mount.closeDatabase(dataDbId);
