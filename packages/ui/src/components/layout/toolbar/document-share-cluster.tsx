@@ -31,7 +31,11 @@ type DocumentShareClusterProps = {
 export function DocumentShareCluster(props: DocumentShareClusterProps) {
     const isMobile = useIsMobile();
     // One icon for every way edits can be stuck in the tab; a storage failure explains itself, so it wins.
-    const label = props.storageGone ? 'Storage gone' : props.storageUnavailable ? 'Storage unavailable' : 'Offline';
+    const label = props.storageGone
+        ? 'Stored data not found'
+        : props.storageUnavailable
+          ? 'Storage unavailable'
+          : 'Offline';
     const offlineBadge = (props.offline || props.storageUnavailable || props.storageGone) && (
         <Popover>
             <PopoverTrigger asChild>

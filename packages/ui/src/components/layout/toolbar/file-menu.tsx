@@ -61,7 +61,7 @@ type FileMenuProps = {
     createIcon?: LucideIcon;
     createType: EigenDocType;
     // From useCollabDoc: a restore rebuilds the missing document and reloads.
-    storageGone?: boolean;
+    storageGone: boolean;
     children?: ReactNode;
 };
 
@@ -75,7 +75,7 @@ export function FileMenu({
     createLabel,
     createIcon: CreateIcon = FileText,
     createType,
-    storageGone = false,
+    storageGone,
     children,
 }: FileMenuProps) {
     const [createOpen, setCreateOpen] = useState(false);
