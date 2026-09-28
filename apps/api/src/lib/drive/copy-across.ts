@@ -1,6 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
-import { ApiError } from '../core';
+import { storageGone } from '../storage';
 import type { User } from '../user';
 import { isVersionsFolder } from '../versioning/versions-folder';
 import type { DriveLike } from './get-drive';
@@ -33,6 +33,6 @@ export async function copyPathAcross(
     }
 
     const file = await source.downloadFile(src.mountId, src.id);
-    if (!file) throw new ApiError(404, 'Source file data not found');
+    if (!file) throw storageGone();
     return target.createFileFromData(destMountId, destParentId, name, src.mimeType, file, user);
 }

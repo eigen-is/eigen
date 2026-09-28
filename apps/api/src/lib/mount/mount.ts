@@ -1028,12 +1028,25 @@ export class Mount {
                 `[Mount] downloadToTemp ${pathId}: tempId ${tempId} is an open document DB — refusing to overwrite its live working copy`,
             );
         }
-        const storageKey = await this.getStorageKey(pathId);
-        // Freshest-first, as readKey: a version saved during an outage exists only as its staged copy.
-        const staged = this.pendingStagedCopy(storageKey);
-        if (!staged) return this.downloadKeyToTemp(storageKey, tempId);
-        await this.replaceTempFrom(tempId, Bun.file(staged));
-        return this.getTempPath(tempId);
+        // Under the tree lock, as the open: on `local` an ancestor rename racing the read would read as gone.
+        return this.withTreeShared(async () => {
+            const storageKey = await this.getStorageKey(pathId);
+            // Freshest-first, as readKey: a version saved during an outage exists only as its staged copy.
+            const staged = this.pendingStagedCopy(storageKey);
+            if (staged) {
+                try {
+                    await this.replaceTempFrom(tempId, Bun.file(staged));
+                    return this.getTempPath(tempId);
+                } catch (err) {
+                    // A staged copy the queue's ack unlinked mid-read now sits in the bucket: fall through.
+                    if (!isMissingObjectCause(err)) {
+                        console.error(`[Mount] download of staged ${storageKey} failed:`, err);
+                        throw err instanceof ApiError ? err : storageUnavailable();
+                    }
+                }
+            }
+            return this.downloadKeyToTemp(storageKey, tempId);
+        });
     }
 
     // internal — used by mount/*.ts

@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -154,6 +154,35 @@ describe('Version restore under degraded storage', () => {
         const document = await drive.getCollabDocument(MOUNT_ID, doc.id);
         document.doc.getMap('state').set('marker', 'later');
         await drive.restoreContainer(MOUNT_ID, doc.id, saved.name);
+        expect(document.doc.getMap('state').get('marker')).toBe('saved');
+        await drive.closeCollabDocument(MOUNT_ID, doc.id);
+        await settleContainer(mount, doc.id);
+    });
+
+    test('a version whose staged copy the ack unlinks before the read restores from the stored object', async () => {
+        const doc = await drive.create(MOUNT_ID, rootId, 'Acked Version', 'sheets', user);
+        const seeded = await drive.getCollabDocument(MOUNT_ID, doc.id);
+        seeded.doc.getMap('state').set('marker', 'saved');
+        await drive.closeCollabDocument(MOUNT_ID, doc.id);
+        await settleContainer(mount, doc.id);
+
+        fault.failNextWrites = 1;
+        const saved = await drive.saveVersion(MOUNT_ID, doc.id);
+        await waitFor(() => fault.failNextWrites === 0);
+
+        const document = await drive.getCollabDocument(MOUNT_ID, doc.id);
+        document.doc.getMap('state').set('marker', 'later');
+        // The retry lands and unlinks the staged copy after downloadToTemp picked it.
+        const replaceTempFrom = mount.replaceTempFrom.bind(mount);
+        const spy = spyOn(mount, 'replaceTempFrom').mockImplementationOnce(async (tempId, source) => {
+            await mount.uploadQueue!.drain({ flushNow: true });
+            return replaceTempFrom(tempId, source);
+        });
+        try {
+            await drive.restoreContainer(MOUNT_ID, doc.id, saved.name);
+        } finally {
+            spy.mockRestore();
+        }
         expect(document.doc.getMap('state').get('marker')).toBe('saved');
         await drive.closeCollabDocument(MOUNT_ID, doc.id);
         await settleContainer(mount, doc.id);

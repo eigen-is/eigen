@@ -53,11 +53,14 @@ export async function copyPath(
     // just-created / outage-staged data.db) rather than the possibly-stale-or-absent storage
     // object. The container branch above flushed the doc first, so its pending staging holds the
     // current bytes; a regular file is staged only by a home restore whose upload has not acked yet.
-    const srcFile = await mount.readFile(srcPathId);
-    if (!srcFile) throw storageGone();
     const tempId = randomUUID();
     try {
-        const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), srcFile);
+        // Under the tree lock, as the open: on `local` an ancestor rename racing the read would read as gone.
+        const { size, hash } = await mount.withTreeShared(async () => {
+            const srcFile = await mount.readFile(srcPathId);
+            if (!srcFile) throw storageGone();
+            return writeTempWithHash(mount.getTempPath(tempId), srcFile);
+        });
         const newId = await mount.createFileFromTemp(destParentId, name, src.mimeType, size, hash, tempId);
         // The media facts the upload path derives from the bytes travel with them, thumbnail or not.
         // The rest of details stays behind: originalName names the source's own downloads and
