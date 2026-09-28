@@ -529,10 +529,6 @@ export default class Drive {
             throw new ApiError(404, 'Target parent is not a folder');
         }
 
-        if (await mount.isSelfOrDescendant(pathId, targetParentId)) {
-            throw new ApiError(400, 'Cannot move a folder into itself or its own descendant');
-        }
-
         // Old chain BEFORE the move — reading via either chain qualifies a watcher
         const oldChain = user ? await mount.getBreadcrumb(pathId) : [];
 

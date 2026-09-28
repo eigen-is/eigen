@@ -15,6 +15,7 @@ import { EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { RWLock } from '../../utils/rw-lock';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, PATHS, type SchemaType } from '../core';
 import { FileHistory } from '../drive/history';
@@ -71,6 +72,7 @@ export class Mount {
     // One-way teardown gate: set by closeAllDatabases, it refuses every later document-db open.
     closing = false; // internal — used by mount/*.ts
     private pathLocks: Map<string, Promise<void>> = new Map();
+    private treeLock = new RWLock();
 
     // Write-behind upload queue (Phase 1b) — only for isRemote (s3) mounts; undefined otherwise.
     uploadQueue?: UploadQueue; // internal — used by mount/*.ts + versioning/snapshot.ts
@@ -327,9 +329,7 @@ export class Mount {
         return path;
     }
 
-    // True if `candidateId` is `ancestorId` itself or any descendant of it.
-    // Used to reject moving/copying a folder into its own subtree (which would
-    // also make copyPath recurse forever).
+    // Copy-only guard (copyPath would recurse forever); a move checks inside updatePath's row write.
     async isSelfOrDescendant(ancestorId: string, candidateId: string): Promise<boolean> {
         if (ancestorId === candidateId) return true;
         let current = await this.getPath(candidateId);
@@ -453,21 +453,23 @@ export class Mount {
         const mimeType = type === DRIVE_TYPE_FOLDER ? DRIVE_MIME_FOLDER : EIGEN_DOC_TYPE_INFO[type].mime;
         const fileValue = this.isPathBased ? name : '';
 
-        if (this.isPathBased && this.storage.mkdir) {
-            await this.storage.mkdir(await this.resolveWriteKey(parentId, fileValue));
-        }
+        await this.withTreeShared(async () => {
+            if (this.isPathBased && this.storage.mkdir) {
+                await this.storage.mkdir(await this.resolveWriteKey(parentId, fileValue));
+            }
 
-        await this.insertPathRow({
-            id: folderId,
-            file: fileValue,
-            name,
-            type,
-            parentId,
-            ownerId: this.ownerId,
-            mimeType,
-            acl: null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            await this.insertPathRow({
+                id: folderId,
+                file: fileValue,
+                name,
+                type,
+                parentId,
+                ownerId: this.ownerId,
+                mimeType,
+                acl: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
         });
 
         return folderId;
@@ -496,26 +498,28 @@ export class Mount {
         const fileValue = this.buildFileValue(fileId, name);
         const hash = data !== undefined ? await this.computeHash(data) : null;
 
-        // Storage write before DB insert (crash safety: orphaned file > orphaned row)
-        if (data !== undefined) {
-            await this.storage.write(await this.resolveWriteKey(parentId, fileValue), data);
-        }
-
         const searchable = isSearchableTextFile(mimeType, name);
-        await this.insertPathRow({
-            id: fileId,
-            file: fileValue,
-            name,
-            type: 'file',
-            parentId,
-            ownerId: this.ownerId,
-            mimeType,
-            size,
-            hash,
-            acl: null,
-            contentDirty: searchable ? 1 : 0,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+        await this.withTreeShared(async () => {
+            // Storage write before DB insert (crash safety: orphaned file > orphaned row)
+            if (data !== undefined) {
+                await this.storage.write(await this.resolveWriteKey(parentId, fileValue), data);
+            }
+
+            await this.insertPathRow({
+                id: fileId,
+                file: fileValue,
+                name,
+                type: 'file',
+                parentId,
+                ownerId: this.ownerId,
+                mimeType,
+                size,
+                hash,
+                acl: null,
+                contentDirty: searchable ? 1 : 0,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
         });
 
         await this.invalidateSizesFrom(parentId);
@@ -537,25 +541,27 @@ export class Mount {
         const fileId = randomUUID();
         const fileValue = this.buildFileValue(fileId, name);
 
-        const storageKey = await this.resolveWriteKey(parentId, fileValue);
-
-        await this.uploadFromTemp(storageKey, tempId);
-
         const searchable = isSearchableTextFile(mimeType, name);
-        await this.insertPathRow({
-            id: fileId,
-            file: fileValue,
-            name,
-            type: 'file',
-            parentId,
-            ownerId: this.ownerId,
-            mimeType,
-            size,
-            hash,
-            acl: null,
-            contentDirty: searchable ? 1 : 0,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+        await this.withTreeShared(async () => {
+            const storageKey = await this.resolveWriteKey(parentId, fileValue);
+
+            await this.uploadFromTemp(storageKey, tempId);
+
+            await this.insertPathRow({
+                id: fileId,
+                file: fileValue,
+                name,
+                type: 'file',
+                parentId,
+                ownerId: this.ownerId,
+                mimeType,
+                size,
+                hash,
+                acl: null,
+                contentDirty: searchable ? 1 : 0,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
         });
 
         await this.invalidateSizesFrom(parentId);
@@ -631,6 +637,19 @@ export class Mount {
         return this.withPathLock(pathId, fn);
     }
 
+    // On `local` a key is a name path: key-derived writes hold shared from resolve through the row
+    // write, directory renames exclusive. Order: path lock → tree lock → nothing; a holder never
+    // locks again (shared inside shared deadlocks once an exclusive is queued).
+    // internal — used by mount/*.ts
+    async withTreeShared<T>(fn: () => Promise<T>): Promise<T> {
+        return this.isPathBased ? this.treeLock.shared(fn) : fn();
+    }
+
+    // internal — used by mount/*.ts
+    async withTreeExclusive<T>(fn: () => Promise<T>): Promise<T> {
+        return this.isPathBased ? this.treeLock.exclusive(fn) : fn();
+    }
+
     async updatePath(
         pathId: string,
         updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>>,
@@ -659,11 +678,18 @@ export class Mount {
         // The row write both branches owe. Sizes are invalidated here, i.e. before any storage rename —
         // a rename failure still leaves the DB updated, so the caches must already reflect the new parent.
         const writeRow = async (): Promise<void> => {
+            const set = { ...values, updatedAt: new Date() };
+            const targetParentId = updates.parentId;
             try {
-                await this.db
-                    .update(paths)
-                    .set({ ...values, updatedAt: new Date() })
-                    .where(eq(paths.id, pathId));
+                if (targetParentId === undefined) {
+                    await this.db.update(paths).set(set).where(eq(paths.id, pathId));
+                } else {
+                    // One sync transaction: no raced opposite move lands between the check and the UPDATE.
+                    this.db.transaction((tx) => {
+                        this.assertNotOwnAncestorInTx(tx, pathId, targetParentId);
+                        tx.update(paths).set(set).where(eq(paths.id, pathId)).run();
+                    });
+                }
             } catch (e) {
                 rethrowDuplicateActiveName(e, targetName);
             }
@@ -692,18 +718,20 @@ export class Mount {
                 const renameFn = this.storage.rename;
                 if (this.isPathBased && renameFn) {
                     wroteUnderLock = true;
-                    await this.withPathLock(pathId, async () => {
-                        const oldPath = await this.resolveStoragePath(pathId);
-                        if (!oldPath) return;
-                        if (updates.name !== undefined) {
-                            values.file = targetName;
-                        }
-                        await writeRow();
-                        const newPath = await this.resolveStoragePath(pathId);
-                        if (oldPath !== newPath) {
-                            await renameFn.call(this.storage, oldPath, newPath);
-                        }
-                    });
+                    await this.withPathLock(pathId, () =>
+                        this.withTreeExclusive(async () => {
+                            const oldPath = await this.resolveStoragePath(pathId);
+                            if (!oldPath) return;
+                            if (updates.name !== undefined) {
+                                values.file = targetName;
+                            }
+                            await writeRow();
+                            const newPath = await this.resolveStoragePath(pathId);
+                            if (oldPath !== newPath) {
+                                await renameFn.call(this.storage, oldPath, newPath);
+                            }
+                        }),
+                    );
                 }
             }
         }
@@ -767,32 +795,37 @@ export class Mount {
         await documentDb.closeCachedDbsUnder(this, pathId);
 
         // DB delete before storage cleanup (crash safety: orphaned file > orphaned row)
+        const deleteDir = this.storage.deleteDir;
         if (pathEntry.type === 'file') {
-            const storageKey = await this.getStorageKey(pathId);
-            await this.db.delete(paths).where(eq(paths.id, pathId));
-            await deleteThumbnail(this.thumbsDir, pathId);
-            // Cancel any queued upload + staged copy first, so an in-flight/queued PUT can't
-            // resurrect the object we're about to delete (invariant 7). Covers container
-            // deletes (recursive deletePath), provisionManagedDbs rollback, and the chat-restore
-            // replace, which all route data.db deletion through here.
-            if (this.uploadQueue) await this.uploadQueue.cancel(storageKey);
-            if (!(await this.storage.delete(storageKey))) {
-                console.warn(`[Mount] deleted ${pathId}, but its object ${storageKey} stays behind`);
-            }
-        } else if (this.isPathBased && this.storage.deleteDir) {
-            const storageKey = await this.getStorageKey(pathId);
-            // Collected before the rows go: only files own a thumbnail, so folder ids are no-ops.
-            const descendantIds = this.collectDescendantIds(pathId);
-            this.db.transaction((tx) => {
-                this.deleteDescendantsInTx(tx, pathId);
-                tx.delete(paths).where(eq(paths.id, pathId)).run();
+            await this.withTreeShared(async () => {
+                const storageKey = await this.getStorageKey(pathId);
+                await this.db.delete(paths).where(eq(paths.id, pathId));
+                await deleteThumbnail(this.thumbsDir, pathId);
+                // Cancel any queued upload + staged copy first, so an in-flight/queued PUT can't
+                // resurrect the object we're about to delete (invariant 7). Covers container
+                // deletes (recursive deletePath), provisionManagedDbs rollback, and the chat-restore
+                // replace, which all route data.db deletion through here.
+                if (this.uploadQueue) await this.uploadQueue.cancel(storageKey);
+                if (!(await this.storage.delete(storageKey))) {
+                    console.warn(`[Mount] deleted ${pathId}, but its object ${storageKey} stays behind`);
+                }
             });
-            for (const id of descendantIds) {
-                await deleteThumbnail(this.thumbsDir, id);
-            }
-            if (storageKey && !(await this.storage.deleteDir(storageKey))) {
-                console.warn(`[Mount] deleted ${pathId}, but its folder ${storageKey} stays behind`);
-            }
+        } else if (this.isPathBased && deleteDir) {
+            await this.withTreeExclusive(async () => {
+                const storageKey = await this.getStorageKey(pathId);
+                // Collected before the rows go: only files own a thumbnail, so folder ids are no-ops.
+                const descendantIds = this.collectDescendantIds(pathId);
+                this.db.transaction((tx) => {
+                    this.deleteDescendantsInTx(tx, pathId);
+                    tx.delete(paths).where(eq(paths.id, pathId)).run();
+                });
+                for (const id of descendantIds) {
+                    await deleteThumbnail(this.thumbsDir, id);
+                }
+                if (storageKey && !(await deleteDir.call(this.storage, storageKey))) {
+                    console.warn(`[Mount] deleted ${pathId}, but its folder ${storageKey} stays behind`);
+                }
+            });
         } else {
             const children = await this.listFolderAll(pathId);
             for (const child of children) {
@@ -802,6 +835,25 @@ export class Mount {
         }
 
         await this.invalidateSizesFrom(pathEntry.parentId);
+    }
+
+    // `seen` bounds the walk, so a tree that already holds a cycle fails instead of spinning.
+    private assertNotOwnAncestorInTx(
+        tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
+        pathId: string,
+        targetParentId: string | null,
+    ): void {
+        const seen = new Set<string>();
+        let current = targetParentId;
+        while (current) {
+            if (current === pathId) {
+                throw new ApiError(400, 'Cannot move a folder into itself or its own descendant');
+            }
+            if (seen.has(current)) throw new ApiError(500, `Folder tree has a cycle at ${current}`);
+            seen.add(current);
+            const row = tx.select({ parentId: paths.parentId }).from(paths).where(eq(paths.id, current)).get();
+            current = row?.parentId ?? null;
+        }
     }
 
     private deleteDescendantsInTx(
@@ -907,32 +959,36 @@ export class Mount {
     }
 
     async writeFile(pathId: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
-        return this.withPathLock(pathId, async () => {
-            const storageKey = await this.getStorageKey(pathId);
-            const written = await this.storage.write(storageKey, data);
+        let size: number;
+        if (Buffer.isBuffer(data) || data instanceof Uint8Array) {
+            size = data.length;
+        } else if (data instanceof ArrayBuffer) {
+            size = data.byteLength;
+        } else {
+            size = data.size;
+        }
+        const hash = await this.computeHash(data);
 
-            let size: number;
-            if (Buffer.isBuffer(data) || data instanceof Uint8Array) {
-                size = data.length;
-            } else if (data instanceof ArrayBuffer) {
-                size = data.byteLength;
-            } else {
-                size = data.size;
-            }
-
-            await this.commitOverwrite(pathId, storageKey, size, await this.computeHash(data));
-            return written;
-        });
+        return this.withPathLock(pathId, () =>
+            this.withTreeShared(async () => {
+                const storageKey = await this.getStorageKey(pathId);
+                const written = await this.storage.write(storageKey, data);
+                await this.commitOverwrite(pathId, storageKey, size, hash);
+                return written;
+            }),
+        );
     }
 
     // Overwrite using a temp file with size+hash already known (from writeTempWithHash).
     // Mirrors createFileFromTemp on the create side and avoids re-hashing.
     async writeFileFromTemp(pathId: string, tempId: string, size: number, hash: string): Promise<void> {
-        await this.withPathLock(pathId, async () => {
-            const storageKey = await this.getStorageKey(pathId);
-            await this.uploadFromTemp(storageKey, tempId);
-            await this.commitOverwrite(pathId, storageKey, size, hash);
-        });
+        await this.withPathLock(pathId, () =>
+            this.withTreeShared(async () => {
+                const storageKey = await this.getStorageKey(pathId);
+                await this.uploadFromTemp(storageKey, tempId);
+                await this.commitOverwrite(pathId, storageKey, size, hash);
+            }),
+        );
     }
 
     // Runs under the path lock after the PUT landed. deletePath doesn't wait on that lock, so a

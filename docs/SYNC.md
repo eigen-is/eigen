@@ -126,7 +126,7 @@ temp-copy backend.
 |---|---|
 | `lib/mount/upload-queue.ts` | The per-mount `UploadQueue` — enqueue / drain / backoff / cancel / reconcile + staging + orphan tracking |
 | `lib/sync/index.ts` | Process-global bits: per-destination semaphore map, backoff, shutdown deadline |
-| `lib/mount/document-db.ts` | The `onSync` / `onOpen` / `onClose` callbacks + snapshot wiring. One slot per pathId (`Mount.documentDbs`) serializes open, create and close in call order, so a fresh instance never shares a closing one's temp/journal files; the slot holds the live instance while open and nothing else; once the teardown sweep starts (after the downloads abort, the reindex drain and the thumbnail wait), a new open is refused with a 503. Lock order is container path lock → slot, and a close-time snapshot try-locks |
+| `lib/mount/document-db.ts` | The `onSync` / `onOpen` / `onClose` callbacks + snapshot wiring. One slot per pathId (`Mount.documentDbs`) serializes open, create and close in call order, so a fresh instance never shares a closing one's temp/journal files; the slot holds the live instance while open and nothing else; once the teardown sweep starts (after the downloads abort, the reindex drain and the thumbnail wait), a new open is refused with a 503. Lock order is container path lock → slot → the `local` tree lock ([STORAGE.md § Mount System](STORAGE.md#mount-system)), and a close-time snapshot try-locks |
 | `lib/core/managed-database.ts` | `markDirty` (crash recovery), `stageCopy` (`VACUUM INTO`), `mustExist` open guard (refuse a missing/0-byte working copy) |
 | `lib/mount/schema.ts` + `db-config.ts` | The `pending_uploads` table (additive migration v4; `isDatabase` in v8) |
 
@@ -155,12 +155,6 @@ temp-copy backend.
 
 ## Residual limitations
 
-- A move/rename on `local` can strand one in-flight sync: `onSync` re-resolves the storage key on every
-  sync but holds no path lock, so a rename landing between that resolution and the write sends that one
-  sync's bytes to the pre-move path (a `createPath: true` zombie tree) and the watermark marks them
-  synced — a tail write stays stranded until the next dirty sync. Accepted: a path lock wouldn't close
-  it (an ancestor rename locks the folder's id, not the data.db's); id-stable `s3`/`local-key` keys are
-  immune.
 - A home that idle-destructs mid-outage leaves queued bytes on local disk until it's next opened (same
   durability as the temp files; a host-disk loss in that window is the Litestream-class residual RPO).
 - The shutdown drain budget is whole-process; a multi-mount home drains its mounts sequentially.
