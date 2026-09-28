@@ -187,8 +187,9 @@ describe('open during close waits for the close to settle', () => {
         managed.db.insert(docSchema.items).values({ id: 2, data: 'dirty' }).run(); // close's final sync writes this
 
         // Park the close's final sync (trashPath → closeCachedDbsUnder → close → onSync →
-        // uploadFromTemp → storage.write) and land an open in the window. Keys resolve under the tree lock, so
-        // the assertion holds whether the open takes it before the trash's rename (its sync resolves the trashed key) or after.
+        // uploadFromTemp → storage.write) and land an open in the window. Keys resolve under the tree
+        // lock, so the assertion holds whether the open takes it before the trash's rename (its sync
+        // resolves the trashed key) or after.
         const writeGate = storage.armWrite();
         const trashPromise = mount.trashPath(containerId);
         await writeGate.parked;

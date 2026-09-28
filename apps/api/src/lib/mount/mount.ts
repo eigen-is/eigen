@@ -21,9 +21,11 @@ import { ApiError, type DatabaseConfig, type ManagedDatabase, PATHS, type Schema
 import { FileHistory } from '../drive/history';
 import { deleteThumbnail } from '../shared/thumbnails';
 import {
+    isMissingObjectCause,
     readStorageFile,
     type StorageBackend,
     type StorageFile,
+    storageGone,
     storageUnavailable,
     writeTempWithHash,
 } from '../storage';
@@ -1026,7 +1028,12 @@ export class Mount {
                 `[Mount] downloadToTemp ${pathId}: tempId ${tempId} is an open document DB — refusing to overwrite its live working copy`,
             );
         }
-        return this.downloadKeyToTemp(await this.getStorageKey(pathId), tempId);
+        const storageKey = await this.getStorageKey(pathId);
+        // Freshest-first, as readKey: a version saved during an outage exists only as its staged copy.
+        const staged = this.pendingStagedCopy(storageKey);
+        if (!staged) return this.downloadKeyToTemp(storageKey, tempId);
+        await this.replaceTempFrom(tempId, Bun.file(staged));
+        return this.getTempPath(tempId);
     }
 
     // internal — used by mount/*.ts
@@ -1042,7 +1049,9 @@ export class Mount {
             size = await this.replaceTempFrom(tempId, this.storage.read(storageKey));
         } catch (err) {
             console.error(`[Mount] download ${storageKey} failed:`, err);
-            // The read's own failures arrive as ApiErrors; a raw one is local (tmp/ write or rename), and its ENOENT must not read as a gone object.
+            // Only the GET body tells a gone object (410) from an outage (503). The read's own failures
+            // arrive as ApiErrors; a raw one is local (tmp/ write or rename), and its ENOENT is not a gone object.
+            if (isMissingObjectCause(err)) throw storageGone(err.cause);
             throw err instanceof ApiError ? err : storageUnavailable();
         }
         const ms = (Bun.nanoseconds() - start) / 1_000_000;

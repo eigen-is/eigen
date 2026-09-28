@@ -4,7 +4,7 @@ import { escapeXml } from '@workspace/lib/html';
 import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
 import { type BunFile, S3Client, type S3File } from 'bun';
 import { ApiError } from '../core';
-import { storageUnavailable, withStorageDeadline } from './deadline';
+import { errnoOf, storageUnavailable, withStorageDeadline } from './deadline';
 import type { S3Config, StorageBackend } from './types';
 
 export async function checkS3Connection(config: S3Config): Promise<S3CheckResult> {
@@ -280,7 +280,7 @@ export class S3Storage implements StorageBackend {
             await withStorageDeadline(this.read(key).delete());
             return true;
         } catch (error) {
-            if (error instanceof Error && 'code' in error && error.code === 'NoSuchBucket') return true;
+            if (errnoOf(error) === 'NoSuchBucket') return true;
             console.error(`Failed to delete S3 file ${key}:`, error);
             return false;
         }
