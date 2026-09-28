@@ -311,6 +311,7 @@ function SheetEditorInner({
                 canWrite={canWrite}
                 offline={offline}
                 storageUnavailable={storageUnavailable}
+                storageGone={storageGone}
                 onAccessDialogOpen={onAccessDialogOpen}
                 onToggleCommentPanel={toggleComments}
                 commentPanelOpen={commentPanelOpen}
@@ -324,6 +325,7 @@ function SheetEditorInner({
             canWrite,
             offline,
             storageUnavailable,
+            storageGone,
             onAccessDialogOpen,
             commentPanelOpen,
             activityPanelOpen,

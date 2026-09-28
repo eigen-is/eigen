@@ -83,6 +83,8 @@ export function CanvasDocumentShell({
                             <CollabLoadingState
                                 storageUnavailable={doc.storageUnavailable}
                                 storageGone={doc.storageGone}
+                                path={path}
+                                canWrite={canWrite}
                             />
                         ) : (
                             <div className="flex h-full w-full overflow-hidden">

@@ -77,6 +77,7 @@ type EditorToolbarProps = {
     canWrite: boolean;
     offline: boolean;
     storageUnavailable: boolean;
+    storageGone: boolean;
     canUndo: boolean;
     canRedo: boolean;
     onAccessDialogOpen: () => void;
@@ -98,6 +99,7 @@ export const EditorToolbar = ({
     canWrite,
     offline,
     storageUnavailable,
+    storageGone,
     canUndo,
     canRedo,
     onAccessDialogOpen,
@@ -685,6 +687,7 @@ export const EditorToolbar = ({
                         canWrite={canWrite}
                         offline={offline}
                         storageUnavailable={storageUnavailable}
+                        storageGone={storageGone}
                         onAccessDialogOpen={onAccessDialogOpen}
                         onToggleCommentPanel={onToggleCommentPanel}
                         commentPanelOpen={commentPanelOpen}

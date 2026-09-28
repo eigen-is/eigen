@@ -26,6 +26,7 @@ type CanvasToolbarProps = {
     canEdit: boolean;
     offline: boolean;
     storageUnavailable: boolean;
+    storageGone?: boolean;
     // Exactly what useYjsUndoState consumes (Y.UndoManager | null) — named via the hook so an app
     // needn't take a direct yjs dependency just to type one prop.
     undoManager: Parameters<typeof useYjsUndoState>[0];
@@ -61,6 +62,7 @@ export function CanvasToolbar({
     canEdit,
     offline,
     storageUnavailable,
+    storageGone = false,
     undoManager,
     tool,
     setTool,
@@ -97,6 +99,7 @@ export function CanvasToolbar({
                             createLabel={createLabel}
                             createIcon={createIcon}
                             createType={createType}
+                            storageGone={storageGone}
                         />
                         {/* Unconditional: EditMenu drops its edit section itself, and its Find entries
                             are the read-only viewer's only menu route to the find bar. */}
@@ -141,6 +144,7 @@ export function CanvasToolbar({
                             canWrite={canWrite}
                             offline={offline}
                             storageUnavailable={storageUnavailable}
+                            storageGone={storageGone}
                             onAccessDialogOpen={onAccessDialogOpen}
                             watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
                             onToggleCommentPanel={onToggleCommentPanel}

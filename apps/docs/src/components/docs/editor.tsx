@@ -248,6 +248,7 @@ export const CollaborativeEditor = ({
                 canWrite={canWrite}
                 offline={offline}
                 storageUnavailable={storageUnavailable}
+                storageGone={storageGone}
                 mediaFolderId={mediaFolderId}
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={onAccessDialogOpen}
@@ -265,6 +266,7 @@ const TiptapEditor = ({
     canWrite,
     offline,
     storageUnavailable,
+    storageGone,
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
@@ -277,6 +279,7 @@ const TiptapEditor = ({
     canWrite: boolean;
     offline: boolean;
     storageUnavailable: boolean;
+    storageGone: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
@@ -900,6 +903,7 @@ const TiptapEditor = ({
                                     canWrite={canWrite}
                                     offline={offline}
                                     storageUnavailable={storageUnavailable}
+                                    storageGone={storageGone}
                                     canUndo={canUndo}
                                     canRedo={canRedo}
                                     onAccessDialogOpen={onAccessDialogOpen}

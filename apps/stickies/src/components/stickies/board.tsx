@@ -352,6 +352,7 @@ export function StickiesBoard({
                                     canWrite={canWrite}
                                     offline={offline}
                                     storageUnavailable={storageUnavailable}
+                                    storageGone={storageGone}
                                     undoManager={undoManager}
                                     onAccessDialogOpen={onAccessDialogOpen}
                                     onAddColumn={() => setIsAddColumnDialogOpen(true)}
