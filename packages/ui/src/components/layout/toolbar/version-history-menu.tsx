@@ -3,6 +3,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { useRestoreVersion, useSaveVersion, useVersions } from '@workspace/lib/versioning';
 import { History, Save } from 'lucide-react';
+import { useState } from 'react';
+import { Button } from '../../button';
 import { ConfirmDialog } from '../../confirm-dialog';
 import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../../dropdown-menu';
 
@@ -59,7 +61,7 @@ export function RestoreVersionDialog({
     path: DrivePath;
     snapshot: Snapshot | null;
     // The document's stored data is missing: there is no current state to save first, and nothing loaded to update.
-    storageGone?: boolean;
+    storageGone: boolean;
     onClose: () => void;
 }) {
     const restore = useRestoreVersion(path.ownerId, path.mountId, path.id);
@@ -86,5 +88,37 @@ export function RestoreVersionDialog({
                 if (storageGone) window.location.reload();
             }}
         />
+    );
+}
+
+// VersionHistoryMenu's rows as plain buttons, for the gone screen outside any dropdown.
+export function StorageGoneVersions({ path }: { path: DrivePath }) {
+    const { data } = useVersions(path.ownerId, path.mountId, path.id);
+    const [pendingSnapshot, setPendingSnapshot] = useState<Snapshot | null>(null);
+
+    if (!data || data.length === 0) return null;
+
+    return (
+        <>
+            <div className="mt-2 flex max-h-64 min-w-[240px] flex-col overflow-y-auto">
+                {data.map((snap) => (
+                    <Button
+                        key={snap.id}
+                        variant="ghost"
+                        className="justify-between gap-4"
+                        onClick={() => setPendingSnapshot(snap)}
+                    >
+                        <span>{formatDateTime(snap.createdAt)}</span>
+                        <span className="text-xs text-muted-foreground">Restore</span>
+                    </Button>
+                ))}
+            </div>
+            <RestoreVersionDialog
+                path={path}
+                snapshot={pendingSnapshot}
+                storageGone
+                onClose={() => setPendingSnapshot(null)}
+            />
+        </>
     );
 }

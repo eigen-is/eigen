@@ -65,7 +65,7 @@ connecting…" so you know it has not given up.
 
 **What it means:** the server reached your storage, but the document's saved data is not there. Instead of the editor, you see "The stored data for this document could not be found." Waiting will not bring it back, so Eigen stops trying.
 
-If the document was already open, it stays on screen, but the red wifi icon says "The stored data for this document could not be found. Edits cannot be saved." Reload the page to get the message above.
+If the document was already open, it stays on screen, but clicking the red wifi icon says "The stored data for this document could not be found. Edits cannot be saved." Reload the page to get the message above.
 
 **What to do:** restore a saved version. In a file you can edit, the versions are listed under the message: click one, then **Restore**, and the page reloads onto it. If there is no version to go back to, ask whoever runs your Eigen to restore a backup.
 
