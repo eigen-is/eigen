@@ -41,6 +41,7 @@ const FULL_MOUNT_ID = 'backup-s3-full';
 const STALLED_MOUNT_ID = 'backup-s3-stalled';
 const FAILING_MOUNT_ID = 'backup-s3-failing';
 const FAILING_CONTAINER_MOUNT_ID = 'backup-s3-failing-container';
+const NO_BUCKET_MOUNT_ID = 'backup-s3-no-bucket';
 const RACING_DELETE_MOUNT_ID = 'backup-s3-racing-delete';
 const VANISHING_OBJECT_MOUNT_ID = 'backup-s3-vanishing-object';
 const LOCAL_MOUNT_ID = 'backup-local';
@@ -348,6 +349,21 @@ describe('Backup freshest-first on an s3 mount', () => {
             fake.faults.set(storageKey, 'fail-get');
             await expect(snapshot()).rejects.toThrow(
                 `mount ${FAILING_CONTAINER_MOUNT_ID}: storage unreachable (InternalError) reading ${storageKey}`,
+            );
+        });
+    });
+
+    // A HEAD answers a missing bucket as it answers a missing key; only the GET body tells them apart.
+    test('a container database whose bucket answers NoSuchBucket fails as unreachable, not as lost', async () => {
+        await withFakeS3Mount(NO_BUCKET_MOUNT_ID, async (mount, fake) => {
+            const { containerId, dataDbId } = await provisionDoc(mount);
+            const managed = await mount.createDatabase(docConfig, dataDbId);
+            managed.db.insert(docSchema.items).values({ id: 1, data: 'stored' }).run();
+            await settleContainer(mount, containerId);
+            const storageKey = await mount.getStorageKey(dataDbId);
+            fake.faults.set(storageKey, 'no-bucket');
+            await expect(snapshot()).rejects.toThrow(
+                `mount ${NO_BUCKET_MOUNT_ID}: storage unreachable (NoSuchBucket) reading ${storageKey}`,
             );
         });
     });

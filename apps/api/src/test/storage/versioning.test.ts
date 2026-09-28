@@ -439,6 +439,29 @@ describe('versions HTTP routes', () => {
         expect(restored).not.toContain('V2');
     });
 
+    test('doc: a document whose data.db file is gone answers 410 and a restore brings the version back', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const { getHome } = await import('../../lib/home');
+        const drive = (await getHome(ownerId)).drive;
+
+        const docPath = await drive.create(aliceMountId, aliceRootId, 'versions-gone', 'doc');
+        const collab = await drive.getCollabDocument(aliceMountId, docPath.id);
+        collab.doc.getMap('probe').set('kept', 'v1');
+        const saved = await saveVersion(token, ownerId, aliceMountId, docPath.id);
+        await drive.closeCollabDocument(aliceMountId, docPath.id);
+
+        const { mount } = await drive.resolveFile(aliceMountId, docPath.id);
+        const dataDb = await mount.getChildByName(docPath.id, 'data.db');
+        await mount.storage.delete(await mount.getStorageKey(dataDb!.id));
+        await expect(drive.getCollabDocument(aliceMountId, docPath.id)).rejects.toMatchObject({ status: 410 });
+
+        await restoreVersion(token, ownerId, aliceMountId, docPath.id, saved.name);
+        const reopened = await drive.getCollabDocument(aliceMountId, docPath.id);
+        expect(reopened.doc.getMap('probe').get('kept')).toBe('v1');
+        await drive.closeCollabDocument(aliceMountId, docPath.id);
+    });
+
     test('chat: restore survives the close-time snapshot fire during evict', async () => {
         // Regression: a chat restore overwrites data.db's bytes from the snapshot.
         // replaceContainerDataDb closes the live db with skipFinalSnapshot — without

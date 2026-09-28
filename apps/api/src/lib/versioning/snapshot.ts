@@ -9,7 +9,7 @@ import { isViableRecoveryTemp } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { markContainerContentDirty } from '../mount/search-index';
-import { writeTempWithHash } from '../storage';
+import { isMissingObjectCause, storageGone, writeTempWithHash } from '../storage';
 import { getShutdownDrainDeadline } from '../sync';
 import { type RetentionPolicy, selectSnapshotsToPrune } from './retention';
 import { formatSnapshotTimestamp } from './timestamp';
@@ -122,9 +122,7 @@ async function snapshotDataDbToVersionStaged(
             throw error;
         },
     );
-    if (!staged) {
-        throw new ApiError(503, `Cannot snapshot ${dataDb.id}: its stored object is not available`);
-    }
+    if (!staged) throw storageGone();
     const versionPathId = await mount.touchFile(versionsId, snapshotName, dataDb.mimeType);
     const versionKey = await mount.getStorageKey(versionPathId);
     const size = fs.statSync(versionStaging).size;
@@ -193,9 +191,15 @@ export async function stageManagedDbCopy(
         cached.stageCopy(destPath);
         return true;
     }
-    if (!(await mount.storage.exists(storageKey))) return false;
-    await writeTempWithHash(destPath, mount.storage.read(storageKey));
-    return true;
+    // A GET, not a HEAD: a HEAD answers a missing bucket as a missing key, and false here is terminal.
+    try {
+        await writeTempWithHash(destPath, mount.storage.read(storageKey));
+        return true;
+    } catch (error) {
+        if (!isMissingObjectCause(error)) throw error;
+        fs.rmSync(destPath, { force: true });
+        return false;
+    }
 }
 
 // Replaces the container's data.db with the file at `sourcePath` — a snapshot the
