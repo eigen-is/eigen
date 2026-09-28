@@ -41,7 +41,7 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
             </PopoverTrigger>
             <PopoverContent align="end" className="w-auto text-sm">
                 {props.storageGone
-                    ? 'The stored data for this document is gone. Edits cannot be saved.'
+                    ? 'The stored data for this document could not be found. Edits cannot be saved.'
                     : props.storageUnavailable
                       ? 'Storage is temporarily unavailable, retrying. Edits will sync when it is back.'
                       : 'Offline, will sync when back online'}

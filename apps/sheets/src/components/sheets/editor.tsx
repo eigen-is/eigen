@@ -301,8 +301,15 @@ function SheetEditorInner({
     );
 
     const leftItems = useMemo(
-        () => <ToolbarLeftItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} />,
-        [path, canWrite, onAccessDialogOpen],
+        () => (
+            <ToolbarLeftItems
+                path={path}
+                canWrite={canWrite}
+                onAccessDialogOpen={onAccessDialogOpen}
+                storageGone={storageGone}
+            />
+        ),
+        [path, canWrite, onAccessDialogOpen, storageGone],
     );
 
     const rightItems = useMemo(

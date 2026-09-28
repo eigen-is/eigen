@@ -17,7 +17,7 @@ type CollabLoadingStateProps = {
     storageUnavailable: boolean;
     // From useCollabDoc — the WS closed with the storage-gone code and stopped.
     storageGone?: boolean;
-    // Hosts whose File menu is not up before load pass these, so the gone state offers version history itself.
+    // Every host passes these, so a writer gets version history on the gone screen.
     path?: DrivePath;
     canWrite?: boolean;
 };

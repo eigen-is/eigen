@@ -184,6 +184,7 @@ export const EditorToolbar = ({
                             importLabel="Import docx file…"
                             createLabel="New doc"
                             createType="doc"
+                            storageGone={storageGone}
                         >
                             <DropdownMenuItem onClick={printDocument}>
                                 <Printer className="h-4 w-4 mr-2" /> Print

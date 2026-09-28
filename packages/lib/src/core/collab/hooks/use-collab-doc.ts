@@ -70,6 +70,7 @@ export type CollabDoc = {
     // The server closed with COLLAB_STORAGE_GONE_CLOSE: the stored data is missing, so the hook stopped reconnecting.
     storageGone: boolean;
     // Edits may not have reached the server; render `<UnsyncedEditsGuard active>` so leaving warns first.
+    // False once storage is gone: those edits can never be saved, and a restore's reload must not meet the prompt.
     unsyncedEdits: boolean;
 };
 
@@ -247,6 +248,6 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         loaded,
         storageUnavailable,
         storageGone,
-        unsyncedEdits,
+        unsyncedEdits: unsyncedEdits && !storageGone,
     };
 }

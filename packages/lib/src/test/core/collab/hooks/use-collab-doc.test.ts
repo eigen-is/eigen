@@ -70,6 +70,7 @@ class FakeProvider {
     }
     connect() {
         this.connects++;
+        this.disconnected = false;
     }
 
     open() {
@@ -307,6 +308,7 @@ describe('useCollabDoc connection state', () => {
         });
         act(() => void jest.advanceTimersByTime(STORAGE_RETRY_PASSED_MS));
         expect(h.provider.connects).toBe(1);
+        expect(h.provider.disconnected).toBe(true);
         expect(h.state.storageGone).toBe(true);
         expect(h.state.storageUnavailable).toBe(false);
         expect(h.state.loaded).toBe(false);
@@ -325,6 +327,11 @@ describe('useCollabDoc connection state', () => {
         expect(h.state.loaded).toBe(true);
         expect(h.state.storageGone).toBe(true);
         expect(h.state.offline).toBe(false);
+
+        // Those edits can never be saved, so the leave guard stays down for a restore's reload.
+        const doc = h.doc;
+        act(() => doc.getMap('items').set('b', 2));
+        expect(h.state.unsyncedEdits).toBe(false);
     });
 
     test('a home replaced by a restore reloads the page instead of syncing back', () => {

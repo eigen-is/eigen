@@ -64,6 +64,7 @@ export function Toolbar({
                         createLabel="New stickies"
                         createIcon={SquareKanban}
                         createType="stickies"
+                        storageGone={storageGone}
                     />
                     <EditMenu canEdit={canWrite} canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo} />
                     {canWrite && (
