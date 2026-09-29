@@ -316,13 +316,7 @@ export function StickiesBoard({
 
     // Latched: a WS blip keeps the board mounted; `isSynced` still gates presence + seeding. See useCollabDoc.
     return (
-        <CollabDocumentGate
-            loaded={loaded}
-            storageUnavailable={storageUnavailable}
-            storageGone={storageGone}
-            path={path}
-            canWrite={canWrite}
-        >
+        <CollabDocumentGate collab={{ loaded, storageUnavailable, storageGone }} path={path} canWrite={canWrite}>
             <MediaResolverProvider
                 ownerId={ownerId}
                 mountId={path.mountId}

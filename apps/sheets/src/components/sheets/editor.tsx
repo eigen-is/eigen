@@ -335,18 +335,10 @@ function SheetEditorInner({
         ],
     );
 
-    // Gate on the LATCHED loaded flag, not `synced`: the shared useCollabDoc flips `synced` false on a
-    // WS blip and true on reconnect, and unmounting the Workbook there would drop the engine undo stack
-    // and any in-progress cell edit. The mounted workbook catches up via the op-log observer (and a
-    // remote snapshot flush remounts through snapshotVersion).
+    // A WS blip keeps the Workbook mounted; it catches up via the op-log observer, and a remote
+    // snapshot flush remounts through snapshotVersion.
     return (
-        <CollabDocumentGate
-            loaded={loaded}
-            storageUnavailable={storageUnavailable}
-            storageGone={storageGone}
-            path={path}
-            canWrite={canWrite}
-        >
+        <CollabDocumentGate collab={{ loaded, storageUnavailable, storageGone }} path={path} canWrite={canWrite}>
             <UnsyncedEditsGuard active={unsyncedEdits} />
             {mediaFolderId && (
                 <DrivePickerWithUpload

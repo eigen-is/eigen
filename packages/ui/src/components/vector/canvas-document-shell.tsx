@@ -65,13 +65,7 @@ export function CanvasDocumentShell({
 
     return (
         // Latched: a WS blip keeps the canvas mounted; `doc.synced` still gates presence.
-        <CollabDocumentGate
-            loaded={doc.loaded}
-            storageUnavailable={doc.storageUnavailable}
-            storageGone={doc.storageGone}
-            path={path}
-            canWrite={canWrite}
-        >
+        <CollabDocumentGate collab={doc} path={path} canWrite={canWrite}>
             <ColumnLayout>
                 <UnsyncedEditsGuard active={doc.unsyncedEdits} />
                 {/* The pane hides the canvas on mobile (a Column sibling below); keep the canvas mounted
