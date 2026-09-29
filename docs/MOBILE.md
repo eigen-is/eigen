@@ -112,7 +112,7 @@ Contracts for the shipped pane live in [COMMENTS.md](COMMENTS.md) (panel hosting
   (reproducer set, still on the dev server), pixel verdicts + behavioral probes (tap, long-press,
   scroll, reload-persistence). `hOverflow`-style page probes report 0 on the worst bugs
   (portalled layers / `overflow:hidden` clip without widening the page) — pixel review is
-  mandatory. Full recipe: [VERIFICATION.md](VERIFICATION.md). Long-press needs real CDP touch
+  mandatory. Full recipe: the [verify-in-browser skill](../.claude/skills/verify-in-browser/SKILL.md). Long-press needs real CDP touch
   synthesis; account passwords + fresh-cookie recipe live in the phase1-verify helper header.
 - Same-cycle doc updates: LAYOUT.md prose when layout APIs change (`bun run primitives` regenerates the component index), and this file per phase.
 
