@@ -34,7 +34,7 @@
     "primitives:check": "bun scripts/generate-shared-primitives.ts --check",
     "standards": "bun scripts/check-standards.ts",
     "standards:update": "bun scripts/check-standards.ts --update",
-    "check": "bun run lint && bun run typecheck && bun scripts/check-home-imports.ts && bun scripts/check-test-layout.ts && bun scripts/check-docs-links.ts && bun run standards && bun run primitives:check && bun run test"
+    "check": "bun dedupe --check && bun run lint && bun run typecheck && bun scripts/check-home-imports.ts && bun scripts/check-test-layout.ts && bun scripts/check-docs-links.ts && bun run standards && bun run primitives:check && bun run test"
   },
   "workspaces": [
     "packages/*",

@@ -24,6 +24,9 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      - name: One version per package
+        run: bun dedupe --check
+
       - name: Lint
         run: bun run lint
 
