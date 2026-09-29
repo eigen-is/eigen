@@ -18,7 +18,7 @@
 | **Storage backends**  | `apps/api/src/lib/storage/`                  | Two classes — `LocalStorage` (serves both `local` + `local-key` modes) and `S3Storage`; `deadline.ts` bounds every metadata call and every storage read the server consumes itself; served files (`/download` and `/embed` in `lib/drive/serve-file.ts`, WebDAV GET in `lib/webdav/resource.ts`) stream unbounded |
 | **Errors**            | `apps/api/src/lib/core/errors.ts`            | `throw new ApiError(status, message)`                                                                      |
 | **SSE emission**      | `apps/api/src/lib/[domain]/sse-events.ts`    | `home.broadcast(buildEvent(...))`                                                                          |
-| **Notifications**     | `apps/api/src/lib/notification-center/`      | `home.notifications.persist({...})` — per-user SQLite, broadcasts SSE. See [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md) + [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md) |
+| **Notifications**     | `apps/api/src/lib/notification-center/`      | `home.notifications.persist({...})` — per-user SQLite, broadcasts `notification:created`, which the frontend shows as a toast. See [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md) + [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md) |
 | **Auth**              | `apps/api/src/lib/auth/auth.ts`              | better-auth with org/team/2FA/API key plugins. `users3.db` has no migration system: a new auth column goes in `auth-schema.ts`, the `setup.ts` DDL and `ensureAuthSchemaColumns` (boot-time ALTER for existing installs) together — better-auth refuses to start on a Drizzle schema that misses a plugin field |
 | **Protocol auth**     | `apps/api/src/lib/auth/protocol-auth.ts`     | `verifyProtocolAuth()` — shared IMAP/CalDAV/CardDAV/WebDAV auth (app password → primary password fallback)         |
 | **WebDAV**            | `apps/api/src/lib/webdav/`                   | RFC 4918 Class 1+2 server at `/webdav/:ownerId/:mountId/*`; mirrors the CalDAV layer. See [WEBDAV.md](WEBDAV.md) |
@@ -60,13 +60,26 @@ Route (thin handler)  →  SharedDrive (ACL wrapper)  →  Drive (business logic
 - **SharedDrive** (`apps/api/src/lib/drive/sharedDrive.ts`): ACL-enforcing wrapper, composition over inheritance — does NOT extend Drive. `getSharedDrive()` returns `Drive | SharedDrive`; routes can only call methods present on both, so adding a public method to `Drive` without a matching `SharedDrive` wrapper is a TS error at the callsite. Own-drive routes get raw Drive (no ACL overhead); cross-owner routes get SharedDrive (ACL-checked). **Escape hatch**: a small number of routes (`/shared/by-me`, `/shared/with-me`) need owner-only Drive methods that have no meaningful ACL semantics. They `requireSelf(params.ownerId, user.id)` first and then call `getDrive(user)` to obtain raw Drive — bypassing the SharedDrive surface. The drive.ts class doc explains which methods are non-route-callable (annotated `// Called by:` — invoked by peer lib code like collab/chat/home-relay, not from routes). If you add a route that needs one of those, add a SharedDrive wrapper first, don't reach for the escape hatch
 - **Routes** (`apps/api/src/routes/drive.ts`): Thin Elysia handlers that delegate via `getSharedDrive`
 
+### Eigen file types
+
+Every Eigen document is a Drive folder with its own `data.db` and `media/`. The MIME strings are the `DRIVE_MIME_*` constants in `packages/lib/src/types/drive.ts`; never type one by hand (gated).
+
+| Type | MIME | Extension | Storage |
+|---|---|---|---|
+| Document | `application/eigendoc` | `.eigendoc` | `data.db` (Yjs) + `comments.db` + `media/` |
+| Stickies | `application/eigenstickies` | `.eigenstickies` | `data.db` (Yjs) + `comments.db` + `media/` |
+| Chat | `application/eigenchat` | `.eigenchat` | `data.db` + `media/` |
+| Slides | `application/eigenslides` | `.eigenslides` | `data.db` (Yjs) + `comments.db` + `media/` |
+| Sheets | `application/eigensheets` | `.eigensheets` | `data.db` (Yjs) + `comments.db` + `media/` |
+| Vector | `application/eigenvector` | `.eigenvector` | `data.db` (Yjs) + `comments.db` + `media/` |
+
 ## Frontend
 
 | Concept            | Location                                              | Pattern                                                    |
 |--------------------|-------------------------------------------------------|------------------------------------------------------------|
 | **API client**     | `packages/lib/src/core/api.ts`                        | Eden Treaty — type-safe from Elysia definitions            |
 | **Data hooks**     | `packages/lib/src/core/[domain]/hooks/`               | TanStack Query with hierarchical query keys                |
-| **SSE handlers**   | `packages/lib/src/core/[domain]/sse-handlers.ts`      | Invalidate query cache on events                           |
+| **SSE handlers**   | `packages/lib/src/core/[domain]/sse-handlers.ts`      | `useSSE` hands each event to its domain handler, which invalidates the query cache. See [SSE.md](SSE.md) |
 | **Shared types**   | `packages/lib/src/types/[domain].ts`                  | Used by both FE and BE                                     |
 | **Validation**     | `packages/lib/src/validation/`                        | Shared FE/BE validation                                    |
 | **Colors**         | `packages/lib/src/constants/colors.ts`                | `EIGEN_COLORS`, `EIGEN_ACCENT_COLORS`                      |
@@ -81,6 +94,7 @@ Route (thin handler)  →  SharedDrive (ACL wrapper)  →  Drive (business logic
 | **Collab lifecycle** | `packages/lib/src/core/collab/hooks/use-collab-doc.ts` | `useCollabDoc` owns the Y.Doc + provider + UndoManager for every collab editor — **gate the loading screen on `loaded`, never `synced`**. It reconnects with the server's data epoch and reloads the page on `COLLAB_HOME_REPLACED_CLOSE`, after the commit that disarms `UnsyncedEditsGuard`. See [CANVAS.md](CANVAS.md) + [COLLAB.md](COLLAB.md) |
 | **Canvas engine** | `packages/lib/src/vector/` + `packages/ui/src/components/vector/` | One engine for free-canvas documents: React-free element model + kind registry in lib, `CanvasEditor` the host in ui. See [CANVAS.md](CANVAS.md) |
 | **Canvas editors** | `apps/vector/` + `apps/slides/` | One engine, two apps: `CanvasEditor` on the infinite canvas (drawings) and in frame mode (a deck of slides). See [CANVAS.md](CANVAS.md) + [SLIDES.md](SLIDES.md) |
+| **Everyday UI**    | `@workspace/ui` root barrel                           | Check these before building custom UI: `TooltipButton`, `DeleteDialog`, `ConfirmDialog`, `EmptyState`/`LoadingState`/`ErrorState`, `SearchBar`, `FileMenu`, `RequestAccessView` (the "request access" screen for a shared resource). Everything else: [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md) |
 | **App shell**      | `packages/ui/src/components/layout/app/app-shell.tsx` | Wraps every app (Topbar + sidebar + content)               |
 | **Provider stack** | `packages/ui/src/components/layout/app/eigen-app.tsx` | Auth → SSE → Upload → Preview → CommandPalette → Toaster   |
 | **Layout**         | `packages/ui/src/components/layout/app/column-layout.tsx` | `ColumnLayout` + `Column` with responsive mobile switching |
@@ -132,10 +146,10 @@ These patterns have caused bugs across multiple domains. The gated ones (MIME st
 
 - **Query keys must include `ownerId`** for any owner-scoped data. Without it, switching between personal and team contexts serves stale cached data from the wrong owner
 - **Add a `SharedDrive` wrapper for every route-callable `Drive` method**, with the appropriate permission check (`withReadPermission`, `withWritePermission`, or owner check) — see [§ Drive Architecture](#drive-architecture)
-- **MIME type strings** — the rule is one line in [AGENTS.md § Pitfalls](../AGENTS.md#pitfalls) (gated), and the table it matches is [AGENTS.md § Eigen File Types](../AGENTS.md#eigen-file-types)
+- **MIME type strings**: [§ Eigen file types](#eigen-file-types) (gated)
 - **`validateSearch` in shared routes must extract all URL params the route uses** — missing params (like `uid`) silently break detail panes for shared items
 - **Never mutate TanStack Query cache directly** — use `queryClient.setQueryData()` or `invalidateQueries()`, not direct object mutation on cached data
 - **No `"use client"` directives** — this is a Vite project, not Next.js. The directive is a no-op
-- **Every authenticated route must include `:ownerId` as the second path segment** — `ownerId` identifies the Home that owns the resource. For personal data it equals `user.id`; for team data it's `team_{teamId}`. This consistent prefix enables future load-balancer sharding by ownerId (all requests for one Home on the same server). Routes must validate that the caller has access to the specified ownerId (owns it or is a team member). Gated, carve-outs included: server-wide endpoints that don't operate on a Home (setup, server-wide admin config, public surfaces, admin backup) must NOT carry `:ownerId` — they're protected by `requireAdmin(user.id)` or their own gate, not by Home ownership. The exempt list lives in `OWNER_ID_EXEMPT` in `scripts/check-standards.ts`
+- **Every authenticated route must include `:ownerId` as the second path segment** — `ownerId` identifies the Home that owns the resource. For personal data it equals `user.id` (a raw UUID); for team data it's `team_{teamId}`; `parseOwnerId()` in `packages/lib/src/types/owner.ts` resolves one, and external iMIP organizers take the same shape as `external_{email}` ([CALENDAR.md § iMIP](CALENDAR.md#imip-email-based-calendar-invitations)). This consistent prefix enables future load-balancer sharding by ownerId (all requests for one Home on the same server). Routes must validate that the caller has access to the specified ownerId (owns it or is a team member). Gated, carve-outs included: server-wide endpoints that don't operate on a Home (setup, server-wide admin config, public surfaces, admin backup) must NOT carry `:ownerId` — they're protected by `requireAdmin(user.id)` or their own gate, not by Home ownership. The exempt list lives in `OWNER_ID_EXEMPT` in `scripts/check-standards.ts`
 - **Never call `getHome()` for another user's data** — all cross-home interactions (where one user's action touches another user's Home) must go through the relay in `home-relay.ts`: `sendToHome()` for push, `pull*()` for reads. `getHome()` is fine for the current request's own home. This is the sharding seam — only `home-relay.ts` changes when homes move to different servers. See [SCALABILITY.md](SCALABILITY.md)
 - **Use `ColumnLayout` + `Column` with the `toolbar` prop for page layout** — don't put the toolbar inside the page content. See [LAYOUT.md § Page Layout Pattern](LAYOUT.md#page-layout-pattern)

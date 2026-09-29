@@ -136,7 +136,7 @@ Typing `1/2/2026`, `31/12/2025` or `5 Jan 2026` into a cell keeps it as text; on
 
 ### Q12 — Who opens an exported spreadsheet in real Excel, and when?
 
-An agent can't do this; it needs a person with Excel or Google Sheets. It's a documented [VERIFICATION.md](VERIFICATION.md) obligation, owed since 2026-08-05. The rule exists because exceljs already burned us once — it wrote internal hyperlinks our own importer accepted and Google Sheets rejected. Either someone spends twenty minutes on it, or we consciously drop the rule for xlsx.
+An agent can't do this; it needs a person with Excel or Google Sheets. It's a documented [verify-in-browser](../.claude/skills/verify-in-browser/SKILL.md) obligation, owed since 2026-08-05. The rule exists because exceljs already burned us once — it wrote internal hyperlinks our own importer accepted and Google Sheets rejected. Either someone spends twenty minutes on it, or we consciously drop the rule for xlsx.
 
 ## Bugs
 

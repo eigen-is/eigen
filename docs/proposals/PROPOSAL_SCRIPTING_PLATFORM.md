@@ -344,7 +344,7 @@ Contracts, not runner mocks.
 | Collaboration | two connected editors; a concurrent edit gives `CONFLICT` or the documented merge; delete-only updates move the revision; formulas and frame bindings survive; reload proves persistence |
 | UI | selection, document or account switch while running; panel close and reopen; permission loss; duplicate and lost SSE; reconnect and polling; reload without replay; no double application |
 
-Real Deno permission and protocol probes run against the pinned release on the supported dev and production platforms. Load measurements cover startup latency, API responsiveness, total RSS and disk; a heap test proves nothing about the machine. Plus `bun run check` and browser verification of authoring, live edits and stale results ([VERIFICATION.md](../VERIFICATION.md)).
+Real Deno permission and protocol probes run against the pinned release on the supported dev and production platforms. Load measurements cover startup latency, API responsiveness, total RSS and disk; a heap test proves nothing about the machine. Plus `bun run check` and browser verification of authoring, live edits and stale results ([the verify-in-browser skill](../../.claude/skills/verify-in-browser/SKILL.md)).
 
 ## Open questions
 

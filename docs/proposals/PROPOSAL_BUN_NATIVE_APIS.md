@@ -32,7 +32,7 @@ The 1.4 release post also says Bun is now written in Rust and that 1.4 is the fi
 - **`Bun.Image` in place of `sharp` + `heic-convert`** (`apps/api/src/lib/shared/thumbnail-worker.ts`). HEIC, AVIF and TIFF decode only on macOS and Windows, and production runs Linux, so `heic-convert` stays regardless. The API landed in 1.3.14 and is young. Dropping sharp's native dependency is attractive; it needs a spike first that runs our thumbnail fixtures through `Bun.Image` inside the `oven/bun` image.
 - **`Bun.Archive` for backups.** [BACKUP.md](../BACKUP.md) rules it out: it buffers the whole archive in memory and mangles non-ASCII names, so `apps/api/src/lib/backup/archive.ts` keeps its streaming tar over `node:zlib` zstd. Those findings were measured on 1.3.14. The buffering is a design choice, so re-checking the name bug on 1.4.2 would not change the decision.
 - **`HTMLRewriter` in place of `jsdom`.** It only does streaming rewrites; the vector export (`apps/api/src/lib/export/vector/transform.ts`) and the docx import (`apps/api/src/lib/import/doc/from-docx.ts`) need a DOM.
-- **`Bun.WebView` in place of Playwright** for [VERIFICATION.md](../VERIFICATION.md). On Linux it drives an installed Chrome anyway, and Playwright's multi-context API is what the E2E collab suite needs.
+- **`Bun.WebView` in place of Playwright** for [the verify-in-browser skill](../../.claude/skills/verify-in-browser/SKILL.md). On Linux it drives an installed Chrome anyway, and Playwright's multi-context API is what the E2E collab suite needs.
 
 ## No Bun equivalent
 
