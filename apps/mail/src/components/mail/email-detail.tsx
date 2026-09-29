@@ -96,7 +96,7 @@ export function EmailDetailToolbar({
 }
 
 type EmailDetailProps = {
-    email: Email | null;
+    email: Email;
     toggleMailRead: (mail: Email, isRead: boolean) => void;
     highlightTerm?: string;
 };
@@ -110,19 +110,11 @@ export function EmailDetail({ email, toggleMailRead, highlightTerm }: EmailDetai
     });
 
     useEffect(() => {
-        if (email && !email.isRead && hasMarkedAsRead.current !== email.id) {
+        if (!email.isRead && hasMarkedAsRead.current !== email.id) {
             hasMarkedAsRead.current = email.id;
             markRead(email);
         }
     }, [email]);
-
-    if (!email) {
-        return (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-                Email data not available
-            </div>
-        );
-    }
 
     return (
         <div className="flex flex-col h-full bg-background">

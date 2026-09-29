@@ -8,7 +8,8 @@ import { useSpaceSettings } from '@workspace/lib/space';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Email } from '@workspace/lib/types/mail';
 import { isEmailDraft } from '@workspace/lib/types/mail';
-import { Column, ColumnLayout, DeleteDialog, EmptyState, useLayout } from '@workspace/ui';
+import { Column, ColumnLayout, DeleteDialog, useLayout } from '@workspace/ui';
+import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmailDetail, EmailDetailToolbar } from '../components/mail/email-detail';
 import { EmailDraft, EmailDraftToolbar } from '../components/mail/email-draft';
@@ -285,7 +286,7 @@ function MailRoute() {
     const [preparingSend, setPreparingSend] = useState(false);
     const isSending = actions.isSendPending || preparingSend;
     const listWidth = isTablet ? '320px' : '400px';
-    const showDetail = !!(selectedEmail || mode === 'compose');
+    const showDetail = !!mailId || mode === 'compose';
     const isDraft = mode === 'compose' || selectedEmail?.isDraft;
 
     const listToolbar = (
@@ -341,8 +342,8 @@ function MailRoute() {
             {/* display:contents, so the ref hangs on a real node without changing the layout. */}
             <div ref={mailSurfaceRef} className="contents">
                 <ColumnLayout mobileColumn={showDetail ? 'detail' : 'list'}>
-                    <Column id="list" width={listWidth} onBack="sidebar" toolbar={listToolbar}>
-                        <div className="flex flex-col border-r h-full overflow-hidden">
+                    <Column id="list" width={showDetail ? listWidth : 'flex'} onBack="sidebar" toolbar={listToolbar}>
+                        <div className={cn('flex flex-col h-full overflow-hidden', showDetail && 'border-r')}>
                             <EmailList
                                 // View identity: on a mailbox switch OR any change to the search text,
                                 // EmailList resets the virtualizer to the top. Folding the query in (not just
@@ -379,9 +380,9 @@ function MailRoute() {
                         </div>
                     </Column>
                     {/* Leaving compose is safe: EmailDraft saves the draft on unmount. */}
-                    <Column id="detail" width="flex" onBack={actions.navigateToList} toolbar={detailToolbar}>
-                        {showDetail ? (
-                            isDraft ? (
+                    {showDetail && (
+                        <Column id="detail" width="flex" onBack={actions.navigateToList} toolbar={detailToolbar}>
+                            {isDraft ? (
                                 <EmailDraft
                                     // Identity key: within one compose session (mode='compose' +
                                     // same composeSessionKey), the composer stays mounted across
@@ -408,17 +409,15 @@ function MailRoute() {
                                     filePickerOpen={filePickerOpen}
                                     onFilePickerOpenChange={setFilePickerOpen}
                                 />
-                            ) : (
+                            ) : selectedEmail ? (
                                 <EmailDetail
                                     email={selectedEmail}
                                     toggleMailRead={actions.handleToggleMailRead}
                                     highlightTerm={q}
                                 />
-                            )
-                        ) : (
-                            <EmptyState message="Select an email to view details" />
-                        )}
-                    </Column>
+                            ) : null}
+                        </Column>
+                    )}
                 </ColumnLayout>
             </div>
         </>
