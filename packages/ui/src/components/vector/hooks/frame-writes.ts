@@ -42,11 +42,11 @@ function frameOrder(framesMap: Y.Map<unknown>): { id: string; index: string }[] 
 }
 
 // The key that lands a frame directly after `afterId` — at the front for null, at the end when it is
-// undefined or unknown. `excludeId` drops the frame being moved from the order it is placed into.
-function keyAfter(framesMap: Y.Map<unknown>, afterId?: string | null, excludeId?: string): string {
+// unknown. `excludeId` drops the frame being moved from the order it is placed into.
+function keyAfter(framesMap: Y.Map<unknown>, afterId: string | null, excludeId?: string): string {
     const order = frameOrder(framesMap).filter((f) => f.id !== excludeId);
     if (afterId === null) return generateKeyBetween(null, order[0]?.index ?? null);
-    const at = afterId === undefined ? -1 : order.findIndex((f) => f.id === afterId);
+    const at = order.findIndex((f) => f.id === afterId);
     if (at === -1) return generateKeyBetween(order[order.length - 1]?.index ?? null, null);
     return generateKeyBetween(order[at].index, order[at + 1]?.index ?? null);
 }
@@ -68,7 +68,7 @@ export function writeFrameInDoc(doc: Y.Doc, frame: Partial<VectorFrame> & { id: 
     doc.transact(() => writeFrame(doc.getMap('frames'), frame));
 }
 
-export function addFrameInDoc(doc: Y.Doc, afterId?: string): string {
+export function addFrameInDoc(doc: Y.Doc, afterId: string | null): string {
     const id = newFrameId();
     doc.transact(() => {
         const framesMap = doc.getMap('frames');

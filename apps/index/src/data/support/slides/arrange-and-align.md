@@ -6,7 +6,7 @@ category: Editing
 tags: [slides, selection, align, arrange, layers]
 related: [slides/create-and-edit, slides/draw-shapes-and-arrows, slides/style-objects]
 order: 55
-updated: 2026-09-11
+updated: 2026-09-29
 ---
 
 Once a slide has a few objects on it, the work becomes tidying: picking several at once, moving them by exact amounts, stacking them in the right order, and lining them up. This article covers all of that. For placing and resizing a single object, see [Create and edit a presentation](/support/slides/create-and-edit).
@@ -63,8 +63,11 @@ Right-click an object to open its menu. The commands appear in this order:
 - **Bring to front**, **Bring forward**, **Send backward**, **Send to back**.
 - **Copy**, **Cut**, **Paste**.
 - **Duplicate**, **Delete**.
+- **Download original image**, on an image only. It saves the image file at its full size and in its own format.
 
 If you can comment on the presentation, an **Add comment** row appears at the bottom.
+
+If you can only view the presentation, right-clicking an image gives you **Download original image** and nothing else.
 
 <div class="eigen-callout">
 

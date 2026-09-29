@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, text, images, objects, canvas]
 related: [slides/get-started, slides/add-slides, slides/style-objects, slides/draw-shapes-and-arrows]
 order: 40
-updated: 2026-09-11
+updated: 2026-09-29
 ---
 
 You build slides by placing text boxes and images on the canvas. Both work the same way: add one from the toolbar, then move, resize, and adjust it from the properties panel on the right.
@@ -68,7 +68,7 @@ Right-click an object and choose from the menu:
 - **Send backward**: moves it one step toward the back.
 - **Send to back**: places the object behind all others.
 
-The same menu has **Copy**, **Cut**, **Paste**, **Duplicate**, **Delete**, and **Add comment**.
+The same menu has **Copy**, **Cut**, **Paste**, **Duplicate**, **Delete**, and **Add comment**. On an image it also has **Download original image**, which saves the image file at its full size and in its own format. If you can only view the presentation, right-clicking an image gives you that option alone.
 
 ## Delete an object
 

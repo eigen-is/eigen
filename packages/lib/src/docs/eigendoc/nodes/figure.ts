@@ -11,6 +11,7 @@ export type FigureAttrs = {
     width?: number | null;
     alignment?: string | null;
     layout?: FigureLayout | null;
+    commentCardId?: string | null;
 };
 
 declare module '@tiptap/core' {
@@ -38,6 +39,9 @@ export const FigureNode = Node.create({
             src: { default: null },
             alt: { default: null },
             caption: { default: null },
+            // The image's comment card. An attribute, not the comment mark text carries: the Yjs
+            // binding persists a mark only on text.
+            commentCardId: { default: null },
             width: {
                 default: null,
                 parseHTML: (element: HTMLElement) => {
@@ -89,6 +93,7 @@ export const FigureNode = Node.create({
                         caption: figcaption?.textContent || null,
                         alignment: el.getAttribute('data-alignment') || 'center',
                         layout,
+                        commentCardId: el.getAttribute('data-comment-id'),
                     };
                 },
                 priority: 60,
@@ -126,6 +131,10 @@ export const FigureNode = Node.create({
         }
         if (HTMLAttributes['layout'] && HTMLAttributes['layout'] !== 'block') {
             figureAttrs['data-layout'] = HTMLAttributes['layout'];
+        }
+        // Spelled like the comment mark's, so a cut image keeps its card the way cut text does.
+        if (HTMLAttributes['commentCardId']) {
+            figureAttrs['data-comment-id'] = HTMLAttributes['commentCardId'];
         }
         const imgAttrs: Record<string, unknown> = {
             src: HTMLAttributes['src'],

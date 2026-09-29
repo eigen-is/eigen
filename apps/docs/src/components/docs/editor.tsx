@@ -55,16 +55,12 @@ import { renderPresenceCaret } from '@workspace/ui/components/collab';
 import {
     type CommentContextMenuItem,
     CommentLifecycleDialogs,
+    CommentLifecycleMenuItems,
     CommentMenuItems,
     PanelColumn,
 } from '@workspace/ui/components/comments';
-import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/context-menu';
-import {
-    DropdownMenuItem,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
-} from '@workspace/ui/components/dropdown-menu';
+import { ContextMenuAnchor, DownloadImageMenuItem, useContextMenu } from '@workspace/ui/components/context-menu';
+import { DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { PROPERTIES_PANEL_WIDTH_PX } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';
@@ -76,23 +72,19 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { EditorToolbar } from './editor-toolbar';
-import { CommentMark, updateCommentDecorations } from './extensions/comment-mark';
+import { CommentMark, commentAnchorText, nodeCommentCardId, updateCommentDecorations } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { useActiveComments } from './hooks/use-active-comments';
 import { TablePropertiesPanel } from './table-properties-panel';
 
-function findCommentMarkPositions(doc: Node, cardId: string): { pos: number; end: number }[] {
-    const positions: { pos: number; end: number }[] = [];
+function findCommentAnchors(doc: Node, cardId: string): { node: Node; pos: number; end: number }[] {
+    const anchors: { node: Node; pos: number; end: number }[] = [];
     doc.descendants((node, pos) => {
-        for (const mark of node.marks) {
-            if (mark.type.name === 'comment' && mark.attrs.cardId === cardId) {
-                positions.push({ pos, end: pos + node.nodeSize });
-            }
-        }
+        if (nodeCommentCardId(node) === cardId) anchors.push({ node, pos, end: pos + node.nodeSize });
     });
-    return positions;
+    return anchors;
 }
 
 function swapFigureMediaName(editor: Editor, pendingName: string, newName: string | null) {
@@ -299,8 +291,17 @@ const TiptapEditor = ({
     const handleAddCommentRef = useRef<(() => void) | null>(null);
     const allCommentsRef = useRef<CommentEntry[]>([]);
     const cardsRef = useRef<Record<string, CommentCard>>({});
+    // The extensions keep the closures they were created with, so the figure menu reads this render's state here.
+    const figureContextMenuRef = useRef<(node: Node, pos: number, event: React.MouseEvent) => void>(() => {});
     const mediaFolderIdRef = useRef(mediaFolderId);
     mediaFolderIdRef.current = mediaFolderId;
+
+    const commentMenuItem = (cardId: string | null): CommentContextMenuItem | null => {
+        const card = cardId ? cardsRef.current[cardId] : undefined;
+        if (!card) return null;
+        const entry = card.chatName ? allCommentsRef.current.find((c) => c.chatName === card.chatName) : undefined;
+        return { card, entry };
+    };
 
     const getEditorMaxWidth = useCallback(() => {
         const el = documentRef.current;
@@ -347,18 +348,17 @@ const TiptapEditor = ({
             editable: canWrite,
             extensions: [
                 ...getDocExtensions({ lowlight, exclude: ['figure', 'comment'] }),
-                Figure,
+                Figure.configure({
+                    onOpenComment: handleCommentClick,
+                    onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
+                }),
                 TableWidthClamp,
                 SearchHighlight,
                 CommentMark.configure({
                     onCommentClick: handleCommentClick,
                     onCommentContextMenu: (cardId, event) => {
-                        const card = cardsRef.current[cardId];
-                        if (!card) return;
-                        const entry = card.chatName
-                            ? allCommentsRef.current.find((c) => c.chatName === card.chatName)
-                            : undefined;
-                        commentContextMenu.openAt({ card, entry }, event.clientX, event.clientY);
+                        const item = commentMenuItem(cardId);
+                        if (item) commentContextMenu.openAt(item, event.clientX, event.clientY);
                     },
                     onSelectionContextMenu: (event) => {
                         selectionContextMenu.openAt(true, event.clientX, event.clientY);
@@ -678,7 +678,7 @@ const TiptapEditor = ({
     const handleAddComment = () => {
         if (!editor || !chatFolderId) return;
         const { from, to } = editor.state.selection;
-        const text = editor.state.doc.textBetween(from, to, ' ');
+        const text = commentAnchorText(editor.state.doc, from, to);
         if (!text.trim()) return;
         setPendingMarkRange({ from, to, text });
         setAddOpen(true);
@@ -708,22 +708,57 @@ const TiptapEditor = ({
 
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
     const selectionContextMenu = useContextMenu<boolean>();
+    const figureContextMenu = useContextMenu<{
+        imagePath: DrivePath | undefined;
+        comment: CommentContextMenuItem | null;
+    }>();
+    const canAddComment = canWrite && !!chatFolderId;
+    // Opens only when a row will render; otherwise the browser's own menu shows.
+    figureContextMenuRef.current = (node, pos, event) => {
+        const imagePath = resolveMediaPath(node.attrs.mediaName ?? '');
+        const comment = commentMenuItem(nodeCommentCardId(node));
+        if (!imagePath && !comment && !canAddComment) return;
+        // Selected first, so Add comment anchors to it.
+        editor?.commands.setNodeSelection(pos);
+        figureContextMenu.handleContextMenu(event, { imagePath, comment });
+    };
+
+    const removeCommentMarks = (cardId: string) => {
+        if (!editor) return;
+        const { tr } = editor.state;
+        const commentType = editor.state.schema.marks.comment;
+        for (const { node, pos, end } of findCommentAnchors(editor.state.doc, cardId)) {
+            if (node.type.name === 'figure') tr.setNodeAttribute(pos, 'commentCardId', null);
+            else tr.removeMark(pos, end, commentType);
+        }
+        editor.view.dispatch(tr);
+    };
 
     const handleSaveNew = useCallback(
         async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
             if (!editor || !pendingMarkRange) return;
             const range = pendingMarkRange;
-            const card = await createCard(
-                { title: pendingMarkRange.text.slice(0, 100), ...patch, attachments },
-                (card) => {
-                    editor
-                        .chain()
-                        .focus()
-                        .setTextSelection({ from: range.from, to: range.to })
-                        .setComment(card.id)
-                        .run();
-                },
-            );
+            const card = await createCard({ title: pendingMarkRange.text, ...patch, attachments }, (card) => {
+                const node = editor.state.doc.nodeAt(range.from);
+                if (node?.type.name === 'figure' && range.to === range.from + node.nodeSize) {
+                    editor.view.dispatch(editor.state.tr.setNodeAttribute(range.from, 'commentCardId', card.id));
+                    return;
+                }
+                editor
+                    .chain()
+                    .focus()
+                    .setTextSelection({ from: range.from, to: range.to })
+                    .setComment(card.id)
+                    // A figure the selection spans would keep the mark only until reload; it anchors by attribute.
+                    .command(({ tr }) => {
+                        tr.doc.nodesBetween(range.from, range.to, (n, pos) => {
+                            if (n.type.name === 'figure')
+                                tr.removeMark(pos, pos + n.nodeSize, n.type.schema.marks.comment);
+                        });
+                        return true;
+                    })
+                    .run();
+            });
             if (assignee !== undefined && card?.chatName) {
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
             }
@@ -821,10 +856,12 @@ const TiptapEditor = ({
     if (!editor) return null;
 
     const handleScrollToComment = (cardId: string) => {
-        const positions = findCommentMarkPositions(editor.state.doc, cardId);
-        if (positions.length > 0) {
-            editor.chain().focus().setTextSelection(positions[0].pos).scrollIntoView().run();
-        }
+        const anchors = findCommentAnchors(editor.state.doc, cardId);
+        if (anchors.length === 0) return;
+        const { node, pos } = anchors[0];
+        const chain = editor.chain().focus();
+        const selected = node.type.name === 'figure' ? chain.setNodeSelection(pos) : chain.setTextSelection(pos);
+        selected.scrollIntoView().run();
     };
 
     // Desktop reveals the anchor and switches an activity tap over to comments; the mobile pane hides
@@ -972,7 +1009,7 @@ const TiptapEditor = ({
                     setAddOpen(o);
                     if (!o) setPendingMarkRange(null);
                 }}
-                initialTitle={pendingMarkRange ? pendingMarkRange.text.slice(0, 100) : ''}
+                initialTitle={pendingMarkRange?.text ?? ''}
                 onSave={handleSaveNew}
                 allowAttachments={!!mediaFolderId}
                 members={members}
@@ -986,25 +1023,25 @@ const TiptapEditor = ({
                 path={path}
                 canWrite={canWrite}
                 commentContextMenu={commentContextMenu}
-                onDelete={(cardId) => {
-                    if (!editor) return;
-                    const { tr } = editor.state;
-                    const commentType = editor.state.schema.marks.comment;
-                    for (const { pos, end } of findCommentMarkPositions(editor.state.doc, cardId)) {
-                        tr.removeMark(pos, end, commentType);
-                    }
-                    editor.view.dispatch(tr);
-                }}
+                onDelete={removeCommentMarks}
             />
+
+            <ContextMenuAnchor contextMenu={figureContextMenu}>
+                <DownloadImageMenuItem path={figureContextMenu.item?.imagePath} />
+                {figureContextMenu.item?.imagePath && (figureContextMenu.item.comment || canAddComment) && (
+                    <DropdownMenuSeparator />
+                )}
+                <CommentLifecycleMenuItems
+                    lifecycle={lifecycle}
+                    item={figureContextMenu.item?.comment ?? null}
+                    canWrite={canWrite}
+                    onAddComment={chatFolderId ? handleAddComment : undefined}
+                    onDelete={removeCommentMarks}
+                />
+            </ContextMenuAnchor>
 
             <ContextMenuAnchor contextMenu={selectionContextMenu}>
                 <CommentMenuItems
-                    primitives={{
-                        Item: DropdownMenuItem,
-                        Sub: DropdownMenuSub,
-                        SubTrigger: DropdownMenuSubTrigger,
-                        SubContent: DropdownMenuSubContent,
-                    }}
                     item={null}
                     onAddComment={() => {
                         handleAddCommentRef.current?.();

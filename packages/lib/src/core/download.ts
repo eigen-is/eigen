@@ -2,6 +2,8 @@
 // so the backend never imports this module.
 
 import { useCallback, useState } from 'react';
+import type { DrivePath } from '../types/drive';
+import { getDriveDownloadUrl } from './api';
 import { onMutationError } from './api-error';
 
 export function downloadBlob(blob: Blob, filename: string): void {
@@ -63,4 +65,9 @@ export function triggerDownload(url: string): void {
     document.body.appendChild(a);
     a.click();
     a.remove();
+}
+
+// The file's original bytes, never the resized preview an embedded image renders from.
+export function downloadDriveFile(path: DrivePath): void {
+    triggerDownload(getDriveDownloadUrl(path.ownerId, path.mountId, path.id, path.updatedAt));
 }

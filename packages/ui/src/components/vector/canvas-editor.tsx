@@ -171,6 +171,10 @@ type CanvasEditorProps = {
     searchActiveId?: string | null;
     // Page through frames on a one-finger swipe — the deck shell passes it on a view-only phone.
     onSwipeFrame?: (delta: number) => void;
+    // Opens the host's image picker on the image key; the toolbar gets the same callback.
+    onInsertImage?: () => void;
+    // A right-click on empty canvas; the deck opens its slide menu. Omitted, the browser's menu shows.
+    onEmptyContextMenu?: (e: React.MouseEvent) => void;
 };
 
 // The live, interactive canvas surface — one absolutely positioned layer per element, with the
@@ -202,6 +206,8 @@ export function CanvasEditor({
     searchMatchedIds,
     searchActiveId,
     onSwipeFrame,
+    onInsertImage,
+    onEmptyContextMenu,
 }: CanvasEditorProps) {
     const {
         elements,
@@ -460,6 +466,7 @@ export function CanvasEditor({
         deleteElements,
         updateElements,
         duplicateElements,
+        onInsertImage,
     });
 
     // Freeze the viewport while an overlay is open (same latch as gestures): a pan/zoom would
@@ -937,13 +944,13 @@ export function CanvasEditor({
     };
     const onDoubleClick = (e: React.MouseEvent) => openTextAtClient(e.clientX, e.clientY);
 
-    // Right-click on an element opens the object menu (empty canvas keeps the browser default). Like
+    // Right-click on an element opens the object menu (empty canvas goes to onEmptyContextMenu). Like
     // slides, a right-click on an element outside the current selection selects it first, so the menu
     // ops act on the target; a right-click inside the selection keeps the whole selection. The canvas
     // uses hit-testing (elements have no per-node DOM), so this lives on the container, not per object.
     const onContextMenu = (e: React.MouseEvent) => {
         // frozenRef: no menu over a live left-button gesture (marquee/move keeps its capture).
-        if (!canEdit || textEditing || frozenRef.current) return;
+        if (textEditing || frozenRef.current) return;
         // A multi-point draft runs unfrozen but still owns the pointer: no menu (object or browser)
         // mid-draft — the draft keeps floating and the next left click keeps placing points.
         if (drawing.multiPointDraft) {
@@ -952,7 +959,17 @@ export function CanvasEditor({
         }
         const p = clientToScene(e.clientX, e.clientY);
         const hitId = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
-        if (!hitId) return;
+        // A viewer's menu is the image download alone, so only an image opens it.
+        if (!canEdit) {
+            const hit = hitId ? committedById.get(hitId) : undefined;
+            if (hit?.type === 'image' && resolveMediaPath(hit.mediaName))
+                objectContextMenu.handleContextMenu(e, hit.id);
+            return;
+        }
+        if (!hitId) {
+            onEmptyContextMenu?.(e);
+            return;
+        }
         if (!selectedIds.includes(hitId)) setSelectedIds([hitId]);
         objectContextMenu.handleContextMenu(e, hitId);
     };
@@ -964,6 +981,7 @@ export function CanvasEditor({
     const onMenuDelete = () => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
     // A comment is raised on the right-clicked element, not on the selection: a card anchors to one element.
     const menuItemId = objectContextMenu.item;
+    const menuElement = menuItemId ? committedById.get(menuItemId) : undefined;
     // Touch/stylus policy (penMode palm rejection, two-finger pan/pinch, double-tap → text) lives in
     // the sibling module; the canvas only dispatches. Its second-finger takeover ends any live one-finger
     // gesture through this callback (a draw draft in the tools hook, else a canvas create/move/marquee).
@@ -1615,6 +1633,8 @@ export function CanvasEditor({
             )}
             <CanvasObjectMenu
                 contextMenu={objectContextMenu}
+                canEdit={canEdit}
+                imagePath={menuElement?.type === 'image' ? resolveMediaPath(menuElement.mediaName) : undefined}
                 onArrange={onMenuArrange}
                 onCopy={onMenuCopy}
                 onCut={onMenuCut}

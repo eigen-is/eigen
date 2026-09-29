@@ -25,6 +25,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@workspace/ui/components/dialog';
+import { ProgressDialog } from '@workspace/ui/components/drive';
 import { UserName } from '@workspace/ui/components/user';
 import { Calendar, Check, Download, HelpCircle, Pencil, Trash2, X as XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -328,6 +329,8 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 event={event}
                 ownerUserId={sharedCalendar?.ownerUserId}
             />
+
+            <ProgressDialog open={isExporting} title="Exporting event" />
         </>
     );
 }

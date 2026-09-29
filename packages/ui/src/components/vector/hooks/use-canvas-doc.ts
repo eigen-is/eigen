@@ -290,7 +290,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
     // Each is a discrete op, so each is `sealed` — adding a page then renaming it must be two undo
     // steps. add/duplicate return the new frame id so the caller can activate it.
     const addFrame = useCallback(
-        (afterId?: string) => {
+        (afterId: string | null) => {
             const doc = docRef.current;
             return doc ? sealed(undoManager, () => addFrameInDoc(doc, afterId)) : undefined;
         },

@@ -1,13 +1,6 @@
 import { CommentLifecycleMenuItems } from '@workspace/ui/components/comments';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/context-menu';
-import {
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuShortcut,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
-} from '@workspace/ui/components/dropdown-menu';
+import { DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut } from '@workspace/ui/components/dropdown-menu';
 import {
     ArrowDownAZ,
     ArrowDownZA,
@@ -342,12 +335,6 @@ function CommentItems() {
     return (
         <CommentLifecycleMenuItems
             lifecycle={commentLifecycle}
-            primitives={{
-                Item: DropdownMenuItem,
-                Sub: DropdownMenuSub,
-                SubTrigger: DropdownMenuSubTrigger,
-                SubContent: DropdownMenuSubContent,
-            }}
             item={info ? { card: info.card, entry: info.entry } : null}
             canWrite={settings.allowEdit}
             onAddComment={onAddComment && (() => onAddComment(row, col))}

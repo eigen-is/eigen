@@ -11,6 +11,7 @@ import { useMyTeams } from '@workspace/lib/home';
 import type { Contact } from '@workspace/lib/types/contact';
 import { isVCardFile, VCARD_ACCEPT } from '@workspace/lib/types/drive';
 import { Column, ColumnLayout, DeleteDialog, EmptyState, LoadingState } from '@workspace/ui';
+import { IMPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';
 import { FileImportPicker } from '@workspace/ui/components/drive';
 import { LabelFilterHeader } from '@workspace/ui/components/labels';
 import { useEffect, useState } from 'react';
@@ -236,6 +237,8 @@ function ContactsRoute() {
                         drive: { sourceOwnerId: item.ownerId, sourceMountId: item.mountId, sourcePathId: item.id },
                     })
                 }
+                pending={importMutation.isPending || importFileMutation.isPending}
+                progressTitle={IMPORTING_CONTACTS_TITLE}
             />
         </>
     );

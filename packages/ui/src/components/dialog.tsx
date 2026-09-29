@@ -54,6 +54,7 @@ function DialogContent({
     size,
     abovePreview,
     onPointerDownOutside,
+    onEscapeKeyDown,
     ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
     showCloseButton?: boolean;
@@ -98,6 +99,11 @@ function DialogContent({
                         }
                     }
                     onPointerDownOutside?.(e);
+                }}
+                // Escape over an open preview is the preview's to close, not the dialog's under it.
+                onEscapeKeyDown={(e) => {
+                    if (preview?.isPreviewOpen && !abovePreview) e.preventDefault();
+                    onEscapeKeyDown?.(e);
                 }}
                 {...props}
             >

@@ -12,7 +12,7 @@ import {
 function docWithFrames(n: number): { doc: Y.Doc; ids: string[] } {
     const doc = new Y.Doc();
     const ids: string[] = [];
-    for (let i = 0; i < n; i++) ids.push(addFrameInDoc(doc));
+    for (let i = 0; i < n; i++) ids.push(addFrameInDoc(doc, ids.at(-1) ?? null));
     return { doc, ids };
 }
 
@@ -61,6 +61,12 @@ describe('frame writes', () => {
         const { doc, ids } = docWithFrames(2);
         const mid = addFrameInDoc(doc, ids[0]);
         expect(readVectorFromDoc(doc).frames.map((f) => f.id)).toEqual([ids[0], mid, ids[1]]);
+    });
+
+    test('addFrame(null) inserts before the first frame', () => {
+        const { doc, ids } = docWithFrames(2);
+        const first = addFrameInDoc(doc, null);
+        expect(readVectorFromDoc(doc).frames.map((f) => f.id)).toEqual([first, ids[0], ids[1]]);
     });
 
     test('deleting a frame deletes its elements and leaves the others alone', () => {

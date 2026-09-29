@@ -1,6 +1,6 @@
 // The toolbar both canvas apps mount: File + Edit menus, the Insert menu, the shape-tool cluster and
 // the share/comments/activity cluster. The apps differ only in their File-menu identity (export
-// formats, the "New …" row) and in the deck's two extra actions, which arrive as slots — so the tool
+// formats, the "New …" row) and in the deck's extra actions, which arrive as slots — so the tool
 // cluster, the undo wiring and the compact-breakpoint rule cannot drift between them.
 
 import { useYjsUndoState } from '@workspace/lib/collab';
@@ -16,7 +16,9 @@ import { EditMenu } from '../layout/toolbar/edit-menu';
 import { FileMenu } from '../layout/toolbar/file-menu';
 import { CenteredToolbar } from '../layout/toolbar/toolbar';
 import { ToolbarMenu } from '../layout/toolbar/toolbar-menu';
+import { ToolbarSeparator } from '../layout/toolbar/toolbar-separator';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
+import { INSERT_IMAGE_KEY, TOOL_LOCK_KEY } from './hooks/use-canvas-keyboard';
 import type { VectorTool } from './hooks/use-tool';
 import { EDIT_TOOLS, INSERT_TOOLS, ToolButtons, ToolMenuItems } from './toolbar-tools';
 
@@ -47,10 +49,8 @@ type CanvasToolbarProps = {
     createLabel: string;
     createIcon: LucideIcon;
     createType: EigenDocType;
-    // Rows above the shape tools in the Insert menu (the deck's "Slide").
+    // Rows above the shape tools in the Insert menu (the deck's "New slide").
     insertItems?: ReactNode;
-    // Buttons left of the shape cluster; they fold away with it below the compact breakpoint.
-    toolItems?: ReactNode;
     // Buttons a read-only viewer keeps at any width (the deck's Present).
     centerItems?: ReactNode;
 };
@@ -77,7 +77,6 @@ export function CanvasToolbar({
     createIcon,
     createType,
     insertItems,
-    toolItems,
     centerItems,
 }: CanvasToolbarProps) {
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canEdit);
@@ -104,7 +103,7 @@ export function CanvasToolbar({
                             <ToolMenuItems tools={EDIT_TOOLS} setTool={setTool} />
                             <DropdownMenuCheckboxItem checked={toolLocked} onCheckedChange={setToolLocked}>
                                 Keep selected tool
-                                <DropdownMenuShortcut>Q</DropdownMenuShortcut>
+                                <DropdownMenuShortcut>{TOOL_LOCK_KEY}</DropdownMenuShortcut>
                             </DropdownMenuCheckboxItem>
                         </EditMenu>
                         {canEdit && (
@@ -114,6 +113,7 @@ export function CanvasToolbar({
                                 {onInsertImage && (
                                     <DropdownMenuItem onClick={onInsertImage}>
                                         <ImagePlus className="h-4 w-4 mr-2" /> Image
+                                        <DropdownMenuShortcut>{INSERT_IMAGE_KEY}</DropdownMenuShortcut>
                                     </DropdownMenuItem>
                                 )}
                             </ToolbarMenu>
@@ -125,11 +125,15 @@ export function CanvasToolbar({
                         {/* Below the compact-toolbar breakpoint the cluster folds into the menus. */}
                         {canEdit && !isCompact && (
                             <>
-                                {toolItems}
                                 <ToolButtons tool={tool} setTool={setTool} />
                                 {onInsertImage && (
-                                    <TooltipButton icon={ImagePlus} tooltipText="Add image" onClick={onInsertImage} />
+                                    <TooltipButton
+                                        icon={ImagePlus}
+                                        tooltipText={`Add image (${INSERT_IMAGE_KEY})`}
+                                        onClick={onInsertImage}
+                                    />
                                 )}
+                                {centerItems && <ToolbarSeparator />}
                             </>
                         )}
                         {centerItems}

@@ -1,4 +1,5 @@
 import type { Editor } from '@tiptap/core';
+import type { Node } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
@@ -20,15 +21,33 @@ type CommentMeta = {
 
 const decorationKey = new PluginKey('commentDecorations');
 
+// The card a node anchors: an image holds it as an attribute, text as the comment mark.
+export function nodeCommentCardId(node: Node): string | null {
+    if (node.type.name === 'figure') return node.attrs.commentCardId;
+    return node.marks.find((m) => m.type.name === 'comment')?.attrs.cardId ?? null;
+}
+
+// A comment on an image alone has no text to quote, so the image reads as "Image".
+export function commentAnchorText(doc: Node, from: number, to: number): string {
+    return doc
+        .textBetween(from, to, ' ', (leaf) =>
+            leaf.type.name === 'figure' ? 'Image' : (leaf.type.spec.leafText?.(leaf) ?? ''),
+        )
+        .slice(0, 100);
+}
+
 function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet {
     const decorations: Decoration[] = [];
     state.doc.descendants((node, pos) => {
-        for (const mark of node.marks) {
-            if (mark.type.name !== 'comment' || !mark.attrs.cardId) continue;
-            const cardId = mark.attrs.cardId as string;
+        const cardId = nodeCommentCardId(node);
+        if (cardId) {
             const end = pos + node.nodeSize;
 
-            if (meta.resolvedIds.has(cardId)) {
+            // An image's node view paints the corner mark from this spec, resolved or not, like a
+            // commented canvas element.
+            if (node.type.name === 'figure') {
+                decorations.push(Decoration.node(pos, end, {}, { commentColor: meta.colorMap.get(cardId) }));
+            } else if (meta.resolvedIds.has(cardId)) {
                 // Resolved comments: no decoration, keep default highlight appearance.
                 // Resolved status is visible in the sidebar (checkmark icon + filter).
             } else {

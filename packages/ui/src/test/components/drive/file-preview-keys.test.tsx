@@ -24,11 +24,17 @@ const subject = subjectFromMailAttachment('owner-1', 'message-1', 0, {
     filename: 'ledger.bin',
     size: 2048,
 });
+const next = subjectFromMailAttachment('owner-1', 'message-1', 1, {
+    contentType: 'application/octet-stream',
+    filename: 'journal.bin',
+    size: 2048,
+});
 
 const preview = { openPreview: () => {}, updatePreview: () => {}, closePreview: () => {}, isPreviewOpen: true };
 
 async function mount(popoverOpen: boolean) {
     const closed = { count: 0 };
+    const paged = { count: 0 };
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -42,12 +48,14 @@ async function mount(popoverOpen: boolean) {
                     { value: preview },
                     createElement(FilePreview, {
                         subject,
-                        siblings: [subject],
+                        siblings: [subject, next],
                         onClose: () => {
                             closed.count += 1;
                         },
                         onPrev: () => {},
-                        onNext: () => {},
+                        onNext: () => {
+                            paged.count += 1;
+                        },
                     }),
                     // The shape of the header's details popover: Radix portals it to the body, above the overlay.
                     createElement(
@@ -77,7 +85,7 @@ async function mount(popoverOpen: boolean) {
         await act(async () => root.unmount());
         container.remove();
     };
-    return { closed, press, cleanup };
+    return { closed, paged, press, cleanup };
 }
 
 test('Escape closes the overlay when nothing is open above it', async () => {
@@ -128,4 +136,23 @@ test.each(['menu', 'listbox'])('Escape inside an open %s above the overlay is no
     await press('Escape');
     expect(closed.count).toBe(1);
     await cleanup();
+});
+
+// The overlay opened from inside a dialog (a stickies card's attachments): that dialog sits below it, earlier
+// in the document, and its focus trap holds focus, so neither its presence nor a key pressed in it is a layer above.
+test('a dialog the overlay was opened over leaves the overlay its keys', async () => {
+    const card = document.createElement('div');
+    card.setAttribute('role', 'dialog');
+    const chip = document.createElement('a');
+    chip.href = '#';
+    card.append(chip);
+    document.body.append(card);
+
+    const { closed, paged, press, cleanup } = await mount(false);
+    await press('ArrowRight', chip);
+    expect(paged.count).toBe(1);
+    await press('Escape', chip);
+    expect(closed.count).toBe(1);
+    await cleanup();
+    card.remove();
 });

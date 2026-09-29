@@ -1,7 +1,6 @@
 import { useImportDocument, useImportFromDrive } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { FileImportPicker } from './file-import-picker';
-import { ProgressDialog } from './progress-dialog';
 
 type DocumentImportPickerProps = {
     path: DrivePath;
@@ -29,27 +28,23 @@ export function DocumentImportPicker({
     const importFromDriveMutation = useImportFromDrive(path.ownerId, path.mountId);
 
     return (
-        <>
-            <FileImportPicker
-                open={open}
-                onOpenChange={onOpenChange}
-                title={title}
-                accept={accept}
-                canPick={(item) => item.mimeType === mime}
-                onDeviceFile={(file) => importMutation.mutate({ pathId: path.id, file })}
-                onDrivePick={(source) =>
-                    importFromDriveMutation.mutate({
-                        pathId: path.id,
-                        sourceOwnerId: source.ownerId,
-                        sourceMountId: source.mountId,
-                        sourcePathId: source.id,
-                    })
-                }
-            />
-            <ProgressDialog
-                open={importMutation.isPending || importFromDriveMutation.isPending}
-                title={progressTitle}
-            />
-        </>
+        <FileImportPicker
+            open={open}
+            onOpenChange={onOpenChange}
+            title={title}
+            accept={accept}
+            canPick={(item) => item.mimeType === mime}
+            onDeviceFile={(file) => importMutation.mutate({ pathId: path.id, file })}
+            onDrivePick={(source) =>
+                importFromDriveMutation.mutate({
+                    pathId: path.id,
+                    sourceOwnerId: source.ownerId,
+                    sourceMountId: source.mountId,
+                    sourcePathId: source.id,
+                })
+            }
+            pending={importMutation.isPending || importFromDriveMutation.isPending}
+            progressTitle={progressTitle}
+        />
     );
 }

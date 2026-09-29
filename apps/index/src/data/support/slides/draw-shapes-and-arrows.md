@@ -6,7 +6,7 @@ category: Editing
 tags: [slides, shapes, arrows, lines, drawing]
 related: [slides/insert-content, slides/style-objects, slides/arrange-and-align]
 order: 45
-updated: 2026-09-11
+updated: 2026-09-29
 ---
 
 The middle of the toolbar holds the drawing tools. Use them to place shapes, draw freehand, add arrows and lines, and connect an arrow to a shape so it follows when you move things around. You need editor access to draw. If you can only view the presentation, the tools are not shown.
@@ -34,6 +34,7 @@ Each tool has a single-key shortcut, shown in its tooltip. Press the key to pick
 | **Line** | `L` or `6` |
 | **Draw** | `P` or `7` |
 | **Text** | `T` or `8` |
+| **Add image** | `9` |
 | **Eraser** | `E` or `0` |
 
 <div class="eigen-callout">

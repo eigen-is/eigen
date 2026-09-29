@@ -6,6 +6,8 @@ import { useMailEnabled } from '@workspace/lib/public';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { ChatCreateWizard } from '@workspace/ui/components/chat';
+import { EXPORTING_CONTACTS_TITLE } from '@workspace/ui/components/contacts';
+import { ProgressDialog } from '@workspace/ui/components/drive';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { LabelAssignSubMenu } from '@workspace/ui/components/labels';
 import { printDocument } from '@workspace/ui/lib/printElement';
@@ -34,13 +36,7 @@ export type ContactMenuActions = {
     showExport?: boolean;
 };
 
-// The single menu-item definition the contact list's context menu and the detail page's kebab both
-// render — same actions, same order on both surfaces (Send email, Start chat, Print, Export, Edit,
-// Delete, Assign label). Send email and Start chat act on the whole selection, silently dropping your
-// own card (a mail/chat with yourself is pointless); print and edit are single-select-only; export is
-// gated on showExport (stored cards only) and delete and labels act on the whole batch. Owns the
-// start-chat handoff and the wizard both surfaces open, so mount `chatWizard` at a stable spot outside
-// the menu content.
+// The contact rows the list's context menu and the detail kebab share; mount `dialogs` outside the menu content.
 export function useContactMenu() {
     const openWriteEmailTo = useOpenWriteEmailTo();
     const mailEnabled = useMailEnabled();
@@ -182,15 +178,18 @@ export function useContactMenu() {
         );
     };
 
-    const chatWizard = (
-        <ChatCreateWizard
-            open={!!chatWith}
-            onOpenChange={(open) => {
-                if (!open) setChatWith(null);
-            }}
-            initialPeople={chatWith ?? undefined}
-        />
+    const dialogs = (
+        <>
+            <ChatCreateWizard
+                open={!!chatWith}
+                onOpenChange={(open) => {
+                    if (!open) setChatWith(null);
+                }}
+                initialPeople={chatWith ?? undefined}
+            />
+            <ProgressDialog open={isExporting} title={EXPORTING_CONTACTS_TITLE} />
+        </>
     );
 
-    return { renderItems, chatWizard };
+    return { renderItems, dialogs };
 }

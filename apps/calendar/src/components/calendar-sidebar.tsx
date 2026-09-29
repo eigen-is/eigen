@@ -16,7 +16,7 @@ import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { ICS_ACCEPT, isIcsFile } from '@workspace/lib/types/drive';
 import { KebabTrigger, SidebarBody, SidebarItem, SidebarSection, TooltipButton } from '@workspace/ui';
-import { FileImportPicker } from '@workspace/ui/components/drive/file-import-picker';
+import { FileImportPicker, ProgressDialog } from '@workspace/ui/components/drive';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { StorageUsage } from '@workspace/ui/components/home';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
@@ -117,7 +117,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
     const { data: sharedCalendars = [], isLoading: sharedLoading } = useSharedCalendars(ownerId);
     const updateCalendar = useUpdateCalendar(ownerId);
     const updateSharedCalendar = useUpdateSharedCalendar(ownerId);
-    const { exportCalendar } = useExportCalendar();
+    const { exportCalendar, isExporting } = useExportCalendar();
     const importCalendar = useImportCalendar();
     const importFromDevice = useImportCalendarFromDevice();
     const isGuest = useIsGuest();
@@ -309,24 +309,29 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
 
             <CreateEventDialog open={createEventOpen} onOpenChange={setCreateEventOpen} />
 
-            {importTarget && (
-                <FileImportPicker
-                    open
-                    onOpenChange={(open) => {
-                        if (!open) setImportTarget(null);
-                    }}
-                    title="Import events"
-                    accept={ICS_ACCEPT}
-                    canPick={(item) => isIcsFile(item.mimeType, item.name)}
-                    onDeviceFile={(file) => importFromDevice.mutate({ file, ...importTarget })}
-                    onDrivePick={(item) =>
-                        importCalendar.mutate({
-                            drive: { sourceOwnerId: item.ownerId, sourceMountId: item.mountId, sourcePathId: item.id },
-                            ...importTarget,
-                        })
-                    }
-                />
-            )}
+            {/* Always mounted: closing the picker on a pick must not unmount the progress dialog it owns. */}
+            <FileImportPicker
+                open={!!importTarget}
+                onOpenChange={(open) => {
+                    if (!open) setImportTarget(null);
+                }}
+                title="Import events"
+                accept={ICS_ACCEPT}
+                canPick={(item) => isIcsFile(item.mimeType, item.name)}
+                onDeviceFile={(file) => {
+                    if (importTarget) importFromDevice.mutate({ file, ...importTarget });
+                }}
+                onDrivePick={(item) => {
+                    if (!importTarget) return;
+                    importCalendar.mutate({
+                        drive: { sourceOwnerId: item.ownerId, sourceMountId: item.mountId, sourcePathId: item.id },
+                        ...importTarget,
+                    });
+                }}
+                pending={importCalendar.isPending || importFromDevice.isPending}
+                progressTitle="Importing events"
+            />
+            <ProgressDialog open={isExporting} title="Exporting calendar" />
         </>
     );
 }

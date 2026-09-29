@@ -1061,8 +1061,10 @@ describe('document transform (eigenvector)', () => {
 // writeEigendocToYjs into a fresh document) over buildGoldenDocx(), so the move
 // off-thread is proven equivalent: the Worker must hand back a Yjs update whose
 // applied document reads back identically, and the extracted image bytes must
-// survive the transfer untouched. Regenerate only for an intentional converter change.
-const GOLDEN_DOCX_PM_JSON_SHA256 = '15b5feca693ca9ee7c3cf8fe3d030a1bc79bc3a1ac56bee9f23d644e5de19eb1';
+// survive the transfer untouched. Regenerate only for an intentional converter change. The parse hash
+// moved when the figure gained its `commentCardId` attribute: the image's JSON carries it as null, and
+// stripping that key restores the previous hash. The Yjs readback drops null attributes, so it held.
+const GOLDEN_DOCX_PM_JSON_SHA256 = '78e7c40265e25cb7519f66e435784731068f1fdecfd92051217397fb62b8bc91';
 const GOLDEN_DOCX_DOCUMENT_SHA256 = '51ae42c1e14f8f5acfa31337873d126218c155746f6850860afdc90900808cfe';
 
 describe('document transform (docx import)', () => {

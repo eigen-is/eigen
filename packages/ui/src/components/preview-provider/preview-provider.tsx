@@ -2,6 +2,7 @@ import { subjectInfo } from '@workspace/lib/file-subject';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type React from 'react';
 import { useCallback, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FilePreview } from '../drive/file-preview';
 import { PreviewContext, useOptionalPreview, usePreview } from './preview-context';
 
@@ -43,14 +44,17 @@ export function PreviewProvider({ children }: { children: React.ReactNode }) {
     return (
         <PreviewContext.Provider value={{ openPreview, updatePreview, closePreview, isPreviewOpen: preview !== null }}>
             {children}
-            {preview && (
-                <FilePreview
-                    {...preview}
-                    onClose={closePreview}
-                    onPrev={() => navigatePreview(-1)}
-                    onNext={() => navigatePreview(1)}
-                />
-            )}
+            {/* On <body> like every Radix layer, so document order is stacking order (isLayerAbove). */}
+            {preview &&
+                createPortal(
+                    <FilePreview
+                        {...preview}
+                        onClose={closePreview}
+                        onPrev={() => navigatePreview(-1)}
+                        onNext={() => navigatePreview(1)}
+                    />,
+                    document.body,
+                )}
         </PreviewContext.Provider>
     );
 }

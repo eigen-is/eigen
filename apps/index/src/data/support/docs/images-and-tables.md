@@ -5,7 +5,7 @@ type: how-to
 tags: [docs, images, tables, formatting, editor]
 related: [docs/format-text, docs/get-started]
 order: 50
-updated: 2026-06-08
+updated: 2026-09-29
 ---
 
 You can insert images and tables anywhere in a document. Images can come from your device or from Drive.
@@ -46,6 +46,12 @@ On a wide screen, selecting an image also opens the **Image** panel on the right
 - **Alt**: add alternative text, which is used by screen readers and shown if the image fails to load.
 - **Cap**: add a caption that appears beneath the image.
 - **Replace image**: swap the image for a different file from your device or Drive, keeping the same position in the document.
+
+## Download an image
+
+Right-click an image and choose **Download original image**. You get the image file at its full size and in its own format. This works with view access too.
+
+The same menu has **Add comment**, to comment on the image itself. See [Comment and discuss](/support/docs/comments).
 
 ## Insert a table
 

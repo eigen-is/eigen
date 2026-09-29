@@ -6,7 +6,7 @@ category: Reference
 tags: [slides, shortcuts, keyboard, search]
 related: [slides/get-started, slides/arrange-and-align, slides/present]
 order: 100
-updated: 2026-09-13
+updated: 2026-09-29
 ---
 
 Slides gives you a keyboard shortcut for every tool and most editing actions, so you can build a deck without reaching for the toolbar. This page covers how to find text across a presentation, and lists every shortcut grouped so you can look one up fast.
@@ -21,7 +21,7 @@ Press **⌘F** (or **Ctrl+F**) to open the find bar. It searches the text in eve
 
 ### Tools
 
-Press a letter or the matching number to pick a tool. The Image tool has no shortcut, because you add an image by uploading or pasting it.
+Press a letter or the matching number to pick a tool. Press `9` to open the image picker.
 
 | Action | Mac | Windows/Linux |
 |---|---|---|
@@ -33,6 +33,7 @@ Press a letter or the matching number to pick a tool. The Image tool has no shor
 | Line | `L` or `6` | `L` or `6` |
 | Draw | `P` or `7` | `P` or `7` |
 | Text | `T` or `8` | `T` or `8` |
+| Add image | `9` | `9` |
 | Eraser | `E` or `0` | `E` or `0` |
 | Keep the tool active after drawing | `Q` | `Q` |
 

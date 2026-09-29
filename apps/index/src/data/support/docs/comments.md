@@ -6,11 +6,10 @@ category: Collaboration
 tags: [docs, comments, collaboration, review]
 related: [docs/share-a-document, docs/create-and-edit]
 order: 80
-updated: 2026-09-11
+updated: 2026-09-29
 ---
 
-Comments let you leave a note on any piece of text in a document. Each comment has its own thread, so
-collaborators can reply, discuss, and resolve it without touching the document itself.
+Comments let you leave a note on any piece of text or image in a document. Each comment has its own thread, so collaborators can reply, discuss, and resolve it without touching the document itself.
 
 ## Add a comment
 
@@ -18,23 +17,20 @@ You need write access to add comments. If you only have view access, the option 
 
 1. Select the text you want to comment on.
 2. Right-click the selection and choose **Add comment** from the menu.
-3. In the **New comment** dialog, the **Title** is pre-filled with your selected text. You can edit it, or
-   add a longer note in the **Description** field. Pick a color if you like.
+3. In the **New comment** dialog, the **Title** is pre-filled with your selected text. You can edit it, or add a longer note in the **Description** field. Pick a color if you like.
 4. Click **Add comment**.
 
-The selected text is highlighted in the document with the comment's color, so it's easy to see at a glance
-which passages have comments.
+The selected text is highlighted in the document with the comment's color, so it's easy to see at a glance which passages have comments.
 
-You can also use the keyboard shortcut Cmd+Option+M (Mac) or Ctrl+Alt+M (Windows) when you have text
-selected.
+You can also use the keyboard shortcut Cmd+Option+M (Mac) or Ctrl+Alt+M (Windows) when you have text selected.
+
+To comment on an image, right-click it and choose **Add comment**. The **Title** starts as "Image". A commented image shows a small triangle in the comment's color in its top-right corner instead of a highlight. Click the triangle to open the comment, or right-click the image for the same options as a comment highlight. Cut an image and paste it elsewhere in the same document, and its comment moves with it.
 
 ## Open the comments sidebar
 
-Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number
-badge shows how many open comments the document has.
+Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number badge shows how many open comments the document has.
 
-The sidebar lists every comment anchored to the document. Click a comment to jump to its location in
-the text and open the thread.
+The sidebar lists every comment anchored to the document. Click a comment to jump to its location in the text and open the thread.
 
 ## Filter and find comments
 
@@ -46,8 +42,7 @@ Click the filter button (the funnel icon) at the top of the sidebar to narrow th
 
 ## Reply to a comment
 
-Click a comment in the sidebar (or click its highlighted text in the document) to open the thread. Type
-your reply in the **Reply...** box at the bottom and press Enter to send.
+Click a comment in the sidebar (or click its highlighted text in the document) to open the thread. Type your reply in the **Reply...** box at the bottom and press Enter to send.
 
 To @mention someone, type `@` followed by their name.
 
@@ -58,9 +53,7 @@ When a discussion is done, you can mark it resolved.
 - In the sidebar or in the document, right-click the comment and choose **Resolve comment**.
 - Or open the thread and click the checkmark icon at the top right of the dialog.
 
-Resolved comments are still there; switch the sidebar filter to **Resolved** or **All** to see them.
-To reopen one, right-click it and choose **Reopen comment**, or open the thread and click the
-circular-arrow icon (**Re-open**).
+Resolved comments are still there; switch the sidebar filter to **Resolved** or **All** to see them. To reopen one, right-click it and choose **Reopen comment**, or open the thread and click the circular-arrow icon (**Re-open**).
 
 ## Edit or delete a comment
 
@@ -69,13 +62,10 @@ Right-click a comment highlight in the document to open its context menu:
 - **View comment**: opens the thread.
 - **Comment color**: change the highlight color.
 - **Resolve comment** / **Reopen comment**: toggle the status.
-- **Delete comment**: removes the comment and its highlight. The thread history is preserved but the
-  comment no longer appears in the document or sidebar.
+- **Delete comment**: removes the comment and its highlight. The thread history is preserved but the comment no longer appears in the document or sidebar.
 
-To edit the title or description of an existing comment, open the thread and click the pencil icon
-(**Edit**) near the top.
+To edit the title or description of an existing comment, open the thread and click the pencil icon (**Edit**) near the top.
 
 ## Copy a link to a comment
 
-Open a comment thread and click the link icon (**Copy link**) near the top of the dialog. The link
-goes straight to the document with that comment thread open, so you can share it with a collaborator.
+Open a comment thread and click the link icon (**Copy link**) near the top of the dialog. The link goes straight to the document with that comment thread open, so you can share it with a collaborator.
