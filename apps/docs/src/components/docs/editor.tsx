@@ -49,7 +49,7 @@ import type { CardAttachmentDraft, CardFormPatch, CommentCard } from '@workspace
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_IMAGE_BOX } from '@workspace/lib/vector';
-import { CollabLoadingState, Column, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
+import { CollabDocumentGate, Column, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { renderPresenceCaret } from '@workspace/ui/components/collab';
 import {
@@ -218,44 +218,33 @@ export const CollaborativeEditor = ({
         pathId: path.id,
     });
 
-    // Gate on the LATCHED loaded flag, not live `synced`: a mid-session WS blip must not unmount
-    // TiptapEditor (y-prosemirror's undo history is destroyed on unmount); the mounted editor
-    // converges on reconnect.
-    if (!loaded || !provider || !yDoc) {
-        return (
-            <CollabLoadingState
-                storageUnavailable={storageUnavailable}
-                storageGone={storageGone}
-                path={path}
-                canWrite={canWrite}
-            />
-        );
-    }
-
     return (
-        <MediaResolverProvider
-            ownerId={path.ownerId}
-            mountId={path.mountId}
-            mediaFolderId={mediaFolderId}
-            chatFolderId={chatFolderId}
-        >
-            <UnsyncedEditsGuard active={unsyncedEdits} />
-            <TiptapEditor
-                key={path.id}
-                path={path}
-                yDoc={yDoc}
-                provider={provider}
-                canWrite={canWrite}
-                offline={offline}
-                storageUnavailable={storageUnavailable}
-                storageGone={storageGone}
-                mediaFolderId={mediaFolderId}
-                chatFolderId={chatFolderId}
-                onAccessDialogOpen={onAccessDialogOpen}
-                initialChatName={initialChatName}
-                initialSearchTerm={initialSearchTerm}
-            />
-        </MediaResolverProvider>
+        <CollabDocumentGate collab={{ loaded, storageUnavailable, storageGone }} path={path} canWrite={canWrite}>
+            {provider && yDoc && (
+                <MediaResolverProvider
+                    ownerId={path.ownerId}
+                    mountId={path.mountId}
+                    mediaFolderId={mediaFolderId}
+                    chatFolderId={chatFolderId}
+                >
+                    <UnsyncedEditsGuard active={unsyncedEdits} />
+                    <TiptapEditor
+                        key={path.id}
+                        path={path}
+                        yDoc={yDoc}
+                        provider={provider}
+                        canWrite={canWrite}
+                        offline={offline}
+                        storageUnavailable={storageUnavailable}
+                        mediaFolderId={mediaFolderId}
+                        chatFolderId={chatFolderId}
+                        onAccessDialogOpen={onAccessDialogOpen}
+                        initialChatName={initialChatName}
+                        initialSearchTerm={initialSearchTerm}
+                    />
+                </MediaResolverProvider>
+            )}
+        </CollabDocumentGate>
     );
 };
 
@@ -266,7 +255,6 @@ const TiptapEditor = ({
     canWrite,
     offline,
     storageUnavailable,
-    storageGone,
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
@@ -279,7 +267,6 @@ const TiptapEditor = ({
     canWrite: boolean;
     offline: boolean;
     storageUnavailable: boolean;
-    storageGone: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
@@ -903,7 +890,6 @@ const TiptapEditor = ({
                                     canWrite={canWrite}
                                     offline={offline}
                                     storageUnavailable={storageUnavailable}
-                                    storageGone={storageGone}
                                     canUndo={canUndo}
                                     canRedo={canRedo}
                                     onAccessDialogOpen={onAccessDialogOpen}

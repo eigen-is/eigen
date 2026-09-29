@@ -10,6 +10,7 @@ This codebase values **simplicity, directness, and consistency** over cleverness
 - **Don't extract single-use helpers** — a method that handles a complete workflow inline is better than several small methods you have to trace through. Only extract when logic is reused
 - **Trust the type system** — no defensive null checks on typed data, no fallback defaults for required fields. Validate at system boundaries (user input, external APIs), trust internal code everywhere else
 - **Consistency over originality** — new code must look like the code next to it. Same patterns, same naming, same structure. Don't invent new patterns when existing ones work
+- **Fewer lines beat more** — removing code is always a good idea when what remains is cleaner and easier to understand. Over-engineering (a flag threaded through layers, a prop every caller passes the same value for, a seam that closes a case that cannot happen) is a broken window: remove it on touch, and don't add it to close a nit
 
 ## Review Hot Spots
 

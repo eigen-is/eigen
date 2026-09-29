@@ -60,8 +60,6 @@ type FileMenuProps = {
     createLabel: string;
     createIcon?: LucideIcon;
     createType: EigenDocType;
-    // From useCollabDoc: a restore rebuilds the missing document and reloads.
-    storageGone: boolean;
     children?: ReactNode;
 };
 
@@ -75,7 +73,6 @@ export function FileMenu({
     createLabel,
     createIcon: CreateIcon = FileText,
     createType,
-    storageGone,
     children,
 }: FileMenuProps) {
     const [createOpen, setCreateOpen] = useState(false);
@@ -193,12 +190,7 @@ export function FileMenu({
                     if (actionType === 'delete') navigate({ to: `/` });
                 }}
             />
-            <RestoreVersionDialog
-                path={path}
-                snapshot={pendingSnapshot}
-                storageGone={storageGone}
-                onClose={() => setPendingSnapshot(null)}
-            />
+            <RestoreVersionDialog path={path} snapshot={pendingSnapshot} onClose={() => setPendingSnapshot(null)} />
         </>
     );
 }

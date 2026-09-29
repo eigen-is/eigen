@@ -61,7 +61,7 @@ export function RestoreVersionDialog({
     path: DrivePath;
     snapshot: Snapshot | null;
     // The document's stored data is missing: there is no current state to save first, and nothing loaded to update.
-    storageGone: boolean;
+    storageGone?: boolean;
     onClose: () => void;
 }) {
     const restore = useRestoreVersion(path.ownerId, path.mountId, path.id);

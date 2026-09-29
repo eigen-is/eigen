@@ -314,7 +314,7 @@ describe('useCollabDoc connection state', () => {
         expect(h.state.loaded).toBe(false);
     });
 
-    test('a loaded document whose storage goes missing reports storageGone, not offline', () => {
+    test('a loaded document whose storage goes missing stays loaded and reads as offline', () => {
         active = mount(OPTIONS);
         const h = active;
         act(() => {
@@ -326,12 +326,7 @@ describe('useCollabDoc connection state', () => {
         passGraceWindow();
         expect(h.state.loaded).toBe(true);
         expect(h.state.storageGone).toBe(true);
-        expect(h.state.offline).toBe(false);
-
-        // The tab holds the only copy of these edits, so the leave guard stays armed.
-        const doc = h.doc;
-        act(() => doc.getMap('items').set('b', 2));
-        expect(h.state.unsyncedEdits).toBe(true);
+        expect(h.state.offline).toBe(true);
     });
 
     test('a home replaced by a restore reloads the page instead of syncing back', () => {

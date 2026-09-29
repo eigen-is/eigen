@@ -1,7 +1,7 @@
 export { AboutDialog } from './about-dialog';
 export { AppLogo } from './app-logo';
 export { AppShell } from './app-shell';
-export { CollabLoadingState } from './collab-loading-state';
+export { CollabDocumentGate } from './collab-document-gate';
 export type { ColumnProps } from './column-layout';
 export { Column, ColumnLayout } from './column-layout';
 export { EigenApp } from './eigen-app';
