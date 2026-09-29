@@ -1,7 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { COLLAB_STORAGE_UNAVAILABLE_CLOSE } from '@workspace/lib/constants/collab';
+import {
+    COLLAB_STORAGE_GONE_CLOSE,
+    COLLAB_STORAGE_GONE_REASON,
+    COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+    COLLAB_STORAGE_UNAVAILABLE_REASON,
+} from '@workspace/lib/constants/collab';
+import type { Snapshot } from '@workspace/lib/types/versioning';
 import * as decoding from 'lib0/decoding';
 import { MESSAGE_SYNC } from '../../lib/collab/collabDocument';
 import type Drive from '../../lib/drive/drive';
@@ -18,11 +24,11 @@ import {
     settleContainer,
     unregisterFaultMount,
 } from '../fault-storage-helpers';
-import { getTestContext } from '../setup';
+import { authedRequest, getTestContext } from '../setup';
 
-// Unreachable storage closes the collab WS with 1013 'storage-unavailable', every other failed open
-// with 1008. The mount's real S3Storage talks to a FakeS3Server. Needs a real listening server:
-// app.handle() never completes the upgrade.
+// Unreachable storage closes the collab WS with 1013 'storage-unavailable', a stored object that is gone
+// with 4410 'storage-gone', every other failed open with 1008. The mount's real S3Storage talks to a
+// FakeS3Server. Needs a real listening server: app.handle() never completes the upgrade.
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-collab-unavailable-${Date.now()}`);
 const MOUNT_ID = 'fault-collab';
@@ -77,6 +83,23 @@ async function seedStoredDoc(docId: string): Promise<void> {
     await settleContainer(mount, docId);
 }
 
+function versionsUrl(docId: string, ...parts: string[]): string {
+    return [`/drive/${ownerId}/${MOUNT_ID}/file/${docId}/versions`, ...parts].join('/');
+}
+
+async function saveVersion(docId: string): Promise<Snapshot> {
+    const res = await authedRequest(token, versionsUrl(docId, 'save'), { method: 'POST' });
+    expect(res.status).toBe(200);
+    const saved = (await res.json()) as Snapshot;
+    // The version's upload is queued; the restore reads the stored object.
+    await mount.drainPendingUploads({ flushNow: true });
+    return saved;
+}
+
+function restoreVersion(docId: string, name: string): Promise<Response> {
+    return authedRequest(token, versionsUrl(docId, encodeURIComponent(name), 'restore'), { method: 'POST' });
+}
+
 async function storedBytes(key: string): Promise<string> {
     return Bun.hash(await fakeS3.store.read(key).arrayBuffer()).toString();
 }
@@ -122,12 +145,82 @@ afterAll(async () => {
 });
 
 describe('Collab WS open under unreachable storage', () => {
-    test('a document whose storage object is gone closes 1013 storage-unavailable', async () => {
+    test('a document whose storage object is gone closes 4410 storage-gone', async () => {
         expect(await openCollabClient(docId).closed).toEqual({
-            code: COLLAB_STORAGE_UNAVAILABLE_CLOSE,
-            reason: 'storage-unavailable',
+            code: COLLAB_STORAGE_GONE_CLOSE,
+            reason: COLLAB_STORAGE_GONE_REASON,
         });
     });
+
+    test('a failed local temp write on an intact object closes storage-unavailable, not storage-gone', async () => {
+        const { docId } = await createDoc('TmpGone');
+        const parked = `${mount.tmpDir}.parked`;
+        renameSync(mount.tmpDir, parked);
+        try {
+            expect(await openCollabClient(docId).closed).toEqual({
+                code: COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+                reason: COLLAB_STORAGE_UNAVAILABLE_REASON,
+            });
+        } finally {
+            rmSync(mount.tmpDir, { recursive: true, force: true });
+            renameSync(parked, mount.tmpDir);
+        }
+    }, 10_000);
+
+    test('a gone object with a viable crash temp opens from the temp', async () => {
+        const { docId, dataDbId, dataKey } = await createDoc('CrashTempWins');
+        await seedStoredDoc(docId);
+        await mount.downloadKeyToTemp(dataKey, dataDbId);
+        await fakeS3.store.delete(dataKey);
+
+        const reopened = await drive.getCollabDocument(MOUNT_ID, docId);
+        expect(reopened.doc.getMap('probe').get('kept')).toBe('yes');
+    }, 10_000);
+
+    test('a gone object with a pending staged copy opens from the staged copy', async () => {
+        const { docId, dataKey } = await createDoc('StagedWins');
+        await seedStoredDoc(docId);
+        // The next upload fails and its retry is held, so the staged copy stays pending.
+        fakeS3.faults.set(dataKey, 'fail-put');
+        const document = await drive.getCollabDocument(MOUNT_ID, docId);
+        document.doc.getMap('probe').set('kept', 'staged');
+        await drive.closeCollabDocument(MOUNT_ID, docId);
+        expect(mount.pendingStagedCopy(dataKey)).not.toBeNull();
+        await fakeS3.store.delete(dataKey);
+
+        const reopened = await drive.getCollabDocument(MOUNT_ID, docId);
+        expect(reopened.doc.getMap('probe').get('kept')).toBe('staged');
+        fakeS3.faults.delete(dataKey);
+    }, 10_000);
+
+    test('a version restore on a gone document succeeds and the next open serves the version', async () => {
+        const { docId, dataKey } = await createDoc('RestoreGone');
+        await seedStoredDoc(docId);
+        const saved = await saveVersion(docId);
+        const document = await drive.getCollabDocument(MOUNT_ID, docId);
+        document.doc.getMap('probe').set('kept', 'later');
+        await drive.closeCollabDocument(MOUNT_ID, docId);
+        await settleContainer(mount, docId);
+        await fakeS3.store.delete(dataKey);
+
+        expect((await restoreVersion(docId, saved.name)).status).toBe(200);
+        const reopened = await drive.getCollabDocument(MOUNT_ID, docId);
+        expect(reopened.doc.getMap('probe').get('kept')).toBe('yes');
+    }, 10_000);
+
+    test('a version restore while the bucket answers NoSuchBucket fails 503 and changes nothing', async () => {
+        const { docId, dataDbId, dataKey } = await createDoc('RestoreNoBucket');
+        await seedStoredDoc(docId);
+        const saved = await saveVersion(docId);
+        const versionsBefore = await (await authedRequest(token, versionsUrl(docId))).json();
+        fakeS3.faults.set(dataKey, 'no-bucket');
+
+        expect((await restoreVersion(docId, saved.name)).status).toBe(503);
+        expect((await mount.getChildByName(docId, 'data.db'))?.id).toBe(dataDbId);
+        expect(await (await authedRequest(token, versionsUrl(docId))).json()).toEqual(versionsBefore);
+        fakeS3.faults.delete(dataKey);
+        expect(await fakeS3.store.exists(dataKey)).toBe(true);
+    }, 10_000);
 
     test('an ordinary failed open still closes 1008', async () => {
         expect((await openCollabClient('no-such-path').closed).code).toBe(1008);
@@ -135,14 +228,28 @@ describe('Collab WS open under unreachable storage', () => {
 });
 
 describe('Collab WS open whose download fails', () => {
-    test('a 5xx on the GET closes with storage-unavailable, like an unreachable exists()', async () => {
+    test('a 5xx on the GET closes with storage-unavailable', async () => {
         const { docId, dataKey } = await createDoc('Get500');
         fakeS3.faults.set(dataKey, 'fail-get');
         expect(await openCollabClient(docId).closed).toEqual({
             code: COLLAB_STORAGE_UNAVAILABLE_CLOSE,
-            reason: 'storage-unavailable',
+            reason: COLLAB_STORAGE_UNAVAILABLE_REASON,
         });
     }, 10_000);
+
+    // Only NoSuchKey in the GET body means the object is gone; a refused or missing bucket is an outage.
+    test.each(['deny', 'no-bucket'] as const)(
+        'a %s answer on the GET closes with storage-unavailable',
+        async (fault) => {
+            const { docId, dataKey } = await createDoc(`Get-${fault}`);
+            fakeS3.faults.set(dataKey, fault);
+            expect(await openCollabClient(docId).closed).toEqual({
+                code: COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+                reason: COLLAB_STORAGE_UNAVAILABLE_REASON,
+            });
+        },
+        10_000,
+    );
 
     test('a body cut short fails the open, leaves no temp and never touches the stored object', async () => {
         const { docId, dataDbId, dataKey } = await createDoc('Cut');

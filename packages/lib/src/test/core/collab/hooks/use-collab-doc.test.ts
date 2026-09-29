@@ -5,6 +5,7 @@ import type * as Y from 'yjs';
 import {
     COLLAB_EPOCH_MESSAGE,
     COLLAB_HOME_REPLACED_CLOSE,
+    COLLAB_STORAGE_GONE_CLOSE,
     COLLAB_STORAGE_UNAVAILABLE_CLOSE,
 } from '../../../../constants/collab';
 import type { CollabDoc, UseCollabDocOptions } from '../../../../core/collab/hooks/use-collab-doc';
@@ -63,10 +64,14 @@ class FakeProvider {
 
     // The hook drives these on a storage-unavailable close; the fake stays closed either way.
     disconnected = false;
+    connects = 0;
     disconnect() {
         this.disconnected = true;
     }
-    connect() {}
+    connect() {
+        this.connects++;
+        this.disconnected = false;
+    }
 
     open() {
         this.wsconnected = true;
@@ -140,6 +145,8 @@ function mount(options: UseCollabDocOptions) {
 // Comfortably past the hook's offline grace window, and short of its 5s storage retry.
 const PAST_GRACE_MS = 2_000;
 const passGraceWindow = () => act(() => void jest.advanceTimersByTime(PAST_GRACE_MS));
+// Past the hook's 5s storage retry.
+const STORAGE_RETRY_PASSED_MS = 6_000;
 
 const OPTIONS: UseCollabDocOptions = { ownerId: 'owner', mountId: 'mount', pathId: 'doc-1' };
 
@@ -286,6 +293,45 @@ describe('useCollabDoc connection state', () => {
             h.provider.finishSync();
         });
         expect(h.state.storageUnavailable).toBe(false);
+    });
+
+    test('a gone document stops retrying and reports storageGone', () => {
+        active = mount(OPTIONS);
+        const h = active;
+        act(() => h.provider.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE));
+        act(() => void jest.advanceTimersByTime(STORAGE_RETRY_PASSED_MS));
+        expect(h.provider.connects).toBe(1);
+
+        act(() => {
+            h.provider.open();
+            h.provider.close(COLLAB_STORAGE_GONE_CLOSE);
+        });
+        act(() => void jest.advanceTimersByTime(STORAGE_RETRY_PASSED_MS));
+        expect(h.provider.connects).toBe(1);
+        expect(h.provider.disconnected).toBe(true);
+        expect(h.state.storageGone).toBe(true);
+        expect(h.state.storageUnavailable).toBe(false);
+        expect(h.state.loaded).toBe(false);
+    });
+
+    test('a loaded document whose storage goes missing reports storageGone, not offline', () => {
+        active = mount(OPTIONS);
+        const h = active;
+        act(() => {
+            h.provider.open();
+            h.provider.finishSync();
+        });
+
+        act(() => h.provider.close(COLLAB_STORAGE_GONE_CLOSE));
+        passGraceWindow();
+        expect(h.state.loaded).toBe(true);
+        expect(h.state.storageGone).toBe(true);
+        expect(h.state.offline).toBe(false);
+
+        // The tab holds the only copy of these edits, so the leave guard stays armed.
+        const doc = h.doc;
+        act(() => doc.getMap('items').set('b', 2));
+        expect(h.state.unsyncedEdits).toBe(true);
     });
 
     test('a home replaced by a restore reloads the page instead of syncing back', () => {

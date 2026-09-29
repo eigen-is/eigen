@@ -31,7 +31,8 @@ auto-sync tick return after the *local* write; `create` first checks that the ke
 - **Replay on boot / reopen** — `pending_uploads` is durable in `metadata.db`, so a restart or home-reopen
   resumes un-acked uploads (`UploadQueue.reconcile`, before the stale-temp sweep). `stagingPath` stores a
   **basename**, resolved against the mount's `staging/` dir at read time (legacy absolute rows pass
-  through), so a host migration / restore-from-backup / bind-mount change doesn't drop pending rows.
+  through), so a host migration / per-home restore / bind-mount change doesn't drop pending rows.
+  A whole-server restore (`./eigen restore`) replays the snapshot's staged copies unless the `data/` it keeps aside had already uploaded, replaced or deleted them ([BACKUP.md § The whole-server stopgap](BACKUP.md#the-whole-server-stopgap)), and reconcile logs each row whose staged copy is missing before it drops the row.
 - **Crash recovery (Phase 1a)** — a temp that survived an unclean shutdown is force-dirtied on reopen
   (`ManagedDatabase.markDirty`) so its unsynced bytes re-reach storage instead of being dropped by the
   close-time cleanup. Closes the original data-loss bug; needs no queue. (It also *introduced* one — see
@@ -46,7 +47,7 @@ auto-sync tick return after the *local* write; `create` first checks that the ke
   **Invariant: an empty/invalid working copy can never overwrite a non-trivial
   stored object — worst case a transient 503, never a wipe.** A download or a staged-copy recovery
   writes a `tmp/<uuid>` side file and renames it onto the working-copy path, so a process killed mid-GET
-  leaves no partial temp for the next open to adopt. A failed GET, including a missing object, answers 503
+  leaves no partial temp for the next open to adopt. A GET whose body says the object is gone (`NoSuchKey`, or `ENOENT` on local) answers 410 once the crash temp and the staged copy were checked; every other failure, a missing or refused bucket included, answers 503
   (the open sends no HEAD first).
 - **Freshest-first reads** — `Mount.readFile` serves a pending staged copy before the storage object, so
   reopen, copy/duplicate, and copy-across all read the newest bytes during an outage, never a stale/absent

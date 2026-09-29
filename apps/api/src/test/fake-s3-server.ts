@@ -5,9 +5,19 @@ import { DUMMY_S3 } from './fault-storage-helpers';
 
 // A local S3 for the real S3Storage: faults on the lazy S3File's HEAD, GET and DELETE, which FaultStorage never sees.
 
-// stall-body: headers and half the body, then silence; cut: half, then close; fail-get: a 500 on GET only.
-// HEAD and DELETE honor only stall and fail.
-export type S3Fault = 'stall' | 'stall-body' | 'cut' | 'empty' | 'fail' | 'fail-get';
+// stall-body: headers and half the body, then silence; cut: half, then close; fail-get: a 500 on GET only;
+// fail-put: a 500 on PUT only; deny: a 403 AccessDenied; no-bucket: a 404 NoSuchBucket.
+// HEAD and DELETE honor only stall, fail, deny and no-bucket; PUT only fail-put.
+export type S3Fault =
+    | 'stall'
+    | 'stall-body'
+    | 'cut'
+    | 'empty'
+    | 'fail'
+    | 'fail-get'
+    | 'fail-put'
+    | 'deny'
+    | 'no-bucket';
 
 export class FakeS3Server {
     // Keyed by object key.
@@ -78,13 +88,17 @@ export class FakeS3Server {
     private async respond(socket: net.Socket, head: string, body: Buffer): Promise<void> {
         const [method, target] = head.split(' ');
         const key = decodeURIComponent(new URL(target, 'http://s3').pathname.split('/').slice(2).join('/'));
+        const fault = this.faults.get(key);
         if (method === 'PUT') {
+            if (fault === 'fail-put') {
+                reply(socket, method, '500 Internal Server Error', 'InternalError');
+                return;
+            }
             await this.store.write(key, new Uint8Array(body));
             reply(socket, method, '200 OK');
             return;
         }
         if (method === 'GET') this.gets.set(key, (this.gets.get(key) ?? 0) + 1);
-        const fault = this.faults.get(key);
         if (fault === 'stall') {
             this.held.set(socket, () => {
                 this.serve(socket, method, key, head, undefined).catch(() => socket.destroy());
@@ -103,6 +117,14 @@ export class FakeS3Server {
     ): Promise<void> {
         if (fault === 'fail' || (fault === 'fail-get' && method === 'GET')) {
             reply(socket, method, '500 Internal Server Error', 'InternalError');
+            return;
+        }
+        if (fault === 'deny') {
+            reply(socket, method, '403 Forbidden', 'AccessDenied');
+            return;
+        }
+        if (fault === 'no-bucket') {
+            reply(socket, method, '404 Not Found', 'NoSuchBucket');
             return;
         }
         if (method === 'DELETE') {
@@ -132,7 +154,7 @@ export class FakeS3Server {
             ? `206 Partial Content\r\nContent-Range: bytes ${start}-${end - 1}/${object.length}`
             : '200 OK';
         socket.write(`HTTP/1.1 ${status}\r\nContent-Length: ${bytes.length}\r\n\r\n`);
-        if (fault === undefined) {
+        if (fault !== 'cut' && fault !== 'stall-body') {
             socket.write(bytes);
             return;
         }

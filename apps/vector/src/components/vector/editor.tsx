@@ -131,7 +131,9 @@ export function VectorEditor({
                         canWrite={canWrite}
                         canEdit={canEdit}
                         offline={doc.offline}
-                        storageUnavailable={doc.loaded && doc.storageUnavailable}
+                        loaded={doc.loaded}
+                        storageUnavailable={doc.storageUnavailable}
+                        storageGone={doc.storageGone}
                         undoManager={doc.undoManager}
                         tool={tool}
                         setTool={setTool}

@@ -1,6 +1,6 @@
-import { Database } from 'bun:sqlite';
+import { constants, Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { chmodSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
@@ -10,6 +10,7 @@ import { snapshotHome } from '../../lib/backup/snapshot-home';
 import type { DatabaseConfig } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
+import { createMountConfig } from '../../lib/mount';
 import type { Mount } from '../../lib/mount/mount';
 import { STORAGE_TIMEOUT_MS, setStorageTimeoutMs } from '../../lib/storage/deadline';
 import { LocalStorage } from '../../lib/storage/local-storage';
@@ -40,8 +41,10 @@ const FULL_MOUNT_ID = 'backup-s3-full';
 const STALLED_MOUNT_ID = 'backup-s3-stalled';
 const FAILING_MOUNT_ID = 'backup-s3-failing';
 const FAILING_CONTAINER_MOUNT_ID = 'backup-s3-failing-container';
+const NO_BUCKET_MOUNT_ID = 'backup-s3-no-bucket';
 const RACING_DELETE_MOUNT_ID = 'backup-s3-racing-delete';
 const VANISHING_OBJECT_MOUNT_ID = 'backup-s3-vanishing-object';
+const LOCAL_MOUNT_ID = 'backup-local';
 
 const docSchema = { items: sqliteTable('items', { id: integer('id').primaryKey(), data: text('data') }) };
 // No snapshot config: a close-time version enqueue would be noise for these tests.
@@ -73,6 +76,19 @@ async function writeMarkerDb(filePath: string, ...markers: string[]): Promise<Ui
     }
     db.close(true);
     return new Uint8Array(await Bun.file(filePath).arrayBuffer());
+}
+
+// What a SIGKILL leaves: a WAL-mode database whose markers sit only in its -wal. The writer stays
+// open, since closing it would checkpoint the tail into the main file; the caller closes it.
+function writeWalTailDb(filePath: string, ...markers: string[]): Database {
+    const db = new Database(filePath, { create: true });
+    db.run('PRAGMA journal_mode=WAL');
+    db.run('PRAGMA wal_autocheckpoint=0');
+    db.run('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)');
+    for (const [index, marker] of markers.entries()) {
+        db.run('INSERT INTO items (id, data) VALUES (?, ?)', [index + 1, marker]);
+    }
+    return db;
 }
 
 function readMarkers(dbPath: string): string[] {
@@ -116,6 +132,26 @@ async function snapshot(): Promise<{ manifest: BackupManifest; folder: string }>
     const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-freshest-'));
     const manifest = await snapshotHome(home, target);
     return { manifest, folder: join(target, buildHomeFolderName(home.user.id)) };
+}
+
+// A settled document whose working copy in tmp/ holds one more commit, uncheckpointed, than its stored object.
+async function expectWalTailArchived(mount: Mount): Promise<void> {
+    const { containerId, dataDbId } = await provisionDoc(mount);
+    const containerName = (await mount.getPath(containerId))!.name;
+    const managed = await mount.createDatabase(docConfig, dataDbId);
+    managed.db.insert(docSchema.items).values({ id: 1, data: 'settled' }).run();
+    await settleContainer(mount, containerId);
+    const temp = mount.getTempPath(dataDbId);
+    const writer = writeWalTailDb(temp, 'settled', 'crash tail');
+    try {
+        expect(statSync(`${temp}-wal`).size).toBeGreaterThan(0);
+        const { folder } = await snapshot();
+        const archived = join(folder, `home/mounts/${mount.id}/data/${containerName}/data.db`);
+        expect(readMarkers(archived)).toEqual(['settled', 'crash tail']);
+    } finally {
+        writer.close();
+        await mount.deletePath(containerId);
+    }
 }
 
 beforeAll(async () => {
@@ -317,6 +353,21 @@ describe('Backup freshest-first on an s3 mount', () => {
         });
     });
 
+    // A HEAD answers a missing bucket as it answers a missing key; only the GET body tells them apart.
+    test('a container database whose bucket answers NoSuchBucket fails as unreachable, not as lost', async () => {
+        await withFakeS3Mount(NO_BUCKET_MOUNT_ID, async (mount, fake) => {
+            const { containerId, dataDbId } = await provisionDoc(mount);
+            const managed = await mount.createDatabase(docConfig, dataDbId);
+            managed.db.insert(docSchema.items).values({ id: 1, data: 'stored' }).run();
+            await settleContainer(mount, containerId);
+            const storageKey = await mount.getStorageKey(dataDbId);
+            fake.faults.set(storageKey, 'no-bucket');
+            await expect(snapshot()).rejects.toThrow(
+                `mount ${NO_BUCKET_MOUNT_ID}: storage unreachable (NoSuchBucket) reading ${storageKey}`,
+            );
+        });
+    });
+
     // A failure on THIS machine keeps its own errno: calling it "storage unreachable" would send the
     // admin after the wrong box.
     test.skipIf(process.getuid?.() === 0)(
@@ -455,8 +506,7 @@ describe('Backup freshest-first on an s3 mount', () => {
         });
     });
 
-    // Gap BK-5: freshest-first never looks at the crash temp an unclean shutdown leaves behind.
-    test.failing('a document whose last edits survive only in its crash temp is archived with them', async () => {
+    test('a document whose last edits survive only in its crash temp is archived with them', async () => {
         const { containerId, dataDbId } = await provisionDoc(staleMount);
         const containerName = (await staleMount.getPath(containerId))!.name;
         const managed = await staleMount.createDatabase(docConfig, dataDbId);
@@ -468,6 +518,49 @@ describe('Backup freshest-first on an s3 mount', () => {
             const { folder } = await snapshot();
             const relPath = `home/mounts/${STALE_MOUNT_ID}/data/${containerName}/data.db`;
             expect(readMarkers(join(folder, relPath))).toEqual(['settled', 'crash tail']);
+        } finally {
+            await staleMount.deletePath(containerId);
+        }
+    });
+
+    test('a crash temp whose last edits sit in an uncheckpointed WAL tail is archived with them', async () => {
+        await expectWalTailArchived(staleMount);
+    });
+
+    // What a failed final sync leaves: a WAL-mode main file with no -wal or -shm, which a readonly open cannot read.
+    test('a crash temp with no WAL sidecars is archived with its last edits', async () => {
+        const { containerId, dataDbId } = await provisionDoc(staleMount);
+        const containerName = (await staleMount.getPath(containerId))!.name;
+        const managed = await staleMount.createDatabase(docConfig, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'settled' }).run();
+        await settleContainer(staleMount, containerId);
+        try {
+            const temp = staleMount.getTempPath(dataDbId);
+            const writer = writeWalTailDb(temp, 'settled', 'unsynced');
+            writer.fileControl(constants.SQLITE_FCNTL_PERSIST_WAL, 0);
+            writer.close(true);
+            expect(existsSync(`${temp}-wal`)).toBe(false);
+            expect(existsSync(`${temp}-shm`)).toBe(false);
+            const { folder } = await snapshot();
+            const relPath = `home/mounts/${STALE_MOUNT_ID}/data/${containerName}/data.db`;
+            expect(readMarkers(join(folder, relPath))).toEqual(['settled', 'unsynced']);
+        } finally {
+            await staleMount.deletePath(containerId);
+        }
+    });
+
+    // What a SIGKILL during create leaves; the next open discards it, so the backup does too.
+    test('a 0-byte crash temp is skipped and the stored object archived', async () => {
+        const { containerId, dataDbId } = await provisionDoc(staleMount);
+        const containerName = (await staleMount.getPath(containerId))!.name;
+        const managed = await staleMount.createDatabase(docConfig, dataDbId);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'settled' }).run();
+        await settleContainer(staleMount, containerId);
+        try {
+            writeFileSync(staleMount.getTempPath(dataDbId), '');
+            const { folder } = await snapshot();
+            const relPath = `home/mounts/${STALE_MOUNT_ID}/data/${containerName}/data.db`;
+            expect(readMarkers(join(folder, relPath))).toEqual(['settled']);
         } finally {
             await staleMount.deletePath(containerId);
         }
@@ -498,6 +591,22 @@ describe('Backup freshest-first on an s3 mount', () => {
         expect(summary.storageType).toBe('s3');
         expect(summary.files).toBe(archived.length);
         expect(summary.bytes).toBeGreaterThan(0);
+    });
+});
+
+describe('Backup freshest-first on a local mount', () => {
+    // The test server's default mount is local-id, which keeps no working copy in tmp/.
+    let localMount: Mount;
+    beforeAll(async () => {
+        const settings = await home.settings.set({
+            mounts: { [LOCAL_MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Local' } },
+        });
+        await home.drive.addMount(createMountConfig(LOCAL_MOUNT_ID, settings.mounts![LOCAL_MOUNT_ID]));
+        localMount = findOrFail(home.drive.getMounts(), (m) => m.id === LOCAL_MOUNT_ID);
+    });
+
+    test('a crash temp whose last edits sit in an uncheckpointed WAL tail is archived with them', async () => {
+        await expectWalTailArchived(localMount);
     });
 });
 

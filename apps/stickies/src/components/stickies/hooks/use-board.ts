@@ -115,6 +115,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         offline,
         loaded,
         storageUnavailable,
+        storageGone,
         unsyncedEdits,
     } = useCollabDoc({
         ownerId,
@@ -221,6 +222,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         offline,
         loaded,
         storageUnavailable,
+        storageGone,
         unsyncedEdits,
         isAddColumnDialogOpen,
         setIsAddColumnDialogOpen,

@@ -80,7 +80,12 @@ export function CanvasDocumentShell({
                     <Column id="editor" width="flex" className="flex-1 h-full" toolbarBorder="always" toolbar={toolbar}>
                         {/* Latched: a WS blip keeps the canvas mounted; `doc.synced` still gates presence. */}
                         {!doc.loaded ? (
-                            <CollabLoadingState storageUnavailable={doc.storageUnavailable} />
+                            <CollabLoadingState
+                                storageUnavailable={doc.storageUnavailable}
+                                storageGone={doc.storageGone}
+                                path={path}
+                                canWrite={canWrite}
+                            />
                         ) : (
                             <div className="flex h-full w-full overflow-hidden">
                                 {children}

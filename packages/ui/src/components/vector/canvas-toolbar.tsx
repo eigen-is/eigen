@@ -25,7 +25,10 @@ type CanvasToolbarProps = {
     canWrite: boolean;
     canEdit: boolean;
     offline: boolean;
+    // The share cluster's storage badge waits for the load; before it, the gone and loading screens say it.
+    loaded: boolean;
     storageUnavailable: boolean;
+    storageGone: boolean;
     // Exactly what useYjsUndoState consumes (Y.UndoManager | null) — named via the hook so an app
     // needn't take a direct yjs dependency just to type one prop.
     undoManager: Parameters<typeof useYjsUndoState>[0];
@@ -60,7 +63,9 @@ export function CanvasToolbar({
     canWrite,
     canEdit,
     offline,
+    loaded,
     storageUnavailable,
+    storageGone,
     undoManager,
     tool,
     setTool,
@@ -97,6 +102,7 @@ export function CanvasToolbar({
                             createLabel={createLabel}
                             createIcon={createIcon}
                             createType={createType}
+                            storageGone={storageGone}
                         />
                         {/* Unconditional: EditMenu drops its edit section itself, and its Find entries
                             are the read-only viewer's only menu route to the find bar. */}
@@ -140,7 +146,8 @@ export function CanvasToolbar({
                         <DocumentShareCluster
                             canWrite={canWrite}
                             offline={offline}
-                            storageUnavailable={storageUnavailable}
+                            storageUnavailable={loaded && storageUnavailable}
+                            storageGone={loaded && storageGone}
                             onAccessDialogOpen={onAccessDialogOpen}
                             watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
                             onToggleCommentPanel={onToggleCommentPanel}

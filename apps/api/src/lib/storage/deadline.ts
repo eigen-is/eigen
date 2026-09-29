@@ -16,6 +16,23 @@ export function storageUnavailable(cause?: unknown): ApiError {
     return new ApiError(503, 'Storage unavailable', cause === undefined ? undefined : { cause });
 }
 
+// A stored object that is gone for good, after the temp and the staged copy were checked: 410, as the row
+// still resolves.
+export function storageGone(cause?: unknown): ApiError {
+    return new ApiError(410, 'Stored data not found', cause === undefined ? undefined : { cause });
+}
+
+// Node puts the errno on the Error as `code`; a thrown value that is not one has none.
+export function errnoOf(error: unknown): string | null {
+    return error instanceof Error && 'code' in error ? String(error.code) : null;
+}
+
+// Only a GET body's code tells a gone key from a gone bucket or a refused one: S3Error carries no status.
+export function isMissingObjectCause(error: unknown): error is ApiError {
+    const code = error instanceof ApiError ? errnoOf(error.cause) : null;
+    return code === 'NoSuchKey' || code === 'ENOENT';
+}
+
 // A request Bun's S3Client cannot abort keeps running in the background; only the caller stops waiting.
 export function withStorageDeadline<T>(request: Promise<T>): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -35,7 +52,14 @@ export async function consumeStream(
     opts: { idleMs?: number; maxBytes?: number; signal?: AbortSignal } = {},
 ): Promise<number> {
     const { idleMs, maxBytes = Number.POSITIVE_INFINITY, signal } = opts;
-    const reader = stream.getReader();
+    let reader: ReadableStreamDefaultReader<Uint8Array>;
+    try {
+        reader = stream.getReader();
+    } catch (error) {
+        // Bun opens a local file here, so a missing one throws its ENOENT before the first read.
+        if (idleMs === undefined) throw error;
+        throw storageUnavailable(error);
+    }
     let stopped = false;
     const stop = () => {
         stopped = true;

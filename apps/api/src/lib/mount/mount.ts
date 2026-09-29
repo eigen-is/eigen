@@ -21,9 +21,11 @@ import { ApiError, type DatabaseConfig, type ManagedDatabase, PATHS, type Schema
 import { FileHistory } from '../drive/history';
 import { deleteThumbnail } from '../shared/thumbnails';
 import {
+    isMissingObjectCause,
     readStorageFile,
     type StorageBackend,
     type StorageFile,
+    storageGone,
     storageUnavailable,
     writeTempWithHash,
 } from '../storage';
@@ -1026,7 +1028,25 @@ export class Mount {
                 `[Mount] downloadToTemp ${pathId}: tempId ${tempId} is an open document DB — refusing to overwrite its live working copy`,
             );
         }
-        return this.downloadKeyToTemp(await this.getStorageKey(pathId), tempId);
+        // Under the tree lock, as the open: on `local` an ancestor rename racing the read would read as gone.
+        return this.withTreeShared(async () => {
+            const storageKey = await this.getStorageKey(pathId);
+            // Freshest-first, as readKey: a version saved during an outage exists only as its staged copy.
+            const staged = this.pendingStagedCopy(storageKey);
+            if (staged) {
+                try {
+                    await this.replaceTempFrom(tempId, Bun.file(staged));
+                    return this.getTempPath(tempId);
+                } catch (err) {
+                    // A staged copy the queue's ack unlinked mid-read now sits in the bucket: fall through.
+                    if (!isMissingObjectCause(err)) {
+                        console.error(`[Mount] download of staged ${storageKey} failed:`, err);
+                        throw err instanceof ApiError ? err : storageUnavailable();
+                    }
+                }
+            }
+            return this.downloadKeyToTemp(storageKey, tempId);
+        });
     }
 
     // internal — used by mount/*.ts
@@ -1042,7 +1062,10 @@ export class Mount {
             size = await this.replaceTempFrom(tempId, this.storage.read(storageKey));
         } catch (err) {
             console.error(`[Mount] download ${storageKey} failed:`, err);
-            throw storageUnavailable(err);
+            // Only the GET body tells a gone object (410) from an outage (503). The read's own failures
+            // arrive as ApiErrors; a raw one is local (tmp/ write or rename), and its ENOENT is not a gone object.
+            if (isMissingObjectCause(err)) throw storageGone(err.cause);
+            throw err instanceof ApiError ? err : storageUnavailable();
         }
         const ms = (Bun.nanoseconds() - start) / 1_000_000;
         console.log(`[timing] Mount.download ${storageKey} ${(size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
@@ -1109,7 +1132,7 @@ export class Mount {
 
     // ---- Managed document-DB facade — implementation in mount/document-db.ts ----
 
-    // Open an EXISTING managed document database. Throws ApiError(503) if the
+    // Open an EXISTING managed document database. Throws ApiError(410) if the
     // backing storage object isn't there — never silently creates fresh.
     // Use createDatabase for the first-time provisioning instead.
     async openDatabase<S extends SchemaType>(config: DatabaseConfig<S>, pathId: string): Promise<ManagedDatabase<S>> {

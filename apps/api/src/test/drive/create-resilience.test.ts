@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -6,16 +6,19 @@ import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { ApiError } from '../../lib/core';
 import type Drive from '../../lib/drive/drive';
 import { getHome } from '../../lib/home';
+import { createMountConfig } from '../../lib/mount';
 import type { Mount } from '../../lib/mount/mount';
 import type { User } from '../../lib/user';
+import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
 import {
     createFaultMount,
     type FaultStorage,
     registerFaultMount,
     settleContainer,
     unregisterFaultMount,
+    waitFor,
 } from '../fault-storage-helpers';
-import { collectSSE, getTestContext } from '../setup';
+import { collectSSE, findOrFail, getTestContext } from '../setup';
 
 // Drive.create over a FaultStorage mount: a provisioning failure must leave no container row, since a
 // surviving row occupies the name and 503s on every later open. A failed upload leaves no temp behind.
@@ -94,7 +97,7 @@ describe('Drive.create is atomic under degraded storage', () => {
         expect(card.name).toBe('Card 1.eigenchat');
     });
 
-    test('a data.db row whose storage object is gone still 503s on open (mustExist stays strict)', async () => {
+    test('a data.db row whose storage object is gone 410s on open, and an empty one 503s (mustExist stays strict)', async () => {
         const doc = await drive.create(MOUNT_ID, rootId, 'Vanishing', 'doc', user);
         const dataDb = (await mount.getChildByName(doc.id, 'data.db'))!;
         await settleContainer(mount, doc.id);
@@ -103,7 +106,7 @@ describe('Drive.create is atomic under degraded storage', () => {
         await fault.inner.delete(key);
         const missing = await mount.openDatabase(COLLAB_DB_CONFIG, dataDb.id).catch((e: unknown) => e);
         expect(missing).toBeInstanceOf(ApiError);
-        expect(missing).toMatchObject({ status: 503 });
+        expect(missing).toMatchObject({ status: 410 });
 
         // A 0-byte object is the same refusal one layer down: ManagedDatabase's mustExist guard
         // must not open an empty working copy as a fresh database.
@@ -111,6 +114,78 @@ describe('Drive.create is atomic under degraded storage', () => {
         const empty = await mount.openDatabase(COLLAB_DB_CONFIG, dataDb.id).catch((e: unknown) => e);
         expect(empty).toBeInstanceOf(ApiError);
         expect(empty).toMatchObject({ status: 503 });
+    });
+
+    test('a data.db file deleted from a local mount 410s on open', async () => {
+        const home = await getHome(ownerId);
+        const settings = await home.settings.set({
+            mounts: { 'local-gone': { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Local' } },
+        });
+        await drive.addMount(createMountConfig('local-gone', settings.mounts!['local-gone']));
+        const localMount = findOrFail(drive.getMounts(), (m) => m.id === 'local-gone');
+        const localRoot = (await localMount.getRootFolder())!;
+        const doc = await drive.create('local-gone', localRoot.id, 'Vanishing', 'doc', user);
+        const dataDb = (await localMount.getChildByName(doc.id, 'data.db'))!;
+        await settleContainer(localMount, doc.id);
+
+        rmSync(localMount.storage.getPath!(await localMount.getStorageKey(dataDb.id)));
+        const missing = await localMount.openDatabase(COLLAB_DB_CONFIG, dataDb.id).catch((e: unknown) => e);
+        expect(missing).toBeInstanceOf(ApiError);
+        expect(missing).toMatchObject({ status: 410 });
+    });
+});
+
+describe('Version restore under degraded storage', () => {
+    test('a version saved while its upload fails restores from its staged copy', async () => {
+        const doc = await drive.create(MOUNT_ID, rootId, 'Outage Version', 'sheets', user);
+        const seeded = await drive.getCollabDocument(MOUNT_ID, doc.id);
+        seeded.doc.getMap('state').set('marker', 'saved');
+        await drive.closeCollabDocument(MOUNT_ID, doc.id);
+        await settleContainer(mount, doc.id);
+
+        // The version's PUT is the only write; retries are held (FaultMount), so it stays a staged copy.
+        fault.failNextWrites = 1;
+        const saved = await drive.saveVersion(MOUNT_ID, doc.id);
+        await waitFor(() => fault.failNextWrites === 0);
+        const versions = (await mount.getChildByName(doc.id, VERSIONS_FOLDER_NAME))!;
+        const versionKey = await mount.getStorageKey((await mount.getChildByName(versions.id, saved.name))!.id);
+        expect(await fault.inner.exists(versionKey)).toBe(false);
+
+        const document = await drive.getCollabDocument(MOUNT_ID, doc.id);
+        document.doc.getMap('state').set('marker', 'later');
+        await drive.restoreContainer(MOUNT_ID, doc.id, saved.name);
+        expect(document.doc.getMap('state').get('marker')).toBe('saved');
+        await drive.closeCollabDocument(MOUNT_ID, doc.id);
+        await settleContainer(mount, doc.id);
+    });
+
+    test('a version whose staged copy the ack unlinks before the read restores from the stored object', async () => {
+        const doc = await drive.create(MOUNT_ID, rootId, 'Acked Version', 'sheets', user);
+        const seeded = await drive.getCollabDocument(MOUNT_ID, doc.id);
+        seeded.doc.getMap('state').set('marker', 'saved');
+        await drive.closeCollabDocument(MOUNT_ID, doc.id);
+        await settleContainer(mount, doc.id);
+
+        fault.failNextWrites = 1;
+        const saved = await drive.saveVersion(MOUNT_ID, doc.id);
+        await waitFor(() => fault.failNextWrites === 0);
+
+        const document = await drive.getCollabDocument(MOUNT_ID, doc.id);
+        document.doc.getMap('state').set('marker', 'later');
+        // The retry lands and unlinks the staged copy after downloadToTemp picked it.
+        const replaceTempFrom = mount.replaceTempFrom.bind(mount);
+        const spy = spyOn(mount, 'replaceTempFrom').mockImplementationOnce(async (tempId, source) => {
+            await mount.uploadQueue!.drain({ flushNow: true });
+            return replaceTempFrom(tempId, source);
+        });
+        try {
+            await drive.restoreContainer(MOUNT_ID, doc.id, saved.name);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(document.doc.getMap('state').get('marker')).toBe('saved');
+        await drive.closeCollabDocument(MOUNT_ID, doc.id);
+        await settleContainer(mount, doc.id);
     });
 });
 

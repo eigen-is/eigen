@@ -29,14 +29,22 @@ export async function restoreContainer(
     const tempId = randomUUID();
     const tempPath = await mount.downloadToTemp(target.id, tempId);
     try {
-        await mount.snapshotContainerDataDb(container.id, policy);
-        if (isCollabType(container.type)) {
+        // A gone data.db (410, once the temp and staged copy were checked) has no bytes to preserve and no
+        // live Y.Doc to converge.
+        const gone = await mount.snapshotContainerDataDb(container.id, policy).then(
+            () => false,
+            (error: unknown) => {
+                if (!(error instanceof ApiError && error.status === 410)) throw error;
+                return true;
+            },
+        );
+        if (!gone && isCollabType(container.type)) {
             // Yjs (doc/sheets/slides/stickies): replay the snapshot's state into the
             // live Y.Doc so connected editors converge with no reload.
             const state = readYjsStateFromFile(tempPath, { label: `restore:${target.name}` });
             await restoreYjsContainer(drive, mount, container.id, state);
         } else {
-            // Chat has no live Y.Doc: overwrite data.db's bytes with the snapshot's.
+            // Chat, or a gone data.db: overwrite data.db's bytes with the snapshot's.
             await mount.replaceContainerDataDb(container.id, tempPath);
         }
     } finally {

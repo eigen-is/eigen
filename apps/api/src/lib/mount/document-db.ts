@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { settlesWithin } from '../../utils/timing';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType, type SyncCallbacks } from '../core';
+import { errnoOf, storageGone, storageUnavailable } from '../storage';
 import { getShutdownDrainDeadline } from '../sync';
 import { isViableRecoveryTemp } from './helpers';
 import type { Mount } from './mount';
@@ -98,8 +99,13 @@ async function buildDocumentDb<S extends SchemaType>(
         if (await mount.storage.exists(storageKey)) {
             throw new Error(`Mount.createDatabase ${pathId}: storage object ${storageKey} already exists`);
         }
-    } else if (!mount.needsTempCopy && !(await mount.storage.exists(storageKey))) {
-        throw new ApiError(503, `Storage object for ${pathId} not available`);
+    } else if (!mount.needsTempCopy) {
+        // Only absence is gone: EACCES or EIO (a volume gone away) is an outage the client retries.
+        try {
+            fs.statSync(localPath);
+        } catch (error) {
+            throw errnoOf(error) === 'ENOENT' ? storageGone(error) : storageUnavailable(error);
+        }
     }
 
     const snapshot = config.snapshot;
@@ -145,20 +151,25 @@ async function buildDocumentDb<S extends SchemaType>(
                           );
                           await mount.cleanupTemp(pathId);
                       }
-                      // Clean close during an outage: the live temp was cleaned but a staged
-                      // copy holds bytes newer than storage (upload not yet acked). Recover
-                      // from it rather than downloading a stale object.
-                      const staged = mount.pendingStagedCopy(storageKey);
-                      if (staged) {
-                          console.log(`[Mount] Recovering from staged upload for ${pathId}`);
-                          await mount.cleanupTemp(pathId);
-                          await mount.replaceTempFrom(pathId, Bun.file(staged));
-                          return;
-                      }
-                      // A missing object fails the GET, which answers the same 503 a HEAD would.
-                      await mount.downloadKeyToTemp(storageKey, pathId);
-                      // No empty-check here: an empty 200 is caught by ManagedDatabase's
-                      // mustExist guard (openCold refuses to open an empty working copy as a fresh db).
+                      // Under the tree lock, as onSync: on `local` an ancestor rename racing the download
+                      // would read as a miss.
+                      await mount.withTreeShared(async () => {
+                          const currentKey = await mount.getStorageKey(pathId);
+                          // Clean close during an outage: the live temp was cleaned but a staged
+                          // copy holds bytes newer than storage (upload not yet acked). Recover
+                          // from it rather than downloading a stale object.
+                          const staged = mount.pendingStagedCopy(currentKey);
+                          if (staged) {
+                              console.log(`[Mount] Recovering from staged upload for ${pathId}`);
+                              await mount.cleanupTemp(pathId);
+                              await mount.replaceTempFrom(pathId, Bun.file(staged));
+                              return;
+                          }
+                          // The open sends no HEAD: the GET itself answers a gone object (410).
+                          await mount.downloadKeyToTemp(currentKey, pathId);
+                          // No empty-check here: an empty 200 is caught by ManagedDatabase's
+                          // mustExist guard (openCold refuses to open an empty working copy as a fresh db).
+                      });
                   },
                   // isRemote: stage a frozen copy + enqueue, off the request/close path.
                   // Local path-based: keep the synchronous local copy (Bun.write never 503s,
@@ -215,8 +226,8 @@ async function buildDocumentDb<S extends SchemaType>(
     // died before its writes synced. The fresh connection's total_changes() reset to
     // 0, so the DB looks clean and the close-time cleanupTemp would silently drop
     // those bytes (the most plausible cause of the 2026-05-30 chat loss). Force the
-    // next sync so they re-reach storage. Safe because a clean close always
-    // cleanupTemp's the temp — a surviving temp is always an unclean-shutdown signal.
+    // next sync so they re-reach storage. A surviving temp (unclean shutdown, failed
+    // final sync or failed open) may hold bytes storage lacks.
     if (recoveredFromCrash) {
         managed.markDirty();
     }
