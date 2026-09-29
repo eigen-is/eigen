@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, images, pictures, media]
 related: [sheets/get-started, sheets/export-spreadsheet]
 order: 145
-updated: 2026-09-13
+updated: 2026-09-29
 ---
 
 You can put a picture on top of a spreadsheet. It floats over the grid rather than living inside a cell, and
@@ -35,6 +35,8 @@ Click an image to select it. A frame with square handles appears around it.
   snap the angle to steps of 15 degrees.
 
 To remove an image, select it and press Delete.
+
+To save a copy of an image, right-click it and choose **Download original image**. You get the image file at its full size and in its own format. This works with view access too.
 
 ## The image panel
 

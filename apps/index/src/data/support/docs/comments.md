@@ -6,7 +6,7 @@ category: Collaboration
 tags: [docs, comments, collaboration, review]
 related: [docs/share-a-document, docs/create-and-edit]
 order: 80
-updated: 2026-09-11
+updated: 2026-09-29
 ---
 
 Comments let you leave a note on any piece of text in a document. Each comment has its own thread, so
@@ -27,6 +27,8 @@ which passages have comments.
 
 You can also use the keyboard shortcut Cmd+Option+M (Mac) or Ctrl+Alt+M (Windows) when you have text
 selected.
+
+To comment on an image, right-click it and choose **Add comment**. The **Title** starts as "Image". A commented image shows a small triangle in the comment's color in its top-right corner instead of a highlight. Click the triangle to open the comment, or right-click the image for the same options as a comment highlight.
 
 ## Open the comments sidebar
 
