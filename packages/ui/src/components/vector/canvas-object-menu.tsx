@@ -14,13 +14,7 @@ import {
     ObjectActionMenuItems,
     type useContextMenu,
 } from '../context-menu';
-import {
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
-} from '../dropdown-menu';
+import { DropdownMenuSeparator } from '../dropdown-menu';
 import type { ZOp } from '../properties-panel/z-order';
 
 type CanvasObjectMenuProps = {
@@ -72,16 +66,7 @@ export function CanvasObjectMenu({
                             <DropdownMenuSeparator />
                             {/* The shared "Add comment" row, so the label + icon match every other host;
                                 the card's own rows live in the comment panel, not on the canvas menu. */}
-                            <CommentMenuItems
-                                primitives={{
-                                    Item: DropdownMenuItem,
-                                    Sub: DropdownMenuSub,
-                                    SubTrigger: DropdownMenuSubTrigger,
-                                    SubContent: DropdownMenuSubContent,
-                                }}
-                                item={null}
-                                onAddComment={onComment}
-                            />
+                            <CommentMenuItems item={null} onAddComment={onComment} />
                         </>
                     )}
                 </>

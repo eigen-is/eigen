@@ -1,6 +1,5 @@
 import type { useCommentLifecycle } from '@workspace/lib/comments';
 import { ContextMenuAnchor, type useContextMenu } from '../context-menu';
-import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../dropdown-menu';
 import { CommentLifecycleMenuItems } from './comment-lifecycle-menu-items';
 import type { CommentContextMenuItem } from './comment-menu-items';
 
@@ -17,12 +16,6 @@ export function CommentContextMenu({ contextMenu, lifecycle, canWrite, noun, onD
         <ContextMenuAnchor contextMenu={contextMenu}>
             <CommentLifecycleMenuItems
                 lifecycle={lifecycle}
-                primitives={{
-                    Item: DropdownMenuItem,
-                    Sub: DropdownMenuSub,
-                    SubTrigger: DropdownMenuSubTrigger,
-                    SubContent: DropdownMenuSubContent,
-                }}
                 item={contextMenu.item ?? null}
                 canWrite={canWrite}
                 noun={noun}

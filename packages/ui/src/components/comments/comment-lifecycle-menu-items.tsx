@@ -1,6 +1,6 @@
 import { useAuth } from '@workspace/lib/auth';
 import type { useCommentLifecycle } from '@workspace/lib/comments';
-import { type CommentContextMenuItem, CommentMenuItems, type CommentMenuPrimitives } from './comment-menu-items';
+import { type CommentContextMenuItem, CommentMenuItems } from './comment-menu-items';
 
 // Binds the shared comment rows to the lifecycle bundle so every host — the stickies/docs/vector
 // context menu, slides' object menu, sheets' cell menu — offers the same actions from one wiring,
@@ -9,7 +9,6 @@ import { type CommentContextMenuItem, CommentMenuItems, type CommentMenuPrimitiv
 // a real menu item, and the anchor turns Radix's close into the context menu's own `close()`.
 type CommentLifecycleMenuItemsProps = {
     lifecycle: ReturnType<typeof useCommentLifecycle>;
-    primitives: CommentMenuPrimitives;
     item: CommentContextMenuItem | null;
     canWrite: boolean;
     noun?: string;
@@ -19,7 +18,6 @@ type CommentLifecycleMenuItemsProps = {
 
 export function CommentLifecycleMenuItems({
     lifecycle,
-    primitives,
     item,
     canWrite,
     noun,
@@ -31,7 +29,6 @@ export function CommentLifecycleMenuItems({
 
     return (
         <CommentMenuItems
-            primitives={primitives}
             item={item}
             noun={noun}
             onAddComment={canWrite ? onAddComment : undefined}

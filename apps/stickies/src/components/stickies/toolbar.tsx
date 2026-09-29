@@ -5,12 +5,7 @@ import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import { CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu, ToolbarMenu } from '@workspace/ui';
 import { CommentFilterMenuItems, FilterSummary } from '@workspace/ui/components/comments';
-import {
-    DropdownMenuItem,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
-} from '@workspace/ui/components/dropdown-menu';
+import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';
 import { Check, Plus, SquareKanban } from 'lucide-react';
@@ -73,12 +68,6 @@ export function Toolbar({
                     )}
                     <ToolbarMenu label="Filter" open={filterOpen} onOpenChange={setFilterOpen}>
                         <CommentFilterMenuItems
-                            primitives={{
-                                Item: DropdownMenuItem,
-                                Sub: DropdownMenuSub,
-                                SubTrigger: DropdownMenuSubTrigger,
-                                SubContent: DropdownMenuSubContent,
-                            }}
                             filter={filter}
                             members={members}
                             currentUserEmail={currentUserEmail}

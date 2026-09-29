@@ -2,11 +2,10 @@ import { COMMENT_STATUS_LABELS, type useCommentFilter } from '@workspace/lib/com
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Check, CircleDot, FilterX, Palette, Users } from 'lucide-react';
-import type { CommentMenuPrimitives } from './comment-menu-items';
+import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../dropdown-menu';
 import { MemberCommandList, PinnedAssigneeFilterRows } from './member-command-list';
 
 type CommentFilterMenuItemsProps = {
-    primitives: CommentMenuPrimitives;
     filter: ReturnType<typeof useCommentFilter>;
     members: EffectiveMember[];
     currentUserEmail: string;
@@ -14,26 +13,19 @@ type CommentFilterMenuItemsProps = {
     onClose?: () => void;
 };
 
-// The three comment-filter groups (assignee / color / status) as submenus, rendered through the
-// primitives slot so the same body serves any Radix menu family. Mirrors CommentFilterButton's
-// popover, restyled as menu rows (see label-assign-sub-menu.tsx for the color swatches).
-export function CommentFilterMenuItems({
-    primitives: { Item, Sub, SubTrigger, SubContent },
-    filter,
-    members,
-    currentUserEmail,
-    onClose,
-}: CommentFilterMenuItemsProps) {
+// The three comment-filter groups (assignee / color / status) as submenus. Mirrors
+// CommentFilterButton's popover, restyled as menu rows (see label-assign-sub-menu.tsx for the color swatches).
+export function CommentFilterMenuItems({ filter, members, currentUserEmail, onClose }: CommentFilterMenuItemsProps) {
     const { assignee, colors, status } = filter.filter;
     const memberSelected = typeof assignee === 'object' ? assignee.email : null;
 
     return (
         <>
-            <Sub>
-                <SubTrigger className="gap-2">
+            <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="gap-2">
                     <Users className="h-4 w-4" /> Assigned to
-                </SubTrigger>
-                <SubContent className="w-64 p-0">
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="w-64 p-0">
                     <MemberCommandList
                         members={members}
                         selectedEmail={memberSelected}
@@ -53,20 +45,20 @@ export function CommentFilterMenuItems({
                             />
                         }
                     />
-                </SubContent>
-            </Sub>
+                </DropdownMenuSubContent>
+            </DropdownMenuSub>
 
-            <Sub>
-                <SubTrigger className="gap-2">
+            <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="gap-2">
                     <Palette className="h-4 w-4" /> Color
-                </SubTrigger>
-                <SubContent>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
                     {EIGEN_STICKIES_COLORS[0].map((c) => {
                         const active = colors?.has(c.value) ?? false;
                         return (
-                            <Item
+                            <DropdownMenuItem
                                 key={c.value}
-                                onClick={(e: Event) => {
+                                onClick={(e) => {
                                     e.preventDefault();
                                     filter.toggleColor(c.value);
                                 }}
@@ -77,30 +69,30 @@ export function CommentFilterMenuItems({
                                 />
                                 <span className="flex-1">{c.label.replace(/-\d+$/, '')}</span>
                                 {active && <Check className="h-4 w-4 ml-2 shrink-0" />}
-                            </Item>
+                            </DropdownMenuItem>
                         );
                     })}
-                </SubContent>
-            </Sub>
+                </DropdownMenuSubContent>
+            </DropdownMenuSub>
 
-            <Sub>
-                <SubTrigger className="gap-2">
+            <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="gap-2">
                     <CircleDot className="h-4 w-4" /> Status
-                </SubTrigger>
-                <SubContent>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
                     {(['open', 'resolved', 'all'] as const).map((s) => (
-                        <Item key={s} onClick={() => filter.setStatus(s)}>
+                        <DropdownMenuItem key={s} onClick={() => filter.setStatus(s)}>
                             <span className="flex-1">{COMMENT_STATUS_LABELS[s]}</span>
                             {status === s && <Check className="h-4 w-4 ml-2 shrink-0" />}
-                        </Item>
+                        </DropdownMenuItem>
                     ))}
-                </SubContent>
-            </Sub>
+                </DropdownMenuSubContent>
+            </DropdownMenuSub>
 
             {filter.isActive && (
-                <Item onClick={() => filter.clear()}>
+                <DropdownMenuItem onClick={() => filter.clear()}>
                     <FilterX className="h-4 w-4 mr-2" /> Clear filters
-                </Item>
+                </DropdownMenuItem>
             )}
         </>
     );
