@@ -8,6 +8,7 @@ import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
 import type { FileAction, FileActionId, FileImportSource, FileSubject } from '@workspace/lib/types/file-subject';
 import { type ReactNode, useState } from 'react';
 import { ImportToCalendarPicker } from '../calendar/import-to-calendar-picker';
+import { IMPORTING_CONTACTS_TITLE } from '../contacts/transfer-titles';
 import { ProgressDialog } from '../drive/progress-dialog';
 import { SaveToDrivePicker } from '../drive/save-to-drive-picker';
 import { usePreview } from '../preview-provider/preview-context';
@@ -145,7 +146,7 @@ export function useFileActionRunner(
                             : 'Converting to sheet'
                     }
                 />
-                <ProgressDialog open={importContacts.isPending} title="Importing contacts" />
+                <ProgressDialog open={importContacts.isPending} title={IMPORTING_CONTACTS_TITLE} />
                 <ProgressDialog open={importMail.isPending} title="Importing mail" />
             </>
         ),
