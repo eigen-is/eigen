@@ -1,6 +1,6 @@
 // The toolbar both canvas apps mount: File + Edit menus, the Insert menu, the shape-tool cluster and
 // the share/comments/activity cluster. The apps differ only in their File-menu identity (export
-// formats, the "New …" row) and in the deck's two extra actions, which arrive as slots — so the tool
+// formats, the "New …" row) and in the deck's extra actions, which arrive as slots — so the tool
 // cluster, the undo wiring and the compact-breakpoint rule cannot drift between them.
 
 import { useYjsUndoState } from '@workspace/lib/collab';
@@ -16,6 +16,7 @@ import { EditMenu } from '../layout/toolbar/edit-menu';
 import { FileMenu } from '../layout/toolbar/file-menu';
 import { CenteredToolbar } from '../layout/toolbar/toolbar';
 import { ToolbarMenu } from '../layout/toolbar/toolbar-menu';
+import { ToolbarSeparator } from '../layout/toolbar/toolbar-separator';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import type { VectorTool } from './hooks/use-tool';
 import { EDIT_TOOLS, INSERT_TOOLS, ToolButtons, ToolMenuItems } from './toolbar-tools';
@@ -49,8 +50,6 @@ type CanvasToolbarProps = {
     createType: EigenDocType;
     // Rows above the shape tools in the Insert menu (the deck's "Slide").
     insertItems?: ReactNode;
-    // Buttons left of the shape cluster; they fold away with it below the compact breakpoint.
-    toolItems?: ReactNode;
     // Buttons a read-only viewer keeps at any width (the deck's Present).
     centerItems?: ReactNode;
 };
@@ -77,7 +76,6 @@ export function CanvasToolbar({
     createIcon,
     createType,
     insertItems,
-    toolItems,
     centerItems,
 }: CanvasToolbarProps) {
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canEdit);
@@ -125,11 +123,11 @@ export function CanvasToolbar({
                         {/* Below the compact-toolbar breakpoint the cluster folds into the menus. */}
                         {canEdit && !isCompact && (
                             <>
-                                {toolItems}
                                 <ToolButtons tool={tool} setTool={setTool} />
                                 {onInsertImage && (
                                     <TooltipButton icon={ImagePlus} tooltipText="Add image" onClick={onInsertImage} />
                                 )}
+                                {centerItems && <ToolbarSeparator />}
                             </>
                         )}
                         {centerItems}

@@ -9,7 +9,7 @@ import {
     type VectorElement,
 } from '@workspace/lib/vector';
 import { EmptyState, TooltipButton, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
-import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
+import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { useAspectLock } from '@workspace/ui/components/properties-panel';
 import {
     CanvasDocumentShell,
@@ -330,12 +330,21 @@ function SlideEditorInner({
                     createIcon={Presentation}
                     createType="slides"
                     insertItems={
-                        <DropdownMenuItem onClick={addSlide}>
-                            <Plus className="h-4 w-4 mr-2" /> Slide
-                        </DropdownMenuItem>
+                        <>
+                            <DropdownMenuItem onClick={addSlide}>
+                                <Plus className="h-4 w-4 mr-2" /> New slide
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                        </>
                     }
-                    toolItems={<TooltipButton icon={Plus} tooltipText="Add slide" onClick={addSlide} />}
-                    centerItems={<TooltipButton icon={Play} tooltipText="Present" onClick={enterPresent} />}
+                    centerItems={
+                        <TooltipButton
+                            icon={Play}
+                            tooltipText="Present"
+                            onClick={enterPresent}
+                            className="bg-[var(--app-current-color-soft)] text-[var(--app-current-color)] hover:bg-[var(--app-current-color-soft)] hover:text-[var(--app-current-color)]"
+                        />
+                    }
                     onToggleCommentPanel={comments.toggleComments}
                     commentPanelOpen={comments.commentPanelOpen}
                     assignedCommentCount={comments.assignedCount}

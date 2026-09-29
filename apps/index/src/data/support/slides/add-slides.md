@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, presentation, reorder]
 related: [slides/create-and-edit]
 order: 30
-updated: 2026-09-13
+updated: 2026-09-29
 ---
 
 Each slide in your presentation appears as a numbered thumbnail in the panel on the left. You can add blank slides, duplicate one to reuse its layout, and drag them into any order.
@@ -14,7 +14,7 @@ You need editor access to make changes. If you can only view the presentation, t
 
 ## Add a slide
 
-Click the **Add slide** button in the toolbar (the **+** icon). A blank white slide appears straight after the current slide and becomes the active slide. The toolbar menus have the same thing: **Insert → Slide**.
+Choose **Insert → New slide** in the toolbar. A blank white slide appears straight after the current slide and becomes the active slide.
 
 ## Duplicate a slide
 
