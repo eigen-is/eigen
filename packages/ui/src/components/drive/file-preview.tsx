@@ -6,7 +6,7 @@ import { useMailTextPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject, MailPartRef } from '@workspace/lib/types/file-subject';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
-import { useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
+import { isLayerAbove, useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
 import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
 import { cn, IMAGE_CHECKERBOARD_STYLE } from '@workspace/ui/lib/utils';
 import { ArrowRight, ChevronLeft, ChevronRight, FolderDown, Loader2, X } from 'lucide-react';
@@ -56,7 +56,7 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
     const keysEnabled = !useDialogOpen(overlayRef);
     const fromLayerAbove = (event: KeyboardEvent) => {
         const layer = event.target instanceof Element ? event.target.closest(LAYER_ROLES) : null;
-        return !!layer && layer !== overlayRef.current;
+        return !!layer && !!overlayRef.current && isLayerAbove(overlayRef.current, layer);
     };
     useHotkey(
         'Escape',

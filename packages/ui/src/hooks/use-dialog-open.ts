@@ -11,7 +11,8 @@ import { type RefObject, useSyncExternalStore } from 'react';
 // Radix keeps a closing dialog mounted as data-state="closed" for its exit animation.
 //
 // `except` is for an overlay that is a dialog itself and asks about the layers above it: the file
-// preview reads its own keys off this gate, so the popover its content mounts stands them down.
+// preview reads its own keys off this gate, so the popover its content mounts stands them down, and the
+// stickies card dialog it was opened from does not.
 const OPEN_DIALOG = '[role="dialog"]:not([data-state="closed"]), [role="alertdialog"]:not([data-state="closed"])';
 
 // One observer for every subscriber, alive only while one is mounted.
@@ -37,9 +38,16 @@ function subscribe(onChange: () => void): () => void {
 
 const getServerSnapshot = () => false;
 
+// Every layer portals to <body> in the order it opened, so a later one in the document paints above.
+export function isLayerAbove(base: Element, layer: Element): boolean {
+    return !!(base.compareDocumentPosition(layer) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
 export function useDialogOpen(except?: RefObject<HTMLElement | null>): boolean {
     const getSnapshot = () => {
-        for (const dialog of document.querySelectorAll(OPEN_DIALOG)) if (dialog !== except?.current) return true;
+        const base = except?.current;
+        for (const dialog of document.querySelectorAll(OPEN_DIALOG))
+            if (!base || isLayerAbove(base, dialog)) return true;
         return false;
     };
     return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
