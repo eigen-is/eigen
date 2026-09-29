@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import * as fs from 'node:fs';
 import { SETUP_LINK_PARAM } from '@workspace/lib/constants/setup';
 import { getServerDataPath } from '../config/paths';
@@ -12,7 +12,7 @@ const TOKEN_FILE = 'setup-token';
 
 // Only the hash is stored, so neither data/ nor a snapshot of it holds a working link.
 function sha256(token: string): Buffer {
-    return createHash('sha256').update(token).digest();
+    return Bun.CryptoHasher.hash('sha256', token);
 }
 
 export function createSetupToken(): string {

@@ -32,43 +32,32 @@ export async function htmlToPdf(html: string | Uint8Array): Promise<Buffer> {
         stdin: 'pipe',
         stdout: 'pipe',
         stderr: 'pipe',
+        timeout: 60_000,
     });
 
-    const timeout = 60_000;
-    // The killed process exits 143 (128 + SIGTERM), not null, so the exit code can't tell a timeout.
-    let timedOut = false;
-    const timer = setTimeout(() => {
-        timedOut = true;
-        proc.kill();
-    }, timeout);
-
+    // A WeasyPrint that exits early (bad input) closes its stdin; writing to the dead pipe throws
+    // EPIPE. Guard it so an early exit becomes the exitCode-500 below, never a process crash.
     try {
-        // A WeasyPrint that exits early (bad input) closes its stdin; writing to the dead pipe throws
-        // EPIPE. Guard it so an early exit becomes the exitCode-500 below, never a process crash.
-        try {
-            proc.stdin.write(html);
-            await proc.stdin.end();
-        } catch {
-            // Early stdin close is surfaced by the exitCode/stderr check below.
-        }
-
-        const [exitCode, stdoutResponse, stderrResponse] = await Promise.all([
-            proc.exited,
-            new Response(proc.stdout).arrayBuffer(),
-            new Response(proc.stderr).text(),
-        ]);
-
-        // A deadline that fires after a clean exit did not cut the render short.
-        if (timedOut && exitCode !== 0) {
-            throw new ApiError(504, 'PDF export timed out');
-        }
-
-        if (exitCode !== 0) {
-            throw new ApiError(500, `PDF generation failed: ${stderrResponse || `exit code ${exitCode}`}`);
-        }
-
-        return Buffer.from(stdoutResponse);
-    } finally {
-        clearTimeout(timer);
+        proc.stdin.write(html);
+        await proc.stdin.end();
+    } catch {
+        // Early stdin close is surfaced by the exitCode/stderr check below.
     }
+
+    const [exitCode, stdoutResponse, stderrResponse] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).arrayBuffer(),
+        new Response(proc.stderr).text(),
+    ]);
+
+    // Only the deadline sends SIGTERM; a render that exited on its own has no signalCode.
+    if (proc.signalCode === 'SIGTERM') {
+        throw new ApiError(504, 'PDF export timed out');
+    }
+
+    if (exitCode !== 0) {
+        throw new ApiError(500, `PDF generation failed: ${stderrResponse || `exit code ${exitCode}`}`);
+    }
+
+    return Buffer.from(stdoutResponse);
 }
