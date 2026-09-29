@@ -236,6 +236,8 @@ function ContactsRoute() {
                         drive: { sourceOwnerId: item.ownerId, sourceMountId: item.mountId, sourcePathId: item.id },
                     })
                 }
+                pending={importMutation.isPending || importFileMutation.isPending}
+                progressTitle="Importing contacts"
             />
         </>
     );

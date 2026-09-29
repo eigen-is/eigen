@@ -76,6 +76,8 @@ export function useFileActionRunner(
         if (source) mutate(source);
     };
 
+    const isPending = convertDocument.isPending || importContacts.isPending || importMail.isPending;
+
     const run = (action: FileAction) => {
         if (!subject) return;
         switch (action.id) {
@@ -143,9 +145,11 @@ export function useFileActionRunner(
                             : 'Converting to sheet'
                     }
                 />
+                <ProgressDialog open={importContacts.isPending} title="Importing contacts" />
+                <ProgressDialog open={importMail.isPending} title="Importing mail" />
             </>
         ),
-        isDialogOpen: pickerOpen || calendarPickerOpen || convertDocument.isPending,
-        isPending: convertDocument.isPending || importContacts.isPending || importMail.isPending,
+        isDialogOpen: pickerOpen || calendarPickerOpen || isPending,
+        isPending,
     };
 }

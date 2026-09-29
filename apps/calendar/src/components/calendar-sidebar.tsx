@@ -325,6 +325,8 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                             ...importTarget,
                         })
                     }
+                    pending={importCalendar.isPending || importFromDevice.isPending}
+                    progressTitle="Importing events"
                 />
             )}
         </>

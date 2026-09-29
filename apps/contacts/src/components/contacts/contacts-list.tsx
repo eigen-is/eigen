@@ -4,6 +4,7 @@ import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { EmptyState, ErrorState, KebabTrigger, LoadingState, SearchBar, Toolbar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { ProgressDialog } from '@workspace/ui/components/drive';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -67,6 +68,7 @@ export function ContactsListToolbar({
                     </DropdownMenuContent>
                 </DropdownMenu>
             )}
+            <ProgressDialog open={isExporting} title="Exporting contacts" />
         </Toolbar>
     );
 }
@@ -155,7 +157,7 @@ export function ContactsList({
                     })
                 }
             />
-            {contactMenu.chatWizard}
+            {contactMenu.dialogs}
         </>
     );
 }

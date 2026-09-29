@@ -79,7 +79,7 @@ export function PersonDetailToolbar({
                     </DropdownMenu>
                 </div>
             </Toolbar>
-            {contactMenu.chatWizard}
+            {contactMenu.dialogs}
         </>
     );
 }

@@ -17,5 +17,6 @@ export * from './eigendoc-root';
 export * from './eigendoc-shared-view';
 export * from './file-import-picker';
 export * from './file-presentation';
+export * from './progress-dialog';
 export * from './save-to-drive-picker';
 export * from './use-document-export';
