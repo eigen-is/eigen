@@ -1,4 +1,6 @@
+import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Box } from '@workspace/lib/vector';
+import { ContextMenuAnchor, DownloadImageMenuItem, useContextMenu } from '@workspace/ui/components/context-menu';
 import { ImagePlaceholder } from '@workspace/ui/components/media/image-placeholder';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
@@ -17,7 +19,10 @@ function useResolvedImageUrl(mediaName: string | undefined) {
     );
 }
 
-function ActiveImage({ img }: { img: Image }) {
+// An image's right-click opens its own menu, for viewers too, instead of the cell menu under it.
+type ImageContextMenu = (e: React.MouseEvent, img: Image) => void;
+
+function ActiveImage({ img, onContextMenu }: { img: Image; onContextMenu: ImageContextMenu }) {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
     const url = useResolvedImageUrl(img.mediaName);
     const showPlaceholder = !url && img.mediaName.startsWith('pending:');
@@ -80,6 +85,7 @@ function ActiveImage({ img }: { img: Image }) {
                     onImageMoveStart(context, refs.globalCache, e.nativeEvent);
                     e.stopPropagation();
                 }}
+                onContextMenu={(e) => onContextMenu(e, img)}
             >
                 {showPlaceholder && <ImagePlaceholder />}
             </div>
@@ -114,7 +120,7 @@ function ActiveImage({ img }: { img: Image }) {
     );
 }
 
-function InactiveImage({ img }: { img: Image }) {
+function InactiveImage({ img, onContextMenu }: { img: Image; onContextMenu: ImageContextMenu }) {
     const { setContext } = useContext(WorkbookContext);
     const url = useResolvedImageUrl(img.mediaName);
     const w = img.width;
@@ -170,6 +176,7 @@ function InactiveImage({ img }: { img: Image }) {
             }}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={handleClick}
+            onContextMenu={(e) => onContextMenu(e, img)}
             tabIndex={0}
         >
             <img src={url} alt="" style={{ width: w, height: h }} decoding="async" />
@@ -178,7 +185,14 @@ function InactiveImage({ img }: { img: Image }) {
 }
 
 export function ImgBoxs() {
-    const { context } = useContext(WorkbookContext);
+    const { context, settings } = useContext(WorkbookContext);
+    const contextMenu = useContextMenu<DrivePath>();
+    const onContextMenu: ImageContextMenu = (e, img) => {
+        e.stopPropagation();
+        const path = settings.hooks?.resolveImagePath?.(img.mediaName);
+        if (path) contextMenu.handleContextMenu(e, path);
+        else e.preventDefault();
+    };
     const activeImg = useMemo(() => {
         return context.insertedImgs?.find((img) => img.id === context.activeImg);
     }, [context.activeImg, context.insertedImgs]);
@@ -186,11 +200,14 @@ export function ImgBoxs() {
     return (
         <div id="sheet-image-showBoxs">
             {/* key: reset the resize/rotate preview when the active image changes. */}
-            {activeImg && <ActiveImage key={activeImg.id} img={activeImg} />}
+            {activeImg && <ActiveImage key={activeImg.id} img={activeImg} onContextMenu={onContextMenu} />}
             {context.insertedImgs?.map((img) => {
                 if (img.id === context.activeImg) return null;
-                return <InactiveImage key={img.id} img={img} />;
+                return <InactiveImage key={img.id} img={img} onContextMenu={onContextMenu} />;
             })}
+            <ContextMenuAnchor contextMenu={contextMenu}>
+                <DownloadImageMenuItem path={contextMenu.item ?? undefined} />
+            </ContextMenuAnchor>
         </div>
     );
 }
