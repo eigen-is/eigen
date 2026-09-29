@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
@@ -20,11 +20,13 @@ const decoder = new TextDecoder();
 const S3_NOTE = 'Files in S3 buckets are not in a snapshot';
 const NOT_REPLAYED = 'in the snapshot were not replayed';
 const MOUNT_DIR = `home/${OWNER}/mounts/${MOUNT_ID}`;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 const dirs: string[] = [];
 afterAll(() => {
     for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
 });
+afterEach(() => setSystemTime());
 
 type Install = { dir: string; homeDir: string; bucket: string };
 
@@ -333,6 +335,39 @@ describe('Whole-server snapshot of an s3 mount', () => {
             await rolledBack.stop();
         }
     });
+
+    for (const kind of ['full', 'light'] as const) {
+        test(`a ${kind} restore starts the trash over, so the purge keeps the objects the data/ kept aside names`, async () => {
+            const target = install();
+            const first = await start(target);
+            const rootId = (await first.mount.getRootFolder())!.id;
+            const fileId = await first.mount.createFile(rootId, 'object.txt', 'text/plain', 3, encoder.encode('obj'));
+            const storageKey = await first.mount.getStorageKey(fileId);
+            await first.mount.drainPendingUploads({ flushNow: true });
+            // Trashed 40 days ago, and restored from the trash after the backup; the clock stands at then till the untrash.
+            setSystemTime(new Date(Date.now() - 40 * DAY_MS));
+            await first.mount.trashPath(fileId);
+            await first.stop();
+            const name = await snapshot(target.dir, ...(kind === 'light' ? ['--light'] : []));
+            const second = await start(target);
+            setSystemTime();
+            await second.mount.restorePath(fileId);
+            await second.stop();
+
+            const bucket = new LocalStorage(target.bucket);
+            expect(await bucket.exists(storageKey)).toBe(true);
+            const restoredAt = Math.floor(Date.now() / 1000) * 1000;
+            await restore(target.dir, name);
+            const restored = await start(target);
+            try {
+                await restored.mount.purgeTrash(30);
+                expect(await bucket.exists(storageKey)).toBe(true);
+                expect((await restored.mount.getPath(fileId))?.trashedAt?.getTime()).toBeGreaterThanOrEqual(restoredAt);
+            } finally {
+                await restored.stop();
+            }
+        });
+    }
 
     test('a restore onto a fresh host replays the pending uploads of the snapshot', async () => {
         const target = install();

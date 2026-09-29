@@ -1,4 +1,4 @@
-import type { Database } from 'bun:sqlite';
+import { Database } from 'bun:sqlite';
 import {
     chmodSync,
     copyFileSync,
@@ -53,6 +53,7 @@ const LIGHT_SKIPS = new RegExp(
 );
 // Every s3 mount's staged uploads: the pending rows of the metadata.db beside it name them.
 const STAGED_UPLOADS = `${DATA}/*/*/${PATHS.DRIVE.ROOT}/*/${PATHS.DRIVE.STAGING_DIR}/*`;
+const MOUNT_DATABASES = `${DATA}/*/*/${PATHS.DRIVE.ROOT}/*/${PATHS.DRIVE.METADATA_DB}`;
 
 type SnapshotKind = 'full' | 'light';
 type SnapshotMeta = { version: string; createdAt: string; kind: SnapshotKind };
@@ -518,6 +519,20 @@ export async function restore(
         if (!existsSync(dirname(path)) || existsSync(path)) continue;
         rmSync(join(STAGING, path));
         notReplayed++;
+    }
+    // The trash starts over, so a purge never deletes bucket objects the kept-aside data/ may still name and the
+    // operator has the whole retention window. In seconds, as trashPath writes it; on Linux, Bun's SQLite leaves no
+    // root-owned -wal or -shm after a clean close.
+    const now = Math.floor(Date.now() / 1000);
+    for (const path of new Bun.Glob(MOUNT_DATABASES).scanSync({ cwd: STAGING })) {
+        const db = new Database(join(STAGING, path));
+        try {
+            db.run('UPDATE paths SET trashedAt = ? WHERE trashedAt IS NOT NULL', [now]);
+        } catch {
+            console.log(glyphLine('warn', `${path} does not read as a mount database: its trash keeps its dates`));
+        } finally {
+            db.close(true);
+        }
     }
     const stamp = buildBackupStamp(new Date());
     const [dataAside, envAside] = [DATA, ENV_PATH].map((current) => `${current}${PRE_RESTORE_SUFFIX}${stamp}`);
