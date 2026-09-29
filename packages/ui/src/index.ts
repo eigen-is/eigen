@@ -1,5 +1,5 @@
 // The root barrel is the curated "search here first" tier, and nothing else:
-//   1. the AGENTS.md "Key UI Components" (TooltipButton, DeleteDialog, ConfirmDialog,
+//   1. the everyday components, ARCHITECTURE.md "Everyday UI" (TooltipButton, DeleteDialog, ConfirmDialog,
 //      EmptyState/LoadingState/ErrorState, SearchBar, FileMenu, RequestAccessView, ...)
 //      plus braket/ — EigenLoader is the loader those states render, Key-UI in all but name,
 //   2. the layout system (layout/app + layout/sidebar + layout/toolbar; layout/pages stays

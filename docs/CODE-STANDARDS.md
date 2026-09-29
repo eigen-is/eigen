@@ -47,7 +47,7 @@ Workspace imports resolve through each package's `exports` map, with no tsconfig
 
 | Specifier | What you get |
 |---|---|
-| `@workspace/ui` | Root barrel: the AGENTS.md Key UI Components, the layout system (app/sidebar/toolbar — not pages), generic leaf primitives |
+| `@workspace/ui` | Root barrel: the everyday components ([ARCHITECTURE.md § Frontend](ARCHITECTURE.md#frontend), *Everyday UI*), the layout system (app/sidebar/toolbar — not pages), generic leaf primitives |
 | `@workspace/ui/components/[area]` | Area barrel (drive, chat, comments, editor, media, user, …) |
 | `@workspace/ui/components/[leaf]` | Extensionless deep import for a component its barrel doesn't export (`@workspace/ui/components/search/doc-search-provider`) |
 | `@workspace/ui/components/layout/[dir]` | Layout system barrels: `app`, `pages`, `sidebar`, `toolbar` |
