@@ -1,4 +1,3 @@
-import { createHash, createHmac } from 'node:crypto';
 import { S3_ABORT_INCOMPLETE_UPLOAD_DAYS, S3_LIFECYCLE_RULE_ID } from '@workspace/lib/constants/s3';
 import { escapeXml } from '@workspace/lib/html';
 import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
@@ -123,7 +122,7 @@ export async function signedS3Request(
     const credentialScope = `${dateStamp}/${region}/s3/aws4_request`;
     const payloadHash = body ? sha256Hex(body) : EMPTY_SHA256;
     // AWS requires Content-MD5 on PUT ?lifecycle; providers that don't need it ignore it.
-    const contentMd5 = body ? createHash('md5').update(body).digest('base64') : undefined;
+    const contentMd5 = body ? Bun.CryptoHasher.hash('md5', body, 'base64') : undefined;
     const signedHeaders = contentMd5
         ? 'content-md5;host;x-amz-content-sha256;x-amz-date'
         : 'host;x-amz-content-sha256;x-amz-date';
@@ -137,7 +136,7 @@ export async function signedS3Request(
     const kRegion = hmac(kDate, region);
     const kService = hmac(kRegion, 's3');
     const kSigning = hmac(kService, 'aws4_request');
-    const signature = createHmac('sha256', kSigning).update(stringToSign).digest('hex');
+    const signature = hmac(kSigning, stringToSign).toString('hex');
     const authorization =
         `AWS4-HMAC-SHA256 Credential=${config.accessKeyId}/${credentialScope}, ` +
         `SignedHeaders=${signedHeaders}, Signature=${signature}`;
@@ -231,11 +230,11 @@ async function failureReason(res: Response): Promise<'access-denied' | 'not-supp
 }
 
 function sha256Hex(data: string): string {
-    return createHash('sha256').update(data).digest('hex');
+    return Bun.CryptoHasher.hash('sha256', data, 'hex');
 }
 
 function hmac(key: string | Buffer, data: string): Buffer {
-    return createHmac('sha256', key).update(data).digest();
+    return new Bun.CryptoHasher('sha256', key).update(data).digest();
 }
 
 export class S3Storage implements StorageBackend {

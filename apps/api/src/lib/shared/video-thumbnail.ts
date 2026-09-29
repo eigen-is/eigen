@@ -27,18 +27,13 @@ export async function isFfmpegAvailable(): Promise<boolean> {
 const SUBPROC_TIMEOUT_MS = 20_000;
 
 async function runWithTimeout(argv: string[]): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
-    const proc = Bun.spawn(argv, { stdout: 'pipe', stderr: 'pipe' });
-    const timer = setTimeout(() => proc.kill(), SUBPROC_TIMEOUT_MS);
-    try {
-        const [exitCode, stdout, stderr] = await Promise.all([
-            proc.exited,
-            new Response(proc.stdout).text(),
-            new Response(proc.stderr).text(),
-        ]);
-        return { exitCode, stdout, stderr };
-    } finally {
-        clearTimeout(timer);
-    }
+    const proc = Bun.spawn(argv, { stdout: 'pipe', stderr: 'pipe', timeout: SUBPROC_TIMEOUT_MS });
+    const [exitCode, stdout, stderr] = await Promise.all([
+        proc.exited,
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+    ]);
+    return { exitCode, stdout, stderr };
 }
 
 type ProbeResult = { width: number; height: number; duration: number };
