@@ -93,6 +93,7 @@ export const FigureNode = Node.create({
                         caption: figcaption?.textContent || null,
                         alignment: el.getAttribute('data-alignment') || 'center',
                         layout,
+                        commentCardId: el.getAttribute('data-comment-id'),
                     };
                 },
                 priority: 60,
@@ -130,6 +131,10 @@ export const FigureNode = Node.create({
         }
         if (HTMLAttributes['layout'] && HTMLAttributes['layout'] !== 'block') {
             figureAttrs['data-layout'] = HTMLAttributes['layout'];
+        }
+        // Spelled like the comment mark's, so a cut image keeps its card the way cut text does.
+        if (HTMLAttributes['commentCardId']) {
+            figureAttrs['data-comment-id'] = HTMLAttributes['commentCardId'];
         }
         const imgAttrs: Record<string, unknown> = {
             src: HTMLAttributes['src'],

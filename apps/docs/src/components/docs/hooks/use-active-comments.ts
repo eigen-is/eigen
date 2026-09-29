@@ -1,19 +1,14 @@
-import type { Node } from '@tiptap/pm/model';
 import type { Editor } from '@tiptap/react';
 import type { ActiveComments } from '@workspace/lib/types/comments';
 import { useEffect, useState } from 'react';
-import { nodeCommentCardId } from '../extensions/comment-mark';
+import { commentAnchorText, nodeCommentCardId } from '../extensions/comment-mark';
 
 const EMPTY_ACTIVE: ActiveComments = { ids: new Set(), anchorTexts: new Map() };
 
-// A comment on an image alone has no text to quote, so the image reads as "Image".
-export function commentAnchorText(doc: Node, from: number, to: number): string {
-    return doc.textBetween(from, to, ' ', (leaf) => (leaf.type.name === 'figure' ? 'Image' : '')).slice(0, 100);
-}
-
-// Active comment cards + their anchor text, derived from the editor's `comment` marks. Doc-model
-// specific (walks the ProseMirror doc), so it stays a per-app hook — the slides/sheets siblings walk
-// their own models. Debounced 200ms and refreshed on every editor update.
+// Active comment cards + their anchor text, derived from the editor's comment anchors (the `comment`
+// mark on text, `commentCardId` on a figure). Doc-model specific (walks the ProseMirror doc), so it
+// stays a per-app hook — the slides/sheets siblings walk their own models. Debounced 200ms and
+// refreshed on every editor update.
 export function useActiveComments(editor: Editor | null): ActiveComments {
     const [result, setResult] = useState<ActiveComments>(EMPTY_ACTIVE);
 

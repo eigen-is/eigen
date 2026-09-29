@@ -16,9 +16,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 const FIGURE_MIN_WIDTH = 100;
 
 type FigureOptions = {
-    // The figure is selected first, so the host's Add comment anchors to it.
-    onContextMenu: ((node: PMNode, event: React.MouseEvent) => void) | null;
-    onOpenComment: ((cardId: string) => void) | null;
+    // The host decides whether a menu opens, so an image with no rows keeps the browser's own.
+    onContextMenu: (node: PMNode, pos: number, event: React.MouseEvent) => void;
+    onOpenComment: (cardId: string) => void;
 };
 
 function FigureView({ node, updateAttributes, selected, editor, extension, getPos, decorations }: NodeViewProps) {
@@ -207,17 +207,10 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
             <figure
                 className="m-0"
                 // ProseMirror never sees a node view's right-click (stopEvent), so the figure asks here.
-                onContextMenu={
-                    onContextMenu
-                        ? (e) => {
-                              const pos = getPos();
-                              if (pos === undefined) return;
-                              e.preventDefault();
-                              editor.commands.setNodeSelection(pos);
-                              onContextMenu(node, e);
-                          }
-                        : undefined
-                }
+                onContextMenu={(e) => {
+                    const pos = getPos();
+                    if (pos !== undefined) onContextMenu(node, pos, e);
+                }}
             >
                 <div ref={containerRef}>
                     {/* Relative wrapper shrink-wraps the img so the inset-0 ObjectTransform ring
@@ -275,7 +268,7 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
                         )}
                         {/* After the transform, so its NE grip never covers the mark. A button, so
                             ProseMirror leaves its press alone (no node select, no drag). */}
-                        {commentCardId && onOpenComment && (
+                        {commentCardId && (
                             <button
                                 type="button"
                                 className="absolute top-0 right-0"
@@ -296,7 +289,7 @@ function FigureView({ node, updateAttributes, selected, editor, extension, getPo
 
 export const Figure = FigureNode.extend<FigureOptions>({
     addOptions() {
-        return { onContextMenu: null, onOpenComment: null };
+        return { onContextMenu: () => {}, onOpenComment: () => {} };
     },
     addNodeView() {
         // TipTap skips the re-render when only decorations change, and the comment mark's color

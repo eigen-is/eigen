@@ -27,6 +27,15 @@ export function nodeCommentCardId(node: Node): string | null {
     return node.marks.find((m) => m.type.name === 'comment')?.attrs.cardId ?? null;
 }
 
+// A comment on an image alone has no text to quote, so the image reads as "Image".
+export function commentAnchorText(doc: Node, from: number, to: number): string {
+    return doc
+        .textBetween(from, to, ' ', (leaf) =>
+            leaf.type.name === 'figure' ? 'Image' : (leaf.type.spec.leafText?.(leaf) ?? ''),
+        )
+        .slice(0, 100);
+}
+
 function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet {
     const decorations: Decoration[] = [];
     state.doc.descendants((node, pos) => {
