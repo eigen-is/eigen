@@ -105,6 +105,7 @@ export function VectorEditor({
 
     // Toolbar "Add image": the picker lives here, placement goes through the canvas handle.
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
+    const insertImage = canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined;
 
     return (
         <MediaResolverProvider
@@ -137,7 +138,7 @@ export function VectorEditor({
                         setTool={setTool}
                         toolLocked={toolLocked}
                         setToolLocked={setToolLocked}
-                        onInsertImage={canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined}
+                        onInsertImage={insertImage}
                         onAccessDialogOpen={onAccessDialogOpen}
                         createLabel="New vector"
                         createIcon={Diamond}
@@ -197,6 +198,7 @@ export function VectorEditor({
                         onAddComment={canWrite && chatFolderId ? comments.addCommentTo : undefined}
                         searchMatchedIds={searchMatchedIds}
                         searchActiveId={searchActiveId}
+                        onInsertImage={insertImage}
                     />
                 </div>
             </CanvasDocumentShell>

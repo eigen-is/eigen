@@ -6,7 +6,7 @@ category: Reference
 tags: [vector, shortcuts, keyboard, zoom, navigation, search]
 related: [vector/get-started, vector/arrange-and-align]
 order: 60
-updated: 2026-09-11
+updated: 2026-09-29
 ---
 
 Vector gives you an endless canvas to draw on. This page covers how to move around it, how to find text in a drawing, and every keyboard shortcut, grouped so you can look one up fast.
@@ -41,7 +41,7 @@ You can also share a link that opens a drawing with the find bar already searchi
 
 ### Tools
 
-Press a letter or the matching number to pick a tool. The Image tool has no shortcut, because you add an image by uploading or pasting it.
+Press a letter or the matching number to pick a tool. Press `9` to open the image picker.
 
 | Action | Mac | Windows/Linux |
 |---|---|---|
@@ -53,6 +53,7 @@ Press a letter or the matching number to pick a tool. The Image tool has no shor
 | Line | `L` or `6` | `L` or `6` |
 | Draw | `P` or `7` | `P` or `7` |
 | Text | `T` or `8` | `T` or `8` |
+| Add image | `9` | `9` |
 | Eraser | `E` or `0` | `E` or `0` |
 | Keep the tool active after drawing | `Q` | `Q` |
 

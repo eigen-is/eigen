@@ -125,7 +125,7 @@ Every canvas command runs through `@tanstack/react-hotkeys` (`useHotkey` with `e
 
 | Shortcut | Action | Notes |
 |----------|--------|-------|
-| Letter / digit | Select the matching tool | `V/1` select, `R/2` rect, `D/3` diamond, `O/4` ellipse, `A/5` arrow, `L/6` line, `P/7` draw, `T/8` text (rich text), `E/0` eraser. The list, its order and its letters come from `CREATION_TOOL_TYPES` + `ELEMENT_KIND_UI`, so a new kind brings its own tool |
+| Letter / digit | Select the matching tool | `V/1` select, `R/2` rect, `D/3` diamond, `O/4` ellipse, `A/5` arrow, `L/6` line, `P/7` draw, `T/8` text (rich text), `E/0` eraser; `9` opens the host's image picker (`INSERT_IMAGE_KEY`, only when the host passes `onInsertImage`). The list, its order and its letters come from `CREATION_TOOL_TYPES` + `ELEMENT_KIND_UI`, so a new kind brings its own tool |
 | `Q` | Toggle the tool lock (padlock) | Locked, a shape/line/arrow/text tool stays active after a placement instead of reverting to select (freedraw/eraser always do); session-only |
 | `Arrow` | Nudge selection by `NUDGE_STEP` (1) | A run of taps is one undo step — the run holds the capture window open |
 | `Shift+Arrow` | Nudge by `NUDGE_STEP_LARGE` (5) | Same run as the unshifted arrows |

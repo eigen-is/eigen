@@ -252,6 +252,7 @@ function SlideEditorInner({
 
     // Toolbar "Add image": the picker lives here, placement goes through the canvas handle.
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
+    const insertImage = canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined;
     const canvasRef = useRef<CanvasHandle | null>(null);
 
     const background = frame ? parseBackgroundFill(frame.background) : null;
@@ -324,7 +325,7 @@ function SlideEditorInner({
                     setTool={setTool}
                     toolLocked={toolLocked}
                     setToolLocked={setToolLocked}
-                    onInsertImage={canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined}
+                    onInsertImage={insertImage}
                     onAccessDialogOpen={onAccessDialogOpen}
                     createLabel="New slides"
                     createIcon={Presentation}
@@ -421,6 +422,7 @@ function SlideEditorInner({
                             onAddComment={canWrite && chatFolderId ? comments.addCommentTo : undefined}
                             searchMatchedIds={searchMatchedIds}
                             searchActiveId={searchActiveId}
+                            onInsertImage={insertImage}
                             // A view-only deck pages on a one-finger swipe; an editable one keeps
                             // that finger for the canvas (D4.13).
                             onSwipeFrame={canEdit ? undefined : stepFrame}

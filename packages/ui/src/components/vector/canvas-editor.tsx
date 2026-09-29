@@ -171,6 +171,8 @@ type CanvasEditorProps = {
     searchActiveId?: string | null;
     // Page through frames on a one-finger swipe — the deck shell passes it on a view-only phone.
     onSwipeFrame?: (delta: number) => void;
+    // Opens the host's image picker on the image key; the toolbar gets the same callback.
+    onInsertImage?: () => void;
 };
 
 // The live, interactive canvas surface — one absolutely positioned layer per element, with the
@@ -202,6 +204,7 @@ export function CanvasEditor({
     searchMatchedIds,
     searchActiveId,
     onSwipeFrame,
+    onInsertImage,
 }: CanvasEditorProps) {
     const {
         elements,
@@ -460,6 +463,7 @@ export function CanvasEditor({
         deleteElements,
         updateElements,
         duplicateElements,
+        onInsertImage,
     });
 
     // Freeze the viewport while an overlay is open (same latch as gestures): a pan/zoom would

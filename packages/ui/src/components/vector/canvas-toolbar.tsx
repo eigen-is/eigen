@@ -18,6 +18,7 @@ import { CenteredToolbar } from '../layout/toolbar/toolbar';
 import { ToolbarMenu } from '../layout/toolbar/toolbar-menu';
 import { ToolbarSeparator } from '../layout/toolbar/toolbar-separator';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
+import { INSERT_IMAGE_KEY } from './hooks/use-canvas-keyboard';
 import type { VectorTool } from './hooks/use-tool';
 import { EDIT_TOOLS, INSERT_TOOLS, ToolButtons, ToolMenuItems } from './toolbar-tools';
 
@@ -112,6 +113,7 @@ export function CanvasToolbar({
                                 {onInsertImage && (
                                     <DropdownMenuItem onClick={onInsertImage}>
                                         <ImagePlus className="h-4 w-4 mr-2" /> Image
+                                        <DropdownMenuShortcut>{INSERT_IMAGE_KEY}</DropdownMenuShortcut>
                                     </DropdownMenuItem>
                                 )}
                             </ToolbarMenu>
@@ -125,7 +127,11 @@ export function CanvasToolbar({
                             <>
                                 <ToolButtons tool={tool} setTool={setTool} />
                                 {onInsertImage && (
-                                    <TooltipButton icon={ImagePlus} tooltipText="Add image" onClick={onInsertImage} />
+                                    <TooltipButton
+                                        icon={ImagePlus}
+                                        tooltipText={`Add image (${INSERT_IMAGE_KEY})`}
+                                        onClick={onInsertImage}
+                                    />
                                 )}
                                 {centerItems && <ToolbarSeparator />}
                             </>

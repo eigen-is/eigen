@@ -27,7 +27,11 @@ type CanvasKeyboardParams = {
     deleteElements: (ids: string[]) => void;
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
     duplicateElements: (ids: string[], dx: number, dy: number) => string[];
+    onInsertImage?: () => void;
 };
+
+// Excalidraw's key for its image tool; the toolbar shows it next to Image.
+export const INSERT_IMAGE_KEY = '9';
 
 // The tools that actually carry keys. A creatable kind the registry gave no shortcut binds nothing
 // rather than doubling up on Select's V/1; resolved at module eval, so the hook count and order below
@@ -77,7 +81,7 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     const { enabled, elements, selectedIds, undoManager } = params;
     const hasSelection = selectedIds.length > 0;
 
-    // Every handler below reads the live params through this ref, so all 34 registrations keep ONE
+    // Every handler below reads the live params through this ref, so all 35 registrations keep ONE
     // identity for the canvas' lifetime: a render (a drag preview, a selection change) allocates no
     // callbacks and rebuilds no registration. Only `enabled` may change, in the memoized options.
     const live = useRef(params);
@@ -117,6 +121,11 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     // Tool lock — keeps the selected tool active after a placement (Excalidraw's Q padlock).
     const toggleLock = useCallback(() => live.current.setToolLocked(!live.current.toolLocked), []);
     useHotkey('Q', toggleLock, on);
+
+    const insertImage = useCallback(() => live.current.onInsertImage?.(), []);
+    const canInsertImage = !!params.onInsertImage;
+    const onImage = useMemo(() => ({ enabled: enabled && canInsertImage }), [enabled, canInsertImage]);
+    useHotkey(INSERT_IMAGE_KEY, insertImage, onImage);
 
     // A run of nudges holds the undo capture window open (createNudgeBurst) so the whole run is one
     // step. It ends on the first input that is not another nudge — a different key, a pointer press,
