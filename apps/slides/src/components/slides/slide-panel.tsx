@@ -11,10 +11,11 @@ import { FRAME_ASPECT_RATIO, parseBackgroundFill, type VectorElement, type Vecto
 import type { useContextMenu } from '@workspace/ui/components/context-menu';
 import { FrameThumbnail } from '@workspace/ui/components/vector';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 
 // A stable empty list, so a slide with no elements does not hand the thumbnail's memo a fresh array.
 const EMPTY_ELEMENTS: VectorElement[] = [];
+const noop = () => {};
 
 type SlidePanelProps = {
     frames: VectorFrame[];
@@ -45,14 +46,8 @@ export function SlidePanel({
 }: SlidePanelProps) {
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
     const { resolveMediaUrl } = useMediaResolver();
-    // bind(frameId) is what carries the pressed slide into the menu.
-    const openSlideMenuAt = slideMenu?.openAt;
-    const handleSlideLongPress = useCallback(
-        (frameId: string, x: number, y: number) => openSlideMenuAt?.(frameId, x, y),
-        [openSlideMenuAt],
-    );
     // dragActiveId cancels an armed press the moment a drag starts (the stickies-card mechanism).
-    const slideLongPress = useLongPress(handleSlideLongPress, { disabled: !!dragActiveId || !slideMenu });
+    const slideLongPress = useLongPress(slideMenu?.openAt ?? noop, { disabled: !!dragActiveId || !slideMenu });
 
     const dragged = frames.find((frame) => frame.id === dragActiveId);
 

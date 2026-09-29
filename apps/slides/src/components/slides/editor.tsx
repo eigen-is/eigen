@@ -26,7 +26,7 @@ import {
     useSelection,
     useTool,
 } from '@workspace/ui/components/vector';
-import { ArrowDownToLine, ArrowUpToLine, Copy, Play, Plus, Presentation, Trash2 } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpToLine, CopyPlus, Play, Plus, Presentation, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSlideDnd } from './hooks/use-slide-dnd';
 import { PresentMode, presentStep } from './present-mode';
@@ -172,14 +172,11 @@ function SlideEditorInner({
 
     const [isPresenting, setIsPresenting] = useState(false);
 
-    // Adding a slide activates it, the way inserting one always has. `afterId` null puts it first.
-    const addSlideAfter = useCallback(
-        (afterId: string | null) => {
-            const id = addFrame(afterId);
-            if (id) setFrameId(id);
-        },
-        [addFrame, setFrameId],
-    );
+    // Adding a slide activates it, the way inserting one always has.
+    const addSlideAfter = (afterId: string | null) => {
+        const id = addFrame(afterId);
+        if (id) setFrameId(id);
+    };
 
     const addSlideAbove = (id: string) => {
         const index = doc.frames.findIndex((f) => f.id === id);
@@ -190,23 +187,10 @@ function SlideEditorInner({
     const slideMenu = useContextMenu<string>();
     const menuFrameId = slideMenu.item;
 
-    const duplicateSlide = useCallback(
-        (id: string) => {
-            const copyId = duplicateFrame(id);
-            if (copyId) setFrameId(copyId);
-        },
-        [duplicateFrame, setFrameId],
-    );
-
-    // No fallback to pick here: useActiveFrame hands over to whatever now holds the deleted slide's
-    // position. The slide menu disables the row for a one-slide deck, and this guards the keyboard path.
-    const deleteSlide = useCallback(
-        (id: string) => {
-            if (doc.frames.length <= 1) return;
-            deleteFrame(id);
-        },
-        [deleteFrame, doc.frames.length],
-    );
+    const duplicateSlide = (id: string) => {
+        const copyId = duplicateFrame(id);
+        if (copyId) setFrameId(copyId);
+    };
 
     const enterPresent = useCallback(() => {
         // Nothing to show on a frameless deck, and latching isPresenting there would take fullscreen
@@ -462,13 +446,13 @@ function SlideEditorInner({
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => duplicateSlide(menuFrameId)}>
-                            <Copy className="h-4 w-4 mr-2" /> Duplicate
+                            <CopyPlus className="h-4 w-4 mr-2" /> Duplicate
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                             variant="destructive"
                             disabled={doc.frames.length <= 1}
-                            onClick={() => deleteSlide(menuFrameId)}
+                            onClick={() => deleteFrame(menuFrameId)}
                         >
                             <Trash2 className="h-4 w-4 mr-2" /> Delete
                         </DropdownMenuItem>

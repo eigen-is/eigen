@@ -12,7 +12,7 @@ import {
 function docWithFrames(n: number): { doc: Y.Doc; ids: string[] } {
     const doc = new Y.Doc();
     const ids: string[] = [];
-    for (let i = 0; i < n; i++) ids.push(addFrameInDoc(doc));
+    for (let i = 0; i < n; i++) ids.push(addFrameInDoc(doc, ids.at(-1) ?? null));
     return { doc, ids };
 }
 

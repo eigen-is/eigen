@@ -1,11 +1,5 @@
-// Shared object context-menu item groups for canvas apps (vector, slides). Presentational only —
-// they render the singleton context menu's DropdownMenuItem rows and speak U4c's `ZOp` vocabulary,
-// but the WRITES stay per-app (vector rewrites fractional indices, slides splices a Y.Array). Each
-// host feeds callbacks and composes the separators between groups; app-specific rows (slides' Copy +
-// comment items, vector's future clipboard rows) stay host-side. Labels + order are the single source
-// so the two apps' menus read byte-identically. Home is the context-menu dir — these are menu-item
-// builders for the useContextMenu singleton — and they borrow the `ZOp` union from the properties
-// panel's Arrange chrome so the vocabulary lives in one place.
+// The object context menu's shared row groups, one set of labels and order for every host (the writes
+// stay host-side), plus every embedded image's download row.
 
 import { downloadDriveFile } from '@workspace/lib/download';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -100,7 +94,7 @@ export function ObjectActionMenuItems({ onDuplicate, onDelete }: { onDuplicate?:
 
 // Every embedded image's download row (canvas, docs, sheets). The host resolves the image's media name
 // to its path; none yet (a pending upload, a deleted file) hides the row.
-export function DownloadImageMenuItem({ path }: { path: DrivePath | undefined }) {
+export function DownloadImageMenuItem({ path }: { path?: DrivePath | null }) {
     if (!path) return null;
     return (
         <DropdownMenuItem onClick={() => downloadDriveFile(path)}>

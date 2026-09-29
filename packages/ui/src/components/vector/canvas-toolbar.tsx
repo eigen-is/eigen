@@ -18,7 +18,7 @@ import { CenteredToolbar } from '../layout/toolbar/toolbar';
 import { ToolbarMenu } from '../layout/toolbar/toolbar-menu';
 import { ToolbarSeparator } from '../layout/toolbar/toolbar-separator';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
-import { INSERT_IMAGE_KEY } from './hooks/use-canvas-keyboard';
+import { INSERT_IMAGE_KEY, TOOL_LOCK_KEY } from './hooks/use-canvas-keyboard';
 import type { VectorTool } from './hooks/use-tool';
 import { EDIT_TOOLS, INSERT_TOOLS, ToolButtons, ToolMenuItems } from './toolbar-tools';
 
@@ -49,7 +49,7 @@ type CanvasToolbarProps = {
     createLabel: string;
     createIcon: LucideIcon;
     createType: EigenDocType;
-    // Rows above the shape tools in the Insert menu (the deck's "Slide").
+    // Rows above the shape tools in the Insert menu (the deck's "New slide").
     insertItems?: ReactNode;
     // Buttons a read-only viewer keeps at any width (the deck's Present).
     centerItems?: ReactNode;
@@ -103,7 +103,7 @@ export function CanvasToolbar({
                             <ToolMenuItems tools={EDIT_TOOLS} setTool={setTool} />
                             <DropdownMenuCheckboxItem checked={toolLocked} onCheckedChange={setToolLocked}>
                                 Keep selected tool
-                                <DropdownMenuShortcut>Q</DropdownMenuShortcut>
+                                <DropdownMenuShortcut>{TOOL_LOCK_KEY}</DropdownMenuShortcut>
                             </DropdownMenuCheckboxItem>
                         </EditMenu>
                         {canEdit && (

@@ -951,15 +951,6 @@ export function CanvasEditor({
     const onContextMenu = (e: React.MouseEvent) => {
         // frozenRef: no menu over a live left-button gesture (marquee/move keeps its capture).
         if (textEditing || frozenRef.current) return;
-        // A viewer's menu is the image download alone, so only an image opens it.
-        if (!canEdit) {
-            const p = clientToScene(e.clientX, e.clientY);
-            const hitId = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
-            const hit = hitId ? committedById.get(hitId) : undefined;
-            if (hit?.type === 'image' && resolveMediaPath(hit.mediaName))
-                objectContextMenu.handleContextMenu(e, hit.id);
-            return;
-        }
         // A multi-point draft runs unfrozen but still owns the pointer: no menu (object or browser)
         // mid-draft — the draft keeps floating and the next left click keeps placing points.
         if (drawing.multiPointDraft) {
@@ -968,6 +959,13 @@ export function CanvasEditor({
         }
         const p = clientToScene(e.clientX, e.clientY);
         const hitId = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
+        // A viewer's menu is the image download alone, so only an image opens it.
+        if (!canEdit) {
+            const hit = hitId ? committedById.get(hitId) : undefined;
+            if (hit?.type === 'image' && resolveMediaPath(hit.mediaName))
+                objectContextMenu.handleContextMenu(e, hit.id);
+            return;
+        }
         if (!hitId) {
             onEmptyContextMenu?.(e);
             return;

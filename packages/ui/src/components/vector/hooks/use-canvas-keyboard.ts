@@ -30,8 +30,9 @@ type CanvasKeyboardParams = {
     onInsertImage?: () => void;
 };
 
-// Excalidraw's key for its image tool; the toolbar shows it next to Image.
+// Excalidraw's keys for its image tool and its tool lock; the toolbar shows them beside their rows.
 export const INSERT_IMAGE_KEY = '9';
+export const TOOL_LOCK_KEY = 'Q';
 
 // The tools that actually carry keys. A creatable kind the registry gave no shortcut binds nothing
 // rather than doubling up on Select's V/1; resolved at module eval, so the hook count and order below
@@ -81,7 +82,7 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     const { enabled, elements, selectedIds, undoManager } = params;
     const hasSelection = selectedIds.length > 0;
 
-    // Every handler below reads the live params through this ref, so all 35 registrations keep ONE
+    // Every handler below reads the live params through this ref, so every registration keeps ONE
     // identity for the canvas' lifetime: a render (a drag preview, a selection change) allocates no
     // callbacks and rebuilds no registration. Only `enabled` may change, in the memoized options.
     const live = useRef(params);
@@ -120,7 +121,7 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
 
     // Tool lock — keeps the selected tool active after a placement (Excalidraw's Q padlock).
     const toggleLock = useCallback(() => live.current.setToolLocked(!live.current.toolLocked), []);
-    useHotkey('Q', toggleLock, on);
+    useHotkey(TOOL_LOCK_KEY, toggleLock, on);
 
     const insertImage = useCallback(() => live.current.onInsertImage?.(), []);
     const canInsertImage = !!params.onInsertImage;

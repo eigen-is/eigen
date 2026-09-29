@@ -191,7 +191,6 @@ export function ImgBoxs() {
         e.stopPropagation();
         const path = settings.hooks?.resolveImagePath?.(img.mediaName);
         if (path) contextMenu.handleContextMenu(e, path);
-        else e.preventDefault();
     };
     const activeImg = useMemo(() => {
         return context.insertedImgs?.find((img) => img.id === context.activeImg);
@@ -206,7 +205,7 @@ export function ImgBoxs() {
                 return <InactiveImage key={img.id} img={img} onContextMenu={onContextMenu} />;
             })}
             <ContextMenuAnchor contextMenu={contextMenu}>
-                <DownloadImageMenuItem path={contextMenu.item ?? undefined} />
+                <DownloadImageMenuItem path={contextMenu.item} />
             </ContextMenuAnchor>
         </div>
     );
