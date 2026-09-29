@@ -309,7 +309,7 @@ Tests follow the workspace layout: chart model, layout and binding contracts und
 7. **Formats.** Open the real SVG, HTML, PDF and DOCX output and check presence, labels, hatches, gradients and arrow endpoints.
 8. **Limits.** Oversized ranges, hostile ids, labels and colors, and a malformed chart part produce a bounded placeholder or a clear rejection without losing the stored chart.
 
-Work runs by [WORKING-METHOD.md](../WORKING-METHOD.md), with browser verification of each app and real-consumer checks of every output format.
+Work runs by [the orchestrate skill](../../.claude/skills/orchestrate/SKILL.md), with browser verification of each app and real-consumer checks of every output format.
 
 ## Evidence
 
