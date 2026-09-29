@@ -5,7 +5,7 @@ description: Use when a change must be proven in the running Eigen dev app rathe
 
 # Verify in the browser
 
-How to prove a change works in the real product, not just in tests. Written for an agent driving the app headless; the conventions (test users, upload and convert API) apply to manual verification too. Where verification sits in a program: [WORKING-METHOD.md](../../../docs/WORKING-METHOD.md).
+How to prove a change works in the real product, not just in tests. Written for an agent driving the app headless; the conventions (test users, upload and convert API) apply to manual verification too. Where verification sits in a program: the [orchestrate skill](../orchestrate/SKILL.md), step 7.
 
 ## The dev stack
 

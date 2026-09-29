@@ -14,6 +14,8 @@ for await (const entry of new Glob('**/*.md').scan('docs')) {
     if (path.startsWith('docs/superpowers/')) continue;
     files.push(path);
 }
+for await (const entry of new Glob('*/SKILL.md').scan('.claude/skills'))
+    files.push(`.claude/skills/${entry.replaceAll('\\', '/')}`);
 files.sort();
 
 // A backtick'd repo path: one of the four roots, an extension we care about, no glob/placeholder chars.
