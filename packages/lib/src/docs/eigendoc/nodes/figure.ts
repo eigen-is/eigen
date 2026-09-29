@@ -11,6 +11,7 @@ export type FigureAttrs = {
     width?: number | null;
     alignment?: string | null;
     layout?: FigureLayout | null;
+    commentCardId?: string | null;
 };
 
 declare module '@tiptap/core' {
@@ -38,6 +39,9 @@ export const FigureNode = Node.create({
             src: { default: null },
             alt: { default: null },
             caption: { default: null },
+            // The image's comment card. An attribute, not the comment mark text carries: the Yjs
+            // binding persists a mark only on text.
+            commentCardId: { default: null },
             width: {
                 default: null,
                 parseHTML: (element: HTMLElement) => {

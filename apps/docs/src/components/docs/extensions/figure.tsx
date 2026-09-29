@@ -1,18 +1,30 @@
+import type { Node as PMNode } from '@tiptap/pm/model';
 import type { NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
 import { FigureNode } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { Box } from '@workspace/lib/vector';
+import { CommentIndicator } from '@workspace/ui/components/comments';
 import { ImagePlaceholder } from '@workspace/ui/components/media/image-placeholder';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { cn } from '@workspace/ui/lib/utils';
+import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 // The figure's resize floor (px).
 const FIGURE_MIN_WIDTH = 100;
 
-function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps) {
+type FigureOptions = {
+    // The figure is selected first, so the host's Add comment anchors to it.
+    onContextMenu: ((node: PMNode, event: React.MouseEvent) => void) | null;
+    onOpenComment: ((cardId: string) => void) | null;
+};
+
+function FigureView({ node, updateAttributes, selected, editor, extension, getPos, decorations }: NodeViewProps) {
+    const { onContextMenu, onOpenComment }: FigureOptions = extension.options;
+    const commentCardId: string | null = node.attrs.commentCardId;
+    const commentColor: string | undefined = decorations.find((d) => 'commentColor' in d.spec)?.spec.commentColor;
     const imageRef = useRef<HTMLImageElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [aspectRatio, setAspectRatio] = useState<number | null>(null);
@@ -192,7 +204,21 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
             draggable={isEditable}
             style={wrapperStyle}
         >
-            <figure className="m-0">
+            <figure
+                className="m-0"
+                // ProseMirror never sees a node view's right-click (stopEvent), so the figure asks here.
+                onContextMenu={
+                    onContextMenu
+                        ? (e) => {
+                              const pos = getPos();
+                              if (pos === undefined) return;
+                              e.preventDefault();
+                              editor.commands.setNodeSelection(pos);
+                              onContextMenu(node, e);
+                          }
+                        : undefined
+                }
+            >
                 <div ref={containerRef}>
                     {/* Relative wrapper shrink-wraps the img so the inset-0 ObjectTransform ring
                         lands exactly on the image box. When no transform mounts (placeholder,
@@ -247,6 +273,19 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
                                 onCommit={handleCommit}
                             />
                         )}
+                        {/* After the transform, so its NE grip never covers the mark. A button, so
+                            ProseMirror leaves its press alone (no node select, no drag). */}
+                        {commentCardId && onOpenComment && (
+                            <button
+                                type="button"
+                                className="absolute top-0 right-0"
+                                onClick={() => onOpenComment(commentCardId)}
+                                aria-label="Open comment"
+                                title="Open comment"
+                            >
+                                <CommentIndicator color={commentColor} className="block" />
+                            </button>
+                        )}
                     </div>
                     {caption && <figcaption>{caption}</figcaption>}
                 </div>
@@ -255,8 +294,18 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
     );
 }
 
-export const Figure = FigureNode.extend({
+export const Figure = FigureNode.extend<FigureOptions>({
+    addOptions() {
+        return { onContextMenu: null, onOpenComment: null };
+    },
     addNodeView() {
-        return ReactNodeViewRenderer(FigureView);
+        // TipTap skips the re-render when only decorations change, and the comment mark's color
+        // arrives as one.
+        return ReactNodeViewRenderer(FigureView, {
+            update: ({ updateProps }) => {
+                updateProps();
+                return true;
+            },
+        });
     },
 });

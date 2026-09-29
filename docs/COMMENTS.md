@@ -89,7 +89,7 @@ Each app anchors a card to host content differently:
 | App      | Anchor                                                                  |
 |----------|-------------------------------------------------------------------------|
 | Stickies | Column membership: `columnsMap.<col>.taskIds` contains the cardId       |
-| Docs     | TipTap mark `data-comment-id="<cardId>"` on a text range                |
+| Docs     | TipTap mark `data-comment-id="<cardId>"` on a text range; an image's `figure.commentCardId` attribute |
 | Sheets   | `Cell.commentCardIds?: string[]` on the cell                            |
 | Slides / Vector | `VectorElementBase.commentCardIds` on the element — a JSON id string |
 
@@ -357,6 +357,7 @@ Optional `onResolve`/`onAssign` for apps that surface resolve/assign at the dial
 - `comment-mark.ts` decoration plugin keys decoration colors by `cardId` from the `cards` map.
 - On selection right-click → CardFormDialog opens with the selected text as `initialTitle`. On save,
   `useCreateCommentCard`'s `anchorInTransact` callback runs `editor.chain().setComment(card.id)`.
+- An image (the inline `figure` atom) anchors its card in its own `commentCardId` attribute, not the comment mark: the Yjs binding (y-tiptap) persists marks only on text, so a mark on the figure would vanish on reload and never reach peers. `nodeCommentCardId(node)` (`extensions/comment-mark.ts`) is the one reader of either form; `useActiveComments`, the decorations, scroll-to and delete all go through it. ProseMirror never sees a right-click inside a node view, so the figure's node view handles it: it node-selects the figure and calls the `Figure` extension's `onContextMenu`, and the editor opens the image menu (Download original image, then `CommentLifecycleMenuItems` for the figure's card, or Add comment). `commentAnchorText` reads a figure as "Image", so the card's title and anchor text have something to quote. A commented figure paints the canvas' `CommentIndicator` in its top-right corner, in the color a node decoration's spec carries (resolved cards too), and only that corner mark opens the card. The figure's node view re-renders on every update, since TipTap's `ReactNodeView` skips a decoration-only change and the color arrives as one.
 
 ### Sheets
 
