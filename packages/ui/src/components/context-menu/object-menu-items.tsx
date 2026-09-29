@@ -7,6 +7,8 @@
 // builders for the useContextMenu singleton — and they borrow the `ZOp` union from the properties
 // panel's Arrange chrome so the vocabulary lives in one place.
 
+import { downloadDriveFile } from '@workspace/lib/download';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     ArrowDownToLine,
     ArrowUpToLine,
@@ -15,6 +17,7 @@ import {
     ClipboardPaste,
     Copy,
     CopyPlus,
+    Download,
     Scissors,
     Trash2,
 } from 'lucide-react';
@@ -92,5 +95,16 @@ export function ObjectActionMenuItems({ onDuplicate, onDelete }: { onDuplicate?:
                 </DropdownMenuItem>
             )}
         </>
+    );
+}
+
+// Every embedded image's download row (canvas, docs, sheets). The host resolves the image's media name
+// to its path; none yet (a pending upload, a deleted file) hides the row.
+export function DownloadImageMenuItem({ path }: { path: DrivePath | undefined }) {
+    if (!path) return null;
+    return (
+        <DropdownMenuItem onClick={() => downloadDriveFile(path)}>
+            <Download className="h-4 w-4 mr-2" /> Download original image
+        </DropdownMenuItem>
     );
 }

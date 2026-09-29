@@ -71,6 +71,10 @@ stable, so an upload does not re-render every image in the document.
 A `pending:` name that outlives its tab (closed or reloaded mid-upload) is a zombie: nothing can
 resolve it any more. Sheets sweeps those on mount; the other surfaces do not yet.
 
+### Downloading the original
+
+`resolveMediaUrl` serves `/preview`, which re-encodes a raster image (WebP, at most 2560 px), so a download never goes through it. Every embedded image's right-click menu carries the shared `DownloadImageMenuItem` (`packages/ui/src/components/context-menu/object-menu-items.tsx`): the host resolves the media name with `resolveMediaPath` (sheets: `hooks.resolveImagePath`) and the row calls `downloadDriveFile(path)` (`@workspace/lib/download`), the file's `/download` route with its original bytes and name. No path yet (a `pending:` upload, a deleted file) hides the row. Downloading is a read, so viewers get the menu too: the canvas object menu (vector, slides) shrinks to the row alone, sheets' floating images open their own menu instead of the cell menu under them, and a docs figure opens a menu of Download plus the comment rows ([COMMENTS.md](COMMENTS.md) § Docs).
+
 For **chat attachments**, resolution happens differently: `ChatMessageList` receives `mediaFolderId` from `useChatRoom`,
 and `AttachmentChip` calls `useFolderContent` on that folder to resolve attachment names.
 

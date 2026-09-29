@@ -1,6 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { getDriveDownloadUrl } from '@workspace/lib/api';
-import { triggerDownload } from '@workspace/lib/download';
+import { downloadDriveFile } from '@workspace/lib/download';
 import { useCheckPermissions, useTextPreview } from '@workspace/lib/drive';
 import { invalidateEditorContent, useFileContent } from '@workspace/lib/editor';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -38,8 +37,7 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
         setEditing(false);
     };
 
-    const handleDownload = () =>
-        triggerDownload(getDriveDownloadUrl(path.ownerId, path.mountId, path.id, path.updatedAt));
+    const handleDownload = () => downloadDriveFile(path);
 
     if (isLoading && !preview) {
         return <LoadingState />;

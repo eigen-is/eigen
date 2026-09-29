@@ -1,6 +1,5 @@
-import { getDriveDownloadUrl } from '@workspace/lib/api';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
-import { triggerDownload } from '@workspace/lib/download';
+import { downloadDriveFile } from '@workspace/lib/download';
 import {
     useCopyPath,
     useDeletePaths,
@@ -139,9 +138,7 @@ export function useDriveLayoutDialogs({
     );
 
     const handleDownloadPath = useCallback((path: DrivePath) => {
-        if (path.type === 'file') {
-            triggerDownload(getDriveDownloadUrl(path.ownerId, path.mountId, path.id, path.updatedAt));
-        }
+        if (path.type === 'file') downloadDriveFile(path);
     }, []);
 
     const onDelete = capabilities.canDelete ? handleDeletePaths : undefined;
