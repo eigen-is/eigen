@@ -68,7 +68,7 @@ export function writeFrameInDoc(doc: Y.Doc, frame: Partial<VectorFrame> & { id: 
     doc.transact(() => writeFrame(doc.getMap('frames'), frame));
 }
 
-export function addFrameInDoc(doc: Y.Doc, afterId?: string): string {
+export function addFrameInDoc(doc: Y.Doc, afterId?: string | null): string {
     const id = newFrameId();
     doc.transact(() => {
         const framesMap = doc.getMap('frames');

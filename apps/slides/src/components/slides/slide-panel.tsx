@@ -8,11 +8,9 @@ import { CSS } from '@dnd-kit/utilities';
 import { getBackgroundStyle } from '@workspace/lib/background';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { FRAME_ASPECT_RATIO, parseBackgroundFill, type VectorElement, type VectorFrame } from '@workspace/lib/vector';
-import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/context-menu';
-import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
+import type { useContextMenu } from '@workspace/ui/components/context-menu';
 import { FrameThumbnail } from '@workspace/ui/components/vector';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
-import { Copy, Trash2 } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 
 // A stable empty list, so a slide with no elements does not hand the thumbnail's memo a fresh array.
@@ -29,8 +27,8 @@ type SlidePanelProps = {
     onDragStart: (event: DragStartEvent) => void;
     onDragEnd: (event: DragEndEvent) => void;
     dragActiveId: string | null;
-    onDeleteSlide?: (frameId: string) => void;
-    onDuplicateSlide?: (frameId: string) => void;
+    // The editor's slide menu; absent for a read-only viewer, so no trigger arms.
+    slideMenu?: ReturnType<typeof useContextMenu<string>>;
     matchedFrameIds?: ReadonlySet<string>;
 };
 
@@ -42,27 +40,20 @@ export function SlidePanel({
     onDragStart,
     onDragEnd,
     dragActiveId,
-    onDeleteSlide,
-    onDuplicateSlide,
+    slideMenu,
     matchedFrameIds,
 }: SlidePanelProps) {
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
     const { resolveMediaUrl } = useMediaResolver();
-    const slideContextMenu = useContextMenu<string>();
-
-    // Read-only viewers get no handlers, so the menu would open empty — don't arm its triggers.
-    const hasSlideActions = !!onDuplicateSlide || !!onDeleteSlide;
-
-    // One instance at panel level: bind(frameId) is what carries the pressed slide into the menu.
-    const { openAt: openSlideMenuAt } = slideContextMenu;
+    // bind(frameId) is what carries the pressed slide into the menu.
+    const openSlideMenuAt = slideMenu?.openAt;
     const handleSlideLongPress = useCallback(
-        (frameId: string, x: number, y: number) => openSlideMenuAt(frameId, x, y),
+        (frameId: string, x: number, y: number) => openSlideMenuAt?.(frameId, x, y),
         [openSlideMenuAt],
     );
     // dragActiveId cancels an armed press the moment a drag starts (the stickies-card mechanism).
-    const slideLongPress = useLongPress(handleSlideLongPress, { disabled: !!dragActiveId || !hasSlideActions });
+    const slideLongPress = useLongPress(handleSlideLongPress, { disabled: !!dragActiveId || !slideMenu });
 
-    const menuFrameId = slideContextMenu.item;
     const dragged = frames.find((frame) => frame.id === dragActiveId);
 
     // One pass over the scene per render, not one per slide. An element homed to a frame that is gone
@@ -88,9 +79,7 @@ export function SlidePanel({
                             <SortableSlide key={frame.id} frameId={frame.id} longPressBind={slideLongPress.bind}>
                                 <div
                                     onContextMenu={
-                                        hasSlideActions
-                                            ? (e) => slideContextMenu.handleContextMenu(e, frame.id)
-                                            : undefined
+                                        slideMenu ? (e) => slideMenu.handleContextMenu(e, frame.id) : undefined
                                     }
                                 >
                                     <FrameThumbnail
@@ -118,23 +107,6 @@ export function SlidePanel({
                     </DragOverlay>
                 </DndContext>
             </div>
-            <ContextMenuAnchor contextMenu={slideContextMenu}>
-                {menuFrameId && (
-                    <>
-                        <DropdownMenuItem onClick={() => onDuplicateSlide?.(menuFrameId)}>
-                            <Copy className="h-4 w-4 mr-2" /> Duplicate
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            variant="destructive"
-                            disabled={frames.length <= 1}
-                            onClick={() => onDeleteSlide?.(menuFrameId)}
-                        >
-                            <Trash2 className="h-4 w-4 mr-2" /> Delete
-                        </DropdownMenuItem>
-                    </>
-                )}
-            </ContextMenuAnchor>
         </div>
     );
 }

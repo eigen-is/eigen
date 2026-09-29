@@ -16,6 +16,8 @@ You need editor access to make changes. If you can only view the presentation, t
 
 Choose **Insert → New slide** in the toolbar. A blank white slide appears straight after the current slide and becomes the active slide.
 
+To choose where it goes, right-click a thumbnail in the left panel, or an empty spot on the slide itself, and choose **New slide above** or **New slide below**.
+
 ## Duplicate a slide
 
 Right-click the thumbnail of the slide you want to copy in the left panel, then choose **Duplicate**. The copy appears immediately after the original and becomes the active slide. It carries the same background and all the same objects, but without any comments.

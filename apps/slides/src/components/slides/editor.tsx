@@ -9,6 +9,7 @@ import {
     type VectorElement,
 } from '@workspace/lib/vector';
 import { EmptyState, TooltipButton, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
+import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/context-menu';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { useAspectLock } from '@workspace/ui/components/properties-panel';
 import {
@@ -25,7 +26,7 @@ import {
     useSelection,
     useTool,
 } from '@workspace/ui/components/vector';
-import { Play, Plus, Presentation } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpToLine, Copy, Play, Plus, Presentation, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSlideDnd } from './hooks/use-slide-dnd';
 import { PresentMode, presentStep } from './present-mode';
@@ -171,12 +172,23 @@ function SlideEditorInner({
 
     const [isPresenting, setIsPresenting] = useState(false);
 
-    // Adding a slide activates it, the way inserting one always has. Duplicate and delete are the
-    // rail's own rows and arrive with it.
-    const addSlide = useCallback(() => {
-        const id = addFrame(frameId);
-        if (id) setFrameId(id);
-    }, [addFrame, frameId, setFrameId]);
+    // Adding a slide activates it, the way inserting one always has. `afterId` null puts it first.
+    const addSlideAfter = useCallback(
+        (afterId: string | null) => {
+            const id = addFrame(afterId);
+            if (id) setFrameId(id);
+        },
+        [addFrame, setFrameId],
+    );
+
+    const addSlideAbove = (id: string) => {
+        const index = doc.frames.findIndex((f) => f.id === id);
+        addSlideAfter(index > 0 ? doc.frames[index - 1].id : null);
+    };
+
+    // One menu for a slide, opened from its rail thumbnail or from empty space on the canvas.
+    const slideMenu = useContextMenu<string>();
+    const menuFrameId = slideMenu.item;
 
     const duplicateSlide = useCallback(
         (id: string) => {
@@ -187,7 +199,7 @@ function SlideEditorInner({
     );
 
     // No fallback to pick here: useActiveFrame hands over to whatever now holds the deleted slide's
-    // position. The rail disables the row for a one-slide deck, and this guards the keyboard path.
+    // position. The slide menu disables the row for a one-slide deck, and this guards the keyboard path.
     const deleteSlide = useCallback(
         (id: string) => {
             if (doc.frames.length <= 1) return;
@@ -332,7 +344,7 @@ function SlideEditorInner({
                     createType="slides"
                     insertItems={
                         <>
-                            <DropdownMenuItem onClick={addSlide}>
+                            <DropdownMenuItem onClick={() => addSlideAfter(frameId)}>
                                 <Plus className="h-4 w-4 mr-2" /> New slide
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
@@ -391,8 +403,7 @@ function SlideEditorInner({
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                     dragActiveId={dragActiveId}
-                    onDeleteSlide={canEdit ? deleteSlide : undefined}
-                    onDuplicateSlide={canEdit ? duplicateSlide : undefined}
+                    slideMenu={canEdit ? slideMenu : undefined}
                     matchedFrameIds={matchedFrameIds}
                 />
             )}
@@ -423,6 +434,7 @@ function SlideEditorInner({
                             searchMatchedIds={searchMatchedIds}
                             searchActiveId={searchActiveId}
                             onInsertImage={insertImage}
+                            onEmptyContextMenu={(e) => slideMenu.handleContextMenu(e, frameId)}
                             // A view-only deck pages on a one-finger swipe; an editable one keeps
                             // that finger for the canvas (D4.13).
                             onSwipeFrame={canEdit ? undefined : stepFrame}
@@ -439,6 +451,30 @@ function SlideEditorInner({
                     <EmptyState icon={<Presentation className="h-8 w-8" />} message="No slides yet" />
                 </div>
             )}
+            <ContextMenuAnchor contextMenu={slideMenu}>
+                {menuFrameId && (
+                    <>
+                        <DropdownMenuItem onClick={() => addSlideAbove(menuFrameId)}>
+                            <ArrowUpToLine className="h-4 w-4 mr-2" /> New slide above
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => addSlideAfter(menuFrameId)}>
+                            <ArrowDownToLine className="h-4 w-4 mr-2" /> New slide below
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => duplicateSlide(menuFrameId)}>
+                            <Copy className="h-4 w-4 mr-2" /> Duplicate
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                            variant="destructive"
+                            disabled={doc.frames.length <= 1}
+                            onClick={() => deleteSlide(menuFrameId)}
+                        >
+                            <Trash2 className="h-4 w-4 mr-2" /> Delete
+                        </DropdownMenuItem>
+                    </>
+                )}
+            </ContextMenuAnchor>
         </CanvasDocumentShell>
     );
 }

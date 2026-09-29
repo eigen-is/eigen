@@ -57,7 +57,7 @@ With no object selected, the properties panel shows background options for the a
 
 ## Manage slides
 
-Choose **Insert → New slide** to add a blank slide straight after the current one. Drag a thumbnail in the slide panel to reorder the slides. Right-click a thumbnail to **Duplicate** or **Delete** it. The status bar at the bottom of the canvas shows the current slide number and the total.
+Choose **Insert → New slide** to add a blank slide straight after the current one. Drag a thumbnail in the slide panel to reorder the slides. Right-click a thumbnail, or an empty spot on the slide, to add a **New slide above** or **New slide below** it, or to **Duplicate** or **Delete** it. The status bar at the bottom of the canvas shows the current slide number and the total.
 
 ## Present
 
