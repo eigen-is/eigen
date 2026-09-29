@@ -89,11 +89,13 @@ function injectFontFaces(svg: string, budget: Budget): string {
 }
 
 // The EIGEN fonts the svg's text uses. The svg stores the full family STACK from getFontFamily (e.g.
-// "&apos;Excalifont&apos;, cursive"); split each font-family value into comma-separated tokens and match
+// "&apos;Excalifont&apos;, cursive"), as a <text> attribute or inside a rich-text box's style, where an
+// unquoted value runs to the `;` and an entity's own `;` must not end it; split each value into
+// comma-separated tokens and match
 // a token EXACTLY (quotes/entities stripped, trimmed) against an EIGEN_FONTS name — a substring test
 // would let "Interstate" pull in the Inter face. Scoping to font-family values, not the whole svg,
 // keeps a family name from matching prose elsewhere. An unrecognized family contributes nothing.
-const FONT_FAMILY_RE = /font-family\s*[:=]\s*(?:"([^"]*)"|'([^']*)'|([^;">]+))/gi;
+const FONT_FAMILY_RE = /font-family\s*[:=]\s*(?:"([^"]*)"|'([^']*)'|((?:&\w+;|[^;">])+))/gi;
 const FONT_NAMES = new Set(EIGEN_FONTS.map((font) => font.name));
 function usedEigenFonts(svg: string): Set<string> {
     const used = new Set<string>();

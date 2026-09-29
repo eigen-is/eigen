@@ -187,6 +187,16 @@ describe('inlineSvgMediaRefs font injection', () => {
         expect(out.indexOf('<defs>')).toBeLessThan(out.indexOf('<text'));
     });
 
+    test('a rich-text box names its family inside an escaped style and gets the face injected', async () => {
+        // The style sceneToSvg writes for a rich-text box: `&apos;` carries a `;` of its own, which must
+        // not end the value before the family name.
+        const family = getFontFamily('Excalifont').replace(/'/g, '&apos;');
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div xmlns="http://www.w3.org/1999/xhtml" style="font-family:${family};font-size:20px">hi</div></foreignObject></svg>`;
+        const out = (await inlineSvgMediaRefs(mount, folderId, Buffer.from(svg))).toString('utf8');
+        expect(out).toContain('font-family: "Excalifont"');
+        expect(occurrences(out, '@font-face')).toBe(1);
+    });
+
     test('only the named family is injected, not every bundled face', async () => {
         const out = (await inlineSvgMediaRefs(mount, folderId, Buffer.from(svgWithText('Excalifont')))).toString(
             'utf8',
