@@ -1,6 +1,6 @@
 ---
 name: verify-in-browser
-description: Use when a change must be proven in the running Eigen dev app rather than only in tests — driving it headless with Playwright or Chrome, taking and reading screenshots, pixel-gating a refactor, creating a throwaway test user or injecting an auth cookie, uploading and converting real documents, verifying on mobile viewports or touch, or starting, checking or stopping the dev stack (API on :8000, vite apps) for that purpose. Also use when the dev app shows a blank page, a spinner that never ends, a `SQLITE_IOERR_VNODE` or `useContext` of null crash during verification.
+description: Use when a change must be proven in the running Eigen dev app rather than only in tests — driving it headless with Playwright or Chrome, taking and reading screenshots, pixel-gating a refactor, creating a throwaway test user or injecting an auth cookie, uploading and converting real documents, verifying on mobile viewports or touch, or whenever you start, check or stop the dev stack (API on :8000, vite apps). Also use when the dev app shows a blank page, a spinner that never ends, a `SQLITE_IOERR_VNODE` or `useContext` of null crash during verification.
 ---
 
 # Verify in the browser

@@ -31,14 +31,14 @@ The roadmap's own warning is the design constraint: **flaky suites get abandoned
 
 - **Degraded-storage / slow-S3 E2E.** That failure class (2026-07-03 nbg1 incident) belongs to the create/open resilience work and its API-level storage doubles ([TESTING.md](../TESTING.md)); this suite runs on local storage only and never depends on S3.
 - Cross-browser matrix. Chromium only in v1; Firefox/WebKit add runtime and flake surface for little collab-specific signal.
-- Visual regression / pixel comparison. the verify-in-browser skill's screenshot-reading stays the tool for design verification; this suite asserts content, not pixels.
+- Visual regression / pixel comparison. The verify-in-browser skill's screenshot-reading stays the tool for design verification; this suite asserts content, not pixels.
 - Presence/awareness cursors, load testing, mail/calendar/contacts UI flows (their logic is covered by the API integration tests).
 - Replacing `../../apps/api/src/test` — API-level behavior stays tested at the API level. This suite only tests what *needs* a browser: real WS, real editors, real concurrency.
 
 ## Current state (grounded)
 
 - **CI exists**: `../../.github/workflows/check.yml` runs on push/PR to `main` (`ubuntu-latest`, 15-minute timeout): `bun install --frozen-lockfile`, lint, typecheck, `primitives:check`, `bun --filter '*' test`. No E2E job, no browser step.
-- **Playwright is not a dependency anywhere.** No `playwright` in the root or any workspace `../../package.json`, no `playwright.config.*` in the repo. the verify-in-browser skill's recipe installs it ad-hoc (`bun add playwright` in a `/tmp` work dir, `chromium.launch({ channel: 'chrome' })`).
+- **Playwright is not a dependency anywhere.** No `playwright` in the root or any workspace `../../package.json`, no `playwright.config.*` in the repo. The verify-in-browser skill's recipe installs it ad-hoc (`bun add playwright` in a `/tmp` work dir, `chromium.launch({ channel: 'chrome' })`).
 - **Dev stack**: `bun run serve` = `bun --filter '*' dev` — every app's vite server plus the API. Ports in `../../vite.shared.config.ts` (`APP_PORTS`: index 3000 … sheets 3013); each app serves under its name as base path and builds to `dist/<app>`. The API listens on a **hardcoded port 8000** (`../../apps/api/src/index.ts`).
 - **API host resolution**: `resolveApiHost()` in `../../packages/lib/src/core/api.ts` — `VITE_API_HOST` absolute in dev (`http://localhost:8000`), relative in prod (`/eigen`, spliced onto `window.location.origin`). In production the frontend image's Caddy serves the built apps from `/www` and proxies the API (`../../docker/frontend/Dockerfile`). CORS/auth origins are the hardcoded `trustedOrigins` list in `../../apps/api/src/lib/auth/auth.ts` (localhost:3000…3013).
 - **First-run state**: `server-config.ts` persists `setupCompleted`; `POST /setup/complete` (`routes/setup.ts`) completes the wizard. `EIGEN_DATA_ROOT` relocates all data. `../../apps/api/src/test/setup.ts` already does the full throwaway boot: fresh `data-test/test-<timestamp>` dir, `POST /setup/complete` with `storageType: 'local-id'`, then creates alice/bob/charlie via `auth.api.signUpEmail` and extracts `better-auth.session_token`.
