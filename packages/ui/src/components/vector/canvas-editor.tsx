@@ -950,7 +950,16 @@ export function CanvasEditor({
     // uses hit-testing (elements have no per-node DOM), so this lives on the container, not per object.
     const onContextMenu = (e: React.MouseEvent) => {
         // frozenRef: no menu over a live left-button gesture (marquee/move keeps its capture).
-        if (!canEdit || textEditing || frozenRef.current) return;
+        if (textEditing || frozenRef.current) return;
+        // A viewer's menu is the image download alone, so only an image opens it.
+        if (!canEdit) {
+            const p = clientToScene(e.clientX, e.clientY);
+            const hitId = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
+            const hit = hitId ? committedById.get(hitId) : undefined;
+            if (hit?.type === 'image' && resolveMediaPath(hit.mediaName))
+                objectContextMenu.handleContextMenu(e, hit.id);
+            return;
+        }
         // A multi-point draft runs unfrozen but still owns the pointer: no menu (object or browser)
         // mid-draft — the draft keeps floating and the next left click keeps placing points.
         if (drawing.multiPointDraft) {
@@ -974,6 +983,7 @@ export function CanvasEditor({
     const onMenuDelete = () => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
     // A comment is raised on the right-clicked element, not on the selection: a card anchors to one element.
     const menuItemId = objectContextMenu.item;
+    const menuElement = menuItemId ? committedById.get(menuItemId) : undefined;
     // Touch/stylus policy (penMode palm rejection, two-finger pan/pinch, double-tap → text) lives in
     // the sibling module; the canvas only dispatches. Its second-finger takeover ends any live one-finger
     // gesture through this callback (a draw draft in the tools hook, else a canvas create/move/marquee).
@@ -1625,6 +1635,8 @@ export function CanvasEditor({
             )}
             <CanvasObjectMenu
                 contextMenu={objectContextMenu}
+                canEdit={canEdit}
+                imagePath={menuElement?.type === 'image' ? resolveMediaPath(menuElement.mediaName) : undefined}
                 onArrange={onMenuArrange}
                 onCopy={onMenuCopy}
                 onCut={onMenuCut}
