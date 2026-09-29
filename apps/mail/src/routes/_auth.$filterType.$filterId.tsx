@@ -8,7 +8,7 @@ import { useSpaceSettings } from '@workspace/lib/space';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Email } from '@workspace/lib/types/mail';
 import { isEmailDraft } from '@workspace/lib/types/mail';
-import { Column, ColumnLayout, DeleteDialog, useLayout } from '@workspace/ui';
+import { Column, ColumnLayout, DeleteDialog, EmptyState, useLayout } from '@workspace/ui';
 import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmailDetail, EmailDetailToolbar } from '../components/mail/email-detail';
@@ -112,7 +112,7 @@ function MailRoute() {
         isLoading: isEmailsLoading,
         error: emailsError,
     } = useEmails(filterId);
-    const { data: selectedEmail = null } = useEmail(mailId);
+    const { data: selectedEmail = null, isPending: isEmailPending } = useEmail(mailId);
     const { data: mailboxes = [] } = useMailboxes();
     // Canonical mailbox identity for the list context menu — resolve the URL filterId ('inbox'/'sent'/…)
     // to the mailbox's canonical `path` (inbox = ''), the same identity EmailSummary.mailbox carries and
@@ -415,7 +415,9 @@ function MailRoute() {
                                     toggleMailRead={actions.handleToggleMailRead}
                                     highlightTerm={q}
                                 />
-                            ) : null}
+                            ) : isEmailPending ? null : (
+                                <EmptyState message="Email not found" />
+                            )}
                         </Column>
                     )}
                 </ColumnLayout>
