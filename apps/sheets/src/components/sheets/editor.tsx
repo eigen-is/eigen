@@ -17,7 +17,7 @@ import { isImageMime } from '@workspace/lib/types/drive';
 import { fitImageSize, type ImageSize } from '@workspace/lib/vector';
 import { type Image as SheetImage, Workbook, type WorkbookInstance } from '@workspace/sheet';
 import {
-    CollabLoadingState,
+    CollabDocumentGate,
     DocumentShareCluster,
     FileDropOverlay,
     UnsyncedEditsGuard,
@@ -93,6 +93,7 @@ function SheetEditorInner({
         loadFailed,
         synced,
         offline,
+        loaded,
         storageUnavailable,
         storageGone,
         unsyncedEdits,
@@ -301,15 +302,8 @@ function SheetEditorInner({
     );
 
     const leftItems = useMemo(
-        () => (
-            <ToolbarLeftItems
-                path={path}
-                canWrite={canWrite}
-                onAccessDialogOpen={onAccessDialogOpen}
-                storageGone={storageGone}
-            />
-        ),
-        [path, canWrite, onAccessDialogOpen, storageGone],
+        () => <ToolbarLeftItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} />,
+        [path, canWrite, onAccessDialogOpen],
     );
 
     const rightItems = useMemo(
@@ -318,7 +312,6 @@ function SheetEditorInner({
                 canWrite={canWrite}
                 offline={offline}
                 storageUnavailable={storageUnavailable}
-                storageGone={storageGone}
                 onAccessDialogOpen={onAccessDialogOpen}
                 onToggleCommentPanel={toggleComments}
                 commentPanelOpen={commentPanelOpen}
@@ -332,7 +325,6 @@ function SheetEditorInner({
             canWrite,
             offline,
             storageUnavailable,
-            storageGone,
             onAccessDialogOpen,
             commentPanelOpen,
             activityPanelOpen,
@@ -343,23 +335,18 @@ function SheetEditorInner({
         ],
     );
 
-    // initialData is the load latch, deliberately NOT `synced`: the shared useCollabDoc flips
-    // `synced` false on a WS blip and true on reconnect, and unmounting the Workbook there would
-    // drop the engine undo stack and any in-progress cell edit. The mounted workbook catches up via
-    // the op-log observer (and a remote snapshot flush remounts through snapshotVersion).
-    if (!initialData) {
-        return (
-            <CollabLoadingState
-                storageUnavailable={storageUnavailable}
-                storageGone={storageGone}
-                path={path}
-                canWrite={canWrite}
-            />
-        );
-    }
-
+    // Gate on the LATCHED loaded flag, not `synced`: the shared useCollabDoc flips `synced` false on a
+    // WS blip and true on reconnect, and unmounting the Workbook there would drop the engine undo stack
+    // and any in-progress cell edit. The mounted workbook catches up via the op-log observer (and a
+    // remote snapshot flush remounts through snapshotVersion).
     return (
-        <>
+        <CollabDocumentGate
+            loaded={loaded}
+            storageUnavailable={storageUnavailable}
+            storageGone={storageGone}
+            path={path}
+            canWrite={canWrite}
+        >
             <UnsyncedEditsGuard active={unsyncedEdits} />
             {mediaFolderId && (
                 <DrivePickerWithUpload
@@ -396,77 +383,82 @@ function SheetEditorInner({
                         >
                             <div ref={paneRef} className="relative h-full w-full" {...imageDropProps}>
                                 <FileDropOverlay visible={isDragging} label="Drop images to add" icon={ImageIcon} />
-                                <Workbook
-                                    key={snapshotVersion}
-                                    ref={workbookRef}
-                                    data={initialData}
-                                    onChange={(data) => {
-                                        onDataChange(data);
-                                        setFlowdata(workbookRef.current?.getFlowdata() ?? undefined);
-                                    }}
-                                    onOp={handleOp}
-                                    showToolbar={true}
-                                    showFormulaBar={true}
-                                    showSheetTabs={true}
-                                    allowEdit={canWrite && !loadFailed}
-                                    toolbarLeftItems={leftItems}
-                                    toolbarRightItems={rightItems}
-                                    imageAspectLocked={imageAspectLocked}
-                                    hooks={{
-                                        afterSelectionChange: (sheetId, selection) => {
-                                            const r = selection.row_focus ?? selection.row?.[0];
-                                            const c = selection.column_focus ?? selection.column?.[0];
-                                            if (r != null && c != null) publishSelection(sheetId, r, c);
-                                        },
-                                        onActiveImageChange: setActiveImage,
-                                        ...(canWrite && mediaFolderId
-                                            ? {
-                                                  onInsertImage: () => setImagePickerOpen(true),
-                                                  onPasteEigenImage: handlePasteEigenImage,
-                                                  onPasteImageFile: handleImageFile,
-                                                  onPasteSvgFile: handlePasteSvgFile,
-                                              }
-                                            : {}),
-                                        resolveImageUrl: resolveMediaUrl,
-                                        resolveImagePath: resolveMediaPath,
-                                        ...(canWrite && chatFolderId
-                                            ? {
-                                                  onAddComment: (r: number, c: number) => {
-                                                      addCommentRef.current?.(r, c);
-                                                  },
-                                              }
-                                            : {}),
-                                        commentLifecycle: lifecycle,
-                                        ...(canWrite
-                                            ? {
-                                                  onDeleteComment: (r: number, c: number) => {
-                                                      const fd = workbookRef.current?.getFlowdata();
-                                                      const cell = fd?.[r]?.[c];
-                                                      const cardId = cell?.commentCardIds?.[0];
-                                                      if (cardId && workbookRef.current) {
-                                                          workbookRef.current.setCellFormat(
-                                                              r,
-                                                              c,
-                                                              'commentCardIds',
-                                                              (cell.commentCardIds ?? []).filter((id) => id !== cardId),
-                                                          );
-                                                      }
-                                                  },
-                                              }
-                                            : {}),
-                                        getCommentInfo: (r: number, c: number) => {
-                                            const fd = workbookRef.current?.getFlowdata();
-                                            const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
-                                            const card = cardId ? cards[cardId] : undefined;
-                                            if (!card) return null;
-                                            const entry = card.chatName
-                                                ? allComments.find((c) => c.chatName === card.chatName)
-                                                : undefined;
-                                            const indicatorColor = commentIndicatorColor(card.color);
-                                            return { card, entry, indicatorColor };
-                                        },
-                                    }}
-                                />
+                                {/* Set by the same sync that latches `loaded`; the check only narrows the type. */}
+                                {initialData && (
+                                    <Workbook
+                                        key={snapshotVersion}
+                                        ref={workbookRef}
+                                        data={initialData}
+                                        onChange={(data) => {
+                                            onDataChange(data);
+                                            setFlowdata(workbookRef.current?.getFlowdata() ?? undefined);
+                                        }}
+                                        onOp={handleOp}
+                                        showToolbar={true}
+                                        showFormulaBar={true}
+                                        showSheetTabs={true}
+                                        allowEdit={canWrite && !loadFailed}
+                                        toolbarLeftItems={leftItems}
+                                        toolbarRightItems={rightItems}
+                                        imageAspectLocked={imageAspectLocked}
+                                        hooks={{
+                                            afterSelectionChange: (sheetId, selection) => {
+                                                const r = selection.row_focus ?? selection.row?.[0];
+                                                const c = selection.column_focus ?? selection.column?.[0];
+                                                if (r != null && c != null) publishSelection(sheetId, r, c);
+                                            },
+                                            onActiveImageChange: setActiveImage,
+                                            ...(canWrite && mediaFolderId
+                                                ? {
+                                                      onInsertImage: () => setImagePickerOpen(true),
+                                                      onPasteEigenImage: handlePasteEigenImage,
+                                                      onPasteImageFile: handleImageFile,
+                                                      onPasteSvgFile: handlePasteSvgFile,
+                                                  }
+                                                : {}),
+                                            resolveImageUrl: resolveMediaUrl,
+                                            resolveImagePath: resolveMediaPath,
+                                            ...(canWrite && chatFolderId
+                                                ? {
+                                                      onAddComment: (r: number, c: number) => {
+                                                          addCommentRef.current?.(r, c);
+                                                      },
+                                                  }
+                                                : {}),
+                                            commentLifecycle: lifecycle,
+                                            ...(canWrite
+                                                ? {
+                                                      onDeleteComment: (r: number, c: number) => {
+                                                          const fd = workbookRef.current?.getFlowdata();
+                                                          const cell = fd?.[r]?.[c];
+                                                          const cardId = cell?.commentCardIds?.[0];
+                                                          if (cardId && workbookRef.current) {
+                                                              workbookRef.current.setCellFormat(
+                                                                  r,
+                                                                  c,
+                                                                  'commentCardIds',
+                                                                  (cell.commentCardIds ?? []).filter(
+                                                                      (id) => id !== cardId,
+                                                                  ),
+                                                              );
+                                                          }
+                                                      },
+                                                  }
+                                                : {}),
+                                            getCommentInfo: (r: number, c: number) => {
+                                                const fd = workbookRef.current?.getFlowdata();
+                                                const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
+                                                const card = cardId ? cards[cardId] : undefined;
+                                                if (!card) return null;
+                                                const entry = card.chatName
+                                                    ? allComments.find((c) => c.chatName === card.chatName)
+                                                    : undefined;
+                                                const indicatorColor = commentIndicatorColor(card.color);
+                                                return { card, entry, indicatorColor };
+                                            },
+                                        }}
+                                    />
+                                )}
                             </div>
                         </DocSearchProvider>
                     </div>
@@ -539,6 +531,6 @@ function SheetEditorInner({
                     }
                 }}
             />
-        </>
+        </CollabDocumentGate>
     );
 }

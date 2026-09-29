@@ -24,19 +24,13 @@ type DocumentShareClusterProps = {
     offline?: boolean;
     // The server's storage is failing and the collab socket is retrying; edits stay local meanwhile.
     storageUnavailable?: boolean;
-    // The document's stored data is missing and the collab socket stopped; edits cannot be saved.
-    storageGone?: boolean;
 };
 
 export function DocumentShareCluster(props: DocumentShareClusterProps) {
     const isMobile = useIsMobile();
-    // One icon for every way edits can be stuck in the tab; a storage failure explains itself, so it wins.
-    const label = props.storageGone
-        ? 'Stored data not found'
-        : props.storageUnavailable
-          ? 'Storage unavailable'
-          : 'Offline';
-    const offlineBadge = (props.offline || props.storageUnavailable || props.storageGone) && (
+    // One icon for both ways edits can be stuck in the tab; the outage explains itself, so it wins.
+    const label = props.storageUnavailable ? 'Storage unavailable' : 'Offline';
+    const offlineBadge = (props.offline || props.storageUnavailable) && (
         <Popover>
             <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" aria-label={label} className="h-8 w-8">
@@ -44,11 +38,9 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
                 </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-auto text-sm">
-                {props.storageGone
-                    ? 'The stored data for this document could not be found. Edits cannot be saved.'
-                    : props.storageUnavailable
-                      ? 'Storage is temporarily unavailable, retrying. Edits will sync when it is back.'
-                      : 'Offline, will sync when back online'}
+                {props.storageUnavailable
+                    ? 'Storage is temporarily unavailable, retrying. Edits will sync when it is back.'
+                    : 'Offline, will sync when back online'}
             </PopoverContent>
         </Popover>
     );

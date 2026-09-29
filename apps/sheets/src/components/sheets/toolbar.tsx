@@ -10,10 +10,9 @@ type ToolbarLeftProps = {
     canWrite: boolean;
     onAccessDialogOpen: () => void;
     path: DrivePath;
-    storageGone: boolean;
 };
 
-export function ToolbarLeftItems({ path, onAccessDialogOpen, canWrite, storageGone }: ToolbarLeftProps) {
+export function ToolbarLeftItems({ path, onAccessDialogOpen, canWrite }: ToolbarLeftProps) {
     const { exportPath, isExporting } = useDocumentExport();
     const [importPickerOpen, setImportPickerOpen] = useState(false);
 
@@ -29,7 +28,6 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, canWrite, storageGo
                 createLabel="New sheet"
                 createIcon={Sheet}
                 createType="sheets"
-                storageGone={storageGone}
             />
             <ExportProgressDialog open={isExporting} />
             <DocumentImportPicker

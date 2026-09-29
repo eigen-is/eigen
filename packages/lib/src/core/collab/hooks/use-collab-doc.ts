@@ -57,7 +57,7 @@ export type CollabDoc = {
     undoManager: Y.UndoManager | null;
     // Tracks the actual connection, not first load: true on every provider 'sync', false on disconnect.
     synced: boolean;
-    // Socket down after first load and not a storage outage or miss; drives the toolbar's offline icon.
+    // Socket down after first load and not a storage outage; drives the toolbar's offline icon.
     offline: boolean;
     // LATCHED first-load flag: false at doc creation, true after the FIRST synced=true for this doc
     // instance, and reset only on teardown / pathId swap. Gate the initial loading screen on THIS,
@@ -243,7 +243,7 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         provider,
         undoManager,
         synced,
-        offline: loaded && !connected && !storageUnavailable && !storageGone,
+        offline: loaded && !connected && !storageUnavailable,
         loaded,
         storageUnavailable,
         storageGone,

@@ -77,7 +77,6 @@ type EditorToolbarProps = {
     canWrite: boolean;
     offline: boolean;
     storageUnavailable: boolean;
-    storageGone: boolean;
     canUndo: boolean;
     canRedo: boolean;
     onAccessDialogOpen: () => void;
@@ -99,7 +98,6 @@ export const EditorToolbar = ({
     canWrite,
     offline,
     storageUnavailable,
-    storageGone,
     canUndo,
     canRedo,
     onAccessDialogOpen,
@@ -184,7 +182,6 @@ export const EditorToolbar = ({
                             importLabel="Import docx file…"
                             createLabel="New doc"
                             createType="doc"
-                            storageGone={storageGone}
                         >
                             <DropdownMenuItem onClick={printDocument}>
                                 <Printer className="h-4 w-4 mr-2" /> Print
@@ -688,7 +685,6 @@ export const EditorToolbar = ({
                         canWrite={canWrite}
                         offline={offline}
                         storageUnavailable={storageUnavailable}
-                        storageGone={storageGone}
                         onAccessDialogOpen={onAccessDialogOpen}
                         onToggleCommentPanel={onToggleCommentPanel}
                         commentPanelOpen={commentPanelOpen}

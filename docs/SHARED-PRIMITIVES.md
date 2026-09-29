@@ -24,7 +24,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `AvatarEditor` | `@workspace/ui` | packages/ui/src/components/avatar-editor.tsx |
 | `Bar` | `@workspace/ui` | packages/ui/src/components/braket/bar.tsx |
 | `CenteredToolbar` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar.tsx |
-| `CollabLoadingState` | `@workspace/ui` | packages/ui/src/components/layout/app/collab-loading-state.tsx |
+| `CollabDocumentGate` | `@workspace/ui` | packages/ui/src/components/layout/app/collab-document-gate.tsx |
 | `Column` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
 | `ColumnLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
 | `ConfirmDialog` | `@workspace/ui` | packages/ui/src/components/confirm-dialog.tsx |
