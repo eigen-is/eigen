@@ -193,7 +193,8 @@ missing_items() {
 }
 
 # check_pinned <version> [pinned [registry]]: healthy, status names the version, it or what is pinned instead (a
-# channel) is pinned by digest, from this run's registry by default.
+# channel) is pinned by digest, from this run's registry by default, and on a release of this tree the API reads
+# .env.production. A release published before it may not share the file yet.
 check_pinned() {
     local pinned=${2:-$1}
     if stack_up; then ok "every service runs and eigen-api is healthy"; else fail "the stack is not up"; fi
@@ -204,6 +205,7 @@ check_pinned() {
     else
         fail ".env.production pins $(env_of EIGEN_VERSION) as $(env_of EIGEN_API_IMAGE)"
     fi
+    if [ -z "${3:-}" ]; then check_env 0:0 "on $1"; fi
 }
 
 # check_running <version> [pinned [registry]]: check_pinned, and every seeded item is there.

@@ -42,6 +42,8 @@ The server never creates the folder at boot, only when the first backup or uploa
 mkdir -p data backups && chown -R 1000:1000 data backups
 ```
 
+A start that skips `./eigen`, by Docker's restart policy or a bare `docker compose up`, also skips giving `.env.production` group 1000 and mode 0640, so after a hand edit run `./eigen restart`, or the API may not read the file through its read-only mount and the server backup holds no `.env.production`.
+
 **An archive is a secret, at the level of `.env.production`.** It holds every file and every mail, the user's password hash, their app passwords and API keys, their 2FA secret, and the S3 credentials of every mount they own. Credentials are not stripped, because a backup that cannot restore a mount is not a complete backup. Downloads are admin-only. Anything you copy off the server, keep encrypted, and delete the copy when you are done with it.
 
 ## Backing up a home

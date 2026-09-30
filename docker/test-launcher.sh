@@ -5,9 +5,10 @@
 # refused in a local build, a failing compose config, stop, what update asks the CLI and names the builds, on a release
 # and on the main channel, the tags it refuses, a build whose images differ, a tag that moves during an update, a pinned
 # api image that is not here, the files an unfinished update left, which build's CLI the handed-over update saves the
-# snapshot with, what setup downloads with and without pins, what rollback names, a lock without a pid, and what status
-# passes the CLI about the snapshots, the files of an unfinished update and the newest build of main, and its folder; setup in a folder
-# that holds the launcher alone, with the registry or the build .env.production names, and the installer script
+# snapshot with, what setup downloads with and without pins, what rollback names, a lock without a pid, the group and
+# mode every start gives .env.production first but on Docker Desktop, and what status passes the CLI about the
+# snapshots, the files of an unfinished update and the newest build of main, and its folder; setup in a folder that
+# holds the launcher alone, with the registry or the build .env.production names, and the installer script
 # apps/index/public/install on this host, as a file and on stdin.
 #
 # Usage:  ./docker/test-launcher.sh
@@ -21,8 +22,8 @@ FIX=$(mktemp -d "${TMPDIR:-/tmp}/eigentest-launcher.XXXXXX")
 FIX=$(cd "$FIX" && pwd -P)
 trap 'rm -rf "$FIX"' EXIT
 
-# The stub logs every call to $STUB_LOG. STUB_INFO and STUB_COMPOSE answer info and compose version, empty for a
-# failure; STUB_FAIL names the compose subcommands and docker commands that fail; STUB_IMAGE=1 makes image inspect fail
+# The stub logs every call to $STUB_LOG. STUB_INFO (version, architecture, operating system) and STUB_COMPOSE answer
+# info and compose version, empty for a failure; STUB_FAIL names the compose subcommands and docker commands that fail; STUB_IMAGE=1 makes image inspect fail
 # on an image the launch has not pulled;
 # STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any api tag names;
 # STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a dovecot
@@ -38,7 +39,7 @@ printf '%s\n' "$*" >>"$STUB_LOG"
 fails() { case " ${STUB_FAIL:-} " in *" $1 "*) echo "stub: $1 fails" >&2; exit 1 ;; esac; }
 case $1 in
     info)
-        info=${STUB_INFO-27.3.1 x86_64}
+        info=${STUB_INFO-27.3.1 x86_64 Ubuntu 24.04.1 LTS}
         if [ -z "$info" ]; then exit 1; fi
         echo "$info"
         ;;
@@ -132,6 +133,7 @@ for name in $IMAGES; do
 done
 
 docker pull -q debian:bookworm-slim >/dev/null
+HOST_OS=$(docker info --format '{{.OperatingSystem}}')
 docker pull -q busybox >/dev/null
 PATH_IN=/stub:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
@@ -175,6 +177,18 @@ first_setup() {
         tr '\n' '|'
 }
 FIRST_SETUP='pull ghcr.io/eigen-is/eigen/api:latest|bootstrap ghcr.io/eigen-is/eigen/api:latest|pull ghcr.io/eigen-is/eigen/api:0.2.99|configure|'
+
+# The run that gives .env.production group 1000 and mode 0640, as root in a container, in the launcher's call log.
+SHARE='-c chgrp 1000 /install/.env.production && chmod 0640 /install/.env.production'
+
+# shared <folder>: the last launch started Eigen, and gave .env.production of that folder to group 1000 right before
+# every start.
+shared() {
+    printf '%s\n' "$CALLS" | awk -v share="run --rm --user 0 --entrypoint sh -v $FIX/$1:/install " -v script=" $SHARE" '
+        / up -d --wait$/ { ups++; if (index(prev, share) == 1 && substr(prev, length(prev) - length(script) + 1) == script) shared++ }
+        { prev = $0 }
+        END { exit !(ups > 0 && ups == shared) }'
+}
 
 for SHELL_NAME in dash busybox host; do
     case $SHELL_NAME in
@@ -259,7 +273,7 @@ for SHELL_NAME in dash busybox host; do
     STUB_COMPOSE=2.24.3-desktop.1 launch local restart
     rm "$FIX/local/docker-compose.override.yml"
     expect_error 1 'it needs 2.24.4 or newer' "an override with !override and Compose 2.24.3"
-    STUB_INFO='27.3.1 aarch64' launch local restart
+    STUB_INFO='27.3.1 aarch64 Debian GNU/Linux 12 (bookworm)' launch local restart
     if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q '◇  Docker 27.3.1 on aarch64, Compose 2.29.1'; then
         ok "$SHELL_NAME: an aarch64 server goes through, its architecture named"
     else
@@ -274,6 +288,29 @@ for SHELL_NAME in dash busybox host; do
         ok "$SHELL_NAME: a folder with the build overlay runs Compose with it, a release folder without"
     else
         fail "$SHELL_NAME: mode detection: local '$local_calls', release '$CALLS'"
+    fi
+    if shared release; then
+        ok "$SHELL_NAME: restart gives .env.production group 1000 and mode 0640, as root in a container, right before the start"
+    else
+        fail "$SHELL_NAME: restart does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    STUB_INFO='27.5.1 aarch64 Docker Desktop' launch release restart
+    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q '◇  Docker 27.5.1 on aarch64, Compose 2.29.1' &&
+        printf '%s\n' "$CALLS" | grep -q ' up -d --wait$' && ! printf '%s\n' "$CALLS" | grep -qF "$SHARE"; then
+        ok "$SHELL_NAME: on Docker Desktop, where uid 1000 reads the file already, restart leaves .env.production alone"
+    else
+        fail "$SHELL_NAME: restart on Docker Desktop: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    if [ "$(id -u)" = 0 ]; then
+        skip "$SHELL_NAME: root writes a .env.production of mode 0440"
+    elif [ "$SHELL_NAME" = dash ] && [ "$HOST_OS" = 'Docker Desktop' ]; then
+        # Its file sharing answers glibc's access() for a 0440 file with writable; the write itself fails.
+        skip "$SHELL_NAME: Docker Desktop tells dash that a .env.production of mode 0440 is writable"
+    else
+        chmod 0440 "$FIX/release/.env.production"
+        launch release restart
+        chmod 0644 "$FIX/release/.env.production"
+        expect_error 1 '■  .env.production is not writable by this user.' "a .env.production this user reads but cannot write"
     fi
     STUB_IMAGE=1 launch local restore --help
     expect_error 1 '■  Eigen is not built yet.' "restore --help in an unbuilt local build"
@@ -392,6 +429,11 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: setup on main: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
+    if shared channel; then
+        ok "$SHELL_NAME: setup gives the .env.production configure wrote group 1000 and mode 0640 before it starts Eigen"
+    else
+        fail "$SHELL_NAME: setup does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
     STUB_IMAGE=1 launch release setup
     if printf '%s\n' "$CALLS" | grep -q '^pull ghcr.io/eigen-is/eigen/api:0.2.99$' &&
         printf '%s\n' "$ERR" | grep -q 'api:0.2.99 has no registry digest'; then
@@ -492,11 +534,12 @@ for SHELL_NAME in dash busybox host; do
     rm -r "$FIX/release/data" "$FIX/release/.eigen/last-update"
     sequence=$(printf '%s\n' "$CALLS" | sed -n -e 's/^compose .* stop$/stop/p' -e 's/^compose .* up -d --wait$/up/p' \
         -e 's/^run .* \([^ ]*\) snapshot --pre-update --light$/snapshot \1/p' \
-        -e 's/^run .* \([^ ]*\) configure --backfill$/configure \1/p' | tr '\n' '|')
-    if [ "$CODE" = 0 ] && [ "$sequence" = 'configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|snapshot ghcr.io/eigen-is/eigen/api:local|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
+        -e 's/^run .* \([^ ]*\) configure --backfill$/configure \1/p' \
+        -e "s|^run --rm --user 0 --entrypoint sh -v $FIX/release:/install \([^ ]*\) $SHARE\$|share \1|p" | tr '\n' '|')
+    if [ "$CODE" = 0 ] && [ "$sequence" = 'configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|snapshot ghcr.io/eigen-is/eigen/api:local|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|share ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
         printf '%s\n' "$OUT" | grep -q '│  Saved before the update: snapshots/eigen-pre-update-light-20260101-000000.tar.gz, a light snapshot' &&
         printf '%s\n' "$OUT" | grep -q '└  ./eigen rollback goes back to Eigen 0.2.99 (abc1234).'; then
-        ok "$SHELL_NAME: update --pulled saves the snapshot with the running build's CLI, switches with the new one, and names what it saved"
+        ok "$SHELL_NAME: update --pulled saves the snapshot with the running build's CLI, switches with the new one, shares the file it wrote before the start, and names what it saved"
     else
         fail "$SHELL_NAME: update --pulled: exit $CODE, sequence '$sequence', '$OUT', '$ERR'"
     fi
@@ -531,6 +574,11 @@ for SHELL_NAME in dash busybox host; do
         ok "$SHELL_NAME: a local build's restore adds what is new to the restored .env.production, then starts Eigen"
     else
         fail "$SHELL_NAME: a local build's restore: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    if shared local; then
+        ok "$SHELL_NAME: a restore gives the restored .env.production group 1000 and mode 0640 before it starts Eigen"
+    else
+        fail "$SHELL_NAME: a restore does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     STUB_CHECKED=EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:local launch release restore eigen-20260101-000000.tar.gz
     if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -q ' restore eigen-20260101-000000.tar.gz --yes$' &&
@@ -568,6 +616,11 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
         ok "$SHELL_NAME: rollback puts back the snapshot .eigen/last-update names, and names the builds it leaves and reaches"
     else
         fail "$SHELL_NAME: a release rollback: exit $CODE, '$OUT', '$ERR'"
+    fi
+    if shared release; then
+        ok "$SHELL_NAME: rollback gives the .env.production it put back group 1000 and mode 0640 before it starts Eigen"
+    else
+        fail "$SHELL_NAME: rollback does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
 
     mkdir "$FIX/local/.eigen/lock"

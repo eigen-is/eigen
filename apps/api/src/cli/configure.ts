@@ -372,7 +372,7 @@ export async function configure(
                     message: current
                         ? "What is the relay's password? (empty keeps the current one)"
                         : "What is the relay's password?",
-                    help: `Saved in ${ENV_PATH}, which only its owner can read.`,
+                    help: `Saved in ${ENV_PATH}, readable by its owner and by group 1000, the group Eigen runs as.`,
                     validate: (value) => (value || current ? validateText(value) : 'Enter the relay password.'),
                     flag: `--relay-password-env <VAR>${keep}`,
                 })) || current;

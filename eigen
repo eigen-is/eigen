@@ -300,10 +300,11 @@ compose_at_least() {
 }
 
 preflight() {
-    if [ -e .env.production ] && [ ! -r .env.production ]; then
-        die ".env.production is not readable by this user." "Run ./eigen as the user that owns it, or as root."
+    # Not -r: group 1000 reads the file too, and ./eigen writes it.
+    if [ -e .env.production ] && [ ! -w .env.production ]; then
+        die ".env.production is not writable by this user." "Run ./eigen as the user that owns it, or as root."
     fi
-    server=$(docker info --format '{{.ServerVersion}} {{.Architecture}}' 2>/dev/null || true)
+    server=$(docker info --format '{{.ServerVersion}} {{.Architecture}} {{.OperatingSystem}}' 2>/dev/null || true)
     if [ -z "${server%% *}" ]; then
         die "Docker is not running, or this user cannot use it." "Start Docker, or run ./eigen as root or a member of the docker group."
     fi
@@ -319,6 +320,8 @@ preflight() {
         die "Docker Compose $compose is too old for this install; it needs $need or newer." "Update the Docker Compose plugin, then run ./eigen $COMMAND again."
     fi
     arch=${server#* }
+    docker_os=${arch#* }
+    arch=${arch%% *}
     mkdir -p .eigen
     say "$GREEN" '◇' "Docker ${server%% *} on $arch, Compose $compose"
 }
@@ -451,6 +454,17 @@ api_here() {
         die "The image Eigen runs, $(image api), is not here and cannot be downloaded." "Check the network, then run ./eigen $COMMAND again."
 }
 
+# The API, uid 1000, reads .env.production through a read-only mount for the server backup: group 1000 may read it,
+# others not. Every command that writes the file starts Eigen after, so start gives it this. Root in a container sets
+# the group whoever runs the launcher, as prepare_data does for data/; the group goes first, so no other one reads it.
+# Docker Desktop shows a bind-mounted file as the container user's, so uid 1000 reads it at 0600 already, and keeps the
+# group in the VM: the chmod would only open the file to the host's group.
+share_env() {
+    if [ "$docker_os" = 'Docker Desktop' ]; then return 0; fi
+    docker run --rm --user 0 --entrypoint sh -v "$PWD:/install" "$API_IMAGE" \
+        -c 'chgrp 1000 /install/.env.production && chmod 0640 /install/.env.production'
+}
+
 # Also removes this project's containers whose service the current profiles leave out, so a rerun that switches web
 # or mail mode converges. Runs under step with set -e off, so failures return explicitly.
 start() {
@@ -462,6 +476,7 @@ start() {
         case $active in (*" $service "*) ;; (*) echo "$id" ;; esac
     done)
     if [ -n "$stale" ]; then docker rm -f $stale || return 1; fi
+    share_env || return 1
     dc up -d --wait
 }
 
