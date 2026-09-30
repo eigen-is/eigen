@@ -34,7 +34,7 @@ A category with no matching label mints one, keyed on the normalized name (NFC, 
 
 A rename rewrites `CATEGORIES` in every member card, so their etags change and clients re-fetch them. `rewriteCardCategories` (`labels.ts`) runs inside the transaction that renames the label row, so the label and its members move together under one `ctag` bump. A member card that won't parse is skipped with a warning. A label delete strips the category the same way.
 
-## Photos
+## The avatars folder is a second source of truth, not a cache
 
 The inline `PHOTO` in the card is canonical. `avatars/` holds the webp the web UI serves, named `<contactId>-<hash8>.webp` after the embedded bytes' hash. A changed photo gets a new name, and the sweep reclaims the old one. The `data.avatar` projection holds only that URL. **Photo bytes never enter the projection, a list response or an SSE event**, because base64 photos would multiply the list payload many times over.
 

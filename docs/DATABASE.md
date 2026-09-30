@@ -66,15 +66,15 @@ Every open, create and close of one container database runs through `withDocumen
 
 Once `closeAllDatabases` starts its sweep, after the downloads abort, the reindex drain and the thumbnail wait, a new open is refused with a 503. The lock order is in [STORAGE.md](STORAGE.md#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree).
 
-## Instance lock
+## One API process owns a data folder
 
-One API process owns a data folder, because two on the same one corrupt its databases. `index.ts` imports `src/instance-lock.ts` first and only then loads `src/server.ts` with `await import`, whose modules open server databases as they load. The import is dynamic because a static one guarantees no order in the `buildfordocker` bundle: `--splitting` hoists `auth.ts` and its top-level `users3.db` open into a shared chunk that evaluates before the entry's own code.
+Two API processes on one data folder corrupt its databases, so the first one locks it. `index.ts` imports `src/instance-lock.ts` first and only then loads `src/server.ts` with `await import`, whose modules open server databases as they load. The import is dynamic because a static one guarantees no order in the `buildfordocker` bundle: `--splitting` hoists `auth.ts` and its top-level `users3.db` open into a shared chunk that evaluates before the entry's own code.
 
 `lockDataDir()` (`apps/api/src/lib/config/data-lock.ts`) opens `data/server/instance.lock` as a SQLite database, runs `PRAGMA locking_mode = EXCLUSIVE; BEGIN IMMEDIATE;` and keeps the connection for the life of the process. `IMMEDIATE`, not `EXCLUSIVE`: two processes starting together both read the empty file first, and `BEGIN EXCLUSIVE` then fails them both, while `BEGIN IMMEDIATE` lets exactly one through. A second API gets `SQLITE_BUSY` and exits with code 1, naming the data folder.
 
 The lock is a POSIX file lock, so the OS drops it however the holder ends, SIGKILL included, and a `bun --watch` reload takes it again. The open transaction keeps a 512-byte `instance.lock-journal` with no pages beside it, which a SIGKILL leaves behind. The next holder rolls it back as a no-op, so it is harmless.
 
-`./eigen backup` and the swap of `./eigen restore` take the same lock (`apps/api/src/cli/snapshot.ts`) and refuse while an API holds it, so they only run with Eigen stopped. Seeding and migration scripts don't take it. Tests that boot `app` in-process never take it, while `test/backup/process-lifecycle.test.ts` spawns `src/index.ts`, so each child takes it on its own data root.
+The swap of `./eigen restore` takes the same lock (`lockData` in `apps/api/src/cli/restore.ts`) and refuses while an API holds it, so it only runs with Eigen stopped. `./eigen backup` runs inside the API and needs none ([BACKUP.md](BACKUP.md#the-whole-server-backup-runs-inside-the-api)). Seeding and migration scripts don't take it. Tests that boot `app` in-process never take it, while `test/backup/process-lifecycle.test.ts` spawns `src/index.ts`, so each child takes it on its own data root.
 
 The lock reaches only as far as the file system carries POSIX locks. A Docker Desktop bind mount does not pass them between a container and the host, so an API in the container and one on the host over the same folder both start.
 

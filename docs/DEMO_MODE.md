@@ -40,7 +40,7 @@ Creating or leaving an organization needs no demo guard. `allowUserToCreateOrgan
 
 Swapping database files under open handles is the `SQLITE_IOERR_VNODE` hazard, so the reset stops the API instead of running on an in-app scheduler. `scripts/demo-reset.sh` refuses unless `.env.production` holds the line `EIGEN_DEMO=1`, so it cannot wipe a real box. Then it:
 
-1. Takes the launcher's lock, `.eigen/lock`. While an `./eigen` command such as a backup or an update holds it, the reset refuses and the next hourly run retries.
+1. Takes the launcher's lock, `.eigen/lock`. While an `./eigen` command such as an update or a restore holds it, the reset refuses and the next hourly run retries.
 2. Stops `eigen-api`.
 3. Removes `data/server`, `data/home`, `data/team`, `data/org` and `data/guest`, an explicit list and never a wildcard, so `data/certs` and `data/dkim` survive.
 4. Runs the seeder in a throwaway container off the current image.
@@ -60,7 +60,7 @@ systemctl enable --now eigen-demo-reset.timer
 
 `./eigen update` rewrites the copies in `scripts/` but never installs them. The units assume `/opt/eigen`.
 
-A nightly `./eigen backup` ([BACKUP.md](BACKUP.md#the-whole-server-stopgap)) that starts on the hour meets the reset, and whichever takes the lock first wins. Schedule the backup off the hour, such as `30 3 * * *`, so both run.
+A server backup runs inside the API and holds no `.eigen/lock` ([BACKUP.md](BACKUP.md#the-whole-server-backup-runs-inside-the-api)), so a reset that starts while one runs stops the API under it, and the archive's record says it failed. A demo box has nothing worth backing up: the next reset wipes it anyway.
 
 ## The seeder drives the product, not the databases
 
