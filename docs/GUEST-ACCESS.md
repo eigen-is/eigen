@@ -1,11 +1,76 @@
 # Guest Access
 
-> **TLDR**: External guests authenticate via Email OTP and get a disk-based `GuestHome` with `shared.db` +
-> `notifications.db` — no mail, contacts or calendar. Standard Drive ACL inheritance handles access, and the
-> share registry survives guest deletion. Open signup is on by default; admins can require a pending share
-> instead, list guests on the admin **Guests** page, and inactive guests are deleted once a day.
+> **TLDR:** A guest is an external person who signs in with an emailed code instead of a password and reaches only what was shared with them. Sign-in lives in `apps/api/src/lib/auth/guest-auth.ts`, the home in `apps/api/src/lib/home/guest-home.ts`. Access itself is the ordinary Drive ACL ([ACL.md](ACL.md)). Not obvious from the code: a guest gets a real disk-based `GuestHome` with no mail, contacts or calendar; the share registry outlives a deleted guest, so signing in again rebuilds the same shares; open signup is on by default, and closed signup admits only an address someone shared with; inactive guests are deleted once a day.
 
-## Three Access States
+## A guest has a disk-based home with only drive and notifications
+
+`getHome()` builds a `GuestHome` for a user with `role: 'guest'`. It holds a Drive and a NotificationCenter under `data/guest/{guestId}/` ([STORAGE.md](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)), and leaves mail, contacts and calendar uninitialized. Its `settings.json` names no mounts, so the Drive only carries `shared.db`, the mirror of what others shared with the guest. `GuestHome.size()` reports zero everywhere.
+
+The home is on disk rather than in memory so it reuses Drive and NotificationCenter unchanged. An in-memory stand-in would have to subclass `Drive`, whose `home` is private, and reimplement `receiveSharedPathChange`. On disk, `shared.db` and the notifications also survive idle eviction, restarts and the next session.
+
+## A guest can do less than a user
+
+| Restriction       | Mechanism                                                  |
+|-------------------|------------------------------------------------------------|
+| No personal drive | GuestHome's Drive has no mounts                            |
+| No mail, contacts or calendar | The services are absent, and `requireNonGuest()` guards every mail, contacts and calendar route |
+| No org or team membership | Guest creation skips the auth hooks, and `authEnsureDefaultOrgMembership` skips guests on sign-in |
+| No admin          | Admin checks read the org role, and a guest has none       |
+| No sharing or access requests | `requireNonGuest()` on the ACL route, the mail `access-check` and `request-access`. The chat `/invite` route has no such check ([ROADMAP](ROADMAP.md) § Cheap wins) |
+| Read/write per ACL| SharedDrive enforces the entries the owner set             |
+
+A calendar invitation treats a guest like an external address: an iMIP mail and a registry entry, no in-app copy (`invite-propagation.ts`). The home relay skips calendar messages for a home without a calendar (`hasCalendar`), and reconciliation skips the calendar steps, so no calendar push crashes on a `GuestHome`.
+
+## Sign-in is a two-step code flow on custom endpoints
+
+Guests do not use better-auth's emailOTP plugin. `POST /guest-auth/request-otp` mails a 6-digit code, and `POST /guest-auth/verify-otp` checks it and signs the guest in (`apps/api/src/routes/guest-auth.ts`). The code expires after 5 minutes. A new request replaces the email's previous code, so only the newest one works.
+
+`request-otp` refuses an address that belongs to a non-guest user ("use password login") and an address on the server's own mail domain. The second check is needed because a guest is created by a direct insert that skips the auth hook guarding that domain.
+
+## Open signup decides who may ask for a code
+
+`guests.openSignup` is on by default: any address may ask. Off, an address without an account needs a share-registry entry, so only someone a user shared with can become a guest. Both settings are in [SERVER-SETTINGS.md](SERVER-SETTINGS.md).
+
+With open signup on, anyone can make the server mail a code to any address, up to the per-email cap. Turning it off closes that, and a closed server still tells a caller whether an address was ever shared with (below).
+
+## Code requests are rate-limited per email and per IP
+
+`otp-rate-limit.ts` keeps an in-memory sliding window of an hour: 10 requests per email, 100 per IP. The per-IP cap leaves room for an office of guests behind one address. A successful sign-in hands its slots back (the email's bucket, and that email's entries in the IP bucket), so only requests that never prove the mailbox count. Over the cap the route answers 429.
+
+The state is per process: a restart clears it, and a second API process would not share it. Eigen runs one API process.
+
+## A code gets ten guesses and mints one session
+
+A wrong guess leaves the code usable. A code gets 10 guesses (`MAX_OTP_GUESSES`), counted in memory before the async hash check so parallel guesses can't outrun the cap, and the next one burns the code with a 429. The code is consumed only on success, by a delete that reports whether it removed the row, so two concurrent requests with the right code mint one session. The worst case per email is 10 codes × 10 guesses an hour against a million codes.
+
+## Verification creates the guest and reconciles on every sign-in
+
+A successful verify finds or creates the user with `role: 'guest'`. The insert is direct, so it bypasses `databaseHooks`: no org join and no default reconciliation. The guest signs in through `auth.api.signInEmail()` with a password nobody sees, `HMAC-SHA256('guest:{email}', auth secret)`, re-derived and written on every sign-in so a tampered credential heals.
+
+Every successful sign-in, not only the first, calls `reconcileSharesForNewUser()` to seed `shared.db` from the share registry ([ACL.md § Reconciliation](ACL.md#reconciliation)). A failed first reconcile then heals at the next sign-in.
+
+## The share registry is a durable record, not a queue
+
+For a guest the registry records "owner X shared something with address Z" and is never consumed. It survives the guest's creation and deletion, so signing in again after a deletion rebuilds the same `shared.db`.
+
+1. **Before the guest exists**: a share finds no user, so the address gets a registry entry and a share mail. That mail is how the guest learns to come and sign in, gated by `notifications.email.guestOnAclAdd` (default on). Send-time mail grants ([MAIL.md § A send grants access only when the sender says so](MAIL.md#a-send-grants-access-only-when-the-sender-says-so)) mint the same entries but suppress this mail (`suppressShareEmail: 'all'`): the user's own message carries the `?email=` link.
+2. **The guest verifies**: reconciliation reads (does not delete) the registry and writes `shared.db` idempotently through `receiveSharedPathChange`.
+3. **After the guest exists**: a share resolves the user and pushes into `shared.db` directly.
+4. **The guest is deleted**: the teardown removes the home and the registry entries the guest created, and keeps the entries addressed to the guest ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#deleting-a-user-runs-one-teardown-from-every-entry-point)).
+
+A deleted non-guest user loses the entries addressed to them too. A user cannot come back as the same identity with the same address, so for them the entries only ever mattered until the account existed.
+
+A share on a team drive path records the team as the source, and reconciliation handles that case ([ACL.md § Reconciliation](ACL.md#reconciliation)).
+
+## A revoked share leaves its registry entry
+
+Removing an address from an ACL does not remove its registry entry, since the owner may still share something else with it. Reconciliation re-reads the owner's current shares, so a stale entry delivers nothing. On a closed-signup server it still lets that address ask for a code and become a guest with nothing shared. The leak is bounded and only matters at very long lifetimes or very high revoke rates.
+
+## The access check tells a sharer whether an address was ever shared with
+
+On a closed-signup server, the drive `access-check` (`checkAccessForEmails`, used by the mail Share & send dialog) returns `needsGuestAdmission` per address. Any non-guest user who can read a path can therefore probe an arbitrary address for "has an account, or was shared with before". `request-otp` already exposes the same information and rate-limits it, so this is accepted.
+
+## A signed-in user without access sees a request screen
 
 | State                      | What the user sees                       |
 |----------------------------|------------------------------------------|
@@ -13,195 +78,45 @@
 | Authenticated + no access  | "Request access" screen with owner info  |
 | Not authenticated          | Login page with guest OTP option         |
 
-## GuestHome
+Every document app (docs, stickies, slides, sheets, vector) renders `<RequestAccessView>` from `EigenDocEditorRoute` when `useCollabDocumentInfo()` says `!canRead`. Drive shows it when the folder listing fails with a 403 `AppError`, chat when `useCheckPermissions()` says `!canRead`.
 
-`GuestHome` (`apps/api/src/lib/home/guest-home.ts`) extends `Home` with minimal services — only Drive (for
-`shared.db`) and NotificationCenter. Mail, contacts, and calendar are left uninitialized.
+A guest sees the same screen, but `POST .../request-access` rejects guests with 403 (`requireNonGuest`).
 
-### Disk Layout
+## An access request notifies the owner and never reveals the path
 
-```
-data/guest/{guestId}/
-├── mounts/
-│   └── shared.db              # shared-with-me paths
-├── settings.json              # minimal
-└── eigen.notifications/
-    └── notifications.db
-```
+`POST /drive/:ownerId/:mountId/path/:pathId/request-access` calls `propagateAccessRequest` (`apps/api/src/lib/drive/access-request-propagation.ts`), which reads the path through the home relay and pushes an `access-request` notification into the owner's home. The route skips the SharedDrive facade by design: the caller has no permission yet, which is the point. It returns 200 whether or not the path exists or is trashed, so it never reveals a path. An unknown owner or mount still answers 404.
 
-No default mount — guests have no personal drive. The Drive instance is only used for
-`getSharedPathsWithMe()` and receiving ACL propagation via `receiveSharedPathChange()`.
+The notification tag is `access-request:{ownerId}:{mountId}:{pathId}:{email}`, so a repeat request updates the same notification. For a user-owned path the owner also gets an email when `notifications.email.ownerOnAccessRequest` is on (default). A team-owned path reaches no one: a `TeamHome` has no NotificationCenter, and the email goes to user owners only.
 
-### Why Disk-Based
+The "Access requested" state on the button is client-side only and resets on a refresh.
 
-Disk-based over in-memory because: (1) `Drive.home` and `Drive.emit()` are `private` — a subclass can't
-override without changing access modifiers, (2) `receiveSharedPathChange()` is ~50 lines that would need parallel
-reimplementation, (3) `shared.db` persists across idle timeouts and server restarts, (4) notifications
-persist across sessions.
+## A granted request refreshes the requester's view
 
-### Home Factory
+Clicking the notification opens Drive with the share dialog pre-filled: `resolveAccessRequestLink()` (`packages/lib/src/core/notification/resolve-link.ts`) turns the tag into a Drive URL with `sharePathId` and `shareEmail`. When the owner grants access, propagation sends `DRIVE_ACL_SHARED` to the requester. The SSE handler invalidates the drive permission keys and the `['collab', 'info', ...]` keys on `DRIVE_ACL_SHARED` and `DRIVE_ACL_UNSHARED`, so the waiting app shows the resource without a reload.
 
-`getHome()` checks `user.role` — guests get `GuestHome`, regular users get `UserHome`:
+## The guest frontend is a narrower shell
 
-```typescript
-if (user.role === 'guest') {
-    home = new GuestHome(user, () => cleanupHomeFactory(ownerId));
-}
-```
+The login page (`packages/ui/src/components/layout/pages/login-page.tsx`) has a "Guest" tab next to "Sign in": email, send code, 6-digit code, verify, reload. A login URL with `?email=` opens on the Guest tab with the address filled in, which is where a share mail's link lands.
 
-`GuestHome.size()` returns zero for all quotas (no mounts to measure).
+The topbar limits a guest's app switcher to Drive, Docs, Stickies, Slides, Vector, Sheets and Chat (`GUEST_APPS` in `topbar.tsx`), and gives them a reduced user menu with no settings, profile or theme.
 
-## Guest Authentication
+## Inactive guests are deleted once a day
 
-Two-step OTP flow via custom endpoints (not better-auth's emailOTP plugin). Logic in
-`apps/api/src/lib/auth/guest-auth.ts` + `otp-rate-limit.ts`, routes in `apps/api/src/routes/guest-auth.ts`.
+`cleanupInactiveGuests` (`apps/api/src/lib/auth/guest-cleanup.ts`) runs at startup and every 24 hours (`apps/api/src/lib/scheduler/jobs.ts`). It deletes a guest whose last activity is older than `guests.inactivityDays`.
 
-### Request OTP
+Activity is `MAX(session.updatedAt)` for the guest, falling back to `user.updatedAt` when the guest has no session yet. better-auth refreshes a session row when it validates it, so any authenticated request keeps the guest alive.
 
-`POST /guest-auth/request-otp { email }` — rate-limited per-email (10/hour) and per-IP (100/hour) by an
-in-memory sliding window. The per-IP cap leaves room for an office of guests behind one address, and a successful sign-in hands its slots back (the email's bucket, and that email's entries in the IP bucket), so only requests that never prove the mailbox count. Behavior depends on the `guests.openSignup` setting:
+A guest whose home is loaded (`atHome(userId)`) is skipped, to protect an in-flight collaboration session. The next sweep after the home idles out catches it.
 
-- `openSignup = true` (default): accept any email that isn't already a non-guest user.
-- `openSignup = false`: require a pending share registry entry for the email.
+The sweep calls `deleteUserCompletely(userId, null)`, the system mode that goes through better-auth's internal adapter instead of its admin API. The teardown is the same as any deletion, and the registry entries addressed to the guest stay.
 
-Sends a 6-digit OTP via email (5-minute expiry). A new request replaces the email's previous code, so only the newest one works. Returns 429 when the rate limit is hit.
+## Admins see guests on two pages
 
-### Verify OTP
+The Admin app has **Guest access** (`/guest-settings`), with the `guests.openSignup` toggle and the `guests.inactivityDays` threshold, and **Guests** (`/guests`), every `role: 'guest'` account from `GET /settings/users/guests` with a detail view and delete. Guest access is the owner's page ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#the-owner-holds-server-settings-and-admins-manage-people)). No endpoint turns a guest into a regular user ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)).
 
-`POST /guest-auth/verify-otp { email, otp }` — verifies the OTP, finds or creates a guest user with
-`role: 'guest'`, creates a deterministic password via `HMAC-SHA256('guest:{email}', auth.secret)`, signs
-in via `auth.api.signInEmail()`, and calls `reconcileSharesForNewUser()` to seed `shared.db` from the
-registry. Registry entries are NOT consumed — they persist across guest deletion so re-OTP after deletion
-rehydrates the same shared resources.
+## See also
 
-A wrong guess leaves the code usable: a code gets 10 guesses (`MAX_OTP_GUESSES`, counted in memory before the async hash check so parallel guesses can't outrun the cap), and the next one burns it with a 429. The code is consumed only on success, by a delete that reports whether it removed the row, so two concurrent requests with the right code mint one session. Worst case per email is 10 codes × 10 guesses an hour against a million codes.
-
-Guest user creation bypasses `databaseHooks` — no org join, no default reconciliation. The reconciliation
-runs explicitly after OTP verification instead.
-
-## Access Request Flow
-
-When an authenticated user visits a shared resource they don't have access to:
-
-1. App renders `<RequestAccessView>` instead of a generic access-denied page
-2. User clicks "Request access" → `POST /drive/:ownerId/:mountId/path/:pathId/request-access`
-3. The route calls `propagateAccessRequest` (`apps/api/src/lib/drive/access-request-propagation.ts`), which reads
-   the path through the home relay and pushes a notification into the owner's notification center
-4. Notification tag: `access-request:{ownerId}:{mountId}:{pathId}:{email}` (idempotent via tag dedup)
-5. For a user-owned path it also mails the owner when `notifications.email.ownerOnAccessRequest` is set (default
-   on) — see [SERVER-SETTINGS.md](SERVER-SETTINGS.md)
-6. Owner clicks notification → navigates to Drive with share dialog pre-filled with requester's email
-7. Owner grants access → ACL propagation fires → `DRIVE_ACL_SHARED` SSE event → requester's
-   permission query auto-refetches → resource appears
-
-The route skips the SharedDrive facade by design — the caller has no permission yet, which is the point — and
-always returns 200 regardless of whether the path exists (no existence leak).
-
-### Per-App Integration
-
-| App      | Permission check pattern                  | Integration                               |
-|----------|-------------------------------------------|-------------------------------------------|
-| Docs     | `useCollabDocumentInfo()` → `canRead`     | `<RequestAccessView>` when `!canRead`     |
-| Stickies | Same                                      | Same                                      |
-| Slides   | Same                                      | Same                                      |
-| Sheets   | Same                                      | Same                                      |
-| Drive    | `useFolderContent` throws `AppError(403)` | Check `AppError.status === 403`           |
-| Chat     | `useCheckPermissions()` → `canRead`       | `<RequestAccessView>` when `!canRead`     |
-
-SSE handlers invalidate both drive permission keys and `['collab', 'info', ...]` keys on
-`DRIVE_ACL_SHARED` / `DRIVE_ACL_UNSHARED`, so collab apps auto-refresh when access is granted.
-
-## Guest Restrictions
-
-| Restriction       | Mechanism                                                  |
-|-------------------|------------------------------------------------------------|
-| No personal drive | GuestHome's Drive has no mounts (empty `settings.json`)    |
-| No mail           | `_mail` undefined, `requireSelf()` on mail routes          |
-| No contacts       | `_contacts` undefined, `requireSelf()` on contacts routes  |
-| No calendar       | `_calendar` undefined, null guards in propagation          |
-| No teams          | `authAddUserToDefaultOrg()` skipped for guests             |
-| No admin          | `role: 'guest'` is not admin/owner                         |
-| No sharing        | `requireNonGuest()` on `PUT /drive/.../acl`                |
-| Read/write per ACL| SharedDrive enforces via ACL entries set by owner           |
-
-Calendar null guards in `reconciliation.ts` (`if (targetHome.hasCalendar)`) and
-`share-propagation.ts` prevent crashes when ACL propagation targets a GuestHome.
-
-## Frontend
-
-**Login page** (`packages/ui/src/components/layout/pages/login-page.tsx`) — two tabs: "Sign in" (password) and
-"Guest" (OTP). Guest tab: email input → send code → 6-digit input → verify → reload.
-
-**Topbar** — guest app switcher limited to Drive, Docs, Stickies, Slides, Vector, Sheets, Chat. Simplified user
-dropdown (logout only, no settings/profile/theme).
-
-**Notification link resolution** — `resolveAccessRequestLink()` parses the notification tag and returns a
-Drive URL with `sharePathId` and `shareEmail` query params to pre-fill the share dialog.
-
-## Share Registry + Reconciliation
-
-The registry is a durable projection of "user X shared resource Y with email Z" rather than a queue of
-pending shares. Entries persist across guest creation AND deletion so re-OTP rehydrates `shared.db`
-identically.
-
-1. **Before guest account exists**: share → `resolveACLUserIds` → user not found → registry entry created, and
-   `emailNewlyAddedAclEntries` (`apps/api/src/lib/drive/acl-propagation.ts`) mails the address. That mail is the
-   guest-onboarding trigger — without it nobody knows to come and OTP in. Gated by
-   `notifications.email.guestOnAclAdd` (default true). Send-time mail grants ([MAIL.md § A send grants access only when the sender says so](MAIL.md#a-send-grants-access-only-when-the-sender-says-so)) mint the same registry entries but suppress this mail (`suppressShareEmail: 'all'`); the user's own message carries the `?email=` invite link
-2. **Guest verifies OTP**: account created → `reconcileSharesForNewUser()` reads (does not delete) from
-   registry → idempotently writes to `shared.db` via `Drive.receiveSharedPathChange`
-3. **After guest account exists**: share → `resolveACLUserIds` → user found → `receiveSharedPathChange()` called
-   directly → writes to `shared.db`
-4. **Guest deleted**: `deleteUserCompletely` removes the home directory, sessions, and FROM-this-user
-   registry entries. TO-this-email entries are preserved. Re-OTP later rebuilds the home and re-reads the
-   same registry rows.
-
-**Team-owned sources.** A mail-send grant on a team drive path stores `team_<id>` as the registry source. `reconcileSharesForNewUser` resolves it through the team home (`getTeam`) instead of treating it as a user id: it delivers the team's shared paths attributed to the team name, and drive paths only, since teams have no calendars or invitations to reconcile. Without this a guest granted a team-owned doc got OTP admission but never the shared-path mirror or notification. `reconcileSharesForNewTeamMember` applies the same rule to a team-to-team grant, relayed through `sendToHome` since it targets another user's home; without it a user who joins the granted team afterwards never sees the item in *Shared with me*.
-
-For non-guest users, deletion still purges TO-this-email entries (the registry-as-pending-queue semantics
-make sense for users who can't reappear with the same email + a new identity).
-
-## Inactivity Cleanup
-
-Guests with no recent session activity are deleted automatically once a day. The sweep is registered in
-`apps/api/src/lib/scheduler/jobs.ts` and runs at server startup + every 24 hours.
-
-**Activity signal**: `MAX(session.updatedAt)` for the guest, falling back to `user.updatedAt` when the
-guest has no session rows yet. Better-auth refreshes session rows on validation, so any authenticated
-request keeps the guest alive.
-
-**Skipped**: guests whose home is currently loaded (`atHome(userId) === true`) — protects in-flight
-collaboration sessions; they get cleaned up on the next sweep after the home idles out.
-
-**Deletion path**: `cleanupInactiveGuests` (`apps/api/src/lib/auth/guest-cleanup.ts`) calls
-`deleteUserCompletely(userId, null)` — system mode that bypasses better-auth's admin API and deletes auth rows
-directly. Home directory removed; share registry entries preserved (see above).
-
-## Admin
-
-Two pages in `apps/admin/src/routes/`:
-
-- **Guest access** (`/guest-settings`) — the `guests.openSignup` toggle and the `guests.inactivityDays` threshold
-- **Guests** (`/guests`) — every `role: 'guest'` account, from `GET /settings/users/guests` via
-  `useAdminGuests()`, with a detail view and delete
-
-## Known Limitations
-
-- **Team notifications**: team-owned resources (`team_xyz` ownerId) — `TeamHome` has no NotificationCenter,
-  so access request notifications are silently skipped
-- **No guest upgrade**: no endpoint or UI to convert a guest to a regular user (set password, change role,
-  move data directory). Planned but not yet implemented
-- **Request state**: "Access requested" state is client-side only (lost on refresh). Idempotent via tag
-  dedup — re-requesting just updates the notification timestamp
-- **Open-signup OTP exposure**: with `openSignup=true` an attacker can trigger up to 10 OTP emails per
-  hour to any address (rate-limited per-email and per-IP). Set `guests.openSignup=false` to require a
-  pending share before issuing OTPs.
-- **Rate-limit state is per-process**: lost on server restart and not shared across replicas. Fine while
-  Eigen runs as a single API process; needs a DB-backed swap if we ever shard.
-- **Registry GC for revoked shares**: when an owner removes an email from an ACL, the registry entry
-  isn't proactively removed (the share might still be reachable via another path). Bounded leak — only
-  matters at very long lifetimes / very high revoke rates.
-- **Access-check email probing**: on `openSignup=false` servers the drive access-check (`checkAccessForEmails`, used by the mail Share & send dialog) returns `needsGuestAdmission` per email, so any non-guest user who can read a path can probe an arbitrary address for "has an account, or was ever shared with anything". Same information class `request-otp` already exposes (and rate-limits); accepted.
-
-See: [ACL.md](ACL.md) for the sharing model, [SERVER-SETTINGS.md](SERVER-SETTINGS.md) for the `guests` and
-`notifications.email` settings, [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md) for user deletion
+- [ACL.md](ACL.md): the sharing model, propagation and the share registry
+- [SERVER-SETTINGS.md](SERVER-SETTINGS.md): the `guests` and `notifications.email` settings
+- [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md): user deletion
+- [DEMO_MODE.md](DEMO_MODE.md): the demo sign-in that shares the scoped-password session mint

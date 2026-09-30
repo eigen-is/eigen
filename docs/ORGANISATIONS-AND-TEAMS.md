@@ -1,234 +1,97 @@
 # Organizations & Teams
 
-> **TLDR**: Single-org, self-hosted. One org created at setup. All users auto-joined. Teams are flat groups for ACL
-> sharing and shared drives. Three Home subclasses: `UserHome` (personal), `TeamHome` (team drives), `OrgHome`
-> (org-level). Prefixed owner IDs: raw UUID = user, `team_` = team, `org_` = org.
+> **TLDR:** Eigen is single-org and self-hosted: setup creates one organization and every user joins it. Teams are flat groups inside it, used as ACL groups and as owners of shared drives (`TeamHome`). The data model is better-auth's `organization()` plugin (`apps/api/src/lib/auth/auth.ts`), and owner IDs carry their type as a prefix: a bare id is a user, `team_` a team, `org_` the org. Not obvious from the code: teams have no roles of their own, so managing a team is an org admin's job; every team route wants the prefixed `team_` id; the org owner is out of reach of the admin plugin; and every way to delete a user runs one teardown.
 
-## Organization
+## One org, created at setup, and everyone joins it
 
-Created during setup wizard. Uses better-auth `organization()` plugin with `teams: { enabled: true }`, the plugin's default 100-member cap lifted (`membershipLimit`), and `apiKey()`
-plugin.
+Setup creates the organization with a system call (`auth.api.createOrganization` with no session) and pins its id in the server config. `allowUserToCreateOrganization: false` blocks every other creation, so a user can't spin up an org they own and escalate past `requireAdmin`. The plugin runs with teams enabled and the `apiKey()` plugin beside it. Its default 100-member cap is lifted (`membershipLimit`), because the cap fails every user creation past the hundredth in the create hook.
 
-- All new users auto-joined as `member` (via `databaseHooks.user.create.after`)
-- Every sign-in re-attempts the join when the membership row is missing (`authEnsureDefaultOrgMembership`, called from `databaseHooks.session.create.after`), so an account whose sign-up join failed still reaches the org instead of staying invisible in Admin → Users; guests are skipped
-- Setup admin becomes `owner`. The owner is out of reach of better-auth's admin plugin: `/admin/impersonate-user` is disabled, and a `hooks.before` on `/admin/*` (`apps/api/src/lib/auth/auth.ts`) refuses a call that targets the owner unless the owner makes it, so an admin can neither demote, delete, rename nor sign in as the owner
-- Config stored in `serverConfig` (`data/server/`)
-- New users also trigger share reconciliation (`reconcileSharesForNewUser`)
+Every new non-guest user joins as `member` in `databaseHooks.user.create.after`, which also runs share reconciliation ([ACL.md § Reconciliation](ACL.md#reconciliation)). Every sign-in re-attempts the join when the membership row is missing (`authEnsureDefaultOrgMembership` from `databaseHooks.session.create.after`). The sign-up join only logs a failure, so sign-in is its repair path: without it, an account whose join failed stays outside the org and invisible in Admin → Users. Guests never join ([GUEST-ACCESS.md](GUEST-ACCESS.md)).
 
-| Role     | Description                                     |
+## The owner holds server settings and admins manage people
+
+| Role     | Can                                             |
 |----------|-------------------------------------------------|
-| `owner`  | Full org management (setup admin)               |
-| `admin`  | Manage members, teams, and server settings      |
-| `member` | Default. Uses shared drives they have access to |
+| `owner`  | Everything an admin can, plus the server settings, S3 config, waitlist and onboarding. The setup admin |
+| `admin`  | Users, teams, team drives and guests            |
+| `member` | Default. Uses the shared drives their teams own |
 
-## Teams
+`requireAdmin` and `requireOwner` (`apps/api/src/lib/core/access.ts`) read the org role. Which settings route is whose, and the Admin app's `_owner` guard, are in [SERVER-SETTINGS.md](SERVER-SETTINGS.md#settings-are-the-owners-the-pages-admins-need-are-theirs-too).
 
-Flat groups within the org serving two purposes:
+## The owner is out of reach of the admin plugin
 
-1. **ACL groups**: Share with `team_{id}` instead of individual emails
-2. **Shared drives**: Team-owned storage (`TeamHome`)
+Every org admin also holds better-auth's `user.role: 'admin'`, which lets the admin plugin act on any user past Eigen's own checks. So `/admin/impersonate-user` is in `disabledPaths`, and a `hooks.before` on `/admin/*` (`apps/api/src/lib/auth/auth.ts`) refuses a call that targets the owner unless the owner makes it. An admin can neither demote, delete, rename nor sign in as the owner. Eigen's own routes hold the same line: deleting the owner answers 400, and only the owner resets the owner's password ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#an-admin-password-reset-revokes-every-way-in)).
 
-| Team Role | Description                 |
-|-----------|-----------------------------|
-| `owner`   | Edit team, manage members   |
-| `member`  | Default. ACL + drive access |
+## Teams are flat groups with no roles
 
-When a member is added to a team, `reconcileSharesForNewTeamMember` runs to propagate existing team-targeted shares
-to the new member's Home.
+A team serves two purposes: an ACL group (share with `team_{id}` instead of emails) and the owner of shared drives. A team member row has no role, so every member is equal. Adding a member runs `reconcileSharesForNewTeamMember`, which delivers the shares already made to the team.
 
-### TeamHome
+Team routes (`apps/api/src/routes/team.ts`) use two guards from `apps/api/src/lib/core/access.ts`. `requireTeamAccess` lets an org admin or owner in without membership and otherwise demands membership of that team; members may read the team's members, settings and mounts. `requireTeamAdmin` demands org admin or owner, so only they change team settings, mounts, calendar and avatar.
 
-**File**: `apps/api/src/lib/home/team-home.ts`
+## Every team route takes the prefixed team id
 
-- Synthetic user ID: `team_{teamId}`
-- Path: `data/team/{teamId}/`
-- Services: Drive + Calendar only (no mail/contacts/notifications)
-- Starts with zero mounts — mounts are added explicitly via "Add Mount" in Admin app
-- Settings stored in `settings.json` (`JsonStore<TeamSettings>`)
-- Calendar can be disabled via `settings.calendar.enabled`
-- Created lazily, auto-destructs after 30 min inactivity (`TEAM_HOME_IDLE_MS`, longer than the 5 min a `UserHome`
-  gets — a team drive is opened by many people at irregular intervals)
+Team routes take `:ownerId` in its `team_{teamId}` form, not the bare team id. Pass a bare id and `parseOwnerId` reads it as a *user* id, so a route that loads the team home 404s on a missing user (or 400s on a malformed id). Build the segment with `teamOwnerId(teamId)`. `useTeamMembers(teamId)` (`packages/lib/src/core/team/hooks/`) takes the raw id and wraps it itself.
 
-### Team Avatars
+## A team drive starts empty and its calendar starts off
 
-Org admins set a team avatar from the admin team detail page (`POST`/`DELETE /team/:ownerId/avatar`, gated by
-`requireTeamAdmin`). Storage mirrors the user-avatar pipeline: one webp at `data/server/avatars/team_{teamId}.webp`,
-written via `pushTeamAvatar` in `home-relay.ts`. File existence is the only source of truth — no settings pointer,
-no schema column. Serving goes through `GET /p/avatar/team_{teamId}`, falling back to the deterministic team SVG,
-with the same 24h public `Cache-Control` as user avatars.
+`TeamHome` (`apps/api/src/lib/home/team-home.ts`) runs as a synthetic user with id `team_{teamId}` and holds a Drive and a Calendar, with no mail, contacts or notifications. Its folder and idle window are in [STORAGE.md](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle). It starts with zero mounts: an admin adds each drive from the Admin app (`TeamHome.addMount`). The calendar is off until an admin turns it on (`settings.calendar.enabled`), and while off the calendar getter answers 404. Team settings live in the team's `settings.json` (`JsonStore<TeamSettings>`).
 
-**Gotcha**: the team filename is stable (unlike per-upload-UUID user avatars), so the editing surface would show
-the browser-cached copy. The admin team detail page appends a client-generated `?v={timestamp}` on mount, on team
-switch, and after upload/remove. A `?v` value must never be reused across page loads — a repeated value serves the
-stale cache entry, so never use a counter. Other surfaces accept up-to-24h staleness.
+No team user ever logs in, so team members always reach team data through `SharedDrive`, where they count as co-owners ([ACL.md § Design Decisions](ACL.md#design-decisions)).
 
-### OrgHome
+## A team avatar is one file, and the admin page busts its cache
 
-**File**: `apps/api/src/lib/home/org-home.ts`
+Org admins set a team avatar from the admin team detail page (`POST`/`DELETE /team/:ownerId/avatar`, gated by `requireTeamAdmin`). Storage mirrors the user-avatar pipeline: one webp at `data/server/avatars/team_{teamId}.webp`, written via `pushTeamAvatar` in `home-relay.ts`. File existence is the only source of truth: no settings pointer, no schema column. Deleting the team removes the file (`afterDeleteTeam`). Serving goes through `GET /p/avatar/team_{teamId}`, falling back to the deterministic team SVG, with the same 24h public `Cache-Control` as user avatars.
 
-- Synthetic user ID: `org_{orgId}`
-- Path: `data/org/{orgId}/`
-- No domain services (no drive/mail/contacts/calendar) — just filesystem
-- Created lazily via `getHome()` like other Home types
+The team filename is stable, unlike the per-upload UUID of a user avatar, so the editing surface would show the browser-cached copy. The admin team detail page appends a client-generated `?v={timestamp}` on mount, on team switch, and after upload or remove. A `?v` value must never repeat across page loads, because a repeated value serves the stale cache entry: never use a counter. Other surfaces accept up to 24h of staleness.
 
-## Home Resolution
+## An owner ID says which kind of home it names
 
-**File**: `apps/api/src/lib/home/get-home.ts`
+Every drive route is `/drive/:ownerId/:mountId/...`, and `ownerId` encodes the type. `parseOwnerId` (`packages/lib/src/types/owner.ts`) reads it:
 
-`getHome(ownerId)` parses the owner ID prefix and creates the correct Home subclass:
+| Type | Format          | Home |
+|------|-----------------|------|
+| User | 32-character auth id (an email also parses as a user) | `UserHome`, or `GuestHome` for a guest |
+| Team | `team_{teamId}` | `TeamHome` |
+| Org  | `org_{orgId}`   | `OrgHome` |
 
-- Raw UUID → `UserHome` (looks up user in auth DB)
-- `team_` prefix → `TeamHome` (verifies team exists)
-- `org_` prefix → `OrgHome` (verifies org exists)
+It also knows `external_` (a calendar organizer outside Eigen) and flags anything else `invalid`, which `getHome` answers with 400. Build ids with `userOwnerId`, `teamOwnerId` and `orgOwnerId`.
 
-All Home instances are cached in a factory map and auto-destruct when idle — 5 min by default, 30 min for
-`TeamHome`. `evictHome(ownerId)` forces immediate shutdown (used during user deletion).
+`getHome(ownerId)` (`apps/api/src/lib/home/get-home.ts`) dispatches on the type and checks that the user, team or org exists. `getSharedDrive(ownerId, user)` (`apps/api/src/lib/drive/get-drive.ts`) hands the owner their own `Drive` and wraps any other home in a `SharedDrive`.
 
-## Prefixed Owner IDs
+`OrgHome` has no services, only its folder, and no code builds an `org_` owner id.
 
-All drives use `/drive/:ownerId/:mountId/...`. The `ownerId` encodes type:
+## A team ACL entry resolves through memberships
 
-| Type | Format          | Example         |
-|------|-----------------|-----------------|
-| User | Raw UUID        | `a1b2c3d4-...`  |
-| Team | `team_{teamId}` | `team_x9y8z7w6` |
-| Org  | `org_{orgId}`   | `org_a1b2c3d4`  |
+A team entry is `{ id: 'team_xyz', read: true, write: false }`. `canRead` and `canWrite` parse it and check `getMemberships(userId)` (`apps/api/src/lib/user/user.ts`), which returns `{ orgIds, teamIds }`. `filterRedundantACL()` drops a team entry on a path that team owns. The rest of the model is in [ACL.md](ACL.md).
 
-**Resolution** (`packages/lib/src/types/owner.ts`):
+## The Admin app is for org admins and owners
 
-```typescript
-type OwnerType = 'user' | 'team' | 'org';
+`apps/admin/` manages members and teams through better-auth's client (`authClient.organization.*`) and everything else through Eden. The route guard in `_auth.tsx` fetches the org members and shows an access-denied `EmptyState` to anyone who is not `admin` or `owner`. The app switcher shows "Admin" only to them. The admin hooks are in `packages/lib/src/core/admin/hooks/` and the team hooks in `packages/lib/src/core/team/hooks/`. What each page does for the user is in the help center (`apps/index/src/data/support/admin/`).
 
-parseOwnerId("a1b2c3d4")      → { type: 'user', id: 'a1b2c3d4' }
-parseOwnerId("team_x9y8z7w6") → { type: 'team', id: 'x9y8z7w6' }
-parseOwnerId("org_a1b2c3d4")  → { type: 'org',  id: 'a1b2c3d4' }
-```
+The Users page (`GET /settings/users`) lists org members **and** orphans, non-guest accounts with no membership in the org, so an orphan is visible and can be deleted from its detail pane. The old `/members` path redirects to `/users`.
 
-Helper functions: `userOwnerId(id)`, `teamOwnerId(id)`, `orgOwnerId(id)`.
+## Deleting a user runs one teardown from every entry point
 
-**Drive resolution** (`apps/api/src/lib/drive/get-drive.ts`): `getSharedDrive(ownerId, user)` calls
-`getHome(ownerId)` (dispatches to the correct Home subclass) and wraps it in a `SharedDrive`.
+`teardownUserData` (`apps/api/src/lib/user/delete-user.ts`) runs from the `databaseHooks.user.delete.before` hook in `auth.ts`, the one seam every better-auth deletion path passes through while the user row still exists:
 
-## Team Access Control
+1. Evicts the cached Home (closes its databases)
+2. Deletes the home folder (`data/home/{userId}/`, or the guest home for a guest)
+3. Cleans the share registry: the entries the user created always, the entries addressed to the user only for a non-guest, so a guest who signs in again gets the same shares back ([GUEST-ACCESS.md](GUEST-ACCESS.md#the-share-registry-is-a-durable-record-not-a-queue))
+4. Removes the auth rows that reference the user (org and team memberships, 2FA, API keys) through `authDeleteUserReferences`. The deletion is explicit because SQLite's CASCADE does nothing with `PRAGMA foreign_keys` off, and a leftover member row 500s `listMembers` org-wide. The membership delete also sweeps rows whose user is already gone, healing orphans from older deletions
 
-**File**: `apps/api/src/lib/core/access.ts`
+Every entry point funnels through better-auth's `deleteUser` (sessions and accounts, then the user row, with the hook firing before the user row goes):
 
-Team routes use `requireTeamAccess` and `requireTeamAdmin`:
+- `DELETE /settings/user/:userId`: the admin route, where `deleteUserCompletely` delegates to `auth.api.removeUser()`
+- better-auth's raw `POST /auth/admin/remove-user`: the same teardown through the hook
+- inactive-guest cleanup (system, no session): `deleteUserCompletely(id, null)` goes through `auth.$context.internalAdapter.deleteUser()`
 
-- Org `admin`/`owner` roles bypass team membership checks (always get `admin` access)
-- Regular users must be a member of the specific team
-- `requireTeamAdmin` rejects non-admin team members
+A hook error aborts the user-row deletion (fail-closed). Sessions and accounts are already gone at that point, so retrying the deletion completes it.
 
-## Team ACL
+The guards hold on both routes. The Eigen route has `requireAdmin`, a 400 for your own account and a 400 for the owner. better-auth's `/admin/remove-user` rejects a non-admin (403) and self-removal (400) itself, and `hooks.before` keeps it off the owner, so the raw endpoint bypasses nothing. The frontend is `useDeleteUser(organizationId)` in `packages/lib/src/core/admin/hooks/use-members.ts`, behind a confirmation in the user's danger zone.
 
-```typescript
-// Share folder with team
-{ id: 'team_xyz', read: true, write: false }
-```
+## See also
 
-Resolution: `canRead`/`canWrite` → `parseOwnerId` → `getMemberships(userId)` → check team membership.
-
-`getMemberships(userId)` lives in `apps/api/src/lib/user/user.ts` and returns `{ orgIds: string[], teamIds: string[] }`.
-
-`filterRedundantACL()` strips team ACL entries covered by inherited permissions or ownership (e.g., team ACL on a
-path owned by the same team).
-
-## Frontend
-
-- **Sidebar**: Team drives appear under "Shared Drives" in Drive app
-- **Share dialog**: `drive-access-list-edit.tsx` supports team picker + team display
-- **Admin hooks** (`packages/lib/src/core/admin/hooks/`, exported from `@workspace/lib/admin`):
-  `useMembers(orgId?)`, `useTeams(orgId?)`, `useAdminUserList()` (org members + orphans for the Users page),
-  `useAdminUsersUsage()` (per-user disk usage), `useAdminGuests()`
-- **Team hooks** (`packages/lib/src/core/team/hooks/`, exported from `@workspace/lib/team`):
-  `useTeamMembers(teamId)` — takes the raw team id and wraps it with `teamOwnerId()` itself — plus the team
-  settings/mounts hooks that share `teamKeys`
-
-## Admin App
-
-Admin UI for org member + team management at `apps/admin/`. Requires org role `admin` or `owner`. Uses better-auth
-client API (`authClient.organization.*`) for org/team operations and Eden Treaty for server settings.
-
-### Pages
-
-- **Users** (`/users`, old `/members` redirects here): one enriched table of org members **and** orphans — columns
-  name, role (orphans carry a "no organization" badge), email, disk usage, teams, last active, joined. Create,
-  search, change role, reset password, remove org members, fully delete user accounts, and drag members onto team
-  sidebar items. Collapses to a 350px list + detail pane on narrow viewports (container query, no remount); the
-  detail pane holds the role select, teams, last active/joined, per-user storage bars, a danger zone, and
-  reset-password + close in the toolbar. Orphan cleanup is a delete from this detail pane
-- **Teams**: Team list in sidebar with create dialog. Team detail as main content
-- **Team Detail**: List/add/remove team members, toggle team calendar on/off, set calendar member access
-  (free-busy/read/write), manage mounts (add/edit/enable/disable), set quota overrides (mail & contacts, default
-  mount), set/remove the team avatar (see [Team Avatars](#team-avatars))
-- **Settings**: Server-wide settings — the organization name, the server's status, the system sender and test mail, quotas, storage defaults (incl. S3), email-notification toggles, landing page links. See [SERVER-SETTINGS.md](SERVER-SETTINGS.md)
-- **Guests**: guest accounts, with detail + delete — see [GUEST-ACCESS.md](GUEST-ACCESS.md) (the `/guest-settings`
-  page next to it holds the guest toggles)
-- **Waitlist**: waitlist entries — accept, reject, resend invite, delete
-- **Onboarding**: the waitlist toggle and the invite / welcome mail templates
-
-### Access
-
-Route guard in `_auth.tsx`: fetches org members, checks current user has role `admin` or `owner`. Non-admins see an access-denied `EmptyState`. Settings, Onboarding, Guest settings and Waitlist sit under a second guard, `_auth._owner.tsx` (`useIsOrgOwner()`), since their routes are the owner's; the sidebar hides them from admins. Visible via "Admin" in app switcher.
-
-### API
-
-Org/team management via `authClient.organization.*` (better-auth client). Team settings, mounts and avatar go
-through dedicated routes.
-
-Every team route takes `:ownerId` — the prefixed `team_{teamId}` form, not the bare team id. Pass a bare id and
-`parseOwnerId` reads it as a *user* id, so the route 404s on a missing user (or 400s on a malformed id). Always
-build the segment with `teamOwnerId(teamId)`.
-
-| Route                            | Method     | Purpose                                   |
-|----------------------------------|------------|-------------------------------------------|
-| `/team/:ownerId/members`         | GET        | List team members                         |
-| `/team/:ownerId/settings`        | GET / PUT  | Team settings (calendar, quota overrides) |
-| `/team/:ownerId/mounts`          | GET        | List team mounts                          |
-| `/team/:ownerId/mount`           | POST       | Add mount to team                         |
-| `/team/:ownerId/mount/:mountId`  | PUT        | Update mount settings                     |
-| `/team/:ownerId/avatar`          | POST / DELETE | Set / remove the team avatar           |
-| `/settings/user/:userId`         | DELETE     | Delete user completely                    |
-| `/settings/user/:userId/password` | PUT      | Reset a user's password                   |
-| `/settings/users`                | GET        | Org members + orphans (`AdminUserRow[]`)  |
-| `/settings/users/usage`          | GET        | Per-user disk usage                       |
-| `/settings/users/guests`         | GET        | Guest accounts only                       |
-| `/settings/server`               | GET / PUT  | Server-wide settings                      |
-| `/settings/s3config`             | GET / PUT  | S3 storage configuration                  |
-| `/settings/s3check`              | POST       | Test S3 connection                        |
-
-Routes in `apps/api/src/routes/team.ts` and `apps/api/src/routes/settings.ts`. Team settings are stored in
-`data/team/{teamId}/settings.json` via `TeamHome.settings` (`JsonStore<TeamSettings>`).
-
-### User Deletion
-
-One deletion semantic for every entry point. The complete teardown lives in `teardownUserData`
-(`lib/user/delete-user.ts`), invoked from the `databaseHooks.user.delete.before` hook in `auth.ts` — the one
-seam every better-auth deletion path passes through while the user row still exists:
-
-1. Evicts cached Home singleton (closes databases)
-2. Deletes home directory (`data/home/{userId}/`, or the guest home for guests)
-3. Cleans share registry (entries FROM the user always; entries TO the user only for non-guests, so re-OTP
-   after guest deletion rehydrates the same shared.db state)
-4. Removes auth rows referencing the user — org/team memberships, 2FA, API keys — via
-   `authDeleteUserReferences` (explicit deletion since SQLite CASCADE is inert with `PRAGMA foreign_keys` off).
-   Membership deletion also sweeps rows whose user is already gone, healing orphans from past bad deletions
-
-Entry points, all funneling through better-auth's `deleteUser` (sessions + accounts, then the user row, with
-the hook firing before the user row goes):
-
-- `DELETE /settings/user/:userId` — admin-only Eigen route; `deleteUserCompletely` delegates to
-  `auth.api.removeUser()`
-- better-auth's raw `POST /auth/admin/remove-user` — same complete teardown via the hook
-- inactive-guest cleanup (system, no session) — `deleteUserCompletely(id, null)` goes through
-  `auth.$context.internalAdapter.deleteUser()`
-
-A hook error aborts better-auth's user-row deletion (fail-closed); sessions and accounts are already gone at
-that point, so a retry of the deletion completes the removal.
-
-Guards: cannot delete your own account and non-admins are rejected — enforced server-side by the Eigen route
-(`requireAdmin` + own-account 400) and independently by better-auth's `/admin/remove-user` itself (403
-non-admin, 400 self-removal), so the raw endpoint bypasses nothing.
-
-**Frontend**: `useDeleteUser(organizationId)` hook in `packages/lib/src/core/admin/hooks/use-members.ts`.
-"Danger zone" section in member detail with confirmation dialog.
+- [ACL.md](ACL.md): sharing, team entries and reconciliation
+- [GUEST-ACCESS.md](GUEST-ACCESS.md): guests, who never join the org
+- [STORAGE.md](STORAGE.md): homes, their folders and idle windows
+- [SERVER-SETTINGS.md](SERVER-SETTINGS.md): the owner's settings and the admin routes
