@@ -33,7 +33,7 @@ describe('status', () => {
     test('files of another build, as the launcher finds them, say an update is unfinished, before any newer release', async () => {
         const result = await status('--files=9.9.9 (def5678)', '--latest=99.0.0');
         expect(result.stdout).toContain(
-            `▲  Update         files of 9.9.9 (def5678), running ${pkg.version}: run ./eigen update`,
+            `▲  Update  files of 9.9.9 (def5678), running ${pkg.version}: run ./eigen update`,
         );
         expect(result.stdout).not.toContain('99.0.0');
         expect((await status(`--files=${pkg.version}`)).stdout).toContain(`files of ${pkg.version}, running`);
@@ -51,18 +51,22 @@ describe('status', () => {
         );
     });
 
-    test('counts the snapshots and what they take on disk', async () => {
-        const snapshots = [
-            'eigen-20260101-000000.tar.gz',
-            'eigen-pre-update-light-20260103-000000.tar.gz',
-            'eigen-pre-update-20260102-000000.tar.gz',
-            'eigen-light-20260101-120000.tar.gz',
+    test('without the API, names the newest archive in backups/ by the time in its name', async () => {
+        const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000);
+        const newest = buildServerArchiveName('pre-update', 'light', hoursAgo(2));
+        const listing = [
+            buildServerArchiveName('scheduled', 'full', hoursAgo(26)),
+            `${newest}.json`,
+            newest,
+            'home-u1-20990101-000000.tar.zst',
             'notes.txt',
         ];
-        const result = await status(`--snapshots=${snapshots.join('\n')}`, '--snapshots-kb=2048');
-        expect(result.stdout).toMatch(/Last snapshot +eigen-pre-update-light-20260103-000000\.tar\.gz, /);
-        expect(result.stdout).toMatch(/◇ {2}Snapshots +4 in snapshots\/, 2\.0 MB on disk/);
-        expect((await status('--snapshots=', '--snapshots-kb=4')).stdout).not.toContain('Snapshots');
+        const result = await status(`--backups=${listing.join('\n')}`);
+        expect(result.stdout).toMatch(new RegExp(`◇ {2}Backup +${newest.replaceAll('.', '\\.')}, Light, 2h ago\n`));
+        expect((await status('--backups=notes.txt')).stdout).toMatch(
+            /▲ {2}Backup +none yet; \.\/eigen backup makes one/,
+        );
+        expect((await status()).stdout).not.toContain('snapshot');
     });
 });
 
@@ -120,7 +124,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             newestGoodFullAt: hoursAgo(3).toISOString(),
         });
-        expect(row).toBe(`◇  Backup         ${newest.name}, 3h ago, 1.0 MB`);
+        expect(row).toBe(`◇  Backup       ${newest.name}, 3h ago, 1.0 MB`);
     });
 
     test('is red while the newest scheduled attempt failed, whatever came after it', async () => {
@@ -131,7 +135,7 @@ describe('the Backup row', () => {
             scheduledFailure: { ...failed, error: 'no room' },
             newestGoodFullAt: hoursAgo(1).toISOString(),
         });
-        expect(row).toBe(`■  Backup         ${failed.name} failed, 5h ago: no room`);
+        expect(row).toBe(`■  Backup       ${failed.name} failed, 5h ago: no room`);
     });
 
     test('is yellow while the schedule is on and no Full verified in two days', async () => {
@@ -142,7 +146,7 @@ describe('the Backup row', () => {
             newestGoodFullAt: hoursAgo(49).toISOString(),
         };
         expect(await backupRow({ scheduleEnabled: true, ...facts })).toBe(
-            `▲  Backup         ${newest.name}, 1h ago, 1.0 KB; no good Full backup in two days`,
+            `▲  Backup       ${newest.name}, 1h ago, 1.0 KB; no good Full backup in two days`,
         );
         expect(await backupRow({ scheduleEnabled: true, ...facts, newestGoodFullAt: null })).toStartWith('▲');
         expect(await backupRow({ scheduleEnabled: false, ...facts })).toStartWith('◇');
@@ -157,20 +161,20 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             newestGoodFullAt: null,
         });
-        expect(running).toBe(`◇  Backup         ${name}, just now, running`);
+        expect(running).toBe(`◇  Backup       ${name}, just now, running`);
         const failed = await backupRow({
             scheduleEnabled: false,
             newest: { ...newest, state: 'failed', bytes: null, error: 'no room' },
             scheduledFailure: null,
             newestGoodFullAt: null,
         });
-        expect(failed).toBe(`▲  Backup         ${name}, just now, failed: no room`);
+        expect(failed).toBe(`▲  Backup       ${name}, just now, failed: no room`);
         const none = await backupRow({
             scheduleEnabled: false,
             newest: null,
             scheduledFailure: null,
             newestGoodFullAt: null,
         });
-        expect(none).toBe('▲  Backup         none yet; ./eigen backup makes one');
+        expect(none).toBe('▲  Backup       none yet; ./eigen backup makes one');
     });
 });

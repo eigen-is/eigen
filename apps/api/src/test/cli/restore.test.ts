@@ -1024,6 +1024,71 @@ describe('restore --stage and --swap', () => {
     });
 });
 
+describe('restore --env, the first step on a fresh machine', () => {
+    function fresh(): string {
+        return scratch('restore-fresh-');
+    }
+
+    test(
+        "writes the archive's .env.production into an empty folder, mode 0600, and nothing else",
+        async () => {
+            const dir = fresh();
+            const result = await restoreCli(dir, [fullArchive, '--env']);
+            expect(result.stderr).toBe('');
+            expect(result.code).toBe(0);
+            expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(ARCHIVED_ENV);
+            expect(statSync(join(dir, '.env.production')).mode & 0o777).toBe(0o600);
+            expect(readdirSync(dir)).toEqual(['.env.production']);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'refuses a folder that has a .env.production, an archive without one, and one of a local build',
+        async () => {
+            const here = fresh();
+            writeFileSync(join(here, '.env.production'), RELEASE_ENV);
+            const kept = await restoreCli(here, [fullArchive, '--env']);
+            expect(kept.code).toBe(1);
+            expect(kept.stderr).toContain('This folder has a .env.production already.');
+            expect(readFileSync(join(here, '.env.production'), 'utf8')).toBe(RELEASE_ENV);
+
+            const without = await craft(fullArchive, {
+                drop: (name) => name === '.env.production',
+                manifest: (m) => ({ ...m, envFile: false }),
+            });
+            const local = join(scratch('restore-local-env-'), 'local.env');
+            writeFileSync(local, 'DOMAIN=archived.example.org\n');
+            const ofLocal = await craft(fullArchive, { replace: { '.env.production': local } });
+            for (const [archive, message] of [
+                [without, 'holds no .env.production'],
+                [ofLocal, 'is an archive of a local build'],
+            ]) {
+                const dir = fresh();
+                const result = await restoreCli(dir, [archive, '--env']);
+                expect(result.code).toBe(1);
+                expect(result.stderr).toContain(message);
+                expect(readdirSync(dir)).toEqual([]);
+            }
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'refuses a damaged archive before it writes anything',
+        async () => {
+            const dir = fresh();
+            const cut = join(scratch('restore-cut-'), basename(fullArchive));
+            writeFileSync(cut, readFileSync(fullArchive).subarray(0, 4096));
+            const result = await restoreCli(dir, [cut, '--env']);
+            expect(result.code).toBe(1);
+            expect(result.stderr).toContain('is not a whole Eigen server archive');
+            expect(readdirSync(dir)).toEqual([]);
+        },
+        JOB_TIMEOUT_MS,
+    );
+});
+
 describe('an interrupted swap', () => {
     test(
         'one that died after its first rename is finished by the next --swap',

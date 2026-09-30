@@ -5,11 +5,13 @@
 # tree whose version is out already becomes the next patch release. Then releases <version>-harness.8, .9 (also
 # :latest) and .10 (with a breaking change), built from the working tree and pushed to a registry:2 of this run, beside
 # the new release. With ./eigen in a docker:cli container that has no Bun:
-# install .8 and seed a document, sheet, event, contact and chat message; update to :latest; roll back; refuse and
-# then accept the breaking release; refuse an unknown version and a downgrade; refuse a local build's snapshot, and a
-# snapshot of .8 while the registry is down, before anything stops; restore a snapshot of .8, which brings its
-# launcher and Compose files back; move .8 onto the main channel, update it to a second build of main, roll back one
-# build, and leave main for .10; install from main; install .9 from the launcher alone; install .9 twice, on one digest.
+# install .8 and seed a document, sheet, event, contact and chat message; update to :latest, which waits out a backup
+# that runs and makes its own on the running API first; roll back to that backup; refuse and then accept the breaking
+# release; refuse an unknown version and a downgrade; refuse the backup of .8 while the registry is down, before
+# anything stops; restore the backup of .8, which brings its launcher and Compose files back; move .8 onto the main
+# channel, update it to a second build of main, roll back one build, and leave main for .10; install from main; install
+# .9 from the launcher alone; install .9 twice, on one digest. The published release updates through its own launcher,
+# which saves a snapshot, and goes back through the two commands ./eigen rollback prints for it.
 #
 # Usage:  ./docker/test-release.sh
 #         ACCEPT_BREAKING=1 lets the new release list breaking changes since the published one: the update takes
@@ -140,7 +142,7 @@ seed() {
 }
 
 # missing_items: what of the seed is gone, empty when all of it is there. Signs in first: a rollback brings back
-# the session store of its snapshot.
+# the session store of its backup.
 missing_items() {
     local listing missing=''
     sign_in "$PASSWORD" "$JAR" >/dev/null
@@ -212,8 +214,8 @@ image_label() { docker image inspect --format "{{index .Config.Labels \"org.open
 # The api image the install runs, by ID.
 api_image() { docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)"; }
 
-# What snapshots/ holds, which is root's alone.
-snapshots() { scratch_run ls "$INSTALL/snapshots"; }
+# What backups/ holds.
+backups() { scratch_run ls "$INSTALL/backups"; }
 
 # Every line of the env file but the pins.
 unpinned() { scratch_run cat "$INSTALL/.env.production" | grep -v '^EIGEN_\(VERSION\|[A-Z]*_IMAGE\)='; }
@@ -348,7 +350,8 @@ upgrade_published() {
     else
         fail ".env.production changed: $(diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") | tr '\n' ' ')"
     fi
-    pointer=$(scratch_run cat "$INSTALL/.eigen/last-update" 2>/dev/null || true)
+    # $PUBLISHED's launcher hands over without a backup: its own image saved a snapshot after the stop.
+    pointer=$(scratch_run sed -n 1p "$INSTALL/.eigen/last-update" 2>/dev/null || true)
     meta=$(scratch_run tar -xzOf "$INSTALL/snapshots/${pointer:-none}" eigen-snapshot.json 2>/dev/null || true)
     if [[ $pointer == "$snapshot"* ]] && [[ $meta == *"\"version\":\"$PUBLISHED\""* ]]; then
         ok ".eigen/last-update names snapshots/$pointer, made by $PUBLISHED before the update"
@@ -360,11 +363,20 @@ upgrade_published() {
     started=$SECONDS
     eigen rollback --yes
     show
-    if [ "$CODE" = 0 ] &&
-        says "◇  Eigen $RELEASE ($RELEASE_COMMIT) → $PUBLISHED (.*) is running at https://localhost/"; then
-        ok "./eigen rollback went back to $PUBLISHED in $((SECONDS - started))s"
+    back=$(printf '%s\n' "$OUT" | sed -n 's/^│  \(docker run .* bootstrap --force --out \/install\)$/\1/p')
+    restore=$(printf '%s\n' "$OUT" | sed -n 's/^│  \(EIGEN_API_IMAGE=.* \.\/eigen restore .*\)$/\1/p')
+    if [ "$CODE" = 0 ] && [ -n "$back" ] && [ -n "$restore" ]; then
+        ok "./eigen rollback prints the two commands that go back to $PUBLISHED"
     else
-        fail "./eigen rollback to $PUBLISHED exited $CODE"
+        fail "./eigen rollback after the update from $PUBLISHED: exit $CODE"
+    fi
+    CODE=0
+    OUT=$(in_cli_container sh -c "$back && $restore --yes" 2>&1) || CODE=$?
+    show
+    if [ "$CODE" = 0 ] && stack_up; then
+        ok "those two commands went back to $PUBLISHED in $((SECONDS - started))s"
+    else
+        fail "the way back to $PUBLISHED exited $CODE"
     fi
     check_running "$PUBLISHED" "$PUBLISHED" "$PUBLISHED_REGISTRY"
     check_pins "$pinned"
@@ -397,14 +409,39 @@ PINS_BEFORE=$(pins)
 ##############################################################################
 header "./eigen update to :latest"
 ##############################################################################
+# A Full backup that runs when the update starts, slow with a file of noise in the home: the update's own backup
+# waits it out instead of failing. Its Light backup holds the file too, so the rollback brings it back.
+BALLAST="$INSTALL/data/home/$ADMIN_ID/ballast.bin"
+scratch_run sh -c 'head -c 300000000 /dev/urandom >"$1" && chown 1000:1000 "$1"' sh "$BALLAST"
+(
+    eigen backup
+    printf '%s\n' "$OUT" >"$SCRATCH/running-backup.log"
+    exit "$CODE"
+) &
+running=$!
+for _ in $(seq 1 300); do
+    if backups | grep -q '^server-manual-full-.*\.tar\.json$'; then break; fi
+    sleep 0.2
+done
 started=$SECONDS
 eigen update
 show
+backed_up=0
+wait "$running" || backed_up=$?
+scratch_run rm "$BALLAST"
 if [ "$CODE" = 0 ] && says "◆  Eigen $NEW" && says "The harness's new release" &&
     says "◇  Eigen $PREVIOUS (harness) → $NEW (harness) is running at https://localhost/"; then
     ok "./eigen update went from $PREVIOUS to $NEW in $((SECONDS - started))s, with its notes"
 else
     fail "./eigen update exited $CODE"
+fi
+saved=$(scratch_run cat "$INSTALL/.eigen/last-update" 2>/dev/null || true)
+manual=$(sed -n 's/^archive=//p' "$SCRATCH/running-backup.log")
+if [ "$backed_up" = 0 ] && [ -n "$manual" ] && [[ $saved == server-pre-update-light-*.tar ]] &&
+    [[ $saved > ${manual/manual-full/pre-update-light} ]] && says "Saved before the update: backups/$saved"; then
+    ok "the backup that ran finished as $manual, then the update made $saved on the running API"
+else
+    fail "the backups around the update: the running one exited $backed_up as '$manual', the update's is '$saved'"
 fi
 check_running "$NEW"
 after=$(unpinned)
@@ -447,9 +484,9 @@ fi
 header "./eigen rollback"
 ##############################################################################
 eigen_piped n rollback
-if [ "$CODE" = 0 ] && says "a light snapshot of Eigen $PREVIOUS, made on " && says 'kept aside as data.pre-restore-\*' &&
-    says 'Nothing was changed.' && [ "$(api_started)" = "$started" ]; then
-    ok "rollback asks with the version, the date and the age, and a no stops nothing"
+if [ "$CODE" = 0 ] && says "A light archive of Eigen $PREVIOUS for localhost, made on " && says 'Nothing was changed.' &&
+    [ "$(api_started)" = "$started" ] && ! scratch_run test -e "$INSTALL/data/.restoring"; then
+    ok "rollback asks with the level, the version, the date and the age, and a no stops nothing"
 else
     fail "rollback answered no: exit $CODE"
     show
@@ -469,6 +506,7 @@ if [ ! -e "$INSTALL/.eigen/last-update" ] && ls -d "$INSTALL"/data.pre-restore-*
 else
     fail "after the rollback: .eigen/last-update is left, or no data.pre-restore-*"
 fi
+scratch_run rm -f "$BALLAST"
 eigen rollback --yes
 if [ "$CODE" = 1 ] && says '■  There is no update to roll back.'; then
     ok "a second rollback says there is nothing to roll back"
@@ -483,7 +521,7 @@ header "A breaking release"
 started=$(api_started)
 inode=$(scratch_run stat -c %i "$INSTALL/eigen")
 env_before=$(scratch_run cat "$INSTALL/.env.production")
-snapshots_before=$(snapshots)
+backups_before=$(backups)
 eigen update "$BREAKING"
 show
 if [ "$CODE" = 1 ] && says '▲  Harness storage (breaking)' &&
@@ -494,7 +532,7 @@ else
     fail "update to $BREAKING without the flag: exit $CODE"
 fi
 if [ "$(api_started)" = "$started" ] && [ "$(scratch_run stat -c %i "$INSTALL/eigen")" = "$inode" ] &&
-    [ "$(scratch_run cat "$INSTALL/.env.production")" = "$env_before" ] && [ "$(snapshots)" = "$snapshots_before" ]; then
+    [ "$(scratch_run cat "$INSTALL/.env.production")" = "$env_before" ] && [ "$(backups)" = "$backups_before" ]; then
     ok "the refusal stopped nothing and changed nothing"
 else
     fail "the refused update changed something"
@@ -536,42 +574,26 @@ else
 fi
 
 ##############################################################################
-header "./eigen restore of a snapshot of $PREVIOUS"
+header "./eigen restore of the backup of $PREVIOUS"
 ##############################################################################
 started=$(api_started)
 env_before=$(scratch_run cat "$INSTALL/.env.production")
 aside=$(aside_count)
-# unchanged: Eigen was not stopped, and .env.production, data/ and the checked copy are as before the restore.
+# unchanged: Eigen was not stopped, and .env.production and data/ are as before, with nothing left staged.
 unchanged() {
     [ "$(api_started)" = "$started" ] && [ "$(scratch_run cat "$INSTALL/.env.production")" = "$env_before" ] &&
-        [ "$(aside_count)" = "$aside" ] && ! scratch_run test -e "$INSTALL/.eigen/restore"
+        [ "$(aside_count)" = "$aside" ] && ! scratch_run test -e "$INSTALL/data/.restoring"
 }
 
-# A local build's snapshot pins no images.
-cross=eigen-20260101-000000.tar.gz
-scratch_run sh -c 'set -e; cd "$1"; stage=$(mktemp -d)
-    printf "{\"version\":\"%s\",\"createdAt\":\"2026-01-01T00:00:00.000Z\"}" "$2" >"$stage/eigen-snapshot.json"
-    grep -v "^EIGEN_\(VERSION\|[A-Z]*_IMAGE\)=" .env.production >"$stage/.env.production"
-    mkdir "$stage/data"
-    tar -czf "snapshots/$3" -C "$stage" eigen-snapshot.json .env.production data
-    rm -r "$stage"' sh "$INSTALL" "$BREAKING" "$cross"
-eigen restore "$cross" --yes
-scratch_run rm "$INSTALL/snapshots/$cross"
-if [ "$CODE" = 1 ] && says "■  $cross is a snapshot of a local build; this is a release install." && unchanged; then
-    ok "a snapshot of a local build is refused before anything stops"
-else
-    fail "the restore of a local build's snapshot: exit $CODE"
-    show
-fi
-
-snapshot=$(scratch_run cat "$INSTALL/.eigen/last-update")
+# The backup the update to $BREAKING made of $PREVIOUS.
+archive=$(scratch_run cat "$INSTALL/.eigen/last-update")
 # Only the registry has the images of $PREVIOUS now.
 for name in $IMAGES; do docker image rm "$REGISTRY/$name:$PREVIOUS" >/dev/null; done
 docker stop "eigentest-registry-$RUN" >/dev/null
-eigen restore "$snapshot" --yes
+eigen restore "$archive" --yes
 docker start "eigentest-registry-$RUN" >/dev/null
 if [ "$CODE" = 1 ] && says "■  Could not get Eigen $PREVIOUS; Eigen runs on as it was" && unchanged; then
-    ok "with the registry down, a restore of a snapshot of $PREVIOUS stops nothing and says so"
+    ok "with the registry down, a restore of the backup of $PREVIOUS stops nothing and says so"
 else
     fail "the restore with the registry down: exit $CODE"
     show
@@ -582,12 +604,12 @@ for _ in $(seq 30); do
 done
 
 inode=$(scratch_run stat -c %i "$INSTALL/eigen")
-eigen restore "$snapshot" --yes
+eigen restore "$archive" --yes
 show
 if [ "$CODE" = 0 ] && says "◇  Eigen $PREVIOUS (harness) files written" && [ "$(scratch_run stat -c %i "$INSTALL/eigen")" != "$inode" ]; then
-    ok "a restore of a snapshot of $PREVIOUS on $BREAKING writes the launcher and Compose files of $PREVIOUS"
+    ok "a restore of the backup of $PREVIOUS on $BREAKING writes the launcher and Compose files of $PREVIOUS"
 else
-    fail "the restore of a snapshot of $PREVIOUS: exit $CODE"
+    fail "the restore of the backup of $PREVIOUS: exit $CODE"
 fi
 check_running "$PREVIOUS"
 
@@ -643,7 +665,7 @@ fi
 check_channel main2
 kept=$(docker image ls --all "$REGISTRY/api" -q --no-trunc | sort -u | tr '\n' ' ')
 if [ "$kept" = "$(printf '%s\n' "$main1" "$(api_image)" | sort -u | tr '\n' ' ')" ]; then
-    ok "only the two builds of main are kept: the running one, and the one the rollback snapshot pins"
+    ok "only the two builds of main are kept: the running one, and the one the rollback's backup pins"
 else
     fail "api images kept: $kept"
     for id in $kept; do
@@ -655,7 +677,7 @@ fi
 
 eigen rollback --yes
 show
-if [ "$CODE" = 0 ] && says "Back from Eigen $NEW (main2) to the snapshot the last update saved" &&
+if [ "$CODE" = 0 ] && says "Back from Eigen $NEW (main2) to the backup the last update made" &&
     says "◇  Eigen $NEW (main2) → $NEW (main1) is running at https://localhost/"; then
     ok "./eigen rollback went back to the previous build of main"
 else

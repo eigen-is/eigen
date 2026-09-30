@@ -49,17 +49,19 @@ import { createUi, glyphLine, type Ui } from './ui';
 
 // Two runs, as the launcher makes them. --stage runs as the API's user in its container while Eigen runs, on the
 // data root, .env.production and backups folder the API sees. --swap runs as root on the install folder (-w
-// /install) with Eigen stopped, like --staged. A refusal in either comes before anything of data/ moves.
+// /install) with Eigen stopped, like --staged and --env. A refusal in either comes before anything of data/ moves.
 export const RESTORE_OPTIONS = {
     stage: { type: 'boolean' },
     staged: { type: 'boolean' },
     swap: { type: 'boolean' },
+    env: { type: 'boolean' },
     yes: { type: 'boolean' },
     's3-from-archive': { type: 'boolean' },
 } as const;
 export const RESTORE_USAGE = `Usage: restore <archive> --stage [--yes] [--s3-from-archive]
        restore --staged
        restore --swap
+       restore <archive> --env
 
 Puts a whole-server archive back in two steps, run by ./eigen restore.
 
@@ -70,7 +72,9 @@ Puts a whole-server archive back in two steps, run by ./eigen restore.
                      bucket as it is
   --staged           Print the staged archive's version, level and the images its ${ENV_PATH} pins
   --swap             With Eigen stopped: swap the staged tree in and keep what it replaces aside. Finishes a swap
-                     that was cut off`;
+                     that was cut off
+  --env              On a fresh machine, before the stage: write the ${ENV_PATH} of <archive> here, which pins
+                     the build that restores it`;
 
 type Flags = ReturnType<typeof parseArgs<{ options: typeof RESTORE_OPTIONS }>>['values'];
 
@@ -489,7 +493,7 @@ function runSwap(ui: Ui, swap: RestoreSwap): void {
         } catch (error) {
             ui.fail(
                 `The swap of ${swap.archive} stopped at ${from}: ${describeError(error)}.`,
-                'Fix what it says, then run ./eigen restore again: it finishes the swap.',
+                'Fix what it says, then run ./eigen restart, which finishes the swap first.',
             );
         }
     }
@@ -609,12 +613,52 @@ async function swap(): Promise<void> {
     runSwap(ui, marker);
 }
 
+// No setup runs on a fresh machine (D8): the archive's own file pins the images, Compose's settings and the secrets.
+async function takeEnv(archive: string | undefined): Promise<void> {
+    const ui = await createUi(true);
+    if (!archive) return ui.fail('Name the archive to restore.', 'Pass the path of a server archive.');
+    const name = basename(archive);
+    if (existsSync(ENV_PATH)) {
+        return ui.fail(`This folder has a ${ENV_PATH} already.`, `./eigen restore restores ${name} onto it.`);
+    }
+    const read = await readServerArchive(archive);
+    if (!read.manifest || read.verify.status !== 'verified') {
+        return ui.fail(
+            `${name} is not a whole Eigen server archive: ${read.verify.failures.slice(0, 3).join('; ')}.`,
+            'Restore another archive.',
+        );
+    }
+    const member = read.members.find(({ name }) => name === SERVER_ARCHIVE_ENV_MEMBER);
+    if (!member) {
+        return ui.fail(
+            `${name} holds no ${ENV_PATH}, so it cannot be restored on a fresh machine.`,
+            'Run ./eigen setup first, then ./eigen restore.',
+        );
+    }
+    const temporary = `${ENV_PATH}.${process.pid}.tmp`;
+    await copyArchiveMember(member, temporary);
+    if (!readEnvFile(temporary).has('EIGEN_API_IMAGE')) {
+        rmSync(temporary);
+        return ui.fail(
+            `${name} is an archive of a local build, which pins no images.`,
+            'Restore it in a clone of Eigen, after ./eigen setup.',
+        );
+    }
+    chmodSync(temporary, 0o600);
+    ownAs(temporary, installOwner('.'));
+    renameSync(temporary, ENV_PATH);
+    console.log(glyphLine('ok', `Took ${ENV_PATH} from ${name}`));
+}
+
 export async function restore(archive: string | undefined, flags: Flags): Promise<void> {
-    const modes = [flags.stage, flags.staged, flags.swap].filter(Boolean).length;
-    if (modes !== 1 || (!flags.stage && archive !== undefined)) {
-        console.error(`Pass one of --stage, --staged or --swap; only --stage takes an archive.\n\n${RESTORE_USAGE}`);
+    const modes = [flags.stage, flags.staged, flags.swap, flags.env].filter(Boolean).length;
+    if (modes !== 1 || (!flags.stage && !flags.env && archive !== undefined)) {
+        console.error(
+            `Pass one of --stage, --staged, --swap or --env; only --stage and --env take an archive.\n\n${RESTORE_USAGE}`,
+        );
         process.exit(2);
     }
+    if (flags.env) return takeEnv(archive);
     if (flags.stage) return stage(archive, flags);
     if (flags.staged) return staged();
     return swap();

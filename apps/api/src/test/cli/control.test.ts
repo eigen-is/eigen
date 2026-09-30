@@ -212,12 +212,12 @@ describe('eigen status', () => {
             `--services=${SERVICES}`,
             '--latest=99.0.0',
             '--mail-queue=-- 2 Kbytes in 2 Requests.',
-            // The newest by the time in its name, not by the name.
-            '--snapshots=eigen-20260101-120000.tar.gz\neigen-pre-update-20260301-080000.tar.gz\nnotes.txt',
+            // The launcher's listing counts only while the API does not run.
+            '--backups=server-manual-full-20260101-120000.tar',
         ]);
         expect(stderr).toBe('');
         expect(code).toBe(0);
-        expect(stdout).toContain(`◇  Version        ${pkg.version}`);
+        expect(stdout).toContain(`◇  Version      ${pkg.version}`);
         expect(stdout).toMatch(/◇ {2}eigen-api +running, healthy/);
         expect(stdout).toMatch(/caddy +running\n/);
         expect(stdout).toMatch(/■ {2}postfix +exited/);
@@ -225,16 +225,11 @@ describe('eigen status', () => {
         expect(stdout).toMatch(/caddy .+\n.+eigen-api .+\n.+postfix /);
         expect(stdout).toMatch(/▲ {2}Update +Eigen 99\.0\.0 is out; \.\/eigen update installs it/);
         expect(stdout).toMatch(/Disk +\d+\.\d [KMGT]B free of \d+\.\d [KMGT]B\n/);
-        expect(stdout).toMatch(/Last snapshot +eigen-pre-update-20260301-080000\.tar\.gz, .+ ago\n/);
+        expect(stdout).toMatch(/Backup +/);
+        expect(stdout).not.toContain('server-manual-full-20260101-120000.tar');
         expect(stdout).toMatch(/Mail queue +2 messages waiting/);
         expect(stdout).toContain('\n│\n');
         expect(stdout).not.toContain('\x1b[');
-    });
-
-    test('says when there is no snapshot yet', async () => {
-        const { stdout, code } = await runCli(['status', `--services=${SERVICES}`]);
-        expect(code).toBe(0);
-        expect(stdout).toMatch(/▲ {2}Last snapshot +none yet; \.\/eigen backup makes one/);
     });
 
     test('names a newer release, and not an older one or its own', async () => {
@@ -274,14 +269,18 @@ describe('eigen status', () => {
 
     test('with Eigen stopped, reports what the launcher knows and says where to look', async () => {
         const { stdout, stderr, code } = await runCli(
-            ['status', '--services=eigen-api\texited\t\ncaddy\trunning\t', '--snapshots=eigen-20260101-120000.tar.gz'],
+            [
+                'status',
+                '--services=eigen-api\texited\t\ncaddy\trunning\t',
+                '--backups=server-manual-full-20260101-120000.tar',
+            ],
             undefined,
             { EIGEN_CONTROL_SOCKET: join(TEST_DATA_DIR, 'none.sock') },
         );
         expect(code).toBe(1);
         expect(stdout).toMatch(/■ {2}eigen-api +exited\n/);
         expect(stdout).toMatch(/◇ {2}caddy +running\n/);
-        expect(stdout).toMatch(/Last snapshot +eigen-20260101-120000\.tar\.gz/);
+        expect(stdout).toMatch(/Backup +server-manual-full-20260101-120000\.tar, Full, /);
         expect(stdout).not.toContain('Version');
         expect(stderr).toBe('■  Eigen is not running.\n└  Run ./eigen logs eigen-api to see why.\n');
     });

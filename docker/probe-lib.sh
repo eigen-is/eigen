@@ -233,8 +233,8 @@ show() { printf '%s\n' "$OUT" | sed 's/^/    │ /'; }
 # says <text>: whether the last output holds this line fragment.
 says() { printf '%s\n' "$OUT" | grep -q -- "$1"; }
 
-# The snapshot the last ./eigen backup saved, from its output.
-saved_snapshot() { printf '%s\n' "$OUT" | grep -o 'eigen-\(light-\)\{0,1\}[0-9]\{8\}-[0-9]\{6\}\.tar\.gz' | head -n 1 || true; }
+# The archive the last ./eigen backup saved, from the archive= line that ends its output.
+saved_archive() { printf '%s\n' "$OUT" | sed -n 's/^archive=//p' | tail -n 1; }
 
 # run_setup <log> [--user uid:gid] <setup flags…>: ./eigen setup in the no-Bun container, its output in <log>. A
 # setup that fails shows that output and ends the harness.
