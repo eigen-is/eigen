@@ -1,10 +1,17 @@
 name: Publish
 
-# A version tag publishes that release; a push to main publishes :main, the channel an install can follow.
+# A version tag publishes that release; a push to main publishes :main, the channel an install can follow. A release
+# whose CHANGELOG lists breaking changes fails the gate; run this workflow on its tag with breaking: true to publish it.
 on:
   push:
     branches: [main]
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      breaking:
+        description: The release lists breaking changes since the previous one, and that is intended
+        type: boolean
+        default: false
 
 # GitHub keeps one pending run per group and lets the running one finish, so a cancel never leaves :main mixed: a
 # promote that stopped between two images.
@@ -55,17 +62,20 @@ jobs:
             echo "bun-version=$(cat .bun-version)"
           } >>"$GITHUB_OUTPUT"
 
-  # The local release gate on a clean runner: update, rollback and a breaking release through a registry of its own.
-  # Only for a release; main's own checks run in check.yml.
+  # The release gate on a clean runner: the previous published release updated to this one and rolled back, then
+  # update, rollback and a breaking release through a registry of its own. Only for a release; main's own checks run in
+  # check.yml.
   gate:
     needs: meta
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
 
       - run: bash docker/test-release.sh
+        env:
+          ACCEPT_BREAKING: ${{ inputs.breaking && '1' || '' }}
 
   # Each platform builds on a runner of its own architecture, without QEMU.
   publish:
