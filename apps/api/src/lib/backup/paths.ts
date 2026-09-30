@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BackupSafetyCopy } from '@workspace/lib/types/backup';
+import type { BackupLevel, BackupReason, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { type ParsedOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
 import {
     BACKUP_ARTIFACT_EXTENSION,
@@ -11,8 +11,10 @@ import {
     FAILED_RESTORE_SUFFIX,
     PRE_RESTORE_SUFFIX,
     parseBackupStamp,
+    SERVER_ARCHIVE_EXTENSION,
+    SERVER_ARCHIVE_PREFIX,
 } from '@workspace/lib/validation';
-import { getDataRoot, getTeamDataPath, getUserHomePath } from '../config/paths';
+import { getDataRoot, getTeamDataPath, getUserHomePath, SERVER_DIR } from '../config/paths';
 import { ApiError, PATHS } from '../core';
 import { getUserById } from '../user/user';
 
@@ -132,6 +134,32 @@ export function buildHomeFolderName(ownerId: string): string {
 
 export function buildArtifactName(ownerId: string, at: Date): string {
     return `${buildHomeFolderName(ownerId)}-${buildBackupStamp(at)}${BACKUP_ARTIFACT_EXTENSION}`;
+}
+
+// The layout of a whole-server archive beside its manifest.json: one per-home artifact per home, the
+// server folder packed like a home, and the two install files the API may be unable to read.
+export const SERVER_ARCHIVE_HOMES_DIR = 'homes';
+export const SERVER_ARCHIVE_SERVER_MEMBER = 'server.tar.zst';
+export const SERVER_ARCHIVE_ENV_MEMBER = '.env.production';
+export const SERVER_ARCHIVE_DKIM_DIR = 'dkim';
+
+export function buildServerArchiveName(reason: BackupReason, level: BackupLevel, at: Date): string {
+    return `${SERVER_ARCHIVE_PREFIX}${reason}-${level}-${buildBackupStamp(at)}${SERVER_ARCHIVE_EXTENSION}`;
+}
+
+// The per-home artifact name with the archive's stamp, so a member copied out into the backups
+// folder is an ordinary artifact of that home.
+export function buildHomeMemberName(ownerId: string, at: Date): string {
+    return `${SERVER_ARCHIVE_HOMES_DIR}/${buildArtifactName(ownerId, at)}`;
+}
+
+// The single top-level folder inside server.tar.zst. It mirrors data/: `server/` and `org/`.
+export function buildServerFolderName(at: Date): string {
+    return `server-${buildBackupStamp(at)}`;
+}
+
+export function archiveServerPath(relPath: string): string {
+    return `${SERVER_DIR}/${relPath}`;
 }
 
 // The one collision rule these names have: a stamp is a second wide, and two of a home's artifacts

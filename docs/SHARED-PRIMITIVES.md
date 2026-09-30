@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1566 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1574 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -507,7 +507,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (361)
+## Types (364)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -729,9 +729,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BackupArtifact` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupEntry` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupJob` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BackupLevel` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupManifest` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BackupReason` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupSafetyCopy` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupVerifyRecord` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `ServerArchiveManifest` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `Command` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `CommandContext` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `PaletteResult` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
@@ -873,7 +876,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (729)
+## Utilities & constants (734)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1319,6 +1322,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `buildBackupStamp` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `EMAIL_FIND_REGEX` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `FAILED_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `incompleteReason` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `MAX_EMAIL_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `MIN_PASSWORD_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/password.ts |
 | `NO_CONTROL_PATTERN` | `@workspace/lib/validation` | packages/lib/src/validation/text.ts |
@@ -1330,8 +1334,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseBackupStamp` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `parseContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
 | `parseHomeMountSettings` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `parseServerArchiveManifest` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `parseServerArchiveName` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `PRE_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `ROLE_MAILBOX_LOCAL_PARTS` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
+| `SERVER_ARCHIVE_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `SERVER_ARCHIVE_PREFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `validateACLEntries` | `@workspace/lib/validation` | packages/lib/src/validation/acl.ts |
 | `validateCommand` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
 | `validateEmailAddress` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |

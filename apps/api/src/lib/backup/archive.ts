@@ -1,10 +1,16 @@
 /// <reference path="./node-zstd.d.ts" />
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createZstdCompress, createZstdDecompress } from 'node:zlib';
-import type { BackupManifest, BackupVerifyRecord } from '@workspace/lib/types/backup';
+import type {
+    BackupEntry,
+    BackupManifest,
+    BackupVerifyRecord,
+    ServerArchiveManifest,
+} from '@workspace/lib/types/backup';
 import { parseBackupManifest, parseBackupSidecar } from '@workspace/lib/validation';
 import { ApiError } from '../core';
 import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath } from './paths';
@@ -24,6 +30,8 @@ const MAX_OCTAL_SIZE = 0o77777777777;
 // tar's traditional blocking factor. `tar` reads a short archive fine, but every writer pads.
 const BLOCKING_FACTOR = 20 * BLOCK;
 const SIDECAR_SUFFIX = '.manifest.json';
+// A whole-server archive holds every secret of the server, so `tar -xf` hands its members to the user alone.
+const SERVER_MEMBER_MODE = 0o600;
 
 export function sidecarPath(artifactPath: string): string {
     return `${artifactPath}${SIDECAR_SUFFIX}`;
@@ -113,9 +121,7 @@ function* headerChunks(
     yield tarHeader(truncateUtf8(name, NAME_FIELD), size, mtime, typeflag, mode);
 }
 
-async function* entryChunks(name: string, absPath: string, size: number, mtime: number): AsyncGenerator<Uint8Array> {
-    yield* headerChunks(name, size, mtime, '0', 0o644);
-
+async function* fileChunks(name: string, absPath: string, size: number): AsyncGenerator<Uint8Array> {
     const reader = Bun.file(absPath).stream().getReader();
     let copied = 0;
     try {
@@ -126,12 +132,26 @@ async function* entryChunks(name: string, absPath: string, size: number, mtime: 
             yield value;
         }
         // The header above already declared `size`; fewer bytes leave the archive unreadable from here on.
-        if (copied !== size) throw new Error(`packFolder: ${name} changed size while packing (${copied} of ${size})`);
+        if (copied !== size) {
+            throw new Error(`backup archive: ${name} changed size while packing (${copied} of ${size})`);
+        }
     } finally {
         // Reached on a destroyed pipeline too, where nobody else would ever close the file.
         await reader.cancel();
     }
+}
+
+async function* entryChunks(name: string, absPath: string, size: number, mtime: number): AsyncGenerator<Uint8Array> {
+    yield* headerChunks(name, size, mtime, '0', 0o644);
+    yield* fileChunks(name, absPath, size);
     yield padding(size);
+}
+
+// Two zero blocks close a tar; the whole is padded to the blocking factor.
+function* archiveEnd(written: number): Generator<Uint8Array> {
+    yield new Uint8Array(BLOCK * 2);
+    const tail = (BLOCKING_FACTOR - ((written + BLOCK * 2) % BLOCKING_FACTOR)) % BLOCKING_FACTOR;
+    if (tail > 0) yield new Uint8Array(tail);
 }
 
 async function* tarChunks(dir: string, rootName: string, onProgress?: SnapshotProgress): AsyncGenerator<Uint8Array> {
@@ -168,10 +188,7 @@ async function* tarChunks(dir: string, rootName: string, onProgress?: SnapshotPr
             yield chunk;
         }
     }
-    yield new Uint8Array(BLOCK * 2); // end-of-archive marker
-    written += BLOCK * 2;
-    const tail = (BLOCKING_FACTOR - (written % BLOCKING_FACTOR)) % BLOCKING_FACTOR;
-    if (tail > 0) yield new Uint8Array(tail);
+    yield* archiveEnd(written);
 }
 
 // Packs `dir` into a `.tar.zst` whose single root folder is `dir`'s basename. Memory stays flat:
@@ -191,21 +208,97 @@ export async function packFolder(dir: string, artifactPath: string, onProgress?:
     fs.renameSync(tempPath, artifactPath);
 }
 
+export type ArchiveWriter = {
+    appendFile(name: string, sourcePath: string): Promise<void>;
+    finish(manifest: Omit<ServerArchiveManifest, 'entries'>): Promise<ServerArchiveManifest>;
+    abort(): Promise<void>;
+};
+
+// A whole-server archive is a plain tar: its members are compressed already, and a plain tar can be
+// read member by member. Each member is hashed as it is copied in, and finish() closes the archive
+// with manifest.json listing them all, so the manifest is always the last member. The file is
+// written where the caller says; the caller writes to a temp name and renames it into place, and
+// calls abort() in a finally, which takes back an archive finish() never closed.
+export async function createArchiveWriter(archivePath: string): Promise<ArchiveWriter> {
+    const handle = await fsp.open(archivePath, 'w', SERVER_MEMBER_MODE);
+    const entries: BackupEntry[] = [];
+    let written = 0;
+    let closed = false;
+    async function put(chunk: Uint8Array): Promise<void> {
+        let offset = 0;
+        while (offset < chunk.length) offset += (await handle.write(chunk, offset)).bytesWritten;
+        written += chunk.length;
+    }
+    return {
+        async appendFile(name, sourcePath) {
+            const { size, mtimeMs } = fs.statSync(sourcePath);
+            for (const chunk of headerChunks(name, size, Math.floor(mtimeMs / 1000), '0', SERVER_MEMBER_MODE)) {
+                await put(chunk);
+            }
+            const hasher = new Bun.CryptoHasher('sha256');
+            for await (const chunk of fileChunks(name, sourcePath, size)) {
+                hasher.update(chunk);
+                await put(chunk);
+            }
+            await put(padding(size));
+            entries.push({ path: name, bytes: size, sha256: hasher.digest('hex') });
+        },
+        async finish(fields) {
+            const manifest: ServerArchiveManifest = { ...fields, entries };
+            const body = ENCODER.encode(JSON.stringify(manifest, null, 2));
+            const mtime = Math.floor(Date.now() / 1000);
+            for (const chunk of headerChunks(ARCHIVE_MANIFEST_FILE, body.length, mtime, '0', SERVER_MEMBER_MODE)) {
+                await put(chunk);
+            }
+            await put(body);
+            await put(padding(body.length));
+            for (const chunk of archiveEnd(written)) await put(chunk);
+            closed = true;
+            await handle.close();
+            return manifest;
+        },
+        async abort() {
+            if (closed) return;
+            closed = true;
+            await handle.close();
+            fs.rmSync(archivePath, { force: true });
+        },
+    };
+}
+
+// One member of a whole-server archive: where its bytes sit in the outer tar, and their sha256.
+export type ArchiveMember = { archivePath: string; name: string; offset: number; bytes: number; sha256: string };
+
+// Where an artifact's compressed bytes are read from: a file of its own, or a member of a
+// whole-server archive, read in place.
+export type ArtifactSource = string | ArchiveMember;
+
 // The artifact's bytes, decompressed. The two streams are wired by hand rather than through
 // `pipeline`, because a read that stops at the entry it wanted ends as an AbortError there.
-async function* artifactBytes(artifactPath: string): AsyncGenerator<Uint8Array> {
-    const source = fs.createReadStream(artifactPath);
+async function* artifactBytes(source: ArtifactSource): AsyncGenerator<Uint8Array> {
+    const file =
+        typeof source === 'string'
+            ? fs.createReadStream(source)
+            : fs.createReadStream(source.archivePath, { start: source.offset, end: source.offset + source.bytes - 1 });
     const decompressed = createZstdDecompress();
-    source.on('error', (error) => decompressed.destroy(error));
-    source.pipe(decompressed);
+    file.on('error', (error) => decompressed.destroy(error));
+    file.pipe(decompressed);
     try {
         yield* decompressed;
     } finally {
-        source.destroy();
+        file.destroy();
     }
 }
 
-type TarEntry = { path: string; typeflag: string; mode: number; size: number; body: AsyncGenerator<Uint8Array> };
+// `offset` is where the body starts in the tar stream: in a plain tar, its offset in the file.
+type TarEntry = {
+    path: string;
+    typeflag: string;
+    mode: number;
+    size: number;
+    offset: number;
+    body: AsyncGenerator<Uint8Array>;
+};
 
 function headerField(header: Uint8Array, offset: number, length: number): string {
     const field = header.subarray(offset, offset + length);
@@ -255,12 +348,14 @@ function checkedEntryPath(name: string): string {
     return name;
 }
 
-// The archive entry by entry, bodies streamed. A consumer that reads part of a body or none leaves
-// the rest to the loop below, so it can stop at the entry it came for.
-async function* tarEntries(artifactPath: string): AsyncGenerator<TarEntry> {
-    const source = artifactBytes(artifactPath);
+// A tar entry by entry, bodies streamed: an artifact's decompressed bytes, or a plain tar as it sits
+// on disk. A consumer that reads part of a body or none leaves the rest to the loop below, so it can
+// stop at the entry it came for.
+async function* tarEntries(bytes: AsyncIterable<Uint8Array>): AsyncGenerator<TarEntry> {
+    const source = bytes[Symbol.asyncIterator]();
     let buffered = new Uint8Array(0);
     let bodyLeft = 0;
+    let position = 0;
 
     async function fill(): Promise<boolean> {
         const { done, value } = await source.next();
@@ -280,6 +375,7 @@ async function* tarEntries(artifactPath: string): AsyncGenerator<TarEntry> {
         }
         const taken = buffered.subarray(0, count);
         buffered = buffered.subarray(count);
+        position += count;
         return taken;
     }
     async function skip(count: number): Promise<void> {
@@ -289,6 +385,7 @@ async function* tarEntries(artifactPath: string): AsyncGenerator<TarEntry> {
             const step = Math.min(left, buffered.length);
             buffered = buffered.subarray(step);
             left -= step;
+            position += step;
         }
     }
     async function* body(): AsyncGenerator<Uint8Array> {
@@ -297,6 +394,7 @@ async function* tarEntries(artifactPath: string): AsyncGenerator<TarEntry> {
             const chunk = buffered.subarray(0, Math.min(bodyLeft, buffered.length));
             buffered = buffered.subarray(chunk.length);
             bodyLeft -= chunk.length;
+            position += chunk.length;
             yield chunk;
         }
     }
@@ -328,24 +426,77 @@ async function* tarEntries(artifactPath: string): AsyncGenerator<TarEntry> {
             givenName = null;
             // Nothing else (a symlink, a hard link, a device) is something a home folder holds.
             if (typeflag === '' || typeflag === '0' || typeflag === '5') {
-                yield { path: entryPath, typeflag, mode: headerNumber(header, 100, 8), size, body: body() };
+                const mode = headerNumber(header, 100, 8);
+                yield { path: entryPath, typeflag, mode, size, offset: position, body: body() };
             }
             await skip(bodyLeft + padLength(size));
         }
     } finally {
-        await source.return(undefined);
+        await source.return?.();
     }
 }
 
-// `glob` is unused today and reserved by the design for phase ③, where one home is extracted out of
-// a whole-server archive with a `homes/home-{ownerId}/**` filter.
-export async function extractArtifact(artifactPath: string, targetDir: string, glob?: string): Promise<void> {
+// Every file member of a whole-server archive in order, each hashed as it streams past: one read
+// says what the archive holds, where each member sits, and whether its bytes are the ones named.
+export async function readArchiveMembers(archivePath: string): Promise<ArchiveMember[]> {
+    const members: ArchiveMember[] = [];
+    for await (const entry of tarEntries(fs.createReadStream(archivePath))) {
+        if (entry.typeflag === '5') continue;
+        const hasher = new Bun.CryptoHasher('sha256');
+        for await (const chunk of entry.body) hasher.update(chunk);
+        members.push({
+            archivePath,
+            name: entry.path,
+            offset: entry.offset,
+            bytes: entry.size,
+            sha256: hasher.digest('hex'),
+        });
+    }
+    return members;
+}
+
+// What readArchiveMember holds in memory at most: a manifest fits many times over, a home does not.
+export const MAX_MEMBER_READ_BYTES = 16 * 1024 * 1024;
+
+// A member's bytes in memory, for the manifest. A member that has to land on disk goes through
+// copyArchiveMember, and a home member is unpacked in place by extractArtifact.
+export async function readArchiveMember(member: ArchiveMember): Promise<Uint8Array> {
+    if (member.bytes > MAX_MEMBER_READ_BYTES) {
+        throw new Error(`backup archive: ${member.name} is ${member.bytes} bytes, too big to read into memory`);
+    }
+    return Bun.file(member.archivePath)
+        .slice(member.offset, member.offset + member.bytes)
+        .bytes();
+}
+
+// Not Bun.write(dest, a sliced BunFile): Bun 1.4.2 ignores the slice there and writes the whole archive.
+export async function copyArchiveMember(member: ArchiveMember, destPath: string): Promise<void> {
+    // A read stream refuses an `end` before its `start`, which is what an empty member's range is.
+    if (member.bytes === 0) {
+        fs.writeFileSync(destPath, '');
+        return;
+    }
+    try {
+        await pipeline(
+            fs.createReadStream(member.archivePath, { start: member.offset, end: member.offset + member.bytes - 1 }),
+            fs.createWriteStream(destPath),
+        );
+        // A range past the end of the file reads short without an error.
+        const { size } = fs.statSync(destPath);
+        if (size !== member.bytes) {
+            throw new Error(`backup archive: ${member.name} copied ${size} of its ${member.bytes} bytes`);
+        }
+    } catch (error) {
+        fs.rmSync(destPath, { force: true });
+        throw error;
+    }
+}
+
+export async function extractArtifact(source: ArtifactSource, targetDir: string): Promise<void> {
     const existed = fs.existsSync(targetDir);
     fs.mkdirSync(targetDir, { recursive: true });
-    const filter = glob ? new Bun.Glob(glob) : null;
     try {
-        for await (const entry of tarEntries(artifactPath)) {
-            if (filter && !filter.match(entry.path)) continue;
+        for await (const entry of tarEntries(artifactBytes(source))) {
             const target = path.join(targetDir, entry.path);
             if (entry.typeflag === '5') {
                 fs.mkdirSync(target, { recursive: true });
@@ -367,7 +518,7 @@ export async function extractArtifact(artifactPath: string, targetDir: string, g
 export async function readArtifactManifest(artifactPath: string): Promise<BackupManifest> {
     const filter = new Bun.Glob(`*/${ARCHIVE_MANIFEST_FILE}`);
     let text: string | null = null;
-    for await (const entry of tarEntries(artifactPath)) {
+    for await (const entry of tarEntries(artifactBytes(artifactPath))) {
         if (!filter.match(entry.path)) continue;
         text = DECODER.decode(await collect(entry.body));
         break;

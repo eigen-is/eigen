@@ -12,3 +12,8 @@ export async function getEigenDb() {
     const managed = await getDb();
     return managed.db;
 }
+
+// The server backup's copy, through the handle the server writes with.
+export async function stageEigenDbCopy(destPath: string): Promise<void> {
+    (await getDb()).stageCopy(destPath);
+}

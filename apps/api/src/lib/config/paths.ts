@@ -19,6 +19,11 @@ export function getDataRoot(): string {
 
 // The server's own folder in data/, beside the homes.
 export const SERVER_DIR = 'server';
+// The folders in data/ that hold one home each, by owner kind.
+export const USER_HOMES_DIR = 'home';
+export const TEAM_HOMES_DIR = 'team';
+export const ORG_HOMES_DIR = 'org';
+export const GUEST_HOMES_DIR = 'guest';
 
 // What a server backup takes from SERVER_DIR, by name: the databases through their live handles, the rest as files.
 export const SERVER_DATABASES = { users: 'users3.db', shares: 'eigen.db', waitlist: 'waitlist.db' } as const;
@@ -54,17 +59,17 @@ export function getAvatarsDir(): string {
 }
 
 export function getUserHomePath(userId: string): string {
-    return path.join(getDataRoot(), 'home', userId);
+    return path.join(getDataRoot(), USER_HOMES_DIR, userId);
 }
 
 export function getTeamDataPath(teamId: string): string {
-    return path.join(getDataRoot(), 'team', teamId);
+    return path.join(getDataRoot(), TEAM_HOMES_DIR, teamId);
 }
 
 export function getOrgDataPath(orgId: string): string {
-    return path.join(getDataRoot(), 'org', orgId);
+    return path.join(getDataRoot(), ORG_HOMES_DIR, orgId);
 }
 
 export function getGuestHomePath(userId: string): string {
-    return path.join(getDataRoot(), 'guest', userId);
+    return path.join(getDataRoot(), GUEST_HOMES_DIR, userId);
 }

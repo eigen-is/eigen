@@ -40,9 +40,31 @@ export type BackupManifest = {
     }[];
     // Every file under the folder except manifest.json itself, relative to the folder root.
     entries: BackupEntry[];
-    // Server archives only: one row per home folder, each keeping its own manifest. Reserved by the
-    // design — phase ③ builds the enumerator that fills it, and reading it needs no format bump.
-    homes?: { ownerId: string; kind: 'user' | 'team'; name: string }[];
+};
+
+// Why a whole-server archive was made. It is part of the archive's name, so retention and the
+// schedule never open an archive to find out.
+export type BackupReason = 'scheduled' | 'manual' | 'pre-update';
+
+// The last member of a whole-server archive. `entries` lists every other member of the outer tar,
+// so the archive is checked member by member without unpacking one. A home whose capture failed
+// has no `member` and says why in `failed`; `bytes` is its inner manifest's `counts.bytes`.
+// `envFile` and `dkim` say whether those members are in it: either can be unreadable to the API.
+export type ServerArchiveManifest = {
+    formatVersion: 1;
+    level: BackupLevel;
+    reason: BackupReason;
+    createdAt: string;
+    appVersion: string;
+    domain: string;
+    entries: BackupEntry[];
+    homes: { ownerId: string; kind: 'user' | 'team'; name: string; member?: string; bytes?: number; failed?: string }[];
+    // Home folders with no row in users3.db, left out of the archive.
+    orphans: string[];
+    envFile: boolean;
+    dkim: boolean;
+    // The pinned image references the install ran, for display.
+    images: Record<string, string>;
 };
 
 export type BackupVerifyRecord = {
