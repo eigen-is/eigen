@@ -35,12 +35,24 @@ Reports on the running server with what ./eigen status gathers from Docker and t
 type StatusFlags = ReturnType<typeof parseArgs<{ options: typeof STATUS_OPTIONS }>>['values'];
 
 // Red while the newest scheduled attempt failed, whatever came after it: the schedule is what the
-// owner counts on. Yellow while the schedule is on and no Full verified in two days.
-function backupRow({ scheduleEnabled, newest, scheduledFailure, newestGoodFullAt }: ControlStatus['backup']): Row {
+// owner counts on. Yellow while its archive is here but not in the bucket, and while the schedule is on
+// and no Full verified in two days.
+function backupRow({
+    scheduleEnabled,
+    newest,
+    scheduledFailure,
+    scheduledNotUploaded,
+    newestGoodFullAt,
+}: ControlStatus['backup']): Row {
     const why = (error: string | null) => (error ? `: ${error}` : '');
     if (scheduledFailure) {
         const { name, createdAt, error } = scheduledFailure;
         return { level: 'bad', label: 'Backup', value: `${name} failed, ${formatTimeAgo(createdAt)}${why(error)}` };
+    }
+    if (scheduledNotUploaded) {
+        const { name, createdAt, error } = scheduledNotUploaded;
+        const value = `${name} not uploaded, ${formatTimeAgo(createdAt)}${why(error)}`;
+        return { level: 'warn', label: 'Backup', value };
     }
     if (!newest) return { level: 'warn', label: 'Backup', value: 'none yet; ./eigen backup makes one' };
     const parts = [newest.name, formatTimeAgo(newest.createdAt)];

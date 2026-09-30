@@ -85,10 +85,19 @@ export type BackupVerifyRecord = {
     failures: string[];
 };
 
+// The last upload of an archive to the backup bucket. `key` is the object's, prefix and server folder included.
+// `running` with no job behind it is an upload a restart cut off.
+export type ServerArchiveUpload = {
+    state: 'running' | 'done' | 'failed';
+    at: Date;
+    key: string;
+    error?: string;
+};
+
 // `{archive}.json` beside a whole-server archive, written when its job starts and again when it
 // ends, so a crash or a refusal still leaves a dated record for the schedule and the list. `running`
 // with no job behind it is an interrupted attempt. `manifest` is the finished archive's, `verify` the
-// transport check of it.
+// transport check of it. `upload` is absent until an upload was tried.
 export type ServerArchiveSidecar = {
     state: BackupJob['state'];
     startedAt: Date;
@@ -96,6 +105,7 @@ export type ServerArchiveSidecar = {
     error?: string;
     manifest?: ServerArchiveManifest;
     verify?: BackupVerifyRecord;
+    upload?: ServerArchiveUpload;
 };
 
 // A whole-server archive in the backups folder as the owner's list shows it, read off its name and
@@ -121,7 +131,8 @@ export type ServerArchiveList = {
 // `ownerId` is the org's, and it names its archive from the start.
 export type BackupJob = {
     id: string;
-    kind: 'backup' | 'verify' | 'restore' | 'server-backup';
+    // `upload` sends a server archive to the backup bucket, as a server backup ends or on the owner's click.
+    kind: 'backup' | 'verify' | 'restore' | 'server-backup' | 'upload';
     ownerId: string;
     // The admin who started it: a home job's notifications go to their home. Absent for the scheduler
     // and the CLI; a server job alerts the org owner. Its pokes go to all admins.
@@ -134,6 +145,8 @@ export type BackupJob = {
     // what a restore came from. The admin pane names it in the line the finished job leaves.
     artifact?: string;
     error?: string;
+    // A server backup's archive goes up in an upload job of its own, started as it ends: this is its id.
+    uploadJobId?: string;
     startedAt: Date;
     finishedAt?: Date;
 };

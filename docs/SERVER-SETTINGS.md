@@ -49,6 +49,7 @@ The shape is `ServerSettings` in `packages/lib/src/types/settings.ts`, and the d
 | `landing.links` | Extra buttons on the public landing page | `GET /p/config`, which is unauthenticated |
 | `notifications.email` | Which events also send an email | [The notification flags gate the email only](#the-notification-flags-gate-the-email-only) |
 | `mail` | The system sender, and whether the relay may send as users | [One rule decides who a mail is from](#one-rule-decides-who-a-mail-is-from) |
+| `backups` | The nightly schedule, and the bucket archives are uploaded to | [BACKUP.md](BACKUP.md) |
 
 The storage type is `local-id`, `local-fullnames` or `s3`. `mapStorageType()` translates it to the mount's own vocabulary (`local-key`, `local`, `s3`). It reaches only a drive made after the change: `UserHome` and `TeamHome` stamp it into a new mount, and an existing mount keeps its backend ([QUOTA.md](QUOTA.md#a-mount-keeps-what-it-was-stamped-with)).
 
@@ -69,7 +70,7 @@ The ACL flags are read inline in `propagateSharedPathChange` (`apps/api/src/lib/
 
 `apps/api/src/routes/settings.ts` holds the routes. Changing the server's settings is the org owner's (`requireOwner`), and so is the waitlist (`apps/api/src/routes/waitlist.ts`). In the Admin app the `_owner` route guard puts Settings, Onboarding, Guest settings and Waitlist behind the same rule, and an admin who types one of those URLs sees "Only the server owner can open this page."
 
-Admins keep what the Users, Guests and team pages need. They read `GET /settings/server`, because the team page shows the quota defaults and the team mount form starts from the S3 defaults. A non-owner gets the S3 config with an empty `secretAccessKey`: the secret is the owner's. They can also test an S3 connection and harden a bucket (`/settings/s3check`, `/settings/s3harden`) for a team mount, and manage user accounts. Deleting refuses your own account and the owner's.
+Admins keep what the Users, Guests and team pages need. They read `GET /settings/server`, because the team page shows the quota defaults and the team mount form starts from the S3 defaults. A non-owner gets the S3 config with an empty `secretAccessKey`: the secret is the owner's. The backup bucket's secret reaches nobody, the owner included, in a read or in a save's answer. A save or a Test of the backup bucket with a blank secret uses the stored one, unless the access key, the endpoint or the bucket changed with it. They can also test an S3 connection and harden a bucket (`/settings/s3check`, `/settings/s3harden`) for a team mount, and manage user accounts. Deleting refuses your own account and the owner's.
 
 ## An admin password reset revokes every way in
 

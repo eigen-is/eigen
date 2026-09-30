@@ -8,6 +8,7 @@ import type {
     ServerArchive,
     ServerArchiveManifest,
     ServerArchiveSidecar,
+    ServerArchiveUpload,
 } from '@workspace/lib/types/backup';
 import { orgOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
 import {
@@ -27,6 +28,7 @@ import {
 } from '../config/paths';
 import { PIN_KEYS } from '../config/release';
 import { getPublicConfig } from '../config/server-config';
+import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { pullHomeBackupBytes, pullHomeSnapshot, sendToHome } from '../home/home-relay';
 import { getTeamExists } from '../team/team';
@@ -54,10 +56,12 @@ import {
 import { pruneServerArchives } from './retention';
 import { type SnapshotProgress, treeBytes } from './snapshot-home';
 import { appendInstallFiles, snapshotServer } from './snapshot-server';
+import { backupKey, uploadServerArchive } from './upload';
 import { FAILURES_IN_MESSAGE, verifyArchiveTransport, verifyFolder } from './verify';
 
 const HOME_DELETED = 'deleted during the backup';
 const INTERRUPTED = 'interrupted by a restart';
+const UPLOAD_STOPPED = 'Eigen stopped before the upload finished';
 
 export type ServerBackupOptions = {
     level: BackupLevel;
@@ -233,7 +237,7 @@ async function writeServerArchive(
 }
 
 // Fire-and-forget like the poke: a relay that fails must not replace the failure the job records.
-export function alertOwner(tag: string, error: string): void {
+export function alertOwner(tag: string, error: string, title = 'Server backup failed'): void {
     getOrgOwner()
         .then((owner) =>
             owner
@@ -241,7 +245,7 @@ export function alertOwner(tag: string, error: string): void {
                       type: 'notification',
                       notification: {
                           type: 'admin-alert',
-                          title: 'Server backup failed',
+                          title,
                           body: error,
                           tag: `server-backup-${tag}`,
                           coalesce: true,
@@ -325,31 +329,49 @@ async function pruneLocalArchives(keep: number): Promise<void> {
     if (unread.length > 0) {
         console.warn(`[backup] retention skips archives without a readable record: ${unread.join(', ')}`);
     }
+    // An archive a job still reads, as an upload does, stays until the next round.
+    const busy = new Set(listBackupJobs().flatMap((job) => (job.state === 'running' ? [job.artifact] : [])));
     for (const name of pruneServerArchives(archives, keep)) {
+        if (busy.has(name)) continue;
         fs.rmSync(path.join(dir, name), { force: true });
         fs.rmSync(serverSidecarPath(path.join(dir, name)), { force: true });
     }
 }
 
 // Boot: a job killed mid-run left its record running, and nothing will ever end it. It becomes a
-// failed attempt, for retention and the list alike, and the owner hears of it once.
+// failed attempt, for retention and the list alike, and an upload killed mid-run a failed upload, for the
+// list and ./eigen status. The owner hears of each once.
 export async function recoverInterruptedServerBackups(): Promise<void> {
     const dir = backupsDirPath();
     if (!fs.existsSync(dir)) return;
     const interrupted: string[] = [];
+    const notUploaded: string[] = [];
     for (const name of listServerRecords(dir)) {
         const archivePath = path.join(dir, name);
         const sidecar = await readServerSidecar(archivePath).catch(() => null);
-        if (sidecar?.state !== 'running') continue;
-        await writeServerSidecar(archivePath, {
-            ...sidecar,
-            state: 'failed',
-            error: INTERRUPTED,
-            finishedAt: new Date(),
-        });
-        interrupted.push(name);
+        if (sidecar?.state === 'running') {
+            await writeServerSidecar(archivePath, {
+                ...sidecar,
+                state: 'failed',
+                error: INTERRUPTED,
+                finishedAt: new Date(),
+            });
+            interrupted.push(name);
+        } else if (sidecar?.upload?.state === 'running') {
+            const upload: ServerArchiveUpload = {
+                ...sidecar.upload,
+                state: 'failed',
+                at: new Date(),
+                error: INTERRUPTED,
+            };
+            await writeServerSidecar(archivePath, { ...sidecar, upload });
+            notUploaded.push(name);
+        }
     }
     if (interrupted.length > 0) alertOwner('interrupted', `${interrupted.join(', ')}: ${INTERRUPTED}`);
+    if (notUploaded.length > 0) {
+        alertOwner('upload-interrupted', `${notUploaded.join(', ')}: ${INTERRUPTED}`, 'Server backup not uploaded');
+    }
 }
 
 // The job, from its record to its retention. `admit` is called once the room check passes, so the
@@ -381,7 +403,6 @@ async function runServerBackup(
             throw new Error(`${failed.length} of ${sidecar.manifest.homes.length} homes failed: ${named}`);
         }
         sidecar.state = 'done';
-        return name;
     } catch (error) {
         sidecar.state = 'failed';
         sidecar.error = describeError(error);
@@ -392,7 +413,97 @@ async function runServerBackup(
         await writeServerSidecar(archivePath, sidecar);
         // Retention that throws must not replace the job's own outcome.
         await pruneLocalArchives(options.keep).catch(console.error);
+        // An archive that verified goes even when a home failed: the owner heard of the home, and the rest of the
+        // server is worth its copy off the box. A pre-update archive exists for ./eigen rollback on this box.
+        const uploads = getServerSettings().backups.upload.enabled && options.reason !== 'pre-update';
+        if (uploads && sidecar.verify?.status === 'verified') {
+            job.uploadJobId = startUploadJob(archivePath, job.startedBy).id;
+        }
     }
+    return name;
+}
+
+// Uploads take turns: two at once share one uplink and gain nothing.
+let uploadsSettled: Promise<unknown> = Promise.resolve();
+
+function inUploadTurn<T>(run: () => Promise<T>): Promise<T> {
+    const turn = uploadsSettled.then(run);
+    uploadsSettled = turn.catch(() => {});
+    return turn;
+}
+
+// An archive's upload is a job of its own that holds no slot, so a backup never waits for the bucket. A failure
+// is never the archive's, which stays good here: the owner hears of it, and the record says so for the list and
+// ./eigen status. Shutdown aborts it, and the next Upload sends it whole.
+function startUploadJob(archivePath: string, startedBy: string | undefined): BackupJob {
+    const name = path.basename(archivePath);
+    const ownerId = orgOwnerId(getPublicConfig().orgId);
+    return startBackupJob('upload', ownerId, startedBy, (job, onProgress, signal) => {
+        job.artifact = name;
+        return inUploadTurn(async () => {
+            onProgress('upload', 0, 1);
+            const upload = await uploadAndRecord(archivePath, signal);
+            if (upload.error) throw new Error(upload.error);
+            return name;
+        });
+    });
+}
+
+async function recordUpload(archivePath: string, upload: ServerArchiveUpload): Promise<void> {
+    const sidecar = await readServerSidecar(archivePath).catch(() => null);
+    if (sidecar) await writeServerSidecar(archivePath, { ...sidecar, upload });
+}
+
+// The archives here whose manifest names a home that failed: the bucket keeps a complete one past them.
+async function partialArchives(): Promise<Set<string>> {
+    const archives = await listServerArchives();
+    return new Set(
+        archives.flatMap((archive) =>
+            archive.record?.manifest?.homes.some((home) => home.failed) ? [archive.name] : [],
+        ),
+    );
+}
+
+// A restart before the upload ends leaves its record running, which the next boot marks failed.
+async function uploadAndRecord(archivePath: string, signal: AbortSignal): Promise<ServerArchiveUpload> {
+    const { s3, keep } = getServerSettings().backups.upload;
+    const name = path.basename(archivePath);
+    const key = backupKey(s3, name);
+    await recordUpload(archivePath, { state: 'running', at: new Date(), key });
+    let upload: ServerArchiveUpload;
+    try {
+        signal.throwIfAborted();
+        const retention = { keep, partial: await partialArchives() };
+        upload = { state: 'done', at: new Date(), key: await uploadServerArchive(archivePath, s3, retention, signal) };
+    } catch (error) {
+        const reason = signal.aborted ? UPLOAD_STOPPED : describeError(error);
+        upload = { state: 'failed', at: new Date(), key, error: reason };
+        alertOwner(`upload-${name}`, `${name}: ${reason}`, 'Server backup not uploaded');
+    }
+    await recordUpload(archivePath, upload);
+    return upload;
+}
+
+// The owner's Upload, for an archive whose upload failed or that predates the destination. Only one that
+// verified goes, and never a pre-update one.
+export async function startArchiveUpload(name: string, startedBy: string): Promise<BackupJob> {
+    const parsed = parseServerArchiveName(name);
+    if (!parsed) throw new ApiError(400, 'Not a server backup name');
+    if (parsed.reason === 'pre-update') throw new ApiError(400, 'A pre-update backup stays on this server');
+    if (!getServerSettings().backups.upload.enabled) throw new ApiError(400, 'No backup bucket is set');
+    const archivePath = path.join(backupsDirPath(), name);
+    const sidecar = await readServerSidecar(archivePath);
+    if (!sidecar || !fs.existsSync(archivePath)) throw new ApiError(404, 'Archive not found');
+    if (sidecar.verify?.status !== 'verified') throw new ApiError(409, `${name} did not verify, so it is not uploaded`);
+    // One upload of an archive at a time, a queued one included: a second would send it again.
+    const busy = listBackupJobs().find((job) => job.state === 'running' && job.artifact === name);
+    if (busy) {
+        throw new ApiError(
+            409,
+            busy.kind === 'upload' ? `${name} is already being uploaded` : `${name} is still being written`,
+        );
+    }
+    return startUploadJob(archivePath, startedBy);
 }
 
 // Starts the whole-server backup and resolves once it is under way. One runs at a time, in the org's
