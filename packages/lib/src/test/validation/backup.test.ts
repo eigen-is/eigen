@@ -157,7 +157,7 @@ describe('parseServerArchiveManifest', () => {
                 JSON.stringify({ state: 'done', startedAt, finishedAt: 'yesterday' }),
                 JSON.stringify({ state: 'done', startedAt, manifest: { ...valid, formatVersion: 2 } }),
                 JSON.stringify({ state: 'done', startedAt, verify: { status: 'fine', failures: [] } }),
-                JSON.stringify({ state: 'done', startedAt, upload: { state: 'running', at: finishedAt, key: 'k' } }),
+                JSON.stringify({ state: 'done', startedAt, upload: { state: 'queued', at: finishedAt, key: 'k' } }),
                 JSON.stringify({ state: 'done', startedAt, upload: { state: 'done', key: 'k' } }),
                 JSON.stringify({ state: 'done', startedAt, upload: { state: 'done', at: finishedAt } }),
             ]) {

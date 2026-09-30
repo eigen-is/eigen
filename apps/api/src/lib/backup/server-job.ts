@@ -339,24 +339,39 @@ async function pruneLocalArchives(keep: number): Promise<void> {
 }
 
 // Boot: a job killed mid-run left its record running, and nothing will ever end it. It becomes a
-// failed attempt, for retention and the list alike, and the owner hears of it once.
+// failed attempt, for retention and the list alike, and an upload killed mid-run a failed upload, for the
+// list and ./eigen status. The owner hears of each once.
 export async function recoverInterruptedServerBackups(): Promise<void> {
     const dir = backupsDirPath();
     if (!fs.existsSync(dir)) return;
     const interrupted: string[] = [];
+    const notUploaded: string[] = [];
     for (const name of listServerRecords(dir)) {
         const archivePath = path.join(dir, name);
         const sidecar = await readServerSidecar(archivePath).catch(() => null);
-        if (sidecar?.state !== 'running') continue;
-        await writeServerSidecar(archivePath, {
-            ...sidecar,
-            state: 'failed',
-            error: INTERRUPTED,
-            finishedAt: new Date(),
-        });
-        interrupted.push(name);
+        if (sidecar?.state === 'running') {
+            await writeServerSidecar(archivePath, {
+                ...sidecar,
+                state: 'failed',
+                error: INTERRUPTED,
+                finishedAt: new Date(),
+            });
+            interrupted.push(name);
+        } else if (sidecar?.upload?.state === 'running') {
+            const upload: ServerArchiveUpload = {
+                ...sidecar.upload,
+                state: 'failed',
+                at: new Date(),
+                error: INTERRUPTED,
+            };
+            await writeServerSidecar(archivePath, { ...sidecar, upload });
+            notUploaded.push(name);
+        }
     }
     if (interrupted.length > 0) alertOwner('interrupted', `${interrupted.join(', ')}: ${INTERRUPTED}`);
+    if (notUploaded.length > 0) {
+        alertOwner('upload-interrupted', `${notUploaded.join(', ')}: ${INTERRUPTED}`, 'Server backup not uploaded');
+    }
 }
 
 // The job, from its record to its retention. `admit` is called once the room check passes, so the
@@ -426,7 +441,6 @@ function startUploadJob(archivePath: string, startedBy: string | undefined): Bac
     return startBackupJob('upload', ownerId, startedBy, (job, onProgress, signal) => {
         job.artifact = name;
         return inUploadTurn(async () => {
-            signal.throwIfAborted();
             onProgress('upload', 0, 1);
             const upload = await uploadAndRecord(archivePath, signal);
             if (upload.error) throw new Error(upload.error);
@@ -435,19 +449,38 @@ function startUploadJob(archivePath: string, startedBy: string | undefined): Bac
     });
 }
 
+async function recordUpload(archivePath: string, upload: ServerArchiveUpload): Promise<void> {
+    const sidecar = await readServerSidecar(archivePath).catch(() => null);
+    if (sidecar) await writeServerSidecar(archivePath, { ...sidecar, upload });
+}
+
+// The archives here whose manifest names a home that failed: the bucket keeps a complete one past them.
+async function partialArchives(): Promise<Set<string>> {
+    const archives = await listServerArchives();
+    return new Set(
+        archives.flatMap((archive) =>
+            archive.record?.manifest?.homes.some((home) => home.failed) ? [archive.name] : [],
+        ),
+    );
+}
+
+// A restart before the upload ends leaves its record running, which the next boot marks failed.
 async function uploadAndRecord(archivePath: string, signal: AbortSignal): Promise<ServerArchiveUpload> {
     const { s3, keep } = getServerSettings().backups.upload;
     const name = path.basename(archivePath);
+    const key = backupKey(s3, name);
+    await recordUpload(archivePath, { state: 'running', at: new Date(), key });
     let upload: ServerArchiveUpload;
     try {
-        upload = { state: 'done', at: new Date(), key: await uploadServerArchive(archivePath, s3, keep, signal) };
+        signal.throwIfAborted();
+        const retention = { keep, partial: await partialArchives() };
+        upload = { state: 'done', at: new Date(), key: await uploadServerArchive(archivePath, s3, retention, signal) };
     } catch (error) {
         const reason = signal.aborted ? UPLOAD_STOPPED : describeError(error);
-        upload = { state: 'failed', at: new Date(), key: backupKey(s3, name), error: reason };
+        upload = { state: 'failed', at: new Date(), key, error: reason };
         alertOwner(`upload-${name}`, `${name}: ${reason}`, 'Server backup not uploaded');
     }
-    const sidecar = await readServerSidecar(archivePath).catch(() => null);
-    if (sidecar) await writeServerSidecar(archivePath, { ...sidecar, upload });
+    await recordUpload(archivePath, upload);
     return upload;
 }
 
@@ -462,6 +495,14 @@ export async function startArchiveUpload(name: string, startedBy: string): Promi
     const sidecar = await readServerSidecar(archivePath);
     if (!sidecar || !fs.existsSync(archivePath)) throw new ApiError(404, 'Archive not found');
     if (sidecar.verify?.status !== 'verified') throw new ApiError(409, `${name} did not verify, so it is not uploaded`);
+    // One upload of an archive at a time, a queued one included: a second would send it again.
+    const busy = listBackupJobs().find((job) => job.state === 'running' && job.artifact === name);
+    if (busy) {
+        throw new ApiError(
+            409,
+            busy.kind === 'upload' ? `${name} is already being uploaded` : `${name} is still being written`,
+        );
+    }
     return startUploadJob(archivePath, startedBy);
 }
 

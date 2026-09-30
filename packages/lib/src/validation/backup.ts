@@ -378,7 +378,7 @@ export function parseServerArchiveSidecar(text: string): ServerArchiveSidecar | 
     return sidecar;
 }
 
-const UPLOAD_STATES: readonly ServerArchiveUpload['state'][] = ['done', 'failed'];
+const UPLOAD_STATES: readonly ServerArchiveUpload['state'][] = ['running', 'done', 'failed'];
 
 function parseUploadRecord(value: unknown): ServerArchiveUpload | null {
     if (typeof value !== 'object' || value === null) return null;

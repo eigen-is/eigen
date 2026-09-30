@@ -1,13 +1,12 @@
 import * as path from 'node:path';
 import { isS3ConfigValid, type S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult, ServerSettings } from '@workspace/lib/types/settings';
-import { parseServerArchiveName } from '@workspace/lib/validation';
 import { getDomain } from '../config/server-config';
 import { getS3Config, getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { abortsIncompleteUploads, checkS3Connection, S3Storage } from '../storage/s3-storage';
 import { listHomeMounts } from './enumerate-homes';
-import { pruneServerArchives } from './retention';
+import { pruneBucketArchives } from './retention';
 
 // S3 and Bun take parts of 5 MiB to 5 GiB, at most 10,000 of them. Two in flight hold 10 MiB up to a 50 GB
 // archive and 128 MiB at 640 GB; past that the part grows with the archive, as 10,000 parts must hold it all.
@@ -118,12 +117,15 @@ export function multipartOptions(bytes: number): { partSize: number; queueSize: 
 function sealArchive(archivePath: string, signal?: AbortSignal): ReadableStream<Uint8Array> {
     const reader = Bun.file(archivePath).stream().getReader();
     return new ReadableStream<Uint8Array>({
+        start(controller) {
+            const fail = () => {
+                controller.error(signal?.reason);
+                reader.cancel(signal?.reason).catch(() => {});
+            };
+            if (signal?.aborted) fail();
+            else signal?.addEventListener('abort', fail, { once: true });
+        },
         async pull(controller) {
-            if (signal?.aborted) {
-                await reader.cancel();
-                controller.error(signal.reason);
-                return;
-            }
             const { done, value } = await reader.read();
             if (done) controller.close();
             else controller.enqueue(value);
@@ -132,15 +134,25 @@ function sealArchive(archivePath: string, signal?: AbortSignal): ReadableStream<
     });
 }
 
-// Only scheduled archives, and only by name. Only a good archive is uploaded, a manual one is the owner's,
-// a pre-update one never left its box, and a key the grammar does not read is not an archive. An archive
-// uploaded late may be one the keep would drop: it is not deleted as it lands, and this round deletes nothing.
-async function pruneRemoteArchives(bucket: S3Storage, uploaded: string, keep: number): Promise<void> {
-    const scheduled = (await bucket.list()).filter((name) => parseServerArchiveName(name)?.reason === 'scheduled');
-    const doomed = pruneServerArchives(
-        scheduled.map((name) => ({ name, good: true })),
-        keep,
-    );
+// Bun reads the stream's error only once the parts in flight settle, and a slow bucket may hold one past the
+// shutdown budget: the upload stops waiting at the abort, and Bun aborts the multipart upload once they settle.
+function untilAborted<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (!signal) return work;
+    const aborted = Promise.withResolvers<never>();
+    const stop = () => aborted.reject(signal.reason);
+    if (signal.aborted) stop();
+    else signal.addEventListener('abort', stop, { once: true });
+    return Promise.race([work, aborted.promise]).finally(() => signal.removeEventListener('abort', stop));
+}
+
+// How many scheduled archives the bucket keeps, and the ones this box knows lack a home.
+export type RemoteRetention = { keep: number; partial?: ReadonlySet<string> };
+
+// Only scheduled archives, and only by name: a manual one is the owner's, a pre-update one never left its box,
+// and a key the grammar does not read is not an archive. An archive uploaded late may be one the keep would
+// drop: it is not deleted as it lands, and this round deletes nothing.
+async function pruneRemoteArchives(bucket: S3Storage, uploaded: string, retention: RemoteRetention): Promise<void> {
+    const doomed = pruneBucketArchives(await bucket.list(), retention.partial ?? new Set(), retention.keep);
     if (doomed.includes(uploaded)) return;
     for (const name of doomed) await bucket.delete(name);
 }
@@ -151,7 +163,7 @@ async function pruneRemoteArchives(bucket: S3Storage, uploaded: string, keep: nu
 export async function uploadServerArchive(
     archivePath: string,
     destination: S3Config,
-    keep: number,
+    retention: RemoteRetention,
     signal?: AbortSignal,
 ): Promise<string> {
     const check = await checkBackupDestination(destination);
@@ -159,7 +171,8 @@ export async function uploadServerArchive(
     const name = path.basename(archivePath);
     const bytes = Bun.file(archivePath).size;
     const bucket = serverBucket(destination);
-    await bucket.read(name).write(new Response(sealArchive(archivePath, signal)), multipartOptions(bytes));
+    const write = bucket.read(name).write(new Response(sealArchive(archivePath, signal)), multipartOptions(bytes));
+    await untilAborted(write, signal);
     const stored = await bucket.size(name);
     if (stored === null) throw new Error(`The bucket did not say how many bytes of ${name} it holds`);
     if (stored !== bytes) {
@@ -168,6 +181,6 @@ export async function uploadServerArchive(
         throw new Error(`The bucket holds ${stored} bytes of ${name}, not ${bytes}`);
     }
     // Pruning that fails must not turn an upload that worked into one that did not.
-    await pruneRemoteArchives(bucket, name, keep).catch(console.error);
+    await pruneRemoteArchives(bucket, name, retention).catch(console.error);
     return bucket.getKey(name);
 }

@@ -10,8 +10,9 @@ import { DUMMY_S3 } from './fault-storage-helpers';
 
 // stall-body: headers and half the body, then silence; cut: half, then close; fail-get: a 500 on GET only;
 // fail-put: a 500 on PUT only, every part of a multipart upload included; slow-put: each PUT and part answered
-// half a second late; short-head: a HEAD one byte short; deny: a 403 AccessDenied; no-bucket: a 404 NoSuchBucket.
-// HEAD and DELETE honor only stall, fail, deny, no-bucket and short-head; PUT only fail-put and slow-put.
+// half a second late; hold-put: each part of a multipart upload held unanswered until heal(); short-head: a HEAD
+// one byte short; deny: a 403 AccessDenied; no-bucket: a 404 NoSuchBucket. HEAD and DELETE honor only stall, fail,
+// deny, no-bucket and short-head; PUT only fail-put, slow-put and hold-put.
 export type S3Fault =
     | 'stall'
     | 'stall-body'
@@ -21,6 +22,7 @@ export type S3Fault =
     | 'fail-get'
     | 'fail-put'
     | 'slow-put'
+    | 'hold-put'
     | 'short-head'
     | 'deny'
     | 'no-bucket';
@@ -242,8 +244,12 @@ export class FakeS3Server {
                 reply(socket, method, '500 Internal Server Error', 'InternalError');
                 return;
             }
-            upload.parts.set(partNumber, Buffer.from(body));
-            reply(socket, method, '200 OK');
+            const store = () => {
+                upload.parts.set(partNumber, Buffer.from(body));
+                reply(socket, method, '200 OK');
+            };
+            if (fault === 'hold-put') this.held.set(socket, store);
+            else store();
             return;
         }
         const parts = [...upload.parts.entries()].sort(([a], [b]) => a - b).map(([, part]) => part);

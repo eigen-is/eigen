@@ -11,6 +11,7 @@ import { backupKey, checkBackupDestination, multipartOptions, uploadServerArchiv
 import { getDataRoot, USER_HOMES_DIR } from '../../lib/config/paths';
 import { getDomain } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
+import { getServerStatus } from '../../lib/config/server-status';
 import { PATHS } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
@@ -56,6 +57,7 @@ function serverRecords(): string[] {
 }
 
 // A finished archive the way a job leaves one, without running it: any bytes, and a record that says it verified.
+// A `failed` one is what a home that failed leaves: its manifest says which.
 function writeArchive(
     reason: BackupReason,
     at: string,
@@ -66,8 +68,27 @@ function writeArchive(
     mkdirSync(getBackupsDir(), { recursive: true });
     writeFileSync(archivePath, bytes);
     const verify = { status: 'verified', checkedAt: at, failures: [] };
-    writeFileSync(serverSidecarPath(archivePath), JSON.stringify({ state, startedAt: at, finishedAt: at, verify }));
+    const record = { state, startedAt: at, finishedAt: at, verify, manifest: manifestOf(reason, at, state) };
+    writeFileSync(serverSidecarPath(archivePath), JSON.stringify(record));
     return archivePath;
+}
+
+function manifestOf(reason: BackupReason, at: string, state: 'done' | 'failed') {
+    const home = { ownerId: 'a'.repeat(32), kind: 'user', name: 'alice' };
+    return {
+        formatVersion: 1,
+        level: 'full',
+        reason,
+        createdAt: at,
+        appVersion: 'test',
+        domain: getDomain(),
+        entries: [],
+        homes: [state === 'failed' ? { ...home, failed: 'bucket unreachable' } : home],
+        orphans: [],
+        envFile: true,
+        dkim: true,
+        images: {},
+    };
 }
 
 function titlesTo(spy: { mock: { calls: Parameters<typeof homeRelay.sendToHome>[] } }, ownerId: string): string[] {
@@ -116,7 +137,7 @@ describe('Upload of server archives', () => {
 
     test("an archive streams to its name in this server's folder under the prefix, and the bucket holds its bytes", async () => {
         const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z', 'the whole server');
-        const key = await uploadServerArchive(archivePath, bucket, 30);
+        const key = await uploadServerArchive(archivePath, bucket, { keep: 30 });
         expect(key).toBe(own(buildServerArchiveName('manual', 'full', new Date('2026-09-01T02:00:00Z'))));
         expect(await backing.read(key).text()).toBe('the whole server');
     });
@@ -138,7 +159,7 @@ describe('Upload of server archives', () => {
         const key = own(basename(archivePath));
         fake.faults.set(key, 'fail-put');
 
-        await expect(uploadServerArchive(archivePath, bucket, 1)).rejects.toThrow();
+        await expect(uploadServerArchive(archivePath, bucket, { keep: 1 })).rejects.toThrow();
         // Bun sends the abort just after the write rejects.
         await waitFor(() => fake.abortedUploads > 0);
         expect(fake.openUploads.size).toBe(0);
@@ -146,9 +167,27 @@ describe('Upload of server archives', () => {
         expect(await backing.exists(own(old))).toBe(true);
     });
 
+    test('an abort while the bucket holds a part up fails the upload at once, and aborts it once the part settles', async () => {
+        const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z', new Uint8Array(4 * MULTIPART_BYTES));
+        fake.faults.set(own(basename(archivePath)), 'hold-put');
+        const abort = new AbortController();
+        const settled = uploadServerArchive(archivePath, bucket, { keep: 30 }, abort.signal).then(
+            () => 'uploaded',
+            (error: unknown) => error,
+        );
+        await waitFor(() => fake.heldCount > 0);
+
+        abort.abort(new Error('Eigen is stopping'));
+        const outcome = await Promise.race([settled, Bun.sleep(2000).then(() => 'still running')]);
+        expect(outcome).toBeInstanceOf(Error);
+        fake.heal();
+        await waitFor(() => fake.abortedUploads > 0);
+        expect(fake.openUploads.size).toBe(0);
+    });
+
     test('a multipart upload that succeeds is one object of the archive size', async () => {
         const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z', new Uint8Array(MULTIPART_BYTES).fill(7));
-        const key = await uploadServerArchive(archivePath, bucket, 30);
+        const key = await uploadServerArchive(archivePath, bucket, { keep: 30 });
         expect(await backing.size(key)).toBe(MULTIPART_BYTES);
         expect(fake.openUploads.size).toBe(0);
     });
@@ -167,7 +206,7 @@ describe('Upload of server archives', () => {
         const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z', 'the whole server');
         const key = own(basename(archivePath));
         fake.faults.set(key, 'short-head');
-        await expect(uploadServerArchive(archivePath, bucket, 30)).rejects.toThrow('bytes');
+        await expect(uploadServerArchive(archivePath, bucket, { keep: 30 })).rejects.toThrow('bytes');
         expect(await backing.exists(key)).toBe(false);
     });
 
@@ -175,7 +214,7 @@ describe('Upload of server archives', () => {
         const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z', 'the whole server');
         const key = own(basename(archivePath));
         fake.faults.set(key, 'fail');
-        await expect(uploadServerArchive(archivePath, bucket, 30)).rejects.toThrow();
+        await expect(uploadServerArchive(archivePath, bucket, { keep: 30 })).rejects.toThrow();
         expect(await backing.exists(key)).toBe(true);
     });
 
@@ -201,7 +240,7 @@ describe('Upload of server archives', () => {
         for (const name of [night('03'), night('04')]) await neighbour.write(name, new TextEncoder().encode(name));
         await outside.write(night('01'), new TextEncoder().encode('another tenant'));
 
-        await uploadServerArchive(writeArchive('scheduled', '2026-09-01T02:00:00.000Z'), bucket, 2);
+        await uploadServerArchive(writeArchive('scheduled', '2026-09-01T02:00:00.000Z'), bucket, { keep: 2 });
 
         const kept = (await mine.list()).sort();
         const newest = buildServerArchiveName('scheduled', 'full', new Date('2026-09-01T02:00:00Z'));
@@ -217,8 +256,21 @@ describe('Upload of server archives', () => {
         for (const name of [night('03'), night('04'), night('05')]) {
             await mine.write(name, new TextEncoder().encode(name));
         }
-        await uploadServerArchive(writeArchive('scheduled', '2026-08-01T02:00:00.000Z'), bucket, 2);
+        await uploadServerArchive(writeArchive('scheduled', '2026-08-01T02:00:00.000Z'), bucket, { keep: 2 });
         expect((await mine.list()).sort()).toEqual([night('01'), night('03'), night('04'), night('05')]);
+    });
+
+    test('remote retention counts a partial archive toward keep, but never pushes out the newest complete one', async () => {
+        const mine = new S3Storage({ ...bucket, prefix: `nightly/${getDomain()}` });
+        const night = (day: string) =>
+            buildServerArchiveName('scheduled', 'full', new Date(`2026-08-${day}T02:00:00Z`));
+        for (const name of [night('02'), night('03'), night('04'), night('05')]) {
+            await mine.write(name, new TextEncoder().encode(name));
+        }
+        const newest = basename(writeArchive('scheduled', '2026-09-01T02:00:00.000Z', 'most homes', 'failed'));
+        const partial = new Set([night('04'), night('05'), newest]);
+        await uploadServerArchive(join(getBackupsDir(), newest), bucket, { keep: 2, partial });
+        expect((await mine.list()).sort()).toEqual([night('03'), night('05'), newest].sort());
     });
 
     describe('the destination check', () => {
@@ -319,7 +371,7 @@ describe('Upload of server archives', () => {
         test('refuses a data bucket before an upload, and uploads nothing', async () => {
             await updateServerSettings({ defaults: { mount: { s3Config: bucket } } });
             const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z');
-            await expect(uploadServerArchive(archivePath, bucket, 30)).rejects.toThrow('holds Eigen data');
+            await expect(uploadServerArchive(archivePath, bucket, { keep: 30 })).rejects.toThrow('holds Eigen data');
             expect(await new S3Storage({ ...bucket, prefix: '' }).list()).toEqual([]);
         });
     });
@@ -460,6 +512,83 @@ describe('Upload of server archives', () => {
             },
             JOB_TIMEOUT_MS,
         );
+
+        test(
+            'an Upload while the automatic one runs is refused, and the record says it runs',
+            async () => {
+                await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 30 } } });
+                const gate = Promise.withResolvers<void>();
+                const real = upload.uploadServerArchive;
+                let calls = 0;
+                const held = spyOn(upload, 'uploadServerArchive').mockImplementation(async (...args) => {
+                    calls++;
+                    await gate.promise;
+                    return real(...args);
+                });
+                try {
+                    const started = await startServerBackup({ level: 'light', reason: 'manual', keep: 7 });
+                    const job = await waitForJob(started.id);
+                    await waitFor(() => calls === 1);
+                    const archivePath = join(getBackupsDir(), job.artifact!);
+                    expect((await readServerSidecar(archivePath))?.upload?.state).toBe('running');
+
+                    const name = job.artifact!;
+                    const refused = await ctx.alice.api.admin['server-backup'].archives({ name }).upload.post();
+                    expect(refused.status).toBe(409);
+                    gate.resolve();
+                    expect((await uploadOf(job)).state).toBe('done');
+                    expect(calls).toBe(1);
+                } finally {
+                    gate.resolve();
+                    held.mockRestore();
+                }
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        test(
+            './eigen status counts a verified scheduled archive with no upload as not uploaded, unless its upload runs',
+            async () => {
+                const archivePath = writeArchive('scheduled', '2026-09-01T02:00:00.000Z');
+                const name = basename(archivePath);
+                const notUploaded = async () => (await getServerStatus()).backup.scheduledNotUploaded;
+                expect(await notUploaded()).toBeNull();
+
+                await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 30 } } });
+                expect(await notUploaded()).toEqual({ name, createdAt: '2026-09-01T02:00:00.000Z', error: null });
+
+                const gate = Promise.withResolvers<void>();
+                const real = upload.uploadServerArchive;
+                const held = spyOn(upload, 'uploadServerArchive').mockImplementation(async (...args) => {
+                    await gate.promise;
+                    return real(...args);
+                });
+                try {
+                    const { data } = await ctx.alice.api.admin['server-backup'].archives({ name }).upload.post();
+                    expect(await notUploaded()).toBeNull();
+                    gate.resolve();
+                    expect((await waitForJob(data!.jobId)).state).toBe('done');
+                    expect(await notUploaded()).toBeNull();
+                } finally {
+                    gate.resolve();
+                    held.mockRestore();
+                }
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        test('the bucket keeps the newest archive this box records as complete past partial ones', async () => {
+            await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 1 } } });
+            const mine = new S3Storage({ ...bucket, prefix: `nightly/${getDomain()}` });
+            const complete = basename(writeArchive('scheduled', '2026-08-03T02:00:00.000Z', 'every home'));
+            const partial = basename(writeArchive('scheduled', '2026-08-04T02:00:00.000Z', 'most homes', 'failed'));
+            for (const name of [complete, partial]) await mine.write(name, new TextEncoder().encode(name));
+            const newest = basename(writeArchive('scheduled', '2026-08-05T02:00:00.000Z', 'most homes', 'failed'));
+
+            const { data } = await ctx.alice.api.admin['server-backup'].archives({ name: newest }).upload.post();
+            expect((await waitForJob(data!.jobId)).state).toBe('done');
+            expect((await mine.list()).sort()).toEqual([complete, newest].sort());
+        });
 
         test('shutdown aborts an upload under way, and leaves no parts in the bucket', async () => {
             await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 30 } } });
