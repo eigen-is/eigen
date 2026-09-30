@@ -4,9 +4,10 @@ import { getServerDataPath } from '../config/paths';
 
 // A tab's epoch is the server's followed by its home's. A restart keeps both; ./eigen restore leaves the server's out and
 // a restore of one home rotates that home's, so every older tab of what was restored reloads.
-export const DATA_EPOCH_FILE = 'data-epoch';
+// Keep these names: a new one redraws every epoch and reloads every open tab after an update.
+export const DATA_EPOCH_FILE = 'collab-epoch';
 // Home id to epoch; a home that was never restored on its own has none.
-const HOME_EPOCHS_FILE = 'home-data-epochs.json';
+const HOME_EPOCHS_FILE = 'collab-home-epochs.json';
 
 let serverEpoch: string | undefined;
 let homeEpochs: Map<string, string> | undefined;
