@@ -2,8 +2,7 @@ import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import type { BackupJob } from '@workspace/lib/types/backup';
 import { ApiError } from '../core';
-import type { Home } from '../home';
-import { sendToHome } from '../home/home-relay';
+import { pullHomeSnapshot, sendToHome } from '../home/home-relay';
 import { getOrgAdmins } from '../user';
 import { extractArtifact, packFolder, readUnpackedHome, writeSidecar } from './archive';
 import { describeError } from './errors';
@@ -14,7 +13,7 @@ import {
     getBackupsDir,
     wipeBackupStagingDir,
 } from './paths';
-import { type SnapshotProgress, snapshotHome } from './snapshot-home';
+import type { SnapshotProgress } from './snapshot-home';
 import { buildBackupJobEvent } from './sse-events';
 import { FAILURES_IN_MESSAGE, verifyFolder } from './verify';
 
@@ -29,11 +28,12 @@ const PROGRESS_POKE_MS = 500;
 const SHUTDOWN_JOB_BUDGET_MS = 30_000;
 
 const jobs = new Map<string, BackupJob>();
-// Owners whose one-per-home slot is held by work that is not a job (withBackupJobSlot).
-const heldSlots = new Set<string>();
+// Owners whose one-per-home slot is held by work that is not a job of that home: a safety-copy
+// delete, or the server backup while it captures the home. `released` is what a waiter awaits.
+const heldSlots = new Map<string, { holder: string; released: Promise<void> }>();
 // The same jobs while they run, with the promise to wait on. Kept apart from the map above, which
 // is serialized to the admin pane.
-const inFlight = new Map<string, { kind: BackupJob['kind']; settled: Promise<void> }>();
+const inFlight = new Map<string, { kind: BackupJob['kind']; ownerId: string; settled: Promise<void> }>();
 
 function dropExpiredJobs(): void {
     const now = Date.now();
@@ -57,12 +57,32 @@ function poke(job: BackupJob): void {
 // safety-copy delete overlapping a restore would judge the wrong home's keys as garbage.
 function requireHomeSlotFree(ownerId: string): void {
     dropExpiredJobs();
-    if (heldSlots.has(ownerId)) throw new ApiError(409, 'A safety-copy delete of this home is running');
+    const held = heldSlots.get(ownerId);
+    if (held) throw new ApiError(409, `A ${held.holder} of this home is running`);
     for (const running of jobs.values()) {
         if (running.ownerId === ownerId && running.state === 'running') {
             throw new ApiError(409, `A ${running.kind} of this home is already running`);
         }
     }
+}
+
+// What the home's slot is busy with, as a promise that settles when it is free again; null when free.
+function slotBusy(ownerId: string): Promise<void> | null {
+    const held = heldSlots.get(ownerId);
+    if (held) return held.released;
+    for (const running of inFlight.values()) {
+        if (running.ownerId === ownerId) return running.settled;
+    }
+    return null;
+}
+
+function holdSlot(ownerId: string, holder: string): () => void {
+    const { promise, resolve } = Promise.withResolvers<void>();
+    heldSlots.set(ownerId, { holder, released: promise });
+    return () => {
+        heldSlots.delete(ownerId);
+        resolve();
+    };
 }
 
 // Work that takes the same slot without being a job: the safety-copy delete reads the live home's
@@ -71,12 +91,20 @@ function requireHomeSlotFree(ownerId: string): void {
 // is not a user-facing outage — and it is awaited by its route, so the slot lives exactly as long.
 export async function withBackupJobSlot(ownerId: string, run: () => Promise<void>): Promise<void> {
     requireHomeSlotFree(ownerId);
-    heldSlots.add(ownerId);
+    const release = holdSlot(ownerId, 'safety-copy delete');
     try {
         await run();
     } finally {
-        heldSlots.delete(ownerId);
+        release();
     }
+}
+
+// The server backup's way into a home's slot: it waits out whatever holds it rather than failing a
+// night on an admin's click, then takes it in the same tick it found it free. Routes keep the 409.
+// The caller releases the slot with the function this resolves to.
+export async function waitForHomeSlot(ownerId: string, holder: string): Promise<() => void> {
+    for (let busy = slotBusy(ownerId); busy; busy = slotBusy(ownerId)) await busy;
+    return holdSlot(ownerId, holder);
 }
 
 // Runs `run` in the background and hands the caller the job to report back. Every run resolves to
@@ -84,7 +112,7 @@ export async function withBackupJobSlot(ownerId: string, run: () => Promise<void
 export function startBackupJob(
     kind: BackupJob['kind'],
     ownerId: string,
-    adminId: string,
+    startedBy: string | undefined,
     run: (job: BackupJob, onProgress: SnapshotProgress) => Promise<string>,
 ): BackupJob {
     requireHomeSlotFree(ownerId);
@@ -93,7 +121,7 @@ export function startBackupJob(
         id: randomUUID(),
         kind,
         ownerId,
-        startedBy: adminId,
+        startedBy,
         state: 'running',
         progress: { step: 'starting', done: 0, total: 0 },
         startedAt: new Date(),
@@ -123,7 +151,7 @@ export function startBackupJob(
             inFlight.delete(job.id);
             poke(job);
         });
-    inFlight.set(job.id, { kind, settled });
+    inFlight.set(job.id, { kind, ownerId, settled });
 
     return job;
 }
@@ -156,10 +184,10 @@ export function getBackupJob(id: string): BackupJob | undefined {
 // The backup job: snapshot into staging, judge the folder before it is packed, pack it, write the
 // sidecar. A failed verify still keeps the archive — an admin needs to see a bad backup, and the
 // sidecar is where its failures are recorded — but ends the job failed and tells the admin.
-export async function runHomeBackup(home: Home, job: BackupJob, onProgress: SnapshotProgress): Promise<string> {
+export async function runHomeBackup(ownerId: string, job: BackupJob, onProgress: SnapshotProgress): Promise<string> {
     const staging = getBackupStagingDir(job.id);
     try {
-        const manifest = await snapshotHome(home, staging, { onProgress });
+        const manifest = await pullHomeSnapshot(ownerId, staging, { onProgress });
         const folder = path.join(staging, buildHomeFolderName(manifest.ownerId));
         const verify = await verifyFolder(folder, onProgress);
         const name = freeArtifactName(manifest.ownerId, new Date(manifest.createdAt));
@@ -170,16 +198,18 @@ export async function runHomeBackup(home: Home, job: BackupJob, onProgress: Snap
             const failures = verify.failures.slice(0, FAILURES_IN_MESSAGE).join('; ');
             // Fire-and-forget like the poke: a relay that fails must not replace the failure the
             // admin actually needs to read in the job.
-            sendToHome(job.startedBy, {
-                type: 'notification',
-                notification: {
-                    type: 'admin-alert',
-                    title: `Backup of ${manifest.name} did not verify`,
-                    body: failures,
-                    tag: `backup-verify-${manifest.ownerId}`,
-                    coalesce: true,
-                },
-            }).catch(() => {});
+            if (job.startedBy) {
+                sendToHome(job.startedBy, {
+                    type: 'notification',
+                    notification: {
+                        type: 'admin-alert',
+                        title: `Backup of ${manifest.name} did not verify`,
+                        body: failures,
+                        tag: `backup-verify-${manifest.ownerId}`,
+                        coalesce: true,
+                    },
+                }).catch(() => {});
+            }
             throw new Error(`${name} did not verify: ${failures}`);
         }
         return name;

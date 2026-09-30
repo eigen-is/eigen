@@ -180,6 +180,22 @@ export function freeArtifactName(ownerId: string, at: Date): string {
     return buildArtifactName(ownerId, free);
 }
 
+// `{archive}.json`: beside the archive, not inside it, so the list and retention never open one.
+export const SERVER_SIDECAR_SUFFIX = '.json';
+
+export function serverSidecarPath(archivePath: string): string {
+    return `${archivePath}${SERVER_SIDECAR_SUFFIX}`;
+}
+
+// The stamp a new whole-server archive takes, under the same rule; its members carry it too. A
+// refused attempt leaves only its sidecar, and that name is taken as well.
+export function freeServerArchiveAt(reason: BackupReason, level: BackupLevel, at: Date): Date {
+    return freeAt(at, (candidate) => {
+        const archivePath = path.join(backupsDirPath(), buildServerArchiveName(reason, level, candidate));
+        return fs.existsSync(archivePath) || fs.existsSync(serverSidecarPath(archivePath));
+    });
+}
+
 // `{homeFolderName}{suffix}{stamp}`. The caller compares `homeName` against the home it asked
 // about: that equality, not the character class, is what keeps a delete inside the right directory.
 const SAFETY_COPY_SUFFIXES = [PRE_RESTORE_SUFFIX, FAILED_RESTORE_SUFFIX]

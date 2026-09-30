@@ -627,7 +627,7 @@ describe('Backup job on an s3 mount whose bucket stalls', () => {
                 fake.faults.set(storageKey, 'stall-body');
                 setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
                 jobId = startBackupJob('backup', home.user.id, home.user.id, (job, onProgress) =>
-                    runHomeBackup(home, job, onProgress),
+                    runHomeBackup(home.user.id, job, onProgress),
                 ).id;
                 await waitFor(() => fake.gets.has(storageKey), 10_000);
                 expect(await settlesWithin([drainBackupJobs()], SETTLE_BOUND_MS)).toBe(true);

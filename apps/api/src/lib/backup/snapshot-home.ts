@@ -54,7 +54,7 @@ const SKIPPED_HOME_DIRS = new Set<string>([PATHS.DRIVE.ROOT]);
 
 // The other skip, which has no fixed path: every mailbox in the Maildir has a `tmp/` delivery spool
 // beside its `cur/` and `new/`, holding half-written deliveries only.
-const MAILDIR_ROOT = `${PATHS.MAIL.ROOT}/${PATHS.MAIL.MAILDIR}`;
+export const MAILDIR_ROOT = `${PATHS.MAIL.ROOT}/${PATHS.MAIL.MAILDIR}`;
 
 function isSkippedHomeDir(rel: string, level: BackupLevel): boolean {
     if (SKIPPED_HOME_DIRS.has(rel)) return true;
@@ -96,6 +96,16 @@ export function listFileTree(root: string, skipDir: (rel: string) => boolean = (
     };
     walk('');
     return tree;
+}
+
+// What a capture of the tree stages, at most: its files and databases as they sit on disk. The room
+// check before a server backup sizes with it; a file gone since the listing counts nothing.
+export function treeBytes(root: string, skipDir?: (rel: string) => boolean): number {
+    const tree = listFileTree(root, skipDir);
+    return [...tree.files, ...tree.databases].reduce(
+        (sum, rel) => sum + (fs.statSync(path.join(root, rel), { throwIfNoEntry: false })?.size ?? 0),
+        0,
+    );
 }
 
 // Writes a storage-independent copy of one home into `{targetDir}/home-{ownerId}/` and returns the
