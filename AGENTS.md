@@ -65,8 +65,8 @@ Full list: [ARCHITECTURE.md § Pitfalls](docs/ARCHITECTURE.md#pitfalls). The one
 - **Eigen MIME type strings come from the `DRIVE_MIME_*` constants** in `packages/lib/src/types/drive.ts`, never typed by hand (gated); the file types they name: [ARCHITECTURE.md § Eigen file types](docs/ARCHITECTURE.md#eigen-file-types)
 - **Every authenticated route carries `:ownerId` as its second path segment** (gated) — the Home that owns the resource, access-checked in the route; home-independent surfaces are exempt (`OWNER_ID_EXEMPT` in `scripts/check-standards.ts`)
 - **Never call `getHome()` for another user's data** — cross-home interactions go through `home-relay.ts` (`sendToHome()` for push, `pull*()` for reads); `getHome()` is fine for the request's own home. See [SCALABILITY.md](docs/SCALABILITY.md)
-- **Hover-revealed affordances need the matching `pointer-coarse:` variant** so they rest visible on touch (gated): [LAYOUT.md § Hover-Only Icons](docs/LAYOUT.md#hover-only-icons)
-- **Every page uses `ColumnLayout` + `Column` with the `toolbar` prop** — don't put the toolbar inside the page content ([LAYOUT.md § Page Layout Pattern](docs/LAYOUT.md#page-layout-pattern))
+- **Hover-revealed affordances need the matching `pointer-coarse:` variant** so they rest visible on touch (gated): [LAYOUT.md § Hover-revealed affordances rest visible on touch](docs/LAYOUT.md#hover-revealed-affordances-rest-visible-on-touch)
+- **Every page uses `ColumnLayout` + `Column` with the `toolbar` prop** — don't put the toolbar inside the page content ([LAYOUT.md § Every page is a ColumnLayout of Columns](docs/LAYOUT.md#every-page-is-a-columnlayout-of-columns-with-the-toolbar-as-a-prop))
 
 ## Testing
 

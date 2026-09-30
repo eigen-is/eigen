@@ -39,7 +39,7 @@ Examples per rule: [CODE-EXAMPLES.md § Code Style](CODE-EXAMPLES.md#code-style)
 - **Theme tokens, not colors** — `text-muted-foreground`, `bg-muted`, not `text-gray-500`; `selection-handle` for selection UI
 - **Use `cn()` for class merging** — from `@workspace/ui/lib/utils`, never raw `clsx`/`twMerge` or string concatenation
 - **Name for grep-ability; don't shadow libraries** — `use*`, `Eigen*`, `*Dialog`, `*Provider`, `invalidate*`, `*Keys`; never reuse a name a dependency owns (`useSearchQuery`, not `useSearch`) or give three helpers one name (`isMobile`)
-- **Z-index: app-level components don't set one, and anything above 50 needs a comment** — the scale and its rules: [LAYOUT.md § Z-Index / Layering](LAYOUT.md#z-index--layering)
+- **Z-index: app-level components don't set one, and anything above 50 needs a comment** — the scale and its rules: [LAYOUT.md § One z-index scale, and app code sets none](LAYOUT.md#one-z-index-scale-and-app-code-sets-none)
 
 ### Imports
 
@@ -83,7 +83,7 @@ Before declaring any task complete, review every changed file against this list:
 - Did you avoid adding try-catch, null checks, or fallbacks for cases that can't happen?
 - Do new `useQuery` hooks have `enabled` guards and `staleTime`?
 - Does the new code match the patterns and naming of its neighbors?
-- Any new `z-index` set above 50? If yes, is it on the documented exceptions or does it have a `// Why:` comment? (See [LAYOUT.md § Z-Index / Layering](LAYOUT.md#z-index--layering))
+- Any new `z-index` set above 50? If yes, is it on the documented exceptions or does it have a `// Why:` comment? (See [LAYOUT.md § One z-index scale, and app code sets none](LAYOUT.md#one-z-index-scale-and-app-code-sets-none))
 
 ## Standards Gates
 

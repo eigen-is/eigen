@@ -43,8 +43,9 @@ const dialogSizeMap: Record<DialogSize, string> = {
     lg: 'sm:max-w-2xl',
 };
 
-// The layer above the full-screen preview overlay (LAYOUT.md § Z-Index / Layering). Spelled once: every
-// surface that has to clear the overlay — a dialog, the `.eml` reader header's popover — uses this.
+// The layer above the full-screen preview overlay (LAYOUT.md § One z-index scale, and app code sets none).
+// Spelled once: every surface that has to clear the overlay — a dialog, the `.eml` reader header's popover —
+// uses this.
 export const ABOVE_PREVIEW_Z = 'z-[200]';
 
 function DialogContent({

@@ -161,7 +161,8 @@ function MailHeaderDetails({ header }: { header: HeaderFields }) {
 
 function MailHeader({ header, isSent }: { header: HeaderFields; isSent?: boolean }) {
     // Drawn inside the full-screen quick look (z-100), the details popover has to clear it the way a
-    // dialog does (LAYOUT.md § Z-Index / Layering); the reader draws it under no overlay at all.
+    // dialog does (LAYOUT.md § One z-index scale, and app code sets none); the reader draws it under no
+    // overlay at all.
     const preview = useOptionalPreview();
     const recipients = [
         ...collectAddresses(header.to),

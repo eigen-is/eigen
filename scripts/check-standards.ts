@@ -216,9 +216,10 @@ const ROUTE_START = /\.(?:get|post|put|patch|delete|ws|head|options|all)\(\s*['"
 // `/ws` is a transport prefix rather than a path segment — the collab socket's `:ownerId` sits behind it.
 const TRANSPORT_PREFIX = /^\/ws(?=\/)/;
 
-// docs/LAYOUT.md § Hover-Only Icons: an affordance hidden until hover must rest visible on touch, which has
-// no hover. Only a hidden element is at risk — a decorative `group-hover:scale-105` reveals nothing —
-// so the trigger is a hiding utility plus a revealing `group-hover:` in the same class string.
+// docs/LAYOUT.md § Hover-revealed affordances rest visible on touch: an affordance hidden until hover must
+// rest visible on touch, which has no hover. Only a hidden element is at risk — a decorative
+// `group-hover:scale-105` reveals nothing — so the trigger is a hiding utility plus a revealing
+// `group-hover:` in the same class string.
 // `pointer-fine:group-hover:` declares the hover desktop-only on purpose and is not a gap.
 const STRING_LITERAL = /'[^'\n]*'|"[^"\n]*"|`[^`]*`/g;
 const HIDDEN_BASE = /(?<![\w-])(?:invisible|hidden|opacity-0)(?![\w-])/;

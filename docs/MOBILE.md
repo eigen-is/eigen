@@ -1,129 +1,73 @@
-# Mobile — remaining work
+# Mobile
 
-> **TLDR**: The mobile pass shipped in five phases (2026-08-04): one shared `PanelColumn` for
-> comments and activity on every viewport, panel open state in one `useDocumentPanels` hook, a
-> sheet engine that re-measures on container resize, and slides view-only on mobile. This file
-> tracks what is left — the next round of mobile work, the drifts that were accepted on purpose,
-> and the real-device checklist that has to pass before the program is called done.
+> **TLDR:** Eigen has no separate mobile app: the same components adapt, keyed on two independent signals. The viewport width picks the layout (`useIsMobile`, `useIsTablet` in `packages/lib/src/core/media/`), and the pointer type picks the touch affordances (`pointer-coarse:`, `useIsCoarsePointer`, a `touch` pointer event). On a phone one column shows at a time, and a surface that steps aside is hidden with CSS, never unmounted. A phone views the canvas documents (slides, vector) but never edits them. Long-press opens the same context menu as right-click, and a submenu drills in as a page of its menu.
 
-The shipped mechanics are documented where they live: [LAYOUT.md](LAYOUT.md) for the layout
-components and viewport gates, [COMMENTS.md](COMMENTS.md) for panel hosting, `onOpenCard` and
-`useDocumentPanels`.
+## Width picks the layout, the pointer picks the affordances
 
-> **Status (2026-08-04): Phases 1–5 shipped.** Phases 1–3 (navigation shell, toolbar kebabs,
-> dialog + submenu overflow) merged and pushed through `46eb4f61`. Phase 4 (touch affordances —
-> findings 6, 7, 8, 15, 16, 19, 20 + menu-system consolidation) merged through `d9124a2a`: the raw
-> ContextMenu primitive is deleted (all menus now on the singleton), drive row actions and
-> Move/Copy are touch-reachable, long-press opens the context menus on all five audited surfaces
-> via the shared `useLongPress` hook, hover-only affordances rest visible on coarse pointers
-> (policy: match the hover value; pattern documented in LAYOUT.md § Hover-Only Icons), docs gained Insert → Comment,
-> drive trash confirms on coarse pointers only, and the mail cheat-sheet has a toolbar entry
-> point. Phase 5 (structural — findings 5 and 11) merged through `ede86e72`; what
-> it shipped is listed below. Browser-verified per phase at 390/360/768/1280 (Chromium). This doc
-> now tracks ONLY what remains. Raw audit evidence stays in gitignored
-> `docs/superpowers/mobile-audit/`.
+| Width | Hook | Layout |
+|---|---|---|
+| up to 768px | `useIsMobile` | one column at a time; the sidebar is a full column |
+| 769 to 1024px | `useIsTablet` | the sidebar is a `w-16` rail (`SidebarProps.condensed`) |
+| from 1025px | `useIsDesktop` | the full `w-64` sidebar and every column side by side |
 
-## Phase 5 — shipped (structural)
+An editor toolbar folds its format rows into a kebab on its own, wider gate, `useIsCompactToolbar` (1200px, docs 1400px). It is density only and says nothing about touch.
 
-- One shared comments/activity pane, `PanelColumn`, on every viewport in docs, slides and sheets
-  (stickies hosts it for activity, desktop-only — see Next round). Its `Column` toolbar draws the
-  title, the filter and the close affordance — back arrow on mobile, X on desktop — so
-  `CommentPanel` and `ActivityPanel` are plain list bodies. On mobile the editors hide under the
-  pane, they never unmount, so scroll position, selection and node views survive a visit. Panel open state lives in one `useDocumentPanels(isMobile)`
-  hook. Comment rows and activity rows share one `onOpenCard` prop, and the mobile pane stays put when
-  a card opens.
-- The sheet engine re-measures on container resize, not just on window resize. That also fixes the
-  desktop panel-clip bug: the grid now resizes to the panel edge and the scrollbar stays
-  reachable.
-- Docs comment and activity panels render from 768px. The old 1200px `isWide` gate is gone. The
-  page shifts left before it scales, so the text column always clears the panel. The figure and
-  table properties panels ride the same gate — intentional: from 768px up, selecting a figure or a
-  table auto-opens its panel for writers.
-- Slides on mobile is view-only for everyone (`canEdit = canWrite && !isMobile`): a phone gets the frame-fit canvas itself, read-only, with a one-finger horizontal swipe between slides, the slide counter, present mode, comments and the file menu. The slide rail and the properties panel are desktop surfaces — a 208px rail would take half a phone. Rail long-press and the rail context menu are desktop and iPad-desktop-layout only. The kebab open-state cue was dropped again: it is unreachable under the takeover pane.
-- Present mode has a transient exit X, a `fullscreenchange` sync and a `.catch` on
-  `requestFullscreen`. Esc now exits fullscreen too, and editing is inert while presenting (object
-  nudge and delete, Cmd+Z, copy and paste are all gated).
-- The docs mobile kebab has Comments (with count) and Activity back, and the palette
-  comment-reveal opens the card dialog on every viewport.
-- Opening a find session while the pane is up (⌘F, a palette in-document hit) closes the pane in
-  all three editors. The bar rides with the editor, so it used to open inside the hidden one.
+Touch affordances never key on width. An iPad in landscape gets the desktop layout but has no hover, and a narrow desktop window has a mouse. So a hover-revealed action rests visible under `pointer-coarse:` ([LAYOUT.md](LAYOUT.md#hover-revealed-affordances-rest-visible-on-touch)), long-press arms only for a `touch` pointer, and Drive's Move to trash confirms first on a coarse pointer, where there is no hover cue and a mis-tap is easy.
 
-Findings 5 (panels) and 11 (slides view-only) are closed, with their knock-ons. Finding 13
-(calendar week view) was reviewed on 2026-08-03: it is fine on mobile for now, no work planned.
+The media hooks answer `false` during a prerender, so a build-time render and the first client render agree on the desktop layout.
 
-Contracts for the shipped pane live in [COMMENTS.md](COMMENTS.md) (panel hosting, `onOpenCard`,
-`useDocumentPanels`), [SHEETS.md](SHEETS.md) (container-resize contract) and
-[LAYOUT.md](LAYOUT.md) (layout patterns; the component index is [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md)).
+## A phone shows one column, and the rest stays mounted
 
-## Next round
+`ColumnLayout`'s `mobileColumn` picks the one `Column` a phone renders, and the first column's `onBack="sidebar"` arrow opens the sidebar as a column ([LAYOUT.md](LAYOUT.md#on-a-phone-only-the-mobilecolumn-renders)). The sidebar column closes on every navigation, including one that changes only the search params, such as Mail's `?mode=compose`.
 
-- **Sheet tabs below 640px** (finding 17): the tab strip is hidden, so there is only "+" and the
-  all-sheets dropdown. No rename, reorder or recolor.
-- **A phone filmstrip for the deck** — with the rail desktop-only, a phone navigates by swipe and the counter alone, so there is no jump-to-slide. A horizontal filmstrip under the canvas would restore it.
-- **Tap-target pass** (finding 21): recurring 24–36px icon buttons against the ~44px guideline
-  (stickies column header 24px, chat message actions 28px, toolbar and topbar 32–36px).
-- **Session-open actions run while the surface is hidden**: opening a find session closes the pane,
-  but everything that session does on open — the reveal scroll and the bar's own input focus — fires
-  in the same tick, before the editor is back. Neither works on a `display: none` subtree, so a match
-  outside the current scroll window stays off-screen and the bar can open unfocused (verified at
-  390×420 — bar reads "1 of 1", the document does not move). Highlights and the count are correct.
-  Fix seam: a `surfaceHidden` prop on `DocSearchProvider` that parks the pending reveal and replays it
-  from a layout effect once the surface is visible again.
-- Same family: Mod+F while the pane covers an already open find session only refocuses the
-  hidden input, so nothing visible happens. Closing the session when the pane opens fixes it.
-- **Stickies Activity below 768px**: stickies mounts the shared `PanelColumn` behind `!isMobile` and
-  gates its toolbar toggle the same way, so mobile Activity is unreachable. Giving it the mobile pane
-  means adopting the other three editors' shape: hide the board under a `hidden` wrapper and pass
-  `DocSearchProvider`'s `onOpenChange`.
-- **Drive touch multi-select**: picking more than one item needs a modifier click today, so the
-  multi-item menus are keyboard-assisted only on touch. Leading candidate: a "Select mode" entry
-  in the long-press menu and the kebab that turns on checkboxes and reuses the existing
-  multi-select actions.
+What steps aside is hidden, not unmounted. `<main>` hides under the sidebar column, and docs, sheets and the canvas hide under the comments pane ([COMMENTS.md](COMMENTS.md#the-pane-hides-the-editor-never-unmounts-it)). An editor keeps its collab socket, scroll position, selection, node views and undo history across the visit.
 
-## Accepted drifts (decided — don't re-flag, don't fix)
+## A hidden surface can't be scrolled or focused
 
-- Drill-in submenu pages (the shared dropdown primitive): keyboard roving degrades inside pages
-  (touch-first by design); a `DropdownMenuSub` nested directly inside a `DropdownMenuGroup` would
-  not drill (no consumer does this); raw non-item JSX on an *ancestor* page stays visible while a
-  deeper page is open (all such JSX sits on leaf pages today).
-- Read-only member of a *team* chat has no access-dialog entry point on any viewport (personal
-  chats keep the left-slot `DriveShareSummary`).
-- Read-only Eye marker is dropped on mobile (its tooltip can't show on touch, so the explanation
-  is lost either way; desktop unchanged).
-- Sheet-tab menu (phase 4): right-click opens the tab's chevron dropdown (anchored at the
-  chevron, not the pointer); long-press on a tab opens nothing — the always-visible chevron IS
-  the touch path. ≥640px surface only (strip hidden below, finding 17).
-- Drive background create menus (list + picker) are contextmenu-event-only — no long-press timer.
-  Long-press on empty space works where the engine synthesizes contextmenu (Android-class), not
-  on iOS; the `+` / "New folder" buttons are the primary touch create paths.
-- Chat message actions stay JS tap-to-reveal (tap emulates hover and shows the floating bar —
-  verified working on touch). Not converted to always-visible; the 28px targets are finding 21.
-- Beyond the audit's five long-press surfaces, some context menus remain right-click-only by scope: contacts list rows, canvas objects, sheet row/column headers.
-- The canvas keymap is gated on `canEdit`, so on a phone a hardware keyboard cannot act on the read-only deck; the layered-Escape listener stays document-level, the same hidden-surface family as the session-open residual under Next round.
-- Flipping a desktop viewport to mobile with the rail menu open leaves a menu on screen once. It dismisses on tap. Strictly better than the stranded reopen it replaced.
-- Pane rows show the anchor text while the card dialog shows the title. A glance mismatch, product
-  polish for later.
-- Docs desktop `ActivityPanel` still switches to the comments panel when a card is tapped. It is
-  the only surface that does; all three mobile panes stay put.
+Anything that acts on a `display: none` subtree does nothing: a reveal scroll doesn't move it, and a focus call doesn't land. So a phone opens a comment card with plain `setOpenCardId` instead of revealing its anchor first, and a find session that opens (⌘F, an in-document palette hit) closes the pane through `useDocumentPanels`' `onSearchOpenChange`, because the find bar floats inside the hidden editor. The sheet re-measures its canvas when its container shows again ([SHEETS.md](SHEETS.md#comments-are-eigen-comment-cards)).
 
-## Verification (every phase)
+## Docs panels need 769px and shift the page before they shrink it
 
-- Screenshot round at 390×844 + 360×800 with the seeded `mobile-audit@eigen.is` account (reproducer set, still on the dev server), pixel verdicts + behavioral probes (tap, long-press, scroll, reload-persistence). `hOverflow`-style page probes report 0 on the worst bugs (portalled layers / `overflow:hidden` clip without widening the page) — pixel review is mandatory. Full recipe: the [verify-in-browser skill](../.claude/skills/verify-in-browser/SKILL.md). Long-press needs real CDP touch synthesis; account passwords + fresh-cookie recipe live in the phase1-verify helper header.
-- Same-cycle doc updates: LAYOUT.md prose when layout APIs change (`bun run primitives` regenerates the component index), and this file per phase.
+The docs comment, activity and properties panels render whenever the viewport is not a phone. With a panel open, the page first slides left by its overlap with the panel and scales down only when the slack runs out. The shift keeps the text column clear, not the page, so a wide table or a full-bleed figure may tuck under the panel in that band. That is by design. From 769px a writer who selects a figure or a table gets its properties panel opened for them.
 
-### Real-device spot check (before the program is called done)
+## A phone views canvas documents, never edits them
 
-Everything so far is Chromium-only. Open on a real phone and tablet:
+Slides and vector set `canEdit = canWrite && !isMobile`. The file menu, the share cluster and comments keep `canWrite`, so a phone user can still share, comment and download. A phone gets the frame-fit canvas, read-only, and pages the deck with a one-finger horizontal swipe. The slides rail and the properties panel are desktop surfaces: the rail's fixed width would take half a phone ([SLIDES.md](SLIDES.md#phones)).
 
-- Sheets touch-scroll, and native date inputs in iOS Safari.
-- Long-press on the five phase-4 surfaces under real iOS: the timer path, link-callout
-  suppression on drive rows and tiles, and no first-menu-item activation on finger lift.
-- The sheets pane while the iOS URL bar collapses, and the sheets pane with cards in it.
-- Present mode: the exit X on real iOS (no fullscreen API there) and the Android back-gesture
-  exit. Check the 2s fade window when the fullscreen transition is slow.
-- Slides rail callout suppression. `[-webkit-touch-callout:none]` as a TSX arbitrary property is the first of its kind here, so confirm it on a fresh build (stale-JIT gotcha).
-- The phone deck swipe on a real touch surface: a slide step per flick, no fight with the view-only pan, and the counter following along.
-- Docs between 768 and 830px: page legibility at scale ~0.6 with a panel open. Wide tables and
-  full-bleed figures may tuck under the panel in the shift band. That is by design, so eyeball it.
-- Docs figure click at 900px (the properties panel opens through the shift; code-verified only)
-  and the mobile mark-tap path (the card dialog opens over the document and closes back into it).
+The canvas keymap is gated on `canEdit`, so a hardware keyboard on a phone can't act on the deck. The layered-Escape listener stays document-level.
+
+Present mode works without the fullscreen API (iOS Safari has none): the overlay is `fixed inset-0` and draws its own exit X, and it leaves present when fullscreen ends outside its control, such as Android's back gesture.
+
+## Long-press opens the same context menu as right-click
+
+WebKit on iOS never turns a long touch into a `contextmenu` event, so `useLongPress` (`packages/ui/src/hooks/use-long-press.ts`) fires the surface's own menu after a still press on a touch pointer. It serves Drive rows and tiles, the Mail list, `PersonList` (contacts and admin), the slides rail, stickies cards, the sheet's cells and row and column headers, chat messages, and attachment chips in Mail and the card dialog. A chat message's floating action bar is `pointer-fine:` only, because on touch a long press opens the same actions as a menu. `.eigen-list-item` and `.eigen-tile` set `-webkit-touch-callout: none`, so iOS's link-preview callout doesn't compete with the menu.
+
+Some menus stay right-click only, by scope:
+
+- Canvas objects. A phone can't edit the canvas anyway.
+- Drive's create menu on empty list space. Android synthesizes `contextmenu` from a long press there, iOS doesn't; the `+` and New folder buttons are the touch path.
+- A sheet tab. Right-click opens the tab's chevron dropdown at the chevron, and a long press opens nothing, because the always-visible chevron is the touch path.
+
+## A submenu drills in on a phone
+
+On a phone `DropdownMenu` shows a `DropdownMenuSub` as a page of the same menu, with a back row, instead of a flyout that has no room beside the menu. Three limits are accepted:
+
+- Keyboard roving is weaker inside a page. The pages are built for touch first.
+- A `DropdownMenuSub` directly inside a `DropdownMenuGroup` does not drill. No consumer nests it that way.
+- Non-item JSX on an ancestor page stays visible while a deeper page is open. All such JSX sits on leaf pages.
+
+## Small differences that are decided
+
+- The read-only Eye marker is dropped on a phone. Its tooltip can't show on touch, so the explanation is lost either way.
+- A read-only member of a team chat has no entry to the access dialog on any viewport. A personal chat keeps `DriveShareSummary` in the toolbar.
+- A pane row shows the comment's anchor text, the card dialog its title.
+- On desktop, tapping a card in the docs activity panel switches to the comments panel to reveal its anchor. Every phone pane stays put.
+- A desktop viewport resized to phone width with the slides rail menu open leaves that menu on screen once. A tap dismisses it.
+
+Open mobile work, and the real-device check still owed, is the Mobile row in [ROADMAP.md](ROADMAP.md). How to verify at phone sizes: the [verify-in-browser skill](../.claude/skills/verify-in-browser/SKILL.md).
+
+## See also
+
+- [LAYOUT.md](LAYOUT.md): the shell, `ColumnLayout` and the hover rule
+- [COMMENTS.md](COMMENTS.md): the comments and activity pane
+- [SLIDES.md](SLIDES.md) and [CANVAS.md](CANVAS.md): the view-only canvas

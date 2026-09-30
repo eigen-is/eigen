@@ -59,7 +59,7 @@ A status or assignee write first checks that the name resolves to a real `.eigen
 
 ## Search reads a recomputed tail of each thread
 
-`recentText` holds the newest 8 KB of a thread's messages, and the FTS5 table `comments_fts` indexes it for the in-document find bar ([IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md#comment-thread-search-server-backed)). It is rebuilt from the live messages on every indexed write, not appended to, so a deleted message stops matching and an edit never matches twice. Whispers stay out of it and out of the index entirely. Text past the cap is not searchable; the full history lives in the thread's own `data.db`, out of reach of a query on `comments.db`. The FTS update trigger fires only when `recentText` changes, so status, count and assignee writes never re-index the body. The migrations are pinned in `apps/api/src/test/comments/`.
+`recentText` holds the newest 8 KB of a thread's messages, and the FTS5 table `comments_fts` indexes it for the in-document find bar ([IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md#comment-threads-are-searched-on-the-server)). It is rebuilt from the live messages on every indexed write, not appended to, so a deleted message stops matching and an edit never matches twice. Whispers stay out of it and out of the index entirely. Text past the cap is not searchable; the full history lives in the thread's own `data.db`, out of reach of a query on `comments.db`. The FTS update trigger fires only when `recentText` changes, so status, count and assignee writes never re-index the body. The migrations are pinned in `apps/api/src/test/comments/`.
 
 ## Assignment is a member's email, set by the server
 
@@ -90,7 +90,7 @@ Below the breakpoint the pane takes the whole screen. Docs, sheets and the canva
 
 On mobile every host opens a card with plain `setOpenCardId`. Scrolling to a mark or revealing an element would move a view nobody can see. On desktop docs and the canvas reveal the anchor first; slides activates the element's slide, then selects it.
 
-Stickies mounts the pane for activity only and only on desktop; the mobile pane is open work in [MOBILE.md](MOBILE.md). The canvas passes `onAddComment`, which puts a New comment button in the pane for a document-level card.
+Stickies mounts the pane for activity only and only on desktop; the mobile pane is open work in [ROADMAP.md](ROADMAP.md). The canvas passes `onAddComment`, which puts a New comment button in the pane for a document-level card.
 
 ## The filter lives on the surface it filters
 
@@ -104,4 +104,4 @@ The filter is session state, never persisted: `useCommentFilter` holds it in the
 - [SHEETS.md](SHEETS.md): cell anchors and the corner triangle
 - [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md): comment search in the find bar
 - [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md), [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md), [FILE-HISTORY.md](FILE-HISTORY.md): the assigned, resolved and reopened rows
-- [LAYOUT.md](LAYOUT.md) and [MOBILE.md](MOBILE.md): the column layout and the mobile work left
+- [LAYOUT.md](LAYOUT.md) and [MOBILE.md](MOBILE.md): the column layout and how it behaves on phones
