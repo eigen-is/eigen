@@ -1,5 +1,5 @@
 import { apps } from '@workspace/lib/apps';
-import { type LucideIcon, MonitorSmartphone, Rocket, Settings, Shield } from 'lucide-react';
+import { type LucideIcon, MonitorSmartphone, Rocket, Server, Settings, Shield } from 'lucide-react';
 
 export type SectionConfig = {
     id: string;
@@ -61,6 +61,13 @@ export const SECTIONS: SectionConfig[] = [
         title: 'Admin',
         description: 'Organizations, teams, the server.',
         icon: Shield,
+        color: INDEX,
+    },
+    {
+        id: 'self-hosting',
+        title: 'Self-hosting',
+        description: 'Install, update, back up.',
+        icon: Server,
         color: INDEX,
     },
 ];

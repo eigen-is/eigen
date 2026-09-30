@@ -10,7 +10,7 @@
 Everything is in `apps/index` plus two small shared bits. There is no backend: no `apps/api` code, nothing to
 deploy or operate beyond the static files.
 
-- `apps/index/src/data/{support,blog}/**` — the content (14 support sections, ~135 articles).
+- `apps/index/src/data/{support,blog}/**` — the content (15 support sections, ~180 articles).
 - `apps/index/scripts/` — the build steps, with `scripts/lib/` for frontmatter, markdown and related articles.
 - `apps/index/src/components/support/` + `src/routes/support.*` — the pages.
 - `packages/lib/src/core/` — `api.ts` (`getSupportUrl`), `search/pagefind.ts`, and the palette's
