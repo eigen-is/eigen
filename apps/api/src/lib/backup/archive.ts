@@ -476,10 +476,20 @@ export async function copyArchiveMember(member: ArchiveMember, destPath: string)
         fs.writeFileSync(destPath, '');
         return;
     }
-    await pipeline(
-        fs.createReadStream(member.archivePath, { start: member.offset, end: member.offset + member.bytes - 1 }),
-        fs.createWriteStream(destPath),
-    );
+    try {
+        await pipeline(
+            fs.createReadStream(member.archivePath, { start: member.offset, end: member.offset + member.bytes - 1 }),
+            fs.createWriteStream(destPath),
+        );
+        // A range past the end of the file reads short without an error.
+        const { size } = fs.statSync(destPath);
+        if (size !== member.bytes) {
+            throw new Error(`backup archive: ${member.name} copied ${size} of its ${member.bytes} bytes`);
+        }
+    } catch (error) {
+        fs.rmSync(destPath, { force: true });
+        throw error;
+    }
 }
 
 export async function extractArtifact(source: ArtifactSource, targetDir: string): Promise<void> {

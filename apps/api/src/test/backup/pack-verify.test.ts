@@ -859,6 +859,33 @@ describe('Archive writer and reader', () => {
         expect(fs.statSync(dest).size).toBe(0);
     });
 
+    test('a member whose range runs past the end of the archive fails its copy and leaves no file', async () => {
+        const archivePath = await writeArchive('cut.tar', [['lead.txt', lead]]);
+        const member = (await readArchiveMembers(archivePath)).find((m) => m.name === 'lead.txt')!;
+        fs.truncateSync(archivePath, member.offset + 4);
+        const dest = join(dir, 'cut-copy.txt');
+        await expect(copyArchiveMember(member, dest)).rejects.toThrow('lead.txt');
+        expect(existsSync(dest)).toBe(false);
+    });
+
+    test('a read error mid-copy fails the copy and leaves no file', async () => {
+        const archivePath = await writeArchive('broken.tar', [['lead.txt', lead]]);
+        const member = (await readArchiveMembers(archivePath)).find((m) => m.name === 'lead.txt')!;
+        const dest = join(dir, 'broken-copy.txt');
+        const realCreateReadStream = fs.createReadStream;
+        const readStream = spyOn(fs, 'createReadStream').mockImplementation((path, options) => {
+            const stream = realCreateReadStream(path, options);
+            stream.once('data', () => stream.destroy(new Error('injected read failure')));
+            return stream;
+        });
+        try {
+            await expect(copyArchiveMember(member, dest)).rejects.toThrow('injected read failure');
+        } finally {
+            readStream.mockRestore();
+        }
+        expect(existsSync(dest)).toBe(false);
+    });
+
     test('abort removes a half-written archive and leaves a finished one alone', async () => {
         const partial = join(dir, 'partial.tar');
         const writer = await createArchiveWriter(partial);
@@ -878,5 +905,23 @@ describe('Archive writer and reader', () => {
         const record = await verifyArchiveTransport(archivePath);
         expect(record.status).toBe('failed');
         expect(record.failures).toEqual(['lead.txt: appears more than once in the archive']);
+    });
+
+    test('a last member named manifest.json past the read cap fails the transport check', async () => {
+        const big = join(dir, 'big-manifest.json');
+        writeFileSync(big, new Uint8Array(MAX_MEMBER_READ_BYTES + 1));
+        // finish() would put the real manifest after it, so the archive is taken before it closes.
+        const building = join(dir, 'big-manifest-building.tar');
+        const archivePath = join(dir, 'big-manifest.tar');
+        const writer = await createArchiveWriter(building);
+        try {
+            await writer.appendFile('lead.txt', lead);
+            await writer.appendFile('manifest.json', big);
+            fs.copyFileSync(building, archivePath);
+        } finally {
+            await writer.abort();
+        }
+        const record = await verifyArchiveTransport(archivePath);
+        expect(record.status).toBe('failed');
     });
 });
