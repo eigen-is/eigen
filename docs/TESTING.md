@@ -1,87 +1,87 @@
 # Testing
 
-> **TLDR**: Every workspace keeps its tests in `<workspace>/src/test/` — nothing named `*.test.ts` lives anywhere else, and `bun scripts/check-test-layout.ts` enforces it. API integration tests use the Bun test runner + real Elysia app via `app.handle()` + Eden Treaty. No HTTP server needed. The API suite runs in parallel across worker processes, each with its own temp data dir and its own booted server. Test users: Alice, Bob, Charlie. Run: `bun run test`.
+> **TLDR:** Every workspace keeps its tests in `<workspace>/src/test/`, and `bun scripts/check-test-layout.ts` enforces it. API tests drive the real Elysia app in process through `app.handle()` and Eden Treaty, with no HTTP server. Each API test file boots its own server in its own temp data dir, which is what lets CI run the suite on four isolated workers. Not obvious from the code: one API test file runs from `apps/api` with the preload, never from the repo root; storage faults are parked and driven, never slept through; and a release publishes only images that the Docker harnesses in `docker/` installed and upgraded the way a self-hoster does. Run `bun run test` for the tests and `bun run check` for everything CI checks.
 
-## Where tests live
+## Every test lives in its workspace's `src/test/`
 
-Every workspace has exactly one test folder, `<workspace>/src/test/`. Inside it, tests group by subject:
+Every workspace has exactly one test folder, `<workspace>/src/test/`. Inside it, a test that covers one module mirrors that module's path: `packages/lib/src/vector/snap.ts` is tested by `packages/lib/src/test/vector/snap.test.ts`. That is the shape of most package and frontend tests, which target single modules. A test that covers a feature end to end gets a feature folder instead, such as `apps/api/src/test/mail/`. Most of the API suite boots a Home and drives the real API, so its subject is a feature, and there is no module path to mirror. Shared harness files and `fixtures/` sit at the `src/test/` root. Grep the tree before you assume an area is untested.
 
-- **A test covering one module mirrors that module's path.** `packages/lib/src/vector/snap.ts` is tested by `packages/lib/src/test/vector/snap.test.ts`. This is the shape in `packages/lib`, `packages/ui`, `packages/sheet`, `apps/slides` and `apps/stickies`, where tests genuinely target single modules.
-- **A test covering a feature end-to-end gets a feature folder.** `apps/api/src/test/mail/`, `.../drive/`, `.../caldav/`. Most of the API suite boots a Home and drives the real API, so its subject is a feature, not a module — there is no module path to mirror.
+`bun scripts/check-test-layout.ts` runs in `bun run check` and enforces two rules:
 
-Shared harness files (`setup.ts`, `preload.ts`, `test-env.ts`, `home-test-helpers.ts`, `contacts-test-helpers.ts`, `calendar-test-helpers.ts`, `mail-test-helpers.ts`, `mount-test-helpers.ts`, `dav-test-helpers.ts`, `db-test-helpers.ts`, `ics-test-helpers.ts`, `transfer-test-helpers.ts`, `fault-storage-helpers.ts`, `fake-s3-server.ts`, `env-test-helpers.ts`, `fixtures/`) sit at the `src/test/` root, not in a feature folder. `fault-storage-helpers.ts` is the storage double for the drive resilience suites: a `StorageBackend` over a real `LocalStorage` whose writes and `exists()` probes can fail, stall, hang or be parked, plus `createFaultMount` to build a Mount on it. That Mount is a `FaultMount`: its upload queue never retries on its own, so a test drives every retry with `drainPendingUploads({ flushNow: true })` and a jittered backoff timer can't fire into a later step (a restart mount's replay, a deliberately corrupted staged copy). Hold an in-flight PUT with `parkWrites` + `waitForParked`, never with `writeDelayMs` + `Bun.sleep`. A read fault needs `fake-s3-server.ts` instead: `S3Storage.read()` returns a lazy `S3File`, so a stalled or cut GET happens inside Bun's client, where FaultStorage never sees it. `FakeS3Server` is a raw TCP S3 endpoint over a `StorageBackend` that the real `S3Storage` talks to, with per-key faults (`stall`, `stall-body`, `cut`, `empty`, `fail`, `fail-get`; a HEAD or DELETE honors only `stall` and `fail`) and `heal()` to answer every held request. A test that waits out a storage deadline shrinks it with `setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS)` and restores `STORAGE_TIMEOUT_MS` afterwards; `settlesWithin` then bounds one call by `STALL_BOUND_MS`, and a settle of several steps (a mount teardown, a backup job) by `SETTLE_BOUND_MS`. The two DAV stores need no such double: their truth is a BLOB column, so a suite injects a fault with `breakTransaction(domain)` (`db-test-helpers.ts`, shared by both suites), which throws inside the transaction callback — SQLite really undoes the statements — and then asserts that the previous bytes and the whole projection survived it.
+1. No `*.test.ts` or `*.test.tsx` outside `<workspace>/src/test/`.
+2. Every workspace that has tests has a `test` script. `bun --filter '*' test` skips a workspace without one silently, so its tests would never run.
 
-`env-test-helpers.ts` holds `restoreEnvAfterEach(keys)`, which puts each named `process.env` key back after every test, so a suite that sets `MAIL_ENABLED`, `SMTP_*` or `PRODUCTION` leaks nothing into the next test or file.
+Add the `test` script together with the first test, not before. `bun test` exits 1 when it finds no test files, which would break `bun run check`.
 
-`home-test-helpers.ts` is the one fake-Home harness: `openTestHome(create, dir, user)` builds a domain class over a temp directory with no booted app behind it (a stub Home with a memoized `getLocalDatabase`, the current user and a broadcast sink), and `makeTestHome(create, root)` gives each harness its own subdir. The returned harness carries `reopen()` — a fresh instance over the same directory, which is how a crash or restart is simulated — plus `database(relativePath)` and `close()`. `makeContacts` (`contacts-test-helpers.ts`) and `makeCalendar` (`calendar-test-helpers.ts`) are thin callers of it. `dav-test-helpers.ts` holds the DAV request pair every protocol suite shares: `basicAuth(email)` and `davRequest(method, path, { email, headers, body })`.
+`apps/api/src/test/transform-benchmark.ts` is not a test. It is the document-transform benchmark ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md#the-runner-logs-one-line-per-job-overload-included)), run from `apps/api` with `bun src/test/transform-benchmark.ts`.
 
-Two rules are enforced by `bun scripts/check-test-layout.ts`, which runs as part of `bun run check`:
+## One API test file runs from `apps/api` with the preload
 
-1. No `*.test.ts` outside `<workspace>/src/test/`.
-2. Every workspace that has tests has a `test` script — otherwise `bun --filter '*' test` skips it silently and the tests never run.
+Set up the checkout first: [CONTRIBUTING.md § Setting up your development environment](CONTRIBUTING.md#setting-up-your-development-environment). Then:
 
-Note the second rule only fires once a workspace actually has tests. Do not add `"test": "bun test"` to a workspace pre-emptively: `bun test` exits 1 when it finds no test files, which would break `bun run check`.
-
-## Running
-
-Set up the checkout first: [CONTRIBUTING.md § Setting up your development environment](CONTRIBUTING.md#setting-up-your-development-environment).
-
-```bash
-bun run check              # lint + typecheck + home-import + test-layout + docs-link + standards + primitives:check + test
-bun run test               # tests only (all workspaces: api + sheet + lib + index)
-bun run test:api           # API tests only
-bun run test:sheet         # sheet package unit tests only (packages/sheet, plain `bun test`, no preload)
-bun run typecheck          # typecheck only
-bun run lint               # lint + format check (biome)
-```
-
-The API test command (in `apps/api/package.json`) is:
-
-```bash
-bun test --preload ./src/test/preload.ts
-```
-
-- `--preload ./src/test/preload.ts` registers an `afterAll` hook that calls `cleanup()`
-- No path argument: the layout rule already says where tests are, and a path here would mean a stray test file silently never runs
-- Slow end-to-end suites are gated on `CI` (set by GitHub Actions) or `EIGEN_SLOW_TESTS=1`: the demo seeder contract test (`server/seed-demo.test.ts`, ~30 s, spawns the whole seeder) skips in a plain local run. Run it locally with `EIGEN_SLOW_TESTS=1 bun run test:api` after touching `src/scripts/demo/` or the readers it decodes with
-- Files run sequentially by default, in one process. `--parallel=N` is the isolated mode, and what CI runs: it implies `--isolate`, so every test file evaluates in a fresh global and module graph, gets its own `EIGEN_DATA_ROOT` (a per-process dir under `data-test/`, see below) and boots its own server on first use. No two files share a Home singleton or a SQLite file, which is what makes running them concurrently safe. Setup is lazy: `setup.ts` exports `ensureServer()`, and the wizard POST (`/setup/complete`) runs once per file, the first time a test awaits `getTestContext()`, `authedRequest()`, or `ensureServer()`. A pure-unit test that needs a setup side effect (the configured mail domain, the org owner, the auth schema) awaits one of those in a `beforeAll`; it cannot rely on another file having booted the server. The same goes for a Home: `await collectSSE()` resolves once the user's Home is open and the listener attached, so a test never opens the Home itself or sleeps before the action it wants to observe
-- Isolation needs Bun 1.4.1 or newer (`.bun-version`): under 1.3.14 the runtime keeps many finished files' globals alive with no retainer reachable from JS, and a worker grows by the whole app graph (~50 MB) per such file. Two pins are the app's own and outlive a file on any Bun: each Home's idle timeout and Elysia's sucrose cache sweep, both unref'd timers whose callbacks reach the module graph. The preload's `afterAll` clears them (`shutdownAllHomes()`, `clearSucroseCache(0)`), which is why it imports `./test-env` first: anything it pulls from `../lib` would otherwise open SQLite under the wrong data root
-- Why sequential stays the local default: the per-file server boot (~1 s) is the price of `--isolate`, and on a laptop with few spare cores it eats the parallel gain, because many files spawn their own transform/thumbnail Worker threads on top of the test worker. CI runs `--parallel=4` (the runner's core count) for the isolation, not the speed: one sequential process holds every Home of the run and stalls on what ran before, and bun's file order differs per run on Linux
-
-### One file at a time
-
-`bun test apps/api/src/test/drive/drive.test.ts` from the repo root **fails** with `Setup has already been completed`: Bun auto-loads the root `.env`, which collides with the harness's fresh-`EIGEN_DATA_ROOT` setup flow. Run it from `apps/api` with the package script's own flags, and `-t` to filter by name:
+- `bun run test` runs every workspace's `test` script, and `bun run test:api` and `bun run test:sheet` run one workspace.
+- The API's script is `bun test --preload ./src/test/preload.ts`, with no path argument. The layout rule already says where tests are, and a path would let a stray test file silently never run.
+- One file, filtered by name with `-t`:
 
 ```bash
 cd apps/api && bun test --preload ./src/test/preload.ts ./src/test/drive/drive.test.ts -t "rename"
 ```
 
-## Architecture
+Both parts matter. Without the preload, a test file that imports `../lib` before `../setup` opens the server config under the checkout's own data root, where setup is done, so every test fails with `Setup already completed`. From the repo root, Bun also loads the root `.env` when there is one, and its settings (`PRODUCTION` among them) change what the server answers.
 
-```
-Test -> Eden Treaty / authedRequest() -> app.handle() -> Real business logic -> Temp data dir
-```
+## Each API test file boots its own server
 
-- **Data isolation**: `apps/api/src/test/test-env.ts` (imported first by `setup.ts`, before the app/auth modules open their SQLite files) sets `EIGEN_DATA_ROOT` to `data-test/test-<pid>-<random>` — a fresh dir per worker process. It prunes by age alone, once per worker process: anything under `data-test/` older than ten minutes is a dead run. A live sibling's dir is never that old, so the many unit tests that keep their own `data-test/test-<name>-<ts>` scratch dir survive a concurrent run
-- **Test users**: Alice (`alice@test.eigen.is`), Bob (`bob@test.eigen.is`), Charlie (`charlie@test.eigen.is`)
-- **Setup**: `apps/api/src/test/setup.ts` boots the server lazily via `ensureServer()` (runs the setup wizard), seeds the three users on first `getTestContext()`, and exports the helper functions (`authedRequest`, `drivePost`, `chatGet`, etc.). It has no top-level `await` — under `--isolate` a suspended module would be observed mid-evaluation by the importing file, so its exports are all defined synchronously
-- **Preload**: `apps/api/src/test/preload.ts` registers an `afterAll` cleanup hook
-- **Integration tests** (`drive.test.ts`, `calendar.test.ts`, etc.) use test helpers from `setup.ts`: `getTestContext()` → returns `{ alice, bob, charlie }` test users with session tokens and API clients; `authedRequest(token, path, options?)` → make authenticated HTTP request; `driveGet/drivePost/drivePut/driveDelete` → typed drive API helpers; `driveGetPermission` → check read/write permissions
-- **Unit tests** (`mount.test.ts`, `storage.test.ts`, etc.) create isolated instances with temp directories
+`apps/api/src/test/test-env.ts` sets `EIGEN_DATA_ROOT` to a fresh `data-test/test-<pid>-<random>` dir per worker process. It must run before any app or auth module opens its SQLite files, so `setup.ts` and `preload.ts` both import it first. It prunes `data-test/` once per worker, by age alone: anything older than ten minutes is a dead run. A live sibling's dir is never that old, so a concurrent run keeps its own dir and the `data-test/test-<name>-<ts>` scratch dirs that unit tests make for themselves.
 
-## Test Files
+Setup is lazy. `setup.ts` exports `ensureServer()`, and the setup wizard (`POST /setup/complete`) runs once per file, the first time a test awaits `ensureServer()`, `getTestContext()` or `authedRequest()`. `setup.ts` has no top-level `await`: under `--isolate` the importing file would see a suspended module mid-evaluation, so every export is defined synchronously.
 
-Every API test lives in a feature folder under `apps/api/src/test/` — `acl/`, `auth/`, `backup/`, `caldav/`, `calendar/`, `carddav/`, `chat/`, `cli/`, `collab/`, `comments/`, `contacts/`, `core/`, `dav/`, `document/`, `drive/`, `export/`, `home/`, `ical/`, `import/`, `mail/`, `mount/`, `preview/`, `search/`, `server/`, `storage/`, `vcard/`, `webdav/` — one `<subject>.test.ts` per subject. Coverage spans CalDAV, WebDAV, mail, drive, collab, file history, search, import/export, demo mode, upload-queue chaos and more — grep the tree rather than assuming an area is untested.
+- A pure unit test that needs a setup side effect (the mail domain, the org owner, the auth schema) awaits one of those in a `beforeAll`. It cannot count on another file having booted the server.
+- `await collectSSE(userId)` resolves once the user's Home is open and the listener attached. A test never opens the Home itself or sleeps before the action it wants to observe.
+- A suite that sets `process.env` keys (`MAIL_ENABLED`, `SMTP_*`, `PRODUCTION`) calls `restoreEnvAfterEach(keys)` from `env-test-helpers.ts`. `process.env` survives the fresh module graph of the next file in the same worker.
 
-Not part of the suite: `src/test/transform-benchmark.ts` is a standalone responsiveness/memory benchmark for document transforms — run it from `apps/api` with `bun src/test/transform-benchmark.ts` (see [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md#the-runner-logs-one-line-per-job-overload-included)).
+`getTestContext()` seeds the three test users, Alice (`alice@test.eigen.is`, the admin and org owner), Bob and Charlie, each with a session token and a typed Eden Treaty client. `authedRequest(token, path)` takes a raw path, and the `drive*` and `chat*` helpers in `setup.ts` build on it.
 
-Not part of the suite either: the Docker harnesses below.
+## Assertions count only what the test created
 
-## Docker harnesses
+Each file has its own auth database, so it sees only the users and orgs it created. A file that creates users beyond Alice, Bob and Charlie still breaks an exact global count such as `users.length === 3`. Some data exists before the test writes any: a Home's contacts book holds the user's own card and the default labels from its first open (`Contacts.init`). Scope every assertion to the entities the test made.
 
-The scripts in `docker/` install Eigen the way a stranger does and probe it. Each copies the tracked files as the working tree has them (`git add` a new file to include it) into a scratch folder under `$TMPDIR`, runs `./eigen` there from a `docker:cli` container that has no Bun, as its own Compose project on `127.0.0.1` ports 18000-18999, and removes what it started on exit. They never touch your checkout's `data/` or a stack you run. `HARNESS_KEEP=1` leaves the scratch install up. They share `docker/probe-lib.sh`, so a new harness sources it first and adds only its own probes. Its Compose view of the install (`dc`, `stack_up`) runs from that container too, as root, because a release install and its `.env.production` are root's and the harness user on a Linux host cannot read them; Docker Desktop hides that by mapping ownership to your user.
+## The preload clears the timers that pin a file's module graph
 
-Run them one at a time: two started together can pick the same subnet. `./docker/test-all.sh` runs them all, one after another, and prints one line per harness.
+`--isolate` gives every test file a fresh global and module graph, and it needs Bun 1.4.1 or newer (`.bun-version`). Older Bun keeps many finished files' globals alive with no retainer reachable from JS, so a worker grows by the whole app graph, about 50 MB, per such file.
+
+Two pins are the app's own and outlive a file on any Bun: each Home's idle timeout and Elysia's sucrose cache sweep. Both are unref'd timers whose callbacks reach the module graph. The preload's `afterAll` clears them with `shutdownAllHomes()` and `clearSucroseCache(0)`.
+
+## Locally files run in one process, in CI on four isolated workers
+
+`--parallel=N` implies `--isolate`, so every file gets its own `EIGEN_DATA_ROOT` and its own server. No two files share a Home singleton or a SQLite file, which is what makes running them concurrently safe.
+
+A plain local run stays sequential in one process. The per-file server boot (about 1 s) is the price of `--isolate`, and on a laptop with few spare cores it eats the parallel gain, because many files spawn their own transform and thumbnail Worker threads on top of the test worker. CI runs `--parallel=4`, the runner's core count, for the isolation, not the speed. One sequential process holds every Home of the run and stalls on what ran before, and bun's file order differs per run on Linux.
+
+## Slow end-to-end suites run on CI only
+
+A suite that takes tens of seconds skips unless `CI` (set by GitHub Actions) or `EIGEN_SLOW_TESTS=1` is set. The demo seeder contract test, `server/seed-demo.test.ts`, spawns the whole seeder in about 30 s. Run it with `EIGEN_SLOW_TESTS=1 bun run test:api` after you touch `apps/api/src/scripts/demo/` or a reader it decodes with.
+
+## Storage faults are parked and driven, never slept through
+
+The drive resilience suites run on doubles at the `src/test/` root, and each double's header comment lists what it can fake. The rules:
+
+- `fault-storage-helpers.ts` wraps a real `LocalStorage` in `FaultStorage`, whose writes and `exists()` probes can fail, stall, hang or be parked. Its `createFaultMount` builds a `FaultMount`, whose upload queue never retries on its own. A test drives every retry with `drainPendingUploads({ flushNow: true })`, so a jittered backoff timer can't fire into a later step, such as a restart mount's replay.
+- Hold an in-flight PUT with `parkWrites` and `waitForParked`, never with `writeDelayMs` and `Bun.sleep`. A sleep races the code it waits for.
+- A read fault needs `fake-s3-server.ts`. `S3Storage.read()` returns a lazy `S3File`, so a stalled or cut GET happens inside Bun's client, where `FaultStorage` never sees it. `FakeS3Server` is a raw TCP S3 endpoint that the real `S3Storage` talks to, with per-key faults and `heal()` to answer every held request.
+- A test that waits out a storage deadline shrinks it with `setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS)` and restores `STORAGE_TIMEOUT_MS` afterwards. `settlesWithin` (`fault-storage-helpers.ts`) then bounds one call by `STALL_BOUND_MS` and a settle of several steps (a mount teardown, a backup job) by `SETTLE_BOUND_MS`.
+- The CalDAV and CardDAV stores keep their truth in a BLOB column, so their suites need no storage double. `breakTransaction(domain)` (`db-test-helpers.ts`) throws inside the transaction callback, so SQLite really undoes the statements, and the test asserts that the previous bytes and the whole projection survived.
+
+## A domain class runs without a booted app
+
+`home-test-helpers.ts` is the one fake-Home harness. `openTestHome(create, dir, user)` builds a domain class, such as `Contacts` or `Calendar`, over a temp directory, with a stub Home that supplies only a memoized `getLocalDatabase`, the current user and a broadcast sink. Its `reopen()` returns a fresh instance over the same directory, which is how a test simulates a crash or restart. `makeContacts` and `makeCalendar` are thin callers of it.
+
+## The Docker harnesses install Eigen as a stranger does
+
+The scripts in `docker/` are not part of `bun run test`. Each one copies the tracked files as the working tree has them into a scratch folder under `$TMPDIR` (`git add` a new file to include it). It runs `./eigen` there from a `docker:cli` container that has no Bun, as its own Compose project on `127.0.0.1` ports 18000-18999, and removes what it started on exit. So a harness never touches your checkout's `data/` or a stack you run. `HARNESS_KEEP=1` leaves the scratch install up.
+
+Every harness sources `docker/probe-lib.sh` first and adds only its own probes. The library's Compose view of the install (`dc`, `stack_up`) runs from that container as root, because a release install and its `.env.production` are root's, and on a Linux host the harness user cannot read them. Docker Desktop hides this by mapping ownership to your user.
+
+Run them one at a time: two started together can pick the same subnet. `./docker/test-all.sh` runs them in turn and prints one line per harness. Each script's header lists everything it probes.
 
 | Harness | What it proves |
 |---|---|
@@ -94,33 +94,46 @@ Run them one at a time: two started together can pick the same subnet. `./docker
 | `docker/test-boot.sh` | The publish workflow's arm64 gate: its candidate images (`CANDIDATE=candidate-<version or main>-<platform>`), installed with mail off, answer `/eigen/health`. It needs a candidate on ghcr.io, so `test-all.sh` leaves it out. |
 | `docker/test-mail-hardening.sh` | The mail hardening of [MAIL.md § Submission is held to the login's own address](MAIL.md#submission-is-held-to-the-logins-own-address): sender checks, the queue alert and the SASL failure limiters. About 6 minutes; `PROBES=2,3,4` runs a subset. Its comments explain the SMTP AUTH behavior that looks like a bug and is not. |
 
-## Key Details
-
-- **Treaty**: Used for static path routes. `authedRequest()` for dynamic `:mountId` params
-- **Contacts**: `addContact`/`addLabel` return plain UUID strings. Auto-seeds user as contact on first access
-- **One auth DB per file**: under `--isolate` each test file boots its own server in its own data dir, so it sees only the users/orgs it (or its `getTestContext()`) created; files share no users/orgs table. Still scope assertions to the entities the test itself created: a single file that creates users beyond Alice/Bob/Charlie breaks an exact global count (`users.length === 3`) the same way
-
 ## CI
 
-Tests run in GitHub Actions via `.github/workflows/check.yml` on push/PR to `main`:
+`.github/workflows/check.yml` runs on every push and pull request to `main`. Its `check` job installs with `--frozen-lockfile`, then runs `bun dedupe --check`, `bun run lint`, `bun run typecheck` and `bun run primitives:check`, then the tests:
 
-```yaml
-steps:
-  - bun install --frozen-lockfile
-  - bun dedupe --check            # One version per package in bun.lock
-  - bun run lint
-  - bun run typecheck
-  - bun run primitives:check      # Primitives index (docs/SHARED-PRIMITIVES.md is generated + gated)
-  - bun --filter '!@apps/api' test --timeout 30000   # package suites, one sequential process each
-  - bun --filter '@apps/api' test --parallel=4 --timeout 30000
-```
+- `bun --filter '!@apps/api' test --timeout 30000`: the package suites, one sequential process each. They still depend on file order, which a [ROADMAP.md](ROADMAP.md) row tracks.
+- `bun --filter '@apps/api' test --parallel=4 --timeout 30000`: the API suite on four isolated workers.
 
 `bun dedupe --check` fails when `bun.lock` holds two versions of a package that one version could satisfy. Two copies of `@codemirror/language` or of Radix's dismissable layer break at runtime without an error, and a dependency bump or `bun add` can bring a copy back. Run `bun dedupe` and commit the lockfile it writes.
 
-The package suites run as one sequential process each; they still depend on file order (see the roadmap). The API suite runs isolated across four workers, the runner's core count: each file gets a fresh global, so nothing a file leaves behind reaches the next one, and no process holds every Home of the run. The 30 s per-test timeout is CI-only: the runner is slower than a laptop, and bun's 5 s default turned a slow file into a failure. Locally the default stays, so a slow test is caught where it is written. Under `GITHUB_ACTIONS` the API preload prints `[memory] worker N rss` after every file and bun prints per-test timings, so a worker's growth shows next to the file that caused it.
+The 30 s per-test timeout is for CI alone. The runner is slower than a laptop, and bun's 5 s default fails a slow file there. Locally the default stays, so a slow test is caught where it is written. Under `GITHUB_ACTIONS` the API preload prints `[memory] worker N rss` after every file, so a worker's growth shows next to the file that caused it.
 
-The check job runs on `ubuntu-latest` with a 15-minute timeout. A second job, `launcher`, runs `docker/test-launcher.sh` beside it: the launcher under dash, BusyBox and the runner's sh, with a stub `docker`, so no stack and no Bun (5-minute timeout).
+A second job, `launcher`, runs `docker/test-launcher.sh`. It needs no stack and no Bun, so it runs on a plain runner beside the check job.
 
-A `v*` tag runs `.github/workflows/publish.yml` instead, and so does a push to `main`; a run on any other branch or tag, a manual one included, fails before it builds. The workflow builds the images for linux/amd64 and linux/arm64 under candidate tags (`candidate-<version or main>-<platform>`), each on a runner of its own architecture. On a tag two gates test those candidates, the images that get published: `docker/test-release.sh` updates the previous published release to the amd64 candidates and rolls it back, building its own releases while it waits for them, and `docker/test-boot.sh` installs the arm64 candidates on an arm64 runner and checks `/eigen/health`. A tag whose version is published already fails the gate: a release is never published twice. A release whose `CHANGELOG.md` lists breaking changes since the previous one fails it too, since `./eigen update` refuses it on every install; to publish it anyway, run the workflow on its tag with the input `breaking: true`, which updates with `--accept-breaking` and checks the seed only after the rollback. The version is published only once every image is built and both gates passed: each image's two candidates become the `<version>` index, which is then copied to `:latest`, which a prerelease leaves alone. A failed build or gate leaves no partial release. A push to `main` runs no gates and publishes the images as `:main`, the channel a release install can follow; a newer push waits for a running build of `main` and replaces one still queued. In CI arm64 only boots; its update and rollback are proven by the harnesses on an Apple Silicon Mac. Locally `bun run check` is the check job's set plus `bun scripts/check-home-imports.ts`, `bun scripts/check-test-layout.ts`, `bun scripts/check-docs-links.ts` (relative markdown links and backtick'd `apps/`|`packages/`|`docker/`|`scripts/` paths must resolve on disk), and `bun scripts/check-standards.ts` (the ratcheting code-standards gate — see [CODE-STANDARDS.md § Standards Gates](CODE-STANDARDS.md#standards-gates)): dedupe check → lint → typecheck → home-import check → test-layout check → docs-link check → standards check → `primitives:check` → test.
+Locally, `bun run check` runs the check job's set plus four scripts, in this order: dedupe check, lint, typecheck, `bun scripts/check-home-imports.ts`, `bun scripts/check-test-layout.ts`, `bun scripts/check-docs-links.ts`, `bun scripts/check-standards.ts`, `primitives:check`, test. The docs-link check fails on a relative markdown link or a backtick'd `apps/`, `packages/`, `docker/` or `scripts/` path that does not resolve on disk. The standards check is the ratcheting code-standards gate ([CODE-STANDARDS.md § Standards Gates](CODE-STANDARDS.md#standards-gates)).
 
-Before a `v*` tag, bump the dependencies and read `bun audit`. Run `bun update --recursive`, because a plain run at the root updates only the root's own dependencies. Then `bun dedupe`, `bun run check` and a browser pass. better-auth checks `apps/api/auth-schema.ts` against its plugins' models at startup and refuses to boot on a `SCHEMA_MISMATCH`. So a better-auth minor that adds columns lands with the column in `auth-schema.ts`, the DDL in `apps/api/src/lib/setup/setup.ts` and `ensureAuthSchemaColumns` together ([DATABASE.md](DATABASE.md)).
+## A release publishes only the images its gates tested
+
+`.github/workflows/publish.yml` runs on a `v*` tag and on a push to `main`. A run on any other branch or tag, a manual one included, fails before it builds. The workflow builds the images for linux/amd64 and linux/arm64 under candidate tags (`candidate-<version or main>-<platform>`), each on a runner of its own architecture. A candidate is no version, `latest` or `main`, so the launcher refuses it.
+
+On a tag, two gates test those candidates, the images that get published. `docker/test-release.sh` updates the previous published release to the amd64 candidates and rolls it back, building its own releases while it waits for them. `docker/test-boot.sh` installs the arm64 candidates on an arm64 runner and checks `/eigen/health`. Both wait for the candidates stamped with this run's build time, so a candidate left by an earlier run never passes a gate.
+
+- A tag whose version is published already fails the gate: a release is never published twice.
+- In CI, the gate fails when no release before this one is published, unless none is published at all.
+- A release whose `CHANGELOG.md` lists breaking changes since the previous one fails it too, since `./eigen update` refuses it on every install. To publish it anyway, run the workflow on its tag with the input `breaking: true`, which updates with `--accept-breaking` and checks the seed only after the rollback.
+
+The version is published only once every image is built and both gates passed. Each image's two candidates become the `<version>` index, which is then copied to `:latest`; a prerelease leaves `:latest` alone. A failed build or gate leaves no partial release.
+
+A push to `main` runs no gates and publishes the images as `:main`, the channel a release install can follow. A newer push waits for a running build of `main` and replaces one still queued, so a cancel never leaves `:main` half promoted.
+
+In CI arm64 only boots. Its update and rollback are proven by the harnesses on an Apple Silicon Mac.
+
+## Dependencies are bumped before a release tag
+
+Before a `v*` tag, bump the dependencies and read `bun audit`. Run `bun update --recursive`, because a plain run at the root updates only the root's own dependencies. Then `bun dedupe`, `bun run check` and a browser pass.
+
+better-auth checks `apps/api/auth-schema.ts` against its plugins' models at startup and refuses to boot on a `SCHEMA_MISMATCH`. So a better-auth minor that adds columns lands with the column in `auth-schema.ts`, the DDL in `apps/api/src/lib/setup/setup.ts` and `ensureAuthSchemaColumns` together ([DATABASE.md](DATABASE.md)).
+
+## See also
+
+- [CONTRIBUTING.md](CONTRIBUTING.md): setting up a checkout and the pre-commit hook
+- [DEMO_MODE.md](DEMO_MODE.md): the demo seeder that `server/seed-demo.test.ts` pins
+- [SELF-HOSTING.md](SELF-HOSTING.md): the install, update and rollback the Docker harnesses probe
+- The [verify-in-browser skill](../.claude/skills/verify-in-browser/SKILL.md): proving a change in the running dev app
