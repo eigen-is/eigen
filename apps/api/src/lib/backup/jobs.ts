@@ -100,12 +100,17 @@ export async function withBackupJobSlot(ownerId: string, run: () => Promise<void
     }
 }
 
-// The server backup's way into a home's slot: it waits out whatever holds it rather than failing a
-// night on an admin's click, then takes it in the same tick it found it free. Routes keep the 409.
-// The caller releases the slot with the function this resolves to.
-export async function waitForHomeSlot(ownerId: string, holder: string): Promise<() => void> {
+// Waits out whatever holds the slot, then runs `take` in the same tick it found it free: two waiters
+// on one slot must not both see it free.
+export async function whenSlotFree<T>(ownerId: string, take: () => T): Promise<T> {
     for (let busy = slotBusy(ownerId); busy; busy = slotBusy(ownerId)) await busy;
-    return holdSlot(ownerId, holder);
+    return take();
+}
+
+// The server backup's way into a home's slot: it waits rather than failing a night on an admin's
+// click. Routes keep the 409. The caller releases the slot with the function this resolves to.
+export function waitForHomeSlot(ownerId: string, holder: string): Promise<() => void> {
+    return whenSlotFree(ownerId, () => holdSlot(ownerId, holder));
 }
 
 // Runs `run` in the background and hands the caller the job to report back. Every run resolves to

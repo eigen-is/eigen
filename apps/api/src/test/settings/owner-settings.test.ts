@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'b
 import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
+import { EMPTY_S3 } from '@workspace/lib/types/mount';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import { and, eq, inArray } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
@@ -72,6 +73,79 @@ describe('owner-only settings', () => {
                 await authedRequest(ctx.alice.user.sessionToken, '/settings/server'),
             );
             expect(settings.defaults.mount.s3Config).toEqual(s3Config);
+        });
+    });
+
+    describe('the backup settings', () => {
+        const destination = {
+            endpoint: 'https://backups.example.com',
+            bucket: 'eigen-backups',
+            prefix: 'nightly',
+            accessKeyId: 'backup-key-id',
+            secretAccessKey: 'backup-secret',
+        };
+
+        function putBackups(sessionToken: string, backups: unknown): Promise<Response> {
+            return authedRequest(sessionToken, '/settings/server', {
+                method: 'PUT',
+                headers: JSON_HEADERS,
+                body: JSON.stringify({ backups }),
+            });
+        }
+
+        afterAll(async () => {
+            await updateServerSettings({
+                backups: {
+                    schedule: { enabled: false, hourUtc: 2, withS3: false, keep: 7 },
+                    upload: { s3: EMPTY_S3 },
+                },
+            });
+        });
+
+        test('start with the schedule off at 02:00 UTC keeping seven, and no destination', async () => {
+            const settings = await assertJson<ServerSettings>(
+                await authedRequest(ctx.alice.user.sessionToken, '/settings/server'),
+            );
+            expect(settings.backups.schedule).toEqual({ enabled: false, hourUtc: 2, withS3: false, keep: 7 });
+            expect(settings.backups.upload.enabled).toBe(false);
+            expect(settings.backups.upload.keep).toBe(30);
+        });
+
+        test('the owner turns the schedule on, and a later save of one field keeps the rest', async () => {
+            const on = await assertJson<ServerSettings>(
+                await putBackups(ctx.alice.user.sessionToken, {
+                    schedule: { enabled: true, hourUtc: 23, withS3: true, keep: 14 },
+                }),
+            );
+            expect(on.backups.schedule).toEqual({ enabled: true, hourUtc: 23, withS3: true, keep: 14 });
+            const later = await assertJson<ServerSettings>(
+                await putBackups(ctx.alice.user.sessionToken, { schedule: { hourUtc: 0 } }),
+            );
+            expect(later.backups.schedule).toEqual({ enabled: true, hourUtc: 0, withS3: true, keep: 14 });
+        });
+
+        test('an hour that is not one of the day, and a keep under one, are refused', async () => {
+            for (const schedule of [{ hourUtc: 24 }, { hourUtc: -1 }, { hourUtc: 1.5 }, { keep: 0 }, { keep: 2.5 }]) {
+                const res = await putBackups(ctx.alice.user.sessionToken, { schedule });
+                expect(res.status).toBe(422);
+            }
+        });
+
+        test('an admin cannot change them', async () => {
+            const res = await putBackups(admin.sessionToken, { schedule: { enabled: true } });
+            expect(res.status).toBe(403);
+        });
+
+        test("the destination's secret reaches the owner and no admin", async () => {
+            await updateServerSettings({ backups: { upload: { s3: destination } } });
+            const forAdmin = await assertJson<ServerSettings>(
+                await authedRequest(admin.sessionToken, '/settings/server'),
+            );
+            expect(forAdmin.backups.upload.s3).toEqual({ ...destination, secretAccessKey: '' });
+            const forOwner = await assertJson<ServerSettings>(
+                await authedRequest(ctx.alice.user.sessionToken, '/settings/server'),
+            );
+            expect(forOwner.backups.upload.s3).toEqual(destination);
         });
     });
 

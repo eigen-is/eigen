@@ -34,6 +34,28 @@ Reports on the running server with what ./eigen status gathers from Docker and t
 
 type StatusFlags = ReturnType<typeof parseArgs<{ options: typeof STATUS_OPTIONS }>>['values'];
 
+// Red while the newest scheduled attempt failed, whatever came after it: the schedule is what the
+// owner counts on. Yellow while the schedule is on and no Full verified in two days.
+function backupRow({ scheduleEnabled, newest, scheduledFailure, newestGoodFullAt }: ControlStatus['backup']): Row {
+    const why = (error: string | null) => (error ? `: ${error}` : '');
+    if (scheduledFailure) {
+        const { name, createdAt, error } = scheduledFailure;
+        return { level: 'bad', label: 'Backup', value: `${name} failed, ${formatTimeAgo(createdAt)}${why(error)}` };
+    }
+    if (!newest) return { level: 'warn', label: 'Backup', value: 'none yet; ./eigen backup makes one' };
+    const parts = [newest.name, formatTimeAgo(newest.createdAt)];
+    if (newest.bytes !== null) parts.push(formatFileSize(newest.bytes, 1));
+    if (newest.state === 'running') parts.push('running');
+    if (newest.state === 'failed') parts.push(`failed${why(newest.error)}`);
+    const stale =
+        scheduleEnabled && (!newestGoodFullAt || Date.now() - new Date(newestGoodFullAt).getTime() > 2 * DAY_MS);
+    return {
+        level: stale || newest.state === 'failed' ? 'warn' : 'ok',
+        label: 'Backup',
+        value: `${parts.join(', ')}${stale ? '; no good Full backup in two days' : ''}`,
+    };
+}
+
 // Without the API, the report holds what the launcher knows.
 function printReport(flags: StatusFlags, services: Service[], api: ControlStatus | null): void {
     const { install, latest, 'mail-queue': queue, files } = flags;
@@ -99,11 +121,14 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
         });
     }
     if (api) {
-        data.unshift({
-            level: api.diskFree < api.diskTotal / 10 ? 'warn' : 'ok',
-            label: 'Disk',
-            value: `${formatFileSize(api.diskFree, 1)} free of ${formatFileSize(api.diskTotal, 1)}`,
-        });
+        data.unshift(
+            {
+                level: api.diskFree < api.diskTotal / 10 ? 'warn' : 'ok',
+                label: 'Disk',
+                value: `${formatFileSize(api.diskFree, 1)} free of ${formatFileSize(api.diskTotal, 1)}`,
+            },
+            backupRow(api.backup),
+        );
         if (api.certExpiresAt) {
             const days = Math.floor((new Date(api.certExpiresAt).getTime() - Date.now()) / DAY_MS);
             const until = formatDate(api.certExpiresAt);

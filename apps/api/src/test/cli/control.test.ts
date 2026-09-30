@@ -1,16 +1,30 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import {
+    copyFileSync,
+    existsSync,
+    mkdirSync,
+    readdirSync,
+    readFileSync,
+    rmSync,
+    statSync,
+    writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { account as accountSchema, user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { verifyProtocolAuth } from '../../lib/auth/protocol-auth';
+import { getBackupJob } from '../../lib/backup/jobs';
+import { buildServerArchiveName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
+import { startServerBackup } from '../../lib/backup/server-job';
 import { getDataRoot } from '../../lib/config/paths';
 import type { ControlStatus } from '../../lib/config/server-status';
-import { controlRouter, startControlSocket } from '../../routes/control';
+import { getHome } from '../../lib/home/get-home';
+import * as homeRelay from '../../lib/home/home-relay';
+import { type ControlBackupJob, controlRouter, startControlSocket } from '../../routes/control';
 import * as cli from '../cli-test-helpers';
-import { createTestUser, ensureServer, hasSession, signsIn, TEST_DATA_DIR } from '../setup';
+import { createTestUser, ensureServer, getTestContext, hasSession, signsIn, TEST_DATA_DIR } from '../setup';
 
 const FIXTURE_CERT = join(import.meta.dir, '../fixtures/control/expires-2036.crt');
 // Short: a Unix socket path is capped at 104 bytes on macOS.
@@ -336,5 +350,247 @@ describe('eigen reset-password', () => {
         const { stderr, code } = await runCli(['reset-password']);
         expect(code).toBe(1);
         expect(stderr).toBe('■  Name the account.\n└  Run ./eigen reset-password <email>.\n');
+    });
+});
+
+// Every server backup in this file captures the few homes of the test context, for real.
+const JOB_TIMEOUT_MS = 120_000;
+
+function serverRecords(): string[] {
+    return readdirSync(getBackupsDir()).filter((name) => name.startsWith('server-'));
+}
+
+function getJob(id: string): Promise<Response> {
+    return controlRouter.handle(new Request(`http://eigen/backup/jobs/${id}`));
+}
+
+async function waitForControlJob(id: string): Promise<ControlBackupJob> {
+    for (let attempt = 0; attempt < 1200; attempt++) {
+        const job: ControlBackupJob = await (await getJob(id)).json();
+        if (job.state !== 'running') return job;
+        await Bun.sleep(50);
+    }
+    throw new Error(`job ${id} did not finish`);
+}
+
+// Holds every home capture until released, so a job stays running while a test starts another.
+function holdCaptures(): { release(): void; restore(): void } {
+    const gate = Promise.withResolvers<void>();
+    const pull = homeRelay.pullHomeSnapshot;
+    const spy = spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (...args) => {
+        await gate.promise;
+        return pull(...args);
+    });
+    return {
+        release: () => gate.resolve(),
+        restore: () => {
+            gate.resolve();
+            spy.mockRestore();
+        },
+    };
+}
+
+describe('the server backup on the control socket', () => {
+    const spies: { mockRestore(): void }[] = [];
+
+    beforeAll(async () => {
+        const ctx = await getTestContext();
+        await getHome(ctx.alice.user.id);
+        spies.push(spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined));
+    });
+
+    afterEach(() => {
+        for (const name of serverRecords()) rmSync(join(getBackupsDir(), name), { force: true });
+    });
+
+    afterAll(() => {
+        for (const spy of spies.splice(0)) spy.mockRestore();
+    });
+
+    describe('POST /backup', () => {
+        test(
+            'starts one and reports it until it ends, with the size of its archive',
+            async () => {
+                const res = await post('/backup', { level: 'light', reason: 'manual' });
+                expect(res.status).toBe(200);
+                const started: ControlBackupJob = await res.json();
+                expect(started.state).toBe('running');
+                expect(started.artifact).toStartWith('server-manual-light-');
+                const job = await waitForControlJob(started.id);
+                expect(job.error).toBeUndefined();
+                expect(job).toMatchObject({ state: 'done', artifact: started.artifact });
+                expect(job.bytes).toBeGreaterThan(0);
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        test(
+            'a start while one runs is refused naming it, and a pre-update start that waits runs once it has ended',
+            async () => {
+                const held = holdCaptures();
+                try {
+                    const first: ControlBackupJob = await (
+                        await post('/backup', { level: 'full', reason: 'manual' })
+                    ).json();
+                    const refused = await post('/backup', { level: 'light', reason: 'pre-update' });
+                    expect(refused.status).toBe(409);
+                    expect(await refused.text()).toContain(first.artifact!);
+
+                    let answered = false;
+                    const waiting = post('/backup', { level: 'light', reason: 'pre-update', wait: true }).then(
+                        (res) => {
+                            answered = true;
+                            return res;
+                        },
+                    );
+                    await Bun.sleep(300);
+                    expect(answered).toBe(false);
+                    held.release();
+
+                    const res = await waiting;
+                    expect(res.status).toBe(200);
+                    const second: ControlBackupJob = await res.json();
+                    expect(getBackupJob(first.id)?.state).toBe('done');
+                    expect(second.artifact).toStartWith('server-pre-update-light-');
+                    expect((await waitForControlJob(second.id)).state).toBe('done');
+                } finally {
+                    held.restore();
+                }
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        test('takes no scheduled reason and no level it does not know', async () => {
+            expect((await post('/backup', { level: 'full', reason: 'scheduled' })).status).toBe(422);
+            expect((await post('/backup', { level: 'all', reason: 'manual' })).status).toBe(422);
+            expect(serverRecords()).toEqual([]);
+        });
+
+        test('an unknown job is a 404', async () => {
+            expect((await getJob('no-such-job')).status).toBe(404);
+        });
+    });
+
+    describe('GET /status', () => {
+        // A record the way a finished or refused attempt leaves one, without running a job.
+        function writeRecord(reason: 'scheduled' | 'manual', level: 'light' | 'full', at: string, record: object) {
+            const archivePath = join(getBackupsDir(), buildServerArchiveName(reason, level, new Date(at)));
+            writeFileSync(serverSidecarPath(archivePath), JSON.stringify({ startedAt: at, ...record }));
+            return archivePath;
+        }
+
+        test('has no backup when there is none', async () => {
+            expect((await getStatus()).backup).toEqual({
+                scheduleEnabled: false,
+                newest: null,
+                scheduledFailure: null,
+                newestGoodFullAt: null,
+            });
+        });
+
+        test('names the newest record, the failed scheduled attempt and the newest Full that verified', async () => {
+            writeFileSync(
+                writeRecord('scheduled', 'full', '2026-09-01T02:00:00.000Z', { state: 'done' }),
+                'archive bytes',
+            );
+            writeFileSync(writeRecord('manual', 'light', '2026-09-01T12:00:00.000Z', { state: 'done' }), 'light bytes');
+            const failed = writeRecord('scheduled', 'full', '2026-09-02T02:00:00.000Z', {
+                state: 'failed',
+                error: 'no room',
+            });
+            const name = failed.slice(failed.lastIndexOf('/') + 1);
+            expect((await getStatus()).backup).toEqual({
+                scheduleEnabled: false,
+                newest: { name, createdAt: '2026-09-02T02:00:00.000Z', state: 'failed', bytes: null, error: 'no room' },
+                scheduledFailure: { name, createdAt: '2026-09-02T02:00:00.000Z', error: 'no room' },
+                newestGoodFullAt: '2026-09-01T02:00:00.000Z',
+            });
+        });
+    });
+
+    describe('eigen backup', () => {
+        test(
+            'prints the steps it sees, then what it saved, and ends with the archive',
+            async () => {
+                // Long enough that a poll sees the step.
+                const pull = homeRelay.pullHomeSnapshot;
+                const slow = spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (...args) => {
+                    await Bun.sleep(1200);
+                    return pull(...args);
+                });
+                const { stdout, stderr, code } = await runCli(['backup', '--level', 'light']).finally(() =>
+                    slow.mockRestore(),
+                );
+                expect(stderr).toBe('');
+                expect(code).toBe(0);
+                expect(stdout).toMatch(/^┌ {2}Backing up the server into server-manual-light-/);
+                expect(stdout).toMatch(/│ {2}home 1 of \d+\n/);
+                const archive = stdout.match(/\narchive=(server-manual-light-\d{8}-\d{6}\.tar)\n$/)?.[1];
+                expect(archive).toBeDefined();
+                expect(stdout).toContain(`└  Saved ${archive}: Light, `);
+                expect(existsSync(join(getBackupsDir(), archive!))).toBe(true);
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        test('a level or reason it does not take is a usage error', async () => {
+            for (const args of [
+                ['--level', 'all'],
+                ['--reason', 'scheduled'],
+            ]) {
+                const { stderr, code } = await runCli(['backup', ...args]);
+                expect(code).toBe(2);
+                expect(stderr).toContain('Usage: backup');
+            }
+            expect(serverRecords()).toEqual([]);
+        });
+
+        test('with Eigen down it refuses, and says a plain copy is a backup too', async () => {
+            const { stderr, code } = await runCli(['backup'], undefined, {
+                EIGEN_CONTROL_SOCKET: join(TEST_DATA_DIR, 'none.sock'),
+            });
+            expect(code).toBe(1);
+            expect(stderr).toContain('Eigen is not running');
+            expect(stderr).toContain('a copy of data/ and .env.production');
+        });
+
+        test(
+            'a start while one runs fails with the reason, and --wait waits it out',
+            async () => {
+                const held = holdCaptures();
+                try {
+                    const running = await startServerBackup({ level: 'light', reason: 'manual', keep: 7 });
+                    const refused = await runCli(['backup']);
+                    expect(refused.code).toBe(1);
+                    expect(refused.stderr).toContain(running.artifact!);
+
+                    const waiting = runCli(['backup', '--level', 'light', '--reason', 'pre-update', '--wait']);
+                    await Bun.sleep(300);
+                    held.release();
+                    const { stdout, code } = await waiting;
+                    expect(code).toBe(0);
+                    expect(stdout).toMatch(/\narchive=server-pre-update-light-\d{8}-\d{6}\.tar\n$/);
+                } finally {
+                    held.restore();
+                }
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        test(
+            'a job that fails exits 1 with its error',
+            async () => {
+                const failing = spyOn(homeRelay, 'pullHomeSnapshot').mockRejectedValue(new Error('disk on fire'));
+                try {
+                    const { stdout, stderr, code } = await runCli(['backup', '--level', 'light']);
+                    expect(code).toBe(1);
+                    expect(stderr).toContain('disk on fire');
+                    expect(stdout).not.toContain('archive=');
+                } finally {
+                    failing.mockRestore();
+                }
+            },
+            JOB_TIMEOUT_MS,
+        );
     });
 });

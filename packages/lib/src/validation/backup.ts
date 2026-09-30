@@ -66,8 +66,13 @@ export const BACKUP_FORMAT_VERSION = 1;
 // The annotations are what keep these lists from drifting from the shared unions.
 const KINDS: readonly BackupManifest['kind'][] = ['user', 'team', 'server'];
 const STORAGE_TYPES: readonly MountConfig['storageType'][] = ['local', 'local-key', 's3'];
-const LEVELS: readonly BackupLevel[] = ['light', 'full', 'full-s3'];
-const REASONS: readonly BackupReason[] = ['scheduled', 'manual', 'pre-update'];
+export const BACKUP_LEVELS = ['light', 'full', 'full-s3'] as const satisfies readonly BackupLevel[];
+export const BACKUP_REASONS: readonly BackupReason[] = ['scheduled', 'manual', 'pre-update'];
+// What ./eigen backup may start one for; only the schedule makes a scheduled archive.
+export const ON_DEMAND_BACKUP_REASONS = ['manual', 'pre-update'] as const satisfies readonly Exclude<
+    BackupReason,
+    'scheduled'
+>[];
 
 // A whole-server archive: `server-{reason}-{level}-{stamp}.tar`, uncompressed because its members
 // already are. Reason and level are in the name, so retention and the schedule read no archive.
@@ -76,13 +81,13 @@ export const SERVER_ARCHIVE_EXTENSION = '.tar';
 
 const SERVER_ARCHIVE_EXTENSION_PATTERN = SERVER_ARCHIVE_EXTENSION.replaceAll('.', String.raw`\.`);
 const SERVER_ARCHIVE_NAME = new RegExp(
-    `^${SERVER_ARCHIVE_PREFIX}(?<reason>${REASONS.join('|')})-(?<level>${LEVELS.join('|')})-${BACKUP_STAMP_PATTERN}${SERVER_ARCHIVE_EXTENSION_PATTERN}$`,
+    `^${SERVER_ARCHIVE_PREFIX}(?<reason>${BACKUP_REASONS.join('|')})-(?<level>${BACKUP_LEVELS.join('|')})-${BACKUP_STAMP_PATTERN}${SERVER_ARCHIVE_EXTENSION_PATTERN}$`,
 );
 
 export function parseServerArchiveName(name: string): { reason: BackupReason; level: BackupLevel; at: Date } | null {
     const groups = SERVER_ARCHIVE_NAME.exec(name)?.groups;
-    const reason = REASONS.find((candidate) => candidate === groups?.['reason']);
-    const level = LEVELS.find((candidate) => candidate === groups?.['level']);
+    const reason = BACKUP_REASONS.find((candidate) => candidate === groups?.['reason']);
+    const level = BACKUP_LEVELS.find((candidate) => candidate === groups?.['level']);
     if (!groups || !reason || !level) return null;
     const at = parseBackupStamp(groups);
     return at ? { reason, level, at } : null;
@@ -98,7 +103,7 @@ function isStorageType(value: string): value is MountConfig['storageType'] {
 
 // An unknown level is refused rather than read as complete: a restore trusts this field to say so.
 function isLevel(value: unknown): value is BackupLevel {
-    return LEVELS.some((level) => level === value);
+    return BACKUP_LEVELS.some((level) => level === value);
 }
 
 function isEntry(value: unknown): value is BackupEntry {
@@ -227,7 +232,7 @@ function isServerArchiveManifest(value: unknown): value is ServerArchiveManifest
         'level' in value &&
         isLevel(value.level) &&
         'reason' in value &&
-        REASONS.some((reason) => reason === value.reason) &&
+        BACKUP_REASONS.some((reason) => reason === value.reason) &&
         'createdAt' in value &&
         typeof value.createdAt === 'string' &&
         'appVersion' in value &&

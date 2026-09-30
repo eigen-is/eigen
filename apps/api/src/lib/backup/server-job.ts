@@ -5,6 +5,7 @@ import type {
     BackupJob,
     BackupLevel,
     BackupReason,
+    ServerArchive,
     ServerArchiveManifest,
     ServerArchiveSidecar,
 } from '@workspace/lib/types/backup';
@@ -33,7 +34,7 @@ import { getOrgOwner, getUserById } from '../user';
 import { type ArchiveWriter, createArchiveWriter, packFolder } from './archive';
 import { enumerateHomes, type ServerHome } from './enumerate-homes';
 import { describeError } from './errors';
-import { startBackupJob, waitForHomeSlot } from './jobs';
+import { startBackupJob, waitForHomeSlot, whenSlotFree } from './jobs';
 import {
     archiveServerPath,
     backupsDirPath,
@@ -64,6 +65,8 @@ export type ServerBackupOptions = {
     // How many good scheduled archives the backups folder keeps once this job has written its own.
     keep: number;
     startedBy?: string;
+    // Wait out a server backup that runs rather than take its 409: the pre-update one does.
+    wait?: boolean;
 };
 
 async function writeServerSidecar(archivePath: string, sidecar: ServerArchiveSidecar): Promise<void> {
@@ -257,6 +260,52 @@ function listServerRecords(dir: string): string[] {
     return [...names];
 }
 
+// The owner's list, newest first, from names and sidecars alone. A missing folder is an empty one.
+export async function listServerArchives(): Promise<ServerArchive[]> {
+    const dir = backupsDirPath();
+    if (!fs.existsSync(dir)) return [];
+    const archives: ServerArchive[] = [];
+    for (const name of listServerRecords(dir)) {
+        const parsed = parseServerArchiveName(name);
+        if (!parsed) continue;
+        const archivePath = path.join(dir, name);
+        archives.push({
+            name,
+            level: parsed.level,
+            reason: parsed.reason,
+            createdAt: parsed.at,
+            bytes: fs.statSync(archivePath, { throwIfNoEntry: false })?.size ?? null,
+            record: await readServerSidecar(archivePath).catch(() => null),
+        });
+    }
+    return archives.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+// The schedule's one question. A failed or refused attempt left its record, so it counts: a night
+// that fails is one alert, not a retry every tick.
+export function hasScheduledAttemptOn(day: Date): boolean {
+    const dir = backupsDirPath();
+    if (!fs.existsSync(dir)) return false;
+    const date = day.toISOString().slice(0, 10);
+    return listServerRecords(dir).some((name) => {
+        const parsed = parseServerArchiveName(name);
+        return parsed?.reason === 'scheduled' && parsed.at.toISOString().slice(0, 10) === date;
+    });
+}
+
+// An archive and its record go together, and a refused attempt's record alone. One still being
+// written is refused: its job would write the record back when it ends.
+export async function deleteServerArchive(name: string): Promise<void> {
+    if (!parseServerArchiveName(name)) throw new ApiError(400, 'Not a server backup name');
+    const archivePath = path.join(backupsDirPath(), name);
+    const recordPath = serverSidecarPath(archivePath);
+    if (!fs.existsSync(archivePath) && !fs.existsSync(recordPath)) throw new ApiError(404, 'Archive not found');
+    const record = await readServerSidecar(archivePath).catch(() => null);
+    if (record?.state === 'running') throw new ApiError(409, `${name} is still being written`);
+    fs.rmSync(archivePath, { force: true });
+    fs.rmSync(recordPath, { force: true });
+}
+
 // Retention over the folder, judged by each sidecar: a scheduled archive counts as good only when its
 // job ended done. An archive and its sidecar go together. One whose sidecar is missing or unreadable
 // is left alone: nothing is deleted on a record nobody can read.
@@ -343,21 +392,37 @@ async function runServerBackup(
 }
 
 // Starts the whole-server backup and resolves once it is under way. One runs at a time, in the org's
-// job slot: a second start is startBackupJob's 409, which names the archive being written. No room
-// is a 507, and the attempt's record stays, failed, like any other.
-export async function startServerBackup({ level, reason, keep, startedBy }: ServerBackupOptions): Promise<BackupJob> {
+// job slot: a second start is startBackupJob's 409, which names the archive being written, unless it
+// is to `wait` for that one to end. No room is a 507, and the attempt's record stays, failed, like
+// any other.
+export async function startServerBackup({
+    level,
+    reason,
+    keep,
+    startedBy,
+    wait,
+}: ServerBackupOptions): Promise<BackupJob> {
     const ownerId = orgOwnerId(getPublicConfig().orgId);
-    const at = freeServerArchiveAt(reason, level, new Date());
-    const archivePath = path.join(getBackupsDir(), buildServerArchiveName(reason, level, at));
     const admitted = Promise.withResolvers<void>();
-    const job = startBackupJob('server-backup', ownerId, startedBy, (started, onProgress) => {
-        started.reason = reason;
-        started.artifact = path.basename(archivePath);
-        const run = runServerBackup(started, archivePath, { level, reason, at, keep }, admitted.resolve, onProgress);
-        // A promise settles once, so after admission this reject is a no-op.
-        run.catch(admitted.reject);
-        return run;
-    });
+    const start = () => {
+        const at = freeServerArchiveAt(reason, level, new Date());
+        const archivePath = path.join(getBackupsDir(), buildServerArchiveName(reason, level, at));
+        return startBackupJob('server-backup', ownerId, startedBy, (started, onProgress) => {
+            started.reason = reason;
+            started.artifact = path.basename(archivePath);
+            const run = runServerBackup(
+                started,
+                archivePath,
+                { level, reason, at, keep },
+                admitted.resolve,
+                onProgress,
+            );
+            // A promise settles once, so after admission this reject is a no-op.
+            run.catch(admitted.reject);
+            return run;
+        });
+    };
+    const job = wait ? await whenSlotFree(ownerId, start) : start();
     await admitted.promise;
     return job;
 }

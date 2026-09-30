@@ -8,11 +8,16 @@
 
 const timers: Timer[] = [];
 
-// Runs fn immediately, then every intervalMs. fn can return anything (sync or
+// Runs fn immediately unless `atStart` is false, then every intervalMs. fn can return anything (sync or
 // Promise) — the return value is discarded and rejections are caught + logged so
 // one bad sweep never breaks the schedule. A slow async fn is never re-entered:
 // a tick that fires while the previous sweep is still running is skipped.
-export function scheduleInterval(name: string, intervalMs: number, fn: () => unknown): void {
+export function scheduleInterval(
+    name: string,
+    intervalMs: number,
+    fn: () => unknown,
+    { atStart = true }: { atStart?: boolean } = {},
+): void {
     let running = false;
     const run = async () => {
         if (running) return;
@@ -25,7 +30,7 @@ export function scheduleInterval(name: string, intervalMs: number, fn: () => unk
             running = false;
         }
     };
-    run();
+    if (atStart) run();
     const timer = setInterval(run, intervalMs);
     timer.unref(); // periodic work must never hold the process open at shutdown
     timers.push(timer);

@@ -32,11 +32,18 @@ export const settingsRouter = new Elysia({ name: 'settings' })
         async ({ user }): Promise<ServerSettings> => {
             await requireAdmin(user.id);
             const settings = getServerSettings();
+            // The secrets are the owner's, as on /settings/s3config; an admin's team mount form takes the rest.
+            if ((await getOrgRole(user.id)) === 'owner') return settings;
             const { s3Config } = settings.defaults.mount;
-            // The secret is the owner's, as on /settings/s3config; an admin's team mount form takes the rest.
-            if (!s3Config || (await getOrgRole(user.id)) === 'owner') return settings;
-            const mount = { ...settings.defaults.mount, s3Config: { ...s3Config, secretAccessKey: '' } };
-            return { ...settings, defaults: { mount } };
+            const mount = s3Config
+                ? { ...settings.defaults.mount, s3Config: { ...s3Config, secretAccessKey: '' } }
+                : settings.defaults.mount;
+            const { upload } = settings.backups;
+            return {
+                ...settings,
+                defaults: { mount },
+                backups: { ...settings.backups, upload: { ...upload, s3: { ...upload.s3, secretAccessKey: '' } } },
+            };
         },
         { auth: true },
     )
@@ -135,6 +142,18 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                         senderName: t.Optional(senderNameSchema),
                         senderAddress: t.Optional(senderAddressSchema),
                         relaySendsAsUsers: t.Optional(t.Boolean()),
+                    }),
+                ),
+                backups: t.Optional(
+                    t.Object({
+                        schedule: t.Optional(
+                            t.Object({
+                                enabled: t.Optional(t.Boolean()),
+                                hourUtc: t.Optional(t.Integer({ minimum: 0, maximum: 23 })),
+                                withS3: t.Optional(t.Boolean()),
+                                keep: t.Optional(t.Integer({ minimum: 1, maximum: 365 })),
+                            }),
+                        ),
                     }),
                 ),
             }),
