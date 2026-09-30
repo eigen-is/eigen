@@ -62,7 +62,7 @@ async function sendSeriesExceptions(
     }
 }
 
-// `series` set means `event` is one occurrence: the messages name the series id plus the occurrence key, the shape an iMIP REQUEST with a RECURRENCE-ID has (docs/CALENDAR.md § Invitations). `exceptions` are the series' own, sent to every added guest and in every external update, so a moved occurrence does not render at its original slot and a deleted one does not render at all.
+// `series` set means `event` is one occurrence: the messages name the series id plus the occurrence key, the shape an iMIP REQUEST with a RECURRENCE-ID has (docs/CALENDAR-INVITATIONS.md § An occurrence message names the series). `exceptions` are the series' own, sent to every added guest and in every external update, so a moved occurrence does not render at its original slot and a deleted one does not render at all.
 export async function propagateInvitation(
     organizerHome: Home,
     event: CalendarEvent,

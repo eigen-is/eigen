@@ -3,7 +3,7 @@ import type { Calendar } from '../calendar/calendar';
 import { davDeleteResponse, davPutResponse, davResourceResponse } from '../dav/write-result';
 import { calendarHref } from './discovery';
 
-// A thin adapter: the calendar store owns the preconditions, the UID rules and the ceiling (docs/CALENDAR.md § CalDAV surface).
+// A thin adapter: the calendar store owns the preconditions, the UID rules and the ceiling (docs/CALDAV.md § A PUT is judged inside the write lock).
 
 // GET /dav/calendars/:ownerId/:calendarId/:uri — the stored bytes ARE the resource. A uri no row holds is a 404.
 export async function handleGet(calendar: Calendar, calendarId: string, uri: string): Promise<Response> {

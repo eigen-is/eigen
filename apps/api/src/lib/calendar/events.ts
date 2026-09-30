@@ -23,7 +23,7 @@ import { prepareResource, resourceBytes } from './resource-store';
 import * as schema from './schema';
 import type { CreateEventArgs } from './types';
 
-// Event mutation over the Calendar facade. See docs/CALENDAR.md § The write path.
+// Event mutation over the Calendar facade. See docs/CALENDAR.md § A web save patches what moved, and a CalDAV PUT replaces the file.
 
 // Where an edit writes and what it credits against the quota; the bytes are the one column no caller needs by default.
 const STORED_RESOURCE = {

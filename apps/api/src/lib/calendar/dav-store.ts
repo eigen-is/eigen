@@ -23,7 +23,7 @@ import {
 } from './resource-store';
 import * as schema from './schema';
 
-// The CalDAV store seam over the Calendar facade. See docs/CALENDAR.md § CalDAV surface.
+// The CalDAV store seam over the Calendar facade. See docs/CALDAV.md § A PUT is judged inside the write lock.
 
 // The size lets a REPORT weigh a row against its byte budget before reading the bytes at all.
 export type ResourceRow = {

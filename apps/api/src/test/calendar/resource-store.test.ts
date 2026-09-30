@@ -13,7 +13,7 @@ import { breakTransaction } from '../db-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
 // The store behind every calendar write: the blob the row carries, and what it looks like when the
-// transaction that would have moved it does not commit. See docs/CALENDAR.md § Storage model.
+// transaction that would have moved it does not commit. See docs/CALENDAR.md § The stored bytes are the event, and every column is a projection.
 
 describe('calendar blob store', () => {
     beforeAll(() => {

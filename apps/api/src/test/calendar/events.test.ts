@@ -14,7 +14,7 @@ import { breakTransaction } from '../db-test-helpers';
 import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
-// The event writes that re-home a stored resource. See docs/CALENDAR.md § The write path.
+// The event writes that re-home a stored resource. See docs/CALENDAR.md § Every write takes one lock and one function.
 
 describe('moveEvent', () => {
     beforeAll(() => {

@@ -10,7 +10,7 @@ import type { TestHome } from '../home-test-helpers';
 import { vcal } from '../ics-test-helpers';
 
 // The CalDAV seam over the store: what a PUT is allowed to land, what it refuses, and what the stored
-// bytes look like afterwards. See docs/CALENDAR.md § CalDAV surface.
+// bytes look like afterwards. See docs/CALDAV.md § A PUT is judged inside the write lock.
 
 const event = (uid: string, summary: string, extra: string[] = []): string[] => [
     'BEGIN:VEVENT',

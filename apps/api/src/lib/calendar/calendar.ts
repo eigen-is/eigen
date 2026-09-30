@@ -552,7 +552,7 @@ export class Calendar {
         return events.moveEvent(this, calendarId, id, targetCalendarId);
     }
 
-    // A whole `.ics` into one calendar of this Home (docs/CALENDAR.md § iCalendar import / export).
+    // A whole `.ics` into one calendar of this Home (docs/ICALENDAR.md § Import replays each series through the PUT seam).
     public async importEvents(calendarId: string, bytes: Uint8Array): Promise<ImportCountsResult> {
         return importEvents(this, calendarId, bytes);
     }

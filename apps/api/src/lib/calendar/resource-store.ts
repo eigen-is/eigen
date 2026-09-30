@@ -9,7 +9,7 @@ import { uidOf } from '../ical/ical-parse';
 import { CALENDAR_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 
-// The calendar-shaped half of the store over `core/blob-store.ts`. See docs/CALENDAR.md § Storage model.
+// The calendar-shaped half of the store over `core/blob-store.ts`. See docs/CALENDAR.md § The stored bytes are the event, and every column is a projection.
 
 export type Tx = DatabaseTx<typeof schema>;
 
