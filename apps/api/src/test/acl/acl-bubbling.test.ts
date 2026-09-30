@@ -1,5 +1,9 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import type { DriveACL, InviteResult } from '@workspace/lib/types';
+import { eq } from 'drizzle-orm';
+import { user as userSchema } from '../../../auth-schema';
+import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import {
     assertJson,
     authedRequest,
@@ -422,6 +426,50 @@ describe('ACL Bubbling', () => {
                 'unrestricted-invite@test.eigen.is',
             );
             expect(res.status).toBe(200);
+        });
+    });
+
+    describe('a guest', () => {
+        test('with write on a chat is refused an invite, which adds no one and mails no one', async () => {
+            const email = `invite-guest-${randomUUID()}@external.com`;
+            const password = randomUUID();
+            const created = await auth.api.createUser({ body: { email, password, name: 'Guest', role: 'user' } });
+            // The admin plugin only makes 'user' or 'admin': demote directly.
+            getAuthDrizzleDb()
+                .update(userSchema)
+                .set({ role: 'guest' })
+                .where(eq(userSchema.id, created.user.id))
+                .run();
+            const signIn = await auth.api.signInEmail({ returnHeaders: true, body: { email, password } });
+            const guestToken =
+                (signIn.headers.get('set-cookie') ?? '').match(/better-auth\.session_token=([^;]+)/)?.[1] ?? '';
+            const chat = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}/create/chat`,
+                { fileName: 'guest-room' },
+            );
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${chat.id}/acl`, {
+                add: [{ id: email, read: true, write: true }],
+            });
+
+            const mailer = await import('../../lib/core/mailer');
+            const sent = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            try {
+                const res = await invite(guestToken, ctx.alice.user.id, aliceMountId, chat.id, 'outsider@external.com');
+                expect(res.status).toBe(403);
+                expect(sent).not.toHaveBeenCalled();
+            } finally {
+                sent.mockRestore();
+            }
+            const path = await driveGet(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `path/${chat.id}`,
+            );
+            expect(path.acl?.map((entry) => entry.id)).not.toContain('outsider@external.com');
         });
     });
 

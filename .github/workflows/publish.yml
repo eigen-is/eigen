@@ -127,17 +127,22 @@ jobs:
   # The release gate on a clean runner, beside the builds: the previous published release updated to this run's amd64
   # candidates, the images promote publishes, and rolled back; then update, rollback and a breaking release through a
   # registry of its own. It builds those releases while it waits for the candidates. Only for a release; main's own
-  # checks run in check.yml.
+  # checks run in check.yml. It reads this run's jobs to stop waiting once a build failed: needs publish would wait for
+  # every build before it starts its own.
   gate:
     needs: meta
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     timeout-minutes: 100
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
 
       - run: bash docker/test-release.sh
         env:
+          GH_TOKEN: ${{ github.token }}
           ACCEPT_BREAKING: ${{ inputs.breaking && '1' || '' }}
           CANDIDATE: candidate-${{ needs.meta.outputs.target }}-amd64
           CANDIDATE_CREATED: ${{ needs.meta.outputs.built-at }}

@@ -2,7 +2,7 @@ import type { parseArgs } from 'node:util';
 import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants';
 import { formatFileSize } from '@workspace/lib/format';
 import { BACKUP_LEVELS, ON_DEMAND_BACKUP_REASONS } from '@workspace/lib/validation';
-import type { ControlBackupJob } from '../routes/control';
+import type { ControlBackupJob } from '../lib/backup/server-job';
 import { callControl } from './control-socket';
 import { createUi, glyphLine } from './ui';
 
@@ -42,7 +42,8 @@ function nextAfter(status: number): string {
     return 'Run ./eigen logs eigen-api to see what went wrong.';
 }
 
-// Starts the job on the running API and follows it to its end; with Eigen down there is nothing to run it (D9).
+// Starts the job on the running API and follows it to its end. Only the API's job map keeps a backup off a home a
+// restore writes, so with Eigen down nothing runs it.
 export async function backup(flags: BackupFlags): Promise<void> {
     const level = BACKUP_LEVELS.find((candidate) => candidate === flags.level);
     const reason = ON_DEMAND_BACKUP_REASONS.find((candidate) => candidate === flags.reason);

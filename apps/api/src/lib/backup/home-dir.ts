@@ -1,5 +1,5 @@
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { getTeamDataPath, getUserHomePath } from '../config/paths';
+import { getDataRoot, homeDirUnder } from '../config/paths';
 import { ApiError } from '../core/errors';
 import { getUserById } from '../user/user';
 import { type BackableOwner, requireBackableOwner } from './paths';
@@ -18,6 +18,6 @@ export async function requireBackableHome(ownerId: string): Promise<BackableOwne
 
 // Where this owner's home folder lives.
 export async function resolveHomeDir(ownerId: string): Promise<string> {
-    const owner = await requireBackableHome(ownerId);
-    return owner.type === 'team' ? getTeamDataPath(owner.id) : getUserHomePath(owner.id);
+    await requireBackableHome(ownerId);
+    return homeDirUnder(getDataRoot(), ownerId);
 }

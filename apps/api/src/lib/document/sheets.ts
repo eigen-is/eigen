@@ -28,7 +28,7 @@ export function readSheetsFromDoc(
     // the cross-sheet formula resolver read the dense `data` matrix (v1 editor
     // flushes carried it implicitly). Materialize it for every sheet so preview and
     // export see the same workbook regardless of which format persisted it.
-    // Accepted bound: one far-flung cell (XFD1048576) makes this a huge grid, capped by the Worker deadline.
+    // One far-flung cell (XFD1048576) makes this a huge grid; the Worker deadline caps it.
     const replayed = replaySheetsOps(sheets, opBatches).map(withMaterializedData);
 
     // Server-side recalc for docs the client never computed for us — legacy xlsx

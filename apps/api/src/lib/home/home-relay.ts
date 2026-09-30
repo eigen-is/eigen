@@ -12,15 +12,15 @@ import type {
 } from '@workspace/lib/types/calendar';
 import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
-import { parseOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
-import { parseHomeMountSettings } from '@workspace/lib/validation';
-import { MAILDIR_ROOT } from '../backup/archive-layout';
+import { isLightSkipped } from '../backup/archive-layout';
+import { readHomeMounts } from '../backup/enumerate-homes';
 import { type SnapshotProgress, snapshotHome, treeBytes } from '../backup/snapshot-home';
 import { readCalendarTotalSize } from '../calendar/resource-store';
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/types';
-import { getAvatarsDir, getTeamDataPath, getUserHomePath } from '../config/paths';
+import { getAvatarsDir, getDataRoot, getUserHomePath, homeDirUnder } from '../config/paths';
 import { resolveUserQuotas } from '../config/quota';
 import { readContactsTotalSize } from '../contacts/card-store';
 import { LocalFilesystem, PATHS } from '../core';
@@ -29,7 +29,7 @@ import { readMailTotalSize } from '../mail/maildir-store';
 import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, updateUser } from '../user';
-import { atHome, getHome, getHomeForBackup, getTeamHome } from './get-home';
+import { atHome, getHome, getHomeForBackup, getTeamHome, isHomeOpen } from './get-home';
 
 export type HomeMessage =
     | { type: 'drive:acl-change'; path: DrivePath; acl: DriveACL[] | null; actorEmail?: string; actorName?: string }
@@ -220,7 +220,7 @@ export async function pullHomeSnapshot(
     options: { level?: BackupLevel; onProgress?: SnapshotProgress },
 ): Promise<BackupManifest> {
     const startedAt = Date.now();
-    const wasLoaded = atHome(ownerId);
+    const wasLoaded = isHomeOpen(ownerId);
     const home = await getHomeForBackup(ownerId);
     try {
         return await snapshotHome(home, targetDir, options);
@@ -229,22 +229,16 @@ export async function pullHomeSnapshot(
     }
 }
 
-// A folder inside a mount: its file bodies, thumbs, staging and the container databases in them.
-const MOUNT_SUBDIR = new RegExp(`^${PATHS.DRIVE.ROOT}/[^/]+/`);
-
 // What a capture of the home at `level` stages at most, read off its folder like pullHomeSize: the
 // server backup's room check sizes every home before it starts. Full is every local byte. Light
 // walks no Maildir and of each mount only its metadata.db. Full + S3 adds each s3 mount's objects.
 export async function pullHomeBackupBytes(ownerId: string, level: BackupLevel): Promise<number> {
-    const owner = parseOwnerId(ownerId);
-    const homeDir = owner.type === 'team' ? getTeamDataPath(owner.id) : getUserHomePath(owner.id);
+    const homeDir = homeDirUnder(getDataRoot(), ownerId);
     if (!fs.existsSync(homeDir)) return 0;
-    if (level === 'light') return treeBytes(homeDir, (rel) => rel === MAILDIR_ROOT || MOUNT_SUBDIR.test(rel));
-    const local = treeBytes(homeDir);
+    if (level === 'light') return treeBytes(homeDir, isLightSkipped);
+    const local = await treeBytes(homeDir);
     if (level === 'full') return local;
-    const settingsFile = Bun.file(path.join(homeDir, PATHS.SETTINGS));
-    const mounts = (await settingsFile.exists()) ? parseHomeMountSettings(await settingsFile.text()) : null;
-    const s3Bytes = Object.entries(mounts ?? {})
+    const s3Bytes = Object.entries(readHomeMounts(homeDir) ?? {})
         .filter(([, mount]) => mount.storageType === 's3')
         .map(([id]) => readMountTotalSize(path.join(homeDir, PATHS.DRIVE.ROOT, id, PATHS.DRIVE.METADATA_DB)));
     return s3Bytes.reduce((sum, bytes) => sum + bytes, local);

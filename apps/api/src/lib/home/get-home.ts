@@ -16,6 +16,12 @@ export function atHome(ownerId: string): boolean {
     return homeFactories.has(ownerId);
 }
 
+// Loaded and staying: a home tearing down is gone to whoever asks next.
+export function isHomeOpen(ownerId: string): boolean {
+    const home = homeFactories.get(ownerId)?.peek();
+    return !!home && !home.destructing;
+}
+
 // Resets the idle timer on an already-loaded home. peek() never triggers the factory,
 // so a keepalive tick pins a live home without resurrecting an evicted one.
 export function touchHomeIfLoaded(ownerId: string): void {
@@ -23,15 +29,6 @@ export function touchHomeIfLoaded(ownerId: string): void {
     if (!home) return;
     home.requestedAt = Date.now();
     home.touch();
-}
-
-// A home refused because its folder is being replaced. Its own class so a caller can tell it from
-// every other 503 without matching on the message: the collab WS route answers this one with "reload
-// the page", and an unreachable-storage 503 with "keep the document and retry" — opposite orders.
-export class HomeRestoringError extends ApiError {
-    constructor() {
-        super(503, 'Restore in progress');
-    }
 }
 
 // Homes whose folder is being replaced by a restore. Every surface that resolves a home per request
@@ -59,7 +56,7 @@ export async function getHome(ownerId: string): Promise<Home> {
 // getHome without recording a request: a backup reaching a home is nobody opening it (pullHomeSnapshot).
 export async function getHomeForBackup(ownerId: string): Promise<Home> {
     if (restoringHomes.has(ownerId)) {
-        throw new HomeRestoringError();
+        throw new ApiError(503, 'Restore in progress');
     }
     // Retry to resolve races with a concurrently-destructing home or a competing installer. This
     // settles in one or two iterations in practice; the bound is only a runaway safety net.

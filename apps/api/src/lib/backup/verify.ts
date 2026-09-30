@@ -28,7 +28,11 @@ const SAMPLE_REST = 10;
 // A wrecked archive can fail on every entry; the record is a sidecar and an SSE payload, not a log.
 const MAX_FAILURES = 100;
 // And how many of them a one-line message quotes: the record carries the whole list.
-export const FAILURES_IN_MESSAGE = 3;
+const FAILURES_IN_MESSAGE = 3;
+
+export function describeFailures(verify: Pick<BackupVerifyRecord, 'failures'>): string {
+    return verify.failures.slice(0, FAILURES_IN_MESSAGE).join('; ');
+}
 
 // An Eigen-owned database inside the archive: the path the manifest speaks of, and the resolved
 // one that survived the containment check. `isYjsDocument` marks the data.db of a collab container

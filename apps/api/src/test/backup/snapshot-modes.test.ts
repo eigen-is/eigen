@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupLevel, BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -13,11 +13,12 @@ import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { verifyFolder } from '../../lib/backup/verify';
 import type { DatabaseConfig } from '../../lib/core';
 import type { Home } from '../../lib/home';
-import { getHome } from '../../lib/home/get-home';
+import { evictHome, getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
 import * as mountHelpers from '../../lib/mount/helpers';
 import type { Mount } from '../../lib/mount/mount';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
+import { deleteUserCompletely } from '../../lib/user/delete-user';
 import {
     createHomeFaultMount,
     type FaultStorage,
@@ -394,5 +395,33 @@ describe('Backup capture modes of a disabled mount', () => {
             contents: 'metadata',
         });
         expect(entryPaths(manifest)).toContain(`home/mounts/${DISABLED_MOUNT_ID}/metadata.db`);
+    });
+});
+
+describe('Backup of an enabled mount the drive could not open', () => {
+    // The drive leaves out a mount whose init throws, and a capture that skipped it too would hold a home without
+    // that mount's files, verify and pass: a restore would bring it back empty.
+    test('fails the capture, naming the mount', async () => {
+        await getTestContext();
+        const owner = await createTestUser('backup-modes-broken@test.eigen.is', 'testpassword123', 'Modes Broken');
+        const ownerHome = await getHome(owner.id);
+        await ownerHome.settings.set({
+            mounts: { broken: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Broken' } },
+        });
+        mkdirSync(join(ownerHome.homeDir, 'mounts/broken'), { recursive: true });
+        writeFileSync(join(ownerHome.homeDir, 'mounts/broken/metadata.db'), 'not a database');
+        await evictHome(owner.id);
+        const reopened = await getHome(owner.id);
+        expect(reopened.drive.getMounts().map((mount) => mount.id)).not.toContain('broken');
+
+        try {
+            for (const level of ['light', 'full'] as const) {
+                const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-modes-broken-'));
+                await expect(snapshotHome(reopened, target, { level })).rejects.toThrow('broken');
+            }
+        } finally {
+            // Every whole-server backup after this file would fail on this home.
+            await deleteUserCompletely(owner.id, null);
+        }
     });
 });

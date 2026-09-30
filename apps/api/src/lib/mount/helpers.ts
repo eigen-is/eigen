@@ -54,7 +54,7 @@ export function rethrowDuplicateActiveName(e: unknown, name: string): never {
 
 // A document working copy must be a real SQLite db. The 16-byte magic header is the cheapest proof;
 // a 0-byte or partial download (an empty/failed S3 GET) fails it. Used to refuse opening such a file
-// as a fresh empty doc and re-uploading it over good stored bytes (the 2026-06-08 data loss), and by
+// as a fresh empty doc and re-uploading it over good stored bytes, and by
 // the upload queue to refuse PUTting a corrupted staged copy over the good stored object.
 export function isSqliteFile(filePath: string): boolean {
     let fd: number | null = null;

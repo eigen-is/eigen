@@ -1,30 +1,14 @@
 import * as fs from 'node:fs';
-import * as path from 'node:path';
-import type { BackupJob } from '@workspace/lib/types/backup';
 import { BACKUP_LEVELS, ON_DEMAND_BACKUP_REASONS } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { getBackupJob, isServerJob } from '../lib/backup/jobs';
-import { backupsDirPath } from '../lib/backup/paths';
-import { startServerBackup } from '../lib/backup/server-job';
+import { type ControlBackupJob, startServerBackup, toControlJob } from '../lib/backup/server-job';
 import { getControlSocketPath } from '../lib/config/paths';
-import { getServerSettings } from '../lib/config/server-settings';
 import { type ControlStatus, getServerStatus } from '../lib/config/server-status';
 import { ApiError } from '../lib/core';
 import { handleApiError } from '../lib/core/errors';
 import { createSetupLink, type SetupLink } from '../lib/setup/setup-token';
 import { type ResetPasswordResult, resetUserPassword } from '../lib/user/reset-password';
-
-// What ./eigen backup follows: plain JSON with no dates, since the CLI reads it without Eden's reviver.
-export type ControlBackupJob = Pick<BackupJob, 'id' | 'state' | 'progress' | 'artifact' | 'error' | 'uploadJobId'> & {
-    bytes: number | null;
-};
-
-// `bytes` is null until the archive is renamed into place.
-function toControlJob({ id, state, progress, artifact, error, uploadJobId }: BackupJob): ControlBackupJob {
-    const archivePath = artifact && path.join(backupsDirPath(), artifact);
-    const bytes = archivePath ? (fs.statSync(archivePath, { throwIfNoEntry: false })?.size ?? null) : null;
-    return { id, state, progress, artifact, error, uploadJobId, bytes };
-}
 
 // The CLI's online commands, on the Unix socket `docker compose exec` reaches as the API's user; never the web.
 export const controlRouter = new Elysia({ name: 'control' })
@@ -42,10 +26,8 @@ export const controlRouter = new Elysia({ name: 'control' })
     // `wait` is the pre-update backup's: it waits out a server backup that runs instead of taking its 409.
     .post(
         '/backup',
-        async ({ body, request }): Promise<ControlBackupJob> => {
-            const { keep } = getServerSettings().backups.schedule;
-            return toControlJob(await startServerBackup({ ...body, keep, signal: request.signal }));
-        },
+        async ({ body, request }): Promise<ControlBackupJob> =>
+            toControlJob(await startServerBackup({ ...body, signal: request.signal })),
         {
             body: t.Object({
                 level: t.UnionEnum(BACKUP_LEVELS),

@@ -61,8 +61,11 @@ if [ ! -f "/data/dkim/eigen.private" ]; then
     echo "============================================"
     echo "=== Add this DNS TXT record for DKIM:    ==="
     echo "=== Host: eigen._domainkey.${MAIL_DOMAIN}"
+    echo "=== Value, one line:"
     echo "============================================"
-    cat /data/dkim/eigen.txt
+    # eigen.txt splits the value into quoted parts in BIND's format; a DNS panel takes it joined.
+    grep -o '"[^"]*"' /data/dkim/eigen.txt | tr -d '"\n'
+    echo ""
     echo "============================================"
     echo ""
 fi

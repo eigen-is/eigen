@@ -2,7 +2,12 @@ import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON } from '@workspace/lib/constants/collab';
+import {
+    COLLAB_HOME_REPLACED_CLOSE,
+    COLLAB_HOME_REPLACED_REASON,
+    COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+    COLLAB_STORAGE_UNAVAILABLE_REASON,
+} from '@workspace/lib/constants/collab';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupLevel, BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -462,7 +467,21 @@ describe('Backup restoreHome', () => {
         expect(mailSubjectsIn(join(TEST_DATA_DIR, 'home', preRestore))).toContain('After the backup');
     });
 
-    test('an open collab socket is closed with 1012 home-replaced', async () => {
+    // How a collab socket opened now, naming `query`, is closed.
+    function collabClose(query: string): Promise<{ code: number; reason: string }> {
+        const ws = new WebSocket(`ws://localhost:${port}/ws/collab/${target.id}/${mountId}/${docId}${query}`, {
+            headers: { cookie: `better-auth.session_token=${target.sessionToken}` },
+        } as unknown as string[]);
+        return new Promise((resolve, reject) => {
+            ws.onclose = (event) => resolve({ code: event.code, reason: event.reason });
+            ws.onerror = (event) => reject(event);
+        });
+    }
+
+    // The socket retries through the restore; the reconnect after it names the old epoch, so only a restore that
+    // finished reloads the tab, once, and one that failed lets it sync the edits it still holds.
+    test('an open collab socket is closed with the retry close, and its reconnect after the restore with 1012', async () => {
+        const epoch = getDataEpoch(target.id);
         const ws = new WebSocket(`ws://localhost:${port}/ws/collab/${target.id}/${mountId}/${docId}`, {
             headers: { cookie: `better-auth.session_token=${target.sessionToken}` },
         } as unknown as string[]);
@@ -477,7 +496,14 @@ describe('Backup restoreHome', () => {
 
         await restoreHome(artifact, target.id, `restore-ws-${Date.now()}`);
 
-        expect(await closed).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: COLLAB_HOME_REPLACED_REASON });
+        expect(await closed).toEqual({
+            code: COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+            reason: COLLAB_STORAGE_UNAVAILABLE_REASON,
+        });
+        expect(await collabClose(`?epoch=${epoch}`)).toEqual({
+            code: COLLAB_HOME_REPLACED_CLOSE,
+            reason: COLLAB_HOME_REPLACED_REASON,
+        });
     });
 
     // Every tab of this home reloads on the new epoch, connected or offline through the restore; no other home's does.
@@ -517,19 +543,16 @@ describe('Backup restoreHome', () => {
         }
     });
 
-    test('a socket that connects while the mark is set is closed 1012, never 1013', async () => {
+    test('a socket that connects while the mark is set is closed with the retry close, never 1012', async () => {
         const { markHomeRestoring, clearHomeRestoring } = await import('../../lib/home/get-home');
+        const epoch = getDataEpoch(target.id);
         markHomeRestoring(target.id);
         try {
-            const ws = new WebSocket(`ws://localhost:${port}/ws/collab/${target.id}/${mountId}/${docId}`, {
-                headers: { cookie: `better-auth.session_token=${target.sessionToken}` },
-            } as unknown as string[]);
-            const closed = await new Promise<{ code: number; reason: string }>((resolve, reject) => {
-                ws.onclose = (event) => resolve({ code: event.code, reason: event.reason });
-                ws.onerror = (event) => reject(event);
+            // 1012 would reload the tab onto the 503 of the restore, and throw away its edits if the restore fails.
+            expect(await collabClose(`?epoch=${epoch}`)).toEqual({
+                code: COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+                reason: COLLAB_STORAGE_UNAVAILABLE_REASON,
             });
-            // 1013 would make this tab keep its document and retry — straight back over the restore.
-            expect(closed).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: COLLAB_HOME_REPLACED_REASON });
         } finally {
             clearHomeRestoring(target.id);
         }

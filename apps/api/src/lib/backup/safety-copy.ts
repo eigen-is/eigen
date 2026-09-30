@@ -3,10 +3,10 @@ import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type { BackupSafetyCopy } from '@workspace/lib/types/backup';
-import { parseHomeMountSettings } from '@workspace/lib/validation';
 import { ApiError, PATHS } from '../core';
 import { createMountStorage } from '../mount/helpers';
 import { flatStorageKey } from './archive-layout';
+import { readHomeMounts } from './enumerate-homes';
 import { resolveHomeDir } from './home-dir';
 import { parseSafetyCopyName, resolveMountDir } from './paths';
 
@@ -126,20 +126,19 @@ function foldersReferencingObjects(homeDir: string, deleting: string): string[] 
 // names is left alone. A delete that does not land keeps the whole folder: it is the only record of
 // which objects those bytes belong to, and losing it would orphan a home's worth of them in silence.
 async function deleteRemoteObjects(folder: string, homeDir: string): Promise<void> {
-    const settingsPath = path.join(folder, PATHS.SETTINGS);
-    if (!fs.existsSync(settingsPath)) return;
-    if (!fs.existsSync(homeDir)) {
-        console.warn(`[backup] ${path.basename(folder)}: no live home to compare against, leaving its objects alone`);
-        return;
-    }
-    const mounts = parseHomeMountSettings(await fsp.readFile(settingsPath, 'utf8'));
+    const mounts = readHomeMounts(folder);
     if (!mounts) {
         console.warn(`[backup] ${path.basename(folder)}: ${PATHS.SETTINGS} is unreadable, leaving its objects alone`);
         return;
     }
+    const remote = Object.entries(mounts).filter(([, mount]) => mount.storageType === 's3');
+    if (remote.length === 0) return;
+    if (!fs.existsSync(homeDir)) {
+        console.warn(`[backup] ${path.basename(folder)}: no live home to compare against, leaving its objects alone`);
+        return;
+    }
     const referencing = foldersReferencingObjects(homeDir, folder);
-    for (const [id, mount] of Object.entries(mounts)) {
-        if (mount.storageType !== 's3') continue;
+    for (const [id, mount] of remote) {
         // settings.json came from an archive, so its keys are untrusted: a mount id that resolves
         // outside this folder would have this reading — and deleting the objects of — another home.
         const mountDir = resolveMountDir(folder, id);

@@ -101,7 +101,7 @@ The budget covers the whole process. It starts after the transform runner closes
 
 ## The API container gets 30 s to stop
 
-`docker-compose.yml` gives `eigen-api` a `stop_grace_period` of 30 s, so the 20 s drain can finish before SIGKILL. A stop during a backup job can still end in SIGKILL, and its rows replay on boot.
+`docker-compose.yml` gives `eigen-api` a `stop_grace_period` of 90 s: a running backup job gets 30 s first ([BACKUP.md](BACKUP.md#the-whole-server-backup-runs-inside-the-api)), then the 20 s drain, and both finish before SIGKILL. A long restore, which is waited out in full, can still end in SIGKILL, and its rows replay on boot.
 
 ## The bucket needs versioning and a noncurrent-version expiry rule
 

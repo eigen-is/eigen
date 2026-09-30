@@ -15,9 +15,9 @@ import { createSetupLink } from './lib/setup/setup-token';
 import { setShutdownDrainDeadline } from './lib/sync';
 import { startControlSocket } from './routes/control';
 
-// Wall-clock budget for flushing pending S3 uploads on shutdown. Must stay below
-// docker-compose's stop_grace_period so the drain finishes before SIGKILL; anything
-// not drained in time stays in pending_uploads and replays on the next boot.
+// Wall-clock budget for flushing pending S3 uploads on shutdown. With the backup jobs' budget
+// before it, it must stay below docker-compose's stop_grace_period so the drain finishes before
+// SIGKILL; anything not drained in time stays in pending_uploads and replays on the next boot.
 const SHUTDOWN_DRAIN_BUDGET_MS = 20_000;
 
 // Both before the server listens: a request that resolved a home while the recovery was still

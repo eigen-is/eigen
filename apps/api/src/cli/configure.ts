@@ -126,7 +126,7 @@ function validateRelay(value: string): string | undefined {
     }
 }
 
-// config.json is what lib/config/server-config.ts names its JsonStore; that module exports no constant for it.
+// The server config setup wrote, read here without loading lib/config/server-config.ts, which opens its store.
 const SERVER_CONFIG = join(DATA, SERVER_DIR, SERVER_FILES.config);
 
 // Setup records the domain every account's address was made on; an unreadable data folder leaves the check to the

@@ -31,6 +31,14 @@ export const HOME_DATABASES: [DatabaseConfig<SchemaType>, string][] = [
 // The home's mail, which a Light archive leaves where it is.
 export const MAILDIR_ROOT = `${PATHS.MAIL.ROOT}/${PATHS.MAIL.MAILDIR}`;
 
+// The folders a Light archive leaves where they are, by their path from the home root: the Maildir, and every folder
+// inside a mount (its files, thumbnails and staging), so of a mount only its metadata.db goes.
+const LIGHT_SKIPPED = new RegExp(`^(?:${MAILDIR_ROOT}|${PATHS.DRIVE.ROOT}/[^/]+/[^/]+)$`);
+
+export function isLightSkipped(rel: string): boolean {
+    return LIGHT_SKIPPED.test(rel);
+}
+
 // Home-relative paths of the databases above; verify reads them back to know which archived .db
 // files are Eigen's own.
 export const HOME_DATABASE_PATHS = new Set(HOME_DATABASES.map(([, relPath]) => relPath));
@@ -94,7 +102,7 @@ function* ancestors(row: MountPathRow, byId: Map<string, MountPathRow>): Generat
 // the name chain from the root, with a trash root at `.trash/{id}.{ext}` as trashPath spells it.
 // Deriving it from metadata.db instead of the mount's own keys is what makes the archive
 // storage-independent: local-key and s3 mounts store flat keys, and restore re-derives whichever
-// shape the target mount needs. Exported for restore, which reads the same tree back.
+// shape the target mount needs.
 export function archivePath(row: MountPathRow, byId: Map<string, MountPathRow>): string {
     const segment = (r: MountPathRow) => (r.trashedFrom ? `.trash/${buildStorageKey(r.id, r.name)}` : r.name);
     const segments = [segment(row)];
@@ -113,8 +121,8 @@ export function flatStorageKey(row: Pick<MountPathRow, 'id' | 'file'>): string {
 }
 
 // Mirrors Mount.resolveStoragePath / getStorageKey, resolved from the tree we already hold rather
-// than one recursive-CTE query per file. Exported for restore, which puts every file back at the
-// key the restored mount will look for it under — one spelling of the rule for both directions.
+// than one recursive-CTE query per file. Restore puts every file back at the key the restored mount
+// looks for it under: one spelling of the rule for both directions.
 export function storageKeyOf(row: MountPathRow, byId: Map<string, MountPathRow>, isPathBased: boolean): string {
     if (!isPathBased) return flatStorageKey(row);
     const segments = row.file ? [row.file] : [];

@@ -113,8 +113,9 @@ EOF
             cat <<EOF
 Usage: ./eigen rollback [--yes]
 
-Goes back to the version before the last ./eigen update, with the data as it was then.
-The current data is kept aside.
+Goes back to the version before the last ./eigen update, with the backup it made first: after
+a light one, the accounts, settings and databases as they were then, and the files and mail as
+they are now. The current data is kept aside.
 
   --yes   Do not ask
 EOF
@@ -352,8 +353,9 @@ preflight() {
 # EIGEN_REGISTRY alone before setup.
 unconfigured() { [ ! -e .env.production ] || { [ -r .env.production ] && [ -z "$(env_value DOMAIN)" ]; }; }
 
+# A swap cut off between its two renames of .env.production leaves none, and preflight finishes it.
 need_install() {
-    if unconfigured; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
+    if unconfigured && [ ! -e .eigen/restore-swap ]; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
 }
 
 # need_image <what to do>: the CLI comes with the API image, which a local build builds in ./eigen setup.
@@ -529,6 +531,22 @@ stop() {
     step "Stopping Eigen" "Eigen stopped" "Could not stop Eigen" stop_containers
 }
 
+# The server backup that runs, by the record it keeps in backups/ until it ends. The boot marks the record of one a stop
+# killed failed, so only a running API has one. An upload's own state is nested deeper.
+running_backup() { grep -l '^  "state": "running"' backups/server-*.json 2>/dev/null | head -n 1 || :; }
+
+wait_backup() { while [ -n "$(running_backup)" ]; do sleep 2; done; }
+
+# The stop of a restore or an update, once the server backup that runs has ended: the stop would kill it, and the
+# night it was would have no backup.
+stop_after_backup() {
+    if dc ps --status running --services 2>/dev/null | grep -qx eigen-api && [ -n "$(running_backup)" ]; then
+        step "Waiting for the server backup $(basename "$(running_backup)" .json) to end" "The server backup ended" \
+            "Could not wait for the server backup" wait_backup
+    fi
+    stop
+}
+
 # The server runs as 1000:1000. Only an empty folder is handed over: an existing one keeps its owners.
 prepare_data() {
     mkdir -p data backups || return 1
@@ -559,6 +577,15 @@ pull_pinned() {
         pull_refs $refs
 }
 
+# need_readable <archive>: the stage reads it as uid 1000, and a copy root made is often 0600. Docker Desktop shows a
+# bind-mounted file as the container user's.
+need_readable() {
+    if [ "$docker_os" = 'Docker Desktop' ]; then return 0; fi
+    if ! ls -ln "$1" | awk '{ bit = $3 == 1000 ? 2 : $4 == 1000 ? 5 : 8; exit substr($1, bit, 1) != "r" }'; then
+        die "Eigen runs as uid 1000, which cannot read $1." "Give it the file: sudo chown 1000:1000 $1"
+    fi
+}
+
 # where_archive <archive>: how the CLI reaches it, as STAGE_ARG in the API's container and CLI_ARG on this folder. A
 # bare name is one in backups/, which both see; any other file is mounted read-only as /restore/<name>.
 where_archive() {
@@ -566,10 +593,12 @@ where_archive() {
         */*) ;;
         *)
             STAGE_ARG=$1 CLI_ARG=backups/$1
+            if [ -e "backups/$1" ]; then need_readable "backups/$1"; fi
             return
             ;;
     esac
     if [ ! -f "$1" ]; then die "There is no archive $1." "Name one in backups/, or pass the path of one."; fi
+    need_readable "$1"
     name=$(basename "$1")
     dir=$(cd "$(dirname "$1")" && pwd -P)
     if [ "$dir" = "$(pwd -P)/backups" ]; then
@@ -611,7 +640,7 @@ stage_archive() {
 # had and ends the command; one cut off after it leaves Eigen stopped, for the next ./eigen command to finish.
 swap_archive() {
     AT_EXIT='cli_as 0 rm -rf data/.restoring; restart'
-    stop
+    stop_after_backup
     trap : INT TERM
     swapped=0
     cli_as 0 restore --swap || swapped=$?
@@ -781,6 +810,8 @@ setup() {
     EIGEN_PROJECT=$PROJECT
     export EIGEN_DOCKER_NETWORKS EIGEN_PROJECT
     with_pins cli configure "$@" || exit
+    # The build the files came from, which finishes a swap that was cut off before any update wrote them.
+    if [ "$MODE" = release ] && [ ! -e .eigen/bundle ]; then image api >.eigen/bundle; fi
 
     if [ "$MODE" = local ]; then
         step "Building the web and mail images" "Images built" "Could not build the images" \
@@ -840,7 +871,8 @@ status() {
     "$runner" status "$@"
 }
 
-# The running API makes the backup, under the guards of its job map (D9). It stops nothing, so it takes no lock.
+# The running API makes the backup: its job map keeps a backup off a home a restore writes and waits for it at shutdown.
+# It stops nothing, so it takes no lock.
 backup() {
     level=full s3='' wait=''
     for arg in "$@"; do
@@ -875,8 +907,8 @@ backup() {
 }
 
 # A new machine: the launcher alone, as the installer leaves it, or beside a mirror's .env.production. The archive's
-# .env.production pins the build that restores it and holds what setup asks (D8); that build's launcher takes over,
-# lock and all. A mirror's file waits in .eigen/ until the archive's is in place.
+# .env.production pins the build that restores it and holds what setup asks, so setup does not run; that build's
+# launcher takes over, lock and all. A mirror's file waits in .eigen/ until the archive's is in place.
 restore_fresh() {
     lock
     if [ -e .env.production ]; then mv .env.production .eigen/mirror.env; fi
@@ -1025,7 +1057,7 @@ update_get() {
     cli update-check --from "$old_version" $accept || checked=$?
     case $checked in 0) ;; "$DECLINED") exit 0 ;; *) exit "$checked" ;; esac
     # A retry of an update from Eigen 0.3.0 that failed past its files finds 0.3.0 running, whose CLI has no backup: its
-    # image saves a snapshot after the stop, as 0.3.0's own handover has it do (D1). Asked of the CLI, since a build of
+    # image saves a snapshot after the stop, as 0.3.0's own handover has it do. Asked of the CLI, since a build of
     # main may carry either under one version.
     handover='' old_cli=''
     if [ -n "$no_backup" ]; then
@@ -1065,7 +1097,7 @@ update_get() {
         if [ -z "$saved" ]; then
             die "The backup named no archive." "Eigen $current runs on as it was. Run ./eigen update again; $LOG shows what the backup said."
         fi
-        # What changes from here to the stop is not in it (D10).
+        # What changes from here to the stop is not in it: the operator is told until when it holds.
         say "$GRAY" '│' "backups/$saved, made until $(date -u +%H:%M:%S) UTC"
         handover="--saved $saved"
     fi
@@ -1092,8 +1124,8 @@ update_apply() {
 
     # From the stop on, whatever ends the update starts Eigen again.
     AT_EXIT=restart
-    stop
-    # The launcher of Eigen 0.3.0 hands over without a backup (D1): its image saves a snapshot, which only it can put
+    stop_after_backup
+    # The launcher of Eigen 0.3.0 hands over without a backup: its image saves a snapshot, which only it can put
     # back, so .eigen/last-update names that image too, for the way back ./eigen rollback prints.
     if [ -z "$saved" ] && [ -z "$no_backup" ]; then
         kind=full
@@ -1151,7 +1183,7 @@ rollback() {
     fi
     archive=$(sed -n 1p .eigen/last-update)
     case $archive in eigen-*)
-        # The snapshot of the update from Eigen 0.3.0 (D1): its launcher, with its image, puts it back.
+        # The snapshot of the update from Eigen 0.3.0: only its launcher, with its image, puts it back.
         back=$(sed -n 2p .eigen/last-update)
         say "$ACCENT" '◆' "The update from Eigen 0.3.0 saved snapshots/$archive, which Eigen 0.3.0 puts back. Run:"
         say "$GRAY" '│' "docker run --rm -v \"\$PWD:/install\" $back bootstrap --force --out /install"

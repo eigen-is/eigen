@@ -1,10 +1,5 @@
-// Tiny in-process scheduler for periodic background work — wraps setInterval with
-// kick-off-at-startup semantics, error isolation, and central shutdown.
-//
-// Future: recent Bun added in-process Bun.cron(schedule, handler) that runs the
-// callback inside the current process with shared state — we could switch to it
-// when we want wall-clock schedules (e.g. "every day at 03:00 UTC") instead of
-// the millisecond intervals + kick-at-startup pattern this file gives us.
+// In-process scheduler for periodic background work: setInterval with an optional run at start, error
+// isolation, and one shutdown for all of it.
 
 const timers: Timer[] = [];
 

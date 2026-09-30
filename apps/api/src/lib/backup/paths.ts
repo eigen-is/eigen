@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { formatFileSize } from '@workspace/lib/format';
 import type { BackupLevel, BackupReason, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import type { ParsedOwnerId } from '@workspace/lib/types/owner';
 import {
@@ -18,6 +19,15 @@ import { getDataRoot, SERVER_DIR } from '../config/paths';
 import { PATHS } from '../core/constants';
 import { ApiError } from '../core/errors';
 
+// Why the disk of `dir` has no room for `needed` bytes, or null: the one wording of every backup's, stage's and
+// snapshot's room check.
+export function roomShortfall(what: string, needed: number, dir: string, where: string): string | null {
+    const { bavail, bsize } = fs.statfsSync(dir);
+    const free = bavail * bsize;
+    if (needed <= free) return null;
+    return `${what} needs up to ${formatFileSize(needed)}; ${where} has ${formatFileSize(free)} free`;
+}
+
 // Where backup artifacts live. Outside `data/` on purpose, so one wipe of the data directory can never
 // take the backups with it. In the container it is the `./backups` bind mount, named by EIGEN_BACKUPS_DIR.
 export function backupsDirPath(): string {
@@ -33,10 +43,11 @@ export function getBackupsDir(): string {
     return dir;
 }
 
-// Every job's scratch space lives under one folder, wiped at boot: `.staging` is spelled here and
-// nowhere else.
+// Every job's scratch space lives under one folder in the backups folder, wiped at boot.
+export const STAGING_DIR = '.staging';
+
 export function getStagingRoot(): string {
-    return path.join(backupsDirPath(), '.staging');
+    return path.join(backupsDirPath(), STAGING_DIR);
 }
 
 export function getBackupStagingDir(jobId: string): string {
@@ -185,6 +196,8 @@ export function freeArtifactName(ownerId: string, at: Date): string {
 // and last verify; a server archive's is its job's record, which a refused attempt leaves with no archive.
 export const SIDECAR_SUFFIX = '.manifest.json';
 export const SERVER_SIDECAR_SUFFIX = '.json';
+// Beside a partial archive in the bucket, which may outlive this box's record of it.
+export const BUCKET_PARTIAL_SUFFIX = '.partial';
 
 export function sidecarPath(artifactPath: string): string {
     return `${artifactPath}${SIDECAR_SUFFIX}`;

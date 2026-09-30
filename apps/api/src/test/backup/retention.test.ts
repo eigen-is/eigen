@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { BackupReason } from '@workspace/lib/types/backup';
-import { buildServerArchiveName } from '../../lib/backup/paths';
+import { BUCKET_PARTIAL_SUFFIX, buildServerArchiveName } from '../../lib/backup/paths';
 import { pruneBucketArchives, pruneServerArchives } from '../../lib/backup/retention';
 
 // One archive a night at 02:00 UTC, `night` days after 1 September.
-function archive(reason: BackupReason, night: number, good = true): { name: string; good: boolean } {
+function archive(reason: BackupReason, night: number, good = true): { name: string; good: boolean; build?: string } {
     const at = new Date(Date.UTC(2026, 8, 1 + night, 2, 0, 0));
     return { name: buildServerArchiveName(reason, 'full', at), good };
 }
@@ -28,6 +28,21 @@ describe('Server archive retention', () => {
         const updates = [1, 2, 3, 4].map((night) => archive('pre-update', night));
         expect(pruneServerArchives(updates, 10).sort()).toEqual(names(updates.slice(0, 2)));
         expect(pruneServerArchives(updates, 1).sort()).toEqual(names(updates.slice(0, 2)));
+    });
+
+    test('failed pre-update attempts never push out the good ones a rollback needs', () => {
+        const good = [1, 2, 3].map((night) => archive('pre-update', night));
+        const failed = [4, 5, 6].map((night) => archive('pre-update', night, false));
+        expect(pruneServerArchives([...good, ...failed], 10).sort()).toEqual(names([good[0], failed[0]]));
+        const older = archive('pre-update', 0, false);
+        expect(pruneServerArchives([older, ...good], 10).sort()).toEqual(names([older, good[0]]));
+    });
+
+    test('keeps the newest good pre-update archive of another build than the one running: ./eigen rollback names it', () => {
+        const rollback = { ...archive('pre-update', 1), build: 'api@sha256:old' };
+        const retries = [2, 3].map((night) => ({ ...archive('pre-update', night), build: 'api@sha256:new' }));
+        expect(pruneServerArchives([rollback, ...retries], 10, 'api@sha256:new')).toEqual([]);
+        expect(pruneServerArchives([rollback, ...retries], 10, 'api@sha256:old')).toEqual([rollback.name]);
     });
 
     test('a failed night never pushes out the last good archive', () => {
@@ -69,10 +84,21 @@ describe('Server archive retention', () => {
 
     test('the bucket counts a partial archive toward keep, but keeps the newest complete one past it', () => {
         const nights = [1, 2, 3, 4, 5].map((night) => archive('scheduled', night).name);
-        const partial = new Set([nights[3], nights[4]]);
-        expect(pruneBucketArchives(nights, partial, 2).sort()).toEqual([nights[0], nights[1]].sort());
-        expect(pruneBucketArchives(nights, new Set(nights), 2).sort()).toEqual(nights.slice(0, 3).sort());
+        const marked = (names: string[]) => names.map((name) => `${name}${BUCKET_PARTIAL_SUFFIX}`);
+        const partial = marked([nights[3], nights[4]]);
+        expect(pruneBucketArchives([...nights, ...partial], 2).sort()).toEqual([nights[0], nights[1]].sort());
+        const doomed = nights.slice(0, 3);
+        expect(pruneBucketArchives([...nights, ...marked(nights)], 2).sort()).toEqual(
+            [...doomed, ...marked(doomed)].sort(),
+        );
         const others = [archive('manual', 0).name, archive('pre-update', 0).name, 'notes.txt'];
-        expect(pruneBucketArchives([...others, ...nights], new Set(), 1).sort()).toEqual(nights.slice(0, 4).sort());
+        expect(pruneBucketArchives([...others, ...nights], 1).sort()).toEqual(nights.slice(0, 4).sort());
+    });
+
+    test('the bucket drops a partial marker whose archive never landed', () => {
+        const night = archive('scheduled', 1).name;
+        expect(pruneBucketArchives([`${night}${BUCKET_PARTIAL_SUFFIX}`], 2)).toEqual([
+            `${night}${BUCKET_PARTIAL_SUFFIX}`,
+        ]);
     });
 });

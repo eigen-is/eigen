@@ -19,7 +19,7 @@ The manifest records the level in `level`, and every mount whose bodies are not 
 ## A home archive holds every database, file and auth row
 
 - Every database, copied with `VACUUM INTO` through the running server's own handle, never as a file copy of a live WAL database: the drive's `shared.db`, each mount's `metadata.db`, `calendar.db`, and for a user `mail.db`, `contacts.db` and `notifications.db`. A database under the home that `HOME_DATABASES` (`apps/api/src/lib/backup/archive-layout.ts`) does not list fails the backup, so a new subsystem's database is noticed the day it lands.
-- Every mount the home declares, disabled ones too. A disabled mount is not in the drive's map, so nothing else walks it, and it comes back disabled because `settings.json` rides along. A disabled mount whose storage cannot be read is skipped with the reason in the manifest, since its bucket is often unreachable because it was turned off, and a restore leaves it disabled and absent. An enabled mount's storage failure fails the backup, naming the mount and the error code: that archive would miss files the home is serving. So does a file whose row records bytes and whose object is gone. A file with no bytes on record, or one deleted during the backup, is left out.
+- Every mount the home declares, disabled ones too. A disabled mount is not in the drive's map, so nothing else walks it, and it comes back disabled because `settings.json` rides along. A disabled mount whose storage cannot be read is skipped with the reason in the manifest, since its bucket is often unreachable because it was turned off, and a restore leaves it disabled and absent. An enabled mount's storage failure fails the backup, naming the mount and the error code, and so does an enabled mount the drive could not open: that archive would miss files the home should be serving. So does a file whose row records bytes and whose object is gone. A file with no bytes on record, or one deleted during the backup, is left out.
 - Every file the drive knows about, by the path it would have on a `local` mount, on all three backends. A restore re-derives whatever keys the target mount needs, so an archive never depends on a bucket, its credentials or the storage type staying the same.
 - Every container's `data.db` and `comments.db`, freshest first: an open document's live handle, then a crash temp in `tmp/`, then a pending staged upload, then the stored object. A backup taken during an S3 outage holds the newest local bytes.
 - Version history and trash (`versions/` and `.trash/`). Version history is the only copy of an old file state, and trash is data the user can still restore.
@@ -104,7 +104,7 @@ So a Full + S3 member restores any home, a Full member a home without `s3` mount
 
 Every surface that resolves the home per request (HTTP, SSE, collab, CalDAV, CardDAV, WebDAV) answers `503 Restore in progress`. Sessions are untouched, so nobody is signed out.
 
-Every open tab of the home reloads once the restore is done: the event stream announces the home's new data epoch ([SSE.md](SSE.md#a-restore-reloads-every-tab-of-the-home)). Editor tabs don't wait. Their sockets close with 1012 (`home-replaced`) at the start and reload instead of reconnecting, because a tab that reconnected would sync the document it holds back over the restored copy ([COLLAB.md](COLLAB.md#home-replacement-closes-every-socket)).
+Every open tab of the home reloads once the restore is done: the event stream announces the home's new data epoch ([SSE.md](SSE.md#a-restore-reloads-every-tab-of-the-home)). Editor tabs keep their document through the restore: their sockets close with the retry close, 1013, and the first reconnect after the restore names the old epoch, gets 1012 (`home-replaced`) and reloads without syncing, because a tab that synced would put the document it holds back over the restored copy. A restore that fails leaves the epoch, so the reconnect syncs the tab's edits ([COLLAB.md](COLLAB.md#home-replacement-closes-every-socket)).
 
 ## IMAP keeps writing the old folder during a restore
 
@@ -158,7 +158,7 @@ The job:
 7. Reads the finished tar back and checks every member against the manifest's sha256.
 8. Writes the sidecar, prunes, and starts the upload.
 
-Shutdown gives a running backup 30 s. Its staging goes in the next boot's wipe, and the boot marks its `running` sidecar failed, "interrupted by a restart".
+Shutdown gives a running backup 30 s. Its staging goes in the next boot's wipe, and the boot marks its `running` sidecar failed, "interrupted by a restart". So `./eigen restore`, `./eigen rollback` and `./eigen update` wait for a running server backup to end before they stop Eigen, by its `running` sidecar in `backups/`.
 
 ## A server archive is a plain tar of home archives, manifest last
 
@@ -184,7 +184,7 @@ A home whose capture or verify fails gets `failed` with the reason in the manife
 
 ## The schedule makes one attempt per UTC day
 
-`serverBackupTick` (`apps/api/src/lib/scheduler/jobs.ts`) runs every five minutes, never at boot, when the server is busiest. It starts a Full (Full + S3 with `withS3`) once the UTC hour reaches `hourUtc` and no scheduled archive or record carries today's UTC date. A failed or refused attempt leaves its record, so it counts: a bad night is one alert, not a retry every tick. A restart neither skips nor doubles a night. The settings live in `settings.json` under `backups.schedule` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)).
+`serverBackupTick` (`apps/api/src/lib/scheduler/jobs.ts`) runs every five minutes, never at boot, when the server is busiest. It starts a Full (Full + S3 with `withS3`) once the UTC hour reaches `hourUtc` and no scheduled archive or record carries today's UTC date. A failed or refused attempt leaves its record, so it counts: a bad night is one alert, not a retry every tick. A restart neither skips nor doubles a night. A tick within 15 minutes of a pre-update backup's end starts nothing: the update stops Eigen next, which would kill the Full or wait for it. The settings live in `settings.json` under `backups.schedule` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)).
 
 ## Retention keeps good scheduled archives and every manual one
 
@@ -193,7 +193,7 @@ A home whose capture or verify fails gets `failed` with the reason in the manife
 | Reason | Kept |
 |---|---|
 | scheduled | The newest `keep` whose job ended done, plus up to `keep` failed ones newer than the newest good one |
-| pre-update | The newest two: what `./eigen rollback` restores, and the one before |
+| pre-update | The same rule with a `keep` of two, plus the newest good one made by another build than the one running: `.eigen/last-update` names it, which the API cannot read, and an update that failed after its backup leaves a newer one |
 | manual | All of them; the owner deletes them |
 
 A failed night never pushes out the last good archive, and nights that keep failing don't pile up. An archive without a readable sidecar is never deleted, and neither is one a running job still reads. A name the grammar does not read is never touched.
@@ -219,7 +219,7 @@ The backup bucket's secret reaches no browser, the owner's included, and a blank
 
 ## The bucket keeps its own count, and always the newest complete archive
 
-After a successful upload, `pruneBucketArchives` (`apps/api/src/lib/backup/retention.ts`) lists the server's folder and deletes scheduled archives past `upload.keep`, by name. An archive whose manifest names a failed home counts toward `keep`, but the newest complete archive stays whatever came after it, because only it restores every home. Manual archives and names the grammar does not read are never deleted. An archive uploaded late that the count would drop is left, and that round deletes nothing. Pruning never runs after a failed upload.
+After a successful upload, `pruneBucketArchives` (`apps/api/src/lib/backup/retention.ts`) lists the server's folder and deletes scheduled archives past `upload.keep`, by name. An archive whose manifest names a failed home counts toward `keep`, but the newest complete archive stays whatever came after it, because only it restores every home. The upload of such an archive first writes an empty `{name}.partial` beside it, since this box's record of the archive goes with local retention long before the bucket's copy does; the marker goes with its archive. Manual archives and names the grammar does not read are never deleted. An archive uploaded late that the count would drop is left, and that round deletes nothing. Pruning never runs after a failed upload.
 
 ## No server archive leaves the box through a browser
 
@@ -231,7 +231,7 @@ The server backup routes (`apps/api/src/routes/server-backup.ts`) have no downlo
 
 1. Stage (`restore <archive> --stage`, as uid 1000 while Eigen runs). It reads the archive and checks every member's sha256, refuses before anything moves, shows level, version, age, home count, failed homes and whether `.env.production`, the DKIM key and the TLS certificate are in it, and asks. Then it extracts member by member into `data/.restoring/`, verifies each, and installs each home by its mode. A stale `data/.restoring/` from a stage that died is wiped first; `stage.lock` in it keeps two stages apart.
 2. Pull: on a release install, the images the archive's `.env.production` pins, while Eigen still runs.
-3. Swap (`restore --swap`, as root with Eigen stopped). It writes `.eigen/restore-swap`, the full list of copies and renames, and syncs it to disk before the first rename. Then it runs them, removes the marker and starts Eigen on the pinned images, with their launcher and Compose files. A local build runs `configure --backfill` instead.
+3. Swap (`restore --swap`, as root with Eigen stopped). It writes `.eigen/restore-swap`, the full list of copies and renames, and syncs it to disk before the first rename. Then it runs them, clears `backups/.staging/`, whose per-home restore notes name homes of the `data/` that went aside and would make the boot recovery act on the restored ones, removes the marker and starts Eigen on the pinned images, with their launcher and Compose files. A local build runs `configure --backfill` instead.
 
 A swap cut off anywhere is finished by the next `./eigen` command: `preflight` finds the marker and runs `restore --swap` again with the build whose files wrote it, which skips the renames already done. The staged tree was verified before the marker existed, so rolling forward is safe. The swap holds the API's instance lock ([DATABASE.md](DATABASE.md#one-api-process-owns-a-data-folder)) and `.eigen/restore.lock`; the launcher holds `.eigen/lock` throughout.
 
@@ -255,7 +255,7 @@ Every trashed file of every restored mount is re-dated to the restore, whatever 
 
 ## A restore refuses what root must not swap in
 
-The stage refuses an archive that is damaged, one from a newer Eigen, one from a release install on a local build or the other way around (one pins images, the other builds its own), `--s3-from-archive` on an archive without S3 files, and an archive the data disk has no room to stage. The launcher refuses an archive path with a colon, which Docker cannot mount.
+The stage refuses an archive that is damaged, one from a newer Eigen, one from a release install on a local build or the other way around (one pins images, the other builds its own), `--s3-from-archive` on an archive without S3 files, and an archive the data disk has no room to stage. The launcher refuses an archive path with a colon, which Docker cannot mount, and an archive uid 1000 cannot read, such as a copy root left 0600, with the `chown` that fixes it.
 
 The swap runs as root on files the API's user wrote, so it refuses a staged tree with a link, a device or a setuid or setgid file, and drops fifos and sockets. It needs `data/`, `data/.restoring/` and every home on the install folder's disk, not a link or another mount, because it only renames.
 

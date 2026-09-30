@@ -105,6 +105,18 @@ describe('pullHomeSnapshot', () => {
         expect(atHome(ownerId)).toBe(false);
     });
 
+    test('a home that was tearing down when the capture started counts as asleep: its successor goes after the release idle', async () => {
+        const going = (await getHome(ownerId)).shutdown();
+        captureThenFakeTimers();
+        await pullHomeSnapshot(ownerId, targetDir(), {});
+        await going;
+        expect(atHome(ownerId)).toBe(true);
+
+        jest.advanceTimersByTime(BACKUP_RELEASE_MS + 1);
+        await waitForEviction();
+        expect(atHome(ownerId)).toBe(false);
+    });
+
     test('a home that was open before the capture keeps its full idle', async () => {
         const open = await getHome(ownerId);
         captureThenFakeTimers();

@@ -12,7 +12,7 @@ import {
     symlinkSync,
     writeFileSync,
 } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupJob, BackupLevel, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -192,7 +192,7 @@ async function waitForJob(id: string): Promise<BackupJob> {
 }
 
 async function backup(level: BackupLevel): Promise<string> {
-    const started = await startServerBackup({ level, reason: 'manual', keep: 7 });
+    const started = await startServerBackup({ level, reason: 'manual' });
     const job = await waitForJob(started.id);
     expect(job.error).toBeUndefined();
     if (!job.artifact) throw new Error('the server job names no archive');
@@ -359,19 +359,24 @@ async function withUnbackedPendingRow(archive: string): Promise<string> {
 }
 
 // The s3 mount as it runs here: a metadata.db whose pending rows are `pending`, key to staged name, each staged.
+// WAL and closed, as an idle home leaves it on Linux: no -wal or -shm beside it.
 function liveS3Mount(dir: string, pending: Record<string, string>): void {
     const mount = join(homeDirOf(dir, s3User.id), 'mounts', S3_MOUNT_ID);
     mkdirSync(join(mount, PATHS.DRIVE.STAGING_DIR), { recursive: true });
-    const db = new Database(join(mount, PATHS.DRIVE.METADATA_DB));
+    const metadata = join(mount, PATHS.DRIVE.METADATA_DB);
+    const db = new Database(metadata);
     try {
+        db.run('PRAGMA journal_mode = WAL');
         db.run('CREATE TABLE pending_uploads (storageKey TEXT PRIMARY KEY, stagingPath TEXT NOT NULL)');
         for (const [key, name] of Object.entries(pending)) {
             db.run('INSERT INTO pending_uploads VALUES (?, ?)', [key, name]);
             writeFileSync(join(mount, PATHS.DRIVE.STAGING_DIR, name), 'pending here');
         }
+        db.run('PRAGMA wal_checkpoint(TRUNCATE)');
     } finally {
         db.close();
     }
+    for (const suffix of ['-wal', '-shm']) rmSync(`${metadata}${suffix}`, { force: true });
 }
 
 function homeDirOf(dir: string, ownerId: string): string {
@@ -1068,6 +1073,19 @@ describe('restore --stage and --swap', () => {
                 other.close();
             }
             expect((await swap(dir)).code).toBe(0);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a swap clears backups/.staging, whose per-home restore notes describe the data/ that went aside',
+        async () => {
+            const dir = install();
+            const note = join(dir, 'backups/.staging/job/restoring.json');
+            mkdirSync(dirname(note), { recursive: true });
+            writeFileSync(note, '{}');
+            await stageAndSwap(dir, basename(fullArchive));
+            expect(existsSync(join(dir, 'backups/.staging'))).toBe(false);
         },
         JOB_TIMEOUT_MS,
     );

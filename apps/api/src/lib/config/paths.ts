@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import { DATA_LOCK_FILE } from './data-lock';
 import { isProduction } from './env';
 
@@ -61,6 +62,12 @@ export function getAvatarsDir(): string {
         fs.mkdirSync(avatarsDir, { recursive: true });
     }
     return avatarsDir;
+}
+
+// A user's or a team's home folder under a data root: the live one, or a tree a restore stages.
+export function homeDirUnder(dataRoot: string, ownerId: string): string {
+    const owner = parseOwnerId(ownerId);
+    return path.join(dataRoot, owner.type === 'team' ? TEAM_HOMES_DIR : USER_HOMES_DIR, owner.id);
 }
 
 export function getUserHomePath(userId: string): string {

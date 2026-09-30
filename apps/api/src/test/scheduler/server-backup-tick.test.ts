@@ -55,11 +55,11 @@ describe('The nightly server backup tick', () => {
 
     // Settings outlive the file when files share a process.
     afterAll(async () => {
-        await schedule({ enabled: false, hourUtc: 2, withS3: false, keep: 7 });
+        await schedule({ enabled: false, hourUtc: 2, withS3: false });
     });
 
     beforeEach(async () => {
-        await schedule({ enabled: true, hourUtc: 2, withS3: false, keep: 7 });
+        await schedule({ enabled: true, hourUtc: 2, withS3: false });
         start = spyOn(serverJob, 'startServerBackup').mockImplementation(async ({ level, reason }) => {
             const startedAt = new Date();
             writeAttempt(reason, level, startedAt);
@@ -91,7 +91,7 @@ describe('The nightly server backup tick', () => {
         expect(start).not.toHaveBeenCalled();
         await tickAt('2026-10-01T02:00:00Z');
         expect(start).toHaveBeenCalledTimes(1);
-        expect(start.mock.calls[0][0]).toEqual({ level: 'full', reason: 'scheduled', keep: 7 });
+        expect(start.mock.calls[0][0]).toEqual({ level: 'full', reason: 'scheduled' });
         for (const iso of ['2026-10-01T02:05:00Z', '2026-10-01T23:59:59Z', '2026-10-02T01:30:00Z']) {
             await tickAt(iso);
         }
@@ -143,6 +143,19 @@ describe('The nightly server backup tick', () => {
         expect(start).toHaveBeenCalledTimes(1);
     });
 
+    test('waits a while after a pre-update backup, whose update stops Eigen next and would kill the night', async () => {
+        const archivePath = join(
+            getBackupsDir(),
+            buildServerArchiveName('pre-update', 'light', new Date('2026-10-01T02:01:00Z')),
+        );
+        const record = { state: 'done', startedAt: '2026-10-01T02:01:00Z', finishedAt: '2026-10-01T02:03:00Z' };
+        writeFileSync(serverSidecarPath(archivePath), JSON.stringify(record));
+        await tickAt('2026-10-01T02:05:00Z');
+        expect(start).not.toHaveBeenCalled();
+        await tickAt('2026-10-01T02:20:00Z');
+        expect(start).toHaveBeenCalledTimes(1);
+    });
+
     test('the day is the UTC one: last night’s attempt just before midnight leaves tonight to run', async () => {
         await schedule({ hourUtc: 0 });
         writeAttempt('scheduled', 'full', new Date('2026-09-30T23:59:59Z'), 'done');
@@ -152,13 +165,13 @@ describe('The nightly server backup tick', () => {
         expect(start).toHaveBeenCalledTimes(1);
     });
 
-    test('starts nothing while the schedule is off, and Full + S3 with its keep when asked', async () => {
+    test('starts nothing while the schedule is off, and Full + S3 when asked', async () => {
         await schedule({ enabled: false });
         await tickAt('2026-10-01T12:00:00Z');
         expect(start).not.toHaveBeenCalled();
-        await schedule({ enabled: true, withS3: true, keep: 3 });
+        await schedule({ enabled: true, withS3: true });
         await tickAt('2026-10-01T12:00:00Z');
-        expect(start.mock.calls[0][0]).toEqual({ level: 'full-s3', reason: 'scheduled', keep: 3 });
+        expect(start.mock.calls[0][0]).toEqual({ level: 'full-s3', reason: 'scheduled' });
     });
 
     test('registered at boot it starts nothing then, ticks every five minutes, and a restart the same day does not double the night', async () => {

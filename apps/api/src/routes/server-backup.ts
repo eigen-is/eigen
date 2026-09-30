@@ -10,7 +10,6 @@ import {
     startServerBackup,
 } from '../lib/backup/server-job';
 import { checkBackupDestination, withSavedSecret } from '../lib/backup/upload';
-import { getServerSettings } from '../lib/config/server-settings';
 import { requireOwner } from '../lib/core/access';
 import { betterAuth } from './auth';
 import { s3DestinationBody } from './shared-schemas';
@@ -25,8 +24,7 @@ export const serverBackupRouter = new Elysia({ name: 'server-backup' })
         '/admin/server-backup',
         async ({ body, user }): Promise<{ jobId: string }> => {
             await requireOwner(user.id);
-            const { keep } = getServerSettings().backups.schedule;
-            const job = await startServerBackup({ level: body.level, reason: 'manual', keep, startedBy: user.id });
+            const job = await startServerBackup({ level: body.level, reason: 'manual', startedBy: user.id });
             return { jobId: job.id };
         },
         { auth: true, body: t.Object({ level: t.UnionEnum(BACKUP_LEVELS) }) },

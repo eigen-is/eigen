@@ -29,7 +29,7 @@ import {
 import { markRestoreComplete, writeRestoringMarker } from './recovery';
 import { forgetSafetyCopySize, resolveSafetyCopy } from './safety-copy';
 import type { SnapshotProgress } from './snapshot-home';
-import { FAILURES_IN_MESSAGE, verifyFolder } from './verify';
+import { describeFailures, verifyFolder } from './verify';
 
 // A safety copy of a home whose owner is gone is a delete candidate, not a restore: the folder on
 // its own leaves a home nobody can sign in to. Restoring a deleted user goes through an artifact,
@@ -118,7 +118,7 @@ async function replaceHomeFolder(
 // is renamed aside as `{id}.pre-restore-{ts}`, and a failure after that point leaves the incomplete
 // folder as `{id}.failed-restore-{ts}` and puts the original back. The home is refused on every
 // surface for the duration (markHomeRestoring, which is also the lock against a second restore) and
-// its collab sockets are told to reload; the first load after the mark clears runs migrations, reseeds
+// its collab sockets are told to retry, which the new data epoch turns into a reload; the first load after the mark clears runs migrations, reseeds
 // each domain's byte counters from the restored rows and refreshes shared-with-me.
 export async function restoreHome(
     artifactName: string,
@@ -151,16 +151,12 @@ export async function restoreHome(
             const { folder, manifest } = readUnpackedHome(unpackDir, ownerId, artifactName);
             // A member of a whole-server archive that left out what only a restore of that archive
             // puts back. Refused here, before the home is moved aside: after that, a refusal would
-            // already have cost the user their open pages. The refusal trusts the manifest: one
-            // stripped of `level` and `contents` over missing bodies verifies, since verify lets a
-            // body be missing (a delete can race the backup), and restores to files with no bytes.
+            // already have cost the user their open pages.
             const incomplete = incompleteReason(manifest);
             if (incomplete) throw new ApiError(400, `${artifactName} ${incomplete}`);
             const verified = await verifyFolder(folder, onProgress);
             if (verified.status !== 'verified') {
-                const failures = verified.failures.slice(0, FAILURES_IN_MESSAGE).join('; ');
-                // The whole list is in the record; a few of them are enough for a message.
-                throw new ApiError(400, `${artifactName} did not verify: ${failures}`);
+                throw new ApiError(400, `${artifactName} did not verify: ${describeFailures(verified)}`);
             }
 
             return async (stamp) => {
@@ -177,9 +173,8 @@ export async function restoreHome(
                     onProgress?.('mounts', index + 1, carried.length);
                 }
 
-                // What landed is still a database this server can open. Before the identity write,
-                // not after it (the spec has these the other way around): the rollback moves folders,
-                // and nothing takes a users3.db row back. A restore of a deleted user that failed
+                // What landed is still a database this server can open. Before the identity write:
+                // the rollback moves folders, and nothing takes a users3.db row back. A restore of a deleted user that failed
                 // this check after re-inserting would leave a user who can sign in with no home —
                 // and whose retry would find that user and skip the insert for good.
                 checkRestoredDatabases(

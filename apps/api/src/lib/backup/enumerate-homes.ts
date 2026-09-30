@@ -57,18 +57,18 @@ export function enumerateHomes(usersDbPath: string): { homes: ServerHome[]; orph
     }
 }
 
+type HomeMounts = { folder: string; mounts: BackupMountSettings[] | null };
+
 // Every home folder's mounts, safety copies included, read off its settings.json so no home boots. `mounts` is
 // null when the file does not read.
-export function listHomeMounts(): { folder: string; mounts: BackupMountSettings[] | null }[] {
-    const homes: { folder: string; mounts: BackupMountSettings[] | null }[] = [];
+export function listHomeMounts(): HomeMounts[] {
+    const homes: HomeMounts[] = [];
     for (const dirName of [USER_HOMES_DIR, TEAM_HOMES_DIR]) {
         const dir = path.join(getDataRoot(), dirName);
         if (!fs.existsSync(dir)) continue;
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
             if (!entry.isDirectory()) continue;
-            const settingsPath = path.join(dir, entry.name, PATHS.SETTINGS);
-            if (!fs.existsSync(settingsPath)) continue;
-            const mounts = readHomeMounts(settingsPath);
+            const mounts = readHomeMounts(path.join(dir, entry.name));
             homes.push({ folder: entry.name, mounts: mounts && Object.values(mounts) });
         }
     }
@@ -82,7 +82,10 @@ export function hasS3Mounts(): boolean {
     );
 }
 
-function readHomeMounts(settingsPath: string): ReturnType<typeof parseHomeMountSettings> {
+// A home folder's mounts off its settings.json, so no home boots: none without the file, null when it does not read.
+export function readHomeMounts(folder: string): Record<string, BackupMountSettings> | null {
+    const settingsPath = path.join(folder, PATHS.SETTINGS);
+    if (!fs.existsSync(settingsPath)) return {};
     try {
         return parseHomeMountSettings(fs.readFileSync(settingsPath, 'utf8'));
     } catch {

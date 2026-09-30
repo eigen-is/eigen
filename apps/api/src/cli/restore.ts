@@ -13,7 +13,6 @@ import {
     readFileSync,
     renameSync,
     rmSync,
-    statfsSync,
     statSync,
     writeFileSync,
     writeSync,
@@ -21,38 +20,37 @@ import {
 import { basename, dirname, join, relative } from 'node:path';
 import type { parseArgs } from 'node:util';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
-import { formatFileSize } from '@workspace/lib/format';
 import type { BackupLevel } from '@workspace/lib/types/backup';
-import { buildBackupStamp, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
+import { BACKUP_LEVELS, buildBackupStamp, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { copyArchiveMember } from '../lib/backup/archive';
-import { MAILDIR_ROOT } from '../lib/backup/archive-layout';
+import { isLightSkipped } from '../lib/backup/archive-layout';
 import { describeError } from '../lib/backup/errors';
-import { backupsDirPath, SERVER_ARCHIVE_ENV_MEMBER } from '../lib/backup/paths';
+import { backupsDirPath, roomShortfall, SERVER_ARCHIVE_ENV_MEMBER, STAGING_DIR } from '../lib/backup/paths';
 import {
-    homeDirUnder,
     type NotReplayed,
     RESTORING_DATA_DIR,
     RESTORING_DIR,
-    type ServerArchive,
+    type ServerArchiveFile,
     stageBytesNeeded,
     stageServerArchive,
 } from '../lib/backup/restore-server';
-import { readServerArchive } from '../lib/backup/verify';
+import { describeFailures, readServerArchive } from '../lib/backup/verify';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
 import { getEnvFile } from '../lib/config/env';
 import {
     CERTS_DIR,
     DKIM_DIR,
     getDataRoot,
+    homeDirUnder,
     ORG_HOMES_DIR,
     SERVER_DIR,
     TEAM_HOMES_DIR,
     USER_HOMES_DIR,
 } from '../lib/config/paths';
-import { PIN_KEYS } from '../lib/config/release';
+import { API_IMAGE_KEY, PIN_KEYS } from '../lib/config/release';
 import { PATHS } from '../lib/core/constants';
 import { readEnvFile } from './env-file';
-import { DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
+import { BACKUPS, DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
 import { createUi, glyphLine, type Ui } from './ui';
 
 // Two runs, as the launcher makes them. --stage runs as the API's user in its container while Eigen runs, on the
@@ -108,30 +106,28 @@ type RestoreSwap = {
     env: boolean;
 };
 
-// A light archive leaves each mount's files and the Maildir in the home: every other file is its light set.
-const LIGHT_SKIPS = new RegExp(`^(?:${PATHS.DRIVE.ROOT}/[^/]+/[^/]+|${MAILDIR_ROOT})$`);
 type Held = { path: string; dir: boolean };
 
 // What refusal() looks at; not a setgid folder, which a setgid install folder hands down to every folder in it.
-export const SUSPECTS = '-type b -o -type c -o -type p -o -type s -o -type f ( -perm -4000 -o -perm -2000 ) -o -type l';
+const SUSPECTS = '-type b -o -type c -o -type p -o -type s -o -type f ( -perm -4000 -o -perm -2000 ) -o -type l';
 
 // Held until exit, like the API holds the data lock while it runs. False when another process holds `file`.
-const held: Database[] = [];
+const locks: Database[] = [];
 
 function hold(file: string): boolean {
     const lock = lockDataDir(file);
-    if (lock) held.push(lock);
+    if (lock) locks.push(lock);
     return lock !== null;
 }
 
 // Neither Eigen nor another swap reads or replaces data/ while this one does.
-export function lockData(ui: Ui, command: string): void {
+function lockData(ui: Ui): void {
     const file = join(DATA, SERVER_DIR, DATA_LOCK_FILE);
     // Root must not make one the API could not open; without one, no API ever ran on this data/.
     if (existsSync(file) && !hold(file)) {
         ui.fail(
-            'data/ is in use by Eigen or by another backup or restore.',
-            `Wait for it to finish, then run ./eigen ${command} again.`,
+            'data/ is in use by Eigen or by another restore.',
+            'Wait for it to finish, then run ./eigen restore again.',
         );
     }
 }
@@ -145,7 +141,7 @@ function lightWalk(root: string): Held[] {
         for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
             const path = dir ? `${dir}/${entry.name}` : entry.name;
             if (!entry.isDirectory()) held.push({ path, dir: false });
-            else if (!LIGHT_SKIPS.test(path)) {
+            else if (!isLightSkipped(path)) {
                 held.push({ path, dir: true });
                 walk(path);
             }
@@ -158,16 +154,16 @@ function lightWalk(root: string): Held[] {
 function readStagedRecord(file: string): StagedRestore | null {
     if (!existsSync(file)) return null;
     const value: unknown = JSON.parse(readFileSync(file, 'utf8'));
+    if (typeof value !== 'object' || value === null) return null;
+    const level = 'level' in value ? BACKUP_LEVELS.find((candidate) => candidate === value.level) : undefined;
     if (
-        typeof value !== 'object' ||
-        value === null ||
+        !level ||
         !('archive' in value && typeof value.archive === 'string') ||
-        !('level' in value && (value.level === 'light' || value.level === 'full' || value.level === 'full-s3')) ||
         !('appVersion' in value && typeof value.appVersion === 'string')
     ) {
         return null;
     }
-    return { archive: value.archive, level: value.level, appVersion: value.appVersion };
+    return { archive: value.archive, level, appVersion: value.appVersion };
 }
 
 function readSwapMarker(): RestoreSwap | null {
@@ -236,10 +232,7 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         );
     }
     if (read.verify.status !== 'verified') {
-        return refuse(
-            `${name} is damaged: ${read.verify.failures.slice(0, 3).join('; ')}.`,
-            'Restore another archive.',
-        );
+        return refuse(`${name} is damaged: ${describeFailures(read.verify)}.`, 'Restore another archive.');
     }
     // Bun.semver.order throws on what is not a version.
     if (!VERSION_PATTERN.test(manifest.appVersion) || Bun.semver.order(manifest.appVersion, VERSION) > 0) {
@@ -255,14 +248,9 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         );
     }
     const needed = stageBytesNeeded(manifest);
-    const { bavail, bsize } = statfsSync(dataRoot);
-    if (needed > bavail * bsize) {
-        return refuse(
-            `${name} needs up to ${formatFileSize(needed)} to stage; data/ has ${formatFileSize(bavail * bsize)} free.`,
-            'Free space on that disk, then run ./eigen restore again.',
-        );
-    }
-    const archived: ServerArchive = {
+    const shortfall = roomShortfall(`Staging ${name}`, needed, dataRoot, 'data/');
+    if (shortfall) return refuse(`${shortfall}.`, 'Free space on that disk, then run ./eigen restore again.');
+    const archived: ServerArchiveFile = {
         name,
         manifest,
         members: new Map(read.members.map((member) => [member.name, member])),
@@ -513,6 +501,8 @@ function runSwap(ui: Ui, swap: RestoreSwap): void {
         chmodSync(ENV_PATH, 0o600);
     }
     rmSync(swap.leftover, { recursive: true, force: true });
+    // A per-home restore's notes in there name homes of the data/ that went aside: the boot must not act on them.
+    rmSync(join(BACKUPS, STAGING_DIR), { recursive: true, force: true });
     rmSync(SWAP_MARKER);
     // An aside that keeps nothing goes: a new machine's empty data/, and the .env.production the archive's replaced
     // there. Only once the marker is gone: a rerun would find the restored ones with no aside and move them again.
@@ -534,7 +524,7 @@ async function swap(): Promise<void> {
         return ui.fail('Another restore is swapping data/.', 'Wait for it to finish, then run ./eigen restore again.');
     }
     if (existsSync(SWAP_MARKER)) {
-        lockData(ui, 'restore');
+        lockData(ui);
         const marked = readSwapMarker();
         if (!marked) {
             return ui.fail(
@@ -556,7 +546,7 @@ async function swap(): Promise<void> {
             'Move the data into data/ here, then run ./eigen restore again.',
         );
     }
-    lockData(ui, 'restore');
+    lockData(ui);
     const reason = await refusal(restoring);
     if (reason)
         return ui.fail(
@@ -634,7 +624,8 @@ async function swap(): Promise<void> {
     runSwap(ui, marker);
 }
 
-// No setup runs on a fresh machine (D8): the archive's own file pins the images, Compose's settings and the secrets.
+// No setup runs on a fresh machine: the archive's own file pins the images, Compose's settings and the secrets, and
+// setup would write an org the restore throws away.
 async function takeEnv(archive: string | undefined): Promise<void> {
     const ui = await createUi(true);
     if (!archive) return ui.fail('Name the archive to restore.', 'Pass the path of a server archive.');
@@ -645,7 +636,7 @@ async function takeEnv(archive: string | undefined): Promise<void> {
     const read = await readServerArchive(archive);
     if (!read.manifest || read.verify.status !== 'verified') {
         return ui.fail(
-            `${name} is not a whole Eigen server archive: ${read.verify.failures.slice(0, 3).join('; ')}.`,
+            `${name} is not a whole Eigen server archive: ${describeFailures(read.verify)}.`,
             'Restore another archive.',
         );
     }
@@ -658,7 +649,7 @@ async function takeEnv(archive: string | undefined): Promise<void> {
     }
     const temporary = `${ENV_PATH}.${process.pid}.tmp`;
     await copyArchiveMember(member, temporary);
-    if (!readEnvFile(temporary).has('EIGEN_API_IMAGE')) {
+    if (!readEnvFile(temporary).has(API_IMAGE_KEY)) {
         rmSync(temporary);
         return ui.fail(
             `${name} is an archive of a local build, which pins no images.`,
