@@ -21,8 +21,8 @@ import { gzipSync } from 'node:zlib';
 import { parseBackupStamp } from '@workspace/lib/validation';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { lightWalk, SNAPSHOT_NAME } from '../../cli/snapshot';
-import { COLLAB_EPOCH_FILE } from '../../lib/collab/epoch';
 import { DATA_LOCK_FILE, lockDataDir } from '../../lib/config/data-lock';
+import { DATA_EPOCH_FILE } from '../../lib/home/data-epoch';
 import { CLI, runCli } from '../cli-test-helpers';
 
 const { version } = pkg;
@@ -529,14 +529,14 @@ describe('restore', () => {
         expect(result.stdout).toContain(envAside);
     });
 
-    test('leaves out the collab epoch of the snapshot, so a tab that loaded a document before reloads', async () => {
+    test('leaves out the data epoch of the snapshot, so every tab from before reloads', async () => {
         const dir = install();
         mkdirSync(join(dir, 'data/server'));
-        writeFileSync(join(dir, 'data/server', COLLAB_EPOCH_FILE), 'before');
+        writeFileSync(join(dir, 'data/server', DATA_EPOCH_FILE), 'before');
         const name = await snapshot(dir);
         const result = await eigen(dir, 'restore', name, '--yes');
         expect(result.code).toBe(0);
-        expect(existsSync(join(dir, 'data/server', COLLAB_EPOCH_FILE))).toBe(false);
+        expect(existsSync(join(dir, 'data/server', DATA_EPOCH_FILE))).toBe(false);
         expect(existsSync(join(dir, 'data/home/alice/notes.txt'))).toBe(true);
     });
 

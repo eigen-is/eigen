@@ -3,8 +3,8 @@ import * as path from 'node:path';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { parseBackupArtifactName } from '@workspace/lib/validation';
 import { closeCollabConnectionsForHome } from '../collab/connections';
-import { rotateHomeCollabEpoch } from '../collab/epoch';
 import { ApiError, PATHS } from '../core';
+import { rotateHomeDataEpoch } from '../home/data-epoch';
 import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-home';
 import { getTeam } from '../team/team';
 import { getUserById } from '../user/user';
@@ -68,10 +68,8 @@ async function replaceHomeFolder(
         const install = await prepare();
 
         // Sessions are untouched: the user stays signed in, every request just meets the 503 until
-        // the mark clears. A tab offline now has no socket to close: the home's epoch reloads it on its
-        // next reconnect.
+        // the mark clears.
         closeCollabConnectionsForHome(ownerId);
-        rotateHomeCollabEpoch(ownerId);
         await evictHome(ownerId);
 
         // There is no home folder to move aside on a restore after the user was deleted.
@@ -86,6 +84,11 @@ async function replaceHomeFolder(
 
         try {
             await install(stamp);
+            // Every tab that holds the home as it was reloads: an event stream on its next announcement, a collab
+            // socket on its next reconnect. Only once the new folder is whole, so no tab reloads onto the 503 of a
+            // restore still running, and one that fails leaves the epoch alone with the home put back. Before the
+            // completion note: a crash between the two leaves an extra reload, never a stale tab over the new home.
+            rotateHomeDataEpoch(ownerId);
             // The home folder is whole from here: everything after this only lets go of it. A crash
             // before this line leaves a half-written folder that only the next boot can judge, and
             // the absence of this note is what tells it so.

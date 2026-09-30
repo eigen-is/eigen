@@ -67,7 +67,7 @@ const CONFIRM_COPY: Record<BackupConfirm['kind'], { title: string; description: 
     'restore-artifact': {
         title: 'Restore this home',
         description:
-            'This replaces every file, mail and database of the home with the archive. The home is unavailable while the restore runs and open editors reload, and the state it is in now is kept beside it as a safety copy. Restore the home of',
+            'This replaces every file, mail and database of the home with the archive. The home is unavailable while the restore runs, every open page of it reloads, and the state it is in now is kept beside it as a safety copy. Restore the home of',
         action: 'Restore',
     },
     'delete-artifact': {

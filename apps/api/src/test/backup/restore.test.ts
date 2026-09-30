@@ -1,11 +1,12 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON } from '@workspace/lib/constants/collab';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
 import { apikey as apikeyScheme, user as userScheme } from '../../../auth-schema';
@@ -15,11 +16,12 @@ import * as pathsModule from '../../lib/backup/paths';
 import { ARCHIVE_AVATAR_DIR, buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
-import { getCollabEpoch } from '../../lib/collab/epoch';
 import { getAvatarsDir } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { avatarNameOf } from '../../lib/contacts/card-store';
+import { getDataEpoch } from '../../lib/home/data-epoch';
 import { getHome } from '../../lib/home/get-home';
+import { createSSEStream } from '../../lib/home/sse-stream';
 import { createMountConfig } from '../../lib/mount';
 import { paths } from '../../lib/mount/schema';
 import { getEigenDb } from '../../lib/share/db';
@@ -119,6 +121,21 @@ async function stampSchemaVersion(manifest: BackupManifest, folder: string, relP
         db.close();
     }
     await restateEntry(manifest, folder, relPath);
+}
+
+// One open tab's event stream. `announced` reads on to the next data epochs it announces: the one it opens with, then
+// one per keepalive, which the fake timers of the tests below bring forward.
+async function openEventStream(userId: string) {
+    const reader = createSSEStream(await getHome(userId)).getReader();
+    return {
+        announced: async (): Promise<Record<string, string>> => {
+            for (;;) {
+                const { value } = await reader.read();
+                if (value && 'type' in value && value.type === SSEventType.HOME_DATA_EPOCHS) return value.epochs;
+            }
+        },
+        close: () => reader.cancel(),
+    };
 }
 
 function safetyCopies(userId: string, suffix: string): string[] {
@@ -461,12 +478,40 @@ describe('Backup restoreHome', () => {
     });
 
     // A tab offline through the restore holds no socket to close; its reconnect names the epoch it loaded under.
-    test('draws a new collab epoch for this home alone, so only its tabs that were offline reload', async () => {
-        const before = getCollabEpoch(target.id);
-        const other = getCollabEpoch(ctx.alice.user.id);
+    test('draws a new data epoch for this home alone, so only its tabs that were offline reload', async () => {
+        const before = getDataEpoch(target.id);
+        const other = getDataEpoch(ctx.alice.user.id);
         await restoreHome(artifact, target.id, `restore-epoch-${Date.now()}`);
-        expect(getCollabEpoch(target.id)).not.toBe(before);
-        expect(getCollabEpoch(ctx.alice.user.id)).toBe(other);
+        expect(getDataEpoch(target.id)).not.toBe(before);
+        expect(getDataEpoch(ctx.alice.user.id)).toBe(other);
+    });
+
+    // Every tab of the owner reloads, whatever app it shows: one that stayed connected on its next keepalive, one that
+    // was offline through the restore when it reconnects. Nobody else's stream names the home at all.
+    test("the owner's streams announce the new epoch, and another user's never name the home", async () => {
+        jest.useFakeTimers();
+        const owner = await openEventStream(target.id);
+        const other = await openEventStream(ctx.alice.user.id);
+        try {
+            const before = await owner.announced();
+            const otherBefore = await other.announced();
+            expect(Object.keys(otherBefore)).not.toContain(target.id);
+
+            await restoreHome(artifact, target.id, `restore-sse-${Date.now()}`);
+            jest.advanceTimersByTime(15_000);
+
+            const after = await owner.announced();
+            expect(after[target.id]).not.toBe(before[target.id]);
+            expect(after[target.id]).toBe(getDataEpoch(target.id));
+            expect(await other.announced()).toEqual(otherBefore);
+            const reconnected = await openEventStream(target.id);
+            expect(await reconnected.announced()).toEqual(after);
+            await reconnected.close();
+        } finally {
+            jest.useRealTimers();
+            await owner.close();
+            await other.close();
+        }
     });
 
     test('a socket that connects while the mark is set is closed 1012, never 1013', async () => {
@@ -570,7 +615,12 @@ describe('Backup restoreHome', () => {
             manifest.mounts.push({ id: 'ghost-mount', storageType: 'local', files: 0, bytes: 0 });
         });
 
+        const epoch = getDataEpoch(target.id);
+
         await expect(restoreHome(doctored, target.id, `restore-ghost-${Date.now()}`)).rejects.toThrow(/ghost-mount/);
+
+        // The home as it was is back, so a tab that held it has nothing to reload for.
+        expect(getDataEpoch(target.id)).toBe(epoch);
 
         expect(safetyCopies(target.id, FAILED_RESTORE_SUFFIX).length).toBe(1);
         expect(existsSync(join(TEST_DATA_DIR, 'home', target.id))).toBe(true);
@@ -880,7 +930,32 @@ describe('Backup restore of a team home', () => {
         const teamRoot = join(TEST_DATA_DIR, 'team');
         const copies = readdirSync(teamRoot).filter((name) => name.startsWith(`${ownerId.slice('team_'.length)}.`));
         expect(copies.length).toBe(1);
-        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
+    // A member's stream is their own home's, which the restore never touched: the team's epoch rides along with it.
+    test("a member's stream announces the team's new epoch, and a non-member's never names the team", async () => {
+        jest.useFakeTimers();
+        const member = await openEventStream(ctx.alice.user.id);
+        const outsider = await openEventStream(ctx.bob.user.id);
+        try {
+            const before = await member.announced();
+            const outsiderBefore = await outsider.announced();
+            expect(before[ownerId]).toBe(getDataEpoch(ownerId));
+            expect(Object.keys(outsiderBefore)).not.toContain(ownerId);
+
+            await restoreHome(artifact, ownerId, `restore-team-sse-${Date.now()}`);
+            jest.advanceTimersByTime(15_000);
+
+            const after = await member.announced();
+            expect(after[ownerId]).not.toBe(before[ownerId]);
+            expect(after[ctx.alice.user.id]).toBe(before[ctx.alice.user.id]);
+            expect(await outsider.announced()).toEqual(outsiderBefore);
+        } finally {
+            jest.useRealTimers();
+            await member.close();
+            await outsider.close();
+            rmSync(join(getBackupsDir(), artifact), { force: true });
+        }
     });
 });
 

@@ -1,6 +1,7 @@
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { getHome } from './get-home';
 import type { Home } from './home';
+import { buildDataEpochsEvent } from './sse-events';
 
 type StreamItem = SSEvent | { event: string };
 
@@ -19,6 +20,12 @@ export function createSSEStream(home: Home): ReadableStream<StreamItem> {
         }
     };
 
+    // On open and with every keepalive, so a tab hears a restore whether it stayed connected or reconnected after it.
+    const announceDataEpochs = () =>
+        buildDataEpochsEvent(home.user.id)
+            .then(listener)
+            .catch((e) => console.error(`[SSE] Failed to announce data epochs for ${home.user.id}:`, e));
+
     return new ReadableStream({
         start: (controller) => {
             streamController = controller;
@@ -29,6 +36,7 @@ export function createSSEStream(home: Home): ReadableStream<StreamItem> {
             } catch {
                 isClosed = true;
             }
+            announceDataEpochs();
 
             keepalive = setInterval(async () => {
                 if (isClosed) return;
@@ -55,6 +63,7 @@ export function createSSEStream(home: Home): ReadableStream<StreamItem> {
                 } catch {
                     isClosed = true;
                 }
+                announceDataEpochs();
             }, 15000);
         },
         cancel: () => {

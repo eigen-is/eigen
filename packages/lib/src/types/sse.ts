@@ -59,6 +59,8 @@ export const SSEventType = {
     LABEL_DELETED: 'contacts:label-deleted',
     // Backup events (admin only)
     BACKUP_JOB_UPDATED: 'backup:job-updated',
+    // Home events
+    HOME_DATA_EPOCHS: 'home:data-epochs',
 } as const;
 
 // --- Event data types (minimal — only what frontend handlers need for cache invalidation) ---
@@ -126,6 +128,13 @@ type SSEventBackup = {
     ownerId: string;
 };
 
+// Sent when a stream opens and with every keepalive: the data epoch of the user's own home and of each of their
+// teams, keyed by owner id. Only a restore changes one, so a tab reloads when an epoch it already holds changes.
+type SSEventHomeDataEpochs = {
+    type: typeof SSEventType.HOME_DATA_EPOCHS;
+    epochs: Record<string, string>;
+};
+
 type SSEventTeam = {
     type: typeof SSEventType.TEAM_SETTINGS_UPDATED;
     teamId: string;
@@ -140,6 +149,7 @@ export type SSEvent =
     | SSEventChat
     | SSEventContact
     | SSEventContactsChanged
+    | SSEventHomeDataEpochs
     | SSEventLabel
     | SSEventNotificationCreated
     | SSEventNotificationChanged
@@ -153,6 +163,7 @@ export type {
     SSEventContact,
     SSEventContactsChanged,
     SSEventDrive,
+    SSEventHomeDataEpochs,
     SSEventLabel,
     SSEventMail,
     SSEventNotificationChanged,

@@ -15,12 +15,13 @@ import { getCommentIndex } from '../lib/chat/comment-index';
 import { broadcastCommentIndexUpdated } from '../lib/chat/sse-events';
 import type CollabDocument from '../lib/collab/collabDocument';
 import { registerCollabConnection, unregisterCollabConnection } from '../lib/collab/connections';
-import { collabEpochMessage, getCollabEpoch } from '../lib/collab/epoch';
+import { collabEpochMessage } from '../lib/collab/epoch';
 import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
 import { HomeRestoringError, touchHomeIfLoaded } from '../lib/home';
+import { getDataEpoch } from '../lib/home/data-epoch';
 import { sendToHome } from '../lib/home/home-relay';
 import { getUserByEmail } from '../lib/user';
 import { keepWebSocketAlive } from '../utils/websockets';
@@ -212,7 +213,7 @@ export const collabRouter = new Elysia({
                 // The tab loaded its document before a restore put other data back: its sync would merge what the
                 // restore undid.
                 const { epoch } = ws.data.query;
-                if (epoch !== undefined && epoch !== getCollabEpoch(ownerId)) {
+                if (epoch !== undefined && epoch !== getDataEpoch(ownerId)) {
                     ws.close(COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON);
                     return;
                 }
