@@ -28,9 +28,8 @@ export const SERVER_RUNTIME_FILES = {
     instanceLock: DATA_LOCK_FILE,
     controlSocket: 'control.sock',
     setupToken: 'setup-token',
-    // Keep these names: a new one redraws every data epoch and reloads every open tab after an update.
-    epoch: 'collab-epoch',
-    homeEpochs: 'collab-home-epochs.json',
+    epoch: 'data-epoch',
+    homeEpochs: 'home-data-epochs.json',
 } as const;
 
 export function getServerDataPath(filename?: string): string {
