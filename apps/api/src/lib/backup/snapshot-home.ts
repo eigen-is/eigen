@@ -134,11 +134,12 @@ export async function snapshotHome(
     }
 
     const mounts = home.drive.getMounts();
-    // Every mount the home declares, not only the ones it serves: a disabled mount is not in the
-    // drive's map and its folder is walked by nothing else here, so an archive without it is a
-    // restore that drops it. It comes back as disabled, because settings.json rides along as it is.
-    const disabled = Object.entries(home.settings.get().mounts ?? {}).filter(
-        ([id, settings]) => !settings.enabled && !mounts.some((mount) => mount.id === id),
+    // Every mount the home declares, not only the ones it serves: a disabled mount, and an enabled one
+    // whose init failed, are not in the drive's map and their folders are walked by nothing else here,
+    // so an archive without them is a restore that drops them. A disabled one comes back disabled,
+    // because settings.json rides along as it is.
+    const unserved = Object.entries(home.settings.get().mounts ?? {}).filter(
+        ([id]) => !mounts.some((mount) => mount.id === id),
     );
     const mountSummaries: BackupManifest['mounts'] = [];
 
@@ -179,16 +180,16 @@ export async function snapshotHome(
         });
     };
 
-    const total = mounts.length + disabled.length;
+    const total = mounts.length + unserved.length;
     for (const [index, mount] of mounts.entries()) {
         await archiveMount(mount.config, level === 'light' ? undefined : mount);
         report('mounts', index + 1, total);
     }
 
-    for (const [index, [id, settings]] of disabled.entries()) {
+    for (const [index, [id, settings]] of unserved.entries()) {
         const relMetadata = `${PATHS.DRIVE.ROOT}/${id}/${PATHS.DRIVE.METADATA_DB}`;
-        // A mount whose folder is gone (a disabled entry nobody ever mounted) has nothing to carry.
-        if (!fs.existsSync(path.join(home.homeDir, relMetadata))) continue;
+        // A disabled mount whose folder is gone (an entry nobody ever mounted) has nothing to carry.
+        if (!settings.enabled && !fs.existsSync(path.join(home.homeDir, relMetadata))) continue;
         const config = createMountConfig(id, settings);
         // Where the archive stands before this mount: a mount that turns out to be unreadable is
         // taken back out again, entries and all, so the folder never holds bytes the manifest does
@@ -197,9 +198,9 @@ export async function snapshotHome(
         const databasesBefore = databases;
         let mount: Mount | undefined;
         try {
-            // Archived through the same Mount an enabled one goes through — one spelling of the
-            // capture rules (freshest-first, managed databases, manifest entries) for both. Opened
-            // passively because the drive does not serve this one: nothing is created, purged or
+            // Archived through the same Mount a served one goes through: one spelling of the capture
+            // rules (freshest-first, managed databases, manifest entries) for both. Opened passively
+            // because the drive does not serve this one: nothing is created, purged or
             // uploaded (Mount.init). Its metadata.db is the Home's own cached handle, the one
             // archiveMount stages its copy from, so this opens nothing a second time. Light builds
             // no Mount at all.
@@ -211,11 +212,11 @@ export async function snapshotHome(
                 await archiveMount(config, mount);
             }
         } catch (error) {
-            // A mount an admin turned off must not be able to fail the backup of everything else —
-            // its storage is often unreachable BECAUSE it was turned off. It is recorded as skipped
-            // with the reason instead, and a restore leaves it disabled and absent. An ENABLED
-            // mount's storage failure still fails the whole backup: that archive would be missing
-            // files the home is serving.
+            // An enabled mount that cannot be opened fails the backup: that archive would be missing
+            // files the home should be serving. One an admin turned off must not fail the backup of
+            // everything else, since its storage is often unreachable because it was turned off. It is
+            // recorded as skipped with the reason instead, and a restore leaves it disabled and absent.
+            if (settings.enabled) throw new Error(`mount ${id} cannot be opened: ${describeError(error)}`);
             entries.length = entriesBefore;
             databases = databasesBefore;
             fs.rmSync(path.join(folder, ARCHIVE_HOME_DIR, PATHS.DRIVE.ROOT, id), { recursive: true, force: true });
