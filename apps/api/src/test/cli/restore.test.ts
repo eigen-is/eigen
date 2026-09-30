@@ -359,19 +359,24 @@ async function withUnbackedPendingRow(archive: string): Promise<string> {
 }
 
 // The s3 mount as it runs here: a metadata.db whose pending rows are `pending`, key to staged name, each staged.
+// WAL and closed, as an idle home leaves it on Linux: no -wal or -shm beside it.
 function liveS3Mount(dir: string, pending: Record<string, string>): void {
     const mount = join(homeDirOf(dir, s3User.id), 'mounts', S3_MOUNT_ID);
     mkdirSync(join(mount, PATHS.DRIVE.STAGING_DIR), { recursive: true });
-    const db = new Database(join(mount, PATHS.DRIVE.METADATA_DB));
+    const metadata = join(mount, PATHS.DRIVE.METADATA_DB);
+    const db = new Database(metadata);
     try {
+        db.run('PRAGMA journal_mode = WAL');
         db.run('CREATE TABLE pending_uploads (storageKey TEXT PRIMARY KEY, stagingPath TEXT NOT NULL)');
         for (const [key, name] of Object.entries(pending)) {
             db.run('INSERT INTO pending_uploads VALUES (?, ?)', [key, name]);
             writeFileSync(join(mount, PATHS.DRIVE.STAGING_DIR, name), 'pending here');
         }
+        db.run('PRAGMA wal_checkpoint(TRUNCATE)');
     } finally {
         db.close();
     }
+    for (const suffix of ['-wal', '-shm']) rmSync(`${metadata}${suffix}`, { force: true });
 }
 
 function homeDirOf(dir: string, ownerId: string): string {

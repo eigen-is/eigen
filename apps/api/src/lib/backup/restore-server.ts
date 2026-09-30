@@ -88,12 +88,14 @@ const INSTALL_FOLDERS = [
 // reconcile drops.
 export type NotReplayed = { settled: number; missing: number };
 
-// The storage keys the live mount still has to upload, or null for a mount that never ran here.
+// The storage keys the live mount still has to upload, or null for a mount that never ran here. Read-write like
+// readMountTotalSize: a closed WAL database has no -shm, and a read-only open of it fails.
 function livePendingKeys(liveMountDir: string): Set<string> | null {
     const metadata = path.join(liveMountDir, PATHS.DRIVE.METADATA_DB);
     if (!fs.existsSync(metadata)) return null;
-    const db = new Database(metadata, { readonly: true });
+    const db = new Database(metadata, { readwrite: true, create: false });
     try {
+        db.run('PRAGMA busy_timeout = 5000;');
         const rows = db.query<{ storageKey: string }, []>('SELECT storageKey FROM pending_uploads').all();
         return new Set(rows.map((row) => row.storageKey));
     } finally {
