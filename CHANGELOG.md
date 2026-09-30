@@ -7,7 +7,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Changed
 
-- **Whole-server backups (breaking)** — `./eigen backup` backs up the server into `backups/` while Eigen runs, and `./eigen restore` puts such an archive back, on this machine or a new one. Snapshots in `snapshots/` can no longer be restored by Eigen: after the update from 0.3.0, `./eigen rollback` prints the two commands that go back
+- **Whole-server backups (breaking)** — `./eigen backup` backs up the server into `backups/` while Eigen runs, and `./eigen restore` puts such an archive back, on this machine or a new one. `./eigen update` backs up the running server first; with Eigen stopped it takes `--no-backup`. Snapshots in `snapshots/` can no longer be restored by Eigen: after the update from 0.3.0, `./eigen rollback` prints the commands that go back
 
 ## [0.3.0] - 2026-09-25
 

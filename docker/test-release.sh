@@ -11,12 +11,12 @@
 # anything stops; restore the backup of .8, which brings its launcher and Compose files back; move .8 onto the main
 # channel, update it to a second build of main, roll back one build, and leave main for .10; install from main; install
 # .9 from the launcher alone; install .9 twice, on one digest. The published release updates through its own launcher,
-# which saves a snapshot, and goes back through the two commands ./eigen rollback prints for it.
+# which saves a snapshot, and goes back through the three commands ./eigen rollback prints for it.
 #
 # Usage:  ./docker/test-release.sh
-#         ACCEPT_BREAKING=1 lets the new release list breaking changes since the published one: the update takes
-#         --accept-breaking, and the seed is only checked after the rollback. publish.yml sets it for the input
-#         breaking: true.
+#         ACCEPT_BREAKING=1 is for a new release that lists breaking changes since the published one: the update takes
+#         --accept-breaking, and the seed is only checked after the rollback. A release that lists none fails under
+#         it. publish.yml sets it for the input breaking: true.
 #         CANDIDATE=candidate-<version>-amd64 installs publish.yml's candidate images as the new release instead of a
 #         build; with CANDIDATE_CREATED, it waits for the candidates publish.yml stamped with that time (copy_candidate).
 # Needs:  docker, curl, git, and ghcr.io. Builds the API three times, four without CANDIDATE, and the other images
@@ -331,6 +331,11 @@ upgrade_published() {
         started=$SECONDS
         eigen update "$RELEASE" --accept-breaking
         show
+    elif [ "${ACCEPT_BREAKING:-}" = 1 ]; then
+        fail "the gate ran with breaking: true, but $RELEASE lists no breaking change since $PUBLISHED. A (breaking)" \
+            "line counts only under ## [$RELEASE] in CHANGELOG.md, not under [Unreleased]"
+    else
+        ok "$RELEASE lists no breaking changes since $PUBLISHED, so it updates without --accept-breaking"
     fi
     if [ "$CODE" = 0 ] &&
         says "◇  Eigen $PUBLISHED (.*) → $RELEASE ($RELEASE_COMMIT) is running at https://localhost/"; then
@@ -365,16 +370,18 @@ upgrade_published() {
     show
     back=$(printf '%s\n' "$OUT" | sed -n 's/^│  \(docker run .* bootstrap --force --out \/install\)$/\1/p')
     restore=$(printf '%s\n' "$OUT" | sed -n 's/^│  \(EIGEN_API_IMAGE=.* \.\/eigen restore .*\)$/\1/p')
-    if [ "$CODE" = 0 ] && [ -n "$back" ] && [ -n "$restore" ]; then
-        ok "./eigen rollback prints the two commands that go back to $PUBLISHED"
+    clear=$(printf '%s\n' "$OUT" | sed -n 's/^│  \(rm -f \.eigen\/last-update \.eigen\/bundle\)$/\1/p')
+    if [ "$CODE" = 0 ] && [ -n "$back" ] && [ -n "$restore" ] && [ -n "$clear" ]; then
+        ok "./eigen rollback prints the three commands that go back to $PUBLISHED"
     else
         fail "./eigen rollback after the update from $PUBLISHED: exit $CODE"
     fi
     CODE=0
-    OUT=$(in_cli_container sh -c "$back && $restore --yes" 2>&1) || CODE=$?
+    OUT=$(in_cli_container sh -c "$back && $restore --yes && $clear" 2>&1) || CODE=$?
     show
-    if [ "$CODE" = 0 ] && stack_up; then
-        ok "those two commands went back to $PUBLISHED in $((SECONDS - started))s"
+    if [ "$CODE" = 0 ] && stack_up && ! scratch_run test -e "$INSTALL/.eigen/last-update" &&
+        ! scratch_run test -e "$INSTALL/.eigen/bundle"; then
+        ok "those three commands went back to $PUBLISHED in $((SECONDS - started))s, and left nothing of $RELEASE in .eigen/"
     else
         fail "the way back to $PUBLISHED exited $CODE"
     fi

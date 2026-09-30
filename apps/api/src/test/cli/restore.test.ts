@@ -512,6 +512,21 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
+        'on a new machine, whose data/ is empty and whose .env.production is the archive’s, nothing is kept aside',
+        async () => {
+            const dir = scratch('restore-new-machine-');
+            mkdirSync(join(dir, 'data'));
+            mkdirSync(join(dir, '.eigen'));
+            writeFileSync(join(dir, '.env.production'), ARCHIVED_ENV, { mode: 0o600 });
+            const out = await stageAndSwap(dir, basename(fullArchive));
+            expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(ARCHIVED_ENV);
+            expect(readdirSync(dir).filter((name) => name.includes('.pre-restore-'))).toEqual([]);
+            expect(out).not.toContain('Kept aside');
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
         'the data epoch changes: no epoch file survives, so every open tab reloads',
         async () => {
             const withEpochs = await craft(fullArchive, { replace: await serverMemberWithEpochs(fullArchive) });

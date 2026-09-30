@@ -64,6 +64,8 @@ Usage: ./eigen backup [--light | --full] [--s3] [--wait]
 
 Backs up the whole server into backups/ while Eigen runs, and checks the archive. It
 stops nothing. With Eigen stopped, a copy of data/ and .env.production is a backup too.
+Exits 0 once the archive verified, 1 when it failed, 2 on a wrong argument, and 4
+when it verified but did not reach the backup bucket.
 
   --light   Accounts, settings and databases: no files and no mail
   --full    Everything but the files in S3 buckets, which keep their own history (the default)
@@ -94,7 +96,7 @@ EOF
             ;;
         update)
             cat <<EOF
-Usage: ./eigen update [version] [--check] [--accept-breaking] [--full]
+Usage: ./eigen update [version] [--check] [--accept-breaking] [--full | --no-backup]
 
 Updates Eigen to the newest release, or to <version>. First, while Eigen runs, it makes
 the backup ./eigen rollback goes back to: a light one, of the accounts, settings and
@@ -104,6 +106,7 @@ main channel instead of releases.
   --check             Only tell whether there is an update, and what it brings
   --accept-breaking   Update even when the new version lists breaking changes
   --full              Make a full backup, files and mail too
+  --no-backup         Make none, as with Eigen stopped: copy data/ and .env.production first
 EOF
             ;;
         rollback)
@@ -181,8 +184,8 @@ env_value() {
     printf '%s\n' "$value"
 }
 
-# answer <key> <the CLI's key=value lines>: the value it gave for that key.
-answer() { printf '%s\n' "$2" | sed -n "s/^$1=//p" | tail -n 1; }
+# answer <key> <the CLI's key=value lines>: the value it gave for that key. Through a pty, a line ends in \r\n.
+answer() { printf '%s\n' "$2" | tr -d '\r' | sed -n "s/^$1=//p" | tail -n 1; }
 
 # A folder with the build overlay, such as a clone of the repository, is a local build: setup builds its images.
 if [ -f docker-compose.build.yml ]; then MODE=local; else MODE=release; fi
@@ -315,6 +318,7 @@ compose_at_least() {
     }'
 }
 
+# preflight [quiet]: quiet leaves out the Docker line, for a command whose output is a report.
 preflight() {
     # Not -r: group 1000 reads the file too, and ./eigen writes it.
     if [ -e .env.production ] && [ ! -w .env.production ]; then
@@ -339,16 +343,17 @@ preflight() {
     docker_os=${arch#* }
     arch=${arch%% *}
     mkdir -p .eigen
-    say "$GREEN" '◇' "Docker ${server%% *} on $arch, Compose $compose"
+    if [ "${1:-}" != quiet ]; then say "$GREEN" '◇' "Docker ${server%% *} on $arch, Compose $compose"; fi
     # The staged tree was checked before the swap wrote its marker, so a swap that was cut off goes on first.
     if [ -e .eigen/restore-swap ]; then finish_swap; fi
 }
 
-# Configure always writes DOMAIN; an unreadable .env.production is for preflight to report.
+# Configure always writes DOMAIN; an unreadable .env.production is for preflight to report. A mirror install's holds
+# EIGEN_REGISTRY alone before setup.
+unconfigured() { [ ! -e .env.production ] || { [ -r .env.production ] && [ -z "$(env_value DOMAIN)" ]; }; }
+
 need_install() {
-    if [ ! -e .env.production ] || { [ -r .env.production ] && [ -z "$(env_value DOMAIN)" ]; }; then
-        die "Eigen is not set up in $PWD." "Run ./eigen setup first."
-    fi
+    if unconfigured; then die "Eigen is not set up in $PWD." "Run ./eigen setup first."; fi
 }
 
 # need_image <what to do>: the CLI comes with the API image, which a local build builds in ./eigen setup.
@@ -387,7 +392,8 @@ cli_help() {
 
 # A build is an api image, named by its labels as <version> (<revision>) on every install. Three files hold what an
 # install is: .env.production pins what runs and what it follows (configure writes it from PINS), .eigen/bundle names
-# the api image the files came from (write_bundle), .eigen/last-update the backup the last update made (update_apply).
+# the api image the files came from (write_bundle), .eigen/last-update the backup the last update made (update_apply)
+# until a restore swaps data/ (after_swap).
 
 # image_label <image> <version or revision>: that label of a local image.
 image_label() { docker image inspect --format "{{index .Config.Labels \"org.opencontainers.image.$2\"}}" "$1"; }
@@ -569,6 +575,10 @@ where_archive() {
     if [ "$dir" = "$(pwd -P)/backups" ]; then
         STAGE_ARG=$name CLI_ARG=backups/$name
     else
+        case $dir/$name in *:*)
+            die "Docker cannot mount $dir/$name, whose path has a colon." "Move the archive into backups/, then run ./eigen restore $name."
+            ;;
+        esac
         ARCHIVE_MOUNT="$dir/$name:/restore/$name:ro" STAGE_ARG=/restore/$name CLI_ARG=/restore/$name
     fi
 }
@@ -620,8 +630,10 @@ swap_archive() {
 }
 
 # after_swap <the api image before the swap>: a release install runs the Compose files of the images the archive
-# pins; a local build runs today's, which may need keys an older archive lacks.
+# pins; a local build runs today's, which may need keys an older archive lacks. The last update's backup is no way back
+# from the data swapped in.
 after_swap() {
+    rm -f .eigen/last-update
     API_IMAGE=$(image api)
     if [ "$MODE" = local ]; then
         step "Adding what is new to .env.production" ".env.production has what Eigen needs" \
@@ -646,7 +658,8 @@ put_back() {
     restart
 }
 
-# finish_swap: a swap that was cut off, finished by the build whose files run it, then what follows any swap.
+# finish_swap: a swap that was cut off, finished by the build whose files run it, then what follows any swap, and the
+# start.
 finish_swap() {
     lock
     trap '' HUP
@@ -657,6 +670,7 @@ finish_swap() {
         "The restore that was cut off cannot be finished" with_image "$swapper" cli_as 0 restore --swap
     NEXT=''
     after_swap "$swapper"
+    restart
 }
 
 # The IDs of the mail containers, stopped ones too: fail2ban's jails follow their logs by container ID.
@@ -729,7 +743,7 @@ setup() {
     # Beside the launcher alone: bootstrap the pinned build, else the newest release, and hand over to
     # its launcher, lock included.
     if [ "$MODE" = release ] && [ ! -e docker-compose.yml ]; then
-        preflight >/dev/null
+        preflight quiet
         lock
         pinned=$(env_value EIGEN_API_IMAGE)
         API_IMAGE=${pinned:-$REGISTRY/api:latest}
@@ -783,7 +797,7 @@ status() {
     arguments status 0 "$@"
     need_install
     wordmark status
-    preflight >/dev/null
+    preflight quiet
     # Empty when the check fails; a local build has none.
     newer=''
     if [ "$MODE" = release ]; then
@@ -810,17 +824,20 @@ status() {
         ;;
     esac
 
-    set -- --install="$PWD" --services="$services" --mail-queue="$queue" --backups="$(ls backups 2>/dev/null || :)" \
-        ${newer:+"$newer"}
+    runner=cli
+    case $services in *"eigen-api${tab}running$tab"*) runner=api_cli ;; esac
+    # The status of Eigen 0.3.0, which runs on after an update that failed past its files, refuses --backups.
+    backups=''
+    if "$runner" status --help </dev/null 2>/dev/null | grep -q -- --backups; then
+        backups="--backups=$(ls backups 2>/dev/null || :)"
+    fi
+    set -- --install="$PWD" --services="$services" --mail-queue="$queue" ${backups:+"$backups"} ${newer:+"$newer"}
     bundle=$(stale_bundle)
     if [ -n "$bundle" ]; then
         files=$(describe "$bundle")
         set -- "$@" --files="$files"
     fi
-    case $services in
-        *"eigen-api${tab}running$tab"*) api_cli status "$@" ;;
-        *) cli status "$@" ;;
-    esac
+    "$runner" status "$@"
 }
 
 # The running API makes the backup, under the guards of its job map (D9). It stops nothing, so it takes no lock.
@@ -857,11 +874,13 @@ backup() {
     api_cli backup --level "$level" $wait
 }
 
-# A new machine: the launcher alone, as the installer leaves it. The archive's .env.production pins the build that
-# restores it and holds what setup asks (D8); that build's launcher takes over, lock and all.
+# A new machine: the launcher alone, as the installer leaves it, or beside a mirror's .env.production. The archive's
+# .env.production pins the build that restores it and holds what setup asks (D8); that build's launcher takes over,
+# lock and all. A mirror's file waits in .eigen/ until the archive's is in place.
 restore_fresh() {
     lock
-    AT_EXIT='rm -f .env.production'
+    if [ -e .env.production ]; then mv .env.production .eigen/mirror.env; fi
+    AT_EXIT='rm -f .env.production; if [ -e .eigen/mirror.env ]; then mv .eigen/mirror.env .env.production; fi'
     API_IMAGE=$REGISTRY/api:latest
     step "Downloading Eigen" "Eigen downloaded" "Could not download Eigen" docker pull "$API_IMAGE"
     step "Reading the archive" ".env.production taken from the archive" "The archive cannot be restored here" \
@@ -873,6 +892,7 @@ restore_fresh() {
     write_bundle "$API_IMAGE"
     step "Preparing data/ and backups/" "Data folders ready" "The data folders are not writable" prepare_data
     AT_EXIT=''
+    rm -f .eigen/mirror.env
     exec ./eigen restore "$@"
 }
 
@@ -899,7 +919,7 @@ restore() {
     wordmark restore
     preflight
     where_archive "$archive"
-    if [ "$MODE" = release ] && [ ! -e .env.production ]; then restore_fresh "$@"; fi
+    if [ "$MODE" = release ] && unconfigured; then restore_fresh "$@"; fi
     need_install
     need_image "Run ./eigen setup first, then ./eigen restore <archive>."
     if [ "$MODE" = release ]; then api_here; fi
@@ -909,7 +929,7 @@ restore() {
 }
 
 update() {
-    target='' check=0 accept='' pulled=0 full='' light=--light saved='' previous=''
+    target='' check=0 accept='' pulled=0 full='' light=--light saved='' no_backup='' previous=''
     for arg in "$@"; do
         case $previous in --saved)
             saved=$arg previous=''
@@ -924,8 +944,9 @@ update() {
             --check) check=1 ;;
             --accept-breaking) accept=--accept-breaking ;;
             --full) full=--full light='' ;;
+            --no-backup) no_backup=--no-backup ;;
             # The handover from the launcher that got the new version to the one that came with it, with the backup
-            # it made.
+            # it made, or --no-backup. Eigen 0.3.0's passes neither.
             --pulled) pulled=1 ;;
             --saved) ;;
             -*) refuse update "$arg" ;;
@@ -938,7 +959,7 @@ update() {
     fi
     need_install
     if [ "$pulled" = 1 ]; then
-        preflight >/dev/null
+        preflight quiet
     else
         wordmark update
         preflight
@@ -1003,9 +1024,20 @@ update_get() {
     checked=0
     cli update-check --from "$old_version" $accept || checked=$?
     case $checked in 0) ;; "$DECLINED") exit 0 ;; *) exit "$checked" ;; esac
-    if ! dc ps --status running --services 2>/dev/null | grep -qx eigen-api; then
-        die "Eigen is not running, and the backup an update makes first runs on the running server." \
-            "Start it with ./eigen restart, then run ./eigen update again."
+    # A retry of an update from Eigen 0.3.0 that failed past its files finds 0.3.0 running, whose CLI has no backup: its
+    # image saves a snapshot after the stop, as 0.3.0's own handover has it do (D1). Asked of the CLI, since a build of
+    # main may carry either under one version.
+    handover='' old_cli=''
+    if [ -n "$no_backup" ]; then
+        handover=--no-backup
+    else
+        case $(with_image "$(image api)" cli backup --help 2>&1 </dev/null || :) in
+            *'Unknown command "backup"'*) old_cli=1 ;;
+        esac
+        if [ -z "$old_cli" ] && ! dc ps --status running --services 2>/dev/null | grep -qx eigen-api; then
+            die "Eigen is not running, and the backup an update makes first runs on the running server." \
+                "Start it with ./eigen restart, then run ./eigen update again. Or copy data/ and .env.production somewhere safe, then run ./eigen update --no-backup."
+        fi
     fi
     step "Downloading Eigen $new" "Eigen $new downloaded" "Could not download Eigen $new" pull_images "$tag"
     downloaded=$(describe "$REGISTRY/api:$tag")
@@ -1015,25 +1047,31 @@ update_get() {
     pin_images "$tag"
     # Before the files of the new version, which a failure would leave with the old images, and before its
     # configure --backfill, so the archive holds the .env.production this build runs on. A breaking release gets a
-    # full backup, since it may convert what a light one leaves out.
+    # full backup, since it may convert what a light one leaves out. The CLI prints to a pipe: on a terminal, Docker's
+    # pty would end the line in \r\n.
     level=full
-    if [ -z "$full" ]; then
-        levels=$(cli update-check --from "$old_version" --level)
+    if [ -z "$full" ] && [ -z "$no_backup" ]; then
+        levels=$(cli update-check --from "$old_version" --level </dev/null)
         level=$(answer level "$levels")
     fi
-    NEXT="Eigen $current runs on as it was. Fix what it says, then run ./eigen update again."
-    step "Backing up Eigen $current, $level" "Backed up Eigen $current" "Could not back up Eigen $current" \
-        api_cli backup --level "$level" --reason pre-update --wait
-    NEXT=''
-    saved=$(answer archive "$(cat "$LOG")")
-    if [ -z "$saved" ]; then
-        die "The backup named no archive." "Eigen $current runs on as it was. Run ./eigen update again; $LOG shows what the backup said."
+    if [ -n "$old_cli" ]; then
+        if [ "$level" = full ]; then handover=--full; fi
+    elif [ -z "$no_backup" ]; then
+        NEXT="Eigen $current runs on as it was. Fix what it says, then run ./eigen update again."
+        step "Backing up Eigen $current, $level" "Backed up Eigen $current" "Could not back up Eigen $current" \
+            api_cli backup --level "$level" --reason pre-update --wait
+        NEXT=''
+        saved=$(answer archive "$(cat "$LOG")")
+        if [ -z "$saved" ]; then
+            die "The backup named no archive." "Eigen $current runs on as it was. Run ./eigen update again; $LOG shows what the backup said."
+        fi
+        # What changes from here to the stop is not in it (D10).
+        say "$GRAY" '│' "backups/$saved, made until $(date -u +%H:%M:%S) UTC"
+        handover="--saved $saved"
     fi
-    # What changes from here to the stop is not in it (D10).
-    say "$GRAY" '│' "backups/$saved, made until $(date -u +%H:%M:%S) UTC"
     write_bundle "$(answer EIGEN_API_IMAGE "$PINS")"
-    # The new launcher gets the tag and the archive as arguments and parses them as this one did; no variable crosses.
-    exec ./eigen update --pulled "$tag" --saved "$saved"
+    # The new launcher gets the tag and what it saves as arguments and parses them as this one did; no variable crosses.
+    exec ./eigen update --pulled "$tag" $handover
 }
 
 # The part the launcher of the new version runs: stop, switch and start.
@@ -1047,7 +1085,6 @@ update_apply() {
     new=$(describe "$new_image")
     # What .env.production pins before the switch is what the rollback goes back to.
     old_pins=$(pinned_refs)
-    if [ -n "$saved" ]; then echo "$saved" >.eigen/last-update; fi
 
     API_IMAGE=$new_image
     step "Adding what is new to .env.production" ".env.production has what Eigen $new needs" \
@@ -1058,7 +1095,7 @@ update_apply() {
     stop
     # The launcher of Eigen 0.3.0 hands over without a backup (D1): its image saves a snapshot, which only it can put
     # back, so .eigen/last-update names that image too, for the way back ./eigen rollback prints.
-    if [ -z "$saved" ]; then
+    if [ -z "$saved" ] && [ -z "$no_backup" ]; then
         kind=full
         if [ -n "$light" ]; then kind=light; fi
         step "Saving a $kind snapshot" "Snapshot saved" "Could not save the snapshot" \
@@ -1067,6 +1104,12 @@ update_apply() {
     fi
     step "Switching to Eigen $new" "Switched to Eigen $new" "Could not write Eigen $new into .env.production" \
         with_pins cli configure --backfill
+    # Only a switch makes the backup the way back; an update without one leaves none to an older build.
+    if [ -n "$saved" ]; then
+        echo "$saved" >.eigen/last-update
+    elif [ -n "$no_backup" ]; then
+        rm -f .eigen/last-update
+    fi
     AT_EXIT=''
     restart "Fix what it says, then run ./eigen restart, or ./eigen rollback to go back to Eigen $old."
     step "Removing old images" "Old images removed" "Could not remove the old images" prune_images $old_pins
@@ -1074,6 +1117,8 @@ update_apply() {
     if [ -n "$saved" ]; then
         say "$GRAY" '│' "Saved before the update: backups/$saved"
         say "$GRAY" '└' "./eigen rollback goes back to Eigen $old."
+    elif [ -n "$no_backup" ]; then
+        say "$GRAY" '└' "No backup was made before the update, so ./eigen rollback has nothing to go back to."
     else
         say "$GRAY" '│' "Saved before the update: snapshots/$(sed -n 1p .eigen/last-update), a $kind snapshot"
         say "$GRAY" '└' "./eigen rollback says how to go back to Eigen $old."
@@ -1109,7 +1154,8 @@ rollback() {
         say "$ACCENT" '◆' "The update from Eigen 0.3.0 saved snapshots/$archive, which Eigen 0.3.0 puts back. Run:"
         say "$GRAY" '│' "docker run --rm -v \"\$PWD:/install\" $back bootstrap --force --out /install"
         say "$GRAY" '│' "EIGEN_API_IMAGE=$back ./eigen restore $archive"
-        say "$GRAY" '└' "The first brings back the launcher of Eigen 0.3.0, the second its data and version."
+        say "$GRAY" '│' "rm -f .eigen/last-update .eigen/bundle"
+        say "$GRAY" '└' "The first brings back the launcher of Eigen 0.3.0, the second its data and version, the third clears what this version recorded."
         exit 0
         ;;
     esac
@@ -1121,7 +1167,6 @@ rollback() {
     s3=''
     where_archive "$archive"
     put_back
-    rm -f .eigen/last-update
     say "$GREEN" '◇' "Eigen $current → $(describe "$API_IMAGE") is running at https://$(env_value DOMAIN)/"
     say "$GRAY" '└' "Check that all is well, then delete what was kept aside."
 }

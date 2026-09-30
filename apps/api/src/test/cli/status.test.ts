@@ -149,7 +149,7 @@ describe('the Backup row', () => {
             scheduledNotUploaded: { ...missed, error: 'bucket refused' },
             newestGoodFullAt: hoursAgo(5).toISOString(),
         });
-        expect(row).toBe(`▲  Backup         ${missed.name} not uploaded, 5h ago: bucket refused`);
+        expect(row).toBe(`▲  Backup       ${missed.name} not uploaded, 5h ago: bucket refused`);
     });
 
     test('is yellow while the schedule is on and no Full verified in two days', async () => {

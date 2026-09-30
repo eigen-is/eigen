@@ -119,7 +119,7 @@ On a tag, two gates test those candidates, the images that get published. `docke
 
 - A tag whose version is published already, a prerelease included, fails the gate: a release is never published twice.
 - In CI, the gate fails when no release before this one is published, unless none is published at all.
-- A release whose `CHANGELOG.md` lists breaking changes since the previous one fails it too, since `./eigen update` refuses it on every install. To publish it anyway, run the workflow on its tag with the input `breaking: true`, which updates with `--accept-breaking` and checks the seed only after the rollback.
+- A release whose `CHANGELOG.md` lists breaking changes since the previous one fails it too, since `./eigen update` refuses it on every install. To publish it anyway, run the workflow on its tag with the input `breaking: true`, which updates with `--accept-breaking` and checks the seed only after the rollback. A `(breaking)` line counts only under the release's own `## [<version>]` heading, since `update-check` skips `[Unreleased]`. The gate names the path it took, and a run with `breaking: true` whose release lists no breaking change fails.
 
 The version is published only once every image is built and both gates passed. Each image's two candidates become the `<version>` index, which is then copied to `:latest` when no newer stable release is out. A prerelease, or a backport such as 0.2.1 after 0.3.0, leaves `:latest` alone. A failed build or gate leaves no partial release.
 
