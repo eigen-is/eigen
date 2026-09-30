@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
 import { type S3Config, teamOwnerId } from '@workspace/lib/types';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
@@ -17,6 +17,7 @@ import { user } from '../../../auth-schema';
 import { ensureAuthSchemaColumns, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
+import { updateServerSettings } from '../../lib/config/server-settings';
 import { atHome } from '../../lib/home/get-home';
 import { pullHomeSize } from '../../lib/home/home-relay';
 import * as s3Storage from '../../lib/storage/s3-storage';
@@ -743,6 +744,11 @@ describe('S3 Config Persistence', () => {
 
     beforeAll(async () => {
         ctx = await getTestContext();
+    });
+
+    // The server settings are the whole suite's.
+    afterAll(async () => {
+        await updateServerSettings({ defaults: { mount: { s3Config: undefined } } });
     });
 
     test('GET /settings/s3config returns null when not configured', async () => {

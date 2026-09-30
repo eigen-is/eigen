@@ -73,9 +73,11 @@ const S3_MOUNT_ID = 'restore-cli-s3';
 const ASIDE = /^data\.pre-restore-\d{8}-\d{6}$/;
 
 const dirs: string[] = [];
+// Every install holds a restored copy of the suite's data root, which a full run makes large: past the
+// default deadline the hook fails, and the afterAll below never runs.
 afterAll(() => {
     for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
-});
+}, JOB_TIMEOUT_MS);
 
 function scratch(prefix: string): string {
     const dir = mkdtempSync(join(TEST_DATA_DIR, prefix));
@@ -464,6 +466,10 @@ afterAll(async () => {
     await s3Fault.landAllRemaining();
     unregisterFaultMount((await getHome(s3User.id)).drive, S3_MOUNT_ID);
     await s3Mount.closeAllDatabases();
+    // The backups folder is the whole suite's: a later file lists its server archives.
+    for (const name of readdirSync(getBackupsDir())) {
+        if (name.startsWith('server-')) rmSync(join(getBackupsDir(), name), { force: true });
+    }
 });
 
 describe('restore --stage and --swap', () => {

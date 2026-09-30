@@ -67,7 +67,7 @@ describe('status', () => {
 });
 
 describe('the Backup row', () => {
-    const SOCKET = join(TEST_DATA_DIR, 'st.sock');
+    const SOCKET = join(TEST_DATA_DIR, 'status.sock');
     const HOUR_MS = 60 * 60 * 1000;
     const hoursAgo = (hours: number) => new Date(Date.now() - hours * HOUR_MS);
     const archive = (reason: BackupReason, at: Date) => ({

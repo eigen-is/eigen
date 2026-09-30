@@ -1,5 +1,6 @@
-import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { rmSync } from 'node:fs';
 import { teamOwnerId } from '@workspace/lib/types';
 import { getSyntheticTeamUser, TeamHome } from '../../lib/home/team-home';
 import { getTestContext } from '../setup';
@@ -9,13 +10,21 @@ import { getTestContext } from '../setup';
 // and reloaded. These tests build a TeamHome directly and assert the LIVE Drive reflects an update
 // without any evict/reload.
 describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
+    const homeDirs: string[] = [];
+
     beforeAll(async () => {
         await getTestContext(); // boots the app: server settings + EIGEN_DATA_ROOT
+    });
+
+    // The data root is the whole suite's: a later server backup would find these homes and their s3 mount.
+    afterAll(() => {
+        for (const dir of homeDirs) rmSync(dir, { recursive: true, force: true });
     });
 
     async function freshTeamHome(): Promise<TeamHome> {
         const owner = teamOwnerId(randomUUID().replace(/-/g, '')); // parseOwnerId wants 32 alnum chars
         const home = new TeamHome(getSyntheticTeamUser(owner, 'Live Update Team'));
+        homeDirs.push(home.homeDir);
         await home.init();
         return home;
     }
