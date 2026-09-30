@@ -24,6 +24,8 @@ export const USER_HOMES_DIR = 'home';
 export const TEAM_HOMES_DIR = 'team';
 export const ORG_HOMES_DIR = 'org';
 export const GUEST_HOMES_DIR = 'guest';
+// The DKIM key and its DNS record, which the postfix container generates in data/ and owns.
+export const DKIM_DIR = 'dkim';
 
 // What a server backup takes from SERVER_DIR, by name: the databases through their live handles, the rest as files.
 export const SERVER_DATABASES = { users: 'users3.db', shares: 'eigen.db', waitlist: 'waitlist.db' } as const;

@@ -5,6 +5,7 @@ import type {
     BackupReason,
     BackupVerifyRecord,
     ServerArchiveManifest,
+    ServerArchiveSidecar,
 } from '../types/backup';
 import type { MountConfig, S3Config } from '../types/mount';
 import { parseOwnerId } from '../types/owner';
@@ -203,7 +204,8 @@ function isServerArchiveHome(value: unknown): value is ServerArchiveManifest['ho
         typeof value.name === 'string' &&
         (!('member' in value) || typeof value.member === 'string') &&
         (!('bytes' in value) || typeof value.bytes === 'number') &&
-        (!('failed' in value) || typeof value.failed === 'string')
+        (!('failed' in value) || typeof value.failed === 'string') &&
+        (!('skipped' in value) || typeof value.skipped === 'string')
     );
 }
 
@@ -259,6 +261,10 @@ export function parseServerArchiveManifest(text: string): ServerArchiveManifest 
     } catch {
         return null;
     }
+    return checkServerArchiveManifest(value);
+}
+
+function checkServerArchiveManifest(value: unknown): ServerArchiveManifest | null {
     if (!isServerArchiveManifest(value)) return null;
     // A home's member is read by that name, so it has to be one the entries vouch for.
     const members = new Set(value.entries.map((entry) => entry.path));
@@ -296,6 +302,21 @@ function isStatus(value: string): value is BackupVerifyRecord['status'] {
     return value === 'unverified' || value === 'verified' || value === 'failed';
 }
 
+// A sidecar holds ISO strings; every reader of one wants the Date the API speaks.
+function reviveDate(value: unknown): Date | undefined {
+    const stamp = typeof value === 'string' ? new Date(value) : null;
+    return stamp && !Number.isNaN(stamp.getTime()) ? stamp : undefined;
+}
+
+function parseVerifyRecord(verify: unknown): BackupVerifyRecord | null {
+    if (typeof verify !== 'object' || verify === null) return null;
+    if (!('status' in verify) || typeof verify.status !== 'string' || !isStatus(verify.status)) return null;
+    if (!('failures' in verify) || !Array.isArray(verify.failures)) return null;
+    if (verify.failures.some((failure) => typeof failure !== 'string')) return null;
+    const checkedAt = 'checkedAt' in verify ? reviveDate(verify.checkedAt) : undefined;
+    return { status: verify.status, checkedAt, failures: verify.failures };
+}
+
 // The sidecar written next to an artifact: the same manifest plus the verify record.
 export function parseBackupSidecar(text: string): { manifest: BackupManifest; verify: BackupVerifyRecord } | null {
     let value: unknown;
@@ -306,15 +327,44 @@ export function parseBackupSidecar(text: string): { manifest: BackupManifest; ve
     }
     if (typeof value !== 'object' || value === null) return null;
     if (!('manifest' in value) || !isManifest(value.manifest)) return null;
-    if (!('verify' in value) || typeof value.verify !== 'object' || value.verify === null) return null;
-    const verify = value.verify;
-    if (!('status' in verify) || typeof verify.status !== 'string' || !isStatus(verify.status)) return null;
-    if (!('failures' in verify) || !Array.isArray(verify.failures)) return null;
-    if (verify.failures.some((failure) => typeof failure !== 'string')) return null;
-    // The file holds an ISO string; every reader of the record wants the Date the API speaks.
-    const stamp = 'checkedAt' in verify && typeof verify.checkedAt === 'string' ? new Date(verify.checkedAt) : null;
-    const checkedAt = stamp && !Number.isNaN(stamp.getTime()) ? stamp : undefined;
-    return { manifest: value.manifest, verify: { status: verify.status, checkedAt, failures: verify.failures } };
+    const verify = 'verify' in value ? parseVerifyRecord(value.verify) : null;
+    return verify ? { manifest: value.manifest, verify } : null;
+}
+
+const JOB_STATES: readonly ServerArchiveSidecar['state'][] = ['running', 'done', 'failed'];
+
+// The record beside a whole-server archive. Null means "not one this build wrote".
+export function parseServerArchiveSidecar(text: string): ServerArchiveSidecar | null {
+    let value: unknown;
+    try {
+        value = JSON.parse(text);
+    } catch {
+        return null;
+    }
+    if (typeof value !== 'object' || value === null) return null;
+    const state = 'state' in value ? JOB_STATES.find((candidate) => candidate === value.state) : undefined;
+    const startedAt = 'startedAt' in value ? reviveDate(value.startedAt) : undefined;
+    if (!state || !startedAt) return null;
+    const sidecar: ServerArchiveSidecar = { state, startedAt };
+    if ('finishedAt' in value) {
+        sidecar.finishedAt = reviveDate(value.finishedAt);
+        if (!sidecar.finishedAt) return null;
+    }
+    if ('error' in value) {
+        if (typeof value.error !== 'string') return null;
+        sidecar.error = value.error;
+    }
+    if ('manifest' in value) {
+        const manifest = checkServerArchiveManifest(value.manifest);
+        if (!manifest) return null;
+        sidecar.manifest = manifest;
+    }
+    if ('verify' in value) {
+        const verify = parseVerifyRecord(value.verify);
+        if (!verify) return null;
+        sidecar.verify = verify;
+    }
+    return sidecar;
 }
 
 // `auth.json`: one array of rows per users3.db table. The columns are better-auth's and change with

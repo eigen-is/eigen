@@ -3,6 +3,7 @@ import { app } from './app';
 import { drainBackupJobs } from './lib/backup/jobs';
 import { wipeBackupStaging } from './lib/backup/paths';
 import { recoverInterruptedRestores } from './lib/backup/recovery';
+import { recoverInterruptedServerBackups } from './lib/backup/server-job';
 import { isProduction } from './lib/config/env';
 import { assertMailDomainUnchanged, isSetupRequired } from './lib/config/server-config';
 import { documentTransformRunner } from './lib/document/transform/runner';
@@ -26,6 +27,8 @@ const SHUTDOWN_DRAIN_BUDGET_MS = 20_000;
 // backup, verify or restore interrupted by a restart leaves a half-written folder nothing resumes.
 recoverInterruptedRestores();
 wipeBackupStaging();
+// A server backup killed mid-run left its record running; it becomes a failed attempt.
+await recoverInterruptedServerBackups().catch((error) => console.error('[backup] recovering server records:', error));
 
 await assertMailDomainUnchanged();
 

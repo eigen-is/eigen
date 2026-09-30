@@ -35,6 +35,9 @@ export class Home {
     protected _notifications!: NotificationCenter;
 
     protected idleMs = 1000 * 60 * 5;
+    // When a request last reached this home through getHome or a keepalive; a backup's own reach and
+    // the getters leave it be, so pullHomeSnapshot can tell whether anybody else opened the home.
+    public requestedAt = 0;
 
     private initPromise: Promise<this> | null = null;
     private timeout: Timer | undefined;
@@ -111,7 +114,8 @@ export class Home {
         }
     }
 
-    public touch() {
+    // `idleMs` is for the backup that booted a home only to capture it; everything else re-arms the full idle.
+    public touch(idleMs = this.idleMs) {
         if (this._destructing) return this;
         if (this.timeout) {
             clearTimeout(this.timeout);
@@ -121,7 +125,7 @@ export class Home {
             this.destruct()
                 .catch((e) => console.error(`[Home] Destruct failed for ${this.user.id}:`, e))
                 .finally(() => this.cleanUp?.());
-        }, this.idleMs);
+        }, idleMs);
         return this;
     }
 

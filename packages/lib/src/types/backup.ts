@@ -58,7 +58,16 @@ export type ServerArchiveManifest = {
     appVersion: string;
     domain: string;
     entries: BackupEntry[];
-    homes: { ownerId: string; kind: 'user' | 'team'; name: string; member?: string; bytes?: number; failed?: string }[];
+    // A home has its member, or says why not: `failed` fails the job, `skipped` (deleted mid-run) does not.
+    homes: {
+        ownerId: string;
+        kind: 'user' | 'team';
+        name: string;
+        member?: string;
+        bytes?: number;
+        failed?: string;
+        skipped?: string;
+    }[];
     // Home folders with no row in users3.db, left out of the archive.
     orphans: string[];
     envFile: boolean;
@@ -76,14 +85,31 @@ export type BackupVerifyRecord = {
     failures: string[];
 };
 
+// `{archive}.json` beside a whole-server archive, written when its job starts and again when it
+// ends, so a crash or a refusal still leaves a dated record for the schedule and the list. `running`
+// with no job behind it is an interrupted attempt. `manifest` is the finished archive's, `verify` the
+// transport check of it.
+export type ServerArchiveSidecar = {
+    state: BackupJob['state'];
+    startedAt: Date;
+    finishedAt?: Date;
+    error?: string;
+    manifest?: ServerArchiveManifest;
+    verify?: BackupVerifyRecord;
+};
+
 // A backup, verify or restore running on the server. The job map in the API is the truth; the
-// `backup:job-updated` SSE event only tells the admin's browser to refetch this.
+// `backup:job-updated` SSE event only tells the admin's browser to refetch this. A server backup's
+// `ownerId` is the org's, and it names its archive from the start.
 export type BackupJob = {
     id: string;
-    kind: 'backup' | 'verify' | 'restore';
+    kind: 'backup' | 'verify' | 'restore' | 'server-backup';
     ownerId: string;
-    // The admin who started it: the job's notifications go to their home. Its pokes go to all admins.
-    startedBy: string;
+    // The admin who started it: a home job's notifications go to their home. Absent for the scheduler
+    // and the CLI; a server job alerts the org owner. Its pokes go to all admins.
+    startedBy?: string;
+    // Why a server backup runs.
+    reason?: BackupReason;
     state: 'running' | 'done' | 'failed';
     progress: { step: string; done: number; total: number };
     // The artifact the job ended on, once it has one: what a backup wrote, what a verify judged,

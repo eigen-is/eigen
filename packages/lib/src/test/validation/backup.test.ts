@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import type { BackupManifest, ServerArchiveManifest } from '../../types/backup';
-import { incompleteReason, parseServerArchiveManifest, parseServerArchiveName } from '../../validation';
+import type { BackupManifest, ServerArchiveManifest, ServerArchiveSidecar } from '../../types/backup';
+import {
+    incompleteReason,
+    parseServerArchiveManifest,
+    parseServerArchiveName,
+    parseServerArchiveSidecar,
+} from '../../validation';
 
 const mount = (id: string, storageType: BackupManifest['mounts'][number]['storageType']) => ({
     id,
@@ -79,6 +84,7 @@ describe('parseServerArchiveManifest', () => {
         homes: [
             { ownerId: userId, kind: 'user', name: 'U', member, bytes: 5 },
             { ownerId: `team_${'t'.repeat(32)}`, kind: 'team', name: 'T', failed: 'bucket unreadable' },
+            { ownerId: 'v'.repeat(32), kind: 'user', name: 'V', skipped: 'deleted during the backup' },
         ],
         orphans: ['home/gone'],
         envFile: true,
@@ -111,8 +117,43 @@ describe('parseServerArchiveManifest', () => {
             [{ ...user, ownerId: team.ownerId }],
             [{ ...team, ownerId: user.ownerId }],
             [{ ...user, member: 'homes/elsewhere.tar.zst' }],
+            [{ ...user, skipped: true }],
         ]) {
             expect(parseServerArchiveManifest(JSON.stringify({ ...valid, homes }))).toBeNull();
         }
+    });
+
+    describe('parseServerArchiveSidecar', () => {
+        const startedAt = new Date('2026-09-30T02:00:00.000Z');
+        const finishedAt = new Date('2026-09-30T02:10:00.000Z');
+
+        test('reads a running record and a finished one, dates revived', () => {
+            expect(parseServerArchiveSidecar(JSON.stringify({ state: 'running', startedAt }))).toEqual({
+                state: 'running',
+                startedAt,
+            });
+            const done: ServerArchiveSidecar = {
+                state: 'failed',
+                startedAt,
+                finishedAt,
+                error: 'Bob failed',
+                manifest: valid,
+                verify: { status: 'verified', checkedAt: finishedAt, failures: [] },
+            };
+            expect(parseServerArchiveSidecar(JSON.stringify(done))).toEqual(done);
+        });
+
+        test('refuses an unknown state, a missing or broken date, and a broken manifest or verify record', () => {
+            for (const broken of [
+                'not json',
+                JSON.stringify({ state: 'paused', startedAt }),
+                JSON.stringify({ state: 'running' }),
+                JSON.stringify({ state: 'done', startedAt, finishedAt: 'yesterday' }),
+                JSON.stringify({ state: 'done', startedAt, manifest: { ...valid, formatVersion: 2 } }),
+                JSON.stringify({ state: 'done', startedAt, verify: { status: 'fine', failures: [] } }),
+            ]) {
+                expect(parseServerArchiveSidecar(broken)).toBeNull();
+            }
+        });
     });
 });

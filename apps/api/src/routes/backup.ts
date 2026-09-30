@@ -78,12 +78,8 @@ export const backupRouter = new Elysia({ name: 'backup' })
         async ({ params, user }): Promise<{ jobId: string }> => {
             await requireAdmin(user.id);
             await requireExistingHome(params.ownerId);
-            // Another user's home, resolved here and handed to the job: lib/backup never reaches for
-            // a home of its own. Phase ③ runs the job on the server that owns the home, and this
-            // lookup moves behind home-relay with it (ROADMAP, cheap wins).
-            const home = await getHome(params.ownerId);
             const job = startBackupJob('backup', params.ownerId, user.id, (started, onProgress) =>
-                runHomeBackup(home, started, onProgress),
+                runHomeBackup(params.ownerId, started, onProgress),
             );
             return { jobId: job.id };
         },

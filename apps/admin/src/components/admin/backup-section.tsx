@@ -27,12 +27,14 @@ const JOB_LABEL: Record<BackupJob['kind'], string> = {
     backup: 'Creating backup',
     verify: 'Verifying archive',
     restore: 'Restoring home',
+    'server-backup': 'Backing up the server',
 };
 
 const JOB_DONE_LABEL: Record<BackupJob['kind'], string> = {
     backup: 'Backup created',
     verify: 'Archive verified',
     restore: 'Home restored',
+    'server-backup': 'Server backed up',
 };
 
 // The two things a row shows about itself are server words; these are the ones an admin reads.

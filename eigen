@@ -8,7 +8,7 @@ cd "$(dirname "$(readlink -f "$0")")"
 
 REPO=https://github.com/eigen-is/eigen
 REGISTRY=ghcr.io/eigen-is/eigen
-# IMAGE_NAMES in apps/api/src/cli/install.ts. Not from compose config --images: that names the images of the
+# IMAGE_NAMES in apps/api/src/lib/config/release.ts. Not from compose config --images: that names the images of the
 # profiles in use, and a release pins every image in IMAGES.
 IMAGES='api frontend postfix dovecot unbound'
 # The CLI's exit code for a question answered no: DECLINED in apps/api/src/cli/install.ts.
