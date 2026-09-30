@@ -159,7 +159,7 @@ export function getBackupJob(id: string): BackupJob | undefined {
 export async function runHomeBackup(home: Home, job: BackupJob, onProgress: SnapshotProgress): Promise<string> {
     const staging = getBackupStagingDir(job.id);
     try {
-        const manifest = await snapshotHome(home, staging, onProgress);
+        const manifest = await snapshotHome(home, staging, { onProgress });
         const folder = path.join(staging, buildHomeFolderName(manifest.ownerId));
         const verify = await verifyFolder(folder, onProgress);
         const name = freeArtifactName(manifest.ownerId, new Date(manifest.createdAt));

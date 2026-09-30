@@ -73,7 +73,7 @@ async function backup(
     const home = await getHome(userId);
     const staging = mkdtempSync(join(TEST_DATA_DIR, 'restore-backup-'));
     const folder = join(staging, buildHomeFolderName(userId));
-    const manifest = await snapshotHome(home, staging, undefined, level);
+    const manifest = await snapshotHome(home, staging, { level });
     if (patch) {
         await patch(manifest, folder);
         writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));

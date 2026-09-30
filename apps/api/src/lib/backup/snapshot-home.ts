@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry, BackupLevel, BackupManifest } from '@workspace/lib/types/backup';
+import type { MountConfig } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_FORMAT_VERSION } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
@@ -102,13 +103,13 @@ function listHomeTree(dir: string, relDir: string, level: BackupLevel, out: Home
 // Writes a storage-independent copy of one home into `{targetDir}/home-{ownerId}/` and returns the
 // manifest describing it. Every database copy is internally consistent (VACUUM INTO); the folder as a
 // whole is not one instant, which is the standard guarantee for a live-system backup — the home keeps
-// serving its user throughout. Only `full-s3` is a complete home: the other levels are capture modes
-// of the whole-server archive, and their manifest says what they left out (BackupLevel).
+// serving its user throughout. `full-s3`, the default, always holds a complete home. The other levels
+// are capture modes of the whole-server archive: their manifest says what they left out (BackupLevel),
+// and a Full member of a home with no s3 mount left out nothing (incompleteReason).
 export async function snapshotHome(
     home: Home,
     targetDir: string,
-    onProgress?: SnapshotProgress,
-    level: BackupLevel = 'full-s3',
+    { onProgress, level = 'full-s3' }: { onProgress?: SnapshotProgress; level?: BackupLevel } = {},
 ): Promise<BackupManifest> {
     const ownerId = home.user.id;
     const owner = parseOwnerId(ownerId);
@@ -156,12 +157,15 @@ export async function snapshotHome(
     // it, and the summary row. metadata.db is counted as a database, so the summary means the files
     // the archive holds for this mount. Light takes no more; Full leaves an s3 mount's objects to its
     // bucket (whose versioning is their history) and takes the uploads still in staging/ instead.
-    const archiveMount = async (mount: Mount): Promise<void> => {
-        const stagedOnly = level === 'full' && mount.isRemote;
+    // Light reads no storage, so it hands over no Mount, and a mount without one is its metadata.db
+    // alone: a disabled mount whose storage cannot even be built keeps that much at Light.
+    const archiveMount = async (config: MountConfig, mount?: Mount): Promise<void> => {
+        const stagedOnly = level === 'full' && mount?.isRemote === true;
+        const metadataOnly = !mount || stagedOnly;
         if (stagedOnly) await flushOpenDocumentDbs(mount);
-        await stageDatabase(MOUNT_DB_CONFIG, `${PATHS.DRIVE.ROOT}/${mount.id}/${PATHS.DRIVE.METADATA_DB}`);
+        await stageDatabase(MOUNT_DB_CONFIG, `${PATHS.DRIVE.ROOT}/${config.id}/${PATHS.DRIVE.METADATA_DB}`);
         const mountEntries: BackupEntry[] = [];
-        if (level !== 'light') {
+        if (mount) {
             const relFiles = archiveMountPath(mount.id, stagedOnly ? PATHS.DRIVE.STAGING_DIR : PATHS.DRIVE.DATA_DIR);
             const relThumbs = archiveMountPath(mount.id, PATHS.DRIVE.THUMBS_DIR);
             const data = stagedOnly
@@ -178,17 +182,17 @@ export async function snapshotHome(
         }
         entries.push(...mountEntries);
         mountSummaries.push({
-            id: mount.id,
-            storageType: mount.config.storageType,
+            id: config.id,
+            storageType: config.storageType,
             files: mountEntries.length,
             bytes: mountEntries.reduce((sum, entry) => sum + entry.bytes, 0),
-            ...((level === 'light' || stagedOnly) && { contents: 'metadata' }),
+            ...(metadataOnly && { contents: 'metadata' }),
         });
     };
 
     const total = mounts.length + disabled.length;
     for (const [index, mount] of mounts.entries()) {
-        await archiveMount(mount);
+        await archiveMount(mount.config, level === 'light' ? undefined : mount);
         report('mounts', index + 1, total);
     }
 
@@ -208,10 +212,15 @@ export async function snapshotHome(
             // capture rules (freshest-first, managed databases, manifest entries) for both. Opened
             // passively because the drive does not serve this one: nothing is created, purged or
             // uploaded (Mount.init). Its metadata.db is the Home's own cached handle, the one
-            // archiveMount stages its copy from, so this opens nothing a second time.
-            mount = new Mount(ownerId, home.homeDir, config, home.getLocalDatabase.bind(home));
-            await mount.init({ passive: true });
-            await archiveMount(mount);
+            // archiveMount stages its copy from, so this opens nothing a second time. Light builds
+            // no Mount at all.
+            if (level === 'light') {
+                await archiveMount(config);
+            } else {
+                mount = new Mount(ownerId, home.homeDir, config, home.getLocalDatabase.bind(home));
+                await mount.init({ passive: true });
+                await archiveMount(config, mount);
+            }
         } catch (error) {
             // A mount an admin turned off must not be able to fail the backup of everything else —
             // its storage is often unreachable BECAUSE it was turned off. It is recorded as skipped

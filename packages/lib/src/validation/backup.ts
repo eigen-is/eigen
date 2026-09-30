@@ -190,6 +190,21 @@ export function parseBackupManifest(text: string): BackupManifest | null {
     return isManifest(value) ? value : null;
 }
 
+// Why an archive cannot restore a home on its own, or null when it can. A Light member of a
+// whole-server archive holds no files and no mail; a mount marked metadata-only keeps its bodies in
+// its bucket (an s3 mount at Full). Phrased to follow the archive's name. It trusts the manifest: a
+// manifest stripped of these fields over missing bodies still verifies, because verify has to let a
+// body be missing (a delete can race the backup).
+export function incompleteReason(manifest: Pick<BackupManifest, 'level' | 'mounts'>): string | null {
+    if (manifest.level === 'light') {
+        return 'is a light backup: it holds no files and no mail, so it cannot restore a home on its own';
+    }
+    const metadataOnly = manifest.mounts.filter((summary) => summary.contents === 'metadata');
+    if (metadataOnly.length === 0) return null;
+    const ids = metadataOnly.map((summary) => summary.id).join(', ');
+    return `holds only the metadata of mount ${ids}, not its files, so it cannot restore a home on its own`;
+}
+
 function isStatus(value: string): value is BackupVerifyRecord['status'] {
     return value === 'unverified' || value === 'verified' || value === 'failed';
 }

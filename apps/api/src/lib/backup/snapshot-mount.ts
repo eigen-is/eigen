@@ -333,11 +333,21 @@ export async function snapshotMountStaging(mount: Mount, targetDir: string, relP
     if (fs.existsSync(mount.stagingDir)) {
         for (const entry of fs.readdirSync(mount.stagingDir, { withFileTypes: true })) {
             if (!entry.isFile()) continue;
+            // A staged copy goes once its PUT acks (its bytes are in the bucket) or a newer copy
+            // supersedes it (UploadQueue.enqueueStaged), so one can vanish mid-copy. It is left out:
+            // the archived pending row then names a missing file, which reconcile drops, and a
+            // restore of this level takes the bucket as it is.
+            const destPath = path.join(targetDir, entry.name);
             const source = Bun.file(path.join(mount.stagingDir, entry.name));
-            // The queue unlinks a staged copy once its PUT acks: one gone since the listing is in the bucket.
-            if (await source.exists()) {
-                entries.push(await captureFile(source, path.join(targetDir, entry.name), `${relPrefix}/${entry.name}`));
-            }
+            const captured = await captureFile(source, destPath, `${relPrefix}/${entry.name}`).catch(
+                (error: unknown) => {
+                    // A local file's ENOENT arrives as the cause of a storage error (consumeStream).
+                    if (!isMissingObjectCause(error)) throw error;
+                    fs.rmSync(destPath, { force: true });
+                    return null;
+                },
+            );
+            if (captured) entries.push(captured);
         }
     }
     const rows = await mount.db.select({ id: paths.id }).from(paths).where(eq(paths.type, 'file')).all();

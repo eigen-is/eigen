@@ -1,17 +1,20 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupLevel, BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { parseBackupManifest } from '@workspace/lib/validation';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import * as captureModule from '../../lib/backup/capture';
 import { buildHomeFolderName } from '../../lib/backup/paths';
 import { HOME_DATABASE_PATHS, snapshotHome } from '../../lib/backup/snapshot-home';
 import { verifyFolder } from '../../lib/backup/verify';
 import type { DatabaseConfig } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
+import { createMountConfig } from '../../lib/mount';
+import * as mountHelpers from '../../lib/mount/helpers';
 import type { Mount } from '../../lib/mount/mount';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
 import {
@@ -38,6 +41,8 @@ import {
 // keeps an s3 mount's metadata.db and staged uploads and leaves its objects to the bucket.
 
 const S3_MOUNT_ID = 'modes-s3';
+// A flat-key mount on local disk: remote in its key shape, local in where its bytes live.
+const LOCAL_KEY_MOUNT_ID = 'modes-local-key';
 const MAILDIR = 'home/eigen.mail/Maildir';
 
 const docSchema = { items: sqliteTable('items', { id: integer('id').primaryKey(), data: text('data') }) };
@@ -58,7 +63,7 @@ let pendingObjectKey: string;
 
 async function snapshot(level?: BackupLevel): Promise<{ manifest: BackupManifest; folder: string }> {
     const target = mkdtempSync(join(TEST_DATA_DIR, `backup-modes-${level ?? 'default'}-`));
-    const manifest = await snapshotHome(home, target, undefined, level);
+    const manifest = await snapshotHome(home, target, { level });
     return { manifest, folder: join(target, buildHomeFolderName(home.user.id)) };
 }
 
@@ -134,6 +139,21 @@ beforeAll(async () => {
     expect(delivered.status).toBe(200);
     expect(existsSync(join(home.homeDir, 'eigen.mail', 'Maildir'))).toBe(true);
 
+    const settings = await home.settings.set({
+        mounts: { [LOCAL_KEY_MOUNT_ID]: { storageType: 'local-key', maxSizeMB: 100, enabled: true, name: 'Flat' } },
+    });
+    await home.drive.addMount(createMountConfig(LOCAL_KEY_MOUNT_ID, settings.mounts![LOCAL_KEY_MOUNT_ID]));
+    const flatRoot = await assertJson<DrivePath>(
+        await authedRequest(user.sessionToken, `/drive/${user.id}/${LOCAL_KEY_MOUNT_ID}/root`),
+    );
+    await driveUpload<DrivePath>(
+        user.sessionToken,
+        user.id,
+        LOCAL_KEY_MOUNT_ID,
+        flatRoot.id,
+        new File([TEST_PNG_BYTES], 'flat.png', { type: 'image/png' }),
+    );
+
     // The s3 mount: one object the bucket holds, one upload still waiting in staging/.
     backingRoot = mkdtempSync(join(TEST_DATA_DIR, 'backup-modes-backing-'));
     ({ mount: s3Mount, fault: s3Fault } = createHomeFaultMount(home, S3_MOUNT_ID, backingRoot));
@@ -169,7 +189,9 @@ describe('Backup capture modes', () => {
 
         const paths = entryPaths(manifest);
         const homeDatabases = [...HOME_DATABASE_PATHS].filter((rel) => existsSync(join(home.homeDir, rel)));
-        const mountDatabases = [defaultMountId, S3_MOUNT_ID].map((id) => `mounts/${id}/metadata.db`);
+        const mountDatabases = [defaultMountId, LOCAL_KEY_MOUNT_ID, S3_MOUNT_ID].map(
+            (id) => `mounts/${id}/metadata.db`,
+        );
         for (const rel of [...homeDatabases, ...mountDatabases]) expect(paths).toContain(`home/${rel}`);
         expect(manifest.counts.databases).toBe(homeDatabases.length + mountDatabases.length);
 
@@ -208,12 +230,42 @@ describe('Backup capture modes', () => {
         expect(s3Summary?.contents).toBe('metadata');
         expect(s3Summary?.files).toBe(staged.length);
 
-        // A local mount is complete at every level above Light.
-        const localSummary = manifest.mounts.find((summary) => summary.id === defaultMountId);
-        expect(localSummary && 'contents' in localSummary).toBe(false);
-        expect(mountEntries(manifest, defaultMountId).some((p) => p.endsWith('/data/kept.png'))).toBe(true);
+        // A mount on local disk is complete at every level above Light, whatever shape its keys have.
+        for (const [mountId, name] of [
+            [defaultMountId, 'kept.png'],
+            [LOCAL_KEY_MOUNT_ID, 'flat.png'],
+        ]) {
+            const localSummary = manifest.mounts.find((summary) => summary.id === mountId);
+            expect(localSummary && 'contents' in localSummary).toBe(false);
+            expect(mountEntries(manifest, mountId)).toContain(`home/mounts/${mountId}/data/${name}`);
+        }
         expect(existsSync(join(folder, MAILDIR))).toBe(true);
         expect((await verifyFolder(folder)).status).toBe('verified');
+    });
+
+    // A staged copy goes when its PUT acks or a newer copy supersedes it (UploadQueue.enqueueStaged),
+    // and neither may fail the capture it happened during.
+    test('a staged upload gone between the listing and its copy is left out, not a failure', async () => {
+        const gone = join(s3Mount.stagingDir, 'superseded.tmp');
+        await Bun.write(gone, 'superseded by a newer copy');
+        const capture = captureModule.captureFile;
+        const spy = spyOn(captureModule, 'captureFile').mockImplementation(async (source, destPath, relPath) => {
+            if (relPath.endsWith('/superseded.tmp')) rmSync(gone);
+            return capture(source, destPath, relPath);
+        });
+        try {
+            const { manifest, folder } = await snapshot('full');
+            const staged = `home/mounts/${S3_MOUNT_ID}/staging/superseded.tmp`;
+            expect(spy.mock.calls.some(([, , relPath]) => relPath === staged)).toBe(true);
+            expect(entryPaths(manifest)).not.toContain(staged);
+            expect(existsSync(join(folder, staged))).toBe(false);
+            // The upload that is still waiting is copied all the same.
+            expect(mountEntries(manifest, S3_MOUNT_ID).some((p) => p.includes('/staging/'))).toBe(true);
+            expect((await verifyFolder(folder)).status).toBe('verified');
+        } finally {
+            spy.mockRestore();
+            rmSync(gone, { force: true });
+        }
     });
 
     test('an edit made a second before a Full snapshot is in its staged uploads', async () => {
@@ -253,5 +305,49 @@ describe('Backup capture modes', () => {
         expect(parseBackupManifest(JSON.stringify({ ...manifest, level: 'partial' }))).toBeNull();
         const mounts = manifest.mounts.map((summary) => ({ ...summary, contents: 'thumbs' }));
         expect(parseBackupManifest(JSON.stringify({ ...manifest, mounts }))).toBeNull();
+    });
+});
+
+describe('Backup capture modes of a disabled mount', () => {
+    const DISABLED_MOUNT_ID = 'modes-disabled';
+
+    // Light reads no storage, so a disabled mount's storage being out of reach is no reason to drop
+    // it: it keeps its metadata.db as every other mount does at Light.
+    test('a Light snapshot keeps the metadata.db of a disabled mount whose storage cannot be built', async () => {
+        await getTestContext();
+        const owner = await createTestUser('backup-modes-disabled@test.eigen.is', 'testpassword123', 'Modes Off');
+        const ownerHome = await getHome(owner.id);
+        const on = await ownerHome.settings.set({
+            mounts: {
+                [DISABLED_MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Switched Off' },
+            },
+        });
+        await ownerHome.drive.addMount(createMountConfig(DISABLED_MOUNT_ID, on.mounts![DISABLED_MOUNT_ID]));
+        const off = await ownerHome.settings.set({
+            mounts: { [DISABLED_MOUNT_ID]: { ...on.mounts![DISABLED_MOUNT_ID], enabled: false } },
+        });
+        await ownerHome.drive.updateMount(createMountConfig(DISABLED_MOUNT_ID, off.mounts![DISABLED_MOUNT_ID]), false);
+
+        const spy = spyOn(mountHelpers, 'createMountStorage').mockImplementation(() => {
+            throw new Error('storage unreachable');
+        });
+        let manifest: BackupManifest;
+        try {
+            manifest = await snapshotHome(ownerHome, mkdtempSync(join(TEST_DATA_DIR, 'backup-modes-disabled-')), {
+                level: 'light',
+            });
+        } finally {
+            spy.mockRestore();
+        }
+
+        const summary = manifest.mounts.find((mount) => mount.id === DISABLED_MOUNT_ID);
+        expect(summary).toEqual({
+            id: DISABLED_MOUNT_ID,
+            storageType: 'local',
+            files: 0,
+            bytes: 0,
+            contents: 'metadata',
+        });
+        expect(entryPaths(manifest)).toContain(`home/mounts/${DISABLED_MOUNT_ID}/metadata.db`);
     });
 });

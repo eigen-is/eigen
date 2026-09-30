@@ -78,7 +78,10 @@ export type BackupArtifact = {
     name: string;
     bytes: number;
     createdAt: Date;
-    manifest: Pick<BackupManifest, 'kind' | 'ownerId' | 'email' | 'name' | 'appVersion' | 'counts' | 'mounts'> | null;
+    manifest: Pick<
+        BackupManifest,
+        'kind' | 'ownerId' | 'email' | 'name' | 'appVersion' | 'counts' | 'level' | 'mounts'
+    > | null;
     verify: BackupVerifyRecord;
 };
 

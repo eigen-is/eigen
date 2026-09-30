@@ -45,6 +45,7 @@ export async function listArtifacts(ownerId: string): Promise<BackupArtifact[]> 
                       name: manifest.name,
                       appVersion: manifest.appVersion,
                       counts: manifest.counts,
+                      level: manifest.level,
                       mounts: manifest.mounts,
                   }
                 : null,
