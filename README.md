@@ -4,7 +4,7 @@
 
 **Try the live demo at [demo.eigen.is](https://demo.eigen.is).** It is a shared workspace that resets every hour.
 
-Eigen is a self-hosted alternative to Google Workspace. It runs as a single server with integrated apps for email, file storage, documents, spreadsheets, presentations, drawings, kanban boards, calendar, contacts, and real-time chat — all sharing one API, one auth system, and one UI.
+Eigen is a self-hosted alternative to Google Workspace. It runs as a single server with integrated apps for email, file storage, documents, spreadsheets, presentations, drawings, kanban boards, calendar, contacts, and real-time chat, all sharing one API, one auth system, and one UI.
 
 The name *Eigen* is Dutch and German for "own." You own your data, you own your infrastructure, you own your workspace.
 
@@ -28,8 +28,8 @@ Eigen makes different choices:
 - **Collaboration is built in.** In Nextcloud, collaborative editing comes from an external office server (Collabora
   or OnlyOffice). In Eigen, every app is collaborative through CRDTs (Yjs). Two people on the same document, sheet,
   or board works out of the box.
-- **Simple to run.** One server, one compose file, SQLite per user. No PHP, no MySQL, no Redis. A backup is a file
-  copy.
+- **Simple to run.** One server, one compose file, SQLite per user. No PHP, no MySQL, no Redis. One command backs up
+  the whole server while it runs.
 
 If Nextcloud works for you, keep using it. Eigen exists for people who want a workspace that feels like one product
 instead of a platform with plugins.
@@ -37,7 +37,7 @@ instead of a platform with plugins.
 ## Goal
 
 The first goal is a **self-hostable workspace for individuals, enthusiasts, and small organizations**. During active
-development, expect rough edges — but the core is functional and improving fast. As the project matures and stabilizes,
+development, expect rough edges, but the core is functional and improving fast. As the project matures and stabilizes,
 the aim is to make Eigen reliable enough for mid-to-large organizations as well.
 
 ## Status & responsibilities
@@ -152,7 +152,7 @@ Docker is only needed to test mail delivery, IMAP or the images: see [CONTRIBUTI
 
 ## Architecture
 
-Each user gets their own directory on the server. SQLite databases (per user) store metadata and structured data. Files are stored separately. No shared database means no way to accidentally access someone else's data. `./eigen backup` saves the whole server as one snapshot; [docs/BACKUP.md](docs/BACKUP.md) covers it and the backup of one user.
+Each user gets their own directory on the server. SQLite databases (per user) store metadata and structured data. Files are stored separately. No shared database means no way to accidentally access someone else's data. `./eigen backup` saves the whole server as one archive, which holds a backup of every user and team; [docs/BACKUP.md](docs/BACKUP.md) covers it and the backup of one user or team.
 
 ```
 data/home/{userId}/
