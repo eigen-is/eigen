@@ -28,7 +28,7 @@ What, then why, then where. One idea per section.
 ```
 
 - The TLDR stands alone. A reader who stops there knows what the domain is, where its code lives and what will surprise them. It is not a table of contents.
-- Headings state facts: "A document lingers after the last unsubscribe", not "Lifecycle".
+- Headings state facts: "A document lingers after the last unsubscribe", not "Lifecycle". A heading avoids "seam" and other coined words unless the doc defines them.
 - Every section carries a why. A section with no reason in it is a catalogue. Cut it or point at the directory.
 - Tables hold parallel facts (values and their effect, a crash point and its repair). Bullets for short lists. Prose for reasons. A code block only for a type or route shape that is the contract, ten lines at most.
 - Name a symbol when the reader will grep for it. Otherwise use plain words. Point at a directory, not at every file in it.
@@ -67,7 +67,7 @@ A doc is as long as its domain needs. It gets shorter only by cutting narration,
 4. **Give every claim a home** from the table above, and verify the home of every reason. A reason survives even when its "what" goes. For every why you drop from the doc, grep the code for the reason (not the symbol). If it is absent, add a one-line comment in the same commit. Your report to the caller, not only the commit message, lists each dropped why with its home as `file:line`, doc §, or test name.
 5. **Check.** Run the checklist.
 
-Editing one section follows the same steps, and the TLDR changes only when one of its claims does. A doc that receives moved material runs the whole checklist too. Renaming a heading breaks its anchor and its prose citations: grep `docs/`, `AGENTS.md` and `.claude/` for `NAME.md#old-anchor`, and `apps/ packages/ docker/ scripts/` for `NAME.md § Old heading`, skipping `.claude/worktrees/` and `docs/superpowers/`, and fix every hit.
+Editing one section follows the same steps, and the TLDR changes only when one of its claims does. A doc that receives moved material runs the whole checklist too. Renaming a heading breaks its anchor and its prose citations: grep `docs/`, `AGENTS.md` and `.claude/` for `NAME.md#old-anchor`, and `apps/ packages/ docker/ scripts/` for `NAME.md § Old heading`, skipping `.claude/worktrees/` and `docs/superpowers/`, and fix every hit. After rewording a claim, grep `docs/ROADMAP*.md` for prose that quotes the old one.
 
 ## Checklist before you commit
 
@@ -75,18 +75,23 @@ Editing one section follows the same steps, and the TLDR changes only when one o
 f=docs/NAME.md
 grep -nE '—|used to|previously|no longer' $f                                # expect nothing
 bun scripts/check-docs-links.ts                                             # files exist, not anchors
-# every #anchor resolves: prints each link whose heading is gone
-grep -oE '\]\(([A-Za-z0-9_./-]*\.md)?#[^)]+\)' AGENTS.md docs/*.md .claude/skills/*/SKILL.md | while IFS= read -r hit; do
+```
+
+```bash
+# every #anchor resolves: prints each link whose heading is gone (bash, since zsh rejects the patterns)
+bash <<'EOF'
+grep -oE '\]\(([A-Za-z0-9_./-]*\.md)?#[^)]+\)' AGENTS.md .claude/skills/*/SKILL.md $(find docs -name '*.md' -not -path 'docs/superpowers/*') | while IFS= read -r hit; do
   src=${hit%%:*}; link=${hit#*](}; link=${link%)}; doc=${link%%#*}; target=$src; [ -n "$doc" ] && target=$(dirname "$src")/$doc
   grep -E '^#{1,6} ' "$target" | sed -E 's/^#+ //' | tr 'A-Z' 'a-z' | sed -E 's/[^a-z0-9 _-]//g; s/ /-/g' | grep -qxF -- "${link#*#}" || echo "$src -> $link"
 done
+EOF
 ```
 
 - The TLDR is one short paragraph and makes sense alone. Every claim in it has a section that carries it.
 - Every heading states a fact. Every section has a why.
 - Present tense. Short sentences in simple English. No em-dashes, no "Note that", "robust", "seamlessly".
 - No hard line breaks inside a paragraph.
-- Every path you name exists and both link checks print nothing.
+- Every path you name exists, every "X lives in `file`" is grepped in that file, and both link checks print nothing.
 - A new doc gets its line in the AGENTS.md index and its row in `docs/ARCHITECTURE.md`.
 
 ## Common mistakes
