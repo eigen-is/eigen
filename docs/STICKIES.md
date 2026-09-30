@@ -24,6 +24,16 @@ The `tasks` entries are **not** a stickies-specific type. They are written with 
 so the board and the comment infrastructure agree on one card shape. The undo manager tracks all three
 roots, so a card add/remove and its column reference undo as one step.
 
+## A concurrent merge can leave a card in two columns, or none
+
+Two peers moving the same card at once can leave it in two columns' `taskIds`, or in none. `normalizeBoard` runs the shared `normalizeParentChildRefs` (`packages/lib/src/core/collab/normalize-refs.ts`) on the first sync and inside every drag commit. A card in several columns keeps the last one; a card in none joins the first. **First and last come from `columnOrder`, never from Y.Map key order.** Key order is each peer's local integration order, so peers would disagree and could delete each other's survivor. A column missing from `columnOrder` ranks before every listed one, so it never receives a re-homed card: the board doesn't render it.
+
+The repair is idempotent. Run alone it writes under `NORMALIZE_ORIGIN`, which no UndoManager tracks, so it syncs to peers but ⌘Z can't restore the corruption. Inside a drag it joins the drag's undo step.
+
+## Roots are read through typed accessors
+
+The board reads its roots and id lists through `getItemMapRoot`, `getIdArrayRoot` and `getIdArray` (`packages/lib/src/core/collab/yjs-utils.ts`) instead of casting. A root needs no runtime check: `doc.get` upgrades the `AbstractType` root that `Y.applyUpdate` leaves on the server and throws only on a real mismatch. A nested list is checked with `instanceof Y.Array`, which is sound because nested types always decode with their real constructors. The server reader (`apps/api/src/lib/document/stickies.ts`) uses the same accessors through the React-free `@workspace/lib/collab/yjs-utils` subpath.
+
 ## Data Types
 
 Cards are `CommentCard` from `packages/lib/src/types/comments.ts` — `id`, `title`, `description`, `color?`,

@@ -229,7 +229,7 @@ function SlideEditorInner({
         [frameIndex, doc.frames, exitPresent, setFrameId],
     );
 
-    // Layered Escape, capture phase (docs/CANVAS.md § Layered Escape): present is the OUTERMOST layer
+    // Layered Escape, capture phase (docs/CANVAS.md § Escape is layered per host, on purpose): present is the OUTERMOST layer
     // and claims Escape before anything else sees it; the find bar's own bubble-phase handler and the
     // canvas' text-edit / gesture / deselect layers keep the rest. A capture listener is required
     // because the bar closes itself on bubble, so a bubble handler here could never tell it had been

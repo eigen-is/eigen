@@ -1,6 +1,6 @@
-# Collab Documents (server)
+# Collab Documents
 
-> **TLDR:** `apps/api/src/lib/collab/` is the server half of every Yjs container — one `CollabDocument` per open document, Yjs updates and snapshots persisted as zstd-compressed BLOBs in the container's `data.db`, and a WebSocket route (`apps/api/src/routes/collab.ts`) that fans updates out to the connected peers. Four things here are not obvious from the code: the compression seam is backward compatible by magic-byte sniff, awareness frames are validated before apply, the route sends a heartbeat during a cold load, and a document lingers 60 s after the last unsubscribe. The client half — `useCollabDoc`, the loading gate, and what each close code does to the tab — is [CANVAS.md § Shared primitives](CANVAS.md#shared-primitives).
+> **TLDR:** `apps/api/src/lib/collab/` is the server half of every Yjs container — one `CollabDocument` per open document, Yjs updates and snapshots persisted as zstd-compressed BLOBs in the container's `data.db`, and a WebSocket route (`apps/api/src/routes/collab.ts`) that fans updates out to the connected peers. Four things here are not obvious from the code: the compression seam is backward compatible by magic-byte sniff, awareness frames are validated before apply, the route sends a heartbeat during a cold load, and a document lingers 60 s after the last unsubscribe. Client side, `useCollabDoc` gates the editor on a latched `loaded`.
 
 ## The storage seam is zstd
 
@@ -43,9 +43,34 @@ The walker handles every Y subtype an Eigen container uses — `Y.Map`, `Y.Array
 
 `./eigen restore` and `./eigen rollback` replace every home while the API is stopped, so no socket is open to close, and a tab that was offline would not hear it anyway. The data epoch covers them. It has two parts (`apps/api/src/lib/collab/epoch.ts`): the server's, a random id in `data/server/collab-epoch` drawn on first use, followed by the home's, from `data/server/collab-home-epochs.json`, which only a per-home restore writes (a home never restored on its own has none). Every open sends the epoch of the document's home in a `COLLAB_EPOCH_MESSAGE` frame before the sync, `useCollabDoc` reconnects with `?epoch=`, and the route closes a reconnect that names another epoch with `COLLAB_HOME_REPLACED_CLOSE` before it syncs anything, so the tab reloads. The restore deletes the server's file from the data it puts back, so the next start draws a new server part and every tab reloads; a restart or an update keeps it, so an offline edit still syncs. The hook keeps BroadcastChannel off until the first epoch arrives and then joins a channel named after it: a reloaded tab never takes state from a sibling tab still holding the document from before the restore.
 
+## The client gates on `loaded`, never `synced`
+
+`useCollabDoc` (`packages/lib/src/core/collab/hooks/use-collab-doc.ts`) owns the Y.Doc, the WebSocket provider and the UndoManager for every editor. `synced` follows the socket. `loaded` latches on the first sync and resets only on teardown or a document switch. **Gate the loading screen on `loaded`.** A short outage must not unmount the editor, which would destroy its undo history and selection. While the socket is down, edits land in the local Y.Doc and y-websocket pushes them on the next handshake.
+
+Every editor, sheets included, wraps its toolbar and body in `CollabDocumentGate` (`packages/ui/src/components/layout/app/`), so no toolbar exists before load. After 10 s the loading screen says storage is slow, since a cold open can legitimately take that long.
+
+Before that, the route asks `useCollabDocumentInfo` whether the user may read the document. Only a 401 or 403 means no access. Anything else throws and shows an error, so an outage never offers to request access to a document the user owns.
+
+## Each close code tells the tab what to do
+
+The codes live in `packages/lib/src/constants/collab.ts`.
+
+| Close | The tab |
+|---|---|
+| 1013 `storage-unavailable` | Shows "retrying" and reconnects itself after 5 s. y-websocket would retry every 2.5 s and re-pay the failing load each time. |
+| 4410 `storage-gone` | Stops for good. The loading screen shows an error and offers the version list to a writer. An open editor stays mounted and reads as offline. |
+| 1012 `home-replaced` | Reloads, one render after clearing the unsynced flag, so the leave prompt doesn't block the reload. |
+
+The share cluster's offline icon waits 1.5 s after a disconnect, so a blip or the storage retry's brief connect doesn't flash it.
+
+## Unacknowledged edits guard the tab
+
+Nothing persists in the browser, so a reload loses whatever the server has not acknowledged. `unsyncedEdits` arms on an update while the socket is down. It also arms on the disconnect event when this tab sent updates since the last handshake: a silently dead socket looks connected until y-websocket's 30 s silence check, so the close is the first honest signal. Updates y-websocket applied itself (from the server or a sibling tab) don't count, so a reader is never warned about someone else's edits. The flag clears on the next sync. Every editor renders `UnsyncedEditsGuard` once, which asks before a reload, a close or an in-app navigation.
+
 ## See also
 
-- [CANVAS.md](CANVAS.md) — `useCollabDoc`, the `loaded` gate, offline/unsynced-edits surfaces, the typed Yjs root accessors, sealing discipline
-- [DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md) — the readers and writers over a materialized `Y.Doc`
-- [BACKUP.md](BACKUP.md) — what a restore does to an open document
-- [STORAGE.md](STORAGE.md) — container layout and file versioning
+- [CANVAS.md](CANVAS.md): one discrete op is one undo step on the canvas
+- [STICKIES.md](STICKIES.md): the typed Yjs root accessors and the parent-child ref repair
+- [DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md): the readers and writers over a materialized `Y.Doc`
+- [BACKUP.md](BACKUP.md): what a restore does to an open document
+- [STORAGE.md](STORAGE.md): container layout and file versioning

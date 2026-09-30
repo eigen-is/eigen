@@ -118,7 +118,7 @@ Nothing writes an empty text item today, but the wire is forgeable and any app m
 
 ### Copy flavors
 
-A pure-image copy writes no `text/plain`. The rule it belongs to is "never write two flavors a single consumer would both accept", which is what avoids a double-paste; in practice the only pair at risk would be `text/plain` beside an `image/png`, and no producer in the repo writes an `image/png` flavor at all, so that half of the rule has nothing to bite on today. The rule still governs anything new: add a PNG flavor and it must not ride beside `text/plain`. The canvas' own flavor bullet is under [CANVAS.md](CANVAS.md) § Shared primitives.
+A pure-image copy writes no `text/plain`. The rule it belongs to is "never write two flavors a single consumer would both accept", which is what avoids a double-paste; in practice the only pair at risk would be `text/plain` beside an `image/png`, and no producer in the repo writes an `image/png` flavor at all, so that half of the rule has nothing to bite on today. The rule still governs anything new: add a PNG flavor and it must not ride beside `text/plain`. The canvas' own flavor rules are the next section.
 
 ### The SVG flavor (canvas copies)
 

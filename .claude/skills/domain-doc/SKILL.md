@@ -43,7 +43,7 @@ Measured on the exemplars. Words, not lines: a paragraph is one line.
 | Paragraph | 150 words max | 139 and 187 | 411 and 2,680 |
 | Sentence | aim under 20 words, split anything over 35 | average 18 (ACL) | average 32 and 36 |
 
-A doc over 2,000 words is two domains. Split it and link both ways, the way COLLAB.md holds the server half of collab and CANVAS.md the client half, or IMAP.md holds the Maildir mechanics under MAIL.md.
+A doc over 2,000 words is two domains. Split it and link both ways, the way CANVAS-ARROWS.md holds the arrows under CANVAS.md, or IMAP.md holds the Maildir mechanics under MAIL.md.
 
 ## What goes where
 
