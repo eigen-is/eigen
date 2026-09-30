@@ -31,7 +31,7 @@ Guests do not use better-auth's emailOTP plugin. `POST /guest-auth/request-otp` 
 
 `guests.openSignup` is on by default: any address may ask. Off, an address without an account needs a share-registry entry, so only someone a user shared with can become a guest. Both settings are in [SERVER-SETTINGS.md](SERVER-SETTINGS.md).
 
-With open signup on, anyone can make the server mail a code to any address, up to the per-email cap. Turning it off closes that, and a closed server still tells a caller whether an address was ever shared with (below).
+With open signup on, anyone can make the server mail a code to any address, up to the per-email cap. Turning it off closes that, and a closed server still tells a caller whether an address was ever shared with ([The access check tells a sharer whether an address was ever shared with](#the-access-check-tells-a-sharer-whether-an-address-was-ever-shared-with)).
 
 ## Code requests are rate-limited per email and per IP
 
@@ -86,7 +86,7 @@ A guest sees the same screen, but `POST .../request-access` rejects guests with 
 
 `POST /drive/:ownerId/:mountId/path/:pathId/request-access` calls `propagateAccessRequest` (`apps/api/src/lib/drive/access-request-propagation.ts`), which reads the path through the home relay and pushes an `access-request` notification into the owner's home. The route skips the SharedDrive facade by design: the caller has no permission yet, which is the point. It returns 200 whether or not the path exists or is trashed, so it never reveals a path. An unknown owner or mount still answers 404.
 
-The notification tag is `access-request:{ownerId}:{mountId}:{pathId}:{email}`, so a repeat request updates the same notification. For a user-owned path the owner also gets an email when `notifications.email.ownerOnAccessRequest` is on (default). A team-owned path reaches no one: a `TeamHome` has no NotificationCenter, and the email goes to user owners only.
+The notification tag is `access-request:{ownerId}:{mountId}:{pathId}:{email}`, so a repeat request updates the same notification. For a user-owned path the owner also gets an email when `notifications.email.ownerOnAccessRequest` is on (default). A team-owned path reaches no one: a `TeamHome` has no NotificationCenter, and the email goes to user owners only ([ROADMAP.md](ROADMAP.md) § Cheap wins).
 
 The "Access requested" state on the button is client-side only and resets on a refresh.
 

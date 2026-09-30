@@ -20,7 +20,7 @@ mountMax    = max(mount's maxSizeMB ?? server default, ...team overrides that ar
 
 A team sets `TeamSettings.memberOverrides` (`packages/lib/src/types/settings.ts`), and an unset field means inherit, so it adds no candidate. A user in no team gets the server default. `resolveUserQuotas` returns both limits in bytes. Its data half, `resolveHomeDataMax`, also stands alone, because a team Home has no `default` mount yet meters its calendar. A team is in no teams, so its calendar meters against the server default.
 
-Nothing is cached, so every upload resolves again. The overrides come through `pullTeamQuotaOverrides` (`apps/api/src/lib/home/home-relay.ts`), one relay read per team, which opens a team Home that is not in memory. A `TeamHome` idles out after 30 minutes (`TEAM_HOME_IDLE_MS`) instead of the 5 every other Home takes, because no SSE keep-alive pins it.
+Nothing is cached, so every upload resolves again. The overrides come through `pullTeamQuotaOverrides` (`apps/api/src/lib/home/home-relay.ts`), one relay read per team, which opens a team Home that is not in memory. A `TeamHome` idles out after 30 minutes, which the `TEAM_HOME_IDLE_MS` env var overrides, instead of the 5 every other Home takes, because no SSE keep-alive pins it.
 
 ## A mount write takes the writer's overrides
 
@@ -28,7 +28,7 @@ Nothing is cached, so every upload resolves again. The overrides come through `p
 
 ## A mount keeps what it was stamped with
 
-A user's `default` mount is written into their settings at the first `UserHome.init()`, not at signup, with the server's current storage type and `maxSizeMB` set to `defaultMountMaxSizeMB`. So a change to the defaults between signup and first sign-in reaches that user. A change after it does not: the stamped `maxSizeMB` wins over the server default in the formula above, and no route edits a user's mount. A team mount is stamped when an admin adds it, and its `maxSizeMB` stays editable per mount (`TeamHome.updateMount`, which pushes the change onto the live mount).
+A user's `default` mount is written into their settings at the first `UserHome.init()`, not at signup, with the server's current storage type and `maxSizeMB` set to `defaultMountMaxSizeMB`. So a change to the defaults between signup and first sign-in reaches that user. A change after it does not: the stamped `maxSizeMB` wins over the server default in the `mountMax` formula ([Teams can only raise a limit](#teams-can-only-raise-a-limit)), and no route edits a user's mount. A team mount is stamped when an admin adds it, and its `maxSizeMB` stays editable per mount (`TeamHome.updateMount`, which pushes the change onto the live mount).
 
 A mount's `storageType` never changes after it is made, since its bytes live in that backend: `updateMount` does not accept it. A mount is enabled or disabled, never deleted, so its data is kept.
 
@@ -36,7 +36,9 @@ A mount's `storageType` never changes after it is made, since its bytes live in 
 
 `enforcement.ts` answers 507 `Insufficient Storage` when a bucket is full or a projected write would overfill it. It answers 413 when one file is larger than it may be. The per-file cap is `quotas.maxUploadSizeMB` (`enforceMaxUploadSize`).
 
-A streamed Drive upload is the case where the two meet. `getUploadMaxSize` returns `min(per-file cap, what is left of the mount)`, and throws 507 up front when nothing is left, so a full mount is refused before the body is read. The route hands that number to `streamFilesToTemp` (`apps/api/src/lib/drive/streaming.ts`) as the ceiling per file, and a file that runs past it mid-transfer is a 413, whichever of the two was smaller.
+The two meet in `getUploadMaxSize`, which returns `min(per-file cap, what is left of the mount)` and throws 507 up front when nothing is left, so a full mount is refused before any bytes move. A streamed Drive upload hands that number to `streamFilesToTemp` (`apps/api/src/lib/drive/streaming.ts`) as the ceiling per file, and a file that runs past it mid-transfer is a 413, whichever of the two was smaller.
+
+Every other route that brings a whole file into a mount takes the same number and answers 413 above it: a Drive copy and a conversion check the source's size, an import into a document bounds the body it reads (`apps/api/src/routes/drive.ts`), and saving mail attachments to Drive checks each attachment (`apps/api/src/lib/mail/mail.ts`).
 
 ## A write that knows its size is checked on the projection
 

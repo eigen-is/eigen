@@ -14,7 +14,7 @@ The secret is made at first boot and never changes, so a session signed in right
 
 ## The web address and the mail domain come from the environment
 
-`getDomain()` reads `DOMAIN` and `getMailDomain()` reads `MAIL_DOMAIN`, falling back to `DOMAIN`. Both are what `./eigen setup` wrote to `.env.production`, because they are deployment identity: DNS, certificates and every account's address depend on them. The Admin app shows both read-only. Hosted mail and the relay are environment too ([below](#hosted-mail-and-the-relay-are-environment-not-settings)).
+`getDomain()` reads `DOMAIN` and `getMailDomain()` reads `MAIL_DOMAIN`, falling back to `DOMAIN`. Both are what `./eigen setup` wrote to `.env.production`, because they are deployment identity: DNS, certificates and every account's address depend on them. The Admin app shows both read-only. [Hosted mail and the relay are environment too](#hosted-mail-and-the-relay-are-environment-not-settings).
 
 ## The mail domain is recorded once and never changes
 
@@ -24,7 +24,7 @@ At boot `assertMailDomainUnchanged()` compares `MAIL_DOMAIN` with the recorded v
 
 ## Renaming the organization renames its default team
 
-`orgName` is the one identity field that changes after setup (`PUT /settings/organization`, `renameOrganization` in `apps/api/src/lib/org/org.ts`). The rename writes `config.json` and the better-auth organization. It also renames the team that still carries the old name, which is the default team setup made. A team renamed by hand keeps its name. The web address and the mail domain stay. `useUpdateOrgName` invalidates the public config, which carries the name to every app, and the team lists, which carry the default team's.
+`orgName` is the one identity field that changes after setup (`PUT /settings/organization`, `renameOrganization` in `apps/api/src/lib/org/org.ts`). The rename writes `config.json` and the better-auth organization. It also renames the team that still carries the old name, which is the default team setup made. A team renamed by hand keeps its name. The web address and the mail domain stay. `useUpdateOrgName` invalidates the public config, which carries the name to every app, and the team lists and the admin users list, which carry the default team's.
 
 ## JsonStore merges onto defaults and fails closed
 
@@ -43,12 +43,12 @@ The shape is `ServerSettings` in `packages/lib/src/types/settings.ts`, and the d
 | Branch | What it decides | Where it is read |
 |---|---|---|
 | `quotas` | The per-user budgets, the per-file upload cap, trash retention | [QUOTA.md](QUOTA.md), [SOFT-DELETE.md](SOFT-DELETE.md) |
-| `defaults.mount` | The storage backend of a new drive, and the S3 config it uses | [Below](#s3-becomes-the-default-only-while-it-connects) |
+| `defaults.mount` | The storage backend of a new drive, and the S3 config it uses | [S3 becomes the default only while it connects](#s3-becomes-the-default-only-while-it-connects) |
 | `onboarding` | The waitlist, seeding the owner as a contact, the welcome mail, the waitlist invite mail | `requireWaitlistEnabled` gates every waitlist route; `welcome.ts` skips the welcome mail without hosted mail |
 | `guests` | Whether any address may ask for a sign-in code, and how long an idle guest lives | [GUEST-ACCESS.md](GUEST-ACCESS.md) |
 | `landing.links` | Extra buttons on the public landing page | `GET /p/config`, which is unauthenticated |
-| `notifications.email` | Which events also send an email | [Below](#the-notification-flags-gate-the-email-only) |
-| `mail` | The system sender, and whether the relay may send as users | [Below](#one-rule-decides-who-a-mail-is-from) |
+| `notifications.email` | Which events also send an email | [The notification flags gate the email only](#the-notification-flags-gate-the-email-only) |
+| `mail` | The system sender, and whether the relay may send as users | [One rule decides who a mail is from](#one-rule-decides-who-a-mail-is-from) |
 
 The storage type is `local-id`, `local-fullnames` or `s3`. `mapStorageType()` translates it to the mount's own vocabulary (`local-key`, `local`, `s3`). It reaches only a drive made after the change: `UserHome` and `TeamHome` stamp it into a new mount, and an existing mount keeps its backend ([QUOTA.md](QUOTA.md#a-mount-keeps-what-it-was-stamped-with)).
 
@@ -63,7 +63,7 @@ Each `notifications.email` flag turns one email on or off. The in-app notificati
 | `userOnCalendarInvite` | on | An Eigen user is invited to an event | An invitation is time-sensitive, and Google and Outlook mail it too |
 | `ownerOnAccessRequest` | on | Someone asks for access to a user's path | A team-owned path sends no email |
 
-The ACL flags are read in `emailNewlyAddedAclEntries` (`apps/api/src/lib/drive/acl-propagation.ts`), the access-request flag in `access-request-propagation.ts` and the invite flag in `invite-propagation.ts`. See [ACL.md](ACL.md).
+The ACL flags are read inline in `propagateSharedPathChange` (`apps/api/src/lib/drive/acl-propagation.ts`), the access-request flag in `access-request-propagation.ts` and the invite flag in `invite-propagation.ts`. See [ACL.md](ACL.md).
 
 ## Settings are the owner's, the pages admins need are theirs too
 

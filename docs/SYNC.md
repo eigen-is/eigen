@@ -16,7 +16,7 @@ Only container databases and the plain files a per-home restore stages go throug
 
 ## Only `s3` mounts queue
 
-A queue exists only when `buildUploadDestinationKey` (`apps/api/src/lib/mount/helpers.ts`) returns a key, which it does for storage type `s3`. `local` and `local-key` keep synchronous writes: a local write never 503s, and queuing it would only weaken its on-completion durability. The crash-temp recovery below applies to both temp-copy backends, `s3` and `local`.
+A queue exists only when `buildUploadDestinationKey` (`apps/api/src/lib/mount/helpers.ts`) returns a key, which it does for storage type `s3`. `local` and `local-key` keep synchronous writes: a local write never 503s, and queuing it would only weaken its on-completion durability. The crash-temp recovery ([A crash temp is adopted and re-synced](#a-crash-temp-is-adopted-and-re-synced)) applies to both temp-copy backends, `s3` and `local`.
 
 ## Code comments cite seven numbered invariants
 
@@ -56,7 +56,7 @@ Which failure answers 410 and which 503 is in [STORAGE.md](STORAGE.md#a-gone-obj
 
 ## Reads serve the staged copy first
 
-A pending staged copy holds bytes newer than the stored object, so every read on the mount serves it first: `readKey`, `readRange` and `downloadToTemp` (`apps/api/src/lib/mount/mount.ts`). A document open looks at the crash temp, then the staged copy, then the object. So a reopen, a copy, a copy across mounts and a backup read the newest bytes during an outage, never a stale or missing object.
+A pending staged copy holds bytes newer than the stored object, so every read on the mount serves it first: `readKey`, `readRange` and `downloadToTemp` (`apps/api/src/lib/mount/mount.ts`). `downloadKeyToTemp` is the raw GET that skips it, and both its callers look at the staged copy before they call it: `downloadToTemp`, and a document open, which looks at the crash temp, then the staged copy, then the object. So a reopen, a copy, a copy across mounts and a backup read the newest bytes during an outage, never a stale or missing object.
 
 ## Version snapshots are queued too
 
@@ -95,9 +95,9 @@ A failed upload backs off with full jitter, capped (`uploadBackoffMs`), and the 
 ## Idle teardown leaves the queue, shutdown drains it
 
 - **Idle teardown** closes the queue. Its rows and staged copies replay on the next open.
-- **Process shutdown**: `server.ts` sets a deadline (`SHUTDOWN_DRAIN_BUDGET_MS`, 20 s) before `shutdownAllHomes`. Each mount flushes its queue after its final close-time enqueues and stops waiting at the deadline, even with a PUT or a semaphore slot stalled. Then it closes the queue: no PUT starts after that, and one still in flight leaves its row. Anything undrained replays on boot.
+- **Process shutdown**: `server.ts` sets a deadline (`SHUTDOWN_DRAIN_BUDGET_MS`, 20 s), awaits `drainACLFanOuts()`, since an in-flight fan-out reopens recipient homes, and then runs `shutdownAllHomes`. Each mount flushes its queue after its final close-time enqueues and stops waiting at the deadline, even with a PUT or a semaphore slot stalled. Then it closes the queue: no PUT starts after that, and one still in flight leaves its row. Anything undrained replays on boot.
 
-The budget covers the whole process, and a Home with several mounts drains them one after another. It starts after the transform runner closes and running backup jobs settle.
+The budget covers the whole process. It starts after the transform runner closes and running backup jobs settle, but before the ACL fan-outs drain, so a slow fan-out leaves less of it for the mounts. A Home with several mounts drains them one after another.
 
 ## The API container gets 30 s to stop
 
@@ -105,7 +105,7 @@ The budget covers the whole process, and a Home with several mounts drains them 
 
 ## The bucket needs versioning and a noncurrent-version expiry rule
 
-Versioning makes an accidental overwrite recoverable, and it is the recovery for the orphan cases above. Because every sync re-PUTs the whole file, old versions pile up, so a lifecycle rule expires them. The same rule aborts incomplete multipart uploads after 7 days.
+Versioning makes an accidental overwrite recoverable, and it is the recovery for the two orphan cases a timed-out PUT leaves unrepaired ([A timed-out PUT is tracked until it settles](#a-timed-out-put-is-tracked-until-it-settles)). Because every sync re-PUTs the whole file, old versions pile up, so a lifecycle rule expires them. The same rule aborts incomplete multipart uploads after 7 days.
 
 The admin app's S3 config card sets both ("Bucket safety", "Enable safe defaults", `hardenS3Bucket` behind `POST /settings/s3harden` and `/setup/s3harden`). It matches its rule by ID (`S3_LIFECYCLE_RULE_ID`, `packages/lib/src/constants/s3.ts`), so a repeat updates the rule instead of adding one. A lifecycle configuration Eigen didn't write is never rewritten. The card reports it and shows the `aws s3api` commands to run by hand instead, as it does for a key that can't read the bucket's settings. The operator's side is the [bucket safety article](../apps/index/src/data/support/admin/s3-bucket-safety.md).
 

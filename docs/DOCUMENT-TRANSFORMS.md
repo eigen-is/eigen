@@ -8,7 +8,7 @@ Awaiting a preview only suspends the caller. Yjs materialization, formula recalc
 
 ## Every transform takes one main-thread path
 
-`run-transform.ts` is the one seam. It checks admission, captures the source, applies the kind's limits, surfaces warnings and maps failures, so a new operation is a thin wrapper plus a pure converter in the Worker. `worker.ts` dispatches on a closed switch over the request union, so nothing in a message can pick a module or a path. It loads each format module lazily, so a doc preview never evaluates the sheet engine or ExcelJS.
+`run-transform.ts` is the single main-thread entry for every transform. It checks admission, captures the source, applies the kind's limits, surfaces warnings and maps failures, so a new operation is a thin wrapper plus a pure converter in the Worker. `worker.ts` dispatches on a closed switch over the request union, so nothing in a message can pick a module or a path. It loads each format module lazily, so a doc preview never evaluates the sheet engine or ExcelJS.
 
 A job carries one of two sources (`protocol.ts`). A collab job carries the compressed Yjs blobs `captureCollabSource` copies out of `data.db` in a SELECT-only transaction ([DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md#a-reader-takes-a-ydoc-never-a-mount)). A bytes job, an import or a `.vcf`, `.eml` or `.ics` preview, carries the file's bytes. A bytes preview returns its typed payload as a JSON string.
 

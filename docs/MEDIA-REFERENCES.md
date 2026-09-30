@@ -8,7 +8,7 @@ A copy gives every file a new id but keeps its name. A reference by name therefo
 
 Two things keep it safe. `Mount.assertUniqueName` refuses a second live item with the same name in a folder, case-insensitively. And the folders are fixed: media in `{doc}/media/`, comment threads in `{doc}/chat/`, a chat's attachments in `{chat}/media/`. An upload that collides is renamed (`getUniqueFileName`, `apps/api/src/lib/drive/naming.ts`), so a caller always stores the name the upload returned, not the one it sent.
 
-## Where the names live
+## Each document kind keeps its names in fixed fields
 
 | Document | Field | Names |
 |---|---|---|

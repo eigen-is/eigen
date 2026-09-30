@@ -147,7 +147,7 @@ GET /calendar/:ownerId/shared-with-me
 GET /drive/:ownerId/shared-with-me
 ```
 
-Fan-out only happens on share/unshare (rare). Event data stays in owner's Home, and recipients pull on demand. 100 inserts complete in milliseconds with Bun + SQLite. Non-issue for typical deployments.
+Fan-out only happens on share/unshare (rare). Event data stays in owner's Home, and recipients pull on demand. Non-issue for typical deployments.
 
 ## Chat Invite Bubbling
 

@@ -967,7 +967,7 @@ export default class Drive {
         const chatPath = await this.getPath(mountId, chatId);
         if (!chatPath) throw new ApiError(404, 'Chat not found');
 
-        // Walk up parents to find the container document (doc/stickies/slides/sheets).
+        // Walk up parents to find the container document (doc/stickies/slides/sheets/vector).
         // Standalone chats get null — ACL is set on the chat itself.
         const container = await this.findContainerPath(mountId, chatPath.parentId ?? '');
         const targetPath = container ?? chatPath;

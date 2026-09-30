@@ -22,7 +22,7 @@ Most mutations need no success toast: the UI update from cache invalidation is t
 
 The toast lives in the hook's `onSuccess`, next to the mutation, never in a component. One call site owns both the request and its feedback, and every app gets the same wording.
 
-A toast that is not one mutation's outcome is raised where the action is: mail's Undo toast after an archive (`use-mail-actions.ts`) spans several mutations, and a paste with nothing to place is no request at all.
+A toast that is not one mutation's outcome is raised where the action is: mail's Undo toast after an archive (`apps/mail/src/components/mail/hooks/use-mail-actions.ts`) spans several mutations, and a paste with nothing to place is no request at all.
 
 ## A toast action works over a modal dialog
 

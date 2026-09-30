@@ -38,7 +38,7 @@ Per collection it writes one `<slug>.json` body (`{ html, mediaGrids }`) and one
 
 On the client, `mountReactApp` picks `hydrateRoot` when the container already has markup, and `main.tsx` renders `RouterClient` when `$_TSR` is present. The dev server has no bootstrap, so it falls back to a plain `RouterProvider`. Hydration reuses the prerendered DOM instead of rendering twice.
 
-Each page also gets its `<title>`, description and OG tags, and an article page gets a minimal `Article` JSON-LD block. The dehydration script differs per page, so `withInlineScriptHashes` (`vite.security-headers.ts`) writes that page's script hashes into its CSP meta.
+Each page also gets its `<title>`, description and OG tags, and an article page gets a minimal `Article` JSON-LD block. The dehydration script differs per page, so `withInlineScriptHashes` (`vite.security-headers.ts` at the repo root) writes that page's script hashes into its CSP meta.
 
 ## The canonical URL and the sitemap need `DOMAIN`
 
@@ -59,7 +59,7 @@ The comments in `prerender.tsx`, `entry-server.tsx` and `main.tsx` explain each 
 
 `drive/share-a-file.md` is `/support/drive/share-a-file`. Both parts are permanent identifiers: renaming breaks deep links and search ranking. `section` is never a frontmatter field: the folder decides.
 
-`src/components/support/sections.ts` is the display registry: id (the folder name), title, description, icon and color, in display order. An app-backed section takes its icon and brand color from the shared `apps` registry, and an unknown app name throws at build. The sections without an app of their own (Getting started, Integrations, Account, Admin and Self-hosting) use the index app's color.
+`src/components/support/sections.ts` is the display registry: id (the folder name), title, description, icon and color, in display order. An app-backed section takes its icon and brand color from the shared `apps` registry, and an unknown app name throws at build. The sections without an app of their own (the folders `getting-started`, `connect`, `account`, `admin` and `self-hosting`) use the index app's color. `connect` is titled Integrations.
 
 The Self-hosting section is written for the person who runs the server, not for its users. It holds the operator's steps from requirements to troubleshooting. [SELF-HOSTING.md](SELF-HOSTING.md) is the technical reference beside the code and links into it rather than repeating them.
 

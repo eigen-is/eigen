@@ -4,5 +4,4 @@ export {
     getEntriesForTarget,
     getEntriesForTargets,
     removeEntriesForTarget,
-    removeRegistryEntries,
 } from './registry';

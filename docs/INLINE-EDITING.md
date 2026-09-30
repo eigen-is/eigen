@@ -8,7 +8,7 @@ Drive opens a file at the inline-edit route when `isInlineEditable(mimeType, nam
 
 ## Two lists decide what is editable
 
-The client asks `isInlineEditable` (`packages/lib/src/types/drive.ts`): a MIME list plus the extension list it shares with the code preview. The server asks `getTextPreviewMode` (`packages/lib/src/constants/preview.ts`), which also picks the edit mode (`markdown`, `plaintext` or `code`) on both sides. The server refuses a file it has no mode for with a 400. It checks on save as well as on read, because otherwise a write collaborator could overwrite a binary, such as a container's `data.db`, with text.
+The client asks `isInlineEditable` (`packages/lib/src/types/drive.ts`): a MIME list plus `INLINE_EDITABLE_EXTENSIONS`, which is the code preview's `CODE_EXTENSIONS` plus `.md`, `.markdown` and `.txt`. The server asks `getTextPreviewMode` (`packages/lib/src/constants/preview.ts`), which also picks the edit mode (`markdown`, `plaintext` or `code`) on both sides. The server refuses a file it has no mode for with a 400. It checks on save as well as on read, because otherwise a write collaborator could overwrite a binary, such as a container's `data.db`, with text.
 
 ## A read refuses bytes it can't round-trip
 

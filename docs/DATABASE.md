@@ -8,7 +8,7 @@
 |---|---|---|---|
 | Server | `users3.db` (better-auth), `eigen.db` (the [share registry](ACL.md#share-registry)), `waitlist.db`, all in `data/server/` (`SERVER_DATABASES`, `apps/api/src/lib/config/paths.ts`) | Once per process, through `createAsyncSingleton` (`apps/api/src/utils/singleton.ts`) | Never |
 | Home | `mounts/shared.db`, each mount's `metadata.db`, and the mail, contacts, calendar and notification databases (`PATHS`, `apps/api/src/lib/core/constants.ts`) | `Home.getLocalDatabase(config, relativePath)`, once per path | Never |
-| Container | A collab document's or chat's `data.db` and an eigendoc's `comments.db`, stored as Drive files keyed by their `pathId` | `Mount.openDatabase`, one slot per `pathId` | Through the mount, queued on `s3` ([SYNC.md](SYNC.md)) |
+| Container | A collab document's or chat's `data.db` and a collab document's `comments.db`, stored as Drive files keyed by their `pathId` | `Mount.openDatabase`, one slot per `pathId` | Through the mount, queued on `s3` ([SYNC.md](SYNC.md)) |
 
 A container database lives in its container folder:
 
@@ -32,11 +32,11 @@ Before applying anything, `runMigrations` refuses a database whose stamp is high
 
 A stamp that is not an integer is refused the same way (503 `unreadable schema stamp`). Only Eigen's migrations write it, and a non-number compares false against every migration, so the database would open with nothing migrated and fail on its first query instead.
 
-A missing stamp row is recreated at 0 by `INSERT OR IGNORE`, and every migration runs again. The `CREATE ... IF NOT EXISTS` steps pass. The first step that can't run twice, such as an `ADD COLUMN` or a `DROP COLUMN`, fails inside its transaction, and the open fails. A database whose migrations can all run twice (collab's single v1) just opens.
+A missing stamp row is recreated at 0 by `INSERT OR IGNORE`, and every migration runs again. The `CREATE ... IF NOT EXISTS` steps pass. The first step that can't run twice, such as an `ADD COLUMN` or a `DROP COLUMN`, fails inside its transaction, and the open fails. A database whose migrations can all run twice just opens: collab, `shared.db`, the share registry and `waitlist.db`, each a single v1 of `IF NOT EXISTS` steps.
 
 ## The dirty watermark moves only after `onSync` returns
 
-A database with an `onSync` callback (a container database) syncs every 30 s and on close. `sync()` skips a clean database. Dirty means `total_changes()` differs from the watermark, or `markDirty` forced it ([SYNC.md](SYNC.md#a-crash-temp-is-adopted-and-re-synced)).
+A database with an `onSync` callback (a container database) syncs every 30 s and on close. `sync()` skips a clean database. Dirty means `total_changes()` differs from the watermark, or `markDirty` forced it ([SYNC.md](SYNC.md#a-crash-temp-is-adopted-and-re-synced)). A dirty one runs `PRAGMA wal_checkpoint(PASSIVE)` before `onSync`, so the main file holds the committed frames a snapshot copies, without waiting on another connection.
 
 The watermark is read before `onSync` runs and stored only after it returns. `onSync` copies the bytes first, so a write landing during its later awaits is not in the copy, and reading the watermark afterwards would count it as synced. A throwing `onSync` stores nothing, so the database stays dirty: the next tick retries, `flush()` passes the error on, and `close()` still tears down and hands `syncFailed` to `onClose`. That flag means the working copy holds bytes storage lacks.
 

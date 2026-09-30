@@ -33,7 +33,7 @@ One `@theme` block in `globals.css` sets `--font-weight-medium` to 450, `--font-
 The name expands to CSS only where it renders. A sheet cell is looser: it stores a name or an index.
 
 - The canvas reader accepts only a name from `EIGEN_FONT_NAMES` and falls back to its default (`fontFamily` in `packages/lib/src/vector/kinds/read-fields.ts`). The name ends up in a CSS declaration list, where a stray `;` would open a declaration of the writer's choosing.
-- The docs `textStyle` mark stores a name and renders it through `fontNameToCss` (`packages/lib/src/docs/eigendoc/nodes/font-family.ts`). A value that is already a stack passes through unchanged, and `normalizeFontFamilyMarks` in the docs editor collapses it to its name on an editable load. `getFontName` does the reverse lookup for paste and import.
+- The docs `textStyle` mark stores a name, and its node (`packages/lib/src/docs/eigendoc/nodes/font-family.ts`) renders it through `fontNameToCss` (`packages/lib/src/constants/fonts.ts`). A value that is already a stack passes through unchanged, and `normalizeFontFamilyMarks` in the docs editor collapses it to its name on an editable load. `getFontName` does the reverse lookup for paste and import.
 - `getFontFamily` wraps an unknown name as `'<name>', sans-serif`. `fontNameToCss` must not wrap, or a stored stack would be wrapped twice.
 
 ## Foreign fonts map onto the bundled ones
