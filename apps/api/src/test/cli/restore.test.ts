@@ -31,6 +31,7 @@ import {
 } from '../../lib/backup/archive';
 import { getBackupJob } from '../../lib/backup/jobs';
 import { getBackupsDir } from '../../lib/backup/paths';
+import { stageBytesNeeded } from '../../lib/backup/restore-server';
 import { startServerBackup } from '../../lib/backup/server-job';
 import { lockDataDir } from '../../lib/config/data-lock';
 import { SERVER_DATABASES, SERVER_RUNTIME_FILES } from '../../lib/config/paths';
@@ -315,6 +316,61 @@ async function serverMemberWithEpochs(archive: string): Promise<Record<string, s
     return { 'server.tar.zst': join(work, 'server.tar.zst') };
 }
 
+// A home member of `archive` with `edit` run on its unpacked folder, and its manifest's entries hashed again.
+async function editedMember(
+    archive: string,
+    ownerId: string,
+    edit: (folder: string) => void,
+): Promise<Record<string, string>> {
+    const { members, manifest } = await readManifest(archive);
+    const name = manifest.homes.find((home) => home.ownerId === ownerId)!.member!;
+    const work = scratch('restore-edited-');
+    await extractArtifact(members.find((member) => member.name === name)!, join(work, 'tree'));
+    const [folder] = readdirSync(join(work, 'tree'));
+    const root = join(work, 'tree', folder);
+    edit(root);
+    const inner = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'));
+    for (const entry of inner.entries) {
+        const body = readFileSync(join(root, entry.path));
+        entry.bytes = body.length;
+        entry.sha256 = new Bun.CryptoHasher('sha256').update(body).digest('hex');
+    }
+    writeFileSync(join(root, 'manifest.json'), JSON.stringify(inner));
+    await packFolder(root, join(work, 'member.tar.zst'));
+    return { [name]: join(work, 'member.tar.zst') };
+}
+
+// `archive` with one more pending row in the s3 mount, for a key whose bytes it does not hold.
+async function withUnbackedPendingRow(archive: string): Promise<string> {
+    const replace = await editedMember(archive, s3User.id, (folder) => {
+        const db = new Database(join(folder, 'home/mounts', S3_MOUNT_ID, PATHS.DRIVE.METADATA_DB));
+        try {
+            db.run(
+                "INSERT INTO pending_uploads (storageKey, stagingPath, enqueuedAt, nextAttemptAt) VALUES ('no-such-key', 'no-such-upload', 0, 0)",
+            );
+        } finally {
+            db.close();
+        }
+    });
+    return craft(archive, { replace });
+}
+
+// The s3 mount as it runs here: a metadata.db whose pending rows are `pending`, key to staged name, each staged.
+function liveS3Mount(dir: string, pending: Record<string, string>): void {
+    const mount = join(homeDirOf(dir, s3User.id), 'mounts', S3_MOUNT_ID);
+    mkdirSync(join(mount, PATHS.DRIVE.STAGING_DIR), { recursive: true });
+    const db = new Database(join(mount, PATHS.DRIVE.METADATA_DB));
+    try {
+        db.run('CREATE TABLE pending_uploads (storageKey TEXT PRIMARY KEY, stagingPath TEXT NOT NULL)');
+        for (const [key, name] of Object.entries(pending)) {
+            db.run('INSERT INTO pending_uploads VALUES (?, ?)', [key, name]);
+            writeFileSync(join(mount, PATHS.DRIVE.STAGING_DIR, name), 'pending here');
+        }
+    } finally {
+        db.close();
+    }
+}
+
 function homeDirOf(dir: string, ownerId: string): string {
     const owner = parseOwnerId(ownerId);
     return join(dir, 'data', owner.type === 'team' ? 'team' : 'home', owner.id);
@@ -329,6 +385,7 @@ let s3User: TestUser;
 let s3Mount: Mount;
 let s3Fault: FaultStorage;
 let stagedUploadName: string;
+let stagedUploadKey: string;
 let fullArchive: string;
 let lightArchive: string;
 let fullS3Archive: string;
@@ -387,6 +444,7 @@ beforeAll(async () => {
     queue.enqueueStaged(key, stagingPath, false);
     await s3Fault.waitForParked((write) => write.key === key);
     stagedUploadName = basename(stagingPath);
+    stagedUploadKey = key;
 
     mkdirSync(join(TEST_DATA_DIR, 'dkim'), { recursive: true });
     writeFileSync(join(TEST_DATA_DIR, 'dkim/eigen.private'), DKIM_KEY);
@@ -754,25 +812,32 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'a Light swap onto an install with no data/team makes it as the owner of data/, before its marker',
+        'a Light swap onto an install with no data/team makes it as the owner of what moves in, before its marker',
         async () => {
             const dir = install();
             expect(existsSync(join(dir, 'data/team'))).toBe(false);
             expect((await stage(dir, basename(lightArchive))).code).toBe(0);
+            const staged = statSync(join(dir, 'data/.restoring/data/team'));
             const log = join(scratch('restore-owned-'), 'owned.log');
-            // The install folder's owner differs from data/'s here, so the two cannot be mixed up.
+            // data/ reads as root's and the install folder as another user's, so neither can be mixed up with
+            // the API user who staged the tree.
             const result = await restoreCli(dir, ['--swap'], {
-                preamble: spyOwnAs(log),
+                preamble: [
+                    ...spyOwnAs(log),
+                    `import { spyOn } from 'bun:test';`,
+                    `import * as fs from 'node:fs';`,
+                    'const stat = fs.statSync;',
+                    `spyOn(fs, 'statSync').mockImplementation((path, options) => { const found = stat(path, options); if (found && path === 'data') { found.uid = 0; found.gid = 0; } return found; });`,
+                ],
                 env: { EIGEN_OWNER: '4242:4242' },
             });
             expect(result.stderr).toBe('');
             expect(result.code).toBe(0);
             expect(statSync(join(dir, 'data/team')).isDirectory()).toBe(true);
-            const data = statSync(join(dir, 'data'));
             const underData = readOwned(log).filter((call) => call.path.startsWith('data/'));
             expect(underData.map((call) => call.path)).toContain('data/team');
             for (const call of underData) {
-                expect(call).toEqual({ path: call.path, uid: data.uid, gid: data.gid, marker: false });
+                expect(call).toEqual({ path: call.path, uid: staged.uid, gid: staged.gid, marker: false });
             }
         },
         JOB_TIMEOUT_MS,
@@ -827,6 +892,33 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
+        'a Full swap is refused before its marker where data/.restoring sits on another disk',
+        async () => {
+            const dir = install();
+            // Without .env.production, only data/ and the staged tree move: nothing else names that disk.
+            const crafted = await craft(fullArchive, {
+                drop: (name) => name === '.env.production',
+                manifest: (m) => ({ ...m, envFile: false }),
+            });
+            expect((await stage(dir, crafted)).code).toBe(0);
+            const result = await restoreCli(dir, ['--swap'], {
+                preamble: [
+                    `import { spyOn } from 'bun:test';`,
+                    `import * as fs from 'node:fs';`,
+                    'const lstat = fs.lstatSync;',
+                    `spyOn(fs, 'lstatSync').mockImplementation((path, options) => { const stat = lstat(path, options); if (stat && String(path).startsWith('data/.restoring')) stat.dev += 1; return stat; });`,
+                ],
+            });
+            expect(result.code).toBe(1);
+            expect(result.stderr).toContain('another disk');
+            expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
+            expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
+            expect(asideDirs(dir)).toEqual([]);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
         'an archive that calls itself full around light homes is refused before anything moves',
         async () => {
             const dir = install();
@@ -869,6 +961,17 @@ describe('restore --stage and --swap', () => {
             expect(result.code).toBe(1);
             expect(result.stderr).toContain('4.00 KB free');
             expectUntouched(dir);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'the stage counts server.tar.zst at what its databases unpack to, well past its compressed size',
+        async () => {
+            const { manifest } = await readManifest(fullArchive);
+            const server = manifest.entries.find((entry) => entry.path === 'server.tar.zst')!;
+            const alone = { ...manifest, entries: [{ ...server, bytes: 1_000_000 }], homes: [] };
+            expect(stageBytesNeeded(alone)).toBeGreaterThanOrEqual(10_000_000);
         },
         JOB_TIMEOUT_MS,
     );
@@ -1001,96 +1104,75 @@ describe('an interrupted swap', () => {
     });
 });
 
-describe('staged uploads of an s3 mount', () => {
-    test(
-        'one the live mount already dropped from staging/ is not replayed',
-        async () => {
-            const dir = install();
-            const liveStaging = join(homeDirOf(dir, s3User.id), 'mounts', S3_MOUNT_ID, PATHS.DRIVE.STAGING_DIR);
-            mkdirSync(liveStaging, { recursive: true });
-            const result = await stage(dir, basename(fullArchive));
-            expect(result.code).toBe(0);
-            expect(result.stdout).toContain('1 pending upload');
-            const staged = join(
-                dir,
-                'data/.restoring/data/home',
-                s3User.id,
-                'mounts',
-                S3_MOUNT_ID,
-                PATHS.DRIVE.STAGING_DIR,
-            );
-            expect(existsSync(join(staged, stagedUploadName))).toBe(false);
-        },
-        JOB_TIMEOUT_MS,
-    );
+function stagedS3Mount(dir: string): string {
+    return join(dir, 'data/.restoring/data/home', s3User.id, 'mounts', S3_MOUNT_ID);
+}
 
-    test(
-        'one the live mount still stages, or a mount that never ran here, is replayed',
-        async () => {
-            for (const keepLive of [true, false]) {
+// Each describe runs for both ways an archive carries a pending upload: in staging/, or among the files.
+for (const [what, archive] of [
+    ['staged uploads of an s3 mount', () => fullArchive],
+    ['an archive with the files of an s3 mount, restored without them', () => fullS3Archive],
+] as const) {
+    describe(what, () => {
+        test(
+            'a pending upload the live mount has no row for any more is not replayed',
+            async () => {
                 const dir = install();
-                if (keepLive) {
-                    const liveStaging = join(homeDirOf(dir, s3User.id), 'mounts', S3_MOUNT_ID, PATHS.DRIVE.STAGING_DIR);
-                    mkdirSync(liveStaging, { recursive: true });
-                    writeFileSync(join(liveStaging, stagedUploadName), 'still pending');
-                }
-                const result = await stage(dir, basename(fullArchive));
+                liveS3Mount(dir, {});
+                const result = await stage(dir, basename(archive()));
                 expect(result.code).toBe(0);
-                expect(result.stdout).not.toContain('pending upload');
-                const staged = join(
-                    dir,
-                    'data/.restoring/data/home',
-                    s3User.id,
-                    'mounts',
-                    S3_MOUNT_ID,
-                    PATHS.DRIVE.STAGING_DIR,
+                expect(result.stdout).toContain('1 pending upload');
+                const staged = stagedS3Mount(dir);
+                expect(existsSync(join(staged, PATHS.DRIVE.STAGING_DIR, stagedUploadName))).toBe(false);
+                expect(existsSync(join(staged, PATHS.DRIVE.DATA_DIR))).toBe(false);
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        test(
+            'a pending upload the live mount still has a row for, under any name, or a mount that never ran here, is replayed',
+            async () => {
+                for (const live of [{ [stagedUploadKey]: stagedUploadName }, { [stagedUploadKey]: 'newer' }, null]) {
+                    const dir = install();
+                    if (live) liveS3Mount(dir, live);
+                    const result = await stage(dir, basename(archive()));
+                    expect(result.code).toBe(0);
+                    expect(result.stdout).not.toContain('pending upload');
+                    const staged = stagedS3Mount(dir);
+                    expect(readFileSync(join(staged, PATHS.DRIVE.STAGING_DIR, stagedUploadName), 'utf8')).toBe(
+                        'not in the bucket yet',
+                    );
+                    expect(existsSync(join(staged, PATHS.DRIVE.DATA_DIR))).toBe(false);
+                    const db = new Database(join(staged, PATHS.DRIVE.METADATA_DB), { readonly: true });
+                    try {
+                        expect(db.query('SELECT storageKey, stagingPath FROM pending_uploads').all()).toEqual([
+                            { storageKey: stagedUploadKey, stagingPath: stagedUploadName },
+                        ]);
+                    } finally {
+                        db.close();
+                    }
+                }
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        test(
+            'a pending row whose bytes the archive does not hold is counted as not replayed',
+            async () => {
+                const dir = install();
+                const result = await stage(dir, await withUnbackedPendingRow(archive()));
+                expect(result.stderr).toBe('');
+                expect(result.code).toBe(0);
+                expect(result.stdout).toContain('1 pending upload(s) are not replayed: the archive does not hold');
+                const staged = stagedS3Mount(dir);
+                expect(readFileSync(join(staged, PATHS.DRIVE.STAGING_DIR, stagedUploadName), 'utf8')).toBe(
+                    'not in the bucket yet',
                 );
-                expect(readFileSync(join(staged, stagedUploadName), 'utf8')).toBe('not in the bucket yet');
-            }
-        },
-        JOB_TIMEOUT_MS,
-    );
-});
-
-describe('an archive with the files of an s3 mount, restored without them', () => {
-    test(
-        'a pending upload only its files hold is replayed',
-        async () => {
-            const dir = install();
-            await stageAndSwap(dir, basename(fullS3Archive));
-            const mount = join(homeDirOf(dir, s3User.id), 'mounts', S3_MOUNT_ID);
-            expect(readFileSync(join(mount, PATHS.DRIVE.STAGING_DIR, stagedUploadName), 'utf8')).toBe(
-                'not in the bucket yet',
-            );
-            expect(existsSync(join(mount, PATHS.DRIVE.DATA_DIR))).toBe(false);
-            const db = new Database(join(mount, PATHS.DRIVE.METADATA_DB), { readonly: true });
-            try {
-                expect(db.query('SELECT stagingPath FROM pending_uploads').all()).toEqual([
-                    { stagingPath: stagedUploadName },
-                ]);
-            } finally {
-                db.close();
-            }
-        },
-        JOB_TIMEOUT_MS,
-    );
-
-    test(
-        'one the live mount already dropped from staging/ is not',
-        async () => {
-            const dir = install();
-            const mount = join(homeDirOf(dir, s3User.id), 'mounts', S3_MOUNT_ID);
-            mkdirSync(join(mount, PATHS.DRIVE.STAGING_DIR), { recursive: true });
-            const result = await stage(dir, basename(fullS3Archive));
-            expect(result.code).toBe(0);
-            expect(result.stdout).toContain('1 pending upload');
-            const staged = join(dir, 'data/.restoring/data/home', s3User.id, 'mounts', S3_MOUNT_ID);
-            expect(readdirSync(join(staged, PATHS.DRIVE.STAGING_DIR))).toEqual([]);
-            expect(existsSync(join(staged, PATHS.DRIVE.DATA_DIR))).toBe(false);
-        },
-        JOB_TIMEOUT_MS,
-    );
-});
+            },
+            JOB_TIMEOUT_MS,
+        );
+    });
+}
 
 test('importing cli/restore.ts opens nothing under the data root', async () => {
     const root = join(scratch('restore-import-'), 'data');

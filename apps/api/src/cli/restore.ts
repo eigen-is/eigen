@@ -30,6 +30,7 @@ import { describeError } from '../lib/backup/errors';
 import { backupsDirPath, SERVER_ARCHIVE_ENV_MEMBER } from '../lib/backup/paths';
 import {
     homeDirUnder,
+    type NotReplayed,
     RESTORING_DATA_DIR,
     RESTORING_DIR,
     type ServerArchive,
@@ -306,24 +307,32 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         }
     }
 
-    let notReplayed = 0;
+    let notReplayed: NotReplayed = { settled: 0, missing: 0 };
     try {
-        ({ notReplayed } = await stageServerArchive(archived, restoring, {
+        notReplayed = await stageServerArchive(archived, restoring, {
             liveDataRoot: dataRoot,
             s3FromArchive: flags['s3-from-archive'] === true,
             onStep: (step) => console.log(glyphLine('bar', step)),
-        }));
+        });
     } catch (error) {
         refuse(`${name} cannot be restored: ${describeError(error)}.`, 'Restore another archive.');
     }
     const record: StagedRestore = { archive: name, level: manifest.level, appVersion: manifest.appVersion };
     writeFileSync(join(restoring, STAGE_RECORD), JSON.stringify(record));
     console.log(glyphLine('ok', `Staged ${name} in data/${RESTORING_DIR}`));
-    if (notReplayed) {
+    if (notReplayed.settled) {
         console.log(
             glyphLine(
                 'warn',
-                `${notReplayed} pending upload(s) in the archive are not replayed: data/ here already uploaded, replaced or deleted them`,
+                `${notReplayed.settled} pending upload(s) in the archive are not replayed: data/ here already uploaded, replaced or deleted them`,
+            ),
+        );
+    }
+    if (notReplayed.missing) {
+        console.log(
+            glyphLine(
+                'warn',
+                `${notReplayed.missing} pending upload(s) are not replayed: the archive does not hold their bytes`,
             ),
         );
     }
@@ -413,12 +422,11 @@ function planLight(
     return { renames, merged };
 }
 
-// The folders missing above `path`, owned like data/: root's own, uid 1000 could not open the homes in them.
-function makeParents(path: string): void {
+// The folders missing above `path`, owned like `owner`, what moves in: the stage made every staged item as the API
+// user. Root's own, or data/'s, which may be root's, would keep that user out of the homes in them.
+function makeParents(path: string, owner: { uid: number; gid: number }): void {
     const missing: string[] = [];
     for (let dir = dirname(path); !lexists(dir); dir = dirname(dir)) missing.unshift(dir);
-    if (!missing.length) return;
-    const owner = statSync(DATA);
     for (const dir of missing) {
         mkdirSync(dir, { mode: 0o700 });
         ownAs(dir, owner);
@@ -462,7 +470,7 @@ function runSwap(ui: Ui, swap: RestoreSwap): void {
     for (const [from, to] of swap.copies) {
         const source = statSync(from, { throwIfNoEntry: false });
         if (!source) continue;
-        makeParents(to);
+        makeParents(to, source);
         copyFileSync(from, to);
         ownAs(to, source);
     }
@@ -476,7 +484,7 @@ function runSwap(ui: Ui, swap: RestoreSwap): void {
         }
         if (!fromHere) cannot(`${from} is gone`);
         try {
-            makeParents(to);
+            makeParents(to, lstatSync(from));
             renameSync(from, to);
         } catch (error) {
             ui.fail(
@@ -533,6 +541,14 @@ async function swap(): Promise<void> {
             `The staged ${record.archive} cannot be swapped in: ${reason}.`,
             'Run ./eigen restore <archive> again.',
         );
+    const stagedData = join(restoring, RESTORING_DATA_DIR);
+    // The check of each rename below misses a Full swap's second: its source is only there once data/ moved aside.
+    if (lstatSync(stagedData).dev !== data.dev) {
+        return ui.fail(
+            `${record.archive} cannot be swapped in: ${stagedData} is on another disk than ${DATA}.`,
+            `Restore needs data/${RESTORING_DIR} on the disk of data/: unmount what is there, then run ./eigen restore again.`,
+        );
+    }
 
     let at = new Date();
     const asideOf = (path: string) => `${path}${PRE_RESTORE_SUFFIX}${buildBackupStamp(at)}`;
@@ -544,7 +560,6 @@ async function swap(): Promise<void> {
     const renames: [string, string][] = [];
     if (env && lexists(ENV_PATH)) renames.push([ENV_PATH, envAside]);
     if (env) renames.push([stagedEnv, ENV_PATH]);
-    const stagedData = join(restoring, RESTORING_DATA_DIR);
     let leftover = restoring;
     if (record.level === 'light') {
         const plan = planLight(stagedData, dataAside);
@@ -579,8 +594,8 @@ async function swap(): Promise<void> {
             );
         }
     }
-    // Made before the marker, as data/'s owner: a swap cut off before it plans them again, and finds them there.
-    for (const [, to] of renames) if (to.startsWith(`${DATA}/`)) makeParents(to);
+    // Made before the marker, owned like what moves in: a swap cut off before it plans them again, and finds them there.
+    for (const [from, to] of renames) if (to.startsWith(`${DATA}/`)) makeParents(to, lstatSync(from));
 
     const marker: RestoreSwap = {
         archive: record.archive,
