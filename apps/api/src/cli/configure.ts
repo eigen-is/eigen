@@ -335,7 +335,7 @@ export async function configure(
     const currentHost = existing.get('SMTP_RELAY_HOST');
     const relayAnswer = await answer(
         {
-            message: 'Which mail relay should Eigen send through, as host:port? (optional)',
+            message: 'Which mail relay should Eigen send through, as host:port?',
             help: mail
                 ? 'Useful when your provider blocks port 25. Leave it empty to send directly.'
                 : 'Eigen needs one to send sign-in codes, invitations and notifications.',

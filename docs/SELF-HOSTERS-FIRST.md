@@ -2,7 +2,7 @@
 
 The work list for the weeks before the open-source repository is announced. One question orders it: what does a stranger with a VPS or a NAS hit, in the order they hit it? Install, then update, then "is my data safe", then "do I have to run a mail server". Designs live in the linked proposals; this file is the order, the scope cut, and the checkboxes. Delete a line once it is done, and a block once its "done when" holds and it is recorded in its own doc.
 
-Done and recorded elsewhere: install, update and rollback without host Bun, prebuilt images with the bundle inside, the first tagged release through `publish.yml` (v0.3.0), eigen.is and demo.eigen.is as release installs on the `main` channel, mail-off setup with a relay in both modes, and release hygiene (upgrade notes, secret scan, `SECURITY.md`, issue templates, `CONTRIBUTING.md`).
+Done and recorded elsewhere: install, update and rollback without host Bun, prebuilt images with the bundle inside, the first tagged release through `publish.yml` (v0.3.0), eigen.is and demo.eigen.is as release installs on the `main` channel, mail-off setup with a relay in both modes, mail off as a first-class setup path, and release hygiene (upgrade notes, secret scan, `SECURITY.md`, issue templates, `CONTRIBUTING.md`).
 
 ## Ready to announce when
 
@@ -32,11 +32,7 @@ Done when: the gate is green on a real previous-to-new upgrade and its rollback.
 
 Not in this block: phase ④ migration between servers, chunked artifact upload, the orphaned-bucket-object sweep. Their ROADMAP rows stand.
 
-## 3. Mail off as a first-class path
-
-- [ ] The setup guide's mail-off section becomes a first-class path, not an alternative deployment, and the relay moves out of "optional" into the main flow
-
-## 4. The documentation a stranger needs
+## 3. The documentation a stranger needs
 
 Size S–M, mostly writing. Public text goes out in Reinder's voice.
 

@@ -5,8 +5,8 @@ This guide takes you from an empty server to a running Eigen. It is longer than 
 ## What you get
 
 - The web apps at `https://yourdomain.com`: mail, drive, docs, sheets, slides, stickies, chat, calendar, contacts and vector
-- Your own mail server, sending and receiving, with DKIM signing
-- IMAP (port 993) and SMTP (port 587) for mail clients on your phone and desktop
+- Your own mail server, sending and receiving, with DKIM signing. Or keep the mail you have, at Gmail, Fastmail, Google Workspace or your own mail server: that is a full install too
+- IMAP (port 993) and SMTP (port 587) for mail clients on your phone and desktop, when Eigen hosts your mail
 - CalDAV and CardDAV for calendar and contacts apps
 - WebDAV, so you can mount your drive in Finder, Files or any WebDAV client
 - HTTPS from Let's Encrypt, renewed by itself
@@ -19,13 +19,18 @@ Everything runs in Docker. Updating is one command, and so is going back.
 - **Docker**, with the **Docker Compose plugin 2.20 or newer**. Nothing else: no Bun, no Node.
 - A **domain** you control, like `eigen.example.com`
 - **SSH access** to the server
-- A **mail relay**, optional. Most servers do without one: [Do I need a mail relay?](#do-i-need-a-mail-relay)
+- A **mail relay** when you keep your existing mail. When Eigen hosts your mail, only when your provider blocks outgoing port 25. See [Mail relay](#mail-relay)
 
 ---
 
 ## Quick Start
 
-This is the plain install: one domain, everything in Docker on one server. If you already run a web server or a mail server, or want addresses on another domain than the web address, read [Alternative deployments](#alternative-deployments) first.
+This is the plain install: one domain, everything in Docker on one server. Mail takes one of two paths, and both are a full install:
+
+- **Hosting mail.** Eigen runs the mail server and holds the mailboxes.
+- **Keeping your mail.** Your addresses stay at Gmail, Fastmail, Google Workspace or the mail server you run now. Eigen sends its own mail, like sign-in codes and invitations, through a relay.
+
+Steps 1 to 5 are the same for both. You pick the path in step 4, and the guide splits at step 6. If you already run a web server, read [Alternative deployments](#alternative-deployments) first.
 
 ### 1. Install Docker
 
@@ -50,7 +55,7 @@ DNS takes a few minutes to spread, sometimes half an hour. Check with:
 dig eigen.example.com A
 ```
 
-`./eigen setup` lists every record your answers need. The mail records (MX, SPF, DKIM, DMARC, SRV) come in step 6, once the mail server has started and made its DKIM key.
+`./eigen setup` lists every record your answers need. With hosted mail, the mail records (MX, SPF, DKIM, DMARC, SRV) come in step 6a, once the mail server has started and made its DKIM key.
 
 ### 3. Install Eigen
 
@@ -86,14 +91,14 @@ Developing Eigen? `./eigen setup` also builds the images from a clone of the rep
 `./eigen setup` asks five questions, in this order, and suggests an answer for each:
 
 1. **Where will Eigen be hosted?** Your web address, like `eigen.example.com`.
-2. **Which mail domain will you use?** Everyone's address and login is on it, like `jane@example.com`. It defaults to the web address. You cannot change it later: every account is made on it. A later `./eigen setup` shows it instead of asking.
+2. **Which mail domain will you use?** Everyone's address and login is on it, like `jane@example.com`. It defaults to the web address. Keeping your mail? Answer the domain your addresses are on now. You cannot change it later: every account is made on it. A later `./eigen setup` shows it instead of asking. Hosting mail on another domain than the web address: [Mail at a different domain than the web URL](#mail-at-a-different-domain-than-the-web-url).
 3. **How do people reach Eigen over HTTPS?** Eigen handles it on ports 80 and 443, or your own web server forwards to it ([Behind your existing webserver](#behind-your-existing-webserver)). With Eigen's own, it asks which email address Let's Encrypt may use, `admin@<mail domain>` by default. With yours, it asks where Eigen should listen.
-4. **Host email on this server?** Yes: Eigen hosts the mailboxes, on ports 25, 465, 587 and 993. No: see [Using your existing mail server](#using-your-existing-mail-server).
-5. **Which mail relay should Eigen send through?** Optional. Leave it empty and Eigen's own mail server delivers directly. To use one, answer `host:port` and setup asks for its user name and password. See [Do I need a mail relay?](#do-i-need-a-mail-relay).
+4. **Host email on this server?** Yes is hosting mail: Eigen hosts the mailboxes, on ports 25, 465, 587 and 993, and you go on with [step 6a](#6a-hosting-mail-add-the-mail-dns-records). No is keeping your mail: Eigen hosts no mailboxes, your mail stays where it is, and you go on with [step 6b](#6b-keeping-your-mail-check-the-relay-and-the-sender).
+5. **Which mail relay should Eigen send through?** Keeping your mail, you need one, or Eigen sends no email at all. Hosting mail, leave it empty and Eigen's own mail server delivers directly, unless your provider blocks outgoing port 25. Answer `host:port`, and setup asks for its user name and password. Which relay to pick: [Mail relay](#mail-relay).
 
 Before the first question, setup downloads the release. After the last, it writes your answers to `.env.production` (only its owner can read it), lists the DNS records to add, and starts Eigen. Run `./eigen setup` again whenever you want to change an answer. It keeps the others, and every key it does not know. `./eigen setup --help` lists the flags for a run without questions.
 
-Five containers start:
+With hosted mail, five containers start:
 
 - **caddy**: the web server, with automatic HTTPS
 - **eigen-api**: the backend
@@ -101,13 +106,17 @@ Five containers start:
 - **postfix**: incoming mail, and outgoing mail
 - **dovecot**: IMAP
 
+Keeping your mail, only caddy and eigen-api start.
+
 ### 5. Finish in your browser
 
 Setup ends with a link that works once, `https://eigen.example.com/admin/#setup=…`. Open it. It asks for the name of your organization, the sender of Eigen's own mail (codes, invitations and notifications; the organization name and `noreply@<mail domain>` unless you change them), where to keep files, and your admin account. Then **Go to Login** takes you to the sign-in page. You can change the sender later in Admin, under **Settings → Mail**. Lost the link? Run `./eigen setup` again for a fresh one.
 
 Check on Eigen at any time with `./eigen status`.
 
-### 6. Add the mail DNS records
+### 6a. Hosting mail: add the mail DNS records
+
+Keeping your mail? Skip to [step 6b](#6b-keeping-your-mail-check-the-relay-and-the-sender).
 
 When Postfix starts for the first time, it makes a DKIM key. You find it in `data/dkim/eigen.txt`, and in the postfix log of that first start (`./eigen logs postfix`, Ctrl-C to stop).
 
@@ -141,9 +150,62 @@ What these do:
 - **Reverse DNS** maps your IP back to your domain. Many mail servers check it
 - **SRV** lets mail, calendar and contacts apps find your server from just an email address. The two TXT records tell CalDAV and CardDAV clients the path (RFC 6764)
 
+Outgoing port 25 blocked by your provider? Send through a relay: [Mail relay](#mail-relay).
+
+#### Mail at a different domain than the web URL
+
+When Eigen runs at `eigen.example.com` but addresses are `you@example.com`, answer `eigen.example.com` to the first setup question and `example.com` to the second. In `.env.production` that is:
+
+```
+DOMAIN=eigen.example.com
+MAIL_DOMAIN=example.com
+```
+
+The mail records (MX, SPF, DKIM, DMARC) live on `MAIL_DOMAIN`. The MX *target* is your web host:
+
+```
+example.com.                     MX   10 eigen.example.com.
+example.com.                     TXT  "v=spf1 mx -all"
+_dmarc.example.com.              TXT  "v=DMARC1; p=quarantine; rua=mailto:postmaster@example.com"
+eigen._domainkey.example.com.    TXT  "<key from postfix logs after first boot>"
+```
+
+The SRV and TXT records for autodiscovery also live on `MAIL_DOMAIN`, because clients take the lookup domain from the email address. Their targets point at the web host:
+
+```
+_imaps._tcp.example.com.         SRV  0 1 993 eigen.example.com.
+_submission._tcp.example.com.    SRV  0 1 587 eigen.example.com.
+_caldavs._tcp.example.com.       SRV  0 1 443 eigen.example.com.
+_carddavs._tcp.example.com.      SRV  0 1 443 eigen.example.com.
+_caldavs._tcp.example.com.       TXT  "path=/dav/"
+_carddavs._tcp.example.com.      TXT  "path=/dav/"
+```
+
+**Autoconfig:** mail clients look for auto-discovery at `https://autoconfig.example.com/...`, on the apex, not on Eigen's subdomain. Two options:
+
+1. **Manual config.** Tell users to enter `eigen.example.com` as the IMAP and SMTP server when they add their account.
+2. **Autoconfig record.** Point `autoconfig.example.com` at the same IP. `./eigen setup` lists that A record when `DOMAIN` and `MAIL_DOMAIN` differ.
+
+Then go on with [step 7](#7-connect-a-mail-or-calendar-client-optional).
+
+### 6b. Keeping your mail: check the relay and the sender
+
+Eigen hosts no mailboxes, and Postfix, Dovecot and Unbound do not start. The Mail app, its entries in the app switcher and the command palette, the "Mail to…" actions and the IMAP settings card all disappear. Anyone who still opens `/mail` gets a plain "Mail is turned off on this server" page. Addresses stay on your mail domain, and people still sign in with them. Their mailboxes live wherever that domain's mail is hosted, so they keep their mail app pointed there. Calendar and contacts work as on any Eigen. One thing needs hosted mail: when someone outside Eigen answers a calendar invitation, the answer lands in the organizer's own mailbox, and Eigen does not update that guest's status on the event.
+
+Everything Eigen sends goes out through the relay you named in step 4. No relay yet? Pick one in [Mail relay](#mail-relay) and run `./eigen setup` again. Already running postfix on this server? It can be the relay: [Your mail server on this host](#your-mail-server-on-this-host).
+
+Setup lists no mail DNS records. Your mail domain keeps the MX, SPF and DKIM records your mail provider set. A relay service that sends from your domain, like Brevo or Postmark, has you verify the domain first, usually with an SPF include and a DKIM key of its own. Add those beside the records you have.
+
+Then check it in Admin, under **Settings**:
+
+1. The **Mail** row in the Server section names the relay. "No mailboxes and no relay" means Eigen sends no email.
+2. Under **Mail**, the **Sender address** is the system sender, the address Eigen's own mail comes from (step 5). The relay must accept it.
+3. Mail a person causes, like a share notification or a calendar invitation, comes from the system sender with their name, `Ada via Acme <noreply@example.com>`, and replies go to them. If your relay allows every address on your mail domain as a sender, turn on **Relay sends as users**. Mail a person causes then comes from their own address.
+4. **Send test mail** sends one mail from you to you, the way a share notification goes out. When it fails, it shows the relay's answer.
+
 ### 7. Connect a mail or calendar client (optional)
 
-**IMAP / SMTP:**
+**IMAP / SMTP**, with hosted mail (keeping your mail, people use the settings of their own mail provider):
 
 | Setting | Value |
 |---------|-------|
@@ -161,13 +223,36 @@ What these do:
 | Username | `you@eigen.example.com` |
 | Password | your Eigen password |
 
-Some clients find the server from your email address alone, through the SRV records of step 6 (DAVx5's login with email, for example). Support differs per client, so the server address above is the reliable way.
+Some clients find the server from your email address alone, through the SRV records of step 6a (DAVx5's login with email, for example). Support differs per client, so the server address above is the reliable way.
 
 Thunderbird's calendar picker wants the full URL: `https://eigen.example.com/dav/calendars/{userId}/`. You find it on the Space → Integrations page, next to the one for your address book.
 
 The web apps and your mail and calendar clients work on the same data. A change in one shows up in the other.
 
 You are done.
+
+---
+
+## Mail relay
+
+A relay is a mail server that takes your mail over a login and delivers it for you. Whether you need one depends on your answer to "Host email on this server?":
+
+- **Keeping your mail: always.** There is no Postfix, and everything Eigen sends goes through the relay: two-factor codes by email, guest sign-in codes, invitations, share and access-request notifications, calendar invitations and replies. Without a relay, every one of those fails. Setup warns when you leave it empty.
+- **Hosting mail: only when your provider blocks outgoing port 25.** Otherwise Postfix delivers your mail straight to the receiving server, like any mail server. eigen.is runs that way. Hetzner and DigitalOcean block port 25 on new accounts. Ask them to open it, or send through a relay. Not sure? Leave the relay empty, and run `./eigen setup` again to add one later.
+
+Anything that speaks SMTP with a user name and password works: a mail service like Brevo, Postmark, Mailgun, SendGrid or Amazon SES (most have a free tier of a few hundred mails a day), the SMTP server of your current mail provider (Google Workspace, Gmail with an app password, Fastmail, your ISP), or a mail server you run yourself. Answer it as `host:port` at setup, like `smtp-relay.brevo.com:587`, and setup asks for the user name and password. `.env.production` keeps them as `SMTP_RELAY_HOST`, `SMTP_RELAY_PORT`, `SMTP_RELAY_USER` and `SMTP_RELAY_PASSWORD`. Port 465 is implicit TLS, any other port STARTTLS. With a user name, the connection must be encrypted, so the password never travels in the clear. Keeping your mail, Eigen then also checks the relay's certificate.
+
+One thing to check: which addresses the relay lets you send from.
+
+- **Keeping your mail**, Eigen sends from one address, the system sender you pick in step 5, unless you turn on **Relay sends as users**. One mailbox is enough, a Gmail account included, as long as the sender address is one that account may send from. How mail a person causes goes out: [step 6b](#6b-keeping-your-mail-check-the-relay-and-the-sender).
+- **Hosting mail**, Postfix sends every user's mail through the relay from that user's own address. The relay must accept every address on your mail domain. A mail service does, once you have verified the domain. A personal Gmail account does not: Gmail rewrites the sender to the account itself, so mail from Jane would arrive as sent by you. Google Workspace has an SMTP relay service that sends for a whole domain.
+
+### Your mail server on this host
+
+Already running postfix and dovecot on the host? Keep your mail there, and answer `host.docker.internal:25` for the relay. `host.docker.internal` is Docker's name for "the machine the container runs on". For this to work, your host postfix needs to:
+
+- Bind to `0.0.0.0` (or the gateway of `EIGEN_SUBNET`, the Docker network in `.env.production`), not just `127.0.0.1`
+- Permit relay from `EIGEN_SUBNET`
 
 ---
 
@@ -270,6 +355,8 @@ ufw allow 465/tcp    # SMTPS
 ufw allow 587/tcp    # SMTP submission
 ufw allow 993/tcp    # IMAP
 ```
+
+Ports 25, 465, 587 and 993 are for hosted mail. Keeping your mail, leave them closed.
 
 ### Mail hardening
 
@@ -404,75 +491,6 @@ tailscale serve --bg --https=443 http://127.0.0.1:8080
 tailscale funnel --bg 443
 ```
 
-### Do I need a mail relay?
-
-Usually not. Eigen comes with its own mail server, and Postfix delivers your mail straight to the receiving server, like any mail server. eigen.is runs that way. A relay is a mail server that takes your mail over a login and delivers it for you. You want one in two cases:
-
-- **Your provider blocks outgoing port 25.** Hetzner and DigitalOcean do that on new accounts. Ask them to open it, or send through a relay.
-- **You answered No to hosting mail.** Then there is no Postfix, and Eigen needs a relay for its own mail: sign-in codes, invitations and notifications. Without one, none of those go out.
-
-Anything that speaks SMTP with a user name and password works: a mail service like Brevo, Postmark, Mailgun, SendGrid or Amazon SES (most have a free tier of a few hundred mails a day), the SMTP server of your current mail provider (Google Workspace, Gmail with an app password, Fastmail, your ISP), or a mail server you run yourself. Answer it as `host:port` at setup, like `smtp-relay.brevo.com:587`, and setup asks for the user name and password. `.env.production` keeps them as `SMTP_RELAY_HOST`, `SMTP_RELAY_PORT`, `SMTP_RELAY_USER` and `SMTP_RELAY_PASSWORD`. Port 465 is implicit TLS, any other port STARTTLS. With a user name, the connection must be encrypted, so the password never travels in the clear.
-
-One thing to check: which addresses the relay lets you send from.
-
-- **With hosted mail**, Postfix sends every user's mail through the relay from that user's own address. The relay must accept every address on your mail domain. A mail service does, once you have verified the domain. A personal Gmail account does not: Gmail rewrites the sender to the account itself, so mail from Jane would arrive as sent by you. Google Workspace has an SMTP relay service that sends for a whole domain.
-- **Without hosted mail**, everything Eigen sends comes from one address, the sender address you pick at setup. Mail about a person carries that person's name, `Jane via Acme <noreply@example.com>`, and replies go to Jane. One mailbox is enough, a Gmail account included, as long as the sender address is one that account may send from.
-
-Leave the relay empty at setup if you are not sure. Run `./eigen setup` again to add one later.
-
-### Using your existing mail server
-
-**Pick this when** you already run postfix and dovecot on the host, or want a mail provider to host the mailboxes and IMAP.
-
-Answer **No** to "Host email on this server?" in step 4 (`--no-mail`). Postfix, Dovecot and Unbound do not start, and the server hosts no mailboxes. The Mail app, its entries in the app switcher and the command palette, the "Mail to…" actions and the IMAP settings card all disappear. Anyone who still opens `/mail` gets a plain "Mail is turned off on this server" page. Addresses stay on your mail domain, and people still sign in with them. Their mailboxes live wherever that domain's mail is hosted.
-
-Eigen still sends mail of its own: two-factor codes by email, guest sign-in codes, invitations, share and access-request notifications, calendar invitations and replies. Without hosted mail it sends them through a relay, the next question setup asks. Without a relay, every one of those emails fails. Setup warns when you leave it empty. Which relays work, and how to answer: [Do I need a mail relay?](#do-i-need-a-mail-relay). Without hosted mail, Eigen also checks the relay's certificate.
-
-Your own mail server on the same host works as a relay too: answer `host.docker.internal:25`. `host.docker.internal` is Docker's name for "the machine the container runs on". For this to work, your host postfix needs to:
-
-- Bind to `0.0.0.0` (or the gateway of `EIGEN_SUBNET`, the Docker network in `.env.production`), not just `127.0.0.1`
-- Permit relay from `EIGEN_SUBNET`
-
-The relay must accept the system sender, the address Eigen's own mail comes from. You set it in the setup wizard, and later in Admin under **Settings → Mail**. Mail a person causes, like a share notification or a calendar invitation, comes from the system sender with their name, `Ada via Acme <noreply@example.com>`, and replies go to them. If your relay allows every address on your mail domain as a sender, turn on **Relay sends as users** in the same place. Mail a person causes then comes from their own address. **Send test mail** there sends one mail from you to you, the way a share notification goes out.
-
-Tell your users to point their mail client at your existing mail server. Eigen shows no IMAP settings of its own.
-
-### Mail at a different domain than the web URL
-
-**Pick this when** Eigen runs at `eigen.example.com` but addresses are `you@example.com`.
-
-Answer `eigen.example.com` to the first setup question and `example.com` to the second. In `.env.production` that is:
-
-```
-DOMAIN=eigen.example.com
-MAIL_DOMAIN=example.com
-```
-
-The mail records (MX, SPF, DKIM, DMARC) live on `MAIL_DOMAIN`. The MX *target* is your web host:
-
-```
-example.com.                     MX   10 eigen.example.com.
-example.com.                     TXT  "v=spf1 mx -all"
-_dmarc.example.com.              TXT  "v=DMARC1; p=quarantine; rua=mailto:postmaster@example.com"
-eigen._domainkey.example.com.    TXT  "<key from postfix logs after first boot>"
-```
-
-The SRV and TXT records for autodiscovery also live on `MAIL_DOMAIN`, because clients take the lookup domain from the email address. Their targets point at the web host:
-
-```
-_imaps._tcp.example.com.         SRV  0 1 993 eigen.example.com.
-_submission._tcp.example.com.    SRV  0 1 587 eigen.example.com.
-_caldavs._tcp.example.com.       SRV  0 1 443 eigen.example.com.
-_carddavs._tcp.example.com.      SRV  0 1 443 eigen.example.com.
-_caldavs._tcp.example.com.       TXT  "path=/dav/"
-_carddavs._tcp.example.com.      TXT  "path=/dav/"
-```
-
-**Autoconfig:** mail clients look for auto-discovery at `https://autoconfig.example.com/...`, on the apex, not on Eigen's subdomain. Two options:
-
-1. **Manual config.** Tell users to enter `eigen.example.com` as the IMAP and SMTP server when they add their account.
-2. **Autoconfig record.** Point `autoconfig.example.com` at the same IP. `./eigen setup` lists that A record when `DOMAIN` and `MAIL_DOMAIN` differ.
-
 ### Compose profile reference
 
 `COMPOSE_PROFILES` controls which bundled services start. `./eigen setup` writes it from your answers to the HTTPS and mail questions. To change it, run `./eigen setup` again with other answers:
@@ -481,5 +499,5 @@ _carddavs._tcp.example.com.      TXT  "path=/dav/"
 |---|---|
 | All-in-one (default) | `edge,mail` |
 | Bundled mail, your webserver | `static,mail` |
-| Bundled webserver, your mail server | `edge` |
-| Neither: the host runs both | `static` |
+| Bundled webserver, your mail kept elsewhere | `edge` |
+| Your webserver, your mail kept elsewhere | `static` |

@@ -111,9 +111,9 @@ mkdir -p /opt/eigen && cd /opt/eigen
 curl -fsSL https://eigen.is/install | sh
 ```
 
-The script downloads the `eigen` command and runs `./eigen setup`. Setup asks for your web address and mail domain, whether Eigen or your own web server handles HTTPS, and whether to host email on this server. Then it starts Eigen and prints a link that finishes the setup in your browser.
+The script downloads the `eigen` command and runs `./eigen setup`. Setup asks for your web address and mail domain, whether Eigen or your own web server handles HTTPS, whether to host email on this server or keep the mail you have, and which mail relay sends Eigen's own mail (needed when you keep your mail). Then it starts Eigen and prints a link that finishes the setup in your browser.
 
-Everything runs in Docker: Caddy for HTTPS, the Eigen API, and Postfix, Dovecot and Unbound for mail. The same `eigen` command updates, backs up and restores: `./eigen help`.
+Everything runs in Docker: Caddy for HTTPS, the Eigen API, and Postfix, Dovecot and Unbound when Eigen hosts your mail. The same `eigen` command updates, backs up and restores: `./eigen help`.
 
 Developing Eigen? See [CONTRIBUTING.md § Eigen in Docker](docs/CONTRIBUTING.md#eigen-in-docker).
 
