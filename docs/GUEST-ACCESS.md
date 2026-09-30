@@ -147,7 +147,7 @@ identically.
 1. **Before guest account exists**: share → `resolveACLUserIds` → user not found → registry entry created, and
    `emailNewlyAddedAclEntries` (`apps/api/src/lib/drive/acl-propagation.ts`) mails the address. That mail is the
    guest-onboarding trigger — without it nobody knows to come and OTP in. Gated by
-   `notifications.email.guestOnAclAdd` (default true). Send-time mail grants ([MAIL.md § Send-time access grants](MAIL.md#send-time-access-grants)) mint the same registry entries but suppress this mail (`suppressShareEmail: 'all'`); the user's own message carries the `?email=` invite link
+   `notifications.email.guestOnAclAdd` (default true). Send-time mail grants ([MAIL.md § A send grants access only when the sender says so](MAIL.md#a-send-grants-access-only-when-the-sender-says-so)) mint the same registry entries but suppress this mail (`suppressShareEmail: 'all'`); the user's own message carries the `?email=` invite link
 2. **Guest verifies OTP**: account created → `reconcileSharesForNewUser()` reads (does not delete) from
    registry → idempotently writes to `shared.db` via `Drive.receiveSharedPathChange`
 3. **After guest account exists**: share → `resolveACLUserIds` → user found → `receiveSharedPathChange()` called
