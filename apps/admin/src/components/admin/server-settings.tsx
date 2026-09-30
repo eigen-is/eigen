@@ -147,9 +147,9 @@ export function ServerSettingsPage() {
             const saved = await updateSettings.mutateAsync(
                 draft.landing ? { ...draft, landing: { links: normalizeLinks(draft.landing.links ?? []) } } : draft,
             );
-            // Said once, for a new backup bucket: its keys are the one thing to keep off this server. Every save that
-            // touches the upload checks the bucket again, so its warning comes with the notice; Test shows it too.
-            if (saved.notice) setBackupNotice({ notice: saved.notice, warning: saved.warning });
+            // The notice comes once, for a new backup bucket: its keys are the one thing to keep off this server. The
+            // warning comes from the bucket check, which every save with the upload on runs, bucket changed or not.
+            if (saved.notice || saved.warning) setBackupNotice({ notice: saved.notice, warning: saved.warning });
         }
         handleReset();
     };

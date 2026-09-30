@@ -531,18 +531,33 @@ stop() {
     step "Stopping Eigen" "Eigen stopped" "Could not stop Eigen" stop_containers
 }
 
+# Backups run nightly, so one still running after a day is not: its end was never written, as on a full disk.
+BACKUP_STALE_MINUTES=1440
+
+# running_records <find test…>: the records in backups/ that say running, of those the test picks. A record is written
+# at the start and at the end only, so while it says running its mtime is its startedAt. An upload's own state is
+# nested deeper.
+running_records() {
+    find backups -maxdepth 1 -name 'server-*.json' "$@" -exec grep -l '^  "state": "running"' {} + 2>/dev/null || :
+}
+
 # The server backup that runs, by the record it keeps in backups/ until it ends. The boot marks the record of one a stop
-# killed failed, so only a running API has one. An upload's own state is nested deeper.
-running_backup() { grep -l '^  "state": "running"' backups/server-*.json 2>/dev/null | head -n 1 || :; }
+# killed failed, so only a running API has one.
+running_backup() { running_records ! -mmin +"$BACKUP_STALE_MINUTES" | head -n 1; }
 
 wait_backup() { while [ -n "$(running_backup)" ]; do sleep 2; done; }
 
 # The stop of a restore or an update, once the server backup that runs has ended: the stop would kill it, and the
-# night it was would have no backup.
+# night it was would have no backup. A stale record is named and passed.
 stop_after_backup() {
-    if dc ps --status running --services 2>/dev/null | grep -qx eigen-api && [ -n "$(running_backup)" ]; then
-        step "Waiting for the server backup $(basename "$(running_backup)" .json) to end" "The server backup ended" \
-            "Could not wait for the server backup" wait_backup
+    if dc ps --status running --services 2>/dev/null | grep -qx eigen-api; then
+        if [ -n "$(running_backup)" ]; then
+            step "Waiting for the server backup $(basename "$(running_backup)" .json) to end" "The server backup ended" \
+                "Could not wait for the server backup" wait_backup
+        fi
+        for record in $(running_records -mmin +"$BACKUP_STALE_MINUTES"); do
+            say "$YELLOW" '▲' "$record has said running for over a day. It looks stale, so Eigen does not wait for it."
+        done
     fi
     stop
 }
