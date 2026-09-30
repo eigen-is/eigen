@@ -181,8 +181,9 @@ export async function svgToImageDataUri(svg: string): Promise<string> {
 // HTML attribute, so a 500-shape select-all put ~1.1MB on `text/html`. Over either cap the producer
 // SKIPS the flavor — the count is checked before the render so a huge selection never pays for it, the
 // byte budget catches the few-but-enormous case (long freedraw point lists). The failure mode is
-// deliberate and total: every eigen host still pastes losslessly from the typed items, and a foreign
-// host gets the text/plain fallback instead of an image (the same thing it gets for a shape-only copy).
+// deliberate and total: a canvas still pastes losslessly from the elements item, docs and sheets get
+// only the image and text items, and a foreign host gets the text/plain fallback instead of an image
+// (the same thing it gets for a shape-only copy).
 export const CLIPBOARD_SVG_MAX_ELEMENTS = 300;
 export const CLIPBOARD_SVG_MAX_BYTES = 512 * 1024;
 
