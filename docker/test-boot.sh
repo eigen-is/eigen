@@ -4,7 +4,6 @@
 # Bun, answer /eigen/health. The release gate proves the rest on amd64.
 #
 # Usage:  CANDIDATE=candidate-<version or main>-<platform> ./docker/test-boot.sh
-#         CANDIDATE_CREATED waits for the candidates publish.yml stamped with that time (copy_candidate).
 # Needs:  docker, curl, git, and ghcr.io.
 
 set -euo pipefail
@@ -35,13 +34,8 @@ fi
 remove_registry_images
 ok "copied $CANDIDATE into the registry on port $REGISTRY_PORT in $((SECONDS - started))s"
 
-register_install "eigentest-boot-$$" 0:0
-scratch_run mkdir "$INSTALL"
-# A candidate names ghcr.io: this run's registry is a mirror, named before bootstrap as a mirror install does.
-scratch_run sh -c 'umask 077 && echo "EIGEN_REGISTRY=$1" >"$2"' sh "$REGISTRY" "$INSTALL/.env.production"
-assert_isolated
-in_cli_container docker run --rm -v "$INSTALL:/out" "$REGISTRY/api:$TARGET" bootstrap >"$SCRATCH/bootstrap.log" 2>&1
-write_override
+# A candidate names ghcr.io: this run's registry is a mirror.
+release_install "eigentest-boot-$$" "$TARGET" "$REGISTRY" --mirror
 run_setup "$SCRATCH/setup.log" --yes --mail-domain example.org --no-mail --no-relay --no-proxy \
     --contact-email admin@example.org --domain localhost
 if stack_up && [ "$(env_of EIGEN_VERSION)" = "$TARGET" ] && env_of EIGEN_API_IMAGE | grep -q "^$REGISTRY/api@sha256:"; then

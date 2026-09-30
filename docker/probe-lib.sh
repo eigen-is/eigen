@@ -493,12 +493,41 @@ PUBLISHED_REGISTRY=$(sed -n 's/^REGISTRY=\([^$]*\)$/\1/p' "$REPO_ROOT/eigen")
 
 # published_get <image> <path>: $PUBLISHED_REGISTRY's /v2/<repo of that image>/<path>, with an anonymous pull token.
 published_get() {
-    local host=${PUBLISHED_REGISTRY%%/*} repo=${PUBLISHED_REGISTRY#*/}/$1 token
+    local host=${PUBLISHED_REGISTRY%%/*} repo=${PUBLISHED_REGISTRY#*/}/$1 token accept
     token=$(curl -fsS "https://$host/token?scope=repository:$repo:pull" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p') ||
         return 1
-    curl -fsS -H "Authorization: Bearer $token" \
-        -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
-        "https://$host/v2/$repo/$2"
+    # A candidate is a manifest, a release an index.
+    accept='application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'
+    accept="$accept, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json"
+    curl -fsS -H "Authorization: Bearer $token" -H "Accept: $accept" "https://$host/v2/$repo/$2"
+}
+
+# published_releases: the x.y.z tags of its api image. Prereleases, main, latest and publish.yml's candidates are no
+# release an install runs by default. One page of 1000 tags: the Link header of a next page is not followed.
+published_releases() {
+    published_get api 'tags/list?n=1000' | { grep -o '"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*"' || true; } | tr -d '"'
+}
+
+# release_install <folder name> <version> [registry] [--mirror]: $INSTALL, bootstrapped by root from the no-Bun
+# container from api:<version> of that registry, this run's by default, with the harness's ports. The folder name is
+# the Compose project, so it holds no dot. --mirror names the registry in .env.production first, as a mirror install
+# does. A bootstrap that fails shows its output and ends the harness.
+release_install() {
+    local log="$SCRATCH/bootstrap-$1.log"
+    register_install "$1" 0:0
+    scratch_run mkdir "$INSTALL"
+    if [ "${4:-}" = --mirror ]; then
+        scratch_run sh -c 'umask 077 && echo "EIGEN_REGISTRY=$1" >"$2"' sh "$3" "$INSTALL/.env.production"
+    fi
+    assert_isolated
+    if ! in_cli_container docker run --rm -v "$INSTALL:/out" "${3:-$REGISTRY}/api:$2" bootstrap >"$log" 2>&1; then
+        fail "bootstrap of $2 failed"
+        sed 's/^/    /' "$log"
+        header "Result"
+        probe_summary
+    fi
+    write_override
+    BASE="https://localhost:$PORT_HTTPS/eigen"
 }
 
 # registry_init: after scratch_init, a registry:2 of this run on a free port, REGISTRY its eigen-is/eigen, and a trap

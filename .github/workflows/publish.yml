@@ -103,7 +103,8 @@ jobs:
       # No provenance or SBOM: either makes a candidate an index of its own, and promote's index holds the two platform
       # images alone; the launcher pins that index's digest. An image ignores the build args it does not use. A
       # candidate, candidate-<version or main>-<platform>, is no version, latest or main, so the launcher refuses it.
-      # Its created annotation is this run's, which the gates wait for: a candidate of an earlier run is not this one.
+      # Its created annotation is this run's, which the release gate waits for and promote checks: a candidate of
+      # another run is not this one.
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.image.context }}
@@ -153,12 +154,11 @@ jobs:
       - run: bash docker/test-boot.sh
         env:
           CANDIDATE: candidate-${{ needs.meta.outputs.target }}-arm64
-          CANDIDATE_CREATED: ${{ needs.meta.outputs.built-at }}
 
   # Only once every candidate is built, and on a tag both gates passed on them, so a failed build or gate publishes no
   # version. main has no gates. The version, or :main, is the index of an image's two candidates, which keep their
   # annotations; :latest is a byte-for-byte copy of the version, digest and all. :latest last, and never for a
-  # prerelease or main.
+  # prerelease, a backport or main.
   promote:
     needs: [meta, publish, gate, boot-arm64]
     if: >-
@@ -173,6 +173,7 @@ jobs:
     env:
       VERSION: ${{ needs.meta.outputs.version }}
       TARGET: ${{ needs.meta.outputs.target }}
+      BUILT_AT: ${{ needs.meta.outputs.built-at }}
     steps:
       - uses: actions/checkout@v4
 
@@ -184,17 +185,38 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # IMAGES in ./eigen, the images a release pins, here and in the steps below.
+      # IMAGES in ./eigen, the images a release pins, here and in the steps below. The index takes each candidate by
+      # digest once its created annotation shows this run built it: a later run may have rebuilt the tag since.
       - run: |
           IMAGES=$(sed -n "s/^IMAGES='\(.*\)'/\1/p" eigen)
           echo "IMAGES=$IMAGES" >>"$GITHUB_ENV"
           for name in $IMAGES; do
-            docker buildx imagetools create -t "$REGISTRY/$name:$TARGET" \
-              "$REGISTRY/$name:candidate-$TARGET-amd64" "$REGISTRY/$name:candidate-$TARGET-arm64"
+            refs=()
+            for platform in amd64 arm64; do
+              tag=$REGISTRY/$name:candidate-$TARGET-$platform
+              ref=$REGISTRY/$name@$(docker buildx imagetools inspect "$tag" | awk '$1 == "Digest:" { print $2 }')
+              created=$(docker buildx imagetools inspect --raw "$ref" |
+                jq -r '.annotations["org.opencontainers.image.created"]')
+              if [ "$created" != "$BUILT_AT" ]; then
+                echo "::error::$tag was built at '$created', not by this run at $BUILT_AT"
+                exit 1
+              fi
+              refs+=("$ref")
+            done
+            docker buildx imagetools create -t "$REGISTRY/$name:$TARGET" "${refs[@]}"
           done
 
+      # A backport, such as 0.2.1 after 0.3.0, leaves :latest on the newest stable release.
       - if: ${{ github.ref_type == 'tag' && !contains(needs.meta.outputs.version, '-') }}
         run: |
+          set -o pipefail
+          . docker/probe-lib.sh
+          releases=$(published_releases)
+          newest=$(printf '%s\n' "$VERSION" "$releases" | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)
+          if [ "$newest" != "$VERSION" ]; then
+            echo "::notice::$newest is out, so :latest stays on it"
+            exit 0
+          fi
           for name in $IMAGES; do
             docker buildx imagetools create --prefer-index=false \
               -t "$REGISTRY/$name:latest" "$REGISTRY/$name:$VERSION"

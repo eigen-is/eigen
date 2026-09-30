@@ -33,12 +33,6 @@ BREAKING=$VERSION-harness.10
 SETUP_FLAGS=(--yes --mail-domain example.org --no-mail --no-relay --no-proxy --contact-email admin@example.org)
 SHEET_CELL='a cell before the update'
 
-# published_releases: the x.y.z tags of its api image. Prereleases, main, latest and publish.yml's candidates are no
-# release an install runs by default. One page of 1000 tags: the Link header of a next page is not followed.
-published_releases() {
-    published_get api 'tags/list?n=1000' | { grep -o '"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*"' || true; } | tr -d '"'
-}
-
 # older_than <x.y.z>: the versions on stdin below it, oldest first.
 older_than() {
     awk -F. -v want="$1" 'BEGIN { split(want, w, ".") }
@@ -51,12 +45,12 @@ if ! RELEASES=$(published_releases); then
     echo "harness: could not list the releases on $PUBLISHED_REGISTRY" >&2
     exit 1
 fi
+# A release, a prerelease too, is never published twice: its tag moves no install on.
+if [ "${GITHUB_REF_TYPE:-}" = tag ] && published_get api "manifests/$VERSION" >/dev/null 2>&1; then
+    echo "harness: $VERSION is published on $PUBLISHED_REGISTRY already; release a new version" >&2
+    exit 1
+fi
 if printf '%s\n' "$RELEASES" | grep -qxF "$VERSION"; then
-    # A release is never published twice: its tag moves no install on.
-    if [ "${GITHUB_REF_TYPE:-}" = tag ]; then
-        echo "harness: $VERSION is published on $PUBLISHED_REGISTRY already; release a new version" >&2
-        exit 1
-    fi
     PUBLISHED=$VERSION
     RELEASE=${VERSION%.*}.$((${VERSION##*.} + 1))
 else
@@ -105,17 +99,6 @@ The harness's breaking release.
 
 - **Harness storage (breaking)** — stored another way; there is no way back
 "
-
-# release_install <folder name> <version> [registry]: $INSTALL, bootstrapped by root from the no-Bun container, with
-# the harness's ports, from this run's registry by default. The folder name is the Compose project, so it holds no dot.
-release_install() {
-    register_install "$1" 0:0
-    scratch_run mkdir "$INSTALL"
-    assert_isolated
-    in_cli_container docker run --rm -v "$INSTALL:/out" "${3:-$REGISTRY}/api:$2" bootstrap >"$SCRATCH/bootstrap-$1.log" 2>&1
-    write_override
-    BASE="https://localhost:$PORT_HTTPS/eigen"
-}
 
 # tags_are <tag…>: whether the api image has these tags here and no others.
 tags_are() {
