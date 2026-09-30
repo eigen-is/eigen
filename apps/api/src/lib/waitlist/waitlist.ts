@@ -4,7 +4,7 @@ import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
 import { validateEmailAddress, validateUsername } from '@workspace/lib/validation';
 import { and, desc, eq } from 'drizzle-orm';
 import { createAsyncSingleton } from '../../utils/singleton';
-import { getServerDataPath } from '../config/paths';
+import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
 import { getDomain, getOrgName, getPublicConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
@@ -19,7 +19,7 @@ const INVITE_EXPIRY_DAYS = 7;
 // Memoize the init PROMISE (not the resolved db) so concurrent first-callers await the same
 // open() instead of one reading `.db` before open() resolves ("Database not open").
 const getManagedDb = createAsyncSingleton(async () => {
-    const managed = new ManagedDatabase(WAITLIST_DB_CONFIG, getServerDataPath('waitlist.db'));
+    const managed = new ManagedDatabase(WAITLIST_DB_CONFIG, getServerDataPath(SERVER_DATABASES.waitlist));
     await managed.open();
     return managed;
 });

@@ -5,7 +5,7 @@ import pkg from '../../../../../package.json' with { type: 'json' };
 import { JsonStore } from '../core/json-store';
 import { LocalFilesystem } from '../core/local-filesystem';
 import { isProduction } from './env';
-import { getServerDataPath } from './paths';
+import { getServerDataPath, SERVER_FILES } from './paths';
 
 const VERSION: string = pkg.version;
 const COMMIT: string | undefined = process.env['EIGEN_COMMIT'] || undefined;
@@ -24,7 +24,7 @@ export type ServerConfig = {
 };
 
 const serverFs = new LocalFilesystem(getServerDataPath());
-const store = new JsonStore<ServerConfig>(serverFs, 'config.json', {
+const store = new JsonStore<ServerConfig>(serverFs, SERVER_FILES.config, {
     orgName: '',
     orgId: '',
     secret: '',

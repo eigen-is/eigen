@@ -28,9 +28,8 @@ import {
     parseHomeMountSettings,
 } from '@workspace/lib/validation';
 import type { Subprocess } from 'bun';
-import { COLLAB_EPOCH_FILE } from '../lib/collab/epoch';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
-import { SERVER_DIR } from '../lib/config/paths';
+import { SERVER_DIR, SERVER_RUNTIME_FILES } from '../lib/config/paths';
 import { PATHS } from '../lib/core/constants';
 import { isEnoent } from '../lib/core/local-filesystem';
 import { readEnvFile } from './env-file';
@@ -511,7 +510,7 @@ export async function restore(
     ownAs(staged, installOwner('.'));
     chmodSync(staged, 0o600);
     // Without it the next start draws a new collab epoch: a tab that loaded a document before reloads, not merges back.
-    rmSync(join(STAGING, DATA, SERVER_DIR, COLLAB_EPOCH_FILE), { force: true });
+    rmSync(join(STAGING, DATA, SERVER_DIR, SERVER_RUNTIME_FILES.epoch), { force: true });
     // A staged upload the live data/ no longer holds was acked, superseded or canceled: replaying it puts older
     // bytes on the key. No live staging/ (Mount.init makes it): the mount never ran here, so the copy is the only one.
     let notReplayed = 0;
