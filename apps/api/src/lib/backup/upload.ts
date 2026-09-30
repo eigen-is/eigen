@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { isS3ConfigValid, type S3Config } from '@workspace/lib/types/mount';
+import { isS3ConfigValid, keepsSavedSecret, type S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult, ServerSettings } from '@workspace/lib/types/settings';
 import { getDomain } from '../config/server-config';
 import { getS3Config, getServerSettings } from '../config/server-settings';
@@ -69,16 +69,15 @@ export async function checkBackupDestination(config: S3Config): Promise<S3CheckR
     return aborts ? result : { ...result, warning: NO_ABORT_RULE };
 }
 
-// A destination as the owner sends it, over the saved one. A field left out keeps its saved value. The secret
-// is never sent back, so a blank one keeps the saved one, but only for the same key, endpoint and bucket: sent
-// anywhere else, it would reach whoever runs that endpoint.
+// A destination as the owner sends it, over the saved one. A field left out keeps its saved value, a blank secret
+// the saved one where keepsSavedSecret allows it.
 export function withSavedSecret(s3: Partial<S3Config>): S3Config {
     const saved = getServerSettings().backups.upload.s3;
     const next = { ...saved, ...s3 };
     if (s3.secretAccessKey) return next;
-    const same =
-        next.accessKeyId === saved.accessKeyId && next.endpoint === saved.endpoint && next.bucket === saved.bucket;
-    if (!same) throw new ApiError(400, 'Enter the secret key that goes with this bucket and access key');
+    if (!keepsSavedSecret(next, saved)) {
+        throw new ApiError(400, 'Enter the secret key that goes with this bucket and access key');
+    }
     return { ...next, secretAccessKey: saved.secretAccessKey };
 }
 

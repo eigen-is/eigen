@@ -92,6 +92,7 @@ export const settingsApi = api.settings;
 export const setupApi = api.setup;
 export const waitlistApi = api.waitlist;
 export const backupApi = api.admin.backup;
+export const serverBackupApi = api.admin['server-backup'];
 
 // An env file from before an app existed lacks its key: unset is a same-origin relative link, what production serves.
 export const SPACE_APP_URL = import.meta.env.VITE_APP_SPACE_URL ?? '';

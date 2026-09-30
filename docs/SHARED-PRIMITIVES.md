@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1586 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1595 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -213,7 +213,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyGestureContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (289)
+## Hooks (295)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -224,12 +224,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useAdminUsersUsage` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-user-list.ts |
 | `useBackupArtifacts` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useBackupJobs` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
+| `useCheckBackupDestination` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-server-backup.ts |
 | `useCheckSetupS3` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
 | `useCompleteSetup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
 | `useCreateTeam` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useCreateUser` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useDeleteBackupArtifact` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useDeleteSafetyCopy` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
+| `useDeleteServerArchive` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-server-backup.ts |
 | `useDeleteUser` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useDeleteWaitlistEntry` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
 | `useHardenSetupS3` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
@@ -243,12 +245,16 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useResetUserPassword` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useRestoreBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useRestoreSafetyCopy` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
+| `useServerArchives` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-server-backup.ts |
+| `useServerBackupJobs` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-server-backup.ts |
 | `useSetupStatus` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
 | `useStartBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
+| `useStartServerBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-server-backup.ts |
 | `useTeams` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useUpdateMemberRole` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useUpdateTeam` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useUploadBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
+| `useUploadServerArchive` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-server-backup.ts |
 | `useVerifyBackup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-backup.ts |
 | `useWaitlistEntries` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
 | `useAppPasswords` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-app-passwords.ts |
@@ -882,10 +888,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (740)
+## Utilities & constants (743)
 
 | Name | Import from | File |
 |------|-------------|------|
+| `canUploadServerArchive` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-server-backup.ts |
 | `handleAdminSSEvent` | `@workspace/lib/admin` | packages/lib/src/core/admin/sse-handlers.ts |
 | `ADMIN_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `api` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -966,6 +973,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `publicApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `searchApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `SERVER_HOSTNAME` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `serverBackupApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `settingsApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `setupApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `SHEETS_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -1307,6 +1315,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isOpenable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isS3ConfigValid` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `isVCardFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `keepsSavedSecret` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `mailAttachmentName` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `mapStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `mountStorageIdentity` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |

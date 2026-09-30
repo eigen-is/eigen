@@ -21,19 +21,30 @@ type S3ConfigCardProps = {
     value: S3Config;
     onChange: (config: S3Config) => void;
     onCheck: (config: S3Config) => Promise<S3CheckResult>;
-    onHarden: (config: S3Config, noncurrentDays: number) => Promise<S3HardenResult>;
+    // Without it the card has no Bucket safety panel: the backup bucket holds archives, not versioned files.
+    onHarden?: (config: S3Config, noncurrentDays: number) => Promise<S3HardenResult>;
     isEdit?: boolean;
     onCheckResult?: (result: S3CheckResult | null) => void;
+    // The server keeps a secret for this key, endpoint and bucket, so a blank field keeps it.
+    secretSaved?: boolean;
 };
 
-export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onCheckResult }: S3ConfigCardProps) {
+export function S3ConfigCard({
+    value,
+    onChange,
+    onCheck,
+    onHarden,
+    isEdit,
+    onCheckResult,
+    secretSaved,
+}: S3ConfigCardProps) {
     const [result, setResult] = useState<S3CheckResult | null>(null);
     const [harden, setHarden] = useState<S3HardenResult | null>(null);
     const [checking, setChecking] = useState(false);
     const [confirming, setConfirming] = useState(false);
     const [days, setDays] = useState(S3_NONCURRENT_DAYS_DEFAULT);
 
-    const valid = isS3ConfigValid(value);
+    const valid = isS3ConfigValid(value, secretSaved);
 
     const updateField = (field: keyof S3Config, fieldValue: string) => {
         onChange({ ...value, [field]: fieldValue });
@@ -63,6 +74,7 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
     };
 
     const handleHarden = async () => {
+        if (!onHarden) return;
         // A refused request comes back as an ok:false result, so there is nothing to catch here.
         setHarden(await onHarden(value, days));
     };
@@ -137,7 +149,7 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
                         type="password"
                         value={value.secretAccessKey}
                         onChange={(e) => updateField('secretAccessKey', e.target.value)}
-                        placeholder="Enter the secret access key"
+                        placeholder={secretSaved ? 'Saved. Leave empty to keep it' : 'Enter the secret access key'}
                     />
                 </div>
             </div>
@@ -161,7 +173,14 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
                 )}
             </div>
 
-            {result?.ok && (
+            {result?.warning && (
+                <p className="text-sm text-warning flex items-center gap-1">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    {result.warning}
+                </p>
+            )}
+
+            {result?.ok && onHarden && (
                 <BucketSafetyPanel
                     config={value}
                     versioning={versioning}
