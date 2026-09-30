@@ -2,13 +2,13 @@
 
 The work list for the weeks before the open-source repository is announced. One question orders it: what does a stranger with a VPS or a NAS hit, in the order they hit it? Install, then update, then "is my data safe", then "do I have to run a mail server". Designs live in the linked proposals; this file is the order, the scope cut, and the checkboxes. Delete a line once it is done, and a block once its "done when" holds and it is recorded in its own doc.
 
-Done and recorded elsewhere: install, update and rollback without host Bun, prebuilt images with the bundle inside, the first tagged release through `publish.yml` (v0.3.0), eigen.is and demo.eigen.is as release installs on the `main` channel, mail-off setup with a relay in both modes, mail off as a first-class setup path, and release hygiene (upgrade notes, secret scan, `SECURITY.md`, issue templates, `CONTRIBUTING.md`).
+Done and recorded elsewhere: install, update and rollback without host Bun, prebuilt images with the bundle inside, the first tagged release through `publish.yml` (v0.3.0), eigen.is and demo.eigen.is as release installs on the `main` channel, mail off as a first-class setup path with a relay in both modes, release hygiene (upgrade notes, secret scan, `SECURITY.md`, issue templates, `CONTRIBUTING.md`), and the self-hosting docs ([SELF-HOSTING.md](SELF-HOSTING.md) and the help center's Self-hosting section, Traefik recipe and known gaps included).
 
 ## Ready to announce when
 
 - CI proves the upgrade from the previous published release, on every release.
 - The whole server backs itself up on a schedule, off the box if the admin wants, and a restore onto a fresh machine has been done for real once.
-- The README, the setup guide, and an operating guide tell the truth about requirements, updates, breaking releases, and what pre-1.0 means for someone's data.
+- The README, [SELF-HOSTING.md](SELF-HOSTING.md) and the help center's Self-hosting section tell the truth about requirements, updates, breaking releases, and what pre-1.0 means for someone's data.
 
 ## 1. The release gate
 
@@ -34,12 +34,7 @@ Not in this block: phase ④ migration between servers, chunked artifact upload,
 
 ## 3. The documentation a stranger needs
 
-Size S–M, mostly writing. Public text goes out in Reinder's voice.
-
-- [ ] An operating guide: updating, breaking releases and the pre-1.0 data policy in plain words, backup and restore, moving to another machine, logs, where things live on disk, resetting an admin password. Decide where it lives (repository guide or help center; the ROADMAP help-center row has left this open)
-- [ ] Requirements stated once: measured runtime memory, disk, amd64 and arm64, Compose minimum, ports per profile
-- [ ] A Traefik recipe beside the generated nginx, Apache and Caddy snippets and the tunnel section
-- [ ] A short "what Eigen is not yet" section, so the first issue reports are not about things already known
+- [ ] Measured runtime memory in the requirements (README, [SELF-HOSTING.md](SELF-HOSTING.md) and the help center's requirements article say 2 GB, which is not a measurement)
 
 ## Not now, and what would change that
 

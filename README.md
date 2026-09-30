@@ -44,7 +44,7 @@ the aim is to make Eigen reliable enough for mid-to-large organizations as well.
 
 Eigen is **pre-1.0 and actively developed**. The core works, but be deliberate about what you put on it:
 
-- **Breaking changes** are likely between minor versions until 1.0; expect occasional manual migration.
+- **Breaking changes** are likely between minor versions until 1.0. A release that changes how data is stored converts it once or drops it, and only stickies stay backward compatible. `./eigen update` shows such a release's notes, asks, and saves a full snapshot first, so `./eigen rollback` can go back.
 - **You own your data, including the backups.** Use `./eigen backup` (or your own routine) and verify it restores. Eigen does not back up your data for you.
 - **You own your server's security.** Keep the host patched, lock down SSH, use strong passwords, and watch your logs. A self-hosted server is your responsibility end-to-end.
 - **No warranty**: see [LICENSE.txt](LICENSE.txt). Eigen is built by a single developer in their spare time. It's provided as-is, in good faith, with no SLA.
@@ -102,9 +102,14 @@ Eigen doesn't lock you into its web interface. Standard protocols let you use yo
 
 ### Install on a server
 
-Read the [Setup Guide](docker/SETUP-GUIDE.md).
+You need:
 
-The short version: you need a Linux server with Docker, and a domain that points at it. Then:
+- A Linux server, amd64 or arm64, with 2 GB of RAM or more
+- Docker, with the Docker Compose plugin 2.20 or newer. No Bun, no Node
+- A domain that points at the server
+- A mail relay when you keep your existing mail. When Eigen hosts your mail, only when your provider blocks outgoing port 25
+
+Then:
 
 ```bash
 mkdir -p /opt/eigen && cd /opt/eigen
@@ -114,6 +119,8 @@ curl -fsSL https://eigen.is/install | sh
 The script downloads the `eigen` command and runs `./eigen setup`. Setup asks for your web address and mail domain, whether Eigen or your own web server handles HTTPS, whether to host email on this server or keep the mail you have, and which mail relay sends Eigen's own mail (needed when you keep your mail). Then it starts Eigen and prints a link that finishes the setup in your browser.
 
 Everything runs in Docker: Caddy for HTTPS, the Eigen API, and Postfix, Dovecot and Unbound when Eigen hosts your mail. The same `eigen` command updates, backs up and restores: `./eigen help`.
+
+The step-by-step guide, from DNS records to backups and updates, is the [Self-hosting](https://eigen.is/support/self-hosting/get-started) section of the help center. The technical reference (Compose profiles, `.env.production`, proxy snippets, firewall) is [docs/SELF-HOSTING.md](docs/SELF-HOSTING.md).
 
 Developing Eigen? See [CONTRIBUTING.md § Eigen in Docker](docs/CONTRIBUTING.md#eigen-in-docker).
 
@@ -191,7 +198,7 @@ Architecture docs live in `docs/`:
 | Area | Docs |
 |------|------|
 | Architecture | [Storage](docs/STORAGE.md), [Database](docs/DATABASE.md), [SSE](docs/SSE.md), [ACL](docs/ACL.md), [Search](docs/SEARCH.md), [Scalability](docs/SCALABILITY.md) |
-| Deployment | [Docker Setup](docker/SETUP-GUIDE.md), [S3 Sync](docs/SYNC.md), [Demo Mode](docs/DEMO_MODE.md), [Testing](docs/TESTING.md) |
+| Deployment | [Self-hosting](docs/SELF-HOSTING.md), [Backup](docs/BACKUP.md), [S3 Sync](docs/SYNC.md), [Demo Mode](docs/DEMO_MODE.md), [Testing](docs/TESTING.md) |
 | Frontend | [Layout](docs/LAYOUT.md), [Clipboard](docs/CLIPBOARD.md), [Previews](docs/PREVIEWS.md) |
 | Features | [Mail](docs/MAIL.md), [Calendar](docs/CALENDAR.md), [Contacts](docs/CONTACTS.md), [Chat](docs/CHAT.md), [Notifications](docs/NOTIFICATION-CENTER.md), [IMAP](docs/IMAP.md), [WebDAV](docs/WEBDAV.md) |
 | Apps | [Sheets](docs/SHEETS.md), [Slides](docs/SLIDES.md), [Canvas engine (Vector + Slides)](docs/CANVAS.md), [Stickies](docs/STICKIES.md), [Comments](docs/COMMENTS.md) |

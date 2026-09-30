@@ -131,7 +131,7 @@ Onboarding and guest settings are separate admin pages over the same `PUT /setti
 
 ## Mail environment
 
-Whether this deployment hosts mailboxes at all, and how the API hands mail to an MTA, are deployment identity rather than runtime settings, so they live in the environment: `isMailEnabled()` (`apps/api/src/lib/config/env.ts`) and `createTransport()` (`apps/api/src/lib/core/mailer.ts`). The operator sets one relay, `SMTP_RELAY_*`, read in both modes: with hosted mail the API hands everything to the bundled Postfix (`SMTP_HOST`, set by Compose) and Postfix relays through `SMTP_RELAY_*`; without it the API sends through `SMTP_RELAY_*` itself. With no server to hand mail to, the transport is local `/usr/sbin/sendmail`.
+Whether this deployment hosts mailboxes at all, and how the API hands mail to an MTA, are deployment identity rather than runtime settings, so they live in the environment: `isMailEnabled()` (`apps/api/src/lib/config/env.ts`) and `createTransport()` (`apps/api/src/lib/core/mailer.ts`). The operator sets one relay, `SMTP_RELAY_*`, read in both modes: with hosted mail the API hands everything to the bundled Postfix (`SMTP_HOST`, set by Compose) and Postfix relays through `SMTP_RELAY_*`; without it the API sends through `SMTP_RELAY_*` itself. With no server to hand mail to, `createTransport()` throws, and outside production `sendMail()` logs the message instead of sending it.
 
 | Variable              | Default              | Meaning                                                                    |
 |-----------------------|----------------------|----------------------------------------------------------------------------|
