@@ -82,7 +82,7 @@ see § Frozen-format: the sweep's resumable cursor wants one additive `metadata.
 - **WAL-frame shipping (Litestream model).** The strategic replacement for whole-file re-PUT;
   orthogonal and out of scope ([SYNC.md](../SYNC.md) § Residual limitations).
 - **Create/open resilience under degraded storage.** Atomic `Drive.create` and the client-side
-  create reconcile are described in [STORAGE.md](../STORAGE.md#creating-a-container). They keep new
+  create reconcile are described in [STORAGE.md](../STORAGE.md#creating-a-container-is-all-or-nothing). They keep new
   litter out; the scan of record for the containers already on disk is this proposal's sweep check 2.
 - **Regenerable artifacts** (FTS indexes, thumbnails, previews). Corruption there is rebuilt, not
   alerted.

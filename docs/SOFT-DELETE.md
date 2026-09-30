@@ -1,132 +1,59 @@
-# Soft Delete / Trash
+# Soft Delete and Trash
 
-> **TLDR**: Delete moves items to trash instead of erasing them. `trashedAt` + `trashedFrom` on `paths` track
-> the state; the item is re-parented to the mount root and `trashedFrom` holds the original parent.
-> Path-based (`local`) storage also moves the bytes into `data/.trash/`; key-based and S3 do not move anything.
-> Trash counts toward quota and auto-purges after `trashRetentionDays` (default 30).
+> **TLDR:** A delete moves a Drive item to trash instead of erasing it. Two columns on `paths` hold the state, and the item is re-parented to the mount root. The code is `apps/api/src/lib/mount/trash.ts` (rows and bytes) and `apps/api/src/lib/drive/trash.ts` (collab close, sharing, SSE, history). Four things are not obvious. Only `local` storage moves bytes, into `data/.trash/`. Trash revokes every share, and restore brings them back without a new email. Trash is the drive owner's alone. Expired trash is purged only when a Home loads, and trashed bytes count toward the quota until then.
 
-## Schema
+## Two columns mark trash, and the item moves to the root
 
-Two nullable columns on the `paths` table (`apps/api/src/lib/mount/schema.ts`): `trashedAt` (timestamp, NULL =
-not trashed) and `trashedFrom` (the original `parentId`, kept so restore knows where to put the item back).
+`trashedAt` is the time an item went to trash, `NULL` while it is live. `trashedFrom` holds its original parent, so restore knows where to put it back. `trashedFrom` also marks the trash root: set means the user trashed this item directly, and it is what the trash view lists. The descendants of a trashed folder get `trashedAt` but keep `trashedFrom` empty, since they are trashed through their parent. `DrivePath` carries `trashedAt`. `trashedFrom` stays on the server.
 
-`trashedFrom` doubles as the **trash-root marker**: `trashedFrom IS NOT NULL` means the user trashed this item
-directly, so it is what the trash view lists. Descendants of a trashed folder get `trashedAt` but keep
-`trashedFrom = NULL` — they are implicitly trashed through their parent. `trashedAt` is exposed on `DrivePath`
-(`packages/lib/src/types/drive.ts`); `trashedFrom` is server-side only.
+The item is re-parented to the mount root, so its row no longer names the folder it left. That is why `DRIVE_PATH_TRASHED` carries `oldParentId`: the client needs it to drop the right folder from its cache.
 
-Both columns, plus `idx_paths_trashed_from` and the compound `idx_paths_parent_trash` (which covers the common
-`WHERE parentId = ? AND trashedAt IS NULL` pattern), are part of the **v1 baseline schema** in
-`apps/api/src/lib/mount/db-config.ts` — there is no separate trash migration. Migration v2 in that file is the
-`paths_fts` name index.
+## Trashed rows drop out of lookups, not out of `getPath`
 
-## Layers
+Listings, name lookups, shared views and mime queries add `trashedAt IS NULL`, and the unique name index covers untrashed rows only. So a trashed item disappears everywhere and its name is free again. Content access (download, embed, copy, watch, a collab socket) goes through `Mount.getActivePath`, which answers 404 "File is in trash".
 
-```
-Route (thin)  →  SharedDrive (ACL + ownership)  →  Drive (collab + ACL propagation + SSE + history)  →  Mount (DB + storage)
-```
+`getPath` still returns a trashed row, because restore and breadcrumbs need it. `getTotalSize` counts it, so trash counts toward the quota. The recursive walks (collab close, sharing, descendant collection) use `listFolderAll`, which includes trashed children.
 
-The trash logic itself lives in two sibling modules, not in the big classes: `apps/api/src/lib/mount/trash.ts`
-(DB + storage bodies) and `apps/api/src/lib/drive/trash.ts` (collab close, ACL propagation, SSE, history).
-`Mount` and `Drive` keep thin facades that do the liveness and permission checks and delegate.
+## Only `local` moves bytes into `.trash/`
 
-### Mount
+`local-key` and `s3` address bytes by id, so a trash only changes columns ([STORAGE.md](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)). On `local` a key is the name path, so a trashed file and a new file of the same name would share one path on disk. A `local` mount therefore keeps a flat `data/.trash/` keyed by id, after the idea of the [freedesktop.org Trash spec](https://specifications.freedesktop.org/trash-spec/latest/):
 
-- `trashPath(pathId)` — flush and close cached DBs under the item, then under `withPathLock`: move the bytes to
-  `.trash/` (path-based only), set `trashedAt` + `trashedFrom`, re-parent to root, and recursively set
-  `trashedAt` on descendants not already trashed. The DB write is a direct `db.update(paths)`, not
-  `updatePath()`, so it skips the name-uniqueness check and does not repeat the storage move.
-- `restorePath(pathId)` — back to the original parent if it still exists and is not trashed, else to the mount
-  root; name conflicts auto-rename via `getUniqueFileName()`. Descendants with `trashedFrom IS NOT NULL` are
-  skipped — they were trashed independently and stay in trash.
-- `listTrash()` — rows with `trashedFrom IS NOT NULL`, newest first.
-- `permanentlyDeleteFromTrash(pathId)` — hard delete; 400 if the item is not in trash. For folders it first
-  deletes independently-trashed children re-parented to root (`trashedFrom IN (folderId, ...descendantIds)`).
-- `purgeTrash(maxAgeDays?)` — with an age, deletes items older than it; without, empties the trash.
+- A file is renamed to `.trash/{pathId}.{ext}`, and its `file` column follows.
+- A folder is renamed to `.trash/{pathId}`. Its descendants keep their `file` values and resolve through the renamed folder.
+- Restore renames it back and sets `file` to the restored name.
 
-**Query filtering.** `listFolder`, `getChildByName`, `assertUniqueName`, `getPathsByMimeType` and
-`getPathsWithACL` all add `trashedAt IS NULL`, so trashed items disappear from listings, name lookups and
-shared views, and their names become reusable. `getPath`, `getTotalSize` and `getFileCount` deliberately
-include trashed rows — restore and breadcrumbs need the row, and trashed bytes still count toward quota.
+Any case or compatibility variant of `.trash` is a reserved name on every mount, so no user item can alias the directory. Both renames take the tree lock exclusively ([STORAGE.md](STORAGE.md#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree)).
 
-Two helpers make that safe by default. `listFolderAll(parentId)` returns children **including** trashed ones —
-what the recursive walks (collab close, ACL propagation, descendant collection) need. `getActivePath(pathId)`
-wraps `getPath()` and throws 404 "File is in trash" when `trashedAt` is set; regular file access goes through
-it, and only restore, permanent delete and `listTrash` still use raw `getPath()`.
+## Trash closes what is open under the item first
 
-### Drive
+Before any column changes, `Drive.deletePath` closes every collab document under the item and `Mount.trashPath` flushes and closes every cached database. A still-open database would otherwise keep syncing its `data.db` to the old key: a folder rebuilt outside `.trash/` on `local`, a revived object on `s3`. A collab socket that opens between the collab close and the trash write still gets the document, because `getActivePath` passes until `trashedAt` is set.
 
-| Method | Behavior |
-|--------|----------|
-| `deletePath(mountId, pathId, user?)` | Close collab docs → propagate ACL removal → `mount.trashPath()` → emit `DRIVE_PATH_TRASHED` → record `trashed` history + fan out to watchers |
-| `restorePath(mountId, pathId, user?)` | `mount.restorePath()` → re-propagate ACL for the item + descendants → emit `DRIVE_PATH_RESTORED` → record `restored` |
-| `listTrash(mountId)` | Delegates to `mount.listTrash()` |
-| `permanentlyDelete(mountId, pathId, user?)` | Collect watchers + `trashedFrom` first, then `mount.permanentlyDeleteFromTrash()` → emit `DRIVE_FILE_DELETED` / `DRIVE_FOLDER_DELETED` → notify watchers |
-| `emptyTrash(mountId, user?)` | Lists trash and loops `permanentlyDelete` per item, so every item gets the same ACL, SSE and history handling |
+## Trash revokes every share, and restore re-shares without an email
 
-For folders, collab close and ACL propagation run **before** `trashedAt` is set, because they walk descendants
-via `listFolderAll()`.
+The `acl` column survives trashing. Trash calls `propagateSharedPathChange(path, acl, null)` for the item and every descendant with an ACL: collaborators lose access at once and their `shared.db` rows go, but the owner's `acl` stays. Restore calls it with `(acl, acl)`. The added set is then empty, so collaborators get their access back without a second invite email. Permanent delete skips the call, since trash already revoked everything.
 
-**ACL preservation.** The `acl` column survives trashing. Trash calls
-`propagateSharedPathChange(path, path.acl, null)` — shared access is revoked and `sharedPaths` rows dropped,
-but the owner's `acl` stays. Restore calls it with `(path.acl, path.acl)`: an empty added-diff, so
-collaborators are re-shared without a fresh email. Permanent delete skips it — already revoked at trash time.
+## Restore goes back to the original folder when it still can
 
-### SharedDrive
+The item returns to `trashedFrom` if that folder exists and is not trashed itself, else to the mount root. A name conflict there, or a reserved name, gets a ` (n)` suffix. The name is checked again under the lock, because on `local` a storage rename would replace a file a create put there in the meantime. A descendant with its own `trashedFrom` stays in trash, since the user trashed it separately.
 
-`deletePath` needs `withWritePermission()` on the path. `restorePath`, `permanentlyDelete`, `emptyTrash` and
-`listTrash` are all **drive-owner only** (`isEffectiveOwnerSync`, true for the owner or a member of the owning
-team) — `listTrash` carries its own explicit check so a non-owner cannot enumerate what the owner deleted.
+## Permanent delete takes the separately trashed descendants with it
 
-### Routes
+A folder's permanent delete first removes every trash root whose `trashedFrom` lies inside the folder. Those items hang under the mount root, and once the folder is gone they could never be restored to it. The delete itself is `Mount.deletePath`: rows first, then storage ([STORAGE.md](STORAGE.md)).
 
-All in `apps/api/src/routes/drive.ts`. Deleting is one route for both files and folders —
-`DELETE /drive/:ownerId/:mountId/path/:pathId` (the old separate `file/` and `folder/` DELETE pair is gone).
-Trash itself is `GET /trash`, `POST /trash/:pathId/restore`, `DELETE /trash/:pathId` (permanent) and
-`DELETE /trash` (empty), all under the same `/drive/:ownerId/:mountId` prefix.
+## Only the drive owner sees and manages trash
 
-## SSE and hooks
+`SharedDrive` lets the effective owner alone (`isEffectiveOwnerSync`: the owner, or a member of the owning team) list, restore, permanently delete and empty. `listTrash` has its own check, so a collaborator cannot enumerate what the owner deleted. Trashing needs write access. A path shared directly with the caller is left instead of trashed ([ACL.md](ACL.md)).
 
-Events: `DRIVE_PATH_TRASHED` (carries `oldParentId` from `trashedFrom`, so the frontend knows which folder
-cache to drop), `DRIVE_PATH_RESTORED`, and `DRIVE_FILE_DELETED` / `DRIVE_FOLDER_DELETED` for permanent deletes.
-The handlers in `packages/lib/src/core/drive/sse-handlers.ts` invalidate the affected folder plus the trash
-list. Hooks (`packages/lib/src/core/drive/hooks/trash.ts`) are `useListTrash`, `useRestorePath`,
-`usePermanentlyDelete` and `useEmptyTrash`, all keyed under `driveKeys.trashList` and invalidating it on
-success through the same `invalidateTrash()` the SSE handlers use.
+`Drive.emptyTrash` loops `permanentlyDelete` per item, so every item gets the same sharing, SSE and history handling. Trashing the mount root is a 400.
 
-## Path-Based (`local`) Storage
+## Expired trash is purged only when a Home loads
 
-The only backend needing filesystem work: `local-key` and `s3` address files by UUID keys that never collide,
-so for them only DB columns change. `local` uses hierarchical paths (`data/projects/report.pdf`), so a trashed
-file and a new file of the same name would resolve to the same disk path. Each such mount gets a
-`data/.trash/` directory at `mount.init()`, following the
-[freedesktop.org Trash spec](https://specifications.freedesktop.org/trash-spec/latest/) idea of a flat
-directory keyed by unique ID:
+`Mount.init` purges trash roots older than `quotas.trashRetentionDays` (30 by default, `apps/api/src/lib/config/server-settings.ts`, 0 turns it off). A mount that never loads keeps its trash past the window. The purge calls `Mount.permanentlyDeleteFromTrash` directly, so it sends no SSE and notifies no watcher.
 
-- **File**: rename to `.trash/{pathId}.{ext}` and set `file` to that key.
-- **Folder**: rename to `.trash/{pathId}/` and set the folder's `file`. Descendants keep their `file` values —
-  `resolveStoragePath()` resolves through the renamed parent.
-- **Restore**: rename back to the target location and set `file = name`.
+History and watcher notifications for trash, restore and permanent delete are in [FILE-HISTORY.md](FILE-HISTORY.md#chain-rewriting-mutations-record-their-own-events).
 
-## Auto-Purge
+## See also
 
-`ServerSettings.quotas.trashRetentionDays` (default 30, `apps/api/src/lib/config/server-settings.ts`). Purge
-runs from `mount.init()` only — expired items are cleaned when a Home comes up, through
-`permanentlyDeleteFromTrash()` like any other permanent delete.
-
-## Frontend
-
-The trash view is `apps/drive/src/routes/_auth.trash.tsx`. It reuses the shared `DriveList` +
-`DriveViewControls`, so trash behaves like any other folder, swapping the date column for "Trashed" and
-supplying its own context-menu items (Restore, Delete permanently, both multi-select) plus an "Empty trash"
-toolbar button. The sidebar "Trash" item and count badge live in
-`packages/ui/src/components/layout/sidebar/app-sidebar.tsx`, fed by `useListTrash`.
-
-## Limits
-
-- **Shared access is fully revoked on trash.** Collaborators lose access at once; restore re-shares them.
-- **Labels are preserved** on trashed rows; label views filter with `trashedAt IS NULL`.
-- **Concurrent editing during trash**: a brief window between reading the collab list and closing connections
-  where a new WebSocket can connect — the same race the old hard-delete flow had.
-- Trashing the mount root throws 400, and a collab doc in trash opened over WebSocket is blocked by
-  `getActivePath()`.
+- [STORAGE.md](STORAGE.md): mounts, backends and locks
+- [ACL.md](ACL.md): propagation and leaving a share
+- [QUOTA.md](QUOTA.md): the size a mount counts

@@ -1,165 +1,66 @@
-# File History
+# File History and Watch
 
-> **TLDR**: Every Drive path grows a typed event log. Two tables per mount `metadata.db`:
-> `file_events` (the timeline) and `path_watchers` (subscriptions). Anyone with read access can
-> **Watch** a file or folder; folder watches cascade to descendants and notify through the existing
-> notification center, re-checked against ACL at delivery time. Surfaces: *Recent activity* in the
-> Drive details panel, the *Activity* panel in every eigendoc editor, and a *Watched* view — all
-> refreshed live by one SSE event.
+> **TLDR:** Every Drive path has a typed event log, and anyone who can read a path can watch it. Both live in the mount's `metadata.db` (`file_events`, `path_watchers`), owned by `FileHistory` (`apps/api/src/lib/drive/history.ts`). Four things are not obvious. An event with no actor is never recorded, and container internals never enter the timeline. A folder watch covers every descendant, including later ones, and read access is checked again at delivery. Mutations that rewrite the parent chain capture it before they run. Retention is a count per file, never an age.
 
-## Data model
+## History lives in the mount's `metadata.db`
 
-Tables live in the mount's `metadata.db` — drizzle definitions in `apps/api/src/lib/mount/schema.ts`,
-created by migration v5 in `apps/api/src/lib/mount/db-config.ts`:
+`file_events` holds the timeline and `path_watchers` the subscriptions (`apps/api/src/lib/mount/schema.ts`). History is per mount, not per home or per server. The FK cascade cleans a path's events when the path is permanently deleted. The write lands in the same database as the `paths` row it describes, so it never crosses homes, which are the sharding unit ([SCALABILITY.md](SCALABILITY.md)). And it needs no extra database file.
 
-- `file_events` — `id`, `pathId` (FK → `paths.id`, `ON DELETE CASCADE`), `eventType`, `actorUserId`,
-  `actorEmail`, `details` (JSON), `createdAt`; index on `(pathId, createdAt)`.
-- `path_watchers` — `(pathId, userId)` primary key, `createdAt`, index on `userId`.
+A row stores both `actorUserId` and `actorEmail`, so it renders without an auth-db join. The event types and their detail payloads are `FileEventDetailsMap` in `packages/lib/src/types/file-history.ts`. A stored type outside today's union reads back as `'edited'`.
 
-Shared types: `packages/lib/src/types/file-history.ts`. `FileEventDetailsMap` maps each event type
-to its payload; `FileEventType` is that map's keys plus the detail-less `created`, `edited`,
-`trashed`, `restored`, `deleted`. Today's vocabulary is the drive verbs (`uploaded`, `renamed`,
-`moved`, `copied`, `acl-changed`, `version-restored`, …), the comment verbs (`commented`,
-`assigned`, `resolved`, `reopened`) and the card verbs (`sticky-added`, `sticky-moved`,
-`sticky-removed`). `FileEventInput` (write) demands `details` exactly when the type has them;
-`FileEvent` (read) adds `pathName` + `pathType`, resolved at read time so a folder timeline can name
-and link the descendant an event happened on. `toFileEventType` coerces any persisted string outside
-the union to `'edited'`, so rows from other builds stay renderable and the phrasing helpers total.
+## No actor means no row
 
-Rows carry both `actorUserId` and `actorEmail` — denormalized so a row renders without an auth-db
-join. Drive mutations take an optional `user`; **no actor means no row**, which keeps internal
-scaffolding (chat seed files, `media/` folders) out of the user-visible timeline. History is
-per-mount, not per-home or server-wide: the FK cascade cleans it up when a path is permanently
-deleted, the write stays in the same database as the `paths` row it describes (homes are the
-sharding unit — [SCALABILITY.md](SCALABILITY.md)), and it needs no new database file.
+Drive mutations take an optional `user`. Without one, nothing is recorded, so internal scaffolding (a chat's seed files, `media/` folders) stays out of the timeline users see.
 
-`FileHistory` (`apps/api/src/lib/drive/history.ts`) is constructed by `Mount` next to `paths` and
-owns record / list / watchers / fan-out / prune. Two structural rules live there. **Container
-internals never enter the timeline**: `isContainerInternal` walks the parent chain and drops events
-for anything below an eigendoc or chat container (per-card comment threads, attachment media,
-`data.db`) — the container speaks through its own events. And **`list` is a subtree read**: direct
-events for a file, the whole subtree via a recursive CTE for a folder or container, newest first.
+`FileHistory` also drops every event below an eigendoc or chat container: per-card comment threads, attachment media, `data.db`. The container speaks through its own events. `list` reads a subtree: a file's own events, or a folder's or container's whole subtree through a recursive CTE, newest first.
 
-## Recording events
+## `recordFileEvent` records every event on a live path
 
-`Drive.recordFileEvent` (`apps/api/src/lib/drive/drive.ts`) is the single seam for mutations on a
-live path: record → fan out → broadcast the live-refresh event; missing and trashed paths are
-skipped. Callers: `createFolder`, `create`, `writeFileContent`, `renamePath`, `updateACL` (email
-diff, actor-gated), version restore, trash restore, the comment assign/resolve/reopen methods,
-`chat.ts` (`'commented'`, passing everyone the mention/activity notifications already covered as
-`excludeEmails`), `collabDocument.ts` (`'edited'`), and the client-POST route.
+`Drive.recordFileEvent` records the row, fans out to watchers and broadcasts the live refresh. It skips a missing or trashed path. Creates, content writes, renames, sharing changes, version and trash restores, comment status changes, chat messages and collab edits all go through it.
 
-Four mutations keep their **own inline record + fan-out** because they rewrite the parent chain or
-recurse through the mount, and each therefore fires `broadcastFileHistoryUpdated` itself:
+## Chain-rewriting mutations record their own events
 
-- **Upload** — `finalizeUpload` (`drive/upload.ts`) writes one row per file; the caller fans out
-  once per batch, so a 100-file upload is one notification, not 100.
-- **Move** — records `moved` with old and new parent, fans out over *both* chains, and captures the
-  old breadcrumb before `updatePath` so watchers of the source folder still verify.
-- **Copy** — `mount/copy.ts` records `copied` for the root *and* every recursive descendant;
-  `Drive.copyPath` fans out only at the root (fresh paths have no watchers yet).
-- **Trash** — `drive/trash.ts` captures the pre-trash breadcrumb *and* the pre-trash effective
-  members before `trashPath` re-parents the item to the mount root and strips its share; the
-  post-trash chain no longer resolves either. Permanent delete is notification-only: the FK cascade
-  would kill the row instantly, so watchers and the `trashedFrom` chain are collected before the
-  delete and only a notification goes out.
+Some mutations change the parent chain that the fan-out walks, or recurse through the mount. They record and fan out inline, and each broadcasts the live refresh itself:
 
-**Collab edits** are attributed server-side. `CollabDocument` keeps a `Map<connection, User>` filled
-by subscribe/unsubscribe, resolves the Yjs update's `origin` connection back to a user, and records
-`'edited'` throttled to one row per user per 10 minutes per document instance. Server-origin updates
-(version restores) have no connection origin and are excluded for free. **Stickies boards skip the
-generic `'edited'` row entirely** — every board action already records a specific `sticky-*` or
-comment event, so an `'edited'` row would double-report each drag.
+- **Move** captures the old breadcrumb before `updatePath`, and fans out over both chains, so watchers of the source folder still qualify.
+- **Trash** captures the old breadcrumb and the old effective members before `trashPath` re-parents the item to the root and strips its shares. After the trash neither resolves.
+- **Permanent delete** only notifies. The FK cascade would delete a row at once, so it collects the watchers and the `trashedFrom` chain before the delete.
+- **Upload** writes one row per file and fans out once per batch, so a 100-file upload is one notification.
+- **Copy** records `copied` for the root and every descendant, and fans out only at the root, since fresh paths have no watchers yet.
 
-**Clients** may post a small allowlist of semantic events to
-`POST /drive/:ownerId/:mountId/path/:pathId/history`. The route's typebox union *is* the allowlist:
-`sticky-added` / `sticky-moved` (`card`, `toColumn`, `cardId`) and `sticky-removed` (`card`,
-`cardId`); `isClientFileEventType` re-checks as defense in depth, and identical events from one
-actor collapse within a 30 s dedupe window. Each detail string is capped at `CARD_TITLE_MAX_LENGTH`
-(200, more than the two clamped lines an activity row shows, so a clip is never visible), and `useRecordHistory`
-clips `card` and `toColumn` to it before posting; the comment-card title cached by assign/resolve uses the same bound.
-Slide, sheet and doc structural verbs are deliberately absent — they surface as `'edited'`.
+## Collab edits are attributed on the server
 
-## Watch and fan-out
+`CollabDocument` maps each connection to its user. It resolves a Yjs update's origin connection back to that user and records `'edited'`, at most once per user per 10 minutes per open document. An update the server applies itself, like a version restore, has no connection origin and records nothing. A stickies board records no `'edited'` at all: every board action already records a `sticky-*` or comment event, and an `'edited'` row would report each drag twice.
 
-Routes (`apps/api/src/routes/drive.ts`): POST / DELETE / GET on
-`/drive/:ownerId/:mountId/path/:pathId/watch`, plus `GET /drive/:ownerId/watches` — with `?all=1`
-for the self-only aggregation over the caller's own home, their teams, and every owner who shared
-into their home (`drive/aggregate.ts`). Watching needs read access and a non-guest, non-trashed
-path; it never grants access. `getWatchStatus` returns `{ direct, viaAncestor? }`, the ancestor
-being the nearest watched folder up the chain.
+## Clients post only the stickies card events
 
-Fan-out (`FileHistory.fanOut` → `collectWatcherIds` → `notifyWatchers`):
+`POST /drive/:ownerId/:mountId/path/:pathId/history` takes `sticky-added`, `sticky-moved` and `sticky-removed` and needs write access. The route's body schema is the allowlist, and `isClientFileEventType` checks it again. Identical events from one actor within 30 s collapse into one row. Each detail string is capped at `CARD_TITLE_MAX_LENGTH` (200), and `useRecordHistory` clips to it before posting.
 
-- Watchers come from one upward CTE seeded with the affected path plus the relevant chain roots, so
-  a folder watch covers every descendant, including ones added later. Results are deduped, and
-  **the actor is always excluded** — your own edits never notify you.
-- **Read access is re-verified per watcher at delivery** against a `verifyAncestors` chain the
-  caller captured before any chain-rewriting mutation. A watcher whose share was revoked is silently
-  skipped; there is no watcher-cleanup job. Delivery is per-watcher concurrent, isolated and
-  best-effort — one failing lookup can neither reject the already-committed mutation nor drop the
-  other watchers.
-- Each notification goes through `sendToHome` as type `file-event` with tag
-  `file-event:{ownerId}:{mountId}:{pathId}` and `coalesce: true`, so repeated events on one file
-  collapse to a single bell row. Burst events (`created` / `uploaded` / `copied`) tag the *parent
-  folder* instead. Title and body are composed with `describeFileEvent` — the same phrasing layer
-  the panels render with.
-- Events on items already in trash never fan out; `'trashed'` itself passes its pre-trash snapshot.
+Slide, sheet and doc structural changes stay `'edited'`. A stickies action is a discrete, nameable client action. Docs and sheets have no such clean boundary on the client, and the Yjs update log is a short-lived sync buffer, so naming their changes would take interpreting ops on the server.
 
-The notification pipeline itself (storage, coalescing, SSE, routes) is
-[NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md). Row phrasing and link targets are
-[ACTIVITY-ROWS.md](ACTIVITY-ROWS.md).
+## A watch covers the subtree and never grants access
 
-Retention: `FileHistory.prune` runs fire-and-forget off `Mount.init` (a `setTimeout(0)` the teardown
-can cancel) — per `pathId`, trim `'edited'` rows to the newest **100**, then trim all rows to the newest
-**500**, both hardcoded in `history.ts`. There is no age cap: the in-document activity panel is the file's
-story, and a quiet file must keep its creation/share/assign rows. `path_watchers` is explicit user state,
-never pruned.
+Watching needs read access to an untrashed path and a non-guest user. It grants nothing. `getWatchStatus` answers `{ direct, viaAncestor? }`, the ancestor being the nearest watched folder. `GET /drive/:ownerId/watches?all=1` gathers the caller's watches across their own home, their teams and every owner who shared into it (`apps/api/src/lib/drive/aggregate.ts`). It reads other homes, so it answers for the caller only.
 
-## UX surfaces
+Fan-out (`FileHistory.fanOut`) collects watchers with one upward CTE from the affected path and the chain roots. So a folder watch covers every descendant, including ones added later. The actor never hears about their own action. Each watcher's read access is checked again against the chain the caller captured, so a watcher whose share was revoked is skipped, and no cleanup job is needed. Delivery runs after the mutation committed, per watcher and best effort, so one failing lookup neither fails the mutation nor drops the other watchers. An event on an item already in trash never fans out.
 
-- **Watch bell** — `WatchToggleButton` / `WatchMenuItem`
-  (`packages/ui/src/components/layout/toolbar/watch-toggle-button.tsx`), used by the Drive details
-  header, the Drive item menu, and `DocumentShareCluster` in every eigendoc toolbar. A filled bell
-  means a *direct* watch; a path covered by an ancestor watch reads "Watching via *{folder}*".
-- **Recent activity** — `RecentActivity` in the Drive details panel: the 5 newest events (a folder
-  includes its descendants), rendered by the shared `ActivityEventList`.
-- **Activity panel** — `packages/ui/src/components/comments/activity-panel.tsx`, hosted by
-  docs, sheets, slides and stickies through `PanelColumn`, up to 50 events, rows opening the comment
-  card they reference.
-- **Watched view** — `apps/drive/src/routes/_auth.watched.tsx`, reached from the *Watched* sidebar
-  row in `app-sidebar.tsx`; a read-only listing of everything the user watches, everywhere.
-- **Click-through** — `core/notification/resolve-link.ts` parses the `file-event` tag: collab and
-  chat items open in their app (deep-linking the card when the event carries one); everything else
-  lands on the Drive view with the item selected; the route redirects to the item itself when the
-  viewer can't read the parent folder.
-- **Live refresh** — recording broadcasts `drive:file-history-updated` (`drive/sse-events.ts`) to
-  the owner home *and* the effective members, since plain `drive:*` events only reach the owner
-  home; `core/drive/sse-handlers.ts` invalidates the history keys on it.
+## Notifications coalesce per file, and bursts per folder
 
-Hooks live in `packages/lib/src/core/drive/hooks/`: `use-file-history.ts` (`useFileHistory` — keyed
-by limit, so the 5-row and 50-row panels cache apart — `useRecordHistory`, `invalidateFileHistory`)
-and `use-watch.ts`. Tests: `apps/api/src/test/drive/file-history.test.ts`, `file-watch.test.ts`.
+A notification goes through `sendToHome` as type `file-event` with the tag `file-event:{ownerId}:{mountId}:{pathId}` and `coalesce: true`, so repeated events on one file collapse to one bell row. A create, upload or copy tags the parent folder instead, so a burst collapses too. The title and body come from `describeFileEvent`, the same phrasing the panels render. The pipeline is [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md), the row phrasing and link targets [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md).
 
-## Not built yet
+## The live refresh reaches every member, not only the owner
 
-Tracked as one ROADMAP row.
+A recorded event broadcasts `drive:file-history-updated` to the owner's home and to every effective member (`apps/api/src/lib/drive/sse-events.ts`). A plain `drive:*` event reaches only the owner's home, and a collaborator's open Activity panel must refresh too. The client invalidates its history queries on it. The surfaces are the Drive details panel, the Activity panel in every eigendoc editor and the Watched view.
 
-- **Email / digest channel.** Per-user cadence (`never` / `immediate` / `daily`) as an additive
-  `UserSettings` field, plus a `notifications.db` migration for a per-row `emailedAt` marker and a
-  `digest_state` row. Immediate mail sends at relay delivery, where the watcher's home is already
-  open; the daily digest runs off an hourly scheduler tick asking each home to flush its own unread
-  `file-event` rows. Notification rows are the queue — no outbox, no second pipeline.
-- **In-doc history unified with Version History.** Four decisions settled while shipping the
-  drive-level feature: (1) liveness rides SSE + the relay, no new channel — *shipped*; (2) extend
-  the editor's Version History menu with actor/verb rows instead of standing up a second timeline;
-  (3) rich semantic events only exist where the client has a discrete, nameable action (stickies) —
-  docs and sheets have no clean client boundary and the Yjs update log is a transient sync buffer,
-  so they stay coarse `'edited'` unless we build server-side op interpretation; (4) the 100/500
-  prune is a feed cap, and an authoritative in-doc history wants tiered retention like
-  `versioning/retention.ts`.
-- **Richer sheet / doc / slide vocabulary** (`sheet-column-inserted`, `slide-reordered`, …) — a
-  string in the union plus an emitter, but `'edited'` today.
+## Retention is a count per file, never an age
 
-Weighed and parked: default-watch on share, team-default watches, a per-file mute window, and a
-watcher-side mirror table replacing the per-owner watch aggregation with one local query.
+`FileHistory.prune` runs off `Mount.init` without blocking it. Per path it keeps the newest 100 `'edited'` rows, then the newest 500 rows of any kind. There is no age cap: the Activity panel is the file's story, and a quiet file keeps its creation, sharing and assignment rows. The cap makes the log a feed, not an authoritative history. `path_watchers` is explicit user state and is never pruned.
+
+Tests: `apps/api/src/test/drive/file-history.test.ts`, `file-watch.test.ts`, `drive-watch-fanout.test.ts`.
+
+## See also
+
+- [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md): storage, coalescing and delivery of the bell rows
+- [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md): how an event renders and where it links
+- [SOFT-DELETE.md](SOFT-DELETE.md): trash, restore and permanent delete
+- [COMMENTS.md](COMMENTS.md): the assigned, resolved and reopened events

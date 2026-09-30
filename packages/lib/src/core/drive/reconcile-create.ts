@@ -27,7 +27,7 @@ export function fetchListingOnce<T>(
 }
 
 // A 4xx is the server's definitive "no" (409 duplicate name), so it is never reconciled. The rest
-// of the contract is in docs/STORAGE.md § Create reconcile.
+// of the contract is in docs/STORAGE.md § A create that timed out may still have landed.
 export async function createWithReconcile<T extends { id: string; name: string }>({
     create,
     listFolder,

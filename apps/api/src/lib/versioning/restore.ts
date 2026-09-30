@@ -19,7 +19,7 @@ export async function restoreContainer(
     const target = await mount.getChildByName(versions.id, snapshotName);
     if (!target) throw new ApiError(404, `Snapshot ${snapshotName} not found`);
 
-    // Grab the target into the OS temp dir BEFORE the pre-restore snapshot runs — that
+    // Grab the target into a mount temp file BEFORE the pre-restore snapshot runs — that
     // snapshot prunes old versions and could otherwise drop the very snapshot we're
     // restoring. Read raw (downloadToTemp works on every backend); opening via
     // Mount.openDatabase would migrate and cache an immutable archive. Every step
