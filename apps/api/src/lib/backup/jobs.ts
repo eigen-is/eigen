@@ -57,14 +57,16 @@ function poke(job: BackupJob): void {
 
 // One piece of work per home at a time — a second backup while one is running would read a folder
 // the first is still walking, a second restore would move aside a folder the first is writing, and a
-// safety-copy delete overlapping a restore would judge the wrong home's keys as garbage.
-function requireHomeSlotFree(ownerId: string): void {
+// safety-copy delete overlapping a restore would judge the wrong home's keys as garbage. A server
+// backup's archive is the owner's to know (D11), so only a second server backup hears its name.
+function requireHomeSlotFree(ownerId: string, starting?: BackupJob['kind']): void {
     dropExpiredJobs();
     const held = heldSlots.get(ownerId);
     if (held) throw new ApiError(409, `A ${held.holder} of this home is running`);
     for (const running of jobs.values()) {
         if (running.ownerId === ownerId && running.state === 'running') {
-            const named = running.artifact ? `: ${running.artifact}` : '';
+            const shown = running.kind !== 'server-backup' || starting === 'server-backup';
+            const named = running.artifact && shown ? `: ${running.artifact}` : '';
             throw new ApiError(409, `A ${running.kind} of this home is already running${named}`);
         }
     }
@@ -124,7 +126,7 @@ export function startBackupJob(
     startedBy: string | undefined,
     run: (job: BackupJob, onProgress: SnapshotProgress) => Promise<string>,
 ): BackupJob {
-    requireHomeSlotFree(ownerId);
+    requireHomeSlotFree(ownerId, kind);
 
     const job: BackupJob = {
         id: randomUUID(),

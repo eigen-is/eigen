@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { account as accountSchema, user as userSchema } from '../../../auth-schema';
+import { callControl } from '../../cli/control-socket';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { verifyProtocolAuth } from '../../lib/auth/protocol-auth';
 import { getBackupJob } from '../../lib/backup/jobs';
@@ -91,6 +92,19 @@ describe('control socket', () => {
             );
         } finally {
             process.env['EIGEN_CONTROL_SOCKET'] = SOCKET;
+        }
+    });
+
+    test('a call keeps the fetch idle timeout, so a hung API fails it instead of hanging it', async () => {
+        const spy = spyOn(globalThis, 'fetch');
+        try {
+            const res = await callControl('/status', (): never => {
+                throw new Error('not answering');
+            });
+            expect(res.status).toBe(200);
+            expect(spy.mock.calls[0]?.[1]).not.toHaveProperty('timeout');
+        } finally {
+            spy.mockRestore();
         }
     });
 });

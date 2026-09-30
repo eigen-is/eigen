@@ -54,11 +54,13 @@ export async function backup(flags: BackupFlags): Promise<void> {
     const lost = (): never =>
         ui.fail('Eigen stopped answering during the backup.', 'Run ./eigen logs eigen-api to see why.');
 
+    // No idle timeout: a pre-update backup waits out a running one in silence, and Bun's client would cut it at five minutes.
     const start = (wait: boolean) =>
         callControl('/backup', down, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ level, reason, wait }),
+            timeout: false,
         });
     let res = await start(false);
     // Asked first without waiting, so the wait is announced only when there is one.

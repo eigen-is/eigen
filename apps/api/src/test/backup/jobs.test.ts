@@ -6,6 +6,7 @@ import { member as memberSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { drainBackupJobs, getBackupJob, startBackupJob } from '../../lib/backup/jobs';
 import { getServerConfig } from '../../lib/config/server-config';
+import { ApiError } from '../../lib/core/errors';
 import * as homeRelay from '../../lib/home/home-relay';
 import { collectSSE, getTestContext } from '../setup';
 
@@ -102,6 +103,40 @@ describe('Backup job pokes', () => {
         } finally {
             sse.stop();
             await db.update(memberSchema).set({ role: 'member' }).where(membership);
+        }
+    });
+});
+
+describe('Backup job slot', () => {
+    test("a per-home start refused by a running server backup is not told the server archive's name", async () => {
+        const ownerId = `slot-owner-${randomUUID()}`;
+        const spy = spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined);
+        const gate = Promise.withResolvers<void>();
+        try {
+            startBackupJob('server-backup', ownerId, undefined, async (started) => {
+                started.artifact = 'server-manual-full-20260930-120000.tar';
+                await gate.promise;
+                return started.artifact;
+            });
+            const refuse = (kind: 'backup' | 'server-backup'): ApiError => {
+                try {
+                    startBackupJob(kind, ownerId, undefined, async () => 'never.tar');
+                } catch (error) {
+                    if (error instanceof ApiError) return error;
+                    throw error;
+                }
+                throw new Error('the start was not refused');
+            };
+
+            const perHome = refuse('backup');
+            expect(perHome.status).toBe(409);
+            expect(perHome.message).not.toContain('server-manual');
+            // The owner's second server backup still hears which one runs.
+            expect(refuse('server-backup').message).toContain('server-manual-full-20260930-120000.tar');
+        } finally {
+            gate.resolve();
+            await drainBackupJobs();
+            spy.mockRestore();
         }
     });
 });
