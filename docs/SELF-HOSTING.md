@@ -47,23 +47,25 @@ The help center at eigen.is follows the `main` channel, so it can describe a bui
 
 ## The commands
 
-`./eigen` runs in the install folder. `./eigen <command> --help` tells more about each.
+`./eigen` runs in the install folder. `./eigen <command> --help` tells more about each, and `NO_COLOR=1` turns its colors off.
 
 | Command | What it does |
 |---|---|
 | `setup` | Asks the setup questions, writes `.env.production`, starts Eigen and prints the setup link. Run it again to change an answer |
 | `status` | The version, a waiting update, the services, disk space, the newest backup, the certificate and the mail queue |
-| `update [version]` | Backs up the running server, then switches to the new release. `--full` makes that backup Full, `--no-backup` makes none |
-| `rollback` | Restores the backup the last update made, with the version it ran |
-| `backup` | Backs up the whole server into `backups/` while Eigen runs. `--light`, `--full` (the default), `--s3`, `--wait` |
-| `restore <archive>` | Puts a whole-server backup back, from `backups/` or a path, on this machine or a new one |
+| `update [version]` | Backs up the running server, then switches to the new release. `--check` only tells whether there is an update and what it brings. `--accept-breaking` goes on past breaking changes without asking, as a run without a terminal must. `--full` makes the backup Full, `--no-backup` makes none |
+| `rollback` | Restores the backup the last update made, with the version it ran. `--yes` does not ask |
+| `backup` | Backs up the whole server into `backups/` while Eigen runs. `--light`, `--full` (the default), `--s3`, `--wait`. Exits 0 verified, 1 failed, 2 on a wrong argument, 4 verified but not in the bucket |
+| `restore <archive>` | Puts a whole-server backup back, from `backups/` or a path, on this machine or a new one. `--yes` does not ask, `--s3-from-archive` uploads an archive's S3 files under fresh keys instead of keeping each bucket as it is |
 | `restart`, `stop`, `logs [service]`, `reset-password` | What they say |
 
 One command that changes Eigen runs at a time, under `.eigen/lock`. `backup` takes no lock: it changes nothing and runs inside the API. What the backup and restore do, and why, is in [BACKUP.md](BACKUP.md).
 
+The backup `update` makes is Light, the databases and settings without files and mail, unless a release since the running one lists a breaking change or `--full` asks for Full. Its name starts with `server-pre-update-`. The two newest stay, and they never go to the backup bucket: they exist for `rollback` on this machine.
+
 ## backups/ is outside data/
 
-Whole-server and per-home backups go to `backups/` in the install folder, mounted into the API as `/app/backups` (`EIGEN_BACKUPS_DIR`). It sits beside `data/`, so a wipe of the data folder cannot take the backups with it. Setup creates both folders and gives an empty one to uid 1000, the user Eigen runs as. `backups/` is not in any backup: copy archives off the box, or turn on the backup bucket in Settings.
+Whole-server and per-home backups go to `backups/` in the install folder, mounted into the API as `/app/backups` (`EIGEN_BACKUPS_DIR`). It sits beside `data/`, so a wipe of the data folder cannot take the backups with it. Setup creates both folders and gives an empty one to uid 1000, the user Eigen runs as. A folder Docker creates for a bind mount is root's, so a stack started by hand needs `mkdir -p data backups && chown -R 1000:1000 data backups` first. `backups/` is not in any backup: copy archives off the box, or turn on the backup bucket in Settings.
 
 ## Compose profiles
 
@@ -80,7 +82,7 @@ Whole-server and per-home backups go to `backups/` in the install folder, mounte
 
 ## `.env.production`
 
-Setup writes it, readable by its owner and by group 1000, the group Eigen runs as, and Eigen mounts it read-only at `EIGEN_ENV_FILE` so the server backup can archive it. Every `./eigen` command that starts Eigen gives the file that group and mode 0640 again, so after a hand edit run `./eigen restart` rather than `docker compose up`, or the backup may miss it. A rerun of setup keeps every key it does not know. [`.env.example`](../.env.example) documents each key. In short:
+Setup writes it, readable by its owner and by group 1000 ([The API reads three secrets as group 1000](#the-api-reads-three-secrets-as-group-1000)). A rerun of setup keeps every key it does not know. [`.env.example`](../.env.example) documents each key. In short:
 
 | Keys | Written by | What they are |
 |---|---|---|
@@ -92,6 +94,18 @@ Setup writes it, readable by its owner and by group 1000, the group Eigen runs a
 | `API_URL`, `VITE_*` | setup | Derived from `DOMAIN` |
 | `EIGEN_REGISTRY`, `EIGEN_VERSION`, `EIGEN_*_IMAGE` | setup and update | The release or channel the install follows, and every image pinned by digest |
 | `COMPOSE_PROJECT_NAME`, `QUEUE_CHECK_INTERVAL`, `QUEUE_ALERT_THRESHOLD`, `QUEUE_ALERT_COOLDOWN`, `EIGEN_DEMO`, `EIGEN_DEMO_ADMIN_PASSWORD` | you | Advanced: the Compose project, the mail queue alert, [demo mode](DEMO_MODE.md). Add the key, then run `./eigen setup` again |
+
+## The API reads three secrets as group 1000
+
+The whole-server backup runs in the API, as uid 1000, and archives three files the API does not write. Each is readable by group 1000:
+
+| File | Given group 1000 by | When |
+|---|---|---|
+| `.env.production` | The launcher (`share_env` in `eigen`), mode 0640 | Every `./eigen` command that starts Eigen |
+| `data/dkim/` | The Postfix entrypoint, the key mode 0640 | Every Postfix start |
+| `data/certs/key.pem` | The Dovecot entrypoint, mode 0640 | Every Dovecot start and every new certificate |
+
+The API mounts `.env.production` read-only at `EIGEN_ENV_FILE`. After a hand edit of it, run `./eigen restart` rather than `docker compose up`, or the backup may miss it. What the API cannot read, the backup leaves out and says so ([BACKUP.md § A server archive is a plain tar of home archives, manifest last](BACKUP.md#a-server-archive-is-a-plain-tar-of-home-archives-manifest-last)).
 
 ## `docker-compose.override.yml`
 

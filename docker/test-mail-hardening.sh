@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verify the outbound mail-relay hardening (2026-08-31 spam-incident fixes) against a scratch
+# Verify the outbound mail-relay hardening against a scratch
 # edge,mail install of this working tree: sender/login binding on the submission ports, the per-IP
 # SASL failure lockout, the queue-backlog alert, DKIM signing with the key the server backup reads, and a TLS key
 # the server backup reads too.

@@ -119,7 +119,8 @@ type SSEventSpace = {
     type: typeof SSEventType.SPACE_SETTINGS_UPDATED;
 };
 
-// Sent to every admin on every state or progress change, because any of them can have the pane open.
+// Sent on every state or progress change: a home job's to every admin, since any of them can have the pane open,
+// and a server job's to the owner alone.
 // The payload is a poke: the pane refetches the job and artifact lists, which the server answers from
 // the job map.
 type SSEventBackup = {

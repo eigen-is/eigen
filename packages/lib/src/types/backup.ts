@@ -137,7 +137,7 @@ export type BackupJob = {
     kind: 'backup' | 'verify' | 'restore' | 'server-backup' | 'upload';
     ownerId: string;
     // The admin who started it: a home job's notifications go to their home. Absent for the scheduler
-    // and the CLI; a server job alerts the org owner. Its pokes go to all admins.
+    // and the CLI; a server job alerts the org owner. A home job's pokes go to every admin, a server job's to the owner.
     startedBy?: string;
     // Why a server backup runs.
     reason?: BackupReason;

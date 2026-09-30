@@ -124,7 +124,7 @@ function hold(file: string): boolean {
     return lock !== null;
 }
 
-// Neither Eigen nor another backup or restore reads or replaces data/ while this one does.
+// Neither Eigen nor another swap reads or replaces data/ while this one does.
 export function lockData(ui: Ui, command: string): void {
     const file = join(DATA, SERVER_DIR, DATA_LOCK_FILE);
     // Root must not make one the API could not open; without one, no API ever ran on this data/.

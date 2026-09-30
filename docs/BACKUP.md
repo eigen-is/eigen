@@ -18,28 +18,26 @@ The manifest records the level in `level`, and every mount whose bodies are not 
 
 ## A home archive holds every database, file and auth row
 
-- **Every database**, copied with `VACUUM INTO` through the running server's own handle, never as a file copy of a live WAL database: the drive's `shared.db`, each mount's `metadata.db`, `calendar.db`, and for a user `mail.db`, `contacts.db` and `notifications.db`. A database under the home that `HOME_DATABASES` (`apps/api/src/lib/backup/archive-layout.ts`) does not list fails the backup, so a new subsystem's database is noticed the day it lands.
-- **Every mount the home declares**, disabled ones too. A disabled mount is not in the drive's map, so nothing else walks it, and it comes back disabled because `settings.json` rides along. A disabled mount whose storage cannot be read is skipped with the reason in the manifest, since its bucket is often unreachable because it was turned off, and a restore leaves it disabled and absent. An enabled mount's storage failure fails the backup, naming the mount and the error code: that archive would miss files the home is serving. So does a file whose row records bytes and whose object is gone. A file with no bytes on record, or one deleted during the backup, is left out.
-- **Every file the drive knows about**, by the path it would have on a `local` mount, on all three backends. A restore re-derives whatever keys the target mount needs, so an archive never depends on a bucket, its credentials or the storage type staying the same.
-- **Every container's `data.db` and `comments.db`**, freshest first: an open document's live handle, then a crash temp in `tmp/`, then a pending staged upload, then the stored object. A backup taken during an S3 outage holds the newest local bytes.
-- **Version history and trash** (`versions/` and `.trash/`). Version history is the only copy of an old file state, and trash is data the user can still restore.
-- **Thumbnails.** A thumbnail is made once, at upload, and never again, so it is not derived data.
-- **The contacts avatar renditions** (`eigen.contacts/avatars/`). The served webp keeps the animation and alpha the card's Apple-safe `PHOTO` gave up ([CONTACTS.md](CONTACTS.md#the-avatars-folder-is-a-second-source-of-truth-not-a-cache)).
-- **Mail as Maildir files**, empty folders included. A mailbox nobody delivered to still needs its `new/` and `cur/`, because the mail sync watches them.
-- **The home's `settings.json`**, mount configs and every `s3` mount's keys included.
-- **For a user**: `auth.json` (their `user`, `account`, `apikey`, `two_factor`, `member` and `team_member` rows), `shares.json` (the share-registry rows they granted) and their avatar.
+- Every database, copied with `VACUUM INTO` through the running server's own handle, never as a file copy of a live WAL database: the drive's `shared.db`, each mount's `metadata.db`, `calendar.db`, and for a user `mail.db`, `contacts.db` and `notifications.db`. A database under the home that `HOME_DATABASES` (`apps/api/src/lib/backup/archive-layout.ts`) does not list fails the backup, so a new subsystem's database is noticed the day it lands.
+- Every mount the home declares, disabled ones too. A disabled mount is not in the drive's map, so nothing else walks it, and it comes back disabled because `settings.json` rides along. A disabled mount whose storage cannot be read is skipped with the reason in the manifest, since its bucket is often unreachable because it was turned off, and a restore leaves it disabled and absent. An enabled mount's storage failure fails the backup, naming the mount and the error code: that archive would miss files the home is serving. So does a file whose row records bytes and whose object is gone. A file with no bytes on record, or one deleted during the backup, is left out.
+- Every file the drive knows about, by the path it would have on a `local` mount, on all three backends. A restore re-derives whatever keys the target mount needs, so an archive never depends on a bucket, its credentials or the storage type staying the same.
+- Every container's `data.db` and `comments.db`, freshest first: an open document's live handle, then a crash temp in `tmp/`, then a pending staged upload, then the stored object. A backup taken during an S3 outage holds the newest local bytes.
+- Version history and trash (`versions/` and `.trash/`). Version history is the only copy of an old file state, and trash is data the user can still restore.
+- Thumbnails. A thumbnail is made once, at upload, and never again, so it is not derived data.
+- The contacts avatar renditions (`eigen.contacts/avatars/`). The served webp keeps the animation and alpha the card's Apple-safe `PHOTO` gave up ([CONTACTS.md](CONTACTS.md#the-avatars-folder-is-a-second-source-of-truth-not-a-cache)).
+- Mail as Maildir files, empty folders included. A mailbox nobody delivered to still needs its `new/` and `cur/`, because the mail sync watches them.
+- The home's `settings.json`, mount configs and every `s3` mount's keys included.
+- For a user, `auth.json` (their `user`, `account`, `apikey`, `two_factor`, `member` and `team_member` rows), `shares.json` (the share-registry rows they granted) and their avatar.
 
 Each database copy is one committed state. The archive as a whole is not one instant: a mail that arrives during the backup may or may not be in it. That is the standard guarantee for a backup of a running system, and it is why users keep working during one.
 
-An archive from before contacts and calendars stored their files as blobs restores its databases only. Their migrations drop what the old shape held, so it comes back with an empty address book and calendars without events ([CONTACTS.md](CONTACTS.md), [CALENDAR.md](CALENDAR.md)).
-
 ## A home archive leaves out caches, sessions and other homes
 
-- **Derived caches**: previews, the `tmp/` scratch folders, the mount's `staging/` as a folder (a Full or Full + S3 capture writes its pending bytes into the file tree, where they win over the stored object), and each mailbox's `tmp/` delivery spool.
-- **Sessions.** A per-home restore never signs anybody out, and no archive can bring a session back into a server that has lost it.
-- **Server data**: `users3.db`, `eigen.db`, `waitlist.db`, the server config and settings, and `.env.production`. The whole-server archive holds those.
-- **Other homes.** A team's data lives in the team's home, which has its own archive.
-- **Guest and org homes.** Guest homes are disposable (guest cleanup deletes them) and an org home holds no databases, so the per-home routes answer a guest or org ownerId with 400. The whole-server archive takes the org folder as plain files and leaves guest homes out: a guest keeps their account and gets a new home on their next visit.
+- Derived caches: previews, the `tmp/` scratch folders, the mount's `staging/` as a folder (a Full or Full + S3 capture writes its pending bytes into the file tree, where they win over the stored object), and each mailbox's `tmp/` delivery spool.
+- Sessions. A per-home restore never signs anybody out, and no archive can bring a session back into a server that has lost it.
+- Server data: `users3.db`, `eigen.db`, `waitlist.db`, the server config and settings, and `.env.production`. The whole-server archive holds those.
+- Other homes. A team's data lives in the team's home, which has its own archive.
+- Guest and org homes. Guest homes are disposable (guest cleanup deletes them) and an org home holds no databases, so the per-home routes answer a guest or org ownerId with 400. The whole-server archive takes the org folder as plain files and leaves guest homes out: a guest keeps their account and gets a new home on their next visit.
 
 **A restore does not put mtimes back.** The extractor writes every file with the clock of the restore. Mail is the only domain that reads a file's stats, and its first pass re-reads what looks drifted.
 
@@ -47,7 +45,7 @@ An archive from before contacts and calendars stored their files as blobs restor
 
 The backups folder is `EIGEN_BACKUPS_DIR` if set, else `backups` beside the data root. On a Docker install that is `/app/backups` in the container, bind-mounted from `./backups` in the install folder. It sits outside `data/` so that a wipe of the data folder cannot take the backups with it. Every job's scratch space is `backups/.staging/`, on the same disk as the archives so the last rename of a pack is atomic, and the boot wipes it.
 
-The server creates the folder only when a backup needs it. `./eigen setup` creates `data/` and `backups/` and hands an empty one to uid 1000, the user the API runs as. A bind-mount source that Docker creates is owned by root, so a stack started by hand needs `mkdir -p data backups && chown -R 1000:1000 data backups` first.
+The server creates the folder only when a backup needs it, so it must be writable by uid 1000, the user the API runs as. Who creates it and owns it on an install: [SELF-HOSTING.md § backups/ is outside data/](SELF-HOSTING.md#backups-is-outside-data).
 
 ## An archive is as secret as data/ itself
 
@@ -57,7 +55,7 @@ A home archive holds every file and mail, the password hash, app passwords, API 
 
 **Create backup** in the Backup section of a user or team in the admin app starts a job. It captures the home into staging, verifies the folder, packs it into `home-{ownerId}-{yyyymmdd-hhmmss}.tar.zst` and writes a sidecar beside it with the manifest and the verify result. An artifact that does not verify is kept, with its failures and no Restore button, and the admin who started it gets a notification.
 
-A second job on a home while one runs gets a 409, so a backup never reads a folder a restore is writing. Job state lives in memory (`apps/api/src/lib/backup/jobs.ts`) and a finished job drops after an hour. The artifacts and sidecars are the durable record, so a restart loses nothing but the progress line. The `backup:job-updated` SSE event only tells the pane to refetch; a home job's goes to every admin, a server job's to the owner alone. The pane polls as well, because an admin restoring their own home gets no event while that home is offline.
+A second job on a home while one runs gets a 409, so a backup never reads a folder a restore is writing. Job state lives in memory (`apps/api/src/lib/backup/jobs.ts`) and a finished job drops after an hour. The artifacts and sidecars are the durable record, so a restart loses nothing but the progress line. The `backup:job-updated` SSE event only tells the pane to refetch ([SSE.md § A backup job's event is only a nudge](SSE.md#a-backup-jobs-event-is-only-a-nudge)). The pane polls as well, because an admin restoring their own home gets no event while that home is offline.
 
 There is no read-only window. Capturing a container's `data.db` takes that container's path lock, so a sync or close of that one document waits for one copy. Typing is not affected.
 
@@ -67,9 +65,9 @@ A backup reaches a home through `pullHomeSnapshot` (`apps/api/src/lib/home/home-
 
 Every home archive is verified after the backup that wrote it, on **Verify**, and again before every restore:
 
-1. **Transport**: every file the manifest lists has exactly its size and sha256, and the folder holds nothing it does not list.
-2. **Structure**: `PRAGMA quick_check` on every database the archive owns, opened read-only. Only Eigen's own: a user's upload that happens to be SQLite is stored byte for byte and is not verify's to open.
-3. **Content**: for the ten largest collab documents plus ten more, a sample that is the same on every run, every Yjs blob decodes and a document with blobs decodes to shared types. Chat containers are skipped, since their `data.db` is not Yjs.
+1. Transport: every file the manifest lists has exactly its size and sha256, and the folder holds nothing it does not list.
+2. Structure: `PRAGMA quick_check` on every database the archive owns, opened read-only. Only Eigen's own: a user's upload that happens to be SQLite is stored byte for byte and is not verify's to open.
+3. Content: for the ten largest collab documents plus ten more, a sample that is the same on every run, every Yjs blob decodes and a document with blobs decodes to shared types. Chat containers are skipped, since their `data.db` is not Yjs.
 
 The verdict goes into the sidecar, which the artifact list reads. The manifest inside the archive is canonical; the sidecar is a cache.
 
@@ -98,9 +96,9 @@ So a Full + S3 member restores any home, a Full member a home without `s3` mount
 
 `auth.json` is the one part of an archive that writes to `users3.db`, and an archive is a file somebody uploaded. So a restore takes only what is this home's:
 
-- **Only this owner's rows.** A row that names anybody else is dropped and logged. An archive with a second `user` row is refused: it holds exactly one, with this home's id and the manifest's email, or nothing is inserted.
-- **No privilege.** The restored user is a plain user of this server's organization, whatever the archive says. An admin before the restore is made one again by hand.
-- **No teams this server lacks.** A membership of a team that is not on this server is dropped.
+- Only this owner's rows. A row that names anybody else is dropped and logged. An archive with a second `user` row is refused: it holds exactly one, with this home's id and the manifest's email, or nothing is inserted.
+- No privilege. The restored user is a plain user of this server's organization, whatever the archive says. An admin before the restore is made one again by hand.
+- No teams this server lacks. A membership of a team that is not on this server is dropped.
 
 ## The home is offline during a restore, and every tab reloads after
 
@@ -110,7 +108,7 @@ Every open tab of the home reloads once the restore is done: the event stream an
 
 ## IMAP keeps writing the old folder during a restore
 
-Dovecot runs in its own container and reads the Maildir straight off the volume, so a mail client connected during a restore works on the folder that went aside. Deliveries and flag changes in that window land in `{id}.pre-restore-{timestamp}`. Nothing is lost, but it is not in the live home ([ROADMAP.md](ROADMAP.md)). For a mail-heavy restore, stop Dovecot for the window, or copy the missing messages out of the safety copy afterwards.
+Dovecot runs in its own container and reads the Maildir straight off the volume, so a mail client connected during a restore works on the folder that went aside. What a client does in that window, a flag, a move or a saved message, lands in `{id}.pre-restore-{timestamp}`. Nothing is lost, but it is not in the live home ([ROADMAP.md](ROADMAP.md)). New mail is not affected: Postfix delivers through the API (`mailboxDeliver` in `apps/api/src/lib/mail/mail.ts`), which answers 503 for the home, so Postfix keeps the message queued and delivers it after the restore. For a mail-heavy restore, pause the account's mail clients for the window, or copy what is missing out of the safety copy afterwards.
 
 ## Safety copies are never deleted automatically
 
@@ -136,8 +134,8 @@ A home artifact is a POSIX tar (pax headers for long names, empty folders includ
 
 Before a per-home restore moves the home aside, it writes `restoring.json` in its staging folder, and `restore-complete.json` beside it once the install is whole. The next boot (`apps/api/src/lib/backup/recovery.ts`) reads them before the staging wipe:
 
-- **Marker without the completion note**: the process died in the install. The half-written folder is parked as `{id}.failed-restore-{timestamp}` and the pre-restore copy goes back. This is the window an OOM kill lands in, and it is long when the backups folder is on another disk, since the install then copies instead of renaming.
-- **Both notes**: the restore finished, and both folders stay.
+- Marker without the completion note: the process died in the install. The half-written folder is parked as `{id}.failed-restore-{timestamp}` and the pre-restore copy goes back. This is the window an OOM kill lands in, and it is long when the backups folder is on another disk, since the install then copies instead of renaming.
+- Both notes: the restore finished, and both folders stay.
 
 A marker lost to a torn write does nothing, and the home sits complete in its pre-restore copy, to rename back by hand.
 
@@ -147,7 +145,7 @@ Every restored database is checked against the schema this build supports, and o
 
 ## The whole-server backup runs inside the API
 
-`startServerBackup` (`apps/api/src/lib/backup/server-job.ts`) runs as a job in the org's slot, so one runs at a time and a second start gets a 409 naming it. It starts from Settings § Backups (**Back up now**), from the schedule, or from `./eigen backup` over the control socket (`apps/api/src/routes/control.ts`). It runs in the API because the job map is where the guards live: a separate process would bypass the per-home 409, the restore mark and the shutdown drain.
+`startServerBackup` (`apps/api/src/lib/backup/server-job.ts`) runs as a job in the org's slot, so one runs at a time and a second start gets a 409 naming it. It starts from Settings § Backups (**Back up now**), from the schedule, or from `./eigen backup` over the control socket (`apps/api/src/routes/control.ts`). It runs in the API because the job map is where the guards live: a separate process would bypass the per-home 409, the restore mark and the shutdown drain. So `./eigen backup` refuses with Eigen stopped, where a copy of `data/` and `.env.production` is a backup too, and it takes no `.eigen/lock`, since it stops nothing. Every command and its flags: [SELF-HOSTING.md § The commands](SELF-HOSTING.md#the-commands).
 
 The job:
 
@@ -174,11 +172,11 @@ server-{scheduled|manual|pre-update}-{light|full|full-s3}-{yyyymmdd-hhmmss}.tar
 └── manifest.json                         last
 ```
 
-The outer tar is not compressed: its members already are, and a plain tar reads member by member without unpacking. Reason and level are in the name (`parseServerArchiveName` in `packages/lib/src/validation/backup.ts`), so retention and the schedule never open an archive. The manifest (`ServerArchiveManifest` in `packages/lib/src/types/backup.ts`) lists every member with its sha256, each home with its member or why it has none, the orphans, whether `.env.production`, the DKIM key and the TLS certificate are in it, and the images the install pinned. An archive from before certificates were archived has no `certs` field.
+The outer tar is not compressed: its members already are, and a plain tar reads member by member without unpacking. Reason and level are in the name (`parseServerArchiveName` in `packages/lib/src/validation/backup.ts`), so retention and the schedule never open an archive. The manifest (`ServerArchiveManifest` in `packages/lib/src/types/backup.ts`) lists every member with its sha256, each home with its member or why it has none, the orphans, whether `.env.production`, the DKIM key and the TLS certificate are in it, and the images the install pinned. A manifest without a `certs` field holds no certificate.
 
 The server member holds `users3.db`, `eigen.db` and `waitlist.db`, each through `VACUUM INTO` on the server's own handle, and the files `SERVER_FILES` names (`apps/api/src/lib/config/paths.ts`). The runtime files in `SERVER_RUNTIME_FILES` are never captured: the instance lock, the control socket, the setup token and the two data-epoch files. Leaving the epoch out is what reloads every tab after a whole-server restore.
 
-The API reads `.env.production` through a read-only mount at `EIGEN_ENV_FILE`. The launcher gives the file group 1000 and mode 0640 on every start (`share_env` in `eigen`), the Postfix entrypoint gives `data/dkim` the same group, and the Dovecot entrypoint gives `data/certs/key.pem` group 1000 and mode 0640 on every start and on every new certificate. Caddy's `export-certs.sh` and a certbot hook write the key 0600, so an archive made between a renewal and Dovecot's next check, at most ten minutes, leaves the certificate out. With mail off no Dovecot shares the key, and nothing needs it. What the API cannot read stays out and the manifest says so: a restore then keeps the install's own `.env.production` and certificate, and a move to another machine needs new DKIM DNS. In `bun run dev` there is no `EIGEN_ENV_FILE`.
+The API reads `.env.production` through a read-only mount at `EIGEN_ENV_FILE`, and the DKIM key and the TLS key under `data/`, all three as group 1000 ([SELF-HOSTING.md § The API reads three secrets as group 1000](SELF-HOSTING.md#the-api-reads-three-secrets-as-group-1000)). Caddy's `export-certs.sh` and a certbot hook write the key 0600, so an archive made between a renewal and Dovecot's next check, at most ten minutes, leaves the certificate out. With mail off no Dovecot shares the key, and nothing needs it. What the API cannot read stays out and the manifest says so: a restore then keeps the install's own `.env.production` and certificate, and a move to another machine needs new DKIM DNS. In `bun run dev` there is no `EIGEN_ENV_FILE`.
 
 ## A home that fails is named, and the archive goes on
 
@@ -206,34 +204,34 @@ Every failure of a server backup or its upload sends an `admin-alert` to `getOrg
 
 ## Upload goes to a bucket of its own
 
-A verified scheduled or manual archive goes to the backup bucket as an upload job of its own, which holds no home slot, so a backup never waits for the bucket and a pre-update backup never waits for an upload. Uploads take turns. **Upload** in Settings sends one again. Pre-update archives never leave the box: they exist for `./eigen rollback` on it.
+A verified scheduled or manual archive goes to the backup bucket as an upload job of its own, which holds no home slot, so a backup never waits for the bucket and a pre-update backup never waits for an upload. Uploads take turns. **Upload to the bucket** on an archive's row in Settings sends one again. Pre-update archives never leave the box: they exist for `./eigen rollback` on it.
 
 `apps/api/src/lib/backup/upload.ts` streams the file as a multipart upload, reads the object's size back, and deletes an object that came out short. A failed or aborted upload makes Bun abort the multipart upload. Archives go under `<prefix>/<domain>/`, so two servers can share a bucket and each prunes only its own folder.
 
-`checkBackupDestination` runs on the owner's **Test**, on every save with upload on, and before every upload, since a mount can be added after the destination was saved. It refuses:
+`checkBackupDestination` runs on the owner's **Test Connection**, on every save with upload on, and before every upload, since a mount can be added after the destination was saved. It refuses:
 
 - a bucket name any mount of this server uses, the default mount's or any home's, safety copies included, and any access key they use. One lost bucket or leaked key must not take the data and its backups together. While some home's `settings.json` does not read, any bucket may be a data bucket, so it refuses them all.
 - a bucket that answers an unsigned GET of its probe object: a backup bucket must be private.
 
 It warns, without refusing, when no lifecycle rule aborts incomplete multipart uploads under the server's folder, since the parts of an upload cut off halfway stay and cost money.
 
-The backup bucket's secret reaches no browser, the owner's included, and a blank secret in a save or a Test keeps the stored one unless the endpoint, bucket or access key changed. The endpoint, bucket and keys live only in `settings.json`, which is inside the archives in that bucket. So a save that changes the destination answers with a one-time notice (`BACKUP_DESTINATION_NOTICE` in `packages/lib/src/constants/backup.ts`) to keep them somewhere off the server. A restore on a new machine starts from them.
+The backup bucket's secret reaches no browser, the owner's included, and a blank secret in a save or a **Test Connection** keeps the stored one unless the endpoint, bucket or access key changed. The endpoint, bucket and keys live only in `settings.json`, which is inside the archives in that bucket. So a save that changes the destination answers with a one-time notice (`BACKUP_DESTINATION_NOTICE` in `packages/lib/src/constants/backup.ts`) to keep them somewhere off the server. A restore on a new machine starts from them.
 
 ## The bucket keeps its own count, and always the newest complete archive
 
 After a successful upload, `pruneBucketArchives` (`apps/api/src/lib/backup/retention.ts`) lists the server's folder and deletes scheduled archives past `upload.keep`, by name. An archive whose manifest names a failed home counts toward `keep`, but the newest complete archive stays whatever came after it, because only it restores every home. Manual archives and names the grammar does not read are never deleted. An archive uploaded late that the count would drop is left, and that round deletes nothing. Pruning never runs after a failed upload.
 
-## No archive leaves the box through a browser
+## No server archive leaves the box through a browser
 
-The server backup routes (`apps/api/src/routes/server-backup.ts`) have no download. An archive is large, and one click would carry every mailbox out through a session. It leaves by scp or through the bucket. They are owner-only, like the settings that hold S3 secrets, and server-wide, so they carry no `:ownerId` (`OWNER_ID_EXEMPT` in `scripts/check-standards.ts`).
+The server backup routes (`apps/api/src/routes/server-backup.ts`) have no download. An archive is large, and one click would carry every mailbox out through a session. It leaves by scp or through the bucket. A per-home artifact does download, for an admin, from the home's pane (`GET /admin/backup/artifacts/:name` in `apps/api/src/routes/backup.ts`): to keep a copy of one home off the server. They are owner-only, like the settings that hold S3 secrets, and server-wide, so they carry no `:ownerId` (`OWNER_ID_EXEMPT` in `scripts/check-standards.ts`).
 
 ## ./eigen restore stages while Eigen runs, then swaps under a marker
 
 `./eigen restore <archive>` takes a name in `backups/` or a path, which the launcher mounts read-only into a one-off container. It works in two steps so that Eigen is down only for the renames:
 
-1. **Stage** (`restore <archive> --stage`, as uid 1000 while Eigen runs). It reads the archive and checks every member's sha256, refuses before anything moves, shows level, version, age, home count, failed homes and whether `.env.production`, the DKIM key and the TLS certificate are in it, and asks. Then it extracts member by member into `data/.restoring/`, verifies each, and installs each home by its mode. A stale `data/.restoring/` from a stage that died is wiped first; `stage.lock` in it keeps two stages apart.
-2. **Pull**: on a release install, the images the archive's `.env.production` pins, while Eigen still runs.
-3. **Swap** (`restore --swap`, as root with Eigen stopped). It writes `.eigen/restore-swap`, the full list of copies and renames, and syncs it to disk before the first rename. Then it runs them, removes the marker and starts Eigen on the pinned images, with their launcher and Compose files. A local build runs `configure --backfill` instead.
+1. Stage (`restore <archive> --stage`, as uid 1000 while Eigen runs). It reads the archive and checks every member's sha256, refuses before anything moves, shows level, version, age, home count, failed homes and whether `.env.production`, the DKIM key and the TLS certificate are in it, and asks. Then it extracts member by member into `data/.restoring/`, verifies each, and installs each home by its mode. A stale `data/.restoring/` from a stage that died is wiped first; `stage.lock` in it keeps two stages apart.
+2. Pull: on a release install, the images the archive's `.env.production` pins, while Eigen still runs.
+3. Swap (`restore --swap`, as root with Eigen stopped). It writes `.eigen/restore-swap`, the full list of copies and renames, and syncs it to disk before the first rename. Then it runs them, removes the marker and starts Eigen on the pinned images, with their launcher and Compose files. A local build runs `configure --backfill` instead.
 
 A swap cut off anywhere is finished by the next `./eigen` command: `preflight` finds the marker and runs `restore --swap` again with the build whose files wrote it, which skips the renames already done. The staged tree was verified before the marker existed, so rolling forward is safe. The swap holds the API's instance lock ([DATABASE.md](DATABASE.md#one-api-process-owns-a-data-folder)) and `.eigen/restore.lock`; the launcher holds `.eigen/lock` throughout.
 
@@ -249,9 +247,11 @@ A Light archive holds no file bodies, so it merges. `server/`, `org/`, `dkim/` a
 
 By default an `s3` mount comes back on its bucket as it stands: `metadata.db` as archived, which names keys, not object versions. A file edited since reads its new bytes, and a file deleted since reads as gone, which is what the bucket's versioning is for. The pending uploads in the archive are replayed, except those the live mount no longer has a row for, since it already uploaded, replaced or canceled them and a replay would put older bytes on the key. The stage prints how many it left out, and how many had no bytes in the archive.
 
-Every trashed file is re-dated to the restore, so the trash starts over and no purge deletes an object the data kept aside may still name.
-
 `--s3-from-archive` uploads a Full + S3 archive's objects under fresh keys instead, as a per-home restore does. It is for a damaged bucket. The default avoids doubling an intact one.
+
+## The trash starts over after a whole-server restore
+
+Every trashed file of every restored mount is re-dated to the restore, whatever its storage and whatever the level (`redateTrash` in `apps/api/src/lib/backup/restore-server.ts`). The operator gets the whole retention window to look through what came back, and no purge deletes an `s3` object the data kept aside may still name.
 
 ## A restore refuses what root must not swap in
 
@@ -267,38 +267,19 @@ On a release install with no `.env.production`, or one with no `DOMAIN` (a mirro
 
 `users3.db` comes back whole, so everyone is signed in as they were when the archive was made, and the swap says so. After a restore that follows a compromise, an attacker's session from before the archive works again: reset the passwords of the accounts involved, which signs them out everywhere ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#an-admin-password-reset-revokes-every-way-in)).
 
-## The launcher commands
-
-| Command | What it does |
-|---|---|
-| `./eigen backup [--light \| --full] [--s3] [--wait]` | Starts a manual server backup on the running API and follows it. Full by default; `--s3` makes it Full + S3; `--wait` waits out a backup that runs. Refuses with Eigen stopped: a copy of `data/` and `.env.production` of a stopped Eigen is a backup too. Exits 0 verified, 1 failed, 2 on a wrong argument, 4 verified but not uploaded. Takes no `.eigen/lock`, since it stops nothing |
-| `./eigen restore <archive> [--yes] [--s3-from-archive]` | Stages, swaps and starts ([./eigen restore stages while Eigen runs](#eigen-restore-stages-while-eigen-runs-then-swaps-under-a-marker)) |
-| `./eigen update [version] [--full \| --no-backup]` | Backs up, then switches ([./eigen update backs up before it writes a file](#eigen-update-backs-up-before-it-writes-a-file)) |
-| `./eigen rollback [--yes]` | Restores the archive `.eigen/last-update` names, with the images it pins |
-| `./eigen status` | Shows the Backup row |
-
-`.eigen/last-update` is written once an update has switched, and cleared by any restore or finished swap: the data swapped in makes the old way back meaningless.
-
 ## ./eigen update backs up before it writes a file
 
-`update_get` in `eigen` asks the new image `update-check --level`, which answers `level=full` when a release since the running one lists a `(breaking)` change in its CHANGELOG, else `level=light`. A breaking release may convert what a Light archive leaves out, so only a Full one could bring it back. `--full` forces Full. Then, after the images are pulled and before any file of the new version is written, it runs `backup --reason pre-update --wait` on the running API, which waits out a scheduled backup instead of failing on it. A failure ends the update with Eigen running as it was. The archive's name goes to the new launcher, which records it in `.eigen/last-update` once the switch is written. Changes between the end of the backup and the stop are not in it, so the launcher prints the time it was made until.
+`update_get` in `eigen` asks the new image `update-check --level`, which answers `level=full` when a release since the running one lists a `(breaking)` change in its CHANGELOG, else `level=light`. A breaking release may convert what a Light archive leaves out, so only a Full one could bring it back. `--full` forces Full. Then, after the images are pulled and before any file of the new version is written, it runs `backup --reason pre-update --wait` on the running API, which waits out a scheduled backup instead of failing on it. A failure ends the update with Eigen running as it was. The archive's name goes to the new launcher, which records it in `.eigen/last-update` once the switch is written. `./eigen rollback` restores the archive that file names, with the images it pins. Any restore or finished swap clears the file: the data swapped in makes the old way back meaningless. Changes between the end of the backup and the stop are not in it, so the launcher prints the time it was made until.
 
 With Eigen stopped the update refuses, since the backup runs on the running server. `--no-backup` makes none and clears `.eigen/last-update`, so a rollback has nothing to go back to.
 
 ## An update from 0.3.0 hands over to that image's snapshot
 
-The 0.3.0 launcher makes no pre-update backup and passes no archive. It asks the new image `snapshot --check` (`apps/api/src/cli/snapshot.ts`, kept for that call alone), which answers `kind=full` for a breaking update, and passes that on as `--full`. The new launcher's `update_apply` then saves a snapshot with the 0.3.0 image after the stop, in `snapshots/`, and records that image beside it in `.eigen/last-update`. A retry of an update from 0.3.0 that failed past its files does the same, since the running 0.3.0 CLI has no `backup`. Only 0.3.0 can put such a snapshot back, so `./eigen rollback` prints three commands: bring back 0.3.0's launcher, restore the snapshot with it, and clear what the new version recorded.
+The 0.3.0 launcher makes no pre-update backup and passes no archive. It asks the new image `snapshot --check` (`apps/api/src/cli/snapshot.ts`, which serves that call alone), which answers `kind=full` for a breaking update, and passes that on as `--full`. The new launcher's `update_apply` then saves a snapshot with the 0.3.0 image after the stop, in `snapshots/`, and records that image beside it in `.eigen/last-update`. A retry of an update from 0.3.0 that failed past its files does the same, since the running 0.3.0 CLI has no `backup`. Only 0.3.0 can put such a snapshot back, so `./eigen rollback` prints three commands: bring back 0.3.0's launcher, restore the snapshot with it, and clear what the new version recorded.
 
-## What stays the operator's job
+## An archive holds what the API can read
 
-An archive holds `data/`'s homes and server data, `.env.production`, the DKIM key and the mail server's TLS certificate. Not in it:
-
-- Renewing the TLS certificate: a restored one is only as fresh as the archive. Caddy exports its own again; behind your own web server, the certbot hook runs on the next renewal, or run it once by hand.
-- `caddy-data/`: Caddy gets its certificates again.
-- The Postfix queue, a Docker volume with the mail still waiting to go out.
-- `backups/` itself: copy archives off the box, or turn on the upload.
-- `docker-compose.override.yml`.
-- The backup bucket's endpoint, name and keys, kept somewhere other than the server.
+The backup runs in the API, whose container mounts `data/`, `backups/` and `.env.production` and nothing else of the install. So `caddy-data/`, `docker-compose.override.yml` and the Postfix queue, a Docker volume of its own, are not in an archive, and `backups/` would hold itself. Caddy gets its certificates again. A restored TLS certificate is only as fresh as the archive: Caddy exports its own again, and behind another web server the certbot hook runs on the next renewal. The bucket's keys are inside the archives only ([Upload goes to a bucket of its own](#upload-goes-to-a-bucket-of-its-own)). What the operator keeps by hand, in their words: the help center's [What a backup leaves out](https://eigen.is/support/self-hosting/back-up-and-restore#what-a-backup-leaves-out).
 
 ## See also
 

@@ -24,7 +24,7 @@ A domain handler never toasts. `NotificationCenter.persist()` writes the notific
 
 ## A backup job's event is only a nudge
 
-`backup:job-updated` names a job and nothing else. The job map in the API is the truth, and the admin pane refetches it. A home job's event goes to every admin, so a second admin watching the same pane follows along; a server backup's goes to the owner alone, who alone may see it ([BACKUP.md](BACKUP.md)).
+`backup:job-updated` carries the job's id and its home's `ownerId`, nothing else. The job map in the API is the truth, and the admin pane refetches its job and artifact lists. A home job's event goes to every admin, so a second admin watching the same pane follows along; a server backup's goes to the owner alone, who alone may see it ([BACKUP.md](BACKUP.md)).
 
 ## A restore reloads every tab of the home
 
