@@ -19,6 +19,7 @@ import {
 } from '@workspace/lib/validation';
 import { getEnvFile } from '../config/env';
 import {
+    CERTS_DIR,
     DKIM_DIR,
     getDataRoot,
     getServerDataPath,
@@ -209,6 +210,7 @@ async function writeServerArchive(
         const install = await appendInstallFiles(writer, {
             envFile: getEnvFile(),
             dkimDir: path.join(getDataRoot(), DKIM_DIR),
+            certsDir: path.join(getDataRoot(), CERTS_DIR),
         });
         const config = getPublicConfig();
         const manifest = await writer.finish({

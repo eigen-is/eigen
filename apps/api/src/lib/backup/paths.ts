@@ -137,11 +137,12 @@ export function buildArtifactName(ownerId: string, at: Date): string {
 }
 
 // The layout of a whole-server archive beside its manifest.json: one per-home artifact per home, the
-// server folder packed like a home, and the two install files the API may be unable to read.
+// server folder packed like a home, and the install files the API may be unable to read.
 export const SERVER_ARCHIVE_HOMES_DIR = 'homes';
 export const SERVER_ARCHIVE_SERVER_MEMBER = 'server.tar.zst';
 export const SERVER_ARCHIVE_ENV_MEMBER = '.env.production';
 export const SERVER_ARCHIVE_DKIM_DIR = 'dkim';
+export const SERVER_ARCHIVE_CERTS_DIR = 'certs';
 
 export function buildServerArchiveName(reason: BackupReason, level: BackupLevel, at: Date): string {
     return `${SERVER_ARCHIVE_PREFIX}${reason}-${level}-${buildBackupStamp(at)}${SERVER_ARCHIVE_EXTENSION}`;

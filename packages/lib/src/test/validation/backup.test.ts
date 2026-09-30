@@ -89,11 +89,17 @@ describe('parseServerArchiveManifest', () => {
         orphans: ['home/gone'],
         envFile: true,
         dkim: false,
+        certs: true,
         images: { EIGEN_VERSION: '0.3.1' },
     };
 
     test('round-trips a valid manifest', () => {
         expect(parseServerArchiveManifest(JSON.stringify(valid))).toEqual(valid);
+    });
+
+    test('reads a manifest without certs, as archives made before them are', () => {
+        const { certs: _, ...older } = valid;
+        expect(parseServerArchiveManifest(JSON.stringify(older))).toEqual(older);
     });
 
     test('refuses a per-home manifest, a wrong version and a broken field', () => {
@@ -104,6 +110,7 @@ describe('parseServerArchiveManifest', () => {
             JSON.stringify({ ...valid, entries: undefined }),
             JSON.stringify({ ...valid, homes: [{ ownerId: 'u1', kind: 'org', name: 'O' }] }),
             JSON.stringify({ ...valid, envFile: 'yes' }),
+            JSON.stringify({ ...valid, certs: 'yes' }),
             JSON.stringify({ ...valid, images: { EIGEN_VERSION: 3 } }),
         ]) {
             expect(parseServerArchiveManifest(broken)).toBeNull();

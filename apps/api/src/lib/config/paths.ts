@@ -26,6 +26,9 @@ export const ORG_HOMES_DIR = 'org';
 export const GUEST_HOMES_DIR = 'guest';
 // The DKIM key and its DNS record, which the postfix container generates in data/ and owns.
 export const DKIM_DIR = 'dkim';
+// The mail server's TLS certificate, which Caddy's export-certs.sh or the operator's certbot hook copies in.
+export const CERTS_DIR = 'certs';
+export const CERT_FILES = { cert: 'cert.pem', key: 'key.pem' } as const;
 
 // What a server backup takes from SERVER_DIR, by name: the databases through their live handles, the rest as files.
 export const SERVER_DATABASES = { users: 'users3.db', shares: 'eigen.db', waitlist: 'waitlist.db' } as const;

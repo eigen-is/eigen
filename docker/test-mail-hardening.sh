@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Verify the outbound mail-relay hardening (2026-08-31 spam-incident fixes) against a scratch
 # edge,mail install of this working tree: sender/login binding on the submission ports, the per-IP
-# SASL failure lockout, the queue-backlog alert, and DKIM signing with the key the server backup reads.
+# SASL failure lockout, the queue-backlog alert, DKIM signing with the key the server backup reads, and a TLS key
+# the server backup reads too.
 #
 # Usage:
 #   ./docker/test-mail-hardening.sh
@@ -585,6 +586,25 @@ if should_run 13; then
     fi
 else
     skip "probe 13 not selected"
+fi
+
+##############################################################################
+header "Probe 14 — the API can read the mail server's TLS key"
+##############################################################################
+# The server backup reads data/certs as uid 1000. Caddy has no Let's Encrypt certificate for this install, so the key
+# is Dovecot's self-signed one, which its entrypoint gives group 1000 and mode 0640 like any other.
+if should_run 14; then
+    key_mode=$(dc exec -T dovecot stat -c '%g %a' /certs/key.pem | tr -d '\r' || true)
+    api_tls_key=$(dc exec -T eigen-api head -n 1 /app/data/certs/key.pem | tr -d '\r' || true)
+    if [ "$key_mode" != "1000 640" ]; then
+        fail "data/certs/key.pem is '$key_mode', expected group 1000 and mode 640"
+    elif ! printf '%s' "$api_tls_key" | grep -q '^-----BEGIN .*PRIVATE KEY-----$'; then
+        fail "eigen-api cannot read data/certs/key.pem: '$api_tls_key'"
+    else
+        ok "the TLS key is group 1000 0640 and eigen-api reads it"
+    fi
+else
+    skip "probe 14 not selected"
 fi
 
 ##############################################################################

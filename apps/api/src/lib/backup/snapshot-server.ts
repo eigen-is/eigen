@@ -4,7 +4,14 @@ import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
 import { orgOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_FORMAT_VERSION } from '@workspace/lib/validation';
 import { stageAuthDbCopy } from '../auth/auth';
-import { getDataRoot, getServerDataPath, ORG_HOMES_DIR, SERVER_DATABASES, SERVER_FILES } from '../config/paths';
+import {
+    CERT_FILES,
+    getDataRoot,
+    getServerDataPath,
+    ORG_HOMES_DIR,
+    SERVER_DATABASES,
+    SERVER_FILES,
+} from '../config/paths';
 import { getOrgName, getPublicConfig } from '../config/server-config';
 import { stageEigenDbCopy } from '../share/db';
 import { stageWaitlistDbCopy } from '../waitlist/waitlist';
@@ -14,6 +21,7 @@ import {
     ARCHIVE_MANIFEST_FILE,
     archiveServerPath,
     buildServerFolderName,
+    SERVER_ARCHIVE_CERTS_DIR,
     SERVER_ARCHIVE_DKIM_DIR,
     SERVER_ARCHIVE_ENV_MEMBER,
 } from './paths';
@@ -111,31 +119,39 @@ function isReadable(filePath: string): boolean {
     }
 }
 
-// The DKIM folder's files when every one of them is readable, else none: a key without its record
-// or a record without its key restores nothing. No folder means mail is off.
-function readableKeyFiles(dkimDir: string): string[] {
-    if (!isReadable(dkimDir)) return [];
-    const names = fs
-        .readdirSync(dkimDir, { withFileTypes: true })
+// `names` in `dir` when every one of them is readable, else none: a key without its DNS record or its
+// certificate restores nothing.
+function readableFiles(dir: string, names: string[]): string[] {
+    return names.every((name) => isReadable(path.join(dir, name))) ? names : [];
+}
+
+// The files of a folder. No folder means mail is off.
+function listFiles(dir: string): string[] {
+    if (!isReadable(dir)) return [];
+    return fs
+        .readdirSync(dir, { withFileTypes: true })
         .filter((entry) => entry.isFile())
         .map((entry) => entry.name)
         .sort();
-    return names.every((name) => isReadable(path.join(dkimDir, name))) ? names : [];
 }
 
-// `.env.production` and the DKIM key sit outside data/ or belong to other users, so the API takes
-// what it has been let read. What it cannot read stays out and the manifest says so: a restore then
-// keeps the install's own env file, and a move to another machine needs new DKIM DNS. `envFile` is
-// unset in `bun run dev`.
+// `.env.production`, the DKIM key and the TLS key sit outside data/ or belong to other users, so the API takes
+// what it has been let read. What it cannot read stays out and the manifest says so: a restore then keeps the
+// install's own env file, key and certificate, and a move to another machine needs new DKIM DNS and a new
+// certificate. `envFile` is unset in `bun run dev`.
 export async function appendInstallFiles(
     writer: ArchiveWriter,
-    { envFile, dkimDir }: { envFile?: string; dkimDir: string },
-): Promise<{ envFile: boolean; dkim: boolean }> {
+    { envFile, dkimDir, certsDir }: { envFile?: string; dkimDir: string; certsDir: string },
+): Promise<{ envFile: boolean; dkim: boolean; certs: boolean }> {
     const hasEnvFile = envFile !== undefined && isReadable(envFile);
     if (hasEnvFile) await writer.appendFile(SERVER_ARCHIVE_ENV_MEMBER, envFile);
-    const keyFiles = readableKeyFiles(dkimDir);
-    for (const name of keyFiles) {
-        await writer.appendFile(`${SERVER_ARCHIVE_DKIM_DIR}/${name}`, path.join(dkimDir, name));
+    const folders = [
+        { member: SERVER_ARCHIVE_DKIM_DIR, dir: dkimDir, names: readableFiles(dkimDir, listFiles(dkimDir)) },
+        { member: SERVER_ARCHIVE_CERTS_DIR, dir: certsDir, names: readableFiles(certsDir, Object.values(CERT_FILES)) },
+    ];
+    for (const { member, dir, names } of folders) {
+        for (const name of names) await writer.appendFile(`${member}/${name}`, path.join(dir, name));
     }
-    return { envFile: hasEnvFile, dkim: keyFiles.length > 0 };
+    const [dkim, certs] = folders.map(({ names }) => names.length > 0);
+    return { envFile: hasEnvFile, dkim, certs };
 }

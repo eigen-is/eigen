@@ -82,7 +82,7 @@ Admins keep what the Users, Guests and team pages need. They read `GET /settings
 
 ## The status section is what ./eigen status reports
 
-`getServerStatus()` (`apps/api/src/lib/config/server-status.ts`) answers both `GET /settings/status` and `/status` on the CLI's control socket (`apps/api/src/routes/control.ts`), so the page and the command never disagree. The certificate is read from `data/certs/cert.pem`, where Caddy's export script copies its Let's Encrypt certificate. Without one, Postfix writes a self-signed stand-in, which the report flags. Whether the bundled Caddy runs is the `edge` profile in `COMPOSE_PROFILES`, which the API reads from `.env.production` through Compose's `env_file`.
+`getServerStatus()` (`apps/api/src/lib/config/server-status.ts`) answers both `GET /settings/status` and `/status` on the CLI's control socket (`apps/api/src/routes/control.ts`), so the page and the command never disagree. The certificate is read from `data/certs/cert.pem`, where Caddy's export script copies its Let's Encrypt certificate. Without one, Dovecot writes a self-signed stand-in, which the report flags. Whether the bundled Caddy runs is the `edge` profile in `COMPOSE_PROFILES`, which the API reads from `.env.production` through Compose's `env_file`.
 
 ## S3 becomes the default only while it connects
 

@@ -597,6 +597,7 @@ describe('Whole-server archive', () => {
     // Whole seconds: the member names carry the archive's stamp, and a stamp is a second wide.
     const at = new Date(Math.floor(Date.now() / 1000) * 1000);
     const DKIM_FILES = ['eigen.private', 'eigen.txt'];
+    const CERT_FILES = ['cert.pem', 'key.pem'];
     let dir: string;
     let archivePath: string;
     let manifest: ServerArchiveManifest;
@@ -637,8 +638,13 @@ describe('Whole-server archive', () => {
             const dkimDir = join(dir, 'dkim-source');
             mkdirSync(dkimDir);
             for (const name of DKIM_FILES) writeFileSync(join(dkimDir, name), `${name} bytes`);
-            const install = await appendInstallFiles(writer, { envFile, dkimDir });
-            expect(install).toEqual({ envFile: true, dkim: true });
+            const certsDir = join(dir, 'certs-source');
+            mkdirSync(certsDir);
+            for (const name of CERT_FILES) writeFileSync(join(certsDir, name), `${name} bytes`);
+            // A temp file of a certificate being swapped in is not the certificate.
+            writeFileSync(join(certsDir, 'key.pem.tmp'), 'half a key');
+            const install = await appendInstallFiles(writer, { envFile, dkimDir, certsDir });
+            expect(install).toEqual({ envFile: true, dkim: true, certs: true });
 
             manifest = await writer.finish({
                 formatVersion: 1,
@@ -663,6 +669,7 @@ describe('Whole-server archive', () => {
             ...homes.map((home) => home.member),
             '.env.production',
             ...DKIM_FILES.map((name) => `dkim/${name}`),
+            ...CERT_FILES.map((name) => `certs/${name}`),
             'manifest.json',
         ];
     }
@@ -759,15 +766,19 @@ describe('Whole-server archive', () => {
         PACK_TIMEOUT_MS,
     );
 
-    test('an unreadable env file and a missing DKIM folder are left out and say so', async () => {
+    test('an unreadable env file, a missing DKIM folder and an unreadable TLS key are left out and say so', async () => {
         const small = join(mkdtempSync(join(TEST_DATA_DIR, 'server-install-')), 'archive.tar');
         const envFile = join(dir, 'unreadable.env');
         writeFileSync(envFile, 'SECRET=1\n');
         chmodSync(envFile, 0o000);
+        // A certificate without its key restores nothing.
+        const certsDir = mkdtempSync(join(TEST_DATA_DIR, 'certs-unreadable-'));
+        for (const name of CERT_FILES) writeFileSync(join(certsDir, name), `${name} bytes`);
+        chmodSync(join(certsDir, 'key.pem'), 0o000);
         const writer = await createArchiveWriter(small);
         try {
-            const install = await appendInstallFiles(writer, { envFile, dkimDir: join(dir, 'no-dkim') });
-            expect(install).toEqual({ envFile: false, dkim: false });
+            const install = await appendInstallFiles(writer, { envFile, dkimDir: join(dir, 'no-dkim'), certsDir });
+            expect(install).toEqual({ envFile: false, dkim: false, certs: false });
             await writer.finish({ ...manifest, ...install });
         } finally {
             await writer.abort();

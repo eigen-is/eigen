@@ -9,7 +9,7 @@ order: 90
 updated: 2026-09-30
 ---
 
-Eigen backs up the whole server while it runs: every account's mail, files, contacts, and calendars, the settings, the server databases, `.env.production`, and the key that signs your mail. Nobody is signed out and nothing stops. This page shows how to back up every night, how to keep a copy off the server, what a backup leaves out, and how to put one back.
+Eigen backs up the whole server while it runs: every account's mail, files, contacts, and calendars, the settings, the server databases, `.env.production`, the key that signs your mail, and the mail server's certificate. Nobody is signed out and nothing stops. This page shows how to back up every night, how to keep a copy off the server, what a backup leaves out, and how to put one back.
 
 ## Back up every night
 
@@ -74,7 +74,6 @@ With Eigen stopped there is nothing to run the backup, so `./eigen backup` refus
 ## What a backup leaves out
 
 - `caddy-data/`, the HTTPS certificates. Eigen gets them again by itself.
-- `data/certs/`, the mail server's certificate. Eigen's own web server puts it back. Behind your own web server, run your certificate hook again.
 - Mail still waiting to go out. Docker keeps it in a volume of its own.
 - The `backups/` folder itself.
 - `docker-compose.override.yml`, if you made one.

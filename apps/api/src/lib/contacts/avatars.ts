@@ -14,7 +14,8 @@ import {
 import type { Contacts } from './contacts';
 import * as schema from './schema';
 
-// Avatar staging and the derived photo cache over the Contacts facade. See docs/CONTACTS.md § Photos.
+// Avatar staging and the served photos over the Contacts facade. See docs/CONTACTS.md § The avatars folder is a second
+// source of truth, not a cache.
 
 // A staged upload has no card referencing it yet, so the sweep must leave it alone while the user is still filling in the form.
 const AVATAR_STAGE_GRACE_MS = 60 * 60 * 1000;

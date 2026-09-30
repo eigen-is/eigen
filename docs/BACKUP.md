@@ -1,6 +1,6 @@
 # Backup & Restore
 
-> **TLDR:** Eigen backs up at two sizes, both made by the running API from one primitive, `snapshotHome`, in `apps/api/src/lib/backup/`. An admin backs up one home (a user or a team) from the admin pane into a verified `.tar.zst` artifact, and restores it with the home offline for the length of the restore. The owner backs up the whole server from Settings, on a schedule or on demand, or with `./eigen backup`: one plain tar of per-home artifacts plus the server's own databases, `.env.production` and the DKIM key, optionally uploaded to a bucket of its own. `./eigen restore` (`apps/api/src/cli/restore.ts` and the `eigen` launcher) puts such an archive back offline, on this machine or a new one with no setup first. Not obvious from the code: nothing a restore replaces is ever deleted, a home member restores on its own only when its manifest says it is complete, the backup bucket's keys live only inside the archives in that bucket, and archives are not encrypted.
+> **TLDR:** Eigen backs up at two sizes, both made by the running API from one primitive, `snapshotHome`, in `apps/api/src/lib/backup/`. An admin backs up one home (a user or a team) from the admin pane into a verified `.tar.zst` artifact, and restores it with the home offline for the length of the restore. The owner backs up the whole server from Settings, on a schedule or on demand, or with `./eigen backup`: one plain tar of per-home artifacts plus the server's own databases, `.env.production`, the DKIM key and the mail server's TLS certificate, optionally uploaded to a bucket of its own. `./eigen restore` (`apps/api/src/cli/restore.ts` and the `eigen` launcher) puts such an archive back offline, on this machine or a new one with no setup first. Not obvious from the code: nothing a restore replaces is ever deleted, a home member restores on its own only when its manifest says it is complete, the backup bucket's keys live only inside the archives in that bucket, and archives are not encrypted.
 
 ## One primitive captures a home, at one of three levels
 
@@ -51,7 +51,7 @@ The server creates the folder only when a backup needs it. `./eigen setup` creat
 
 ## An archive is as secret as data/ itself
 
-A home archive holds every file and mail, the password hash, app passwords, API keys, the 2FA secret and every mount's S3 keys. A whole-server archive adds `users3.db` with every session, the auth secret in `config.json`, the relay password in `.env.production` and the DKIM key. Credentials are not stripped, because a backup that cannot restore a mount or send mail is not a complete backup. Archives are not encrypted: they sit beside `data/` on the same disk, with the same exposure. So the per-home routes are admin-only, the whole-server ones owner-only, and the backup bucket must be private.
+A home archive holds every file and mail, the password hash, app passwords, API keys, the 2FA secret and every mount's S3 keys. A whole-server archive adds `users3.db` with every session, the auth secret in `config.json`, the relay password in `.env.production`, the DKIM key and the TLS key. Credentials are not stripped, because a backup that cannot restore a mount or send mail is not a complete backup. Archives are not encrypted: they sit beside `data/` on the same disk, with the same exposure. So the per-home routes are admin-only, the whole-server ones owner-only, and the backup bucket must be private.
 
 ## One job per home at a time, and the user keeps working
 
@@ -156,7 +156,7 @@ The job:
 3. Captures the server member, verifies it and packs `server.tar.zst`.
 4. Lists the homes from the `users3.db` it just captured, so accounts and homes are one moment: every non-guest user and every team with a folder. A folder with no row is named in `orphans` and left out.
 5. Captures each home at the archive's level, verifies it, packs it and appends it. It waits for the home's slot rather than failing a night on an admin's click, and while it holds the slot a per-home job on that home gets the 409.
-6. Appends `.env.production`, the DKIM files and the manifest, then renames the temp file into place.
+6. Appends `.env.production`, the DKIM files, the TLS certificate and its key, and the manifest, then renames the temp file into place.
 7. Reads the finished tar back and checks every member against the manifest's sha256.
 8. Writes the sidecar, prunes, and starts the upload.
 
@@ -170,14 +170,15 @@ server-{scheduled|manual|pre-update}-{light|full|full-s3}-{yyyymmdd-hhmmss}.tar
 ├── homes/home-{ownerId}-{stamp}.tar.zst  one per-home artifact per home
 ├── .env.production                       absent when the API cannot read it
 ├── dkim/                                 absent when unreadable or mail is off
+├── certs/                                cert.pem and key.pem; absent when either is unreadable or missing
 └── manifest.json                         last
 ```
 
-The outer tar is not compressed: its members already are, and a plain tar reads member by member without unpacking. Reason and level are in the name (`parseServerArchiveName` in `packages/lib/src/validation/backup.ts`), so retention and the schedule never open an archive. The manifest (`ServerArchiveManifest` in `packages/lib/src/types/backup.ts`) lists every member with its sha256, each home with its member or why it has none, the orphans, whether `.env.production` and the DKIM key are in it, and the images the install pinned.
+The outer tar is not compressed: its members already are, and a plain tar reads member by member without unpacking. Reason and level are in the name (`parseServerArchiveName` in `packages/lib/src/validation/backup.ts`), so retention and the schedule never open an archive. The manifest (`ServerArchiveManifest` in `packages/lib/src/types/backup.ts`) lists every member with its sha256, each home with its member or why it has none, the orphans, whether `.env.production`, the DKIM key and the TLS certificate are in it, and the images the install pinned. An archive from before certificates were archived has no `certs` field.
 
 The server member holds `users3.db`, `eigen.db` and `waitlist.db`, each through `VACUUM INTO` on the server's own handle, and the files `SERVER_FILES` names (`apps/api/src/lib/config/paths.ts`). The runtime files in `SERVER_RUNTIME_FILES` are never captured: the instance lock, the control socket, the setup token and the two data-epoch files. Leaving the epoch out is what reloads every tab after a whole-server restore.
 
-The API reads `.env.production` through a read-only mount at `EIGEN_ENV_FILE`. The launcher gives the file group 1000 and mode 0640 on every start (`share_env` in `eigen`), and the Postfix entrypoint gives `data/dkim` the same group. What the API cannot read stays out and the manifest says so: a restore then keeps the install's own `.env.production`, and a move to another machine needs new DKIM DNS. In `bun run dev` there is no `EIGEN_ENV_FILE`.
+The API reads `.env.production` through a read-only mount at `EIGEN_ENV_FILE`. The launcher gives the file group 1000 and mode 0640 on every start (`share_env` in `eigen`), the Postfix entrypoint gives `data/dkim` the same group, and the Dovecot entrypoint gives `data/certs/key.pem` group 1000 and mode 0640 on every start and on every new certificate. Caddy's `export-certs.sh` and a certbot hook write the key 0600, so an archive made between a renewal and Dovecot's next check, at most ten minutes, leaves the certificate out. With mail off no Dovecot shares the key, and nothing needs it. What the API cannot read stays out and the manifest says so: a restore then keeps the install's own `.env.production` and certificate, and a move to another machine needs new DKIM DNS. In `bun run dev` there is no `EIGEN_ENV_FILE`.
 
 ## A home that fails is named, and the archive goes on
 
@@ -230,7 +231,7 @@ The server backup routes (`apps/api/src/routes/server-backup.ts`) have no downlo
 
 `./eigen restore <archive>` takes a name in `backups/` or a path, which the launcher mounts read-only into a one-off container. It works in two steps so that Eigen is down only for the renames:
 
-1. **Stage** (`restore <archive> --stage`, as uid 1000 while Eigen runs). It reads the archive and checks every member's sha256, refuses before anything moves, shows level, version, age, home count, failed homes and whether `.env.production` and the DKIM key are in it, and asks. Then it extracts member by member into `data/.restoring/`, verifies each, and installs each home by its mode. A stale `data/.restoring/` from a stage that died is wiped first; `stage.lock` in it keeps two stages apart.
+1. **Stage** (`restore <archive> --stage`, as uid 1000 while Eigen runs). It reads the archive and checks every member's sha256, refuses before anything moves, shows level, version, age, home count, failed homes and whether `.env.production`, the DKIM key and the TLS certificate are in it, and asks. Then it extracts member by member into `data/.restoring/`, verifies each, and installs each home by its mode. A stale `data/.restoring/` from a stage that died is wiped first; `stage.lock` in it keeps two stages apart.
 2. **Pull**: on a release install, the images the archive's `.env.production` pins, while Eigen still runs.
 3. **Swap** (`restore --swap`, as root with Eigen stopped). It writes `.eigen/restore-swap`, the full list of copies and renames, and syncs it to disk before the first rename. Then it runs them, removes the marker and starts Eigen on the pinned images, with their launcher and Compose files. A local build runs `configure --backfill` instead.
 
@@ -238,9 +239,9 @@ A swap cut off anywhere is finished by the next `./eigen` command: `preflight` f
 
 ## A Full restore swaps data/ whole, a Light one merges
 
-A Full or Full + S3 archive replaces `data/` whole: the live one becomes `data.pre-restore-<stamp>` and the staged one moves in, two renames on one disk. A home that failed in the archive is therefore only in the folder kept aside. When the archive has no DKIM key, the current one is copied into the staged tree first, or mail would sign with a key DNS does not publish.
+A Full or Full + S3 archive replaces `data/` whole: the live one becomes `data.pre-restore-<stamp>` and the staged one moves in, two renames on one disk. A home that failed in the archive is therefore only in the folder kept aside. When the archive has no DKIM key or no TLS certificate, the current one is copied into the staged tree first: mail would sign with a key DNS does not publish, and IMAP and SMTP would fall back to a self-signed certificate.
 
-A Light archive holds no file bodies, so it merges. `server/`, `org/` and `dkim/` go aside whole and the staged ones move in. In a home that already exists, every file of its light set goes aside into `data.pre-restore-<stamp>`, whether the archive has it or not, so a leftover `-wal` is never replayed onto another database. The staged files move in, and the drive files and the Maildir stay. A home only in the archive moves in whole, without its files. The uploads pending in each mount's `staging/` stay for the restored rows that name them, and a copy goes aside, since the next start sweeps the rest.
+A Light archive holds no file bodies, so it merges. `server/`, `org/`, `dkim/` and `certs/` go aside whole and the staged ones move in. In a home that already exists, every file of its light set goes aside into `data.pre-restore-<stamp>`, whether the archive has it or not, so a leftover `-wal` is never replayed onto another database. The staged files move in, and the drive files and the Maildir stay. A home only in the archive moves in whole, without its files. The uploads pending in each mount's `staging/` stay for the restored rows that name them, and a copy goes aside, since the next start sweeps the rest.
 
 `.env.production` goes aside as `.env.production.pre-restore-<stamp>` and the archive's comes in; an archive without one keeps the current file. Anything aside that keeps nothing is removed: a new machine's empty `data/`, and an `.env.production` identical to the archive's. The launcher ends with "Check that all is well, then delete what was kept aside."
 
@@ -290,9 +291,9 @@ The 0.3.0 launcher makes no pre-update backup and passes no archive. It asks the
 
 ## What stays the operator's job
 
-An archive holds `data/`'s homes and server data, `.env.production` and the DKIM key. Not in it:
+An archive holds `data/`'s homes and server data, `.env.production`, the DKIM key and the mail server's TLS certificate. Not in it:
 
-- `data/certs/`: Caddy exports its certificate again; behind your own web server, copy it in again.
+- Renewing the TLS certificate: a restored one is only as fresh as the archive. Caddy exports its own again; behind your own web server, the certbot hook runs on the next renewal, or run it once by hand.
 - `caddy-data/`: Caddy gets its certificates again.
 - The Postfix queue, a Docker volume with the mail still waiting to go out.
 - `backups/` itself: copy archives off the box, or turn on the upload.

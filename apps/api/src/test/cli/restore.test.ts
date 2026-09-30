@@ -69,6 +69,7 @@ const ARCHIVED_ENV =
     'DOMAIN=archived.example.org\nEIGEN_VERSION=0.3.1\nEIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api@sha256:abc\n';
 const RELEASE_ENV = 'DOMAIN=here.example.org\nEIGEN_VERSION=0.3.0\n';
 const DKIM_KEY = '-----BEGIN PRIVATE KEY-----\narchived\n-----END PRIVATE KEY-----\n';
+const TLS_KEY = '-----BEGIN PRIVATE KEY-----\narchived tls\n-----END PRIVATE KEY-----\n';
 const S3_MOUNT_ID = 'restore-cli-s3';
 const ASIDE = /^data\.pre-restore-\d{8}-\d{6}$/;
 
@@ -455,9 +456,18 @@ beforeAll(async () => {
     writeFileSync(envFile, ARCHIVED_ENV);
     process.env['EIGEN_ENV_FILE'] = envFile;
 
-    fullArchive = await backup('full');
-    lightArchive = await backup('light');
-    fullS3Archive = await backup('full-s3');
+    // Out again once archived: the status tests read this folder as the mail server's certificate.
+    const certs = join(TEST_DATA_DIR, 'certs');
+    mkdirSync(certs, { recursive: true });
+    writeFileSync(join(certs, 'cert.pem'), 'archived certificate');
+    writeFileSync(join(certs, 'key.pem'), TLS_KEY);
+    try {
+        fullArchive = await backup('full');
+        lightArchive = await backup('light');
+        fullS3Archive = await backup('full-s3');
+    } finally {
+        rmSync(certs, { recursive: true, force: true });
+    }
 }, JOB_TIMEOUT_MS);
 
 afterAll(async () => {
@@ -474,7 +484,7 @@ afterAll(async () => {
 
 describe('restore --stage and --swap', () => {
     test(
-        'a Full archive onto an empty data dir brings back every home, the server databases, env and DKIM, and keeps the old data aside',
+        'a Full archive onto an empty data dir brings back every home, the server databases, env, DKIM and TLS, and keeps the old data aside',
         async () => {
             const dir = install();
             const { manifest } = await readManifest(fullArchive);
@@ -497,6 +507,8 @@ describe('restore --stage and --swap', () => {
             expect(existsSync(join(dir, 'data/server', SERVER_DATABASES.shares))).toBe(true);
             expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(ARCHIVED_ENV);
             expect(readFileSync(join(dir, 'data/dkim/eigen.private'), 'utf8')).toBe(DKIM_KEY);
+            expect(readFileSync(join(dir, 'data/certs/key.pem'), 'utf8')).toBe(TLS_KEY);
+            expect(readFileSync(join(dir, 'data/certs/cert.pem'), 'utf8')).toBe('archived certificate');
 
             // What it replaced is aside, whole, and nothing of the restore's own is left.
             const [aside] = asideDirs(dir);
@@ -574,6 +586,8 @@ describe('restore --stage and --swap', () => {
             writeFileSync(join(live, PATHS.MAIL.ROOT, PATHS.MAIL.MAILDIR, 'cur/1.eml'), 'live mail');
             mkdirSync(join(live, 'mounts', aliceMountId, PATHS.DRIVE.STAGING_DIR), { recursive: true });
             writeFileSync(join(live, 'mounts', aliceMountId, PATHS.DRIVE.STAGING_DIR, 'upload'), 'staged here');
+            mkdirSync(join(dir, 'data/certs'));
+            writeFileSync(join(dir, 'data/certs/key.pem'), 'the key here');
 
             const output = await stageAndSwap(dir, basename(lightArchive));
             expect(output).toMatch(/light/i);
@@ -600,6 +614,9 @@ describe('restore --stage and --swap', () => {
             expect(readFileSync(join(dir, aside, 'server', SERVER_RUNTIME_FILES.epoch), 'utf8')).toBe('epoch-before');
             expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
             expect(existsSync(join(dir, 'data/server', SERVER_DATABASES.users))).toBe(true);
+            // The archive's TLS certificate in, the one here aside.
+            expect(readFileSync(join(dir, 'data/certs/key.pem'), 'utf8')).toBe(TLS_KEY);
+            expect(readFileSync(join(dir, aside, 'certs/key.pem'), 'utf8')).toBe('the key here');
         },
         JOB_TIMEOUT_MS,
     );
@@ -782,6 +799,24 @@ describe('restore --stage and --swap', () => {
             });
             await stageAndSwap(dir, crafted);
             expect(readFileSync(join(dir, 'data/dkim/eigen.private'), 'utf8')).toBe('the key here');
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'an archive without the TLS certificate keeps the current one',
+        async () => {
+            const dir = install();
+            mkdirSync(join(dir, 'data/certs'));
+            writeFileSync(join(dir, 'data/certs/cert.pem'), 'the certificate here');
+            writeFileSync(join(dir, 'data/certs/key.pem'), 'the key here');
+            const crafted = await craft(fullArchive, {
+                drop: (name) => name.startsWith('certs/'),
+                manifest: (m) => ({ ...m, certs: false }),
+            });
+            await stageAndSwap(dir, crafted);
+            expect(readFileSync(join(dir, 'data/certs/cert.pem'), 'utf8')).toBe('the certificate here');
+            expect(readFileSync(join(dir, 'data/certs/key.pem'), 'utf8')).toBe('the key here');
         },
         JOB_TIMEOUT_MS,
     );

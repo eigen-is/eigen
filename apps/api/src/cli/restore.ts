@@ -40,7 +40,15 @@ import {
 import { readServerArchive } from '../lib/backup/verify';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
 import { getEnvFile } from '../lib/config/env';
-import { DKIM_DIR, getDataRoot, ORG_HOMES_DIR, SERVER_DIR, TEAM_HOMES_DIR, USER_HOMES_DIR } from '../lib/config/paths';
+import {
+    CERTS_DIR,
+    DKIM_DIR,
+    getDataRoot,
+    ORG_HOMES_DIR,
+    SERVER_DIR,
+    TEAM_HOMES_DIR,
+    USER_HOMES_DIR,
+} from '../lib/config/paths';
 import { PIN_KEYS } from '../lib/config/release';
 import { PATHS } from '../lib/core/constants';
 import { readEnvFile } from './env-file';
@@ -288,6 +296,9 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         `${homes.length} homes${failed.length ? `; not in it: ${failed.map((home) => `${home.name} (${home.failed})`).join(', ')}` : ''}`,
         envMember ? `${ENV_PATH} from the archive` : `No ${ENV_PATH}: the one here stays`,
         manifest.dkim ? 'The DKIM key from the archive' : 'No DKIM key: the one here stays, or mail needs new DNS',
+        manifest.certs
+            ? 'The mail TLS certificate from the archive'
+            : 'No mail TLS certificate: the one here stays, or the mail server makes a self-signed one',
     ];
     if (manifest.level === 'light') {
         const bare = homes.filter((home) => !existsSync(homeDirUnder(dataRoot, home.ownerId))).length;
@@ -379,8 +390,8 @@ async function refusal(restoring: string): Promise<string | null> {
     return null;
 }
 
-// Light: server/, org/ and dkim/ go aside whole, the staged ones in. In a home here, every file of its light set
-// goes aside first, held by the archive or not: a -wal left beside another database would be replayed onto it.
+// Light: server/, org/, dkim/ and certs/ go aside whole, the staged ones in. In a home here, every file of its light
+// set goes aside first, held by the archive or not: a -wal left beside another database would be replayed onto it.
 // A folder only here stays; one only in the archive moves in whole. A home only in the archive moves in whole.
 // `merged` are the homes here the archive merges into, relative to data/.
 function planLight(
@@ -389,7 +400,7 @@ function planLight(
 ): { renames: [string, string][]; merged: string[] } | { conflict: string } {
     const renames: [string, string][] = [];
     const merged: string[] = [];
-    for (const top of [SERVER_DIR, ORG_HOMES_DIR, DKIM_DIR]) {
+    for (const top of [SERVER_DIR, ORG_HOMES_DIR, DKIM_DIR, CERTS_DIR]) {
         if (!existsSync(join(staged, top))) continue;
         if (lexists(join(DATA, top))) renames.push([join(DATA, top), join(aside, top)]);
         renames.push([join(staged, top), join(DATA, top)]);
@@ -588,9 +599,12 @@ async function swap(): Promise<void> {
             }
         }
     } else {
-        // An archive without the DKIM key keeps the one here, or mail would sign with a key DNS does not publish.
-        if (!existsSync(join(stagedData, DKIM_DIR)) && existsSync(join(DATA, DKIM_DIR))) {
-            cpSync(join(DATA, DKIM_DIR), join(stagedData, DKIM_DIR), { recursive: true });
+        // An archive without the DKIM key or the TLS certificate keeps the one here: mail would sign with a key DNS
+        // does not publish, and serve IMAP and SMTP with a self-signed certificate.
+        for (const top of [DKIM_DIR, CERTS_DIR]) {
+            if (!existsSync(join(stagedData, top)) && existsSync(join(DATA, top))) {
+                cpSync(join(DATA, top), join(stagedData, top), { recursive: true });
+            }
         }
         renames.push([DATA, dataAside], [join(dataAside, RESTORING_DIR, RESTORING_DATA_DIR), DATA]);
         leftover = join(dataAside, RESTORING_DIR);

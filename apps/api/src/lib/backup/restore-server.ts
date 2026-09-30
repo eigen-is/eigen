@@ -5,6 +5,8 @@ import type { ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_OWNER_ID, buildBackupStamp, parseBackupManifest } from '@workspace/lib/validation';
 import {
+    CERT_FILES,
+    CERTS_DIR,
     DKIM_DIR,
     ORG_HOMES_DIR,
     SERVER_DIR,
@@ -25,6 +27,7 @@ import {
     buildServerFolderName,
     requireMountDir,
     resolveInside,
+    SERVER_ARCHIVE_CERTS_DIR,
     SERVER_ARCHIVE_DKIM_DIR,
     SERVER_ARCHIVE_SERVER_MEMBER,
 } from './paths';
@@ -71,6 +74,14 @@ async function stageServerMember(archive: ServerArchive, dataDir: string, unpack
         fs.rmSync(path.join(dataDir, SERVER_DIR, name), { force: true });
     }
 }
+
+// The install folders an archive may carry beside its members, each into its folder in data/. The containers that
+// use them give them their owners and modes when they start.
+const CERT_NAMES = new Set<string>(Object.values(CERT_FILES));
+const INSTALL_FOLDERS = [
+    { member: SERVER_ARCHIVE_DKIM_DIR, dir: DKIM_DIR, what: 'DKIM', accepts: isUsableName },
+    { member: SERVER_ARCHIVE_CERTS_DIR, dir: CERTS_DIR, what: 'TLS', accepts: (file: string) => CERT_NAMES.has(file) },
+];
 
 // What the stage leaves out of the pending uploads it finds: `settled` the ones data/ here already uploaded or
 // canceled, `missing` the ones whose bytes the archive does not hold. Their rows name missing files, which
@@ -247,10 +258,11 @@ export async function stageServerArchive(
     await stageServerMember(archive, context.dataDir, path.join(context.unpackDir, SERVER_DIR));
 
     for (const [name, member] of archive.members) {
-        if (!name.startsWith(`${SERVER_ARCHIVE_DKIM_DIR}/`)) continue;
-        const file = name.slice(SERVER_ARCHIVE_DKIM_DIR.length + 1);
-        if (!isUsableName(file)) throw new ApiError(400, `${name} is not a DKIM file`);
-        const target = path.join(context.dataDir, DKIM_DIR, file);
+        const folder = INSTALL_FOLDERS.find((candidate) => name.startsWith(`${candidate.member}/`));
+        if (!folder) continue;
+        const file = name.slice(folder.member.length + 1);
+        if (!folder.accepts(file)) throw new ApiError(400, `${name} is not a ${folder.what} file`);
+        const target = path.join(context.dataDir, folder.dir, file);
         fs.mkdirSync(path.dirname(target), { recursive: true });
         await copyArchiveMember(member, target);
         fs.chmodSync(target, 0o600);
