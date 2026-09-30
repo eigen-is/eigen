@@ -282,11 +282,6 @@ env_of() { scratch_run sed -n "s/^$1=//p" "$INSTALL/.env.production" | tail -n 1
 # How many data/ folders restores have kept aside.
 aside_count() { (cd "$INSTALL" && ls -d data.pre-restore-* 2>/dev/null | wc -l | tr -d ' '); }
 
-# The pre-update snapshots, space-separated; snapshots/ is root's alone.
-pre_updates() {
-    scratch_run sh -c 'cd "$1" 2>/dev/null && ls eigen-pre-update-*.tar.gz 2>/dev/null' sh "$INSTALL/snapshots" | tr '\n' ' '
-}
-
 # setup_token <log>: the token of the last setup link in ./eigen setup output.
 setup_token() { grep -o 'setup=[A-Za-z0-9_-]*' "$1" | tail -n 1 | cut -d= -f2 || true; }
 
@@ -346,14 +341,15 @@ api() {
 first_id() { grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4 || true; }
 
 # collab_tab <web server service> <its origin inside its container> <doc ID> <kept> <edit>: a browser tab on the
-# document over its collab WebSocket through that web server, as the admin in $JAR, from Bun in the API image. <kept>
-# is what an open tab holds, epoch:Y.Doc, or empty for a fresh tab; <edit> is typed before it connects, as while
-# offline. Prints "synced <kept> <text>" once the server has its state, or "closed <code> <reason>".
+# document over its collab WebSocket through that web server, as the admin in $JAR, from Bun in the image eigen-api
+# runs, which a release install pulled. <kept> is what an open tab holds, epoch:Y.Doc, or empty for a fresh tab; <edit>
+# is typed before it connects, as while offline. Prints "synced <kept> <text>" once the server has its state, or "closed <code> <reason>".
 collab_tab() {
     local cookie
     cookie=$(awk -F'\t' 'NF >= 7 && ($1 !~ /^#/ || $1 ~ /^#HttpOnly_/) { printf "%s=%s; ", $6, $7 }' "$JAR")
     docker run --rm --network "container:$(dc ps -q "$1")" --entrypoint bun -e COOKIE="$cookie" -e KEPT="$4" \
-        -e EDIT="$5" -e URL="$2/eigen/ws/collab/$ADMIN_ID/default/$3" "$EIGEN_API_IMAGE" -e '
+        -e EDIT="$5" -e URL="$2/eigen/ws/collab/$ADMIN_ID/default/$3" \
+        "$(docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)")" -e '
             const Y = require("yjs");
             const encoding = require("lib0/encoding");
             const decoding = require("lib0/decoding");

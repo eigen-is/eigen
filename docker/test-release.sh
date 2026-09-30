@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# The release gate, run locally: releases <version>-harness.8, .9 (also :latest) and .10 (with a breaking change), built
-# from the working tree and pushed to a registry:2 of this run. With ./eigen in a docker:cli container that has no Bun:
+# The release gate, run locally. First the real upgrade: install the newest release published on ghcr.io before this
+# one, as published, seed it, update it to the working tree built as the release it becomes, and roll back. A tree whose
+# version is out already becomes the next patch release. Then releases <version>-harness.8, .9 (also :latest) and .10
+# (with a breaking change), built from the working tree and pushed to a registry:2 of this run, beside the new release.
+# With ./eigen in a docker:cli container that has no Bun:
 # install .8 and seed a document, sheet, event, contact and chat message; update to :latest; roll back; refuse and
 # then accept the breaking release; refuse an unknown version and a downgrade; refuse a local build's snapshot, and a
 # snapshot of .8 while the registry is down, before anything stops; restore a snapshot of .8, which brings its
@@ -8,8 +11,11 @@
 # build, and leave main for .10; install from main; install .9 from the launcher alone; install .9 twice, on one digest.
 #
 # Usage:  ./docker/test-release.sh
-# Needs:  docker, curl, git. Builds the API five times and the other images three times, twice from the cache (the
-#         first on a cold cache takes minutes).
+#         ACCEPT_BREAKING=1 lets the new release list breaking changes since the published one: the update takes
+#         --accept-breaking, and the seed is only checked after the rollback. publish.yml sets it for the input
+#         breaking: true.
+# Needs:  docker, curl, git, and ghcr.io. Builds the API six times and the other images three times, twice from the
+#         cache (the first on a cold cache takes minutes).
 
 set -euo pipefail
 
@@ -22,6 +28,38 @@ PREVIOUS=$VERSION-harness.8
 NEW=$VERSION-harness.9
 BREAKING=$VERSION-harness.10
 SETUP_FLAGS=(--yes --mail-domain example.org --no-mail --no-relay --no-proxy --contact-email admin@example.org)
+
+# The registry publish.yml pushes to: REGISTRY in ./eigen, before .env.production can name another.
+PUBLISHED_REGISTRY=$(sed -n 's/^REGISTRY=\([^$]*\)$/\1/p' "$REPO_ROOT/eigen")
+
+# published_releases: the x.y.z tags of its api image, with an anonymous pull token. Prereleases, main, latest and
+# publish.yml's candidates are no release an install runs by default.
+published_releases() {
+    local host=${PUBLISHED_REGISTRY%%/*} repo=${PUBLISHED_REGISTRY#*/}/api token
+    token=$(curl -fsS "https://$host/token?scope=repository:$repo:pull" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')
+    curl -fsS -H "Authorization: Bearer $token" "https://$host/v2/$repo/tags/list?n=1000" |
+        grep -o '"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*"' | tr -d '"'
+}
+
+# older_than <x.y.z>: the versions on stdin below it, oldest first.
+older_than() {
+    awk -F. -v want="$1" 'BEGIN { split(want, w, ".") }
+        { for (i = 1; i <= 3; i++) if ($i + 0 != w[i] + 0) { if ($i + 0 < w[i] + 0) print; next } }' |
+        sort -t. -k1,1n -k2,2n -k3,3n
+}
+
+# PUBLISHED, the release a self-hoster runs when this one comes out, and RELEASE, what this tree is released as.
+if ! RELEASES=$(published_releases); then
+    echo "harness: could not list the releases on $PUBLISHED_REGISTRY" >&2
+    exit 1
+fi
+if printf '%s\n' "$RELEASES" | grep -qxF "$VERSION"; then
+    PUBLISHED=$VERSION
+    RELEASE=${VERSION%.*}.$((${VERSION##*.} + 1))
+else
+    PUBLISHED=$(printf '%s\n' "$RELEASES" | older_than "${VERSION%%-*}" | tail -n 1)
+    RELEASE=$VERSION
+fi
 
 scratch_init release
 # Release installs pull their images; the private build tags of a local build do not apply.
@@ -43,17 +81,28 @@ remove_registry_images() {
     if [ -n "$images" ]; then docker image rm -f $images >/dev/null 2>&1 || true; fi
 }
 
+# published_images: the IDs of the local images of $PUBLISHED_REGISTRY, one a line.
+published_images() {
+    local name
+    for name in $IMAGES; do docker image ls --all --format '{{.ID}}' "$PUBLISHED_REGISTRY/$name"; done | sort -u
+}
+# Those here before this run are left alone.
+PUBLISHED_BEFORE=$(published_images)
+
 # What this run pushed and pulled, the registry and its volume; harness_cleanup does the rest. The installs go first:
 # an image in use stays.
 release_cleanup() {
-    local project
+    local project pulled
     if [ "${HARNESS_KEEP:-0}" = 1 ]; then return; fi
     for project in $HARNESS_PROJECTS; do down_project "$project"; done
     remove_registry_images
+    pulled=$(comm -13 <(printf '%s\n' "$PUBLISHED_BEFORE") <(published_images))
+    if [ -n "$pulled" ]; then docker image rm -f $pulled >/dev/null 2>&1 || true; fi
     docker rm -f "eigentest-registry-$RUN" >/dev/null 2>&1 || true
     docker volume rm "$REGISTRY_VOLUME" >/dev/null 2>&1 || true
 }
-trap 'code=$?; release_cleanup; (exit $code); harness_cleanup' EXIT
+# set +e: under set -e the (exit $code) of a failed run would end the trap before harness_cleanup.
+trap 'code=$?; set +e; release_cleanup; (exit $code); harness_cleanup' EXIT
 
 # release_source <version> <changelog sections>: the working tree in $SCRATCH/src-<version>, at that version, with
 # the sections above the first release in its CHANGELOG.md.
@@ -86,13 +135,13 @@ The harness's breaking release.
 - **Harness storage (breaking)** — stored another way; there is no way back
 "
 
-# release_install <folder name> <version>: $INSTALL, bootstrapped by root from the no-Bun container, with the
-# harness's ports. The folder name is the Compose project, so it holds no dot.
+# release_install <folder name> <version> [registry]: $INSTALL, bootstrapped by root from the no-Bun container, with
+# the harness's ports, from this run's registry by default. The folder name is the Compose project, so it holds no dot.
 release_install() {
     register_install "$1" 0:0
     scratch_run mkdir "$INSTALL"
     assert_isolated
-    in_cli_container docker run --rm -v "$INSTALL:/out" "$REGISTRY/api:$2" bootstrap >"$SCRATCH/bootstrap-$1.log" 2>&1
+    in_cli_container docker run --rm -v "$INSTALL:/out" "${3:-$REGISTRY}/api:$2" bootstrap >"$SCRATCH/bootstrap-$1.log" 2>&1
     write_override
     BASE="https://localhost:$PORT_HTTPS/eigen"
 }
@@ -103,10 +152,18 @@ tags_are() {
         "$(printf '%s\n' "$@" | sort | tr '\n' ' ')" ]
 }
 
+# doc_text: the text of the seeded document, as a fresh tab on it through Caddy gets it; empty when none syncs.
+doc_text() {
+    local status text
+    read -r status _ text <<<"$(collab_tab caddy wss://localhost "$DOC_ID" '' '')"
+    if [ "$status" = synced ]; then printf '%s' "$text"; fi
+}
+
 seed() {
     local drive="/drive/$ADMIN_ID/default"
     ROOT_ID=$(api GET "$drive/root" | first_id)
-    api POST "$drive/folder/$ROOT_ID/create/doc" '{"fileName":"Release doc"}' >/dev/null
+    DOC_ID=$(api POST "$drive/folder/$ROOT_ID/create/doc" '{"fileName":"Release doc"}' | first_id)
+    collab_tab caddy wss://localhost "$DOC_ID" '' 'typed before the update' >/dev/null
     api POST "$drive/folder/$ROOT_ID/create/sheets" '{"fileName":"Release sheet"}' >/dev/null
     CAL_ID=$(api GET "/calendar/$ADMIN_ID/calendars" |
         grep -o '"id":"[^"]*","name":"[^"]*","color":"[^"]*","isDefault":true' | cut -d'"' -f4 || true)
@@ -128,27 +185,34 @@ missing_items() {
     for name in 'Release doc.eigendoc' 'Release sheet.eigensheets' 'Release chat.eigenchat'; do
         printf '%s' "$listing" | grep -q "\"$name\"" || missing="$missing '$name'"
     done
+    [ "$(doc_text)" = 'typed before the update' ] || missing="$missing 'document text'"
     api GET "/calendar/$ADMIN_ID/calendars/$CAL_ID/events/$EVENT_ID" | grep -q '"Release event"' || missing="$missing event"
     api GET "/contacts/$ADMIN_ID/contacts/$CONTACT_ID" | grep -q '"release@example.com"' || missing="$missing contact"
     api GET "/chat/$ADMIN_ID/default/$CHAT_ID/messages" | grep -q '"survives the update"' || missing="$missing message"
     printf '%s' "$missing"
 }
 
-# check_running <version> [channel]: healthy, status names the version, it or the channel is pinned by digest, every
-# seeded item is there.
-check_running() {
-    local missing pinned=${2:-$1}
+# check_pinned <version> [pinned [registry]]: healthy, status names the version, it or what is pinned instead (a
+# channel) is pinned by digest, from this run's registry by default.
+check_pinned() {
+    local pinned=${2:-$1}
     if stack_up; then ok "every service runs and eigen-api is healthy"; else fail "the stack is not up"; fi
     eigen status
     if says "Version  *$1"; then ok "status shows $1"; else fail "status shows another version"; show; fi
-    if [ "$(env_of EIGEN_VERSION)" = "$pinned" ] && env_of EIGEN_API_IMAGE | grep -q "^$REGISTRY/api@sha256:"; then
+    if [ "$(env_of EIGEN_VERSION)" = "$pinned" ] && env_of EIGEN_API_IMAGE | grep -q "^${3:-$REGISTRY}/api@sha256:"; then
         ok ".env.production pins $pinned by digest"
     else
         fail ".env.production pins $(env_of EIGEN_VERSION) as $(env_of EIGEN_API_IMAGE)"
     fi
+}
+
+# check_running <version> [pinned [registry]]: check_pinned, and every seeded item is there.
+check_running() {
+    local missing
+    check_pinned "$@"
     missing=$(missing_items)
     if [ -z "$missing" ]; then
-        ok "the document, sheet, event, contact and chat message are all there"
+        ok "the document and its text, the sheet, event, contact and chat message are all there"
     else
         fail "missing:$missing"
     fi
@@ -158,16 +222,16 @@ check_running() {
 check_channel() { check_running "$NEW ($1) on main" main; }
 
 # build_main <commit>: the five images of a build of main at that commit, api from $NEW's code, the others from
-# $PREVIOUS's cache, each labeled with the commit as publish.yml labels them. Pushed as :main and untagged, so the
+# $RELEASE's cache, each labeled with the commit as publish.yml labels them. Pushed as :main and untagged, so the
 # installs pull what they run. Like an install's own pull of a new build, the tag moves off the build an install pins.
 build_main() {
     local name
     build -f "$SCRATCH/src-$NEW/docker/api/Dockerfile" --build-arg "EIGEN_VERSION=$NEW" --build-arg "EIGEN_COMMIT=$1" \
         --build-arg EIGEN_CHANNEL=main --build-arg "EIGEN_REGISTRY=$REGISTRY" -t "$REGISTRY/api:main" "$SCRATCH/src-$NEW"
-    build -f "$SCRATCH/src-$PREVIOUS/docker/frontend/Dockerfile" --build-arg "EIGEN_COMMIT=$1" \
-        -t "$REGISTRY/frontend:main" "$SCRATCH/src-$PREVIOUS"
+    build -f "$SCRATCH/src-$RELEASE/docker/frontend/Dockerfile" --build-arg "EIGEN_COMMIT=$1" \
+        -t "$REGISTRY/frontend:main" "$SCRATCH/src-$RELEASE"
     for name in postfix dovecot unbound; do
-        build --build-arg "EIGEN_COMMIT=$1" -t "$REGISTRY/$name:main" "$SCRATCH/src-$PREVIOUS/docker/$name"
+        build --build-arg "EIGEN_COMMIT=$1" -t "$REGISTRY/$name:main" "$SCRATCH/src-$RELEASE/docker/$name"
     done
     for name in $IMAGES; do
         docker push -q "$REGISTRY/$name:main" >/dev/null 2>&1
@@ -178,49 +242,124 @@ build_main() {
 # The api image the install runs, by ID.
 api_image() { docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)"; }
 
+# What snapshots/ holds, which is root's alone.
+snapshots() { scratch_run ls "$INSTALL/snapshots"; }
+
 # Every line of the env file but the pins.
 unpinned() { scratch_run cat "$INSTALL/.env.production" | grep -v '^EIGEN_\(VERSION\|[A-Z]*_IMAGE\)='; }
 
 api_tags() { docker image ls "$REGISTRY/api" --format '{{.Tag}}' | tr '\n' ' '; }
 
-header "Releases $PREVIOUS, $NEW and $BREAKING in a registry on port $REGISTRY_PORT"
+header "Releases $RELEASE, $PREVIOUS, $NEW and $BREAKING in a registry on port $REGISTRY_PORT"
 started=$SECONDS
 docker volume create --label eigen.harness=1 "$REGISTRY_VOLUME" >/dev/null
 docker run -d --name "eigentest-registry-$RUN" --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
     -p "127.0.0.1:$REGISTRY_PORT:5000" -v "$REGISTRY_VOLUME:/var/lib/registry" registry:2 >/dev/null
+release_source "$RELEASE" ''
 release_source "$PREVIOUS" ''
 release_source "$NEW" "$NEW_SECTION"
 release_source "$BREAKING" "$BREAKING_SECTION
 $NEW_SECTION"
 build() { docker build -q --label eigen.harness=1 --build-arg BUN_VERSION "$@" >/dev/null; }
-for version in "$PREVIOUS" "$NEW" "$BREAKING"; do
+for version in "$RELEASE" "$PREVIOUS" "$NEW" "$BREAKING"; do
     build -f "$SCRATCH/src-$version/docker/api/Dockerfile" --build-arg "EIGEN_VERSION=$version" \
         --build-arg EIGEN_COMMIT=harness --build-arg "EIGEN_REGISTRY=$REGISTRY" -t "$REGISTRY/api:$version" \
         "$SCRATCH/src-$version"
 done
 # One commit for all five, or the launcher refuses them as images of different builds.
-build -f "$SCRATCH/src-$PREVIOUS/docker/frontend/Dockerfile" --build-arg EIGEN_COMMIT=harness \
-    -t "$REGISTRY/frontend:$PREVIOUS" "$SCRATCH/src-$PREVIOUS"
+build -f "$SCRATCH/src-$RELEASE/docker/frontend/Dockerfile" --build-arg EIGEN_COMMIT=harness \
+    -t "$REGISTRY/frontend:$RELEASE" "$SCRATCH/src-$RELEASE"
 for name in postfix dovecot unbound; do
-    build --build-arg EIGEN_COMMIT=harness -t "$REGISTRY/$name:$PREVIOUS" "$SCRATCH/src-$PREVIOUS/docker/$name"
+    build --build-arg EIGEN_COMMIT=harness -t "$REGISTRY/$name:$RELEASE" "$SCRATCH/src-$RELEASE/docker/$name"
 done
 for name in $IMAGES; do
     if [ "$name" != api ]; then
-        docker tag "$REGISTRY/$name:$PREVIOUS" "$REGISTRY/$name:$NEW"
-        docker tag "$REGISTRY/$name:$PREVIOUS" "$REGISTRY/$name:$BREAKING"
+        for tag in "$PREVIOUS" "$NEW" "$BREAKING"; do docker tag "$REGISTRY/$name:$RELEASE" "$REGISTRY/$name:$tag"; done
     fi
     docker tag "$REGISTRY/$name:$NEW" "$REGISTRY/$name:latest"
-    for tag in "$PREVIOUS" "$NEW" "$BREAKING" latest; do docker push -q "$REGISTRY/$name:$tag" >/dev/null 2>&1; done
+    for tag in "$RELEASE" "$PREVIOUS" "$NEW" "$BREAKING" latest; do
+        docker push -q "$REGISTRY/$name:$tag" >/dev/null 2>&1
+    done
 done
 # The installs must pull what they run.
 remove_registry_images
-ok "built and pushed the three releases in $((SECONDS - started))s"
+ok "built and pushed the four releases in $((SECONDS - started))s"
+JAR="$SCRATCH/session"
+
+##############################################################################
+header "Updating $PUBLISHED, as published, to $RELEASE"
+##############################################################################
+# upgrade_published: $PUBLISHED from $PUBLISHED_REGISTRY, seeded, updated to $RELEASE and rolled back, as a
+# self-hoster does when $RELEASE comes out.
+upgrade_published() {
+    local before after breaking=''
+    release_install "eigentest-published-$$" "$PUBLISHED" "$PUBLISHED_REGISTRY"
+    run_setup "$SCRATCH/setup-published.log" "${SETUP_FLAGS[@]}" --domain localhost
+    if ! create_admin "$SCRATCH/setup-published.log" "$PASSWORD"; then
+        fail "the setup link of $PUBLISHED made no admin"
+        return
+    fi
+    seed
+    check_running "$PUBLISHED" "$PUBLISHED" "$PUBLISHED_REGISTRY"
+    # $RELEASE is not out yet: the install names this run's registry, which holds it, as a mirror install does.
+    scratch_run sed -i "s|^EIGEN_REGISTRY=.*|EIGEN_REGISTRY=$REGISTRY|" "$INSTALL/.env.production"
+    before=$(unpinned)
+
+    started=$SECONDS
+    eigen update "$RELEASE"
+    show
+    if [ "$CODE" = 1 ] && says "■  Eigen $RELEASE has breaking changes, listed above."; then
+        if [ "${ACCEPT_BREAKING:-}" != 1 ]; then
+            fail "$RELEASE lists breaking changes since $PUBLISHED, so ./eigen update refuses it on every install of $PUBLISHED. To publish it anyway, run publish.yml on its tag with the input breaking: true (locally: ACCEPT_BREAKING=1)"
+            return
+        fi
+        ok "$RELEASE lists breaking changes since $PUBLISHED, accepted by ACCEPT_BREAKING=1"
+        breaking=1
+        started=$SECONDS
+        eigen update "$RELEASE" --accept-breaking
+        show
+    fi
+    if [ "$CODE" = 0 ] && says "◇  Eigen $PUBLISHED (.*) → $RELEASE (harness) is running at https://localhost/"; then
+        ok "./eigen update went from $PUBLISHED to $RELEASE in $((SECONDS - started))s"
+    else
+        fail "./eigen update from $PUBLISHED to $RELEASE exited $CODE"
+    fi
+    if [ -n "$breaking" ]; then
+        check_pinned "$RELEASE"
+        skip "the seed on $RELEASE, whose breaking changes may drop it"
+    else
+        check_running "$RELEASE"
+    fi
+    after=$(unpinned)
+    if [ "${after:0:${#before}}" = "$before" ]; then
+        ok "every line of .env.production but the pins is kept"
+    else
+        fail ".env.production changed: $(diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") | tr '\n' ' ')"
+    fi
+    probe_site "https://localhost:$PORT_HTTPS"
+
+    started=$SECONDS
+    eigen rollback --yes
+    show
+    if [ "$CODE" = 0 ] && says "◇  Eigen $RELEASE (harness) → $PUBLISHED (.*) is running at https://localhost/"; then
+        ok "./eigen rollback went back to $PUBLISHED in $((SECONDS - started))s"
+    else
+        fail "./eigen rollback to $PUBLISHED exited $CODE"
+    fi
+    check_running "$PUBLISHED" "$PUBLISHED" "$PUBLISHED_REGISTRY"
+    probe_site "https://localhost:$PORT_HTTPS"
+}
+if [ -n "$PUBLISHED" ]; then
+    upgrade_published
+    down_project "$PROJECT"
+else
+    skip "no release before $VERSION is published on $PUBLISHED_REGISTRY"
+fi
 
 ##############################################################################
 header "Installing $PREVIOUS"
 ##############################################################################
 release_install "eigentest-release-$$" "$PREVIOUS"
-JAR="$SCRATCH/session"
 run_setup "$SCRATCH/setup.log" "${SETUP_FLAGS[@]}" --domain localhost
 if ! create_admin "$SCRATCH/setup.log" "$PASSWORD"; then
     fail "the setup link of $PREVIOUS made no admin"
@@ -249,15 +388,6 @@ if [ "${after:0:${#UNPINNED}}" = "$UNPINNED" ]; then
     ok "every line of .env.production but the pins is kept"
 else
     fail ".env.production changed: $(diff <(printf '%s\n' "$UNPINNED") <(printf '%s\n' "$after") | tr '\n' ' ')"
-fi
-archive=$(pre_updates)
-archive=${archive% }
-pointer=$(scratch_run cat "$INSTALL/.eigen/last-update")
-meta=$(scratch_run tar -xzOf "$INSTALL/snapshots/$archive" eigen-snapshot.json || true)
-if [ "$pointer" = "$archive" ] && [[ $meta == *"\"version\":\"$PREVIOUS\""* ]] && [[ $archive == eigen-pre-update-light-* ]]; then
-    ok ".eigen/last-update names snapshots/$archive, a light snapshot made by $PREVIOUS and named for its kind"
-else
-    fail ".eigen/last-update '$pointer', snapshot $meta"
 fi
 # latest is the same image as $NEW.
 if tags_are "$PREVIOUS" "$NEW" latest; then
@@ -327,6 +457,7 @@ header "A breaking release"
 started=$(api_started)
 inode=$(scratch_run stat -c %i "$INSTALL/eigen")
 env_before=$(scratch_run cat "$INSTALL/.env.production")
+snapshots_before=$(snapshots)
 eigen update "$BREAKING"
 show
 if [ "$CODE" = 1 ] && says '▲  Harness storage (breaking)' &&
@@ -337,7 +468,7 @@ else
     fail "update to $BREAKING without the flag: exit $CODE"
 fi
 if [ "$(api_started)" = "$started" ] && [ "$(scratch_run stat -c %i "$INSTALL/eigen")" = "$inode" ] &&
-    [ "$(scratch_run cat "$INSTALL/.env.production")" = "$env_before" ] && [ "$(pre_updates)" = "$archive " ]; then
+    [ "$(scratch_run cat "$INSTALL/.env.production")" = "$env_before" ] && [ "$(snapshots)" = "$snapshots_before" ]; then
     ok "the refusal stopped nothing and changed nothing"
 else
     fail "the refused update changed something"
