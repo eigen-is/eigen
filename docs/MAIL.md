@@ -22,6 +22,8 @@ Every Maildir write fsyncs the staged file and each indexed directory its rename
 
 DOMPurify costs more than the parse (9.4 ms against 2.5 ms on a 25 KiB message), and almost nothing that parses a message wants its body. So `parseEml` returns an `IndexedEmail`, whose `html` is `null` by type, for the index, the sync and attachment reads. `parseEmlForReader` sanitizes, and only `MaildirStore.getMessage` calls it. The type guarantees that a caller that never asked for a body never gets an unsanitized one.
 
+The reader's sanitize keeps remote images, and the apps' CSP allows any `https:` image (`vite.security-headers.ts`). So a message loads its remote images as it opens, and a tracking pixel tells its sender. Blocking them takes an opt-in toggle or an image proxy, a [ROADMAP](ROADMAP.md) row.
+
 ## The inbox has three spellings
 
 `packages/lib/src/constants/mailboxes.ts` is the one source of the six standard mailboxes, their special-use flags and their labels. Nobody spells a mailbox by hand. The inbox still differs per layer, the top source of subtle mail bugs:

@@ -17,6 +17,8 @@ A read-only peer can send awareness, so `CollabDocument.handleMessage` validates
 - the state's `user.userId` must be the session user: a client may publish presence for itself only
 - a client id belongs to the connection that declared it (`clientIdOwners`), so no peer can evict or overwrite another's cursor
 
+The display name in the state is not checked. A user may label their own cursor with any name, but it still carries their own `userId`, and no peer can touch another's cursor.
+
 ## The route speaks first during a cold load
 
 y-websocket hard-closes a connection that stays silent for 30 s (a hardcoded client constant) and reconnects on a ~2.5 s backoff, and every retry re-pays the full load. That spiral feeds itself and can degrade the whole server. So `apps/api/src/lib/collab/loading-heartbeat.ts` sends an empty awareness frame immediately and every 10 s until sync-step-1 takes over. Clients apply it as a no-op; it exists only to reset their silence timer.

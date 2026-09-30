@@ -28,11 +28,11 @@ export function buildContentSecurityPolicy({ dev, apiHost }: SecurityPolicyOptio
     // inline scripts; a hash cannot cover them, and adding 'unsafe-inline' alongside a hash makes the
     // browser ignore 'unsafe-inline'. So dev drops the hash and allows inline instead.
     const script = dev ? "'self' 'unsafe-inline'" : `'self' ${themeScriptCspSource()}`;
-    // https: lets sanitized mail bodies (rendered in a srcdoc iframe that inherits this policy) load
-    // remote images; data:/blob: cover generated thumbnails, avatars and object URLs.
+    // https: lets sanitized mail bodies (rendered in a shadow root under this policy) load remote
+    // images; data:/blob: cover generated thumbnails, avatars and object URLs.
     const img = ["'self'", 'data:', 'blob:', 'https:'];
     const media = ["'self'", 'blob:', 'data:'];
-    // Preview iframes and the srcdoc mail body.
+    // Preview iframes.
     const frame = ["'self'", 'blob:'];
     // xhr, SSE and the ws collab socket. All same-origin in prod ('self' covers ws to the same origin).
     const connect = ["'self'"];

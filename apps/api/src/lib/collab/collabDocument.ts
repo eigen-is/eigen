@@ -161,8 +161,8 @@ function isConnection(origin: unknown): origin is ServerWebSocket<unknown> {
 }
 
 // A client may publish presence for itself only: an awareness `user` field must carry the session
-// user's id, so a reader can't paint another person's name/color. A state with no `user` field (the
-// initial empty handshake state) carries no identity to spoof.
+// user's id, so a reader can't publish under another user's id. The display name stays client-set.
+// A state with no `user` field (the initial empty handshake state) carries no identity to spoof.
 function awarenessIdentityMatches(state: unknown, userId: string): boolean {
     if (!isRecord(state)) return true;
     const identity = state['user'];
