@@ -53,7 +53,7 @@ An overwrite trashes the target first. So a request whose source and destination
 
 A create and an overwrite both stream the body to a temp file while hashing it, then write the row. The hash becomes the ETag. An empty PUT succeeds, because Finder reserves a new name with a 0-byte PUT before it sends the content. A PUT over a folder is a 409. The MIME type comes from the name's extension, and an overwrite regenerates the thumbnail.
 
-**The quota pre-check trusts `Content-Length`.** A chunked upload sends none, so nothing is checked, and one upload can push the mount past its cap. The client is authenticated, so this chunked-PUT gap is a noisy-user problem, not an attack. Over quota is a 507. How a mount's quota resolves is in [QUOTA.md](QUOTA.md).
+**The quota pre-check trusts `Content-Length`.** A chunked upload sends none, so nothing is checked, and one upload can push the mount past its cap. The client is authenticated, so this chunked-PUT gap is a noisy-user problem, not an attack. Over quota is a 507. A PUT is also not held to the per-file upload cap a Drive upload meets (`getUploadMaxSize`, `quotas.maxUploadSizeMB`): nothing in `apps/api/src/lib/webdav/` calls it, so the `Content-Length` quota pre-check is the only bound on a PUT's size. How a mount's quota resolves is in [QUOTA.md](QUOTA.md).
 
 ## The ETag is the content hash
 

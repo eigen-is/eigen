@@ -80,7 +80,7 @@ What follows from that:
 
 ### Drive creates a plain chat file, never the wizard
 
-Drive is a place-first surface. Its "New" menu, list context menu and mobile toolbar create a chat like any other Eigen type (`DriveCreateEigenDoc type="chat"`) in the folder you are browsing. The new chat starts with exactly the members its location's ACL implies, which keeps the file model visible. The wizard, with its open-don't-duplicate rule and its `chats` default, belongs to the person-first surfaces, where the intent is "talk to someone", not "create a file here". Don't wire the wizard into Drive.
+Drive is a place-first surface. Its "New" menu, list context menu and mobile toolbar create a chat like any other Eigen type (`DriveCreateEigenDoc type="chat"`) in the folder you are browsing. The new chat starts with exactly the members its location's ACL implies, which keeps the file model visible. The wizard, with its open-don't-duplicate rule and its `chats` default, belongs to the person-first surfaces, where the intent is "talk to someone", not "create a file here". So Drive has no path into the wizard: its open-don't-duplicate rule would answer a create in this folder with a chat that lives somewhere else.
 
 ### Step 1 works like the share dialog
 

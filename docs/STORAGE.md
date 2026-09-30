@@ -66,7 +66,7 @@ Waiters are served in arrival order. A rename queued behind a stream of saves ru
 
 Bun's `S3Client` takes no timeout and no signal, and gives up on a silent request only after about 360 s. Eigen's own bound is `STORAGE_TIMEOUT_MS` (30 s, `apps/api/src/lib/storage/deadline.ts`). `S3Storage` races `exists`, `size` and `delete` against it. A timed-out `exists` or `size` answers 503, a timed-out `delete` returns `false` like any failed delete.
 
-Every storage read the server consumes itself runs through `streamStorageFile`, the storage form of the one stream loop `consumeStream`. A read that delivers no byte for 30 s is cancelled with a 503. Search for its callers rather than a list here.
+Every storage read the server consumes itself runs through `streamStorageFile`, the storage form of the one stream loop `consumeStream`. A read that delivers no byte for 30 s is cancelled with a 503.
 
 Most reads also pass the mount's `downloads` signal. `closeAllDatabases` and `Drive.destruct` abort it first, so no teardown waits on a stalled download or extraction read. Copy and version snapshots read without it, because a close-time snapshot runs after that abort.
 

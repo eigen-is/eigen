@@ -62,9 +62,9 @@ A doc is as long as its domain needs. It gets shorter only by cutting narration,
 ## Rewriting or merging a doc
 
 1. **List the claims first.** Walk the old doc (every doc, when merging) and write down every design decision, invariant and gotcha, one line each. This list is what you must not lose.
-2. **Check each claim against the code.** Find the line that makes it true. A claim with only, every, never or instead is checked against the code path that makes the quantifier true, not just the happy path. A what you can't confirm in a few greps stays out, and your report lists it as unverified: never cut a claim silently. A why stays unless the code contradicts it. When the check narrows an inherited quantifier ("every host" becomes "docs and sheets"), the doc says what the excluded path does now, or the gap gets a ROADMAP row. A wrong doc is worse than a short one.
+2. **Check each claim against the code.** Find the line that makes it true. A claim with only, every, never or instead is checked against the code path that makes the quantifier true, not just the happy path. A what you can't confirm in a few greps stays out, and your report lists it as unverified: never cut a claim silently. A claim the code contradicts is never dropped silently: the doc states the corrected fact, or a ROADMAP row names the gap. A why stays unless the code contradicts it. When the check narrows an inherited quantifier ("every host" becomes "docs and sheets"), the doc says what the excluded path does now, or the gap gets a ROADMAP row. A wrong doc is worse than a short one.
 3. **Write the TLDR**, then one section per claim that needs one. Merge claims that share a reason.
-4. **Give every claim a home** from the table above, and verify the home of every reason. A reason survives even when its "what" goes. For every why you drop from the doc, grep the code for the reason (not the symbol). If it is absent, add a one-line comment in the same commit. Your report to the caller, not only the commit message, lists each dropped why with its home as `file:line`, doc §, or test name.
+4. **Give every claim a home** from the table above, and verify the home of every reason. A reason survives even when its "what" goes. For every why you drop from the doc, grep the code for the reason (not the symbol). If it is absent, add a one-line comment in the same commit. Your report to the caller, not only the commit message, lists each dropped why with its home as `file:line`, doc §, or test name. The report also cites the doc § for every sentence the commit message says the doc now contains.
 5. **Check.** Run the checklist.
 
 Editing one section follows the same steps, and the TLDR changes only when one of its claims does. A doc that receives moved material runs the whole checklist too. Renaming a heading breaks its anchor and its prose citations: grep `docs/`, `AGENTS.md` and `.claude/` for `NAME.md#old-anchor`, and `apps/ packages/ docker/ scripts/` for `NAME.md § Old heading`, skipping `.claude/worktrees/` and `docs/superpowers/`, and fix every hit. After rewording a claim, grep `docs/ROADMAP*.md` for prose that quotes the old one.
@@ -76,8 +76,11 @@ f=docs/NAME.md
 grep -nE '—|used to|previously|no longer' $f                                # expect nothing
 grep -nE 'showed|was a|turned every' $f                                     # fix narration: say why it is so now
 grep -nE 'kept for|later|not built|will' $f                                 # deferred work: a ROADMAP row instead
+grep -nE 'here|above|below|this doc' $f                                     # the doc talks about itself: cut it
 bun scripts/check-docs-links.ts                                             # files exist, not anchors
 ```
+
+The greps flag candidates, not errors. Read every hit: "later ones" or `will-change` is fine where "will be added later" is not.
 
 ```bash
 # every #anchor resolves: prints each link whose heading is gone (bash, since zsh rejects the patterns)
@@ -91,6 +94,7 @@ EOF
 
 - The TLDR is one short paragraph and makes sense alone. Every claim in it has a section that carries it.
 - Every heading states a fact. Every section has a why.
+- The doc never talks about itself: no "here", "above", "below" or "see this doc". It states facts and links to other docs.
 - Present tense. Short sentences in simple English. No em-dashes, no "Note that", "robust", "seamlessly".
 - No hard line breaks inside a paragraph.
 - Every path you name exists, every "X lives in `file`" is grepped in that file, and both link checks print nothing.
