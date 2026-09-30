@@ -10,7 +10,7 @@ export const internalRouter = new Elysia({ name: 'internal' })
         async ({ body, request, server }) => {
             requireLocalhost(request, server);
             // `ip` is the mail client's address, forwarded by eigen-checkpassword from dovecot's
-            // `IP`. Without it the limiter only ever sees the docker bridge peer.
+            // `TCPREMOTEIP`. Without it the limiter only ever sees the docker bridge peer.
             const user = await verifyProtocolAuth(body.email, body.password, body.ip);
             return { userId: user.id, email: user.email };
         },

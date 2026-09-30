@@ -38,7 +38,7 @@ DOMPurify costs more than the parse (9.4 ms against 2.5 ms on a 25 KiB message),
 
 The mailbox list holds the standard six, then every other Maildir++ folder on disk, so a folder an IMAP client made just shows up. Eigen's UI creates, renames and deletes none. A custom name is literal: `Projects` and `projects` are two folders.
 
-`isValidMailboxPath` refuses only what would break a path, not what falls outside an allowlist. Dovecot writes `&` and non-ASCII in modified UTF-7 (`Ärger` is `.&AMQ-rger`), and those are ordinary folders that `mailboxDisplayName` decodes for the sidebar. The rules and the case-clash limit are in [IMAP.md § Mailbox Structure](IMAP.md#mailbox-structure).
+`isValidMailboxPath` refuses only what would break a path, not what falls outside an allowlist. Dovecot writes `&` and non-ASCII in modified UTF-7 (`Ärger` is `.&AMQ-rger`), and those are ordinary folders that `mailboxDisplayName` decodes for the sidebar. The rules and the case-clash limit are in [IMAP.md § A mailbox name is refused only for what breaks a path](IMAP.md#a-mailbox-name-is-refused-only-for-what-breaks-a-path).
 
 Custom folders have no watcher. A listing kicks a background reconcile of each one, at most once a minute per folder, because every burst of mail SSE events re-lists the mailboxes and each reconcile takes the lock user mutations need.
 
@@ -49,7 +49,7 @@ At 50k messages a mailbox, the whole list is 34 MB and one 200-row page is 130 K
 - `MailDB.listMessages` pages on a `(date, id)` cursor over the `(mailbox, date DESC, id DESC)` index.
 - Move, read, flag and delete patch the cached pages by message id (`patchEmailInLists`) and roll back on error, instead of invalidating.
 - The server echoes each mutation over SSE. The mutation records the echo it expects (`markRecentMailMutation`), and the SSE handler skips that one refetch.
-- `listMessages` answers from the DB and reconciles in the background, except on the first open of an empty mailbox ([IMAP.md § Sync Engine](IMAP.md#sync-engine)).
+- `listMessages` answers from the DB and reconciles in the background, except on the first open of an empty mailbox ([IMAP.md § A read answers from the index](IMAP.md#a-read-answers-from-the-index)).
 
 A notification goes out only for mail that arrives, coalesced on the `mail:new` tag. The first index of an empty mailbox rings nothing, because the mail it finds was already on disk. An import, a copy and the welcome message pass `arrival: false`, since the user or Eigen put them there.
 
