@@ -535,9 +535,9 @@ export async function readArtifactManifest(artifactPath: string): Promise<Backup
     return manifest;
 }
 
-// The home folder inside an unpacked archive, with the manifest that describes it. Both callers
-// judge an extract they just made, and both say the same thing about an archive that turns out to
-// be another home's or to carry no manifest this build reads.
+// The home folder inside an unpacked archive, with the manifest that describes it. Every caller judges
+// an extract it just made, and says the same thing about an archive that turns out to be another
+// home's or to carry no manifest this build reads.
 export function readUnpackedHome(
     unpackDir: string,
     ownerId: string,

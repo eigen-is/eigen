@@ -1,18 +1,16 @@
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ServerArchiveManifest } from '@workspace/lib/types/backup';
-import { parseOwnerId } from '@workspace/lib/types/owner';
+import type { BackupVerifyRecord, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { BACKUP_OWNER_ID, buildBackupStamp, parseBackupManifest } from '@workspace/lib/validation';
 import {
     CERT_FILES,
     CERTS_DIR,
     DKIM_DIR,
+    homeDirUnder,
     ORG_HOMES_DIR,
     SERVER_DIR,
     SERVER_RUNTIME_FILES,
-    TEAM_HOMES_DIR,
-    USER_HOMES_DIR,
 } from '../config/paths';
 import { PATHS } from '../core/constants';
 import { ApiError } from '../core/errors';
@@ -31,7 +29,7 @@ import {
     SERVER_ARCHIVE_DKIM_DIR,
     SERVER_ARCHIVE_SERVER_MEMBER,
 } from './paths';
-import { FAILURES_IN_MESSAGE, verifyFolder } from './verify';
+import { describeFailures, verifyFolder } from './verify';
 
 // ./eigen restore stages a whole-server archive into data/.restoring while the API runs on data/, then swaps it in
 // with the API stopped. This is the stage's work on the tree; cli/restore.ts asks, refuses and swaps. Nothing it
@@ -40,22 +38,16 @@ export const RESTORING_DIR = '.restoring';
 // Inside it, the new data/, with the archive's .env.production beside it.
 export const RESTORING_DATA_DIR = 'data';
 
-export type ServerArchive = { name: string; manifest: ServerArchiveManifest; members: Map<string, ArchiveMember> };
+export type ServerArchiveFile = { name: string; manifest: ServerArchiveManifest; members: Map<string, ArchiveMember> };
 
-// Where an owner's home folder sits under a data root.
-export function homeDirUnder(dataRoot: string, ownerId: string): string {
-    const owner = parseOwnerId(ownerId);
-    return path.join(dataRoot, owner.type === 'team' ? TEAM_HOMES_DIR : USER_HOMES_DIR, owner.id);
-}
-
-function requireVerified(verified: Awaited<ReturnType<typeof verifyFolder>>, name: string): void {
+function requireVerified(verified: BackupVerifyRecord, name: string): void {
     if (verified.status === 'verified') return;
-    throw new ApiError(400, `${name} did not verify: ${verified.failures.slice(0, FAILURES_IN_MESSAGE).join('; ')}`);
+    throw new ApiError(400, `${name} did not verify: ${describeFailures(verified)}`);
 }
 
 // server/ and org/ out of server.tar.zst. The runtime files are never captured; one found here goes, so the
 // restored server draws a new data epoch and every tab from before reloads.
-async function stageServerMember(archive: ServerArchive, dataDir: string, unpackDir: string): Promise<void> {
+async function stageServerMember(archive: ServerArchiveFile, dataDir: string, unpackDir: string): Promise<void> {
     const member = archive.members.get(SERVER_ARCHIVE_SERVER_MEMBER);
     if (!member) throw new ApiError(400, `${archive.name} holds no ${SERVER_ARCHIVE_SERVER_MEMBER}`);
     await extractArtifact(member, unpackDir);
@@ -188,7 +180,7 @@ type StageContext = {
 // replayed, unless the archive holds its objects and the operator asked for them (fresh keys, as a per-home
 // restore does).
 async function stageHome(
-    archive: ServerArchive,
+    archive: ServerArchiveFile,
     home: ServerArchiveManifest['homes'][number] & { member: string },
     { dataDir, unpackDir, liveDataRoot, s3FromArchive, stamp, now }: StageContext,
     notReplayed: NotReplayed,
@@ -228,8 +220,9 @@ async function stageHome(
     const mountIds = carried.map((summary) => summary.id);
     checkRestoredDatabases(homeDir, mountIds, containerDatabases);
     for (const id of mountIds) {
+        const metadata = path.join(requireMountDir(homeDir, id), PATHS.DRIVE.METADATA_DB);
         try {
-            redateTrash(path.join(requireMountDir(homeDir, id), PATHS.DRIVE.METADATA_DB), now);
+            redateTrash(metadata, now);
         } catch (error) {
             throw new ApiError(400, `the trash of ${home.name} cannot be dated: ${describeError(error)}`);
         }
@@ -240,7 +233,7 @@ async function stageHome(
 // Every member of the archive into `restoringDir`/data, each verified as it lands. Throws on the first one that
 // is refused; the caller takes the staged tree back.
 export async function stageServerArchive(
-    archive: ServerArchive,
+    archive: ServerArchiveFile,
     restoringDir: string,
     {
         liveDataRoot,

@@ -32,7 +32,7 @@ type ServerDatabase = (typeof SERVER_DATABASES)[keyof typeof SERVER_DATABASES];
 // Each server database is copied with VACUUM INTO through the handle the running server writes
 // with, so the copy is one committed state. Keyed by file name: a database added to SERVER_DATABASES
 // does not compile until it is staged here.
-const STAGE_SERVER_DATABASE: Record<ServerDatabase, (destPath: string) => Promise<void>> = {
+const STAGE_SERVER_DATABASE: Record<ServerDatabase, (destPath: string) => void | Promise<void>> = {
     [SERVER_DATABASES.users]: stageAuthDbCopy,
     [SERVER_DATABASES.shares]: stageEigenDbCopy,
     [SERVER_DATABASES.waitlist]: stageWaitlistDbCopy,

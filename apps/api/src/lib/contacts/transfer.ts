@@ -81,7 +81,7 @@ export async function importCards(contacts: Contacts, bytes: Uint8Array): Promis
     }
     if (cards.length > VCARD_IMPORT_MAX_CARDS) throw new ApiError(413, 'Too many cards');
 
-    // Built outside the write lock, so a concurrent import or DAV PUT can still admit the same address. Accepted.
+    // Built outside the write lock, so a concurrent import or DAV PUT may still add the same address twice.
     const emails = new Set<string>();
     for (const contact of await contacts.getContacts()) {
         for (const email of contact.email) {

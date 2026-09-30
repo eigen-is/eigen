@@ -1,12 +1,12 @@
-import { existsSync, statfsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import type { parseArgs } from 'node:util';
-import { formatFileSize } from '@workspace/lib/format';
+import { roomShortfall } from '../lib/backup/paths';
 import { DATA, VERSION_PATTERN } from './install';
 import { createUi } from './ui';
 import { notesSince } from './update-check';
 
-// What stays of the offline snapshot: the ./eigen update of Eigen 0.3.0 asks this image for it before it switches,
-// then saves the snapshot with its own image. It runs as root on the install folder (-w /install).
+// The ./eigen update of Eigen 0.3.0 asks this image whether to save a full or a light snapshot before it switches,
+// then saves it with its own image. It runs as root on the install folder (-w /install).
 const SNAPSHOTS = 'snapshots';
 
 export const SNAPSHOT_OPTIONS = {
@@ -38,12 +38,12 @@ export async function snapshot(
     const du = Bun.spawn(['du', '-sk', DATA], { stdout: 'pipe', stderr: 'ignore' });
     const [listed] = await Promise.all([new Response(du.stdout).text(), du.exited]);
     const needed = Number.parseInt(listed, 10) * 1024;
-    const { bavail, bsize } = statfsSync(existsSync(SNAPSHOTS) ? SNAPSHOTS : '.');
-    if (!(needed <= bavail * bsize)) {
-        ui.fail(
-            `The ${kind} snapshot needs up to ${formatFileSize(needed)}; ${SNAPSHOTS}/ has ${formatFileSize(bavail * bsize)} free.`,
-            `Free space on that disk, or delete old snapshots from ${SNAPSHOTS}/.`,
-        );
-    }
+    const shortfall = roomShortfall(
+        `The ${kind} snapshot`,
+        needed,
+        existsSync(SNAPSHOTS) ? SNAPSHOTS : '.',
+        `${SNAPSHOTS}/`,
+    );
+    if (shortfall) ui.fail(`${shortfall}.`, `Free space on that disk, or delete old snapshots from ${SNAPSHOTS}/.`);
     console.log(`kind=${kind}`);
 }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { formatFileSize } from '@workspace/lib/format';
 import type { BackupLevel, BackupReason, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import type { ParsedOwnerId } from '@workspace/lib/types/owner';
 import {
@@ -17,6 +18,15 @@ import {
 import { getDataRoot, SERVER_DIR } from '../config/paths';
 import { PATHS } from '../core/constants';
 import { ApiError } from '../core/errors';
+
+// Why the disk of `dir` has no room for `needed` bytes, or null: the one wording of every backup's, stage's and
+// snapshot's room check.
+export function roomShortfall(what: string, needed: number, dir: string, where: string): string | null {
+    const { bavail, bsize } = fs.statfsSync(dir);
+    const free = bavail * bsize;
+    if (needed <= free) return null;
+    return `${what} needs up to ${formatFileSize(needed)}; ${where} has ${formatFileSize(free)} free`;
+}
 
 // Where backup artifacts live. Outside `data/` on purpose, so one wipe of the data directory can never
 // take the backups with it. In the container it is the `./backups` bind mount, named by EIGEN_BACKUPS_DIR.

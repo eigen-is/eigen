@@ -38,7 +38,7 @@ function dataOverlap(config: S3Config): string | null {
     const saved = getS3Config();
     const mounts = homes.flatMap(({ mounts }) => (mounts ?? []).flatMap(({ s3Config }) => s3Config ?? []));
     const configs = [...(saved ? [saved] : []), ...mounts];
-    // By name alone: one provider answers to several hosts, and two prefixes in one bucket share its fate (D13).
+    // By name alone: one provider answers to several hosts, and two prefixes in one bucket share its fate.
     const bucket = config.bucket.toLowerCase();
     if (configs.some((data) => data.bucket.toLowerCase() === bucket)) return DATA_BUCKET;
     if (configs.some((data) => data.accessKeyId === config.accessKeyId)) return DATA_KEY;
@@ -112,9 +112,8 @@ export function multipartOptions(bytes: number): { partSize: number; queueSize: 
     return { partSize, queueSize: PARTS_IN_FLIGHT };
 }
 
-// The bytes that leave the box, failing once `signal` aborts, which makes Bun abort the multipart upload.
-// Encryption, when it comes, is a transform of this stream.
-function sealArchive(archivePath: string, signal?: AbortSignal): ReadableStream<Uint8Array> {
+// The archive's bytes, failing once `signal` aborts, which makes Bun abort the multipart upload.
+function abortableStream(archivePath: string, signal?: AbortSignal): ReadableStream<Uint8Array> {
     const reader = Bun.file(archivePath).stream().getReader();
     return new ReadableStream<Uint8Array>({
         start(controller) {
@@ -173,7 +172,7 @@ export async function uploadServerArchive(
     const bucket = serverBucket(destination);
     // Before the archive, so the bucket never holds a partial one it would count as complete.
     if (retention.partial) await bucket.write(`${name}${BUCKET_PARTIAL_SUFFIX}`, new Uint8Array());
-    const write = bucket.read(name).write(new Response(sealArchive(archivePath, signal)), multipartOptions(bytes));
+    const write = bucket.read(name).write(new Response(abortableStream(archivePath, signal)), multipartOptions(bytes));
     await untilAborted(write, signal);
     const stored = await bucket.size(name);
     if (stored === null) throw new Error(`The bucket did not say how many bytes of ${name} it holds`);

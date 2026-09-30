@@ -2,7 +2,7 @@ import { X509Certificate } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ServerArchive, ServerArchiveSidecar } from '@workspace/lib/types/backup';
-import { listBackupJobs } from '../backup/jobs';
+import { runningJobOn } from '../backup/jobs';
 import { listServerArchives } from '../backup/server-job';
 import { getRelayHost, isBundledCaddy, isMailEnabled } from './env';
 import { CERT_FILES, CERTS_DIR, getDataRoot } from './paths';
@@ -46,7 +46,7 @@ function isNotUploaded({ name, record }: ServerArchive): boolean {
     if (record?.upload?.state === 'failed') return true;
     if (record?.upload || record?.verify?.status !== 'verified') return false;
     if (!getServerSettings().backups.upload.enabled) return false;
-    return !listBackupJobs().some((job) => job.state === 'running' && job.artifact === name);
+    return !runningJobOn(name);
 }
 
 async function getBackupStatus(): Promise<ControlStatus['backup']> {

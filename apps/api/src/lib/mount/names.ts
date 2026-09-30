@@ -19,9 +19,9 @@ export const CONTROL_CHARS = /[\x00-\x1f]/;
 // Filesystem ENAMETOOLONG is a byte limit, not a character limit.
 export const MAX_NAME_BYTES = 255;
 
-// One path segment and nothing else. Split out of validateName so an archived paths table can be
-// held to the same rule without throwing: a live row always passes (validateName wrote it), a row
-// that came in inside an uploaded archive has never been held to anything.
+// One path segment and nothing else, answered without throwing: an archived paths table is held to
+// the rule validateName writes live rows by, and a row that came in inside an uploaded archive has
+// never been held to anything.
 export function isUsableName(name: string): boolean {
     if (!name || name === '.' || name === '..') return false;
     return !(name.includes('/') || name.includes('\\') || CONTROL_CHARS.test(name));

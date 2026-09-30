@@ -122,7 +122,7 @@ async function isPubliclyReadable(config: S3Config, key: string): Promise<boolea
 }
 
 // Path-style, as the S3Client and the signed bucket requests use it; `https://` when no scheme is given.
-export function s3Endpoint(config: S3Config): string {
+function s3Endpoint(config: S3Config): string {
     const rawEndpoint = config.endpoint.replace(/\/$/, '');
     return /^https?:\/\//.test(rawEndpoint) ? rawEndpoint : `https://${rawEndpoint}`;
 }

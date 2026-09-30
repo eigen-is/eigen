@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type { BackupEntry, BackupLevel, BackupManifest } from '@workspace/lib/types/backup';
 import type { MountConfig } from '@workspace/lib/types/mount';
@@ -13,7 +14,7 @@ import { createMountConfig, Mount } from '../mount';
 import { MOUNT_DB_CONFIG } from '../mount/db-config';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
-import { HOME_DATABASE_PATHS, HOME_DATABASES, MAILDIR_ROOT } from './archive-layout';
+import { HOME_DATABASE_PATHS, HOME_DATABASES, isLightSkipped, MAILDIR_ROOT } from './archive-layout';
 import { readAuthRows } from './auth-tables';
 import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
 import { describeError } from './errors';
@@ -32,25 +33,20 @@ import { flushOpenDocumentDbs, snapshotMountData, snapshotMountStaging, snapshot
 
 export type SnapshotProgress = (step: string, done: number, total: number) => void;
 
-// `mounts/` is walked from its paths tables instead (snapshotMountData). Matched on the path from
-// the home root, never on the folder name: a folder deeper in the home that happens to be called
-// `mounts` is somebody's own and belongs in the archive.
-// The contacts avatar cache is archived rather than re-derived: the served webp carries what the card's Apple-safe PHOTO gave up.
-const SKIPPED_HOME_DIRS = new Set<string>([PATHS.DRIVE.ROOT]);
-
-// The other skip, which has no fixed path: every mailbox in the Maildir has a `tmp/` delivery spool
-// beside its `cur/` and `new/`, holding half-written deliveries only.
-
+// `mounts/` is walked from its paths tables instead (snapshotMountData), and each mailbox's `tmp/` delivery spool,
+// beside its `cur/` and `new/`, holds half-written deliveries only. Matched on the path from the home root, never on
+// the folder name: a folder deeper in the home that happens to be called `mounts` is somebody's own.
 function isSkippedHomeDir(rel: string, level: BackupLevel): boolean {
-    if (SKIPPED_HOME_DIRS.has(rel)) return true;
-    // Light leaves the mail where it is: a whole-server restore of one keeps the Maildir in place.
-    if (level === 'light' && rel === MAILDIR_ROOT) return true;
+    if (rel === PATHS.DRIVE.ROOT) return true;
+    // A whole-server restore of a Light archive keeps what it leaves out in place.
+    if (level === 'light' && isLightSkipped(rel)) return true;
     return path.basename(rel) === PATHS.MAIL.TMP && rel.startsWith(`${MAILDIR_ROOT}/`);
 }
 
 // Databases are captured with VACUUM INTO through the live handle, never as a file copy, and their
 // journals belong to the running server.
 const DB_FILE = /\.db(-wal|-shm)?$/;
+const JOURNAL_FILE = /\.db-(wal|shm)$/;
 
 // A folder as plain files: every file to copy, every directory to create in the archive folder, and
 // the databases found, which are not copied (the caller says what one found there means). Journals
@@ -80,13 +76,22 @@ export function listFileTree(root: string, skipDir: (rel: string) => boolean = (
 }
 
 // What a capture of the tree stages, at most: its files and databases as they sit on disk. The room
-// check before a server backup sizes with it; a file gone since the listing counts nothing.
-export function treeBytes(root: string, skipDir?: (rel: string) => boolean): number {
-    const tree = listFileTree(root, skipDir);
-    return [...tree.files, ...tree.databases].reduce(
-        (sum, rel) => sum + (fs.statSync(path.join(root, rel), { throwIfNoEntry: false })?.size ?? 0),
-        0,
-    );
+// check before a server backup sizes every home with it, so it walks without blocking the server; a
+// file gone since the listing counts nothing.
+export async function treeBytes(root: string, skipDir: (rel: string) => boolean = () => false): Promise<number> {
+    let bytes = 0;
+    const walk = async (relDir: string): Promise<void> => {
+        for (const entry of await fsp.readdir(path.join(root, relDir), { withFileTypes: true })) {
+            const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
+            if (entry.isDirectory()) {
+                if (!skipDir(rel)) await walk(rel);
+            } else if (entry.isFile() && !JOURNAL_FILE.test(entry.name)) {
+                bytes += (await fsp.stat(path.join(root, rel)).catch(() => undefined))?.size ?? 0;
+            }
+        }
+    };
+    await walk('');
+    return bytes;
 }
 
 // Writes a storage-independent copy of one home into `{targetDir}/home-{ownerId}/` and returns the

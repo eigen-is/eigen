@@ -15,7 +15,7 @@ import {
 } from './paths';
 import type { SnapshotProgress } from './snapshot-home';
 import { buildBackupJobEvent } from './sse-events';
-import { FAILURES_IN_MESSAGE, verifyFolder } from './verify';
+import { describeFailures, verifyFolder } from './verify';
 
 // A finished job stays this long so an admin who was away still sees the outcome. The artifact and
 // its sidecar are the durable record, so dropping the job loses nothing.
@@ -38,7 +38,8 @@ const inFlight = new Map<
     { kind: BackupJob['kind']; ownerId: string; settled: Promise<void>; abort: AbortController }
 >();
 
-// A server backup and an archive's upload are the owner's alone (D11): they name a server archive.
+// A server backup and an archive's upload are the owner's alone: they name a server archive, which holds every
+// home's mail, password hashes and mount keys.
 export function isServerJob(kind: BackupJob['kind']): boolean {
     return kind === 'server-backup' || kind === 'upload';
 }
@@ -71,7 +72,7 @@ function poke(job: BackupJob): void {
 // One piece of work per home at a time — a second backup while one is running would read a folder
 // the first is still walking, a second restore would move aside a folder the first is writing, and a
 // safety-copy delete overlapping a restore would judge the wrong home's keys as garbage. A server
-// job's archive is the owner's to know (D11), so only another server job hears its name.
+// job's archive is the owner's to know, so only another server job hears its name.
 function requireHomeSlotFree(ownerId: string, starting?: BackupJob['kind']): void {
     dropExpiredJobs();
     const held = heldSlots.get(ownerId);
@@ -203,6 +204,11 @@ export function listBackupJobs(ownerId?: string): BackupJob[] {
     return all.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
 }
 
+// The job that still reads or writes an archive, if one does.
+export function runningJobOn(artifact: string): BackupJob | undefined {
+    return listBackupJobs().find((job) => job.state === 'running' && job.artifact === artifact);
+}
+
 export function getBackupJob(id: string): BackupJob | undefined {
     dropExpiredJobs();
     return jobs.get(id);
@@ -222,7 +228,7 @@ export async function runHomeBackup(ownerId: string, job: BackupJob, onProgress:
         await packFolder(folder, artifactPath, onProgress);
         await writeSidecar(artifactPath, manifest, verify);
         if (verify.status !== 'verified') {
-            const failures = verify.failures.slice(0, FAILURES_IN_MESSAGE).join('; ');
+            const failures = describeFailures(verify);
             // Fire-and-forget like the poke: a relay that fails must not replace the failure the
             // admin actually needs to read in the job.
             if (job.startedBy) {
@@ -265,9 +271,7 @@ export async function runArtifactVerify(
         const record = await verifyFolder(folder, onProgress);
         await writeSidecar(artifactPath, manifest, record);
         if (record.status !== 'verified') {
-            throw new Error(
-                `${artifactName} did not verify: ${record.failures.slice(0, FAILURES_IN_MESSAGE).join('; ')}`,
-            );
+            throw new Error(`${artifactName} did not verify: ${describeFailures(record)}`);
         }
         return artifactName;
     } finally {
