@@ -1,6 +1,6 @@
 ---
 name: domain-doc
-description: Use when writing, rewriting, extending, shortening or reviewing a domain doc under `docs/` (MAIL.md, CANVAS.md, ACL.md, COLLAB.md and their siblings), including the docs update that closes a feature, adding a gotcha or design decision to a doc, splitting a doc that grew too long, or a claim-by-claim docs review. Not for drafts under `docs/superpowers/`, and not for help-center articles under `apps/index/src/data/support/`, which have the support-article skill.
+description: Use when writing, rewriting, extending, shortening or reviewing a domain doc under `docs/` (MAIL.md, CANVAS.md, ACL.md, COLLAB.md and their siblings), including the docs update that closes a feature, adding a gotcha or design decision to a doc, shrinking a doc that grew too long, or a claim-by-claim docs review. Not for drafts under `docs/superpowers/`, and not for help-center articles under `apps/index/src/data/support/`, which have the support-article skill.
 ---
 
 # Domain doc
@@ -38,13 +38,13 @@ Measured on the exemplars. Words, not lines: a paragraph is one line.
 
 | Unit | Budget | Exemplars | MAIL and CANVAS before rewrite |
 |---|---|---|---|
-| Whole doc | 2,000 words max, aim for 1,000 to 1,500 | 1,496 and 1,857 | 8,533 and 9,916 |
+| Whole doc | aim for 1,500 to 3,000, longer when the domain needs it | 1,496 and 1,857 | 8,533 and 9,916 |
 | TLDR | 100 words max | 68 and 108 | |
 | Section, any heading level | 300 words max | 272 and 306 | 1,375 and 2,692 |
 | Paragraph | 150 words max | 139 and 187 | 411 and 2,680 |
 | Sentence | aim under 20 words, split anything over 35 | average 18 (ACL) | average 32 and 36 |
 
-A doc over 2,000 words is two domains. Split it and link both ways, the way CANVAS-ARROWS.md holds the arrows under CANVAS.md, or IMAP.md holds the Maildir mechanics under MAIL.md. Within 5% of a cap, the report says which further split was considered and why not.
+**One topic, one doc. Never split a doc** or move a topic into a new file to meet the budget: every extra doc is one more place to look and one more to keep in sync. Shrink by cutting narration, catalogues and file tours. A long doc that says only what the code can't is fine. A doc past 3,000 words, or a section or paragraph within 5% of its cap, gets a line in the report on what was cut and why the rest stays.
 
 ## What goes where
 
@@ -75,7 +75,7 @@ Editing one section follows the same steps. The section and paragraph budgets ap
 
 ```bash
 f=docs/NAME.md
-wc -w < $f                                                                  # 2,000 max
+wc -w < $f                                                                  # aim 1,500 to 3,000
 awk '/^#/{if(n)print n; n=0; next}{n+=NF}END{print n}' $f | sort -n | tail -1  # section, 300 max
 awk -v RS= '!/^\|/{print NF}' $f | sort -n | tail -1                        # paragraph, 150 max
 grep -nE '—|used to|previously|no longer' $f                                # expect nothing
