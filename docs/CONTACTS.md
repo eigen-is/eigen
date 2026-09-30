@@ -8,7 +8,7 @@ The `vcard` column of a `contacts` row holds the card exactly as it was stored. 
 
 Some facts no card carries, so they live only in the database: label ids and colors, the server-owned `eigenId` self-link, the one-row `book` (the `ctag`, the `syncGen` and the `ownerSeeded` latch) and the delete tombstones. The schema is `schema.ts`.
 
-The database runs `synchronous: 'FULL'` ([DATABASE.md § Pragmas](DATABASE.md#pragmas)), because the cards themselves live in these rows. An acknowledged PUT must survive a power loss, and a book writes little enough that it costs nothing.
+The database runs `synchronous: 'FULL'` ([DATABASE.md](DATABASE.md#a-database-that-holds-the-truth-runs-synchronous-full)), because the cards themselves live in these rows. An acknowledged PUT must survive a power loss, and a book writes little enough that it costs nothing.
 
 A book is personal. `resolveContacts` (`get-contacts.ts`) requires the caller to be the owner, so no team holds a book and none is shared. There are no file watchers either: unlike mail, nothing outside the API writes the book ([MAIL.md](MAIL.md)).
 

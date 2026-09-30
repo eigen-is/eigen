@@ -80,7 +80,7 @@ see § Frozen-format: the sweep's resumable cursor wants one additive `metadata.
   pre-migration snapshots want exactly the semantic verification built here — the shared primitive
   is called out below so the two don't diverge.
 - **WAL-frame shipping (Litestream model).** The strategic replacement for whole-file re-PUT;
-  orthogonal and out of scope ([SYNC.md](../SYNC.md) § Residual limitations).
+  orthogonal and out of scope ([ROADMAP.md](../ROADMAP.md), S3 robustness gaps).
 - **Create/open resilience under degraded storage.** Atomic `Drive.create` and the client-side
   create reconcile are described in [STORAGE.md](../STORAGE.md#creating-a-container-is-all-or-nothing). They keep new
   litter out; the scan of record for the containers already on disk is this proposal's sweep check 2.

@@ -1,6 +1,6 @@
 // The one lifecycle rule Eigen authors on an S3 bucket. Matched by ID on re-read, so a repeat
 // harden updates our rule instead of adding a second one — and a config without it is foreign,
-// which we never overwrite. Mirrored by the manual snippet in docs/SYNC.md § Ops.
+// which we never overwrite. Mirrored by the manual commands the S3 config card shows (s3-config-card.tsx).
 export const S3_LIFECYCLE_RULE_ID = 'eigen-expire-noncurrent';
 
 // Recovery window for noncurrent versions; the pipeline re-PUTs whole files, so this trades
