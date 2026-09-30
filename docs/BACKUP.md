@@ -104,7 +104,7 @@ So a Full + S3 member restores any home, a Full member a home without `s3` mount
 
 Every surface that resolves the home per request (HTTP, SSE, collab, CalDAV, CardDAV, WebDAV) answers `503 Restore in progress`. Sessions are untouched, so nobody is signed out.
 
-Every open tab of the home reloads once the restore is done: the event stream announces the home's new data epoch ([SSE.md](SSE.md#a-restore-reloads-every-tab-of-the-home)). Editor tabs don't wait. Their sockets close with 1012 (`home-replaced`) at the start and reload instead of reconnecting, because a tab that reconnected would sync the document it holds back over the restored copy ([COLLAB.md](COLLAB.md#home-replacement-closes-every-socket)).
+Every open tab of the home reloads once the restore is done: the event stream announces the home's new data epoch ([SSE.md](SSE.md#a-restore-reloads-every-tab-of-the-home)). Editor tabs keep their document through the restore: their sockets close with the retry close, 1013, and the first reconnect after the restore names the old epoch, gets 1012 (`home-replaced`) and reloads without syncing, because a tab that synced would put the document it holds back over the restored copy. A restore that fails leaves the epoch, so the reconnect syncs the tab's edits ([COLLAB.md](COLLAB.md#home-replacement-closes-every-socket)).
 
 ## IMAP keeps writing the old folder during a restore
 
