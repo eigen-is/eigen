@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Glob } from 'bun';
-import type { LicensePackage, LicenseVendored } from './lib/content-types';
+import type { LicenseFont, LicensePackage, LicenseVendored } from './lib/content-types';
 
 // apps/index/scripts → repo root is three levels up.
 const INDEX_APP = join(import.meta.dir, '..');
@@ -34,6 +34,14 @@ const VENDORED: LicenseVendored[] = [
         url: 'https://github.com/rocicorp/fractional-indexing',
         note: 'vendored verbatim to pin z-order behavior in eigen|vector>',
     },
+];
+
+// Bundled font files, not packages, so listed by hand.
+const FONTS: LicenseFont[] = [
+    { name: 'Inter', license: 'OFL-1.1', url: 'https://github.com/rsms/inter' },
+    { name: 'Source Serif 4', license: 'OFL-1.1', url: 'https://github.com/adobe-fonts/source-serif' },
+    { name: 'JetBrains Mono', license: 'OFL-1.1', url: 'https://github.com/JetBrains/JetBrainsMono' },
+    { name: 'Excalifont', license: 'OFL-1.1', url: 'https://plus.excalidraw.com/excalifont' },
 ];
 
 type PackageJson = {
@@ -115,6 +123,6 @@ for (const { dir, pkg } of workspacePackageJsons()) {
 
 const packages = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name, 'en'));
 mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, JSON.stringify({ packages, vendored: VENDORED }));
-console.log(`✓ Wrote ${OUT} — ${packages.length} packages, ${VENDORED.length} vendored`);
+writeFileSync(OUT, JSON.stringify({ packages, vendored: VENDORED, fonts: FONTS }));
+console.log(`✓ Wrote ${OUT}: ${packages.length} packages, ${VENDORED.length} vendored, ${FONTS.length} fonts`);
 if (missing.length) console.warn(`⚠ Could not resolve ${missing.length}: ${missing.sort().join(', ')}`);
