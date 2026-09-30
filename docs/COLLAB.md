@@ -1,6 +1,6 @@
 # Collab Documents
 
-> **TLDR:** `apps/api/src/lib/collab/` is the server half of every Yjs container: one `CollabDocument` per open document, Yjs updates and snapshots persisted as zstd-compressed BLOBs in the container's `data.db`, and a WebSocket route (`apps/api/src/routes/collab.ts`) that fans updates out to the connected peers. Four things here are not obvious from the code: the compression seam is backward compatible by magic-byte sniff, awareness frames are validated before apply, the route sends a heartbeat during a cold load, and a document lingers 60 s after the last unsubscribe. Client side, `useCollabDoc` gates the editor on a latched `loaded`.
+> **TLDR:** `apps/api/src/lib/collab/` is the server half of every Yjs container: one `CollabDocument` per open document, Yjs updates and snapshots persisted as zstd-compressed BLOBs in the container's `data.db`, and a WebSocket route (`apps/api/src/routes/collab.ts`) that fans updates out to the connected peers. Four things here are not obvious from the code: the compression seam is backward compatible by magic-byte sniff, awareness frames are validated before apply, the route sends a heartbeat during a cold load, and a document lingers 60 s after the last unsubscribe. A restore closes the home's sockets, so no tab syncs its old state back over the restored copy. Client side, `useCollabDoc` gates the editor on a latched `loaded`.
 
 ## The storage seam is zstd
 
@@ -25,7 +25,13 @@ The same 30 s window bounds the whole-state sync reply, because a frame only cou
 
 ## The route refuses before it speaks
 
-An unauthenticated upgrade never reaches `open`: the `auth` macro answers the HTTP upgrade itself, so the handler's user is always a session user. A caller without read access gets exactly one frame, the constant empty awareness heartbeat above, then close 1008. Home-replaced (restore), storage-unavailable and storage-gone (a 410: the stored object is gone, so the client stops retrying) opens close with their own codes (`packages/lib/src/constants/collab.ts`); every other failed open is 1008. Binary frames arrive as Bun `Buffer`s; a string frame is `ping`/`pong` or ignored. The route keeps its per-socket state (the `opened` gate, the drive, the document, the keepalive) in a `WeakMap` keyed by the raw Bun socket, the one identity that survives Elysia's fresh wrapper per event, and reads user and params from the typed `ws.data`.
+An unauthenticated upgrade never reaches `open`: the `auth` macro answers the HTTP upgrade itself, so the handler's user is always a session user. A caller without read access gets nothing but the constant empty awareness heartbeat above, then close 1008. That is why the heartbeat may start before the ACL check: it carries no document data. Home-replaced (restore), storage-unavailable and storage-gone (a 410: the stored object is gone, so the client stops retrying) opens close with their own codes (`packages/lib/src/constants/collab.ts`); every other failed open is 1008. Binary frames arrive as Bun `Buffer`s; a string frame is `ping`/`pong` or ignored. The route keeps its per-socket state (the `opened` gate, the drive, the document, the keepalive) in a `WeakMap` keyed by the raw Bun socket, the one identity that survives Elysia's fresh wrapper per event, and reads user and params from the typed `ws.data`.
+
+## Read is checked at open, write on every message
+
+The route checks read once, when the socket opens, and write on every binary frame, so a writer demoted to reader loses write with the next frame. `CollabDocument.handleMessage` drops a sync update from a peer without write and still answers its sync step 1 and awareness.
+
+A revoked read would otherwise keep receiving broadcasts until the socket drops. So `Drive.updateACL` and `Drive.movePath` call `enforceReadAccessBelow` (`apps/api/src/lib/drive/collab-registry.ts`), which walks every open document at or below the path and closes each connection that lost read with 1008. It re-checks read per connection rather than diffing the removed ACL entries, because read inherits from the whole ancestor chain: revoking a folder share must reach the documents inside it. Removing a member from a team does not re-check yet ([ROADMAP.md](ROADMAP.md)).
 
 ## A document lingers after the last unsubscribe
 
@@ -65,7 +71,7 @@ The share cluster's offline icon waits 1.5 s after a disconnect, so a blip or th
 
 ## Unacknowledged edits guard the tab
 
-Nothing persists in the browser, so a reload loses whatever the server has not acknowledged. `unsyncedEdits` arms on an update while the socket is down. It also arms on the disconnect event when this tab sent updates since the last handshake: a silently dead socket looks connected until y-websocket's 30 s silence check, so the close is the first honest signal. Updates y-websocket applied itself (from the server or a sibling tab) don't count, so a reader is never warned about someone else's edits. The flag clears on the next sync. Every editor renders `UnsyncedEditsGuard` once, which asks before a reload, a close or an in-app navigation.
+Nothing persists in the browser, so a reload loses whatever the server has not acknowledged. `unsyncedEdits` arms on an update while the socket is down. It also arms on the disconnect event when this tab made updates since the last handshake: a silently dead socket looks connected until y-websocket's 30 s silence check, so the close is the first honest signal. For that check, updates y-websocket applied itself (from the server or a sibling tab) don't count, so a reader is never warned about someone else's edits. The flag clears on the next sync. Every editor renders `UnsyncedEditsGuard` once, which asks before a reload, a close or an in-app navigation.
 
 ## See also
 
