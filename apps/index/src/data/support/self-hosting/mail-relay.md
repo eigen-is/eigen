@@ -30,7 +30,7 @@ Anything that takes mail over SMTP with a user name and password:
 
 Answer the relay question as `host:port`, like `smtp-relay.brevo.com:587`. Setup then asks for the user name and the password. To change the relay later, run `./eigen setup` again.
 
-Port 465 means the connection is encrypted from the start. Any other port starts plain and switches to encryption. With a user name, the connection must be encrypted, so the password never travels in the clear. Keeping your mail, Eigen also checks the relay's certificate.
+Port 465 means the connection is encrypted from the start. Any other port starts plain and switches to encryption. With a user name, the connection must be encrypted, so the password never travels in the clear. Keeping your mail and signing in with a user name, Eigen also checks the relay's certificate.
 
 ## Which addresses it must accept
 

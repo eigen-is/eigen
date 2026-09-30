@@ -42,9 +42,9 @@ This needs a backup that holds `.env.production`, made by an install from the on
 
 ## 4. Point your domain at the new server
 
-Change the A record of your web address to the IP address of the new server. Hosting mail? Also set the reverse DNS of the new IP address at your hosting provider. The DKIM key comes with the backup, so the other mail records stay as they are.
+Change the A record of your web address to the IP address of the new server. Hosting mail? Also set the reverse DNS of the new IP address at your hosting provider. The key that signs your mail comes with the backup, so the other mail records stay as they are. The restore says so before it asks. If it says the backup has no DKIM key, the new server makes a new one: add its record as in [Host your mail on Eigen](/support/self-hosting/host-your-mail#add-the-mail-dns-records).
 
-Eigen gets a new HTTPS certificate by itself once the domain points at the new server. Check on everything with `./eigen status`, and send yourself a mail. The nightly backup and the backup bucket come along with the rest of the settings.
+Eigen's own web server gets a new HTTPS certificate by itself once the domain points at the new server. Behind your own web server, set up its certificate and the certbot hook for mail again, as in [Run Eigen behind your own web server](/support/self-hosting/behind-your-web-server). Check on everything with `./eigen status`, and send yourself a mail. The nightly backup and the backup bucket come along with the rest of the settings.
 
 ## Drives in an S3 bucket
 

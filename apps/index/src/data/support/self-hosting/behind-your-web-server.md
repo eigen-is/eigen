@@ -5,7 +5,7 @@ type: how-to
 category: Install
 tags: [self-hosting, install, nginx, apache, caddy, traefik, proxy, https, tunnel]
 related: [self-hosting/install, self-hosting/troubleshooting]
-order: 70
+order: 35
 updated: 2026-09-30
 ---
 

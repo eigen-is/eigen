@@ -31,10 +31,10 @@ Developing Eigen? `./eigen setup` in a clone builds the images instead: [CONTRIB
 
 | Step | Article |
 |---|---|
+| nginx, Apache, Caddy, Traefik, a web server in Docker, tunnels, mail certificates without Caddy | [Run Eigen behind your own web server](https://eigen.is/support/self-hosting/behind-your-web-server) |
 | Hosted mail: DNS records, a mail domain apart from the web address, fail2ban | [Host your mail on Eigen](https://eigen.is/support/self-hosting/host-your-mail) |
 | Mail off: the relay, the sender, the test mail | [Keep your existing mail](https://eigen.is/support/self-hosting/keep-your-mail) |
 | Which relay, and which senders it must accept | [Choose a mail relay](https://eigen.is/support/self-hosting/mail-relay) |
-| nginx, Apache, Caddy, Traefik, a web server in Docker, tunnels, mail certificates without Caddy | [Run Eigen behind your own web server](https://eigen.is/support/self-hosting/behind-your-web-server) |
 | `./eigen update`, breaking releases, the pre-1.0 data policy, rollback, the `main` channel | [Update Eigen](https://eigen.is/support/self-hosting/update) |
 | The nightly backup, the backup bucket and its keys, `./eigen backup`, what a backup leaves out, `./eigen restore` | [Back up and restore the whole server](https://eigen.is/support/self-hosting/back-up-and-restore) |
 | A new machine, restored from a backup with no setup first | [Move Eigen to another server](https://eigen.is/support/self-hosting/move-to-another-server) |

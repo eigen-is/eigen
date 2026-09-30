@@ -22,9 +22,9 @@ Only admins can do this. The **Backup** section lives inside a user's or a team'
 
 The backup runs in the background, so you can keep working. The section shows its progress while it runs: first **Creating backup**, then **Verifying archive**, each with the current step and a progress bar. When it finishes, you see **Backup created** with the name of the new archive, and the archive appears in the list below.
 
-The backup stops if a file Eigen has on record is gone from its disk or bucket, for example because someone deleted it outside Eigen. The section then shows **Creating backup failed** and names the file. A document whose data is gone is left out of the backup instead.
+The backup stops if a file Eigen has on record is gone from its disk or bucket, for example because someone deleted it outside Eigen. The section then shows **Creating backup failed** and names the file. The same goes for a document whose data is gone. Only an empty file, or one deleted while the backup runs, is left out.
 
-Each archive is one file named `home-<id>-<date>.tar.zst`. Its row shows the date and size, and a badge:
+Each archive is one file named `home-<id>-<date>-<time>.tar.zst`. Its row shows the date and size, and a badge:
 
 - **Verified**: the archive passed every check and is ready to restore.
 - **Not verified**: the archive has not been checked yet.

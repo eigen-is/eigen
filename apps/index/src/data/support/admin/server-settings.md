@@ -1,6 +1,6 @@
 ---
 title: "Server settings"
-description: "A reference for the Settings page in Admin, covering your organization name, the server status, the sender of Eigen's mail, storage quotas, default storage type, backups of the whole server, and email notifications."
+description: "A reference for the Settings page in Admin, covering your organization name, the server status, the sender of Eigen's mail, storage quotas, default storage type, backups of the whole server, email notifications, and the landing page buttons."
 type: reference
 tags: [admin, settings, quotas, storage, notifications, mail, backup]
 related: [admin/get-started, admin/storage-quotas, self-hosting/back-up-and-restore]
@@ -8,7 +8,7 @@ order: 80
 updated: 2026-09-30
 ---
 
-The **Settings** page in Admin lets the server owner rename the organization, check on the server, set the sender of Eigen's own mail, control storage limits and how new users' files are stored, back up the whole server, and choose which events trigger email notifications. Only the server owner sees this page in the sidebar.
+The **Settings** page in Admin lets the server owner rename the organization, check on the server, set the sender of Eigen's own mail, control storage limits and how new users' files are stored, back up the whole server, choose which events trigger email notifications, and add buttons to the landing page. Only the server owner sees this page in the sidebar.
 
 To open it, sign in to Eigen as the owner and go to [Admin](/admin), then click **Settings** in the sidebar.
 
@@ -50,7 +50,7 @@ These four limits apply by default to every user. You can also set quota overrid
 
 | Field | What it controls | Default |
 |---|---|---|
-| **Mail, Contacts & Calendar (MB)** | Combined storage for all a user's email, contacts, and calendars | 100 MB |
+| **Mail, Contacts & Calendar (MB)** | Combined storage for all a user's email, contacts, and calendars. On a server without mailboxes it reads **Contacts & Calendar (MB)**. | 100 MB |
 | **Default Mount (MB)** | Storage for a user's primary Drive | 500 MB |
 | **Max Upload (MB)** | Largest single file a user can upload | 35 MB |
 | **Trash Retention (days)** | How long deleted files stay in the Trash before being permanently removed | 30 days |
@@ -117,3 +117,7 @@ These toggles control whether Eigen sends an email for each type of event, in ad
 | **Email owner on access request** | Someone requests access to a file the owner has locked. On by default. |
 
 Click the toggle to change a setting. Click **Reset** to discard all unsaved changes.
+
+## Landing page
+
+Extra buttons on the public landing page, each with a title and a web address. Click **Add button** for a new one, and **Remove** (the trash icon) to take one away. See [Add your own buttons to the landing page](/support/admin/landing-page-buttons).

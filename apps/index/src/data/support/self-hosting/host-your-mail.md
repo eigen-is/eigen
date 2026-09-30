@@ -17,6 +17,8 @@ In the examples, Eigen runs at `eigen.example.com` and that is also the mail dom
 
 When the mail server starts for the first time, it makes a DKIM key. You find it in `data/dkim/eigen.txt` in the install folder, and in the log of that first start (`./eigen logs postfix`, Ctrl-C to stop).
 
+That file is written in the format of a DNS zone file. The value sits between parentheses, split into several parts in double quotes, like `"v=DKIM1; h=sha256; k=rsa; "`, `"p=MIIBIjAN…"`, and the rest of the key. Most DNS panels want one value. Join the quoted parts into one, without the quotes and without spaces between them. The result starts with `v=DKIM1;` and holds the whole key after `p=` as one unbroken string.
+
 Add these records:
 
 | Type | Name | Value |
@@ -59,7 +61,7 @@ The mail records then live on the mail domain, and point at the web address:
 
 ```
 example.com.                     MX   10 eigen.example.com.
-example.com.                     TXT  "v=spf1 mx -all"
+example.com.                     TXT  "v=spf1 mx ~all"
 _dmarc.example.com.              TXT  "v=DMARC1; p=quarantine; rua=mailto:postmaster@example.com"
 eigen._domainkey.example.com.    TXT  "<the DKIM key>"
 _imaps._tcp.example.com.         SRV  0 1 993 eigen.example.com.
@@ -94,4 +96,4 @@ systemctl enable --now fail2ban
 systemctl restart fail2ban
 ```
 
-`fail2ban-client status eigen-postfix-sasl` shows what it caught. `./eigen` reloads fail2ban after an update, so the rules keep watching the new mail server. `docker/fail2ban/README.md` in the install folder has the details.
+`fail2ban-client status eigen-postfix-sasl` shows what it caught. When `./eigen` starts new mail containers, like after an update, it copies the rules again and reloads fail2ban, so they keep watching the new mail server. Run as a user who may not do that, it prints the command to run as root instead. `docker/fail2ban/README.md` in the install folder has the details.

@@ -22,7 +22,7 @@ Everything you do with Eigen on the server goes through `./eigen` in the install
 | `./eigen stop` | Stops Eigen. `./eigen restart` starts it again. |
 | `./eigen update` | Installs a new release. See [Update Eigen](/support/self-hosting/update). |
 | `./eigen rollback` | Goes back to the version before the last update |
-| `./eigen backup` | Backs up the whole server into `backups/` while Eigen runs. See [Back up and restore the whole server](/support/self-hosting/back-up-and-restore). |
+| `./eigen backup` | Backs up the whole server into `backups/` while Eigen runs. It exits with 0 when the backup checked out, 1 when it failed, 2 on a wrong argument, and 4 when it checked out but did not reach the bucket. See [Back up and restore the whole server](/support/self-hosting/back-up-and-restore). |
 | `./eigen restore <backup>` | Puts a whole-server backup back, on this server or a new one |
 | `./eigen reset-password <email>` | Sets a new password for an account. See [Reset a password from the server](/support/self-hosting/reset-a-password). |
 
@@ -56,11 +56,12 @@ Everything is in the install folder, like `/opt/eigen`:
 | Path | What it holds |
 |---|---|
 | `eigen` | The `eigen` command |
-| `.env.production` | Your setup answers and the version you run. Only its owner and Eigen can read it. |
+| `.env.production` | Your setup answers and the version you run. Its owner can read it, and so can Eigen, through group 1000, so the backup can take it along. |
 | `.env.example` | Every setting, with a comment on each |
 | `docker-compose.yml` | Which services run. An update rewrites it. |
 | `docker-compose.override.yml` | Your own Compose settings, if you made one. An update leaves it alone. |
 | `data/home/`, `data/team/`, `data/org/` | Every user's, team's, and organization's files, mail, calendars, and contacts |
+| `data/guest/` | The workspaces of guests, people who sign in with a code. A backup leaves them out: after a restore, a guest keeps their account and starts with an empty workspace. |
 | `data/server/` | The accounts, the server settings, and the organization |
 | `data/dkim/` | The key that signs outgoing mail |
 | `data/certs/` | The certificate of the mail server |
@@ -69,6 +70,7 @@ Everything is in the install folder, like `/opt/eigen`:
 | `caddy-data/` | The HTTPS certificates of Eigen's own web server |
 | `eigen.nginx.conf`, `eigen.apache.conf`, `eigen.Caddyfile` | Settings for your own web server, when it forwards to Eigen |
 | `docker/fail2ban/` | Rules for fail2ban, when you host mail |
+| `scripts/` | The hourly reset of a demo server. A normal install does not use it. |
 | `.eigen/` | The command's own notes, like `last-step.log` |
 
 Mail still waiting to go out is the one thing outside the folder. Docker keeps it in a volume of its own.

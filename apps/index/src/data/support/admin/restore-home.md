@@ -13,7 +13,7 @@ You can put a single user's or team's account back to the state held in a backup
 
 ## Before you start
 
-A backup archive can only restore the same account it was made from. You cannot use one user's archive to fill in another user, and you cannot restore an archive onto a different server. If you need to bring an archive over from another machine first, see [Back up a user or team](/support/admin/back-up-home).
+A backup archive can only restore the same account it was made from. You cannot use one user's archive to fill in another user. The archive may come from another server, as long as it is a backup of this same account. To bring one over from another machine first, see [Back up a user or team](/support/admin/back-up-home).
 
 To see what an archive contains, read [What a backup contains](/support/admin/backup-contents). A backup of the whole server holds an archive of every user and team, which whoever runs the server can [copy into the backups folder](/support/self-hosting/back-up-and-restore#restore-one-user-or-team-from-a-server-backup) to restore from here.
 
@@ -23,7 +23,7 @@ To see what an archive contains, read [What a backup contains](/support/admin/ba
 2. For a person, click **Users** in the sidebar and pick the user. For a team, click **Teams** and pick the team.
 3. Scroll to the **Backup** section. It lists every archive for that account.
 4. Find the archive you want, hover over its row, and click **Restore** (the circular arrow icon). An archive that failed its check has no **Restore** button: fix or replace it first. Neither has an archive that holds only part of the account, like a copy out of a Light backup of the whole server. Its row says what it leaves out.
-5. A dialog titled **Restore this home** asks you to confirm. It explains that this replaces every file, email, and setting in the account with the archive, that the account is unavailable while the restore runs, that every open page of it reloads, and that the current state is kept beside it as a safety copy.
+5. A dialog titled **Restore this home** asks you to confirm. It explains that this replaces every file, mail, and database of the account with the archive, that the account is unavailable while the restore runs, that every open page of it reloads, and that the current state is kept beside it as a safety copy.
 6. Click **Restore** to start. The section shows **Restoring home** with its progress while the job runs, then **Home restored** when it finishes.
 
 Eigen verifies the archive before it touches anything. If the check fails, the job stops and the account is left exactly as it was.
@@ -44,7 +44,8 @@ The account is unavailable for the length of the restore, which is usually secon
 - A tab that was offline during the restore reloads once, the next time it reconnects. That way it can't put old content back.
 - Other people's tabs don't reload, unless they have a document of this account open. That document reloads the same way.
 - If you restore your own account, your page reloads too, and it may reload before the **Backup** section shows **Home restored**.
-- A mail client connected over IMAP keeps seeing the old mailbox until the restore finishes. Mail delivered or flagged in that window lands in the safety copy, not in the restored account. For a mail-heavy restore, either pause the mail client for the window or copy any missing messages out of the safety copy afterwards.
+- A mail client connected over IMAP keeps seeing the old mailbox until the restore finishes. What it does in that window, like flagging, moving, or saving a message, lands in the safety copy, not in the restored account. For a mail-heavy restore, either pause the mail client for the window or copy any missing messages out of the safety copy afterwards.
+- New mail is not lost. It waits on the server and arrives in the restored account once the restore is done.
 
 ## Safety copies and undoing a restore
 

@@ -30,7 +30,11 @@ A new record can take a few minutes to reach everyone, sometimes half an hour. C
 
 The setup lists every other record your answers need. With hosted mail, the mail records come after the first start: see [Host your mail on Eigen](/support/self-hosting/host-your-mail).
 
-## 3. Run the install
+## 3. Open the ports
+
+Many hosting providers put a firewall in front of your server, like the cloud firewalls of Hetzner and DigitalOcean. Such a firewall blocks every port you don't open. In your provider's panel, open the ports your setup needs: [Network ports](/support/self-hosting/requirements#network-ports) lists them. Keep SSH open too.
+
+## 4. Run the install
 
 Eigen lives in one folder: the `eigen` command, the settings, and all your data. This guide uses `/opt/eigen`, but any folder will do.
 
@@ -57,7 +61,7 @@ docker run --rm -v "$PWD:/out" ghcr.io/eigen-is/eigen/api:latest bootstrap
 
 Name a version instead of `latest`, like `api:0.3.0`, to install a specific release.
 
-## 4. Answer the setup questions
+## 5. Answer the setup questions
 
 Setup asks five questions and suggests an answer for each. Press Enter to keep the suggestion.
 
@@ -69,7 +73,7 @@ Setup asks five questions and suggests an answer for each. Press Enter to keep t
 
 Then setup saves your answers, lists the DNS records to add, and starts Eigen. Run `./eigen setup` again whenever you want to change an answer. It keeps the others. `./eigen setup --help` lists the flags for a run without questions.
 
-## 5. Finish in your browser
+## 6. Finish in your browser
 
 Setup ends with a link that works once, like `https://eigen.example.com/admin/#setup=…`. Open it to name your organization, pick the sender of Eigen's own mail, choose where files are stored, and create your admin account. [Set up your Eigen server](/support/admin/get-started) walks through that form. Then **Go to Login** takes you to the sign-in page.
 
@@ -77,7 +81,7 @@ Lost the link? Run `./eigen setup` again for a fresh one.
 
 `./eigen status` shows how Eigen is doing at any time.
 
-## 6. Finish the mail
+## 7. Finish the mail
 
 - Hosting mail: add the mail DNS records in [Host your mail on Eigen](/support/self-hosting/host-your-mail).
 - Keeping your mail: check the relay and the sender in [Keep your existing mail](/support/self-hosting/keep-your-mail).

@@ -74,6 +74,7 @@ With Eigen stopped there is nothing to run the backup, so `./eigen backup` refus
 ## What a backup leaves out
 
 - `caddy-data/`, the HTTPS certificates. Eigen gets them again by itself.
+- A fresh mail server certificate. The backup holds the certificate it had, which is as fresh as the backup. Eigen's own web server hands the mail server a new one by itself. Behind your own web server, your certbot hook does at the next renewal, or run it once by hand: see [Mail certificates without Eigen's own web server](/support/self-hosting/behind-your-web-server#mail-certificates-without-eigens-own-web-server).
 - Mail still waiting to go out. Docker keeps it in a volume of its own.
 - The `backups/` folder itself.
 - `docker-compose.override.yml`, if you made one.
@@ -95,11 +96,13 @@ In the install folder, name a backup in `backups/`, or give the path of one:
 ./eigen restore server-scheduled-full-<date>-<time>.tar
 ```
 
-1. Eigen unpacks and checks the backup while it keeps running. It shows what the backup holds, like its level, its date, and any user or team that is not in it, and asks whether to go on.
+1. Eigen checks the backup while it keeps running. It shows what the backup holds, like its level, its date, and any user or team that is not in it, and asks whether to go on. Then it unpacks it, still while Eigen runs.
 2. It stops, moves the current `data/` and `.env.production` aside as `data.pre-restore-<time>` and `.env.production.pre-restore-<time>`, and puts the backup in their place.
 3. It starts again, on the version of Eigen that made the backup. Check that all is well, then delete what was kept aside.
 
 A Light backup puts back the databases, the settings, and `.env.production`, and leaves files and mail as they are. What it replaces goes aside in `data.pre-restore-<time>`.
+
+The question also says whether the backup holds `.env.production`, the key that signs your mail, and the mail server's certificate. A backup made in the ten minutes after that certificate was renewed can miss it, and one of a server without hosted mail has neither. What a backup does not hold, the restore keeps as the server has it.
 
 A user or team that failed during the backup is not in it, and the question names them. After a restore of a Full backup, their data is in `data.pre-restore-<time>` only.
 
