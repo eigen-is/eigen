@@ -12,51 +12,20 @@ import {
 import { getBackupArtifactUrl } from '@workspace/lib/api';
 import { formatDateTime } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
-import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
+import type { BackupArtifact, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { BACKUP_ARTIFACT_EXTENSION, incompleteReason } from '@workspace/lib/validation';
 import { DeleteDialog, ErrorState, LoadingState, TooltipButton } from '@workspace/ui';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
-import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
-import { Progress } from '@workspace/ui/components/progress';
-import { cn } from '@workspace/ui/lib/utils';
-import { AlertTriangle, Archive, Download, RotateCcw, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, Archive, Download, RotateCcw, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
-
-const JOB_LABEL: Record<BackupJob['kind'], string> = {
-    backup: 'Creating backup',
-    verify: 'Verifying archive',
-    restore: 'Restoring home',
-    'server-backup': 'Backing up the server',
-    upload: 'Uploading the server backup',
-};
-
-const JOB_DONE_LABEL: Record<BackupJob['kind'], string> = {
-    backup: 'Backup created',
-    verify: 'Archive verified',
-    restore: 'Home restored',
-    'server-backup': 'Server backed up',
-    upload: 'Server backup uploaded',
-};
-
-// The two things a row shows about itself are server words; these are the ones an admin reads.
-const VERIFY_LABEL: Record<BackupArtifact['verify']['status'], string> = {
-    verified: 'Verified',
-    failed: 'Failed',
-    unverified: 'Not verified',
-};
+import { BackupArtifactRow, VerifyBadge, VerifyFailures } from './backup-artifact-row';
+import { BackupJobStatus } from './backup-job-status';
 
 const SAFETY_COPY_LABEL: Record<BackupSafetyCopy['kind'], string> = {
     'pre-restore': 'The home before a restore',
     'failed-restore': 'A restore that did not finish',
 };
-
-function VerifyBadge({ artifact }: { artifact: BackupArtifact }) {
-    const label = VERIFY_LABEL[artifact.verify.status];
-    if (artifact.verify.status === 'verified') return <Badge variant="secondary">{label}</Badge>;
-    if (artifact.verify.status === 'failed') return <Badge variant="destructive">{label}</Badge>;
-    return <Badge variant="outline">{label}</Badge>;
-}
 
 // The four confirmations this pane asks for. One dialog is mounted for all of them — a dialog that
 // unmounts on close skips its own closing animation — and the choice keeps its name and kind until
@@ -118,7 +87,6 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
     // Newest first, and the server allows one job per home — so the newest job is the whole story.
     const latest = jobs[0];
     const running = latest?.state === 'running' ? latest : undefined;
-    const result = latest && latest.state !== 'running' && latest.id !== dismissedJobId ? latest : undefined;
     const rowCount = data ? data.artifacts.length + data.safetyCopies.length : 0;
 
     const ask = (next: BackupConfirm) => {
@@ -183,43 +151,8 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
                 </Alert>
             )}
 
-            {running && (
-                <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">
-                        {JOB_LABEL[running.kind]} · {running.progress.step}
-                        {running.progress.total > 0 && ` (${running.progress.done}/${running.progress.total})`}
-                    </p>
-                    {running.progress.total > 0 && (
-                        <Progress value={(running.progress.done / running.progress.total) * 100} />
-                    )}
-                </div>
-            )}
-            {result && (
-                <div className="flex items-start gap-1">
-                    <p
-                        className={cn(
-                            'text-xs flex-1',
-                            result.state === 'failed' ? 'text-destructive' : 'text-muted-foreground truncate',
-                        )}
-                    >
-                        {result.state === 'failed' ? (
-                            <>
-                                {JOB_LABEL[result.kind]} failed: {result.error}
-                            </>
-                        ) : (
-                            <>
-                                {JOB_DONE_LABEL[result.kind]}
-                                {result.artifact && ` · ${result.artifact}`}
-                            </>
-                        )}
-                    </p>
-                    <TooltipButton
-                        icon={X}
-                        tooltipText="Dismiss"
-                        className="h-5 w-5 shrink-0"
-                        onClick={() => setDismissedJobId(result.id)}
-                    />
-                </div>
+            {latest && latest.id !== dismissedJobId && (
+                <BackupJobStatus job={latest} onDismiss={() => setDismissedJobId(latest.id)} />
             )}
             {jobsFailed && <p className="text-xs text-destructive">Could not load the jobs running for this home.</p>}
 
@@ -293,17 +226,12 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
     // row says why instead of offering it.
     const incomplete = artifact.manifest && incompleteReason(artifact.manifest);
     return (
-        <div className="group flex flex-col gap-1 p-3 border rounded-lg">
-            <div className="flex items-center gap-3">
-                <Archive className="h-4 w-4 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                    <div className="text-sm truncate">{formatDateTime(artifact.createdAt)}</div>
-                    <div className="text-xs text-muted-foreground truncate">
-                        {formatFileSize(artifact.bytes)} · {artifact.name}
-                    </div>
-                </div>
-                <VerifyBadge artifact={artifact} />
-                <div className="flex items-center invisible group-hover:visible pointer-coarse:visible">
+        <BackupArtifactRow
+            createdAt={artifact.createdAt}
+            detail={`${formatFileSize(artifact.bytes)} · ${artifact.name}`}
+            badges={<VerifyBadge verify={artifact.verify} />}
+            actions={
+                <>
                     <TooltipButton
                         icon={Download}
                         tooltipText="Download"
@@ -335,22 +263,17 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
                         disabled={busy}
                         onClick={onDelete}
                     />
-                </div>
-            </div>
+                </>
+            }
+        >
             {incomplete && <p className="text-xs text-muted-foreground pl-7">This archive {incomplete}.</p>}
             {skipped.map((mount) => (
                 <p key={mount.id} className="text-xs text-muted-foreground pl-7 truncate">
                     Skipped mount {mount.id}: {mount.skipped}
                 </p>
             ))}
-            {artifact.verify.status === 'failed' && (
-                <ul className="text-xs text-destructive max-h-24 overflow-y-auto pl-7 list-disc">
-                    {artifact.verify.failures.map((failure) => (
-                        <li key={failure}>{failure}</li>
-                    ))}
-                </ul>
-            )}
-        </div>
+            <VerifyFailures verify={artifact.verify} />
+        </BackupArtifactRow>
     );
 }
 

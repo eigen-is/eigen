@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryKey, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { backupApi, getBackupUploadUrl } from '@workspace/lib/api';
 import { BACKUP_UPLOAD_MAX_BYTES, BACKUP_UPLOAD_MAX_LABEL } from '@workspace/lib/constants/backup';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
@@ -36,7 +36,8 @@ export function useBackupArtifacts(ownerId: string) {
     });
 }
 
-export function useBackupJobs(ownerId: string) {
+// `listKey` is the list a finished job changes: the home's artifacts, or the server archives.
+export function useBackupJobs(ownerId: string, listKey: QueryKey = backupKeys.artifacts(ownerId)) {
     const isGuest = useIsGuest();
     const queryClient = useQueryClient();
     const query = useQuery({
@@ -58,10 +59,10 @@ export function useBackupJobs(ownerId: string) {
     const wasRunning = useRef(false);
     useEffect(() => {
         if (wasRunning.current && !running) {
-            queryClient.invalidateQueries({ queryKey: backupKeys.artifacts(ownerId) });
+            queryClient.invalidateQueries({ queryKey: listKey });
         }
         wasRunning.current = running;
-    }, [running, ownerId, queryClient]);
+    }, [running, listKey, queryClient]);
 
     return query;
 }

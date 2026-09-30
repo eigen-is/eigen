@@ -49,3 +49,15 @@ export function invalidateBackup(queryClient: QueryClient, ownerId: string): voi
     queryClient.invalidateQueries({ queryKey: backupKeys.artifacts(ownerId) });
     queryClient.invalidateQueries({ queryKey: backupKeys.jobs(ownerId) });
 }
+
+// The whole-server backup is the owner's and server-wide, so its archive list has no ownerId. Its jobs are the
+// org's (`orgOwnerId`) and live under backupKeys.jobs, where the backup poke refetches them like a home's.
+export const serverBackupKeys = {
+    all: ['server-backup'] as const,
+    archives: () => [...serverBackupKeys.all, 'archives'] as const,
+};
+
+export function invalidateServerBackup(queryClient: QueryClient, serverOwnerId: string): void {
+    queryClient.invalidateQueries({ queryKey: serverBackupKeys.archives() });
+    queryClient.invalidateQueries({ queryKey: backupKeys.jobs(serverOwnerId) });
+}

@@ -3,6 +3,7 @@ export * from './use-admin-users';
 export * from './use-backup';
 export * from './use-is-admin';
 export * from './use-members';
+export * from './use-server-backup';
 export * from './use-setup-status';
 export * from './use-teams';
 export * from './use-waitlist';
