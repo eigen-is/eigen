@@ -16,12 +16,15 @@ import { PATHS } from '../core/constants';
 import { ApiError } from '../core/errors';
 import { isUsableName } from '../mount/names';
 import { type ArchiveMember, copyArchiveMember, extractArtifact, readUnpackedHome } from './archive';
+import { archivePath, flatStorageKey, readMountPathRows } from './archive-layout';
+import { describeError } from './errors';
 import { checkRestoredDatabases, materializeMount, movePath, type VersionedDatabase } from './materialize-mount';
 import {
     ARCHIVE_HOME_DIR,
     ARCHIVE_MANIFEST_FILE,
     buildServerFolderName,
     requireMountDir,
+    resolveInside,
     SERVER_ARCHIVE_DKIM_DIR,
     SERVER_ARCHIVE_SERVER_MEMBER,
 } from './paths';
@@ -83,6 +86,40 @@ function dropSettledUploads(stagingDir: string, liveStagingDir: string): number 
     return dropped;
 }
 
+// An s3 mount the bucket stays as it is for, from an archive that holds its files: data/ goes, but a pending upload's
+// bytes are only there, freshest first, under the file's archive path. Each goes back to staging/ under the name
+// its row gives it, then the settled ones drop out. Returns how many were not replayed.
+function replayPendingUploads(mountDir: string, liveStagingDir: string): number {
+    const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
+    const stagingDir = path.join(mountDir, PATHS.DRIVE.STAGING_DIR);
+    const db = new Database(path.join(mountDir, PATHS.DRIVE.METADATA_DB), { readwrite: true, create: false });
+    try {
+        const rows = readMountPathRows(db);
+        const byId = new Map(rows.map((row) => [row.id, row]));
+        const byKey = new Map(rows.filter((row) => row.type === 'file').map((row) => [flatStorageKey(row), row]));
+        const pending = db
+            .query<{ storageKey: string; stagingPath: string }, []>(
+                'SELECT storageKey, stagingPath FROM pending_uploads',
+            )
+            .all();
+        for (const { storageKey, stagingPath } of pending) {
+            const row = byKey.get(storageKey);
+            // A legacy row holds an absolute path on the server that made it; it gets the name the file lands under.
+            const name = path.basename(stagingPath);
+            const source = row && resolveInside(dataDir, archivePath(row, byId));
+            if (!source || !isUsableName(name) || !fs.existsSync(source)) continue;
+            movePath(source, path.join(stagingDir, name));
+            if (name !== stagingPath) {
+                db.run('UPDATE pending_uploads SET stagingPath = ? WHERE storageKey = ?', [name, storageKey]);
+            }
+        }
+    } finally {
+        db.close();
+    }
+    fs.rmSync(dataDir, { recursive: true, force: true });
+    return dropSettledUploads(stagingDir, liveStagingDir);
+}
+
 // The trash starts over, so a purge never deletes bucket objects the data/ kept aside may still name, and the
 // operator has the whole retention window. In seconds, as trashPath writes it.
 function redateTrash(metadataPath: string, now: number): void {
@@ -92,6 +129,13 @@ function redateTrash(metadataPath: string, now: number): void {
     } finally {
         db.close();
     }
+}
+
+// What the stage takes on the data disk, at most: every member unpacked, a home by its inner count, and as much
+// again for a mount materialized beside its unpacked tree.
+export function stageBytesNeeded(manifest: ServerArchiveManifest): number {
+    const homes = new Map(manifest.homes.map((home) => [home.member, home.bytes ?? 0]));
+    return 2 * manifest.entries.reduce((sum, entry) => sum + Math.max(entry.bytes, homes.get(entry.path) ?? 0), 0);
 }
 
 type StageContext = {
@@ -119,6 +163,11 @@ async function stageHome(
     await extractArtifact(member, unpacked);
     const { folder, manifest } = readUnpackedHome(unpacked, home.ownerId, home.member);
     requireVerified(await verifyFolder(folder), home.member);
+    // The swap goes by the outer level: a light home under a full one would replace a home with no files.
+    const level = manifest.level ?? 'full-s3';
+    if (level !== archive.manifest.level) {
+        throw new ApiError(400, `${home.member} is a ${level} capture in a ${archive.manifest.level} archive`);
+    }
 
     const homeDir = homeDirUnder(dataDir, home.ownerId);
     const liveHomeDir = homeDirUnder(liveDataRoot, home.ownerId);
@@ -127,24 +176,26 @@ async function stageHome(
     const containerDatabases: VersionedDatabase[] = [];
     let notReplayed = 0;
     for (const summary of carried) {
-        if (manifest.level === 'light') continue;
+        if (level === 'light') continue;
         const mountDir = requireMountDir(homeDir, summary.id);
+        const liveStagingDir = path.join(liveHomeDir, PATHS.DRIVE.ROOT, summary.id, PATHS.DRIVE.STAGING_DIR);
         if (summary.storageType !== 's3' || (s3FromArchive && summary.contents !== 'metadata')) {
             containerDatabases.push(...materializeMount(homeDir, summary, stamp));
         } else if (summary.contents === 'metadata') {
-            const staging = PATHS.DRIVE.STAGING_DIR;
-            notReplayed += dropSettledUploads(
-                path.join(mountDir, staging),
-                path.join(liveHomeDir, PATHS.DRIVE.ROOT, summary.id, staging),
-            );
+            notReplayed += dropSettledUploads(path.join(mountDir, PATHS.DRIVE.STAGING_DIR), liveStagingDir);
         } else {
-            // The bucket holds these objects under the keys metadata.db names.
-            fs.rmSync(path.join(mountDir, PATHS.DRIVE.DATA_DIR), { recursive: true, force: true });
+            notReplayed += replayPendingUploads(mountDir, liveStagingDir);
         }
     }
     const mountIds = carried.map((summary) => summary.id);
     checkRestoredDatabases(homeDir, mountIds, containerDatabases);
-    for (const id of mountIds) redateTrash(path.join(requireMountDir(homeDir, id), PATHS.DRIVE.METADATA_DB), now);
+    for (const id of mountIds) {
+        try {
+            redateTrash(path.join(requireMountDir(homeDir, id), PATHS.DRIVE.METADATA_DB), now);
+        } catch (error) {
+            throw new ApiError(400, `the trash of ${home.name} cannot be dated: ${describeError(error)}`);
+        }
+    }
     fs.rmSync(unpacked, { recursive: true, force: true });
     return notReplayed;
 }

@@ -19,6 +19,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { parseServerArchiveManifest } from '@workspace/lib/validation';
 import pkg from '../../../../../package.json' with { type: 'json' };
+import { STAGE_LOCK, SWAP_LOCK, SWAP_MARKER } from '../../cli/restore';
 import {
     type ArchiveMember,
     copyArchiveMember,
@@ -31,6 +32,7 @@ import {
 import { getBackupJob } from '../../lib/backup/jobs';
 import { getBackupsDir } from '../../lib/backup/paths';
 import { startServerBackup } from '../../lib/backup/server-job';
+import { lockDataDir } from '../../lib/config/data-lock';
 import { SERVER_DATABASES, SERVER_RUNTIME_FILES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { PATHS } from '../../lib/core/constants';
@@ -61,6 +63,7 @@ import {
 
 const JOB_TIMEOUT_MS = 120_000;
 const RESTORE_CLI = join(import.meta.dir, '../../cli/restore.ts');
+const INSTALL_CLI = join(import.meta.dir, '../../cli/install.ts');
 const ARCHIVED_ENV =
     'DOMAIN=archived.example.org\nEIGEN_VERSION=0.3.1\nEIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api@sha256:abc\n';
 const RELEASE_ENV = 'DOMAIN=here.example.org\nEIGEN_VERSION=0.3.0\n';
@@ -91,10 +94,12 @@ function install(env = RELEASE_ENV): string {
     return dir;
 }
 
-async function restoreCli(dir: string, args: string[]) {
+// `preamble` runs before cli/restore.ts loads, to spy on what the run cannot show from outside.
+async function restoreCli(dir: string, args: string[], { preamble = [], env = {} }: CliSeams = {}) {
     const script = [
         `import { parseArgs } from 'node:util';`,
-        `import { RESTORE_OPTIONS, restore } from ${JSON.stringify(RESTORE_CLI)};`,
+        ...preamble,
+        `const { RESTORE_OPTIONS, restore } = await import(${JSON.stringify(RESTORE_CLI)});`,
         'const { values, positionals } = parseArgs({ args: process.argv.slice(1), options: RESTORE_OPTIONS, allowPositionals: true });',
         'await restore(positionals[0], values);',
     ].join('\n');
@@ -107,6 +112,7 @@ async function restoreCli(dir: string, args: string[]) {
             EIGEN_DATA_ROOT: join(dir, 'data'),
             EIGEN_ENV_FILE: join(dir, '.env.production'),
             EIGEN_BACKUPS_DIR: getBackupsDir(),
+            ...env,
         },
         stdin: 'ignore',
         stdout: 'pipe',
@@ -118,6 +124,28 @@ async function restoreCli(dir: string, args: string[]) {
         proc.exited,
     ]);
     return { stdout, stderr, code };
+}
+
+type CliSeams = { preamble?: string[]; env?: Record<string, string> };
+
+// Every ownAs of the run into `log`, a line each, with whether the swap marker was there yet. Nothing is chowned.
+function spyOwnAs(log: string): string[] {
+    const path = JSON.stringify(INSTALL_CLI);
+    return [
+        `import { mock } from 'bun:test';`,
+        `import { appendFileSync, existsSync } from 'node:fs';`,
+        `const install = await import(${path});`,
+        `mock.module(${path}, () => ({ ...install, ownAs: (path, { uid, gid }) => appendFileSync(${JSON.stringify(log)}, JSON.stringify({ path, uid, gid, marker: existsSync(${JSON.stringify(SWAP_MARKER)}) }) + '\\n') }));`,
+    ];
+}
+
+type Owned = { path: string; uid: number; gid: number; marker: boolean };
+
+function readOwned(log: string): Owned[] {
+    return readFileSync(log, 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
 }
 
 async function stage(dir: string, archive: string, ...flags: string[]) {
@@ -303,6 +331,7 @@ let s3Fault: FaultStorage;
 let stagedUploadName: string;
 let fullArchive: string;
 let lightArchive: string;
+let fullS3Archive: string;
 
 beforeAll(async () => {
     ctx = await getTestContext();
@@ -368,6 +397,7 @@ beforeAll(async () => {
 
     fullArchive = await backup('full');
     lightArchive = await backup('light');
+    fullS3Archive = await backup('full-s3');
 }, JOB_TIMEOUT_MS);
 
 afterAll(async () => {
@@ -723,6 +753,166 @@ describe('restore --stage and --swap', () => {
         JOB_TIMEOUT_MS,
     );
 
+    test(
+        'a Light swap onto an install with no data/team makes it as the owner of data/, before its marker',
+        async () => {
+            const dir = install();
+            expect(existsSync(join(dir, 'data/team'))).toBe(false);
+            expect((await stage(dir, basename(lightArchive))).code).toBe(0);
+            const log = join(scratch('restore-owned-'), 'owned.log');
+            // The install folder's owner differs from data/'s here, so the two cannot be mixed up.
+            const result = await restoreCli(dir, ['--swap'], {
+                preamble: spyOwnAs(log),
+                env: { EIGEN_OWNER: '4242:4242' },
+            });
+            expect(result.stderr).toBe('');
+            expect(result.code).toBe(0);
+            expect(statSync(join(dir, 'data/team')).isDirectory()).toBe(true);
+            const data = statSync(join(dir, 'data'));
+            const underData = readOwned(log).filter((call) => call.path.startsWith('data/'));
+            expect(underData.map((call) => call.path)).toContain('data/team');
+            for (const call of underData) {
+                expect(call).toEqual({ path: call.path, uid: data.uid, gid: data.gid, marker: false });
+            }
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a Light swap copies the staged uploads aside only once its marker lists them',
+        async () => {
+            const dir = install();
+            const staging = join(homeDirOf(dir, alice.id), 'mounts', aliceMountId, PATHS.DRIVE.STAGING_DIR);
+            mkdirSync(staging, { recursive: true });
+            writeFileSync(join(staging, 'upload'), 'staged here');
+            expect((await stage(dir, basename(lightArchive))).code).toBe(0);
+            const log = join(scratch('restore-owned-'), 'owned.log');
+            const result = await restoreCli(dir, ['--swap'], { preamble: spyOwnAs(log) });
+            expect(result.stderr).toBe('');
+            expect(result.code).toBe(0);
+            const aside = readOwned(log).filter((call) => ASIDE.test(call.path.split('/')[0]));
+            expect(aside.map((call) => call.path)).toContain(
+                join(asideDirs(dir)[0], 'home', alice.id, 'mounts', aliceMountId, PATHS.DRIVE.STAGING_DIR, 'upload'),
+            );
+            for (const call of aside) expect(call.marker).toBe(true);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a Light swap is refused before its marker where a home sits on another disk',
+        async () => {
+            const dir = install();
+            const live = homeDirOf(dir, alice.id);
+            mkdirSync(live, { recursive: true });
+            writeFileSync(join(live, 'settings.json'), '{}');
+            expect((await stage(dir, basename(lightArchive))).code).toBe(0);
+            // A bind mount: everything in the home reads as another device.
+            const home = JSON.stringify(join('data/home', alice.id));
+            const result = await restoreCli(dir, ['--swap'], {
+                preamble: [
+                    `import { spyOn } from 'bun:test';`,
+                    `import * as fs from 'node:fs';`,
+                    'const lstat = fs.lstatSync;',
+                    `spyOn(fs, 'lstatSync').mockImplementation((path, options) => { const stat = lstat(path, options); if (stat && String(path).startsWith(${home})) stat.dev += 1; return stat; });`,
+                ],
+            });
+            expect(result.code).toBe(1);
+            expect(result.stderr).toContain('another disk');
+            expect(readFileSync(join(live, 'settings.json'), 'utf8')).toBe('{}');
+            expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
+            expect(asideDirs(dir)).toEqual([]);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'an archive that calls itself full around light homes is refused before anything moves',
+        async () => {
+            const dir = install();
+            const lying = await craft(lightArchive, { manifest: (m) => ({ ...m, level: 'full' }) });
+            const result = await stage(dir, lying);
+            expect(result.code).toBe(1);
+            expect(result.stderr).toContain('a light capture in a full archive');
+            expectUntouched(dir);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a trash that cannot be dated names its home',
+        async () => {
+            const dir = install();
+            const member = await rewrittenMember(lightArchive, alice.id, (entries) =>
+                entries.map((entry) => (entry.name.endsWith('/metadata.db') ? { ...entry, mode: 0o444 } : entry)),
+            );
+            const crafted = await craft(lightArchive, { replace: { [member.name]: member.file } });
+            const result = await stage(dir, crafted);
+            expect(result.code).toBe(1);
+            expect(result.stderr).toContain(`the trash of ${alice.name}`);
+            expectUntouched(dir);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a stage the data disk has no room for is refused before anything is unpacked',
+        async () => {
+            const dir = install();
+            const result = await restoreCli(dir, [basename(fullArchive), '--stage', '--yes'], {
+                preamble: [
+                    `import { spyOn } from 'bun:test';`,
+                    `import * as fs from 'node:fs';`,
+                    `spyOn(fs, 'statfsSync').mockImplementation(() => ({ bavail: 1, bsize: 4096 }));`,
+                ],
+            });
+            expect(result.code).toBe(1);
+            expect(result.stderr).toContain('4.00 KB free');
+            expectUntouched(dir);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a stage while another stages is refused and leaves its tree alone',
+        async () => {
+            const dir = install();
+            mkdirSync(join(dir, 'data/.restoring/data'), { recursive: true });
+            writeFileSync(join(dir, 'data/.restoring/data/half.txt'), 'the other stage');
+            const other = lockDataDir(join(dir, 'data/.restoring', STAGE_LOCK))!;
+            try {
+                const result = await stage(dir, basename(fullArchive));
+                expect(result.code).toBe(1);
+                expect(result.stderr).toContain('Another restore is staging');
+                expect(readFileSync(join(dir, 'data/.restoring/data/half.txt'), 'utf8')).toBe('the other stage');
+            } finally {
+                other.close();
+            }
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a second swap while one runs is refused before anything moves',
+        async () => {
+            const dir = install();
+            expect((await stage(dir, basename(fullArchive))).code).toBe(0);
+            const other = lockDataDir(join(dir, SWAP_LOCK))!;
+            try {
+                const result = await swap(dir);
+                expect(result.code).toBe(1);
+                expect(result.stderr).toContain('Another restore is swapping');
+                expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
+                expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
+                expect(asideDirs(dir)).toEqual([]);
+            } finally {
+                other.close();
+            }
+            expect((await swap(dir)).code).toBe(0);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
     test('a swap is refused when nothing is staged', async () => {
         const dir = install();
         const result = await swap(dir);
@@ -800,6 +990,15 @@ describe('an interrupted swap', () => {
         },
         JOB_TIMEOUT_MS,
     );
+
+    test('a marker that does not parse is refused with what to do, not a stack', async () => {
+        const dir = install();
+        writeFileSync(join(dir, SWAP_MARKER), '{"archive": "cut of');
+        const result = await swap(dir);
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain('does not read as a swap');
+        expect(result.stderr).not.toContain('SyntaxError');
+    });
 });
 
 describe('staged uploads of an s3 mount', () => {
@@ -848,6 +1047,46 @@ describe('staged uploads of an s3 mount', () => {
                 );
                 expect(readFileSync(join(staged, stagedUploadName), 'utf8')).toBe('not in the bucket yet');
             }
+        },
+        JOB_TIMEOUT_MS,
+    );
+});
+
+describe('an archive with the files of an s3 mount, restored without them', () => {
+    test(
+        'a pending upload only its files hold is replayed',
+        async () => {
+            const dir = install();
+            await stageAndSwap(dir, basename(fullS3Archive));
+            const mount = join(homeDirOf(dir, s3User.id), 'mounts', S3_MOUNT_ID);
+            expect(readFileSync(join(mount, PATHS.DRIVE.STAGING_DIR, stagedUploadName), 'utf8')).toBe(
+                'not in the bucket yet',
+            );
+            expect(existsSync(join(mount, PATHS.DRIVE.DATA_DIR))).toBe(false);
+            const db = new Database(join(mount, PATHS.DRIVE.METADATA_DB), { readonly: true });
+            try {
+                expect(db.query('SELECT stagingPath FROM pending_uploads').all()).toEqual([
+                    { stagingPath: stagedUploadName },
+                ]);
+            } finally {
+                db.close();
+            }
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'one the live mount already dropped from staging/ is not',
+        async () => {
+            const dir = install();
+            const mount = join(homeDirOf(dir, s3User.id), 'mounts', S3_MOUNT_ID);
+            mkdirSync(join(mount, PATHS.DRIVE.STAGING_DIR), { recursive: true });
+            const result = await stage(dir, basename(fullS3Archive));
+            expect(result.code).toBe(0);
+            expect(result.stdout).toContain('1 pending upload');
+            const staged = join(dir, 'data/.restoring/data/home', s3User.id, 'mounts', S3_MOUNT_ID);
+            expect(readdirSync(join(staged, PATHS.DRIVE.STAGING_DIR))).toEqual([]);
+            expect(existsSync(join(staged, PATHS.DRIVE.DATA_DIR))).toBe(false);
         },
         JOB_TIMEOUT_MS,
     );

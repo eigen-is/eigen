@@ -1,21 +1,27 @@
 import type { Database } from 'bun:sqlite';
 import {
     chmodSync,
+    closeSync,
     copyFileSync,
     cpSync,
     existsSync,
+    fsyncSync,
     lstatSync,
     mkdirSync,
+    openSync,
     readdirSync,
     readFileSync,
     renameSync,
     rmSync,
+    statfsSync,
     statSync,
     writeFileSync,
+    writeSync,
 } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
 import type { parseArgs } from 'node:util';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
+import { formatFileSize } from '@workspace/lib/format';
 import type { BackupLevel } from '@workspace/lib/types/backup';
 import { buildBackupStamp, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { copyArchiveMember } from '../lib/backup/archive';
@@ -27,6 +33,7 @@ import {
     RESTORING_DATA_DIR,
     RESTORING_DIR,
     type ServerArchive,
+    stageBytesNeeded,
     stageServerArchive,
 } from '../lib/backup/restore-server';
 import { readServerArchive } from '../lib/backup/verify';
@@ -72,9 +79,21 @@ type StagedRestore = { archive: string; level: BackupLevel; appVersion: string }
 
 // Written by the swap before its first rename, read by the launcher's preflight: while it is there, a swap was cut
 // off, and --swap finishes it.
-const SWAP_MARKER = '.eigen/restore-swap';
-// The renames in order, from and to, relative to the install folder; `aside` names what the operator finds after.
-type RestoreSwap = { archive: string; renames: [string, string][]; aside: string[]; leftover: string; env: boolean };
+export const SWAP_MARKER = '.eigen/restore-swap';
+// Held by a swap from before it reads the marker until it exits: .eigen/ is there all along, data/ is not.
+export const SWAP_LOCK = '.eigen/restore.lock';
+// In data/.restoring, held by the stage that fills it: a second one would wipe its tree.
+export const STAGE_LOCK = 'stage.lock';
+// The copies, then the renames in order, from and to, relative to the install folder; `aside` names what the
+// operator finds after.
+type RestoreSwap = {
+    archive: string;
+    copies: [string, string][];
+    renames: [string, string][];
+    aside: string[];
+    leftover: string;
+    env: boolean;
+};
 
 // A light archive leaves each mount's files and the Maildir in the home: every other file is its light set.
 const LIGHT_SKIPS = new RegExp(`^(?:${PATHS.DRIVE.ROOT}/[^/]+/[^/]+|${MAILDIR_ROOT})$`);
@@ -83,15 +102,20 @@ type Held = { path: string; dir: boolean };
 // What refusal() looks at; not a setgid folder, which a setgid install folder hands down to every folder in it.
 export const SUSPECTS = '-type b -o -type c -o -type p -o -type s -o -type f ( -perm -4000 -o -perm -2000 ) -o -type l';
 
-// Held until exit, like the API holds it while it runs: neither reads or replaces data/ while the other does.
-let dataLock: Database | null = null;
+// Held until exit, like the API holds the data lock while it runs. False when another process holds `file`.
+const held: Database[] = [];
 
+function hold(file: string): boolean {
+    const lock = lockDataDir(file);
+    if (lock) held.push(lock);
+    return lock !== null;
+}
+
+// Neither Eigen nor another backup or restore reads or replaces data/ while this one does.
 export function lockData(ui: Ui, command: string): void {
     const file = join(DATA, SERVER_DIR, DATA_LOCK_FILE);
     // Root must not make one the API could not open; without one, no API ever ran on this data/.
-    if (!existsSync(file)) return;
-    dataLock = lockDataDir(file);
-    if (!dataLock) {
+    if (existsSync(file) && !hold(file)) {
         ui.fail(
             'data/ is in use by Eigen or by another backup or restore.',
             `Wait for it to finish, then run ./eigen ${command} again.`,
@@ -134,14 +158,20 @@ function readStagedRecord(file: string): StagedRestore | null {
 }
 
 function readSwapMarker(): RestoreSwap | null {
-    const value: unknown = JSON.parse(readFileSync(SWAP_MARKER, 'utf8'));
-    const isRename = (rename: unknown) =>
-        Array.isArray(rename) && rename.length === 2 && rename.every((path) => typeof path === 'string');
+    let value: unknown;
+    try {
+        value = JSON.parse(readFileSync(SWAP_MARKER, 'utf8'));
+    } catch {
+        return null;
+    }
+    const isPair = (pair: unknown) =>
+        Array.isArray(pair) && pair.length === 2 && pair.every((path) => typeof path === 'string');
     if (
         typeof value !== 'object' ||
         value === null ||
         !('archive' in value && typeof value.archive === 'string') ||
-        !('renames' in value && Array.isArray(value.renames) && value.renames.every(isRename)) ||
+        !('copies' in value && Array.isArray(value.copies) && value.copies.every(isPair)) ||
+        !('renames' in value && Array.isArray(value.renames) && value.renames.every(isPair)) ||
         !('aside' in value && Array.isArray(value.aside) && value.aside.every((path) => typeof path === 'string')) ||
         !('leftover' in value && typeof value.leftover === 'string') ||
         !('env' in value && typeof value.env === 'boolean')
@@ -150,6 +180,7 @@ function readSwapMarker(): RestoreSwap | null {
     }
     return {
         archive: value.archive,
+        copies: value.copies,
         renames: value.renames,
         aside: value.aside,
         leftover: value.leftover,
@@ -167,9 +198,17 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
     const name = basename(archivePath);
     const dataRoot = getDataRoot();
     const restoring = join(dataRoot, RESTORING_DIR);
-    // A stage that died halfway left its tree here, with no record: it goes, whatever it holds.
-    rmSync(restoring, { recursive: true, force: true });
     mkdirSync(restoring, { recursive: true, mode: 0o700 });
+    if (!hold(join(restoring, STAGE_LOCK))) {
+        return ui.fail(
+            'Another restore is staging into data/.restoring.',
+            'Wait for it to finish, then run ./eigen restore again.',
+        );
+    }
+    // A stage that died halfway left its tree here, with no record: it goes, whatever it holds.
+    for (const entry of readdirSync(restoring)) {
+        if (entry !== STAGE_LOCK) rmSync(join(restoring, entry), { recursive: true, force: true });
+    }
     const refuse = (message: string, next: string): never => {
         rmSync(restoring, { recursive: true, force: true });
         return ui.fail(message, next);
@@ -200,6 +239,14 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         return refuse(
             `${name} holds no files of S3 buckets, so --s3-from-archive has nothing to upload.`,
             'Leave the flag out.',
+        );
+    }
+    const needed = stageBytesNeeded(manifest);
+    const { bavail, bsize } = statfsSync(dataRoot);
+    if (needed > bavail * bsize) {
+        return refuse(
+            `${name} needs up to ${formatFileSize(needed)} to stage; data/ has ${formatFileSize(bavail * bsize)} free.`,
+            'Free space on that disk, then run ./eigen restore again.',
         );
     }
     const archived: ServerArchive = {
@@ -366,14 +413,59 @@ function planLight(
     return { renames, merged };
 }
 
-// Renames that already happened are skipped, so a swap cut off anywhere finishes where it stopped. A path both
-// moved away and moved back into counts as moved when the later rename is done.
+// The folders missing above `path`, owned like data/: root's own, uid 1000 could not open the homes in them.
+function makeParents(path: string): void {
+    const missing: string[] = [];
+    for (let dir = dirname(path); !lexists(dir); dir = dirname(dir)) missing.unshift(dir);
+    if (!missing.length) return;
+    const owner = statSync(DATA);
+    for (const dir of missing) {
+        mkdirSync(dir, { mode: 0o700 });
+        ownAs(dir, owner);
+    }
+}
+
+// The device a path is on, or would be: that of its nearest folder that is there.
+function deviceOf(path: string): number {
+    let dir = path;
+    while (!lexists(dir)) dir = dirname(dir);
+    return lstatSync(dir).dev;
+}
+
+// Durable before the first rename: a marker lost to a power cut would leave a half-swapped data/ nobody knows of.
+function writeMarker(marker: RestoreSwap): void {
+    const temporary = `${SWAP_MARKER}.tmp`;
+    const file = openSync(temporary, 'w', 0o600);
+    try {
+        writeSync(file, JSON.stringify(marker, null, 2));
+        fsyncSync(file);
+    } finally {
+        closeSync(file);
+    }
+    renameSync(temporary, SWAP_MARKER);
+    const dir = openSync(dirname(SWAP_MARKER), 'r');
+    try {
+        fsyncSync(dir);
+    } finally {
+        closeSync(dir);
+    }
+}
+
+// Copies are made again and renames that already happened are skipped, so a swap cut off anywhere finishes where it
+// stopped. A path both moved away and moved back into counts as moved when the later rename is done.
 function runSwap(ui: Ui, swap: RestoreSwap): void {
     const cannot = (detail: string): never =>
         ui.fail(
             `The swap of ${swap.archive} stopped halfway and cannot go on: ${detail}.`,
             `${SWAP_MARKER} lists every rename; what went aside is in ${swap.aside.join(', ')}. Put data/ right by hand, then delete ${SWAP_MARKER}.`,
         );
+    for (const [from, to] of swap.copies) {
+        const source = statSync(from, { throwIfNoEntry: false });
+        if (!source) continue;
+        makeParents(to);
+        copyFileSync(from, to);
+        ownAs(to, source);
+    }
     for (const [index, [from, to]] of swap.renames.entries()) {
         const [fromHere, toHere] = [lexists(from), lexists(to)];
         if (!fromHere && toHere) continue;
@@ -384,7 +476,7 @@ function runSwap(ui: Ui, swap: RestoreSwap): void {
         }
         if (!fromHere) cannot(`${from} is gone`);
         try {
-            mkdirSync(dirname(to), { recursive: true, mode: 0o700 });
+            makeParents(to);
             renameSync(from, to);
         } catch (error) {
             ui.fail(
@@ -407,6 +499,10 @@ function runSwap(ui: Ui, swap: RestoreSwap): void {
 
 async function swap(): Promise<void> {
     const ui = await createUi(true);
+    mkdirSync(dirname(SWAP_LOCK), { recursive: true });
+    if (!hold(SWAP_LOCK)) {
+        return ui.fail('Another restore is swapping data/.', 'Wait for it to finish, then run ./eigen restore again.');
+    }
     if (existsSync(SWAP_MARKER)) {
         lockData(ui, 'restore');
         const marked = readSwapMarker();
@@ -444,6 +540,7 @@ async function swap(): Promise<void> {
     const [dataAside, envAside] = [asideOf(DATA), asideOf(ENV_PATH)];
     const stagedEnv = join(restoring, ENV_PATH);
     const env = existsSync(stagedEnv);
+    const copies: [string, string][] = [];
     const renames: [string, string][] = [];
     if (env && lexists(ENV_PATH)) renames.push([ENV_PATH, envAside]);
     if (env) renames.push([stagedEnv, ENV_PATH]);
@@ -461,10 +558,7 @@ async function swap(): Promise<void> {
         const uploads = new Bun.Glob(`${PATHS.DRIVE.ROOT}/*/${PATHS.DRIVE.STAGING_DIR}/*`);
         for (const home of plan.merged) {
             for (const path of uploads.scanSync({ cwd: join(DATA, home), dot: true })) {
-                const [source, target] = [join(DATA, home, path), join(dataAside, home, path)];
-                mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
-                copyFileSync(source, target);
-                ownAs(target, statSync(source));
+                copies.push([join(DATA, home, path), join(dataAside, home, path)]);
             }
         }
     } else {
@@ -476,10 +570,27 @@ async function swap(): Promise<void> {
         leftover = join(dataAside, RESTORING_DIR);
     }
 
-    const marker: RestoreSwap = { archive: record.archive, renames, aside: [dataAside, envAside], leftover, env };
-    mkdirSync(dirname(SWAP_MARKER), { recursive: true });
-    writeFileSync(`${SWAP_MARKER}.tmp`, JSON.stringify(marker, null, 2));
-    renameSync(`${SWAP_MARKER}.tmp`, SWAP_MARKER);
+    // A home bind-mounted from another disk cannot be renamed into or out of.
+    for (const [from, to] of renames) {
+        if (lexists(from) && lstatSync(from).dev !== deviceOf(dirname(to))) {
+            return ui.fail(
+                `${record.archive} cannot be swapped in: ${from} is on another disk than ${dirname(to)}.`,
+                'Restore needs data/ and every home in it on the disk of the install folder.',
+            );
+        }
+    }
+    // Made before the marker, as data/'s owner: a swap cut off before it plans them again, and finds them there.
+    for (const [, to] of renames) if (to.startsWith(`${DATA}/`)) makeParents(to);
+
+    const marker: RestoreSwap = {
+        archive: record.archive,
+        copies,
+        renames,
+        aside: [dataAside, envAside],
+        leftover,
+        env,
+    };
+    writeMarker(marker);
     runSwap(ui, marker);
 }
 
