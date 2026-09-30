@@ -1,11 +1,11 @@
 import type { parseArgs } from 'node:util';
+import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
-import { parseBackupStamp } from '@workspace/lib/validation';
+import { parseServerArchiveName } from '@workspace/lib/validation';
 import type { ControlStatus } from '../lib/config/server-status';
 import { callControl } from './control-socket';
 import { VERSION, VERSION_PATTERN } from './install';
-import { newestSnapshots, SNAPSHOT_NAME } from './snapshot';
 import { createUi, type Glyph, glyphLine } from './ui';
 
 type Row = { level: Glyph; label: string; value: string };
@@ -17,18 +17,18 @@ const CERT_WARN_DAYS = 14;
 // --install is the folder on the host, which the CLI sees as /install. --latest is the newest release of a release
 // install, or on a channel the commit of its newest build: empty when the check failed, left out on a local build.
 // --files is the build the launcher and Compose files were last written from, passed only while it is not the one
-// .env.production pins: an update that failed halfway is not finished.
+// .env.production pins: an update that failed halfway is not finished. --backups lists backups/, for the Backup row
+// while the API does not run.
 export const STATUS_OPTIONS = {
     install: { type: 'string' },
     services: { type: 'string' },
     latest: { type: 'string' },
     'mail-queue': { type: 'string' },
-    snapshots: { type: 'string' },
-    'snapshots-kb': { type: 'string' },
+    backups: { type: 'string' },
     files: { type: 'string' },
 } as const;
-export const STATUS_USAGE = `Usage: status [--install=…] [--services=…] [--latest=…] [--mail-queue=…]
-              [--snapshots=…] [--snapshots-kb=…] [--files=…]
+export const STATUS_USAGE = `Usage: status [--install=…] [--services=…] [--latest=…] [--mail-queue=…] [--backups=…]
+              [--files=…]
 
 Reports on the running server with what ./eigen status gathers from Docker and the host.`;
 
@@ -66,6 +66,20 @@ function backupRow({
         label: 'Backup',
         value: `${parts.join(', ')}${stale ? '; no good Full backup in two days' : ''}`,
     };
+}
+
+// Without the API, the newest archive in backups/ by the time in its name; whether it verified is in its record.
+function listedBackupRow(listing: string): Row {
+    const [newest] = listing
+        .split('\n')
+        .flatMap((name) => {
+            const parsed = parseServerArchiveName(name);
+            return parsed ? [{ name, ...parsed }] : [];
+        })
+        .sort((a, b) => b.at.getTime() - a.at.getTime());
+    if (!newest) return { level: 'warn', label: 'Backup', value: 'none yet; ./eigen backup makes one' };
+    const value = `${newest.name}, ${BACKUP_LEVEL_NAMES[newest.level]}, ${formatTimeAgo(newest.at)}`;
+    return { level: 'ok', label: 'Backup', value };
 }
 
 // Without the API, the report holds what the launcher knows.
@@ -115,25 +129,9 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
         }),
     );
 
-    const snapshots = newestSnapshots((flags.snapshots ?? '').split('\n'));
-    const [snapshot = ''] = snapshots;
-    const groups = SNAPSHOT_NAME.exec(snapshot)?.groups;
-    const snapshotAt = groups && parseBackupStamp(groups);
-    const data: Row[] = [
-        snapshotAt
-            ? { level: 'ok', label: 'Last snapshot', value: `${snapshot}, ${formatTimeAgo(snapshotAt)}` }
-            : { level: 'warn', label: 'Last snapshot', value: 'none yet; ./eigen backup makes one' },
-    ];
-    const kb = Number(flags['snapshots-kb']);
-    if (snapshots.length && kb) {
-        data.push({
-            level: 'ok',
-            label: 'Snapshots',
-            value: `${snapshots.length} in snapshots/, ${formatFileSize(kb * 1024, 1)} on disk`,
-        });
-    }
+    const data: Row[] = api ? [] : [listedBackupRow(flags.backups ?? '')];
     if (api) {
-        data.unshift(
+        data.push(
             {
                 level: api.diskFree < api.diskTotal / 10 ? 'warn' : 'ok',
                 label: 'Disk',

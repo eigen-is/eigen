@@ -9,13 +9,19 @@ type ReleaseNote = { version: string; intro: string; breaking: string[] };
 const CHANGELOG = join(ROOT, 'CHANGELOG.md');
 const HEADING = /^\[([^\]]+)\]/;
 
-export const UPDATE_CHECK_OPTIONS = { from: { type: 'string' }, 'accept-breaking': { type: 'boolean' } } as const;
-export const UPDATE_CHECK_USAGE = `Usage: update-check --from <version> [--accept-breaking]
+export const UPDATE_CHECK_OPTIONS = {
+    from: { type: 'string' },
+    'accept-breaking': { type: 'boolean' },
+    level: { type: 'boolean' },
+} as const;
+export const UPDATE_CHECK_USAGE = `Usage: update-check --from <version> [--accept-breaking | --level]
 
 Prints what changed between <version> and this image's version, from its CHANGELOG.md.
 A breaking change is asked about on a terminal and refused elsewhere (run by ./eigen update).
 
-  --accept-breaking   Go ahead despite breaking changes`;
+  --accept-breaking   Go ahead despite breaking changes
+  --level             Print only the level of the backup the update makes first: level=full when a release
+                      since <version> has breaking changes, else level=light`;
 
 // The CHANGELOG sections after `from` up to `to`, oldest first, with their intro and (breaking) lines; no [Unreleased].
 export function releaseNotes(changelog: string, from: string, to: string): ReleaseNote[] {
@@ -53,7 +59,11 @@ export function notesSince(from: string): ReleaseNote[] {
     return releaseNotes(readFileSync(CHANGELOG, 'utf8'), from, VERSION);
 }
 
-export async function updateCheck(flags: { from?: string; 'accept-breaking'?: boolean }): Promise<void> {
+export async function updateCheck(flags: {
+    from?: string;
+    'accept-breaking'?: boolean;
+    level?: boolean;
+}): Promise<void> {
     const ui = await createUi(false);
     const from = flags.from ?? '';
     if (!VERSION_PATTERN.test(from)) ui.fail('--from takes a version, like 0.2.0.', 'Run it through ./eigen update.');
@@ -65,6 +75,11 @@ export async function updateCheck(flags: { from?: string; 'accept-breaking'?: bo
     }
 
     const notes = notesSince(from);
+    // A breaking release may convert what a light backup leaves out, so only a full one could bring it back.
+    if (flags.level) {
+        console.log(`level=${notes.some(({ breaking }) => breaking.length) ? 'full' : 'light'}`);
+        return;
+    }
     for (const { version, intro, breaking } of notes) {
         console.log(glyphLine('active', `Eigen ${version}`));
         for (const line of wrap(intro, 76)) if (line) console.log(glyphLine('bar', line));

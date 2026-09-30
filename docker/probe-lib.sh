@@ -233,8 +233,8 @@ show() { printf '%s\n' "$OUT" | sed 's/^/    │ /'; }
 # says <text>: whether the last output holds this line fragment.
 says() { printf '%s\n' "$OUT" | grep -q -- "$1"; }
 
-# The snapshot the last ./eigen backup saved, from its output.
-saved_snapshot() { printf '%s\n' "$OUT" | grep -o 'eigen-\(light-\)\{0,1\}[0-9]\{8\}-[0-9]\{6\}\.tar\.gz' | head -n 1 || true; }
+# The archive the last ./eigen backup saved, from the archive= line that ends its output.
+saved_archive() { printf '%s\n' "$OUT" | sed -n 's/^archive=//p' | tail -n 1; }
 
 # run_setup <log> [--user uid:gid] <setup flags…>: ./eigen setup in the no-Bun container, its output in <log>. A
 # setup that fails shows that output and ends the harness.
@@ -309,7 +309,7 @@ check_env() {
 env_of() { scratch_run sed -n "s/^$1=//p" "$INSTALL/.env.production" | tail -n 1; }
 
 # How many data/ folders restores have kept aside.
-aside_count() { (cd "$INSTALL" && ls -d data.pre-restore-* 2>/dev/null | wc -l | tr -d ' '); }
+aside_count() { (cd "$INSTALL" && { ls -d data.pre-restore-* 2>/dev/null || :; } | wc -l | tr -d ' '); }
 
 # setup_token <log>: the token of the last setup link in ./eigen setup output.
 setup_token() { grep -o 'setup=[A-Za-z0-9_-]*' "$1" | tail -n 1 | cut -d= -f2 || true; }

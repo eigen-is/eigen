@@ -4,12 +4,15 @@
 # commands and arguments, the preflight refusals, local-build and release mode, need_install, update and rollback
 # refused in a local build, a failing compose config, stop, what update asks the CLI and names the builds, on a release
 # and on the main channel, the tags it refuses, a build whose images differ, a tag that moves during an update, a pinned
-# api image that is not here, the files an unfinished update left, which build's CLI the handed-over update saves the
-# snapshot with, what setup downloads with and without pins, what rollback names, a lock without a pid, the group and
-# mode every start gives .env.production first but on Docker Desktop, and what status passes the CLI about the
-# snapshots, the files of an unfinished update and the newest build of main, and its folder; setup in a folder that
-# holds the launcher alone, with the registry or the build .env.production names, and the installer script
-# apps/index/public/install on this host, as a file and on stdin.
+# api image that is not here, the files an unfinished update left, the backup an update makes on the running API before
+# it writes anything and hands over, typed on a terminal too, update --no-backup with Eigen stopped, the retry of an
+# update from Eigen 0.3.0 and the handover from it whose own image saves the snapshot, what setup
+# downloads with and without pins, backup on the running API, restore's stage and swap and what each failure leaves,
+# a swap that was cut off and finished first, a restore on a new machine from the launcher alone, what rollback runs
+# or prints, a lock without a pid, the group and mode every start gives .env.production first but on Docker Desktop,
+# and what status passes the CLI about backups/, the files of an unfinished update and the newest build of main, and
+# its folder; setup in a folder that holds the launcher alone, with the registry or the build .env.production names,
+# and the installer script apps/index/public/install on this host, as a file and on stdin, for setup and restore.
 #
 # Usage:  ./docker/test-launcher.sh
 # Needs:  docker (pulls debian:bookworm-slim and busybox once).
@@ -28,15 +31,38 @@ trap 'rm -rf "$FIX"' EXIT
 # STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any api tag names;
 # STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a dovecot
 # image, and STUB_MOVED that of any image once api was pulled twice, as a tag that moves; STUB_DIGEST the registry
-# digest of every local image; a docker run with STUB_RUN_FAIL among its arguments fails, and one with --checked also
-# prints STUB_CHECKED, and one of snapshot --pre-update writes .eigen/last-update. A run of bootstrap writes a Compose
+# digest of every local image; a docker run with STUB_RUN_FAIL among its arguments fails, and one with --staged also
+# prints STUB_CHECKED, one of update-check --level prints level=STUB_LEVEL, one of snapshot --pre-update writes
+# .eigen/last-update, one of restore --env writes a .env.production that pins sha256:eee, and one of restore --swap
+# removes .eigen/restore-swap, or with STUB_SWAP_CUT=1 leaves one and fails. A run of bootstrap writes a Compose
 # file into this folder, the starter keys into .env.production when it names no release, keeping the registry it
-# names, and a launcher that prints STUB_LAUNCHER on stderr.
+# names, and a launcher that prints STUB_LAUNCHER on stderr. Compose ps names eigen-api as running unless
+# STUB_RUNNING=0, compose run (the stage) exits STUB_STAGE, and compose exec of backup prints archive=STUB_ARCHIVE and
+# exits STUB_EXEC. With a -t among a run's arguments, update-check --level ends its line in \r\n, as Docker's pty does.
+# STUB_OLD_CLI=1 is the CLI of Eigen 0.3.0: it has no backup, and its status refuses --backups; the --help of either
+# says what the CLI takes, the launcher's probe. A run of restore --env refuses a folder with a .env.production.
 mkdir "$FIX/bin"
 cat >"$FIX/bin/docker" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >>"$STUB_LOG"
 fails() { case " ${STUB_FAIL:-} " in *" $1 "*) echo "stub: $1 fails" >&2; exit 1 ;; esac; }
+# cli <arguments>: what the CLI of either version answers of backup and status, before the stub does the rest.
+cli() {
+    case " $* " in
+        *" backup --help "*)
+            if [ "${STUB_OLD_CLI:-0}" = 1 ]; then echo 'Unknown command "backup".' >&2; exit 2; fi
+            echo 'Usage: backup [--level light|full|full-s3] [--reason manual|pre-update] [--wait]'
+            exit 0
+            ;;
+        *" status --help "*)
+            if [ "${STUB_OLD_CLI:-0}" = 1 ]; then echo 'Usage: status [--snapshots=…]'; else echo 'Usage: status [--backups=…]'; fi
+            exit 0
+            ;;
+        *" backup "* | *" --backups="*)
+            if [ "${STUB_OLD_CLI:-0}" = 1 ]; then echo 'Unknown argument.' >&2; exit 2; fi
+            ;;
+    esac
+}
 case $1 in
     info)
         info=${STUB_INFO-27.3.1 x86_64 Ubuntu 24.04.1 LTS}
@@ -52,6 +78,16 @@ case $1 in
         case $1 in
             version) if [ -n "${STUB_COMPOSE-2.29.1}" ]; then echo "${STUB_COMPOSE-2.29.1}"; else exit 1; fi ;;
             config) if [ "${2:-}" = --services ]; then printf 'eigen-api\ncaddy\n'; else echo 'name: stub'; fi ;;
+            ps) if [ "${STUB_RUNNING:-1}" = 1 ]; then echo eigen-api; fi ;;
+            run) exit "${STUB_STAGE:-0}" ;;
+            exec)
+                cli "$@"
+                case " $* " in *" backup "*)
+                    echo "archive=${STUB_ARCHIVE-server-pre-update-light-20260101-000000.tar}"
+                    exit "${STUB_EXEC:-0}"
+                    ;;
+                esac
+                ;;
         esac
         ;;
     image)
@@ -74,10 +110,35 @@ case $1 in
         shift
         echo "stub run: $*"
         case " $* " in *" ${STUB_RUN_FAIL:-none} "*) exit 1 ;; esac
-        case " $* " in *" --checked "*) printf '%s\n' "${STUB_CHECKED:-}" ;; esac
+        cli "$@"
+        case " $* " in *" --staged "*) printf '%s\n' "${STUB_CHECKED:-}" ;; esac
+        case " $* " in
+            *" -t "*" update-check "*" --level "*) printf 'level=%s\r\n' "${STUB_LEVEL:-light}" ;;
+            *" update-check "*" --level "*) echo "level=${STUB_LEVEL:-light}" ;;
+        esac
         case " $* " in *" snapshot --pre-update "*)
             mkdir -p .eigen
             echo eigen-pre-update-light-20260101-000000.tar.gz >.eigen/last-update
+            ;;
+        esac
+        case " $* " in *" --env "*)
+            if [ -e .env.production ]; then echo 'This folder has a .env.production already.' >&2; exit 1; fi
+            printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=0.2.98\n' >.env.production
+            for name in api frontend postfix dovecot unbound; do
+                printf 'EIGEN_%s_IMAGE=ghcr.io/eigen-is/eigen/%s@sha256:eee\n' "$(echo $name | tr a-z A-Z)" $name >>.env.production
+            done
+            ;;
+        esac
+        case " $* " in *" restore --swap "*)
+            if [ "${STUB_SWAP_CUT:-0}" = 1 ]; then
+                : >.eigen/restore-swap
+                exit 1
+            fi
+            rm -f .eigen/restore-swap
+            case ${STUB_CHECKED:-} in *EIGEN_API_IMAGE=*)
+                printf 'DOMAIN=eigen.example.com\n%s\n' "$STUB_CHECKED" >.env.production
+                ;;
+            esac
             ;;
         esac
         case " $* " in *" bootstrap "*)
@@ -138,13 +199,15 @@ docker pull -q busybox >/dev/null
 PATH_IN=/stub:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # launch <folder> <args…>: the launcher under $SHELL_NAME in $FIX/<folder>; sets CODE, OUT (stdout), ERR (stderr) and
-# CALLS (what docker was asked). STUB_* pass through as set here.
+# CALLS (what docker was asked). STUB_* pass through as set here. LAUNCH_TTY=1 gives a container shell a terminal, which
+# takes stderr into OUT.
 launch() {
     local dir="$FIX/$1" vars=("STUB_LOG=$FIX/calls.log") flags=() name var
     shift
     : >"$FIX/calls.log"
     for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_REVISION STUB_LABEL_VERSION \
-        STUB_LABEL_REVISION STUB_LABEL_REVISION_DOVECOT STUB_MOVED STUB_DIGEST STUB_RUN_FAIL STUB_CHECKED; do
+        STUB_LABEL_REVISION STUB_LABEL_REVISION_DOVECOT STUB_MOVED STUB_DIGEST STUB_RUN_FAIL STUB_CHECKED STUB_LEVEL \
+        STUB_SWAP_CUT STUB_RUNNING STUB_STAGE STUB_ARCHIVE STUB_EXEC STUB_OLD_CLI; do
         if [ -n "${!name+set}" ]; then vars+=("$name=${!name}"); fi
     done
     CODE=0
@@ -153,6 +216,7 @@ launch() {
     else
         for var in "${vars[@]}"; do flags+=(-e "$var"); done
         # As this user, or on a Linux host root's .eigen would refuse this script's own lock below.
+        if [ "${LAUNCH_TTY:-0}" = 1 ]; then flags+=(-t); fi
         OUT=$(docker run --rm --user "$(id -u):$(id -g)" -v "$FIX:$FIX" -v "$FIX/bin:/stub:ro" -w "$dir" \
             -e PATH="$PATH_IN" "${flags[@]}" "$IMAGE" "$SHELL_CMD" ./eigen "$@" 2>"$FIX/stderr") || CODE=$?
     fi
@@ -190,6 +254,36 @@ shared() {
         END { exit !(ups > 0 && ups == shared) }'
 }
 
+ARCHIVE=server-manual-full-20260101-000000.tar
+
+# steps: what of the last launch a restore, update or rollback turns on, in order, on one line: the stage (compose
+# run), stop, up, pulls, the share of .env.production, and the CLI's restore, bootstrap, configure and rm runs with the
+# image each ran in.
+steps() {
+    printf '%s\n' "$CALLS" | sed -n -e 's/^compose .* run --rm --no-deps -T -e TERM -e NO_COLOR \(.*\)$/stage \1/p' \
+        -e 's/^compose .* stop$/stop/p' -e 's/^compose .* up -d --wait$/up/p' -e 's/^\(pull .*\)$/\1/p' \
+        -e "s|^run --rm --user 0 --entrypoint sh .* $SHARE\$|share|p" \
+        -e 's/^run .* \([^ ]*\) restore \(.*\)$/restore \2 (\1)/p' \
+        -e 's/^run .* \([^ ]*\) bootstrap --force --out \/install$/bootstrap \1/p' \
+        -e 's/^run .* \([^ ]*\) configure --backfill$/configure \1/p' -e 's/^run .* rm -rf \(.*\)$/rm \1/p' | tr '\n' '|'
+}
+
+# update_steps: what of the last launch an update from 0.2.99 turns on, in order, on one line: the notes and the level
+# the new CLI gives, the backup on the running API, the bootstrap, configure and snapshot runs with the image each ran
+# in, the stop and the start.
+update_steps() {
+    printf '%s\n' "$CALLS" | sed -n -e 's/^compose .* stop$/stop/p' -e 's/^compose .* up -d --wait$/up/p' \
+        -e 's/^run .* \([^ ]*\) update-check --from 0.2.99 --level$/level \1/p' \
+        -e 's/^run .* \([^ ]*\) update-check --from 0.2.99$/notes \1/p' \
+        -e 's/^compose .* exec -T -e TERM -e NO_COLOR eigen-api \/app\/docker\/api\/entrypoint.sh \(backup .*\)$/\1/p' \
+        -e 's/^run .* \([^ ]*\) bootstrap --force --out \/install$/bootstrap \1/p' \
+        -e 's/^run .* \([^ ]*\) configure --backfill$/configure \1/p' \
+        -e 's/^run .* \([^ ]*\) snapshot .*$/snapshot \1/p' | tr '\n' '|'
+}
+
+# A restore's stub swap writes the pins of its archive into .env.production; this puts the fixture's back.
+reset_release() { printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=0.2.99\n' >"$FIX/release/.env.production"; }
+
 for SHELL_NAME in dash busybox host; do
     case $SHELL_NAME in
         dash) IMAGE=debian:bookworm-slim SHELL_CMD=dash ;;
@@ -206,7 +300,7 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: help: exit $CODE, calls '$CALLS'"
     fi
     failed=''
-    for command in status backup logs update rollback restart stop; do
+    for command in status backup restore logs update rollback restart stop; do
         launch bare "$command" --help
         case "$CODE $(printf '%s\n' "$OUT" | head -n 1)" in
             "0 Usage: ./eigen $command"*) ;;
@@ -214,19 +308,19 @@ for SHELL_NAME in dash busybox host; do
         esac
     done
     if [ -z "$failed" ]; then
-        ok "$SHELL_NAME: status, backup, logs, update, rollback, restart and stop --help print their usage"
+        ok "$SHELL_NAME: status, backup, restore, logs, update, rollback, restart and stop --help print their usage"
     else
         fail "$SHELL_NAME: no usage from --help of:$failed"
     fi
     failed=''
-    for command in setup restore reset-password; do
+    for command in setup reset-password; do
         launch local "$command" --help
         cli=$command
         if [ "$command" = setup ]; then cli=configure; fi
         case $OUT in "stub run: "*" $cli --help") ;; *) failed="$failed $command" ;; esac
     done
     if [ -z "$failed" ] && [ "$CODE" = 0 ]; then
-        ok "$SHELL_NAME: setup, restore and reset-password --help ask the CLI for its usage"
+        ok "$SHELL_NAME: setup and reset-password --help ask the CLI for its usage"
     else
         fail "$SHELL_NAME: --help did not reach the CLI for:$failed"
     fi
@@ -234,8 +328,8 @@ for SHELL_NAME in dash busybox host; do
     launch bare frobnicate
     expect_error 2 'Unknown command "frobnicate"' "an unknown command is refused with the usage on stderr"
     failed=''
-    for args in 'status extra' 'backup extra' 'backup --keep 2 extra' 'restart extra' 'stop extra' 'logs a b' \
-        'update --bogus' 'update 1 2' 'rollback --nope'; do
+    for args in 'status extra' 'backup extra' 'backup --light --keep' 'restore a b' 'restore a --bogus' 'restart extra' \
+        'stop extra' 'logs a b' 'update --bogus' 'update 1 2' 'rollback --nope'; do
         # shellcheck disable=SC2086
         launch local $args
         if [ "$CODE" != 2 ] || [ -n "$OUT" ] || ! printf '%s\n' "$ERR" | grep -q "^Unknown argument \"${args##* }\"\.$" ||
@@ -312,8 +406,8 @@ for SHELL_NAME in dash busybox host; do
         chmod 0644 "$FIX/release/.env.production"
         expect_error 1 '■  .env.production is not writable by this user.' "a .env.production this user reads but cannot write"
     fi
-    STUB_IMAGE=1 launch local restore --help
-    expect_error 1 '■  Eigen is not built yet.' "restore --help in an unbuilt local build"
+    STUB_IMAGE=1 launch local reset-password --help
+    expect_error 1 '■  Eigen is not built yet.' "reset-password --help in an unbuilt local build"
     launch local update
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  A local build has no updates.' &&
         printf '%s\n' "$ERR" | grep -q '└  Pull the code and run ./eigen setup again, which builds it.' && [ -z "$CALLS" ]; then
@@ -328,11 +422,11 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: rollback in a local build: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
-    STUB_IMAGE=1 launch release restore --help
+    STUB_IMAGE=1 launch release reset-password --help
     case "$CODE $OUT" in
-        "0 stub run: "*" -v $FIX/release:/install -w /install ghcr.io/eigen-is/eigen/api:local restore --help")
+        "0 stub run: "*" -v $FIX/release:/install -w /install ghcr.io/eigen-is/eigen/api:local reset-password --help")
             ok "$SHELL_NAME: a release folder runs the CLI without looking for a build" ;;
-        *) fail "$SHELL_NAME: restore --help in a release folder: exit $CODE, '$OUT'" ;;
+        *) fail "$SHELL_NAME: reset-password --help in a release folder: exit $CODE, '$OUT'" ;;
     esac
     sed -i.bak '/^EIGEN_VERSION=/d' "$FIX/release/.env.production"
     launch release setup
@@ -485,18 +579,26 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: stop: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
 
-    mkdir -p "$FIX/release/snapshots" "$FIX/release/.eigen" "$FIX/channel/.eigen"
-    head -c 4096 /dev/zero >"$FIX/release/snapshots/eigen-20260101-000000.tar.gz"
+    mkdir -p "$FIX/release/backups" "$FIX/release/.eigen" "$FIX/channel/.eigen"
+    : >"$FIX/release/backups/server-manual-full-20260101-000000.tar"
     echo ghcr.io/eigen-is/eigen/api@sha256:bbb >"$FIX/release/.eigen/bundle"
     STUB_LATEST=0.2.99 STUB_LABEL_VERSION=0.2.100 launch release status
-    rm -r "$FIX/release/snapshots" "$FIX/release/.eigen/bundle"
+    rm -r "$FIX/release/backups" "$FIX/release/.eigen/bundle"
     # --services spans lines of the call log.
     if printf '%s\n' "$CALLS" | grep -q " status --install=$FIX/release --services=" &&
-        printf '%s\n' "$CALLS" | grep -q ' --snapshots=eigen-20260101-000000.tar.gz --snapshots-kb=[1-9][0-9]* ' &&
+        printf '%s\n' "$CALLS" | grep -q ' --backups=server-manual-full-20260101-000000.tar ' &&
         printf '%s\n' "$CALLS" | grep -q ' --latest=0.2.99 --files=0.2.100 (abc1234)$'; then
-        ok "$SHELL_NAME: status passes the folder, the snapshots, their size, and the build the files were written from"
+        ok "$SHELL_NAME: status passes the folder, what backups/ holds, and the build the files were written from"
     else
         fail "$SHELL_NAME: status: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    # The API of Eigen 0.3.0 still runs after an update that failed past its files, and its status refuses --backups.
+    STUB_OLD_CLI=1 launch release status
+    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -q " status --install=$FIX/release --services=" &&
+        ! printf '%s\n' "$CALLS" | grep -q -- ' --backups='; then
+        ok "$SHELL_NAME: status passes no --backups to the CLI of Eigen 0.3.0, which does not take it"
+    else
+        fail "$SHELL_NAME: status on Eigen 0.3.0: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     echo ghcr.io/eigen-is/eigen/api@sha256:aaa >"$FIX/channel/.eigen/bundle"
     launch channel status
@@ -528,21 +630,129 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: update over the files of the pinned build: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
 
-    # The handover: the new launcher pins the tag, and the running build's CLI saves the snapshot before the switch.
+    # The update as the operator types it: the new version's CLI names the level, the running API makes the backup,
+    # and only then are the new files written and the new launcher takes over, with the archive.
     mkdir "$FIX/release/data"
-    STUB_DIGEST=ddd launch release update --pulled 0.2.99
-    rm -r "$FIX/release/data" "$FIX/release/.eigen/last-update"
+    STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
+    sequence=$(update_steps)
+    if [ "$CODE" = 0 ] && [ "$sequence" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|level ghcr.io/eigen-is/eigen/api:0.3.1|backup --level light --reason pre-update --wait|bootstrap ghcr.io/eigen-is/eigen/api@sha256:ddd|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
+        [ "$(cat "$FIX/release/.eigen/last-update")" = server-pre-update-light-20260101-000000.tar ] &&
+        printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER &&
+        printf '%s\n' "$OUT" | grep -q '│  Saved before the update: backups/server-pre-update-light-20260101-000000.tar$' &&
+        printf '%s\n' "$OUT" | grep -q '└  ./eigen rollback goes back to Eigen 0.2.99 (abc1234).'; then
+        ok "$SHELL_NAME: update backs up on the running API at the level the new CLI names, before it writes a file, and the new launcher records the archive for a rollback"
+    else
+        fail "$SHELL_NAME: update: exit $CODE, sequence '$sequence', '$OUT', '$ERR'"
+    fi
+    STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update --full
+    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -q ' backup --level full --reason pre-update --wait$' &&
+        ! printf '%s\n' "$CALLS" | grep -q ' --level$'; then
+        ok "$SHELL_NAME: update --full makes a full backup without asking the level"
+    else
+        fail "$SHELL_NAME: update --full: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    rm "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
+    failed=''
+    for stub in STUB_RUNNING=0 STUB_EXEC=1 STUB_ARCHIVE=; do
+        case $stub in
+            STUB_RUNNING=0) STUB_RUNNING=0 STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update ;;
+            STUB_EXEC=1) STUB_EXEC=1 STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update ;;
+            *) STUB_ARCHIVE='' STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update ;;
+        esac
+        if [ "$CODE" != 1 ] || printf '%s\n' "$CALLS" | grep -Eq ' bootstrap | stop$| up -d' ||
+            [ -e "$FIX/release/.eigen/last-update" ]; then
+            failed="$failed $stub ($CODE)"
+        fi
+    done
+    if [ -z "$failed" ]; then
+        ok "$SHELL_NAME: update with Eigen stopped, a failed backup or one that names no archive ends with Eigen running and no new file"
+    else
+        fail "$SHELL_NAME: update went on without a backup:$failed"
+    fi
+    STUB_RUNNING=0 STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
+    if printf '%s\n' "$ERR" | grep -q 'copy data/ and .env.production somewhere safe, then run ./eigen update --no-backup.$'; then
+        ok "$SHELL_NAME: update with Eigen stopped says how to update without the backup"
+    else
+        fail "$SHELL_NAME: update with Eigen stopped names no way on: '$ERR'"
+    fi
+    echo server-pre-update-light-20250101-000000.tar >"$FIX/release/.eigen/last-update"
+    STUB_RUNNING=0 STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update --no-backup
+    sequence=$(update_steps)
+    if [ "$CODE" = 0 ] && [ "$sequence" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|bootstrap ghcr.io/eigen-is/eigen/api@sha256:ddd|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
+        [ ! -e "$FIX/release/.eigen/last-update" ] &&
+        printf '%s\n' "$OUT" | grep -q '└  No backup was made before the update, so ./eigen rollback has nothing to go back to.$'; then
+        ok "$SHELL_NAME: update --no-backup with Eigen stopped makes no backup or snapshot, and leaves no way back to an older update"
+    else
+        fail "$SHELL_NAME: update --no-backup: exit $CODE, sequence '$sequence', '$OUT', '$ERR'"
+    fi
+    rm -f "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
+    # A terminal on stdin: Docker's pty ends the level the new CLI prints in \r\n, unless the CLI runs without one.
+    if [ "$SHELL_NAME" = host ]; then
+        skip "$SHELL_NAME: update typed on a terminal, which only the container shells get"
+    else
+        LAUNCH_TTY=1 STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
+        if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -q ' backup --level light --reason pre-update --wait$' &&
+            printf '%s\n' "$CALLS" | grep ' update-check --from 0.2.99 --level$' | grep -vq ' -t '; then
+            ok "$SHELL_NAME: update typed on a terminal asks the level without one, and backs up at that level"
+        else
+            fail "$SHELL_NAME: update on a terminal: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n\r' '|^')"
+        fi
+        rm -f "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
+    fi
+    # Again after an update from Eigen 0.3.0 failed past its files: the API still runs 0.3.0, whose CLI has no backup, so
+    # its image saves a snapshot after the stop, as 0.3.0's own handover does.
+    STUB_OLD_CLI=1 STUB_LEVEL=full STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
+    sequence=$(update_steps)
+    if [ "$CODE" = 0 ] && [ "$sequence" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|level ghcr.io/eigen-is/eigen/api:0.3.1|bootstrap ghcr.io/eigen-is/eigen/api@sha256:ddd|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|snapshot ghcr.io/eigen-is/eigen/api:local|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
+        printf '%s\n' "$CALLS" | grep -q '/api:local snapshot --pre-update$' &&
+        [ "$(sed -n 2p "$FIX/release/.eigen/last-update")" = ghcr.io/eigen-is/eigen/api:local ]; then
+        ok "$SHELL_NAME: update while Eigen 0.3.0 runs has its image save a snapshot after the stop, full for a breaking release"
+    else
+        fail "$SHELL_NAME: update from Eigen 0.3.0: exit $CODE, sequence '$sequence', '$OUT', '$ERR'"
+    fi
+    rm -f "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
+
+    # The handover from a launcher that made no backup: the running build's image saves a snapshot, as in Eigen 0.3.0.
+    STUB_DIGEST=ddd launch release update --pulled 0.2.99 --full
     sequence=$(printf '%s\n' "$CALLS" | sed -n -e 's/^compose .* stop$/stop/p' -e 's/^compose .* up -d --wait$/up/p' \
-        -e 's/^run .* \([^ ]*\) snapshot --pre-update --light$/snapshot \1/p' \
+        -e 's/^run .* \([^ ]*\) snapshot --pre-update$/snapshot \1/p' \
         -e 's/^run .* \([^ ]*\) configure --backfill$/configure \1/p' \
         -e "s|^run --rm --user 0 --entrypoint sh -v $FIX/release:/install \([^ ]*\) $SHARE\$|share \1|p" | tr '\n' '|')
     if [ "$CODE" = 0 ] && [ "$sequence" = 'configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|snapshot ghcr.io/eigen-is/eigen/api:local|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|share ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
-        printf '%s\n' "$OUT" | grep -q '│  Saved before the update: snapshots/eigen-pre-update-light-20260101-000000.tar.gz, a light snapshot' &&
-        printf '%s\n' "$OUT" | grep -q '└  ./eigen rollback goes back to Eigen 0.2.99 (abc1234).'; then
-        ok "$SHELL_NAME: update --pulled saves the snapshot with the running build's CLI, switches with the new one, shares the file it wrote before the start, and names what it saved"
+        [ "$(sed -n 2p "$FIX/release/.eigen/last-update")" = ghcr.io/eigen-is/eigen/api:local ] &&
+        printf '%s\n' "$OUT" | grep -q '│  Saved before the update: snapshots/eigen-pre-update-light-20260101-000000.tar.gz, a full snapshot' &&
+        printf '%s\n' "$OUT" | grep -q '└  ./eigen rollback says how to go back to Eigen 0.2.99 (abc1234).'; then
+        ok "$SHELL_NAME: a handover without a backup saves a snapshot with the running build's image after the stop, and records that image"
     else
-        fail "$SHELL_NAME: update --pulled: exit $CODE, sequence '$sequence', '$OUT', '$ERR'"
+        fail "$SHELL_NAME: update --pulled without --saved: exit $CODE, sequence '$sequence', '$OUT', '$ERR'"
     fi
+    launch release rollback --yes
+    rm "$FIX/release/.eigen/last-update"
+    if [ "$CODE" = 0 ] && [ -z "$CALLS" ] &&
+        printf '%s\n' "$OUT" | grep -q "│  docker run --rm -v \"\$PWD:/install\" ghcr.io/eigen-is/eigen/api:local bootstrap --force --out /install$" &&
+        printf '%s\n' "$OUT" | grep -q '│  EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:local ./eigen restore eigen-pre-update-light-20260101-000000.tar.gz$' &&
+        printf '%s\n' "$OUT" | grep -q '│  rm -f .eigen/last-update .eigen/bundle$'; then
+        ok "$SHELL_NAME: rollback after that prints the commands that go back with the image of Eigen 0.3.0 and clear what this version recorded, and runs nothing"
+    else
+        fail "$SHELL_NAME: rollback of a snapshot: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    # The archive becomes the way back once the switch is written: a switch that failed leaves the build as it was.
+    STUB_RUN_FAIL=EIGEN_VERSION STUB_DIGEST=ddd launch release update --pulled 0.2.99 --saved server-pre-update-full-20260101-000000.tar
+    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Could not write Eigen .* into .env.production' &&
+        [ ! -e "$FIX/release/.eigen/last-update" ]; then
+        ok "$SHELL_NAME: a handover whose switch fails records no backup for a rollback"
+    else
+        fail "$SHELL_NAME: a failed switch: exit $CODE, '$ERR', last-update '$(cat "$FIX/release/.eigen/last-update" 2>&1)'"
+    fi
+    STUB_DIGEST=ddd launch release update --pulled 0.2.99 --saved server-pre-update-full-20260101-000000.tar
+    rm -r "$FIX/release/data"
+    if [ "$CODE" = 0 ] && ! printf '%s\n' "$CALLS" | grep -q ' snapshot ' &&
+        [ "$(cat "$FIX/release/.eigen/last-update")" = server-pre-update-full-20260101-000000.tar ]; then
+        ok "$SHELL_NAME: a handover with the backup's archive saves nothing more and records it"
+    else
+        fail "$SHELL_NAME: update --pulled --saved: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    rm "$FIX/release/.eigen/last-update"
 
     STUB_FAIL=compose-config launch local restart
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Eigen did not start' &&
@@ -553,74 +763,230 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: failing compose config: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
 
-    STUB_RUN_FAIL=--yes launch local restore eigen-20260101-000000.tar.gz
-    if [ "$CODE" = 1 ] && printf '%s\n' "$CALLS" | grep -q ' restore eigen-20260101-000000.tar.gz --yes$' &&
-        printf '%s\n' "$CALLS" | grep -q ' up -d --wait$' &&
-        printf '%s\n' "$CALLS" | tail -n 1 | grep -q ' rm -rf .eigen/restore$' && [ ! -e "$FIX/local/.eigen/lock" ]; then
-        ok "$SHELL_NAME: a failed swap starts Eigen again, then removes the checked copy and the lock"
+    # A restore: the stage as the API's user beside the running API, then the swap as root with Eigen stopped.
+    mkdir -p "$FIX/elsewhere" "$FIX/release/backups"
+    : >"$FIX/elsewhere/$ARCHIVE"
+    : >"$FIX/release/backups/$ARCHIVE"
+    echo server-pre-update-light-20260101-000000.tar >"$FIX/local/.eigen/last-update"
+    launch local restore "$ARCHIVE" --yes
+    if [ "$CODE" = 0 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|configure ghcr.io/eigen-is/eigen/api:local|share|up|" ] &&
+        [ ! -e "$FIX/local/.eigen/lock" ] && [ ! -e "$FIX/local/.eigen/last-update" ]; then
+        ok "$SHELL_NAME: a restore stages while Eigen runs, then stops it, swaps as root, adds what is new to a local build's .env.production, forgets the last update's backup and starts Eigen"
     else
-        fail "$SHELL_NAME: a failed swap: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+        fail "$SHELL_NAME: a local build's restore: exit $CODE, steps '$(steps)', '$ERR'"
+    fi
+    if shared local; then
+        ok "$SHELL_NAME: a restore gives .env.production group 1000 and mode 0640 before the stage and before it starts Eigen"
+    else
+        fail "$SHELL_NAME: a restore does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    STUB_FAIL=compose-run launch local restore "$ARCHIVE" --yes
+    if [ "$CODE" = 1 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|rm data/.restoring|" ] &&
+        [ ! -e "$FIX/local/.eigen/lock" ]; then
+        ok "$SHELL_NAME: a refused stage stops nothing, and removes what it staged and the lock"
+    else
+        fail "$SHELL_NAME: a refused stage: exit $CODE, steps '$(steps)'"
+    fi
+    STUB_STAGE=3 launch local restore "$ARCHIVE"
+    if [ "$CODE" = 0 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage|" ]; then
+        ok "$SHELL_NAME: a no to the stage's question exits 0 and stops nothing"
+    else
+        fail "$SHELL_NAME: a declined stage: exit $CODE, steps '$(steps)'"
+    fi
+    STUB_RUN_FAIL=--swap launch local restore "$ARCHIVE" --yes
+    if [ "$CODE" = 1 ] &&
+        [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|share|up|rm data/.restoring|" ] &&
+        [ ! -e "$FIX/local/.eigen/lock" ]; then
+        ok "$SHELL_NAME: a swap refused before its marker starts Eigen again, then removes the staged tree and the lock"
+    else
+        fail "$SHELL_NAME: a refused swap: exit $CODE, steps '$(steps)'"
     fi
     if [ "$(printf '%s\n' "$CALLS" | grep -c ' config$')" = 1 ]; then
         ok "$SHELL_NAME: one compose config names the project for the stop and the start"
     else
         fail "$SHELL_NAME: the project was asked $(printf '%s\n' "$CALLS" | grep -c ' config$') times"
     fi
+    STUB_SWAP_CUT=1 launch local restore "$ARCHIVE" --yes
+    if [ "$CODE" = 1 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|" ] &&
+        [ -e "$FIX/local/.eigen/restore-swap" ] && [ ! -e "$FIX/local/.eigen/lock" ]; then
+        ok "$SHELL_NAME: a swap cut off after its marker leaves Eigen stopped and the marker in place"
+    else
+        fail "$SHELL_NAME: a swap cut off: exit $CODE, steps '$(steps)'"
+    fi
+    launch local restart
+    if [ "$CODE" = 0 ] && [ "$(steps)" = 'restore --swap (ghcr.io/eigen-is/eigen/api:local)|configure ghcr.io/eigen-is/eigen/api:local|share|up|share|up|' ] &&
+        [ ! -e "$FIX/local/.eigen/restore-swap" ]; then
+        ok "$SHELL_NAME: the next command finishes the swap first and starts Eigen, then does what it does"
+    else
+        fail "$SHELL_NAME: the next command after a swap cut off: exit $CODE, steps '$(steps)'"
+    fi
+    : >"$FIX/release/.eigen/restore-swap"
+    echo ghcr.io/eigen-is/eigen/api@sha256:bbb >"$FIX/release/.eigen/bundle"
+    launch release restart
+    if [ "$CODE" = 0 ] && [ "$(steps)" = 'restore --swap (ghcr.io/eigen-is/eigen/api@sha256:bbb)|bootstrap ghcr.io/eigen-is/eigen/api:local|share|up|share|up|' ]; then
+        ok "$SHELL_NAME: a release install finishes the swap with the build its files are of, then writes the files of the build it pins"
+    else
+        fail "$SHELL_NAME: a release install after a swap cut off: exit $CODE, steps '$(steps)'"
+    fi
+    rm "$FIX/release/.eigen/bundle"
+    : >"$FIX/release/.eigen/restore-swap"
+    STUB_RUN_FAIL=--swap launch release status
+    rm "$FIX/release/.eigen/restore-swap"
+    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  The restore that was cut off cannot be finished' &&
+        ! printf '%s\n' "$CALLS" | grep -q ' status '; then
+        ok "$SHELL_NAME: a swap that cannot be finished stops every command before it does anything"
+    else
+        fail "$SHELL_NAME: a swap that cannot be finished: exit $CODE, '$ERR'"
+    fi
+    : >"$FIX/release/.eigen/restore-swap"
+    echo server-pre-update-light-20260101-000000.tar >"$FIX/release/.eigen/last-update"
+    launch release status
+    if [ "$CODE" = 0 ] && [ "$(steps)" = 'restore --swap (ghcr.io/eigen-is/eigen/api:local)|share|up|' ] &&
+        printf '%s\n' "$OUT" | grep -q '◇  The restore that was cut off is finished' &&
+        printf '%s\n' "$OUT" | grep -q '◇  Eigen is running' && [ ! -e "$FIX/release/.eigen/last-update" ]; then
+        ok "$SHELL_NAME: status finishes a swap that was cut off where it shows, forgets the last update's backup and starts Eigen"
+    else
+        fail "$SHELL_NAME: status after a swap cut off: exit $CODE, steps '$(steps)', '$OUT'"
+    fi
+    rm -f "$FIX/release/.eigen/last-update"
 
-    # A local build runs today's Compose files on what an older snapshot's .env.production holds.
-    launch local restore eigen-20260101-000000.tar.gz
-    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -A 1 ' restore eigen-20260101-000000.tar.gz --yes$' |
-        grep -q ' configure --backfill$' && printf '%s\n' "$CALLS" | grep -q ' up -d --wait$'; then
-        ok "$SHELL_NAME: a local build's restore adds what is new to the restored .env.production, then starts Eigen"
+    STUB_CHECKED=EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:local launch release restore "$ARCHIVE" --yes
+    if [ "$CODE" = 0 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|share|up|" ]; then
+        ok "$SHELL_NAME: a release restore of the images it runs leaves the archive's .env.production to its files"
     else
-        fail "$SHELL_NAME: a local build's restore: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+        fail "$SHELL_NAME: a release restore: exit $CODE, steps '$(steps)'"
     fi
-    if shared local; then
-        ok "$SHELL_NAME: a restore gives the restored .env.production group 1000 and mode 0640 before it starts Eigen"
-    else
-        fail "$SHELL_NAME: a restore does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
-    fi
-    STUB_CHECKED=EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:local launch release restore eigen-20260101-000000.tar.gz
-    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -q ' restore eigen-20260101-000000.tar.gz --yes$' &&
-        ! printf '%s\n' "$CALLS" | grep -Eq ' (configure|bootstrap) '; then
-        ok "$SHELL_NAME: a release restore of the images it runs leaves the snapshot's .env.production to its files"
-    else
-        fail "$SHELL_NAME: a release restore: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
-    fi
+    reset_release
     checked="EIGEN_VERSION=main"
     for name in $IMAGES; do
         checked="$checked
 $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     done
-    STUB_IMAGE=1 STUB_CHECKED=$checked launch release restore eigen-20260101-000000.tar.gz
+    STUB_IMAGE=1 STUB_CHECKED=$checked launch release restore "$ARCHIVE" --yes
     if [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$CALLS" | grep -m 1 '^pull ')" = 'pull ghcr.io/eigen-is/eigen/api:local' ] &&
-        printf '%s\n' "$CALLS" | grep -q '^pull ghcr.io/eigen-is/eigen/unbound@sha256:bbb$' &&
-        printf '%s\n' "$CALLS" | grep -A 100 ' --yes$' |
-        grep -q ' ghcr.io/eigen-is/eigen/api@sha256:bbb bootstrap --force --out /install$' &&
+        printf '%s\n' "$(steps)" | grep -q 'pull ghcr.io/eigen-is/eigen/unbound@sha256:bbb|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|bootstrap ghcr.io/eigen-is/eigen/api@sha256:bbb|share|up|$' &&
         [ "$(cat "$FIX/release/.eigen/bundle")" = ghcr.io/eigen-is/eigen/api@sha256:bbb ]; then
-        ok "$SHELL_NAME: a release restore gets the api image it runs, pulls the images the snapshot pins, then writes the files of its api image"
+        ok "$SHELL_NAME: a release restore gets the api image it runs, pulls the images the archive pins while Eigen runs, then writes the files of its api image"
     else
-        fail "$SHELL_NAME: a release restore to other images: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+        fail "$SHELL_NAME: a release restore to other images: exit $CODE, steps '$(steps)'"
     fi
-    STUB_CHECKED=EIGEN_VERSION=0.2.98 launch release restore eigen-20260101-000000.tar.gz
-    expect_error 1 '■  The snapshot pins no api image.' "a release restore of a snapshot that pins no images"
-    echo eigen-pre-update-light-20260101-000000.tar.gz >"$FIX/release/.eigen/last-update"
-    mkdir "$FIX/release/snapshots"
-    : >"$FIX/release/snapshots/eigen-pre-update-light-20260101-000000.tar.gz"
-    STUB_CHECKED=$checked launch release rollback --yes
-    rm -rf "$FIX/release/snapshots" "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
-    if [ "$CODE" = 0 ] &&
-        printf '%s\n' "$OUT" | grep -q '◆  Back from Eigen 0.2.99 (abc1234) to the snapshot the last update saved' &&
-        printf '%s\n' "$CALLS" | grep -q ' restore eigen-pre-update-light-20260101-000000.tar.gz --yes$' &&
-        printf '%s\n' "$OUT" | grep -q '◇  Eigen 0.2.99 (abc1234) → 0.2.99 (abc1234) is running at https://eigen.example.com/'; then
-        ok "$SHELL_NAME: rollback puts back the snapshot .eigen/last-update names, and names the builds it leaves and reaches"
+    rm "$FIX/release/.eigen/bundle"
+    reset_release
+    STUB_CHECKED=EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api@sha256:bbb launch release restore "$ARCHIVE" --yes
+    expect_error 1 '■  The archive pins no frontend image.' "a release restore of an archive that pins some images"
+    if printf '%s\n' "$CALLS" | grep -q ' stop$' || ! printf '%s\n' "$(steps)" | grep -q '|rm data/.restoring|$'; then
+        fail "$SHELL_NAME: that refusal stopped Eigen, or left the staged tree: steps '$(steps)'"
+    fi
+    stages=''
+    for path in "$FIX/elsewhere/$ARCHIVE" "$FIX/release/backups/$ARCHIVE"; do
+        STUB_CHECKED=EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:local launch release restore "$path" --yes
+        stages="$stages$(printf '%s\n' "$(steps)" | cut -d '|' -f 2)|"
+    done
+    if [ "$stages" = "stage -v $FIX/elsewhere/$ARCHIVE:/restore/$ARCHIVE:ro eigen-api restore /restore/$ARCHIVE --stage --yes|stage eigen-api restore $ARCHIVE --stage --yes|" ]; then
+        ok "$SHELL_NAME: an archive elsewhere is mounted read-only into the stage, and one in backups/ goes by its name"
     else
-        fail "$SHELL_NAME: a release rollback: exit $CODE, '$OUT', '$ERR'"
+        fail "$SHELL_NAME: the archive's path: '$stages'"
+    fi
+    reset_release
+    launch release restore "$FIX/nowhere/$ARCHIVE"
+    expect_error 1 "■  There is no archive $FIX/nowhere/$ARCHIVE." "a restore of a file that is not there"
+    launch release restore --yes
+    expect_error 1 '■  Name the archive to restore.' "a restore without an archive"
+
+    # A new machine: the archive's .env.production pins the build that restores it, and that build's launcher does.
+    alone
+    STUB_IMAGE=1 launch alone restore "$FIX/elsewhere/$ARCHIVE" --yes
+    pinned="$(for name in $IMAGES; do printf 'pull ghcr.io/eigen-is/eigen/%s@sha256:eee|' "$name"; done)"
+    eee=ghcr.io/eigen-is/eigen/api@sha256:eee
+    if [ "$CODE" = 0 ] && [ "$(steps)" = "pull ghcr.io/eigen-is/eigen/api:latest|restore /restore/$ARCHIVE --env (ghcr.io/eigen-is/eigen/api:latest)|${pinned}bootstrap $eee|share|stage -v $FIX/elsewhere/$ARCHIVE:/restore/$ARCHIVE:ro eigen-api restore /restore/$ARCHIVE --stage --yes|restore --staged ($eee)|stop|restore --swap ($eee)|share|up|" ] &&
+        printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER && [ -e "$FIX/alone/data" ] && [ ! -e "$FIX/alone/.eigen/lock" ]; then
+        ok "$SHELL_NAME: a restore beside the launcher alone takes .env.production from the archive, gets the build it pins, and hands over to its launcher, which restores"
+    else
+        fail "$SHELL_NAME: a restore on a new machine: exit $CODE, steps '$(steps)', '$ERR'"
+    fi
+    alone
+    STUB_RUN_FAIL=--env launch alone restore "$FIX/elsewhere/$ARCHIVE" --yes
+    if [ "$CODE" = 1 ] && [ ! -e "$FIX/alone/.env.production" ] && ! printf '%s\n' "$CALLS" | grep -q ' bootstrap '; then
+        ok "$SHELL_NAME: a new machine whose archive cannot be read is left as it was"
+    else
+        fail "$SHELL_NAME: a new machine with an unreadable archive: exit $CODE, steps '$(steps)'"
+    fi
+    # A mirror install names its registry in .env.production before anything else is there.
+    alone
+    echo EIGEN_REGISTRY=example.test/eigen >"$FIX/alone/.env.production"
+    STUB_IMAGE=1 launch alone restore "$FIX/elsewhere/$ARCHIVE" --yes
+    if [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$CALLS" | grep -m 1 '^pull ')" = 'pull example.test/eigen/api:latest' ] &&
+        printf '%s\n' "$(steps)" | grep -q "|restore --swap (ghcr.io/eigen-is/eigen/api@sha256:eee)|share|up|$" &&
+        [ -z "$(ls -A "$FIX/alone/.eigen" | grep -vx -e bundle -e last-step.log || :)" ]; then
+        ok "$SHELL_NAME: a restore beside the launcher and a .env.production that names a registry alone gets Eigen from it"
+    else
+        fail "$SHELL_NAME: a restore on a new machine with a registry: exit $CODE, steps '$(steps)', '$ERR'"
+    fi
+    alone
+    echo EIGEN_REGISTRY=example.test/eigen >"$FIX/alone/.env.production"
+    STUB_RUN_FAIL=--env launch alone restore "$FIX/elsewhere/$ARCHIVE" --yes
+    if [ "$CODE" = 1 ] && [ "$(cat "$FIX/alone/.env.production")" = EIGEN_REGISTRY=example.test/eigen ]; then
+        ok "$SHELL_NAME: that .env.production is left as it was when the archive cannot be read"
+    else
+        fail "$SHELL_NAME: a mirror's .env.production after a failed restore: exit $CODE, '$(cat "$FIX/alone/.env.production" 2>&1)'"
+    fi
+    mkdir -p "$FIX/with:colon"
+    : >"$FIX/with:colon/$ARCHIVE"
+    launch release restore "$FIX/with:colon/$ARCHIVE" --yes
+    expect_error 1 "■  Docker cannot mount $FIX/with:colon/$ARCHIVE, whose path has a colon." "a restore of an archive whose path has a colon"
+    if printf '%s\n' "$CALLS" | grep -Eq '^run | run '; then fail "$SHELL_NAME: that refusal ran something: $(steps)"; fi
+
+    echo server-pre-update-light-20260101-000000.tar >"$FIX/release/.eigen/last-update"
+    STUB_CHECKED=$checked launch release rollback --yes
+    if [ "$CODE" = 0 ] &&
+        printf '%s\n' "$OUT" | grep -q '◆  Back from Eigen 0.2.99 (abc1234) to the backup the last update made' &&
+        [ "$(steps)" = 'share|stage eigen-api restore server-pre-update-light-20260101-000000.tar --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|bootstrap ghcr.io/eigen-is/eigen/api@sha256:bbb|share|up|' ] &&
+        [ ! -e "$FIX/release/.eigen/last-update" ] &&
+        printf '%s\n' "$OUT" | grep -q '◇  Eigen 0.2.99 (abc1234) → 0.2.99 (abc1234) is running at https://eigen.example.com/'; then
+        ok "$SHELL_NAME: rollback restores the archive .eigen/last-update names on the images it pins, and names the builds it leaves and reaches"
+    else
+        fail "$SHELL_NAME: a release rollback: exit $CODE, steps '$(steps)', '$OUT', '$ERR'"
     fi
     if shared release; then
         ok "$SHELL_NAME: rollback gives the .env.production it put back group 1000 and mode 0640 before it starts Eigen"
     else
         fail "$SHELL_NAME: rollback does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    rm "$FIX/release/.eigen/bundle"
+    reset_release
+
+    # A backup runs on the running API and stops nothing.
+    failed=''
+    for flags in '--light|light' '|full' '--full|full' '--s3|full-s3' '--s3 --wait|full-s3 --wait'; do
+        # shellcheck disable=SC2086
+        launch local backup ${flags%|*}
+        if [ "$CODE" != 0 ] || [ "$(printf '%s\n' "$CALLS" | grep ' exec ' | sed 's/^.* exec //')" != "-T -e TERM -e NO_COLOR eigen-api /app/docker/api/entrypoint.sh backup --level ${flags#*|}" ] ||
+            printf '%s\n' "$CALLS" | grep -Eq ' (stop|up)( |$)'; then
+            failed="$failed '${flags%|*}' ($CODE)"
+        fi
+    done
+    if [ -z "$failed" ]; then
+        ok "$SHELL_NAME: backup starts the level its flags name on the running API, and stops nothing"
+    else
+        fail "$SHELL_NAME: backup levels:$failed"
+    fi
+    launch bare backup --help
+    if printf '%s\n' "$OUT" | grep -q 'Exits 0 once the archive verified, 1 when it failed, 2 on a wrong argument, and 4$'; then
+        ok "$SHELL_NAME: backup --help names the exit codes of the CLI"
+    else
+        fail "$SHELL_NAME: backup --help: '$OUT'"
+    fi
+    launch local backup --light --s3
+    expect_error 2 'A light backup holds no files, so it takes no --s3.' "backup --light --s3"
+    STUB_EXEC=4 launch local backup
+    if [ "$CODE" = 4 ]; then ok "$SHELL_NAME: backup exits with the code of the CLI"; else fail "$SHELL_NAME: backup exit $CODE, expected 4"; fi
+    STUB_RUNNING=0 launch local backup
+    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Eigen is not running, and a backup runs on the running server.' &&
+        printf '%s\n' "$ERR" | grep -q 'With Eigen stopped, a copy of data/ and .env.production is a backup too.' &&
+        ! printf '%s\n' "$CALLS" | grep -q ' exec '; then
+        ok "$SHELL_NAME: backup with Eigen stopped says a copy of the quiet data/ is a backup too"
+    else
+        fail "$SHELL_NAME: backup with Eigen stopped: exit $CODE, '$ERR'"
     fi
 
     mkdir "$FIX/local/.eigen/lock"
@@ -634,11 +1000,11 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     # A launcher between its mkdir and its pid.
     mkdir "$FIX/local/.eigen/lock"
     : >"$FIX/local/.eigen/lock/pid"
-    launch local backup
+    launch local stop
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Another ./eigen command is running.' && printf '%s\n' "$ERR" |
-        grep -q '└  Wait for it to end, then run ./eigen backup again. If none runs, remove .eigen/lock.$' &&
+        grep -q '└  Wait for it to end, then run ./eigen stop again. If none runs, remove .eigen/lock.$' &&
         [ -e "$FIX/local/.eigen/lock/pid" ]; then
-        ok "$SHELL_NAME: a lock without a pid refuses a backup, says how to remove it, and stays"
+        ok "$SHELL_NAME: a lock without a pid refuses a stop, says how to remove it, and stays"
     else
         fail "$SHELL_NAME: a lock without a pid: exit $CODE, '$ERR', lock $(ls "$FIX/local/.eigen/lock" 2>&1)"
     fi
@@ -647,8 +1013,8 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     if [ "$SHELL_NAME" = host ]; then
         mkdir "$FIX/local/.eigen/lock"
         echo $$ >"$FIX/local/.eigen/lock/pid"
-        launch local backup
-        expect_error 1 '■  Another ./eigen command is running.' "a running command's lock refuses a backup"
+        launch local stop
+        expect_error 1 '■  Another ./eigen command is running.' "a running command's lock refuses a stop"
         rm -r "$FIX/local/.eigen/lock"
     fi
 done
@@ -694,6 +1060,21 @@ installed fresh 'from a file'
 # A command that read stdin would eat the rest of the script.
 run_installer --stdin piped
 installed piped 'on stdin, as curl | sh runs it,'
+mkdir "$FIX/restored"
+: >"$FIX/calls.log"
+CODE=0
+OUT=$(cd "$FIX/restored" && env STUB_LOG="$FIX/calls.log" PATH="$FIX/bin:$PATH" /bin/sh -s -- restore \
+    "$FIX/elsewhere/$ARCHIVE" --yes <"$INSTALLER" 2>"$FIX/stderr") || CODE=$?
+ERR=$(cat "$FIX/stderr")
+CALLS=$(cat "$FIX/calls.log")
+if [ "$CODE" = 0 ] && sed 2d "$FIX/restored/eigen" | cmp -s "$REPO_ROOT/eigen" - &&
+    [ "$(steps | cut -d '|' -f 1-2)" = "pull ghcr.io/eigen-is/eigen/api:latest|restore /restore/$ARCHIVE --env (ghcr.io/eigen-is/eigen/api:latest)" ] &&
+    printf '%s\n' "$(steps)" | grep -q "|stage -v $FIX/elsewhere/$ARCHIVE:/restore/$ARCHIVE:ro eigen-api restore /restore/$ARCHIVE --stage --yes|" &&
+    printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER; then
+    ok "the installer with restore downloads the launcher and runs ./eigen restore, which sets Eigen up from the archive"
+else
+    fail "the installer with restore: exit $CODE, '$ERR', steps: $(steps)"
+fi
 run_installer taken
 if [ "$CODE" = 1 ] &&
     [ "$ERR" = 'This folder already has an Eigen install. Run ./eigen setup to change it, or ./eigen update.' ] &&

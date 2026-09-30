@@ -3,6 +3,12 @@
 All notable user-visible changes to Eigen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [Unreleased]
+
+### Changed
+
+- **Whole-server backups (breaking)** — `./eigen backup` backs up the server into `backups/` while Eigen runs, and `./eigen restore` puts such an archive back, on this machine or a new one. `./eigen update` backs up the running server first; with Eigen stopped it takes `--no-backup`. Snapshots in `snapshots/` can no longer be restored by Eigen: after the update from 0.3.0, `./eigen rollback` prints the commands that go back
+
 ## [0.3.0] - 2026-09-25
 
 Self-hosting release. Eigen now installs from prebuilt images with one line, and the `./eigen` launcher updates, rolls back and backs up the server. Slides run on the canvas engine behind eigen|vector>. Mail, calendar and contacts store what a client wrote as the truth, and `.eml`, `.ics` and `.vcf` files open and import everywhere a file shows up. The findings of the September security audit are fixed.
