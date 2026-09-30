@@ -389,12 +389,13 @@ if [ "$got" = "$OWNERS" ] && [ "$(printf '%s' "$OWNERS" | wc -w)" -gt 1 ]; then
 else
     fail "owners under data/: '$got', were '$OWNERS'"
 fi
+# The archive's .env.production is this one, byte for byte, so an aside of it would keep nothing.
 kept=$(cd "$INSTALL" && ls -d data.pre-restore-* .env.production.pre-restore-* 2>/dev/null | tr '\n' ' ' || true)
-case $kept in
-    data.pre-restore-*' '.env.production.pre-restore-*|.env.production.pre-restore-*' 'data.pre-restore-*)
-        ok "the replaced data is kept aside: $kept" ;;
-    *) fail "kept aside: '$kept'" ;;
-esac
+if [[ $kept =~ ^data\.pre-restore-[0-9-]+\ $ ]]; then
+    ok "the replaced data is kept aside, and the unchanged .env.production is not: $kept"
+else
+    fail "kept aside: '$kept'"
+fi
 if ! scratch_run test -e "$INSTALL/data/.restoring" && ! scratch_run test -e "$INSTALL/.eigen/restore-swap"; then
     ok "nothing is left staged, and no swap is marked"
 else
