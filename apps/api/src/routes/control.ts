@@ -15,15 +15,15 @@ import { createSetupLink, type SetupLink } from '../lib/setup/setup-token';
 import { type ResetPasswordResult, resetUserPassword } from '../lib/user/reset-password';
 
 // What ./eigen backup follows: plain JSON with no dates, since the CLI reads it without Eden's reviver.
-export type ControlBackupJob = Pick<BackupJob, 'id' | 'state' | 'progress' | 'artifact' | 'error'> & {
+export type ControlBackupJob = Pick<BackupJob, 'id' | 'state' | 'progress' | 'artifact' | 'error' | 'upload'> & {
     bytes: number | null;
 };
 
 // `bytes` is null until the archive is renamed into place.
-function toControlJob({ id, state, progress, artifact, error }: BackupJob): ControlBackupJob {
+function toControlJob({ id, state, progress, artifact, error, upload }: BackupJob): ControlBackupJob {
     const archivePath = artifact && path.join(backupsDirPath(), artifact);
     const bytes = archivePath ? (fs.statSync(archivePath, { throwIfNoEntry: false })?.size ?? null) : null;
-    return { id, state, progress, artifact, error, bytes };
+    return { id, state, progress, artifact, error, upload, bytes };
 }
 
 // The CLI's online commands, on the Unix socket `docker compose exec` reaches as the API's user; never the web.

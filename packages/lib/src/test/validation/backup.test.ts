@@ -141,6 +141,12 @@ describe('parseServerArchiveManifest', () => {
                 verify: { status: 'verified', checkedAt: finishedAt, failures: [] },
             };
             expect(parseServerArchiveSidecar(JSON.stringify(done))).toEqual(done);
+            const uploaded: ServerArchiveSidecar = {
+                state: 'done',
+                startedAt,
+                upload: { state: 'failed', at: finishedAt, key: 'nightly/server.tar', error: 'refused' },
+            };
+            expect(parseServerArchiveSidecar(JSON.stringify(uploaded))).toEqual(uploaded);
         });
 
         test('refuses an unknown state, a missing or broken date, and a broken manifest or verify record', () => {
@@ -151,6 +157,9 @@ describe('parseServerArchiveManifest', () => {
                 JSON.stringify({ state: 'done', startedAt, finishedAt: 'yesterday' }),
                 JSON.stringify({ state: 'done', startedAt, manifest: { ...valid, formatVersion: 2 } }),
                 JSON.stringify({ state: 'done', startedAt, verify: { status: 'fine', failures: [] } }),
+                JSON.stringify({ state: 'done', startedAt, upload: { state: 'running', at: finishedAt, key: 'k' } }),
+                JSON.stringify({ state: 'done', startedAt, upload: { state: 'done', key: 'k' } }),
+                JSON.stringify({ state: 'done', startedAt, upload: { state: 'done', at: finishedAt } }),
             ]) {
                 expect(parseServerArchiveSidecar(broken)).toBeNull();
             }

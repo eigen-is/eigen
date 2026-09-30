@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1582 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1586 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -507,7 +507,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (367)
+## Types (370)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -696,6 +696,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SearchSource` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `SentMailResult` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `ServerSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `ServerSettingsSaved` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `ServerStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SetupResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SetupStatus` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
@@ -738,6 +739,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ServerArchiveList` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `ServerArchiveManifest` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `ServerArchiveSidecar` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `ServerArchiveUpload` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `Command` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `CommandContext` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `PaletteResult` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
@@ -771,6 +773,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TextPreviewResult` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
 | `VCardPreview` | `@workspace/lib/types/preview` | packages/lib/src/types/preview.ts |
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
+| `BackupMountSettings` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `CommandValidationResult` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
 | `ParsedContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
 | `ArrangeItem` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
@@ -879,7 +882,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (739)
+## Utilities & constants (740)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1060,6 +1063,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `writeCardToDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `APP_URLS` | `@workspace/lib/constants` | packages/lib/src/constants/app-urls.ts |
+| `BACKUP_DESTINATION_NOTICE` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `BACKUP_LEVEL_NAMES` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `BACKUP_UPLOAD_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `BACKUP_UPLOAD_MAX_LABEL` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |

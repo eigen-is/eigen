@@ -7,6 +7,7 @@ import { deleteArtifact, landUpload, listArtifacts, resolveArtifact } from '../l
 import { requireBackableHome } from '../lib/backup/home-dir';
 import {
     getBackupJob,
+    isServerJob,
     listBackupJobs,
     runArtifactVerify,
     runHomeBackup,
@@ -48,7 +49,7 @@ async function requireExistingHome(ownerId: string): Promise<void> {
 // archive and the homes that failed.
 async function jobsVisibleTo(userId: string): Promise<(job: BackupJob) => boolean> {
     const owner = (await getOrgRole(userId)) === 'owner';
-    return (job) => owner || job.kind !== 'server-backup';
+    return (job) => owner || !isServerJob(job.kind);
 }
 
 // A restore ends with the home evicted. On a remote mount it also ends with every file in the

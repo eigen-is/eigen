@@ -83,6 +83,16 @@ export const s3ConfigBody = t.Object({
     region: t.Optional(t.String()),
 });
 
+// The backup bucket as the owner edits it: a field left out keeps the saved one, and so does a blank secret.
+export const s3DestinationBody = t.Object({
+    endpoint: t.Optional(t.String()),
+    bucket: t.Optional(t.String()),
+    prefix: t.Optional(t.String()),
+    accessKeyId: t.Optional(t.String()),
+    secretAccessKey: t.Optional(t.String()),
+    region: t.Optional(t.String()),
+});
+
 export const s3HardenBody = t.Object({
     ...s3ConfigBody.properties,
     noncurrentDays: t.Integer({ minimum: 1, maximum: S3_NONCURRENT_DAYS_MAX }),

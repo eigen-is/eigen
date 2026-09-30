@@ -8,6 +8,7 @@ import type {
     ServerArchive,
     ServerArchiveManifest,
     ServerArchiveSidecar,
+    ServerArchiveUpload,
 } from '@workspace/lib/types/backup';
 import { orgOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
 import {
@@ -27,6 +28,7 @@ import {
 } from '../config/paths';
 import { PIN_KEYS } from '../config/release';
 import { getPublicConfig } from '../config/server-config';
+import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { pullHomeBackupBytes, pullHomeSnapshot, sendToHome } from '../home/home-relay';
 import { getTeamExists } from '../team/team';
@@ -54,6 +56,7 @@ import {
 import { pruneServerArchives } from './retention';
 import { type SnapshotProgress, treeBytes } from './snapshot-home';
 import { appendInstallFiles, snapshotServer } from './snapshot-server';
+import { backupKey, uploadServerArchive } from './upload';
 import { FAILURES_IN_MESSAGE, verifyArchiveTransport, verifyFolder } from './verify';
 
 const HOME_DELETED = 'deleted during the backup';
@@ -233,7 +236,7 @@ async function writeServerArchive(
 }
 
 // Fire-and-forget like the poke: a relay that fails must not replace the failure the job records.
-export function alertOwner(tag: string, error: string): void {
+export function alertOwner(tag: string, error: string, title = 'Server backup failed'): void {
     getOrgOwner()
         .then((owner) =>
             owner
@@ -241,7 +244,7 @@ export function alertOwner(tag: string, error: string): void {
                       type: 'notification',
                       notification: {
                           type: 'admin-alert',
-                          title: 'Server backup failed',
+                          title,
                           body: error,
                           tag: `server-backup-${tag}`,
                           coalesce: true,
@@ -381,7 +384,6 @@ async function runServerBackup(
             throw new Error(`${failed.length} of ${sidecar.manifest.homes.length} homes failed: ${named}`);
         }
         sidecar.state = 'done';
-        return name;
     } catch (error) {
         sidecar.state = 'failed';
         sidecar.error = describeError(error);
@@ -393,6 +395,50 @@ async function runServerBackup(
         // Retention that throws must not replace the job's own outcome.
         await pruneLocalArchives(options.keep).catch(console.error);
     }
+    // A pre-update archive exists for ./eigen rollback on this box.
+    if (getServerSettings().backups.upload.enabled && options.reason !== 'pre-update') {
+        onProgress('upload', 0, 1);
+        const { state, error } = await uploadAndRecord(archivePath, sidecar);
+        job.upload = { state, error };
+    }
+    return name;
+}
+
+// Uploads an archive that ended done and records how it went beside it. A failure is never the archive's,
+// which stays good here: the owner hears of it, and the record says so for the list and ./eigen backup.
+async function uploadAndRecord(archivePath: string, sidecar: ServerArchiveSidecar): Promise<ServerArchiveUpload> {
+    const { s3, keep } = getServerSettings().backups.upload;
+    const name = path.basename(archivePath);
+    try {
+        sidecar.upload = { state: 'done', at: new Date(), key: await uploadServerArchive(archivePath, s3, keep) };
+    } catch (error) {
+        sidecar.upload = { state: 'failed', at: new Date(), key: backupKey(s3, name), error: describeError(error) };
+        alertOwner(`upload-${name}`, `${name}: ${sidecar.upload.error}`, 'Server backup not uploaded');
+    }
+    await writeServerSidecar(archivePath, sidecar);
+    return sidecar.upload;
+}
+
+// The owner's Upload, for an archive whose upload failed or that predates the destination. Only one that
+// ended done goes, and never a pre-update one. It runs in the org's slot, so never beside a server backup.
+export async function startArchiveUpload(name: string, startedBy: string): Promise<BackupJob> {
+    const parsed = parseServerArchiveName(name);
+    if (!parsed) throw new ApiError(400, 'Not a server backup name');
+    if (parsed.reason === 'pre-update') throw new ApiError(400, 'A pre-update backup stays on this server');
+    if (!getServerSettings().backups.upload.enabled) throw new ApiError(400, 'No backup bucket is set');
+    const archivePath = path.join(backupsDirPath(), name);
+    const sidecar = await readServerSidecar(archivePath);
+    if (!sidecar || !fs.existsSync(archivePath)) throw new ApiError(404, 'Archive not found');
+    if (sidecar.state !== 'done') throw new ApiError(409, `${name} did not finish, so it is not uploaded`);
+    const ownerId = orgOwnerId(getPublicConfig().orgId);
+    return startBackupJob('upload', ownerId, startedBy, async (job, onProgress) => {
+        job.artifact = name;
+        onProgress('upload', 0, 1);
+        const { state, error } = await uploadAndRecord(archivePath, sidecar);
+        job.upload = { state, error };
+        if (error) throw new Error(error);
+        return name;
+    });
 }
 
 // Starts the whole-server backup and resolves once it is under way. One runs at a time, in the org's

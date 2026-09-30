@@ -132,6 +132,9 @@ export type ServerSettings = {
     };
 };
 
+// What a save answers: the settings, and a notice the owner must read once about what they just saved.
+export type ServerSettingsSaved = ServerSettings & { notice?: string };
+
 export type MountResponse = {
     id: string;
     name: string;

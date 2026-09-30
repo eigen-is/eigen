@@ -6,7 +6,11 @@ import { ApiError } from '../core';
 import { errnoOf, storageUnavailable, withStorageDeadline } from './deadline';
 import type { S3Config, StorageBackend } from './types';
 
-export async function checkS3Connection(config: S3Config): Promise<S3CheckResult> {
+// `refusePublic` also fails a bucket that answers an unsigned GET of the probe: a backup bucket must be private.
+export async function checkS3Connection(
+    config: S3Config,
+    { refusePublic = false }: { refusePublic?: boolean } = {},
+): Promise<S3CheckResult> {
     try {
         const client = new S3Client({
             endpoint: config.endpoint,
@@ -23,8 +27,10 @@ export async function checkS3Connection(config: S3Config): Promise<S3CheckResult
         const bucketConfig = Promise.all([checkS3Versioning(config), checkS3Lifecycle(config)]);
         await testFile.write('ok');
         const exists = await testFile.exists();
+        const readable = refusePublic && exists && (await isPubliclyReadable(config, testKey));
         await testFile.delete();
         if (!exists) throw new Error('Write verification failed');
+        if (readable) throw new Error('Anyone can read this bucket without its keys. Make it private first.');
         const [versioning, lifecycle] = await bucketConfig;
         return { ok: true, message: 'Connection successful', versioning, lifecycle };
     } catch (err) {
@@ -103,6 +109,24 @@ export async function hardenS3Bucket(config: S3Config, noncurrentDays: number): 
     }
 }
 
+// Only a 200 counts: a refusal, a redirect or no answer at all says nothing about anyone reading it.
+async function isPubliclyReadable(config: S3Config, key: string): Promise<boolean> {
+    try {
+        const url = `${s3Endpoint(config)}/${config.bucket}/${key.split('/').map(encodeURIComponent).join('/')}`;
+        const res = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(5000) });
+        await res.body?.cancel();
+        return res.status === 200;
+    } catch {
+        return false;
+    }
+}
+
+// Path-style, as the S3Client and the signed bucket requests use it; `https://` when no scheme is given.
+export function s3Endpoint(config: S3Config): string {
+    const rawEndpoint = config.endpoint.replace(/\/$/, '');
+    return /^https?:\/\//.test(rawEndpoint) ? rawEndpoint : `https://${rawEndpoint}`;
+}
+
 const EMPTY_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 const OUR_LIFECYCLE_RULE = new RegExp(`<ID>\\s*${S3_LIFECYCLE_RULE_ID}\\s*</ID>`);
 
@@ -112,8 +136,7 @@ export async function signedS3Request(
     config: S3Config,
     { method, query = '', body }: { method: string; query?: string; body?: string },
 ): Promise<Response> {
-    const rawEndpoint = config.endpoint.replace(/\/$/, '');
-    const endpoint = /^https?:\/\//.test(rawEndpoint) ? rawEndpoint : `https://${rawEndpoint}`;
+    const endpoint = s3Endpoint(config);
     const path = `/${config.bucket}`;
     const host = new URL(endpoint).host;
     const region = config.region || 'us-east-1';
@@ -252,7 +275,7 @@ export class S3Storage implements StorageBackend {
         this.prefix = config.prefix;
     }
 
-    private getKey(key: string): string {
+    getKey(key: string): string {
         // Why: S3 keys are not filesystem paths, so `resolveWithinBase` (core/path-utils.ts) doesn't apply;
         // this segment check is the intentional distinct traversal guard for the S3 backend.
         const segments = key.split('/');
@@ -294,6 +317,19 @@ export class S3Storage implements StorageBackend {
             console.error(`S3 exists probe failed for ${key}:`, error);
             throw storageUnavailable(error);
         }
+    }
+
+    // Every key under the prefix, relative to it.
+    async list(): Promise<string[]> {
+        const base = this.prefix ? `${this.prefix}/` : '';
+        const keys: string[] = [];
+        let continuationToken: string | undefined;
+        do {
+            const page = await withStorageDeadline(this.client.list({ prefix: base, continuationToken }));
+            for (const { key } of page.contents ?? []) keys.push(key.slice(base.length));
+            continuationToken = page.isTruncated ? page.nextContinuationToken : undefined;
+        } while (continuationToken);
+        return keys;
     }
 
     async size(key: string): Promise<number | null> {

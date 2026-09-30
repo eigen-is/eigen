@@ -35,6 +35,11 @@ const heldSlots = new Map<string, { holder: string; released: Promise<void> }>()
 // is serialized to the admin pane.
 const inFlight = new Map<string, { kind: BackupJob['kind']; ownerId: string; settled: Promise<void> }>();
 
+// A server backup and an archive's upload are the owner's alone (D11): they name a server archive.
+export function isServerJob(kind: BackupJob['kind']): boolean {
+    return kind === 'server-backup' || kind === 'upload';
+}
+
 function dropExpiredJobs(): void {
     const now = Date.now();
     for (const [id, job] of jobs) {
@@ -43,13 +48,12 @@ function dropExpiredJobs(): void {
 }
 
 // Every admin sees the same pane, so the poke goes to all of them and not only to the one who
-// pressed the button; a server backup's goes to the owner alone, who alone sees it. sendToHome drops
+// pressed the button; a server job's goes to the owner alone, who alone sees it. sendToHome drops
 // the ones with no home loaded, which is every admin who has nothing open. The event carries no
 // state, so one that lands out of order costs nothing.
 function poke(job: BackupJob): void {
     const event = buildBackupJobEvent(job.id, job.ownerId);
-    const recipients =
-        job.kind === 'server-backup' ? getOrgOwner().then((owner) => (owner ? [owner] : [])) : getOrgAdmins();
+    const recipients = isServerJob(job.kind) ? getOrgOwner().then((owner) => (owner ? [owner] : [])) : getOrgAdmins();
     recipients
         .then((users) => Promise.all(users.map((user) => sendToHome(user.id, { type: 'broadcast', event }))))
         .catch(() => {});
@@ -58,14 +62,14 @@ function poke(job: BackupJob): void {
 // One piece of work per home at a time — a second backup while one is running would read a folder
 // the first is still walking, a second restore would move aside a folder the first is writing, and a
 // safety-copy delete overlapping a restore would judge the wrong home's keys as garbage. A server
-// backup's archive is the owner's to know (D11), so only a second server backup hears its name.
+// job's archive is the owner's to know (D11), so only another server job hears its name.
 function requireHomeSlotFree(ownerId: string, starting?: BackupJob['kind']): void {
     dropExpiredJobs();
     const held = heldSlots.get(ownerId);
     if (held) throw new ApiError(409, `A ${held.holder} of this home is running`);
     for (const running of jobs.values()) {
         if (running.ownerId === ownerId && running.state === 'running') {
-            const shown = running.kind !== 'server-backup' || starting === 'server-backup';
+            const shown = !isServerJob(running.kind) || (starting && isServerJob(starting));
             const named = running.artifact && shown ? `: ${running.artifact}` : '';
             throw new ApiError(409, `A ${running.kind} of this home is already running${named}`);
         }

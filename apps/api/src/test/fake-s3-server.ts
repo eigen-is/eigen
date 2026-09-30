@@ -1,13 +1,15 @@
 import * as net from 'node:net';
+import { escapeXml } from '@workspace/lib/html';
 import type { S3Config } from '@workspace/lib/types';
 import type { StorageBackend } from '../lib/storage';
 import { DUMMY_S3 } from './fault-storage-helpers';
 
 // A local S3 for the real S3Storage: faults on the lazy S3File's HEAD, GET and DELETE, which FaultStorage never sees.
+// It lists what went in through it, takes multipart uploads, and refuses an unsigned request unless `publicRead`.
 
 // stall-body: headers and half the body, then silence; cut: half, then close; fail-get: a 500 on GET only;
-// fail-put: a 500 on PUT only; deny: a 403 AccessDenied; no-bucket: a 404 NoSuchBucket.
-// HEAD and DELETE honor only stall, fail, deny and no-bucket; PUT only fail-put.
+// fail-put: a 500 on PUT only, every part of a multipart upload included; deny: a 403 AccessDenied;
+// no-bucket: a 404 NoSuchBucket. HEAD and DELETE honor only stall, fail, deny and no-bucket; PUT only fail-put.
 export type S3Fault =
     | 'stall'
     | 'stall-body'
@@ -25,6 +27,14 @@ export class FakeS3Server {
     readonly gets = new Map<string, number>();
     // Held requests whose client closed the connection itself.
     abandoned = 0;
+    // Answer a GET without a signature, as a bucket anyone may read does.
+    publicRead = false;
+    // Multipart uploads begun and neither completed nor aborted, by upload id.
+    readonly openUploads = new Map<string, { key: string; parts: Map<number, Buffer> }>();
+    abortedUploads = 0;
+    // What a list answers: every key written through this server and not deleted since.
+    private readonly listed = new Set<string>();
+    private nextUploadId = 1;
     private readonly held = new Map<net.Socket, () => void>();
     private readonly sockets = new Set<net.Socket>();
     private readonly server = net.createServer((socket) => this.accept(socket));
@@ -87,14 +97,39 @@ export class FakeS3Server {
 
     private async respond(socket: net.Socket, head: string, body: Buffer): Promise<void> {
         const [method, target] = head.split(' ');
-        const key = decodeURIComponent(new URL(target, 'http://s3').pathname.split('/').slice(2).join('/'));
+        const url = new URL(target, 'http://s3');
+        const key = decodeURIComponent(url.pathname.split('/').slice(2).join('/'));
         const fault = this.faults.get(key);
+        const signed = /^authorization:/im.test(head) || url.searchParams.has('X-Amz-Signature');
+        if (!signed && !(this.publicRead && method === 'GET')) {
+            reply(socket, method, '403 Forbidden', 'AccessDenied');
+            return;
+        }
+        const uploadId = url.searchParams.get('uploadId');
+        if (method === 'POST' && url.searchParams.has('uploads')) {
+            const id = `upload-${this.nextUploadId++}`;
+            this.openUploads.set(id, { key, parts: new Map() });
+            replyXml(
+                socket,
+                `<InitiateMultipartUploadResult><Key>${escapeXml(key)}</Key><UploadId>${id}</UploadId></InitiateMultipartUploadResult>`,
+            );
+            return;
+        }
+        if (uploadId) {
+            await this.multipart(socket, method, uploadId, Number(url.searchParams.get('partNumber')), body, fault);
+            return;
+        }
+        if (method === 'GET' && url.searchParams.get('list-type') === '2') {
+            await this.list(socket, url.searchParams.get('prefix') ?? '');
+            return;
+        }
         if (method === 'PUT') {
             if (fault === 'fail-put') {
                 reply(socket, method, '500 Internal Server Error', 'InternalError');
                 return;
             }
             await this.store.write(key, new Uint8Array(body));
+            this.listed.add(key);
             reply(socket, method, '200 OK');
             return;
         }
@@ -129,6 +164,7 @@ export class FakeS3Server {
         }
         if (method === 'DELETE') {
             await this.store.delete(key);
+            this.listed.delete(key);
             reply(socket, method, '204 No Content');
             return;
         }
@@ -166,6 +202,63 @@ export class FakeS3Server {
         }
         this.held.set(socket, () => socket.write(bytes.subarray(half)));
     }
+
+    private async multipart(
+        socket: net.Socket,
+        method: string,
+        uploadId: string,
+        partNumber: number,
+        body: Buffer,
+        fault: S3Fault | undefined,
+    ): Promise<void> {
+        const upload = this.openUploads.get(uploadId);
+        if (!upload) {
+            reply(socket, method, '404 Not Found', 'NoSuchUpload');
+            return;
+        }
+        if (method === 'DELETE') {
+            this.openUploads.delete(uploadId);
+            this.abortedUploads++;
+            reply(socket, method, '204 No Content');
+            return;
+        }
+        if (method === 'PUT') {
+            if (fault === 'fail-put') {
+                reply(socket, method, '500 Internal Server Error', 'InternalError');
+                return;
+            }
+            upload.parts.set(partNumber, Buffer.from(body));
+            reply(socket, method, '200 OK');
+            return;
+        }
+        const parts = [...upload.parts.entries()].sort(([a], [b]) => a - b).map(([, part]) => part);
+        await this.store.write(upload.key, new Uint8Array(Buffer.concat(parts)));
+        this.listed.add(upload.key);
+        this.openUploads.delete(uploadId);
+        replyXml(
+            socket,
+            `<CompleteMultipartUploadResult><Key>${escapeXml(upload.key)}</Key><ETag>"e"</ETag></CompleteMultipartUploadResult>`,
+        );
+    }
+
+    // One page, whatever the count: nothing here lists a thousand keys.
+    private async list(socket: net.Socket, prefix: string): Promise<void> {
+        const contents: string[] = [];
+        for (const key of [...this.listed].filter((key) => key.startsWith(prefix)).sort()) {
+            const size = (await this.store.size(key)) ?? 0;
+            contents.push(`<Contents><Key>${escapeXml(key)}</Key><Size>${size}</Size><ETag>"e"</ETag></Contents>`);
+        }
+        replyXml(
+            socket,
+            `<ListBucketResult><Prefix>${escapeXml(prefix)}</Prefix><KeyCount>${contents.length}</KeyCount><IsTruncated>false</IsTruncated>${contents.join('')}</ListBucketResult>`,
+        );
+    }
+}
+
+function replyXml(socket: net.Socket, xml: string): void {
+    const payload = Buffer.from(`<?xml version="1.0" encoding="UTF-8"?>${xml}`);
+    socket.write(`HTTP/1.1 200 OK\r\nContent-Type: application/xml\r\nContent-Length: ${payload.length}\r\n\r\n`);
+    socket.write(payload);
 }
 
 function reply(socket: net.Socket, method: string, status: string, code?: string): void {

@@ -8,6 +8,8 @@ import { createUi, glyphLine } from './ui';
 
 // Each step of a real server lasts seconds; a step shorter than this may go by unprinted.
 const POLL_MS = 500;
+// The archive is saved and good, only not in the bucket: cron can tell it from a backup that failed.
+const NOT_UPLOADED = 4;
 
 export const BACKUP_OPTIONS = {
     level: { type: 'string', default: 'full' },
@@ -17,7 +19,8 @@ export const BACKUP_OPTIONS = {
 export const BACKUP_USAGE = `Usage: backup [--level light|full|full-s3] [--reason manual|pre-update] [--wait]
 
 Backs up the whole server into backups/ while Eigen runs, prints each step, and ends with
-archive=<name>. Exits 0 once the archive verified, 1 when it failed, 2 on a wrong argument.
+archive=<name>. Exits 0 once the archive verified, 1 when it failed, 2 on a wrong argument, and 4
+when it verified but did not reach the backup bucket.
 
   --level    full (the default): everything but the files in S3 buckets, which keep their own
              history; full-s3: those too; light: accounts, settings and databases, no files or mail
@@ -84,6 +87,11 @@ export async function backup(flags: BackupFlags): Promise<void> {
     }
     if (job.state === 'failed')
         ui.fail(job.error ?? 'The backup failed.', 'Run ./eigen logs eigen-api to see what went wrong.');
+    if (job.upload?.state === 'failed') {
+        console.error(glyphLine('warn', `Not uploaded: ${job.upload.error}`));
+        console.error(glyphLine('bar', 'Upload it again from the Backups section in Settings.'));
+    }
     ui.outro(`Saved ${job.artifact}: ${BACKUP_LEVEL_NAMES[level]}, ${formatFileSize(job.bytes ?? 0)}.`);
     console.log(`archive=${job.artifact}`);
+    if (job.upload?.state === 'failed') process.exit(NOT_UPLOADED);
 }

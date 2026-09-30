@@ -1,10 +1,18 @@
+import { BACKUP_DESTINATION_NOTICE } from '@workspace/lib/constants/backup';
 import type { AdminUser, AdminUserRow } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
-import type { HomeSizeResponse, S3CheckResult, S3HardenResult, ServerSettings } from '@workspace/lib/types/settings';
+import type {
+    HomeSizeResponse,
+    S3CheckResult,
+    S3HardenResult,
+    ServerSettings,
+    ServerSettingsSaved,
+} from '@workspace/lib/types/settings';
 import { eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, session, team, teamMember, user } from '../../auth-schema';
 import { getAuthDrizzleDb } from '../lib/auth/auth';
+import { resolveBackupUpload } from '../lib/backup/upload';
 import { getOrgName, getServerConfig } from '../lib/config/server-config';
 import { getS3Config, getServerSettings, updateServerSettings } from '../lib/config/server-settings';
 import { type ControlStatus, getServerStatus } from '../lib/config/server-status';
@@ -18,7 +26,14 @@ import { getAllUsersUsage } from '../lib/user/admin-usage';
 import { deleteUserCompletely } from '../lib/user/delete-user';
 import { resetUserPassword } from '../lib/user/reset-password';
 import { betterAuth } from './auth';
-import { s3ConfigBody, s3HardenBody, senderAddressSchema, senderNameSchema, toS3Config } from './shared-schemas';
+import {
+    s3ConfigBody,
+    s3DestinationBody,
+    s3HardenBody,
+    senderAddressSchema,
+    senderNameSchema,
+    toS3Config,
+} from './shared-schemas';
 
 // Who appears on the admin Users page: everyone except guests, orphans included.
 // `ne(user.role, 'guest')` alone excludes NULL-role orphans in SQLite, so OR in isNull.
@@ -50,7 +65,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
 
     .put(
         '/settings/server',
-        async ({ body, user }): Promise<ServerSettings> => {
+        async ({ body, user }): Promise<ServerSettingsSaved> => {
             await requireOwner(user.id);
             if (body.defaults?.mount?.storageType === 's3') {
                 const s3 = getS3Config();
@@ -59,8 +74,11 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                 if (!s3Result.ok) throw new ApiError(400, `Cannot set storage type to S3: ${s3Result.message}`);
             }
             const mail = body.mail && { ...body.mail, ...storedSender(body.mail, getOrgName()) };
-            await updateServerSettings(mail ? { ...body, mail } : body);
-            return getServerSettings();
+            const destination = body.backups?.upload && (await resolveBackupUpload(body.backups.upload));
+            const backups = destination && { ...body.backups, upload: destination.upload };
+            await updateServerSettings({ ...body, ...(mail && { mail }), ...(backups && { backups }) });
+            // The bucket's keys are inside the archives in it: the owner hears once to keep them elsewhere.
+            return { ...getServerSettings(), ...(destination?.changed && { notice: BACKUP_DESTINATION_NOTICE }) };
         },
         {
             body: t.Object({
@@ -151,6 +169,13 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                                 enabled: t.Optional(t.Boolean()),
                                 hourUtc: t.Optional(t.Integer({ minimum: 0, maximum: 23 })),
                                 withS3: t.Optional(t.Boolean()),
+                                keep: t.Optional(t.Integer({ minimum: 1, maximum: 365 })),
+                            }),
+                        ),
+                        upload: t.Optional(
+                            t.Object({
+                                enabled: t.Optional(t.Boolean()),
+                                s3: t.Optional(s3DestinationBody),
                                 keep: t.Optional(t.Integer({ minimum: 1, maximum: 365 })),
                             }),
                         ),
