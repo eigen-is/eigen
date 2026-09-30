@@ -36,6 +36,7 @@ import {
     SPECIAL_MAILBOXES,
     STANDARD_MAILBOXES,
 } from '@workspace/lib/constants/mailboxes';
+import { SERVER_DATABASES, SERVER_DIR } from '../lib/config/paths';
 import { PATHS } from '../lib/core/constants';
 import { buildMaildirFilename, createUniqueMessageId } from '../lib/mail/mailutils';
 
@@ -57,7 +58,7 @@ if (!Number.isFinite(count) || count <= 0) {
 }
 
 // Resolve the target user (id + email + name) from the auth DB.
-const usersDbPath = path.join(DATA_ROOT, 'server', 'users3.db');
+const usersDbPath = path.join(DATA_ROOT, SERVER_DIR, SERVER_DATABASES.users);
 if (!existsSync(usersDbPath)) {
     console.error(`users3.db not found at ${usersDbPath}. Set EIGEN_DATA_ROOT or run from the repo.`);
     process.exit(1);

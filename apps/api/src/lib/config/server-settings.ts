@@ -3,12 +3,12 @@ import type { ServerSettings, ServerStorageType } from '@workspace/lib/types/set
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { JsonStore } from '../core/json-store';
 import { LocalFilesystem } from '../core/local-filesystem';
-import { getServerDataPath } from './paths';
+import { getServerDataPath, SERVER_FILES } from './paths';
 
 export { mapStorageType } from '@workspace/lib/types/settings';
 
 const serverFs = new LocalFilesystem(getServerDataPath());
-const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
+const settingsStore = new JsonStore<ServerSettings>(serverFs, SERVER_FILES.settings, {
     quotas: {
         mailAndContactsMaxMB: 100,
         defaultMountMaxSizeMB: 500,

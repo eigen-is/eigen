@@ -8,7 +8,8 @@ import {
 } from '@workspace/lib/constants/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as decoding from 'lib0/decoding';
-import { DATA_EPOCH_FILE, getDataEpoch, rotateHomeDataEpoch } from '../../lib/home/data-epoch';
+import { SERVER_RUNTIME_FILES } from '../../lib/config/paths';
+import { getDataEpoch, rotateHomeDataEpoch } from '../../lib/home/data-epoch';
 import { driveGet, drivePost, getTestContext, TEST_DATA_DIR } from '../setup';
 
 // A tab that loaded a document before ./eigen restore holds state the restored data lacks, and its sync would merge it
@@ -73,7 +74,7 @@ describe('Collab data epoch', () => {
     test('is kept in data/server/, so it outlives a restart', () => {
         // The first use draws it and writes the file, so read the file after.
         const epoch = getDataEpoch(ownerId);
-        expect(epoch).toStartWith(readFileSync(join(TEST_DATA_DIR, 'server', DATA_EPOCH_FILE), 'utf8'));
+        expect(epoch).toStartWith(readFileSync(join(TEST_DATA_DIR, 'server', SERVER_RUNTIME_FILES.epoch), 'utf8'));
     });
 
     test('an open hands it out before the sync', async () => {

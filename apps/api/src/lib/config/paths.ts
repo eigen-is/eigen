@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { DATA_LOCK_FILE } from './data-lock';
 import { isProduction } from './env';
 
 export function getDataRoot(): string {
@@ -19,6 +20,19 @@ export function getDataRoot(): string {
 // The server's own folder in data/, beside the homes.
 export const SERVER_DIR = 'server';
 
+// What a server backup takes from SERVER_DIR, by name: the databases through their live handles, the rest as files.
+export const SERVER_DATABASES = { users: 'users3.db', shares: 'eigen.db', waitlist: 'waitlist.db' } as const;
+export const SERVER_FILES = { config: 'config.json', settings: 'settings.json', avatars: 'avatars' } as const;
+// Written by the running server, never captured, never restored.
+export const SERVER_RUNTIME_FILES = {
+    instanceLock: DATA_LOCK_FILE,
+    controlSocket: 'control.sock',
+    setupToken: 'setup-token',
+    // Keep these names: a new one redraws every data epoch and reloads every open tab after an update.
+    epoch: 'collab-epoch',
+    homeEpochs: 'collab-home-epochs.json',
+} as const;
+
 export function getServerDataPath(filename?: string): string {
     const serverData = path.join(getDataRoot(), SERVER_DIR);
     if (!fs.existsSync(serverData)) {
@@ -29,11 +43,11 @@ export function getServerDataPath(filename?: string): string {
 
 // The image points this outside data/, so the socket never lands in a snapshot or on a host bind mount.
 export function getControlSocketPath(): string {
-    return process.env['EIGEN_CONTROL_SOCKET'] ?? getServerDataPath('control.sock');
+    return process.env['EIGEN_CONTROL_SOCKET'] ?? getServerDataPath(SERVER_RUNTIME_FILES.controlSocket);
 }
 
 export function getAvatarsDir(): string {
-    const avatarsDir = path.join(getServerDataPath(), 'avatars');
+    const avatarsDir = path.join(getServerDataPath(), SERVER_FILES.avatars);
     if (!fs.existsSync(avatarsDir)) {
         fs.mkdirSync(avatarsDir, { recursive: true });
     }

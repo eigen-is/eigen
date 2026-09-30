@@ -8,10 +8,10 @@
 // Usage:  bun run apps/api/src/scripts/migrate-users.ts
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
-import { getServerDataPath } from '../lib/config/paths';
+import { getServerDataPath, SERVER_DATABASES } from '../lib/config/paths';
 
 const oldDbPath = getServerDataPath('users_current.db');
-const newDbPath = getServerDataPath('users3.db');
+const newDbPath = getServerDataPath(SERVER_DATABASES.users);
 
 if (!fs.existsSync(oldDbPath)) {
     console.error(`Source database not found: ${oldDbPath}`);

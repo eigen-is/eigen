@@ -21,7 +21,7 @@ import {
     verification as verificationScheme,
 } from '../../../auth-schema';
 import { isTest } from '../config/env';
-import { getServerDataPath } from '../config/paths';
+import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
 import { getAuthSecret, getDomain, getOrgName, getServerConfig, isRoleAddress } from '../config/server-config';
 import { ApiError } from '../core';
 import { composeOtpEmail } from '../core/mail-composers';
@@ -89,7 +89,7 @@ export function ensureAuthSchemaColumns(db: Database): void {
 }
 
 {
-    const db = new Database(getServerDataPath('users3.db'));
+    const db = new Database(getServerDataPath(SERVER_DATABASES.users));
     ensureAuthSchemaColumns(db);
     db.close();
 }
@@ -102,7 +102,7 @@ function rejectRoleAddress(email: string | undefined): void {
 }
 
 export const auth = betterAuth({
-    database: drizzleAdapter(drizzle(getServerDataPath('users3.db')), {
+    database: drizzleAdapter(drizzle(getServerDataPath(SERVER_DATABASES.users)), {
         provider: 'sqlite',
         schema: {
             user: userScheme,
@@ -331,7 +331,7 @@ let authDrizzleDb: ReturnType<typeof drizzle> | undefined;
 
 export function getAuthDrizzleDb() {
     if (!authDrizzleDb) {
-        authDrizzleDb = drizzle(getServerDataPath('users3.db'), {
+        authDrizzleDb = drizzle(getServerDataPath(SERVER_DATABASES.users), {
             schema: {
                 user: userScheme,
                 session: sessionScheme,

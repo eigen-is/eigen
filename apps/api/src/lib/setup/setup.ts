@@ -5,7 +5,7 @@ import type { S3Config } from '@workspace/lib/types/mount';
 import type { SetupResult, SetupStatus } from '@workspace/lib/types/settings';
 import { validateEmailAddress, validateUsername } from '@workspace/lib/validation';
 import { auth } from '../auth/auth';
-import { getServerDataPath } from '../config/paths';
+import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
 import { getMailDomain, isSetupRequired, updateServerConfig } from '../config/server-config';
 import { updateServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
@@ -14,7 +14,7 @@ import { checkS3Connection } from '../storage/s3-storage';
 import { clearSetupToken } from './setup-token';
 
 async function resetAuthDatabase(): Promise<void> {
-    const dbPath = getServerDataPath('users3.db');
+    const dbPath = getServerDataPath(SERVER_DATABASES.users);
     const dataDir = dirname(dbPath);
 
     if (!existsSync(dataDir)) {

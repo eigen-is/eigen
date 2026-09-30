@@ -29,10 +29,9 @@ import {
 } from '@workspace/lib/validation';
 import type { Subprocess } from 'bun';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
-import { SERVER_DIR } from '../lib/config/paths';
+import { SERVER_DIR, SERVER_RUNTIME_FILES } from '../lib/config/paths';
 import { PATHS } from '../lib/core/constants';
 import { isEnoent } from '../lib/core/local-filesystem';
-import { DATA_EPOCH_FILE } from '../lib/home/data-epoch';
 import { readEnvFile } from './env-file';
 import { DATA, DECLINED, ENV_PATH, installOwner, ownAs, PIN_KEYS, VERSION, VERSION_PATTERN } from './install';
 import { createUi, glyphLine, type Ui } from './ui';
@@ -511,7 +510,7 @@ export async function restore(
     ownAs(staged, installOwner('.'));
     chmodSync(staged, 0o600);
     // Without it the next start draws a new data epoch: every tab from before reloads, and a document never merges back.
-    rmSync(join(STAGING, DATA, SERVER_DIR, DATA_EPOCH_FILE), { force: true });
+    rmSync(join(STAGING, DATA, SERVER_DIR, SERVER_RUNTIME_FILES.epoch), { force: true });
     // A staged upload the live data/ no longer holds was acked, superseded or canceled: replaying it puts older
     // bytes on the key. No live staging/ (Mount.init makes it): the mount never ran here, so the copy is the only one.
     let notReplayed = 0;
