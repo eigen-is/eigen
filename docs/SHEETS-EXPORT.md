@@ -1,6 +1,6 @@
 # Sheets Export
 
-> **TLDR:** The server renders a workbook to HTML, PDF and xlsx in `apps/api/src/lib/export/sheets/`, from the `Sheet[]` that `readSheetsFromDoc` returns. Not obvious from the code: the full HTML export styles cells by class, because the sanitizer CSS-parses every inline style; that one stylesheet is guarded at two seams; conditional formats run through the same engine as the canvas; and several xlsx round-trip drifts are decisions, not bugs. The Worker, the route and the xlsx coverage: [EXPORT.md](EXPORT.md#sheets-export). The workbook model: [SHEETS.md](SHEETS.md).
+> **TLDR:** The server renders a workbook to HTML, PDF and xlsx in `apps/api/src/lib/export/sheets/`, from the `Sheet[]` that `readSheetsFromDoc` returns. Not obvious from the code: the full HTML export styles cells by class, because the sanitizer CSS-parses every inline style; that one stylesheet is guarded at two seams; conditional formats run through the same engine as the canvas; and several xlsx round-trip drifts are decisions, not bugs. The Worker, the route and the xlsx writer: [EXPORT.md](EXPORT.md#a-sheet-export-recalcs-and-xlsx-carries-cells-only). The workbook model: [SHEETS.md](SHEETS.md).
 
 ## The full export styles cells by class
 
@@ -17,7 +17,7 @@ Cell values are schemaless CRDT strings, and stylesheet text is a different esca
 - `serializeStyleRules` strips what is structural in CSS text from every declaration. `<` and `>` would end the `<style>` element, and DOMPurify keeps what follows, so an `<svg><image href>` becomes a server-side fetch under WeasyPrint. `{` and `}` open rule blocks. `\` starts a CSS escape, which spells `url(` or `@import` invisibly to the sanitizer. `/*` opens a comment that would swallow every later rule, so one odd cell would unstyle the rest of the workbook.
 - Numeric fields are coerced, not escaped. Row heights and column widths go through `cssLength`, the same `Number()` guard `getSheetContentSize` applies for the `@page` rule.
 
-Values are still `escapeHtml`'d on the way in, except the font family: entity encoding would corrupt a real name like `Bell MT & Co`, so its quotes and backslashes are dropped instead. The sanitizer's data-URI rule and `@import` strip cover style-element text too ([EXPORT.md](EXPORT.md#sanitization-and-ssrf)).
+Values are still `escapeHtml`'d on the way in, except the font family: entity encoding would corrupt a real name like `Bell MT & Co`, so its quotes and backslashes are dropped instead. The sanitizer's data-URI rule and `@import` strip cover style-element text too ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-weasyprint-fetches)).
 
 ## Conditional formats run through the canvas engine
 

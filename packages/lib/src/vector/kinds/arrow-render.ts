@@ -111,7 +111,8 @@ function headOptions(el: VectorArrowElement, solidFill: boolean, roughnessCap: n
 // WeasyPrint ignores `clip-rule="evenodd"` and the shaft then strikes through the label in a PDF.
 // The ground HIDES anything outside it, so it must enclose the whole shaft — the point bounds (and the
 // hole) padded past roughjs jitter + the stroke half-width, never a fixed square (an arrow larger than
-// it would lose its shaft).
+// it would lose its shaft). userSpaceOnUse with an explicit box, because the default mask region
+// resolves against the shaft's bounding box, not the ground rect.
 export function labelMask(id: string, points: Point[], label: LabelBox, strokeWidth: number): string {
     const pad = 5;
     const hx = label.center.x - label.width / 2 - pad;

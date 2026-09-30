@@ -87,7 +87,7 @@ On mobile the comments pane takes the whole width, so `editor.tsx` hides the wor
 - [SHEETS-FORMULAS.md](SHEETS-FORMULAS.md): the engine, recalc, number display, conditional formats
 - [SHEETS-CELL-GLYPHS.md](SHEETS-CELL-GLYPHS.md): tick boxes, list chevrons, corner marks
 - [SHEETS-EXPORT.md](SHEETS-EXPORT.md): HTML, PDF and the xlsx round trip
-- [EXPORT.md](EXPORT.md#sheets-import): the xlsx importer and its invariants
+- [EXPORT.md](EXPORT.md#an-imported-sheet-is-stored-as-computed): the xlsx importer and its invariants
 - [DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md): `readSheetsFromDoc`
 - [COLLAB.md](COLLAB.md): the socket and the loading gate
 - [SHEETS-TODO.md](SHEETS-TODO.md) and [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md): open work and the op-log future

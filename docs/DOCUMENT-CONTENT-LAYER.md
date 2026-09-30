@@ -141,7 +141,7 @@ Sheet[]`, `Buffer → JSONContent + images`); the dispatcher wires them to the w
 off-thread: `sheets/transform.ts` composes parse + recalc + snapshot serialization and
 `doc/transform.ts` composes parse + ProseMirror-to-Yjs conversion inside the document-transform
 Worker, and the dispatcher only commits the returned snapshot JSON / Yjs update and writes the
-extracted docx media (see [EXPORT.md § Sheets Import](EXPORT.md#sheets-import)).
+extracted docx media (see [EXPORT.md § An import writes nothing until the Worker succeeds](EXPORT.md#an-import-writes-nothing-until-the-worker-succeeds)).
 Export has a matching dispatcher: `lib/export/export-document.ts` owns the whole main-thread side —
 `(mime, format)` dispatch, the format→envelope table and media prep — while the per-type
 `export/<type>/transform.ts` modules call the readers inside the Worker.
