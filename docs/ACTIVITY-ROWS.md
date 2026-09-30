@@ -1,126 +1,80 @@
 # Activity Rows
 
-> **TLDR**: The reference for what every activity row says and where it links. The bell, Drive's
-> *Recent activity* panel and the editors' *Activity* panel all render one `ActivityRow` through one
-> shared phrasing layer (`describeFileEvent` / `describeNotification`). The pipeline behind it
-> (storage, coalescing, SSE, routes) is [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md).
+> **TLDR:** The notification bell, Drive's *Recent activity* panel and the editors' *Activity* panel render every row with one `ActivityRow` (`packages/ui/src/components/activity-row.tsx`) and phrase it with one layer: `describeFileEvent` for file events, `describeNotification` for notifications. Not obvious from the code: a notification's title and body are phrased on the server and stored, but chat-derived bodies are stored raw and rendered at display time; anything that depends on the viewer ("You", a start time) is formatted on the client; and a click always opens in the same tab. The pipeline behind the bell is [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md).
 
-The three surfaces are the topbar notification bell, the Drive *Recent activity* panel, and the
-eigendoc editors' *Activity* side panel (`ActivityPanel`, toggled from `DocumentShareCluster`).
+## Three surfaces render one row
 
-## Anatomy
+The topbar bell, the Drive details panel's *Recent activity* and the *Activity* side panel of the document editors (`ActivityPanel`, toggled from `DocumentShareCluster` in each editor's toolbar) all show the same row. One anatomy and one phrasing layer mean a file event reads the same as a notification, a watch notification reads the same as the panel row it came from, and a phrasing fix lands everywhere at once.
 
-```
-┌────────────────────────────────────────────────────┐
-│ (av)  <action — who did what, where>        <time> │   text-xs muted; time right, shrink-0
-│       <primary — the object/content>               │   text-sm (font-medium when unread)
-│       <secondary — supporting content>             │   text-sm muted — only when it exists
-└────────────────────────────────────────────────────┘
-```
+## A row is an action, a primary line and an optional secondary line
 
-- Rendered by `ActivityRow` (`packages/ui/src/components/activity-row.tsx`). All lines
-  truncate; rows with no content collapse to the action line alone.
-- The avatar slot is always reserved so rows align. Bell rows add a small app badge on the
-  avatar (`notification-badge.tsx`: app color + glyph from `EIGEN_DOC_ICONS`/`colorVar`,
-  `--app-*-color` vars); panel rows don't — their context is already one item.
-- Unread (bell only): `bg-primary/5` tint, `font-medium` primary.
-- A plain click navigates in the **same tab** everywhere: the bell (`window.location.assign` in
-  `notification-bell.tsx`), the panels, and the toast's **View** action
-  (`packages/lib/src/core/notification/sse-handlers.ts`). Drive's *Recent activity* rows are real
-  `<a href>`s, so cmd/middle-click opens a new tab there — the user's choice, not a default. The bell
-  can't be one: its URL needs an async resolve, and its dismiss control can't nest inside an anchor.
-  The product-wide rule is in [LAYOUT.md § Opening Items and Links](LAYOUT.md#opening-items-and-links).
+- **The action line** is the sentence: who did what, where (`New mail from Hanne Oberman`, `Mark added a card to "Eigen Feedback"`). It is small and muted, with the time beside it.
+- **The primary line** is what the reader scans for: the mail subject, the card title, `Old → New` for a rename, the item name.
+- **The secondary line** is supporting content, such as a mail snippet, an invite's start time or `in To Do`. It shows only when it exists.
 
-## Action-line rules
+A notification persists to that contract: `title` is the action, `body` the primary line, and `details` holds the secondary line plus the deep-link parameters. `details` never holds text the toast needs, because the toast event doesn't carry it ([NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md#the-toast-carries-just-enough-to-link)).
 
-- Pattern: `<Actor> <verb> [object/place]`, past tense, as short as it can be while staying
-  unambiguous. Two arrival-style exceptions: `New mail from <sender>`,
-  `New message from <author> in "<chat>"`.
-- The viewer's own actions read **"You"** — a render-time rule in the panel
-  (`event.actorUserId === viewer id`); notification titles keep their persisted actor names
-  (producers exclude the actor from delivery). Actor names fall back to the email local part;
-  actor-less share/unshare rows fall back to `Shared with you` / `Access removed`.
-- Drive item names are double-quoted inside action sentences, bare as the primary line.
-  Column names stay bare.
+The avatar slot is always there, so rows align whether or not an actor resolves. Only the bell marks unread rows, with a tint and a bold primary line.
 
-## Phrasing layer
+## The action line says who did what, where
 
-- `describeFileEvent(event, ctx, opts?)` (`packages/lib/src/types/file-history.ts`) turns a
-  `FileEvent` into `{ action, primary, secondary }`. The server composes `file-event`
-  notification strings with it (`history.ts` `notifyWatchers`, ctx `container`); the panel
-  renders with it directly. `ctx 'own'` = the selected item's own panel (title already names
-  it); `'container'` = folder timelines and notifications.
-- `describeNotification(n, opts?)` (`packages/lib/src/core/notification/describe.ts`) maps a
-  persisted notification to the same shape; the secondary line derives from `details`
-  client-side (invite start time formatted with `en-GB`).
-- Chat-derived bodies (mentions, chat messages, comment previews) persist the **raw** message
-  text; `formatChatPreview` (`packages/lib/src/core/chat/format-preview.ts`) normalizes it at
-  render time in both describe functions and the SSE toast: the emote wire form
-  (`$dance:marloes@…`) becomes the chat-style sentence without the actor (`dances with Marloes
-  Robijn`, `dances with you` for the viewer), and emails resolve to display names via the
-  public-users map (unknown/external addresses stay as-is).
+- The pattern is `<Actor> <verb> [object or place]`, past tense, as short as it can be while staying clear. Two arrival rows break it: `New mail from <sender>` and `New message from <author> in "<chat>"`.
+- An actor is their display name, else the email's local part. A share or unshare without an actor reads `Shared with you` or `Access removed`.
+- A Drive item's name is double-quoted inside the action and bare as the primary line. A column name stays bare.
+- Your own actions read "You" in the panels, decided at render time by comparing `actorUserId` with the viewer. A notification keeps its stored actor name, which is never you, because every producer skips the actor.
 
-## Notification rows
+## One phrasing layer serves the server and the panels
 
-Actor = display name (email local part as fallback). Chat-derived bodies marked * render
-through `formatChatPreview`.
+`describeFileEvent` (`packages/lib/src/types/file-history.ts`) turns a file event into `{ action, primary, secondary }`. Its context decides how much the row repeats. `'own'` is an item's own panel, whose title already names the item, so the action leaves the name out. `'container'` is a folder's timeline or a notification, where the row must name the descendant it is about. The server composes every `file-event` notification with it in `'container'` context (`FileHistory.notifyWatchers`), and the panels render with it directly (`ActivityEventList`), so a watch notification reads exactly like its panel row.
 
-| type | action (title) | primary (body) | secondary | click → |
-|---|---|---|---|---|
-| `share` | `Hanne shared a board` (noun from `EIGEN_DOC_TYPE_INFO` `noun ?? label`, else folder/file; actor-less: `Shared with you`) | item name | — | item URL |
-| `unshare` | `Hanne removed your access` (actor-less: `Access removed`) | item name | — | not clickable |
-| `calendar-share` | `Hanne shared a calendar` | calendar name | — | calendar app |
-| `calendar-unshare` | `Hanne removed your access` | calendar name | — | calendar app |
-| `calendar-invite` | `Alice invited you` | event title | start time (`details.startTime`, epoch ms) | month view `?eventId=` |
-| `calendar-invite-updated` | `Alice updated an invitation` | event title | new start time | same |
-| `calendar-invite-cancelled` | `Alice canceled an invitation` | event title | — | same |
-| `mail` | `New mail from Hanne Oberman` | subject, or `(no subject)` | snippet (`textShort`, 120 chars) | `box/inbox?mailId=<details.mailId>` |
-| `mention-chat` | `Daan mentioned you in "chat"` | message snippet * | — | chat room |
-| `mention-comment` | `Daan mentioned you in "Doc"` | message snippet * | — | doc `?chat=` |
-| `chat-message` | `New message from Daan in "chat"` | message snippet * | — | chat room |
-| `comment-reply` | `Daan commented on "Doc"` | message snippet * | — | doc `?chat=` |
-| `access-request` | `Hanne requested access` | item name | request message | share dialog `?sharePathId=&shareEmail=` |
-| `file-event` | `${actor} ${lines.action}` via `describeFileEvent` | `lines.primary` * (comment events) | `lines.secondary` | item URL + `?card=`/`?chat=` from details; else `fs?pid=` (gated, see below) |
+`describeNotification` (`packages/lib/src/core/notification/describe.ts`) maps a stored notification to the same shape, taking the secondary line from `details`.
 
-## File-event rows (activity panel)
+## The client formats what depends on the viewer
 
-`own` = the selected item's own events; `container` = descendant events in a folder timeline
-(and, actor-prefixed, the `file-event` notification). Panel rows navigate same-tab per the
-table; events on paths that no longer resolve can still point at a stale target (known
-limitation — resolving would cost a fetch per row).
+An invite's start time is stored as epoch milliseconds in `details.startTime` and formatted by `describeNotification`, so it shows in the viewer's timezone, not the server's. The same goes for "You" in the panels and for an assignment's target, which reads `you` for the viewer and a display name for anyone else.
 
-| eventType | action (own) | action (container) | primary | secondary | click → |
-|---|---|---|---|---|---|
-| `created` | `created "<name>"` | `created` | — / item name | — | open item |
-| `uploaded` | `uploaded "<name>"` | `uploaded` | — / item name | size | open item |
-| `edited` / `moved` / `copied` / `restored` | bare verb | bare verb | — / item name | — | open item |
-| `renamed` | `renamed` | `renamed` | `Old → New` | — | open item |
-| `acl-changed` | `updated sharing` | `updated sharing` | — / item name | `Added …` / `Removed …` (team entries named, see below) | share dialog (`?sharePathId=`) |
-| `trashed` / `deleted` | bare verb | bare verb | — / item name | — | not clickable |
-| `version-restored` | `restored a version` | `restored a version of "<name>"` | version name | — | open item |
-| `commented` | `commented` | `commented on "<name>"` | `“preview”` * | — | doc `?chat=<chatName>` |
-| `sticky-added` | `added a card to <Col>` | `added a card to "<board>"` | card title | `in <Col>` (container) | board `?card=<cardId>` |
-| `sticky-moved` | `moved a card` | `moved a card in "<board>"` | `card → col` | — | board `?card=<cardId>` |
-| `sticky-removed` | `removed a card` | `removed a card from "<board>"` | card title | — | board (card is gone — no `?card=`) |
-| `assigned` | `assigned a comment` | `assigned a comment in "<name>"` | card title, else `to <assignee>` | `to <assignee>` (with card) | doc `?chat=<chatName>` |
-| `resolved` | `resolved a comment` | `resolved a comment in "<name>"` | card title | — | doc `?chat=<chatName>` |
-| `reopened` | `reopened a comment` | `reopened a comment in "<name>"` | card title | — | doc `?chat=<chatName>` |
+## Chat-derived bodies are stored raw and rendered at display time
 
-`<assignee>` renders as `you` for the viewer, else the resolved display name (email local-part fallback).
+Mentions, chat messages, comment replies and comment previews persist the raw message text, emote wire form and bare emails included ([CHAT.md](CHAT.md#emotes-are-stored-as-keys-and-phrased-per-viewer)). `formatChatPreview` (`packages/lib/src/core/chat/format-preview.ts`) renders it in both describe functions and in the SSE toast. An emote becomes the chat's sentence without the actor, because the row already names them (`dances with Marloes Robijn`, or `dances with you` for the viewer). An email becomes a display name through the public-user lookup, and an unknown or external address stays as it is. So the stored `body` differs from what every surface shows, on purpose.
 
-`acl-changed` secondaries list ACL principal ids. Emails render as-is; a `team_<id>` renders the team name and falls back to `UNRESOLVED_TEAM_LABEL` (`@workspace/lib/types/owner`) when it can't be resolved. Both sides go through the shared public resolver, which names users and teams alike: the panel through `usePublicUsers`, the server through `getBatchPublicInfo` before it composes the notification body (that body is persisted, so it can't be fixed at render time).
+A `file-event` row counts as chat-derived only when its `details` carry a `chatName`, since card titles and file names in other file events must not be rewritten. The toast has no viewer identity in scope, so an emote aimed at you shows your name there, not "you".
 
-The fs listing links (`?sharePathId=`, `?pid=`) need read access to the item's **parent** folder, which a viewer granted the item alone doesn't have. Link builders don't test for that: the fs route gets the authoritative 403 and redirects to `getDriveShareUrl` for the `?pid=` item, keeping *Request access* for a viewer who can't read that item either ([LAYOUT.md § Opening Items and Links](LAYOUT.md#opening-items-and-links)).
+## Team names in a sharing row are resolved before the body is stored
 
-## Data
+An `acl-changed` row's secondary line lists the added and removed principals. An email reads fine as it is, but a `team_<id>` does not, so teams are named, with `UNRESOLVED_TEAM_LABEL` (`packages/lib/src/types/owner.ts`) when the team can't be resolved. The panel resolves names at render time through `usePublicUsers`. The notification body is stored, so the server resolves them first through `getBatchPublicInfo` in `notifyWatchers`; a stored body can't be fixed at render time.
 
-- `notifications.details` (JSON, v2 migration) carries the secondary line + deep-link params —
-  see the schema in [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md).
-- `FileEventDetailsMap`: `sticky-*` carry `cardId` (required on the client POST, optional in
-  the read shape — old rows lack it), `commented` carries `chatName`.
-- Old rows degrade: no `details` → action + body only; missing `cardId`/`chatName` → the
-  container-level link. Never blank, never a crash.
-- In-editor mode: the host passes `ActivityPanel` its lifecycle `cards` and an
-  `onOpenCard(cardId)`; the panel resolves a row's `cardId`/`chatName` to one id itself. Drive's
-  *Recent activity* mounts `ActivityEventList` directly, with no `onOpenCard`, so its rows keep
-  their deep links.
+## A click opens in the same tab
+
+Every row is navigation, so a plain click opens its target in the same tab: the bell, both panels and the toast's View action. Drive's *Recent activity* rows are real `<a href>`s, so Cmd-click or middle-click still opens a new tab there. The bell can't use an anchor. The product-wide rule, and why the bell can't be a link, is in [LAYOUT.md § Buttons navigate here, links in content open a new tab](LAYOUT.md#buttons-navigate-here-links-in-content-open-a-new-tab).
+
+The targets live in two functions: `resolveNotificationLink` (`packages/lib/src/core/notification/resolve-link.ts`) for notifications and `resolveEventUrl` (`packages/ui/src/components/drive/activity-event-list.tsx`) for panel rows. The rules they share:
+
+- A card or comment event deep-links into its document with `?card=` or `?chat=`. A removed card links to the board only, since the card is gone.
+- An `acl-changed` row and an access request open the share dialog (`?sharePathId=`). An access request also fills in the requester's email.
+- A calendar invite opens the month of its occurrence with `?eventId=`, taking the start time from the tag.
+- A panel row for a trashed or deleted item, an unshare and an admin alert link nowhere.
+
+A panel row resolves its target from the event alone, without fetching the item, so an older row for an item since trashed or purged still points at it. Checking would cost a fetch per row.
+
+## A Drive listing link needs read access to the parent
+
+The listing links (`?sharePathId=`, `?pid=`) open the item's parent folder, which a viewer granted only the item can't read. The link builders don't test for that. The listing route answers the authoritative 403 and redirects a `?pid=` link to the item itself (`getDriveShareUrl`), which keeps *Request access* for a viewer who can't read the item either.
+
+## In an editor, only card and comment rows are clickable
+
+`ActivityPanel` passes `ActivityEventList` an `onOpenCard` and the editor's comment cards. A row that references a card or a comment thread opens it in place, resolving a `chatName` to its card. Every other row would only reopen the document you are in, so it stays inert. Drive's *Recent activity* mounts `ActivityEventList` without `onOpenCard`, so its rows keep their URLs.
+
+## An old row degrades, never breaks
+
+A notification without `details` renders its action and body only. A file event without a `cardId` or `chatName` links to its document instead of the card. Clients must send `cardId` when they post a card event, but the read shape keeps it optional for the rows that predate it (`FileEventDetailsMap`).
+
+## Bell rows carry an app badge
+
+`NotificationBadge` (`packages/ui/src/components/layout/app/notification-badge.tsx`) puts a small app-colored glyph on the avatar, so the source app reads at a glance. It maps the notification type, plus `details.pathType` when the row is about a Drive item, to the app's icon and color from the shared sources (`EIGEN_DOC_ICONS`, `getEigenDocInfoByType().colorVar`, the `--app-*-color` variables). A row without a path type falls back per type and is never blank. The panels show no badge: each is scoped to one item already.
+
+## See also
+
+- [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md): storage, tags, coalescing and the toast event
+- [FILE-HISTORY.md](FILE-HISTORY.md): the event log and watches behind file-event rows
+- [COMMENTS.md](COMMENTS.md): the cards that comment and assignment rows open
+- [LAYOUT.md](LAYOUT.md#buttons-navigate-here-links-in-content-open-a-new-tab): same tab versus new tab

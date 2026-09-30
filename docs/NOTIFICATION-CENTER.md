@@ -1,215 +1,74 @@
 # Notification Center
 
-> **TLDR**: `NotificationCenter` is a Home domain service (like Calendar, Contacts) backed by a per-user SQLite
-> database. Producers call `home.notifications.persist({...})`, which upserts on `tag` (so repeats coalesce into one
-> refreshed row) and broadcasts a `notification:created` SSE event. The frontend renders the stored rows in the
-> topbar bell and toasts the SSE event. Row strings and link targets: [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md).
+> **TLDR:** `NotificationCenter` (`apps/api/src/lib/notification-center/`) is a per-user SQLite service on the home, like calendar and contacts. A producer calls `home.notifications.persist({...})` in the recipient's home, usually through `sendToHome`. The row upserts on its `tag`, so repeats fold into one refreshed row, and a `notification:created` event makes the toast and refreshes the topbar bell. Not obvious from the code: the tag is both the row's identity and the source of its link, `coalesce` suppresses the toast but never the row, and team homes have no notification center. What each row says and where it links: [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md).
 
-## Architecture
+## Every user and guest home has its own notification database
 
-### NotificationCenter as Home Domain Service
+`UserHome` and `GuestHome` create a `NotificationCenter` over `eigen.notifications/notifications.db` in the home folder. A `TeamHome` has none, and `sendToHome` persists through `home.notifications?.persist`, so a notification addressed to a team id is dropped. A team action therefore notifies each affected user in their own home. The routes (`apps/api/src/routes/notification.ts`) are self-only.
 
-Follows the same pattern as Calendar, Contacts, Mail:
+## Notifications and domain events are separate broadcasts
 
-```
-Home
-├── _drive (Drive)                  → mounts/default/
-├── _contacts (Contacts)            → eigen.contacts/contacts.db
-├── _mail (Maildir)                 → eigen.mail/mail.db
-├── _calendar (Calendar)            → eigen.calendar/calendar.db
-└── _notifications (NotificationCenter) → eigen.notifications/notifications.db
-```
+A cross-user event does two things. `persist()` writes the row and broadcasts `notification:created`, which becomes the toast and refreshes the bell. The producer's own `home.broadcast(domainEvent)` invalidates the domain's query caches. Toasts come only from the notification handler, and domain SSE handlers never toast ([NOTIFICATIONS.md](NOTIFICATIONS.md)). Read, read-all and dismiss broadcast `notification:changed`, which refetches the bell without a toast.
 
-**User-only** — notifications live in `UserHome`, not `TeamHome`. Team actions generate notifications in each affected
-user's Home.
+## A notification's tag is its identity
 
-A cross-user event does two separate things: `home.notifications.persist({...})` writes the row and broadcasts the
-`notification:created` SSE event (toast + bell), while `home.broadcast(domainEvent)` pushes the domain event that
-invalidates query caches. Toasts come only from the notification handler — domain SSE handlers never toast.
+The `tag` column is `UNIQUE`, and `persist()` is an `INSERT ... ON CONFLICT(tag) DO UPDATE`. A repeat with the same tag refreshes the existing row: new title, body, actor and details, unread again, and `createdAt` set to now, so it moves to the top. Twenty mentions in one chat are one row, not twenty. A row without a tag never folds, because SQLite treats NULLs as distinct.
 
-## Storage
+The tag also carries the ids the link is built from, so each producer's tag decides both what folds together and where the row leads.
 
-```
-data/home/{userId}/eigen.notifications/notifications.db
-```
+| Type | Producer | Tag |
+|---|---|---|
+| `share` / `unshare` | `receiveSharedPathChange` (`lib/drive/shared-with-me.ts`) | `share:{ownerId}:{mountId}:{pathId}` / none |
+| `calendar-share` / `calendar-unshare` | `lib/calendar/shares.ts` | `calendar-share:{calId}:{ownerUserId}` / none |
+| `calendar-invite`, `-updated`, `-cancelled` | `lib/calendar/invitations.ts` | `calendar-invite:{eventId}:{startTime}`, shared by all three, so one occurrence is one row |
+| `mail` | `MailDomain` (`lib/mail/mail-domain.ts`) | `mail:new`, a constant, so all incoming mail folds into one row |
+| `mention-chat`, `mention-comment`, `chat-message`, `comment-reply` | `ChatRoom.postMessage` | built in `core/notification/tags.ts`, see below |
+| `assigned` | the assignee route in `routes/collab.ts` | built in `core/notification/tags.ts` |
+| `access-request` | `propagateAccessRequest` (`lib/drive/access-request-propagation.ts`) | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
+| `file-event` | `FileHistory.notifyWatchers` | `file-event:{ownerId}:{mountId}:{pathId}`; burst events tag the parent folder ([FILE-HISTORY.md](FILE-HISTORY.md#notifications-coalesce-per-file-and-bursts-per-folder)) |
+| `admin-alert` | backup verify (`lib/backup/jobs.ts`), mail queue (`routes/internal.ts`) | `backup-verify-{ownerId}`, `mail-queue-backlog` |
 
-## Schema
+An unshare carries no tag, because the reader has lost access and there is nothing to link to.
 
-```typescript
-// apps/api/src/lib/notification-center/schema.ts
-export const notifications = sqliteTable('notifications', {
-    id: text('id').primaryKey(),
-    type: text('type').notNull(),
-    actorEmail: text('actorEmail'),
-    title: text('title').notNull(),
-    body: text('body'),
-    tag: text('tag').unique(),
-    read: integer('read', {mode: 'boolean'}).notNull().default(false),
-    createdAt: integer('createdAt', {mode: 'timestamp'}).notNull().default(sql`(unixepoch())`),
-    details: text('details', {mode: 'json'}).$type<NotificationDetails | null>(), // v2
-});
-```
+## A coalesced persist skips the toast, not the row
 
-The `tag` column with `UNIQUE` constraint enables `INSERT ... ON CONFLICT(tag) DO UPDATE` upsert. Multiple mentions in
-the same chat produce one notification (refreshed, not duplicated). `NULL` tags are exempt (SQLite treats NULLs as
-distinct).
+With `coalesce: true`, `persist()` reads the row with the same tag first. If that row was refreshed less than 30 s ago, the upsert still runs but the broadcast is skipped, so the bell stays correct while a burst of events on one tag doesn't flood the screen with toasts. The window slides: a steady stream faster than 30 s stays silent for its whole length, and the bell catches up on its next refetch. File events, incoming mail and admin alerts set it; everything else toasts every time.
 
-`details` (**v2 migration** — `ALTER TABLE notifications ADD COLUMN details TEXT`) holds a typed JSON blob keyed by
-notification type (`NotificationDetailsMap` in `packages/lib/src/types/notification.ts`): the activity-row secondary
-line plus deep-link parameters — `mail.{mailId, snippet}`, `calendar-invite(-updated).startTime`,
-`file-event.{secondary, cardId, chatName, pathType}`, `access-request.{message, pathType}`, `*.pathType`. Additive and
-nullable — pre-v2 rows read `null` and degrade to a plain title + body row. `PersistInput` is a discriminated write
-input (`NotificationPersistInput`): `details` is allowed exactly for the types that define a `NotificationDetailsMap`
-entry.
+## `details` is typed per notification type
 
-### Coalesce flag
+`details` is a JSON column holding the row's secondary line and deep-link parameters, keyed by type in `NotificationDetailsMap` (`packages/lib/src/types/notification.ts`). The write input `NotificationPersistInput` is discriminated, so `details` type-checks only for a type that defines an entry. The column is nullable (migration v2), so a row without it renders title and body only. The read shape keeps `type` a `string`, because a stored row can hold a retired type string and there is no honest value to coerce it to.
 
-`persist()` accepts an optional `coalesce: boolean` on `PersistInput`. When set and the tag-upsert hit an existing
-row updated within the last 30 s, the SSE broadcast is skipped — the DB row still updates (title, `read = false`,
-`createdAt`), so the bell stays correct, but rapid events on one tag don't toast-storm. The window slides: a
-sustained sub-30 s event stream suppresses broadcasts for its whole duration; the bell catches up on the next
-refetch. Only `file-event` notifications set it today; all other callers keep the always-broadcast default.
+## Chat and comment tags name the thread
 
-## Row content contract (unified activity)
+The five chat, comment and assignment tags are built and parsed in one module, `packages/lib/src/core/notification/tags.ts` (imported by the API as `@workspace/lib/notification/tags`). A standalone chat is tagged with its own path. A comment thread is tagged with the container it comments on plus the thread's chat name, so the notification links to the document and still names the thread inside it. A mention adds the mentioned email, so each person's mention is their own row.
 
-The bell and the Drive *Recent activity* panel render the same row anatomy through one shared
-`ActivityRow` (`packages/ui/src/components/activity-row.tsx`). Every producer persists to one contract:
+`chatThreadKey` is what a reader compares on. `useAutoMarkChatRead` (`packages/lib/src/core/chat/hooks/use-chat-unread.ts`) marks exactly the open thread's rows read, which is why a comment card passes the container's path id with its chat name rather than the thread's own id. `useUnreadChatIds` uses the tag's path id, so a comment's unread dot sits on the document. An assignment has the comment shape, so it clears with the card's other rows when the card opens. Only the assignee ever gets that row, so whoever clears it is the assignee.
 
-- **`title` = the action sentence** — who did what, where (`New mail from Hanne Oberman`,
-  `Mark added a card to "Eigen Feedback"`). Rendered as the small muted first line.
-- **`body` = the primary content** — the thing the user scans for: mail subject, card title, `old → new` rename,
-  item name. Rendered as the normal-size second line.
-- **`details` = structured extras** — the optional secondary line (mail snippet, invite start time, `in To Do`) plus
-  the deep-link parameters. Never a display string the toast needs.
+## Your own actions and plain edits never notify
 
-The server composes file-event strings with `describeFileEvent` (`packages/lib/src/types/file-history.ts`), the
-same phrasing the activity panel renders with; the client mirrors non-file notifications with `describeNotification`
-(`packages/lib/src/core/notification/describe.ts`), which derives the secondary line from `details` (e.g. the invite
-start time is formatted client-side with the `en-GB` locale, not baked into a stored string). Chat-derived bodies
-(mentions, chat messages, comment previews) are persisted raw and normalized at render time by `formatChatPreview`
-(`packages/lib/src/core/chat/format-preview.ts`): emote wire syntax becomes the chat-style sentence, emails resolve
-to display names — so the stored `body` intentionally differs from what the bell/toast/panel show. Old rows without
-`details` render title + body only. Per-type strings and link targets: [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md).
+Every producer skips the actor, so your own share, message or edit never notifies you. Collaborator edits to a document notify nobody directly: that would be too noisy. They reach people only through a watch (`file-event`) and the activity panels. `actorEmail` is the sharer, organizer, mail sender, author or requester on every type except `admin-alert`, which has no actor.
 
-## API Routes
+## Titles are stored as display text
 
-Router: `apps/api/src/routes/notification.ts`, prefix `/notifications/`, all `{auth: true}`.
+A producer composes the title and body when it persists, with Eigen extensions stripped (`stripEigenExtension`), and the bell shows them as stored. The phrasing rules, and the chat-derived bodies that are the exception, are in [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md#a-row-is-an-action-a-primary-line-and-an-optional-secondary-line).
 
-```
-GET    /notifications/:ownerId                    Recent notifications (paginated)
-GET    /notifications/:ownerId/unread-count        Badge count
-PATCH  /notifications/:ownerId/:id/read            Mark one as read
-POST   /notifications/:ownerId/mark-all-read       Mark all as read
-DELETE /notifications/:ownerId/:id                 Dismiss
-```
+## The row stores ids, and the client builds the link
 
-## Notification Sources
+No URL is stored. `resolveNotificationLink` (`packages/lib/src/core/notification/resolve-link.ts`) parses the tag and, for Drive items, fetches the current `DrivePath` at click time, so the link follows the item's type to the right app and survives a move. The link rules per type are in [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md#a-click-opens-in-the-same-tab).
 
-| Source                 | Where persisted                          | Type                        | Tag format                                          |
-|------------------------|------------------------------------------|-----------------------------|-----------------------------------------------------|
-| Drive share            | `Drive.receiveSharedPathChange()` (new share)   | `share`                     | `share:{ownerId}:{mountId}:{pathId}`                |
-| Drive unshare          | `Drive.receiveSharedPathChange()` (removed)     | `unshare`                   | (no tag)                                            |
-| Calendar share         | `Calendar.receiveShare()`                | `calendar-share`            | `calendar-share:{calId}:{ownerUserId}`              |
-| Calendar unshare       | `Calendar.removeShare()`                 | `calendar-unshare`          | (no tag)                                            |
-| Calendar invite        | `invite-propagation.ts`                  | `calendar-invite`           | `calendar-invite:{eventId}:{startTime}`             |
-| Calendar invite update | `invite-propagation.ts`                  | `calendar-invite-updated`   | `calendar-invite:{eventId}:{startTime}`             |
-| Calendar invite cancel | `invite-propagation.ts`                  | `calendar-invite-cancelled` | `calendar-invite:{eventId}:{startTime}`             |
-| Incoming mail          | `Maildir` sync                           | `mail`                      | `mail:new` (constant — coalesces all incoming mail into one refreshed row) |
-| Chat @mention          | `ChatRoom.postMessage()`                 | `mention-chat`              | `mention:{ownerId}:{mountId}:{chatId}:{email}`      |
-| Comment @mention       | `ChatRoom.postMessage()` (embedded chat) | `mention-comment`           | `mention:{ownerId}:{mountId}:{containerId}:{name}:{email}` |
-| Chat activity          | `ChatRoom.postMessage()` (regular msg)   | `chat-message`              | `chat-message:{ownerId}:{mountId}:{chatId}`         |
-| Comment activity       | `ChatRoom.postMessage()` (embedded chat) | `comment-reply`             | `comment-reply:{ownerId}:{mountId}:{containerId}:{name}` |
-| Comment assignment     | assignee PATCH route (`routes/collab.ts`) | `assigned`                 | `assigned:{ownerId}:{mountId}:{pathId}:{chatName}` — only on a real change to a registered non-self assignee |
-| Access request         | `propagateAccessRequest()` (`lib/drive/access-request-propagation.ts`; the route delegates) | `access-request` | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
-| File event (watch)     | `FileHistory.notifyWatchers()` via relay | `file-event`                | `file-event:{ownerId}:{mountId}:{pathId}` — burst events (`created`/`uploaded`/`copied`) tag the parent folder; always sent with `coalesce: true`. See [FILE-HISTORY.md](FILE-HISTORY.md) |
+## The bell counts always and lists on open
 
-The five chat, comment and assignment tags are built and read back through one module, `chatActivityTag` / `chatMentionTag` / `commentAssignedTag` / `parseChatNotificationThread` / `chatThreadKey` (`packages/lib/src/core/notification/tags.ts`, imported by the API as `@workspace/lib/notification/tags`): a chat is tagged with its own path, an embedded chat with the *container* it comments on plus that comment chat's file name, so the notification links to the document and still names the thread inside it. `chatThreadKey` is what a reader compares on — `useAutoMarkChatRead` (`use-chat-unread.ts`) marks exactly the open thread's rows read, which is why a comment card passes the container's pathId with its chat name rather than the comment chat's own id, and `useUnreadChatIds` keeps using the tag's pathId, so the unread dot sits on the document. An assignment carries the comment shape, so it clears with the rest of the card's rows when that card opens — only the assignee is ever sent the row, so the reader that clears it is the assignee by construction.
+`NotificationBell` (`packages/ui/src/components/layout/app/notification-bell.tsx`) sits in the topbar. The unread count is always fetched, since it is the badge. The list is fetched only while the popover is open.
 
-`actorEmail` is set on all sources — the sharer, organizer, mail sender, mention author, or access requester.
+## The toast carries just enough to link
 
-What deliberately does NOT create a notification: your own actions (every source skips the actor), and plain
-collaborator edits — they would be too spammy, so document changes only surface through watches (`file-event`)
-and the activity panel.
+`notification:created` carries the title and body for the toast plus the notification's `type` and `tag`, so the toast's View action resolves the same target the bell does ([SSE.md](SSE.md)). It carries no `details`, so View links only to tag-derivable targets: the card (`?card=`) and mail (`?mailId=`) deep links come from the fetched row in the bell. The bell's list is always fetched from the API, never built from events.
 
-## Frontend
+## See also
 
-### Topbar Bell
-
-`NotificationBell` in topbar between document title and user dropdown. Shows unread count badge (fetched always).
-Notification list fetched lazily only when popover opens.
-
-### Link Resolution
-
-Links are constructed client-side based on notification `type` and `tag`:
-
-- `share`, `mention-chat`, `mention-comment`, `comment-reply`, `assigned` → async: fetches `DrivePath` via API on click, routes to correct app
-  using `getDocumentUrl()` (eigendoc → Docs, eigenchat → Chat, etc.) or falls back to Drive
-- `access-request` → async: fetches `DrivePath` to resolve parent folder, navigates to Drive at
-  `/fs/{ownerId}/{mountId}/{parentId}?sharePathId={pathId}&shareEmail={email}`, auto-opening the share dialog
-  with the requester's email pre-filled
-- `calendar-invite`, `calendar-invite-updated`, `calendar-invite-cancelled` → month view
-  `view/month/{from}/{to}?eventId={eventId}`, the month derived from the tag's `{startTime}` (falls back to
-  `getCalendarAppUrl()` when the tag has no start time)
-- `calendar-share`, `calendar-unshare` → `getCalendarAppUrl()`
-- `mail` → `getMailAppUrl('box/inbox?mailId={id}')` when `details.mailId` is set (v2), else bare `box/inbox`
-- `file-event` → async: fetches `DrivePath`; collab/chat docs open in their app via `getDriveItemUrl()`, appending
-  `?card={cardId}` or `?chat={chatName}` when `details` carries them (deep-links to the exact card / comment thread);
-  plain files and folders land on Drive at `/fs/{ownerId}/{mountId}/{parentId}?pid={pathId}` (item selected,
-  details sidebar open); that route needs read access to the parent folder, so for a watcher granted the item
-  alone it 403s and redirects to the item itself
-- `unshare` → not clickable (resource no longer accessible)
-
-Link resolution logic lives in `packages/lib/src/core/notification/resolve-link.ts`. No URLs stored in the
-database — `tag` contains the IDs, frontend resolves using `get*AppUrl()` helpers from `api.ts`.
-
-### Display Names
-
-Eigen extensions (`.eigendoc`, `.eigenstickies`, etc.) are stripped from notification titles server-side using
-`stripEigenExtension()` (from `packages/lib/src/types/drive.ts`) before persisting. The bell component displays
-the stored title as-is.
-
-### Actor Avatars
-
-`UserAvatar` (from `packages/ui/src/components/user/user-avatar.tsx`) renders the `actorEmail` avatar next to each
-notification item.
-
-### Bell app badge
-
-`NotificationBadge` (`packages/ui/src/components/layout/app/notification-badge.tsx`) overlaps a small circular
-app-colored badge on the avatar's bottom-right so the source app reads pre-attentively. It maps the notification
-`type` — plus `details.pathType` when the row concerns a specific drive item — to an app icon + color from the
-single sources (`EIGEN_DOC_ICONS`, `getEigenDocInfoByType().colorVar`, the `--app-*-color` vars, and lucide
-`Mail`/`Calendar`/`MessageSquare`/`Folder`/`File` for the non-eigendoc cases). Rows without a `pathType` fall back
-per type (chat → chat glyph, share/file-event → folder on `--app-drive-color`), never blank. The badge is
-**bell-only** — the *Recent activity* panel is already scoped to one item, so it renders no badge.
-
-### SSE Handler
-
-`handleNotificationSSEvent()` listens for `notification:created` → shows toast + invalidates notification queries.
-
-## SSE Event
-
-```typescript
-type SSEventNotificationCreated = {
-    type: typeof SSEventType.NOTIFICATION_CREATED;
-    title: string;
-    body?: string;
-    notificationType?: string; // the notification's `type` — lets the toast resolve a "View" link
-    tag?: string;              // the notification's tag — the other half of link resolution
-};
-```
-
-`title`/`body` feed the toast (`toast(title, { description: body })`); `notificationType` + `tag` let the toast's
-**View** action resolve the same target the bell uses (`resolveNotificationLink({ type, tag, details: null })`) and
-open it in the same tab, like every other row. Still minimal — no full row, no `details` (so the View link uses only tag-derivable targets;
-`?card=`/`?mailId=` come from the fetched row in the bell). The list is fetched via API, not populated from SSE. A
-sibling `SSEventNotificationChanged` (`notification:changed`, bare `{ type }`) tells the bell to refetch its
-count/list without toasting (e.g. after a read or dismiss).
-
-## Where the code lives
-
-Backend: `apps/api/src/lib/notification-center/` (schema, db-config with the v2 `details` migration, the
-`NotificationCenter` service, SSE builder) and `apps/api/src/routes/notification.ts`. Frontend:
-`packages/lib/src/core/notification/` (hooks, SSE handler, `resolve-link.ts`, `describe.ts`), shared types in
-`packages/lib/src/types/notification.ts`, and the bell + shared row in
-`packages/ui/src/components/` (`activity-row.tsx`, `layout/app/notification-bell.tsx`, `layout/app/notification-badge.tsx`).
+- [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md): what each row says and where it links
+- [NOTIFICATIONS.md](NOTIFICATIONS.md): the toast contract
+- [SSE.md](SSE.md): the event stream and `notification:created`
+- [FILE-HISTORY.md](FILE-HISTORY.md): watches and the `file-event` fan-out
+- [CHAT.md](CHAT.md): who a chat message notifies
+- [SCALABILITY.md](SCALABILITY.md): `sendToHome` and the home relay
