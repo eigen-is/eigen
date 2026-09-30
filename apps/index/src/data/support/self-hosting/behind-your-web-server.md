@@ -25,11 +25,12 @@ The nginx and Apache files expect a certbot certificate for your web address. Ca
 
 ## What the web server must do
 
-The files setup writes do three things. A web server you set up by hand, or another one, must do the same:
+The files setup writes do four things. A web server you set up by hand, or another one, must do the same:
 
 - **Forward everything** for your web address to the address Eigen listens on, with the original host name.
 - **Keep live connections open and unbuffered.** Live editing in Docs, Sheets, Slides, and Stickies keeps a connection open for as long as the document is. Live updates arrive in small pieces, which a buffering web server holds back.
 - **Set `X-Real-IP` to the visitor's address.** Eigen limits sign-in attempts and codes per visitor by that header. Without it, every visitor shares one limit, and one person guessing passwords locks everyone out. Eigen does not trust `X-Forwarded-For` for this, because a visitor can add their own value to it.
+- **Let large uploads through.** A file you upload arrives in one request, and a backup you upload in Admin can be up to 1 GB. nginx refuses a request over 1 MB unless you raise its limit, as `eigen.nginx.conf` does.
 
 ### Apache
 
