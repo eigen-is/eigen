@@ -174,7 +174,7 @@ In `apps/api/src/lib/drive/acl.ts`. Walks a pre-fetched breadcrumb (root-first) 
 - Standalone chat → ACL lands on the chat itself; embedded or nested → on the outermost container
 - The invitee gets read and write
 - Target already named in the target path's own ACL → `alreadyHasAccess: true`, no ACL write. Access inherited from a folder above does not count
-- `SharedDrive.inviteToChat()` requires write on the chat **and** on the container, otherwise 403
+- The route refuses a guest (`requireNonGuest`), and `SharedDrive.inviteToChat()` requires write on the chat **and** on the container, otherwise 403
 - `sharingRestricted` on the container blocks editors; the owner (or a team member on a team path) passes
 - Emails are lowercased before comparison and storage; invalid email → 400; self-invite is allowed
 

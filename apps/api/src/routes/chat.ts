@@ -210,6 +210,8 @@ export const chatRouter = new Elysia({ name: 'chat' })
     .post(
         '/chat/:ownerId/:mountId/:chatId/invite',
         async ({ params, body, user }) => {
+            // An invite shares the chat, which a guest may not, as on the ACL route.
+            requireNonGuest(user);
             const drive = await getSharedDrive(params.ownerId, user);
             return await drive.inviteToChat(params.mountId, params.chatId, body.email, user);
         },
