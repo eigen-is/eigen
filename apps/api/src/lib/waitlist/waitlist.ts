@@ -28,6 +28,11 @@ async function db() {
     return (await getManagedDb()).db;
 }
 
+// The server backup's copy, through the handle the server writes with.
+export async function stageWaitlistDbCopy(destPath: string): Promise<void> {
+    (await getManagedDb()).stageCopy(destPath);
+}
+
 export async function submitWaitlist(email: string, notes: string): Promise<boolean> {
     email = email.trim().toLowerCase();
     if (!validateEmailAddress(email)) throw new ApiError(400, 'Invalid email address');

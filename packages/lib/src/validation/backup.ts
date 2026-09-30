@@ -1,4 +1,11 @@
-import type { BackupEntry, BackupLevel, BackupManifest, BackupVerifyRecord } from '../types/backup';
+import type {
+    BackupEntry,
+    BackupLevel,
+    BackupManifest,
+    BackupReason,
+    BackupVerifyRecord,
+    ServerArchiveManifest,
+} from '../types/backup';
 import type { MountConfig, S3Config } from '../types/mount';
 
 // One grammar for the names in the backups folder, so the pane, the upload route and the artifact
@@ -58,6 +65,26 @@ export const BACKUP_FORMAT_VERSION = 1;
 const KINDS: readonly BackupManifest['kind'][] = ['user', 'team', 'server'];
 const STORAGE_TYPES: readonly MountConfig['storageType'][] = ['local', 'local-key', 's3'];
 const LEVELS: readonly BackupLevel[] = ['light', 'full', 'full-s3'];
+const REASONS: readonly BackupReason[] = ['scheduled', 'manual', 'pre-update'];
+
+// A whole-server archive: `server-{reason}-{level}-{stamp}.tar`, uncompressed because its members
+// already are. Reason and level are in the name, so retention and the schedule read no archive.
+export const SERVER_ARCHIVE_PREFIX = 'server-';
+export const SERVER_ARCHIVE_EXTENSION = '.tar';
+
+const SERVER_ARCHIVE_EXTENSION_PATTERN = SERVER_ARCHIVE_EXTENSION.replaceAll('.', String.raw`\.`);
+const SERVER_ARCHIVE_NAME = new RegExp(
+    `^${SERVER_ARCHIVE_PREFIX}(?<reason>${REASONS.join('|')})-(?<level>${LEVELS.join('|')})-${BACKUP_STAMP_PATTERN}${SERVER_ARCHIVE_EXTENSION_PATTERN}$`,
+);
+
+export function parseServerArchiveName(name: string): { reason: BackupReason; level: BackupLevel; at: Date } | null {
+    const groups = SERVER_ARCHIVE_NAME.exec(name)?.groups;
+    const reason = REASONS.find((candidate) => candidate === groups?.['reason']);
+    const level = LEVELS.find((candidate) => candidate === groups?.['level']);
+    if (!groups || !reason || !level) return null;
+    const at = parseBackupStamp(groups);
+    return at ? { reason, level, at } : null;
+}
 
 function isKind(value: string): value is BackupManifest['kind'] {
     return KINDS.some((kind) => kind === value);
@@ -130,19 +157,6 @@ function isCounts(value: unknown): value is BackupManifest['counts'] {
     );
 }
 
-function isHomeSummary(value: unknown): value is NonNullable<BackupManifest['homes']>[number] {
-    return (
-        typeof value === 'object' &&
-        value !== null &&
-        'ownerId' in value &&
-        typeof value.ownerId === 'string' &&
-        'kind' in value &&
-        (value.kind === 'user' || value.kind === 'team') &&
-        'name' in value &&
-        typeof value.name === 'string'
-    );
-}
-
 function isManifest(value: unknown): value is BackupManifest {
     return (
         typeof value === 'object' &&
@@ -171,14 +185,82 @@ function isManifest(value: unknown): value is BackupManifest {
         Array.isArray(value.entries) &&
         value.entries.every(isEntry) &&
         (!('email' in value) || value.email === undefined || typeof value.email === 'string') &&
-        (!('level' in value) || isLevel(value.level)) &&
-        (!('homes' in value) ||
-            value.homes === undefined ||
-            (Array.isArray(value.homes) && value.homes.every(isHomeSummary)))
+        (!('level' in value) || isLevel(value.level))
     );
 }
 
-// The one gate every manifest passes through. Null means "not a version 1 Eigen backup manifest";
+function isServerArchiveHome(value: unknown): value is ServerArchiveManifest['homes'][number] {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'ownerId' in value &&
+        typeof value.ownerId === 'string' &&
+        'kind' in value &&
+        (value.kind === 'user' || value.kind === 'team') &&
+        'name' in value &&
+        typeof value.name === 'string' &&
+        (!('member' in value) || typeof value.member === 'string') &&
+        (!('bytes' in value) || typeof value.bytes === 'number') &&
+        (!('failed' in value) || typeof value.failed === 'string')
+    );
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        !Array.isArray(value) &&
+        Object.values(value).every((item) => typeof item === 'string')
+    );
+}
+
+function isServerArchiveManifest(value: unknown): value is ServerArchiveManifest {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'formatVersion' in value &&
+        value.formatVersion === BACKUP_FORMAT_VERSION &&
+        'level' in value &&
+        isLevel(value.level) &&
+        'reason' in value &&
+        REASONS.some((reason) => reason === value.reason) &&
+        'createdAt' in value &&
+        typeof value.createdAt === 'string' &&
+        'appVersion' in value &&
+        typeof value.appVersion === 'string' &&
+        'domain' in value &&
+        typeof value.domain === 'string' &&
+        'entries' in value &&
+        Array.isArray(value.entries) &&
+        value.entries.every(isEntry) &&
+        'homes' in value &&
+        Array.isArray(value.homes) &&
+        value.homes.every(isServerArchiveHome) &&
+        'orphans' in value &&
+        Array.isArray(value.orphans) &&
+        value.orphans.every((orphan) => typeof orphan === 'string') &&
+        'envFile' in value &&
+        typeof value.envFile === 'boolean' &&
+        'dkim' in value &&
+        typeof value.dkim === 'boolean' &&
+        'images' in value &&
+        isStringRecord(value.images)
+    );
+}
+
+// The outer manifest's gate, beside the per-home one below. Null means "not a version 1 manifest of
+// a whole-server archive".
+export function parseServerArchiveManifest(text: string): ServerArchiveManifest | null {
+    let value: unknown;
+    try {
+        value = JSON.parse(text);
+    } catch {
+        return null;
+    }
+    return isServerArchiveManifest(value) ? value : null;
+}
+
+// The one gate every manifest passes through.// The one gate every manifest passes through. Null means "not a version 1 Eigen backup manifest";
 // the caller decides whether that is a failed verify or a rejected request.
 export function parseBackupManifest(text: string): BackupManifest | null {
     let value: unknown;

@@ -16,6 +16,10 @@ export {
     parseBackupSidecar,
     parseBackupStamp,
     parseHomeMountSettings,
+    parseServerArchiveManifest,
+    parseServerArchiveName,
+    SERVER_ARCHIVE_EXTENSION,
+    SERVER_ARCHIVE_PREFIX,
 } from './backup';
 export type { CommandValidationResult } from './command';
 export { validateCommand } from './command';

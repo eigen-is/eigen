@@ -3,13 +3,22 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupVerifyRecord } from '@workspace/lib/types/backup';
 import { isCollabType } from '@workspace/lib/types/drive';
-import { parseBackupManifest } from '@workspace/lib/validation';
+import { parseBackupManifest, parseServerArchiveManifest } from '@workspace/lib/validation';
 import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
+import { SERVER_DATABASES } from '../config/paths';
 import { PATHS } from '../core';
 import { hashFile } from '../storage';
+import { type ArchiveMember, readArchiveMember, readArchiveMembers } from './archive';
 import { describeError } from './errors';
-import { ARCHIVE_HOME_DIR, ARCHIVE_MANIFEST_FILE, archiveHomePath, archiveMountPath, resolveInside } from './paths';
+import {
+    ARCHIVE_HOME_DIR,
+    ARCHIVE_MANIFEST_FILE,
+    archiveHomePath,
+    archiveMountPath,
+    archiveServerPath,
+    resolveInside,
+} from './paths';
 import { HOME_DATABASE_PATHS, type SnapshotProgress } from './snapshot-home';
 import { checkArchivedPathRows, listManagedDatabases, readMountPathRows } from './snapshot-mount';
 
@@ -40,8 +49,12 @@ function listFolderFiles(root: string, relDir: string, present: Set<string>, fai
 
 function listArchiveDatabases(root: string, fail: (message: string) => void): ArchiveDatabase[] {
     const found: ArchiveDatabase[] = [];
-    for (const relPath of HOME_DATABASE_PATHS) {
-        const relDatabase = archiveHomePath(relPath);
+    // A home folder holds the first, the server member the second; neither holds the other's.
+    const fixed = [
+        ...[...HOME_DATABASE_PATHS].map(archiveHomePath),
+        ...Object.values(SERVER_DATABASES).map(archiveServerPath),
+    ];
+    for (const relDatabase of fixed) {
         const abs = resolveInside(root, relDatabase);
         if (abs && fs.existsSync(abs)) found.push({ path: relDatabase, abs, isYjsDocument: false });
     }
@@ -203,5 +216,47 @@ export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): 
     }
 
     if (suppressed > 0) failures.push(`…and ${suppressed} more failures`);
+    return { status: failures.length === 0 ? 'verified' : 'failed', checkedAt, failures };
+}
+
+// The transport check of a whole-server archive: its last member is the manifest, and every other
+// member is there with the bytes and sha256 the manifest names. No member is unpacked; each one
+// verifies on its own when it is extracted.
+export async function verifyArchiveTransport(archivePath: string): Promise<BackupVerifyRecord> {
+    const checkedAt = new Date();
+    let members: ArchiveMember[];
+    try {
+        members = await readArchiveMembers(archivePath);
+    } catch (error) {
+        // A cut-off or foreign tar is a verdict on the archive, not an error of the check.
+        return { status: 'failed', checkedAt, failures: [describeError(error)] };
+    }
+    const last = members.at(-1);
+    if (last?.name !== ARCHIVE_MANIFEST_FILE) {
+        return { status: 'failed', checkedAt, failures: [`${ARCHIVE_MANIFEST_FILE} is not the last member`] };
+    }
+    const manifest = parseServerArchiveManifest(new TextDecoder().decode(await readArchiveMember(last)));
+    if (!manifest) {
+        return {
+            status: 'failed',
+            checkedAt,
+            failures: [`${ARCHIVE_MANIFEST_FILE} is not a version 1 server archive manifest`],
+        };
+    }
+
+    const failures: string[] = [];
+    const present = new Map(members.slice(0, -1).map((member) => [member.name, member]));
+    for (const entry of manifest.entries) {
+        const member = present.get(entry.path);
+        present.delete(entry.path);
+        if (!member) {
+            failures.push(`${entry.path}: missing from the archive`);
+        } else if (member.bytes !== entry.bytes) {
+            failures.push(`${entry.path}: ${member.bytes} bytes, the manifest says ${entry.bytes}`);
+        } else if (member.sha256 !== entry.sha256) {
+            failures.push(`${entry.path}: sha256 does not match the manifest`);
+        }
+    }
+    for (const extra of present.keys()) failures.push(`${extra}: not in the manifest`);
     return { status: failures.length === 0 ? 'verified' : 'failed', checkedAt, failures };
 }
