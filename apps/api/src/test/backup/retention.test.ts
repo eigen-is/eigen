@@ -4,7 +4,7 @@ import { buildServerArchiveName } from '../../lib/backup/paths';
 import { pruneBucketArchives, pruneServerArchives } from '../../lib/backup/retention';
 
 // One archive a night at 02:00 UTC, `night` days after 1 September.
-function archive(reason: BackupReason, night: number, good = true): { name: string; good: boolean } {
+function archive(reason: BackupReason, night: number, good = true): { name: string; good: boolean; build?: string } {
     const at = new Date(Date.UTC(2026, 8, 1 + night, 2, 0, 0));
     return { name: buildServerArchiveName(reason, 'full', at), good };
 }
@@ -28,6 +28,21 @@ describe('Server archive retention', () => {
         const updates = [1, 2, 3, 4].map((night) => archive('pre-update', night));
         expect(pruneServerArchives(updates, 10).sort()).toEqual(names(updates.slice(0, 2)));
         expect(pruneServerArchives(updates, 1).sort()).toEqual(names(updates.slice(0, 2)));
+    });
+
+    test('failed pre-update attempts never push out the good ones a rollback needs', () => {
+        const good = [1, 2, 3].map((night) => archive('pre-update', night));
+        const failed = [4, 5, 6].map((night) => archive('pre-update', night, false));
+        expect(pruneServerArchives([...good, ...failed], 10).sort()).toEqual(names([good[0], failed[0]]));
+        const older = archive('pre-update', 0, false);
+        expect(pruneServerArchives([older, ...good], 10).sort()).toEqual(names([older, good[0]]));
+    });
+
+    test('keeps the newest good pre-update archive of another build than the one running: ./eigen rollback names it', () => {
+        const rollback = { ...archive('pre-update', 1), build: 'api@sha256:old' };
+        const retries = [2, 3].map((night) => ({ ...archive('pre-update', night), build: 'api@sha256:new' }));
+        expect(pruneServerArchives([rollback, ...retries], 10, 'api@sha256:new')).toEqual([]);
+        expect(pruneServerArchives([rollback, ...retries], 10, 'api@sha256:old')).toEqual([rollback.name]);
     });
 
     test('a failed night never pushes out the last good archive', () => {

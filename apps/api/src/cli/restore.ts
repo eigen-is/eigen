@@ -49,7 +49,7 @@ import {
     TEAM_HOMES_DIR,
     USER_HOMES_DIR,
 } from '../lib/config/paths';
-import { PIN_KEYS } from '../lib/config/release';
+import { API_IMAGE_KEY, PIN_KEYS } from '../lib/config/release';
 import { PATHS } from '../lib/core/constants';
 import { readEnvFile } from './env-file';
 import { DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
@@ -658,7 +658,7 @@ async function takeEnv(archive: string | undefined): Promise<void> {
     }
     const temporary = `${ENV_PATH}.${process.pid}.tmp`;
     await copyArchiveMember(member, temporary);
-    if (!readEnvFile(temporary).has('EIGEN_API_IMAGE')) {
+    if (!readEnvFile(temporary).has(API_IMAGE_KEY)) {
         rmSync(temporary);
         return ui.fail(
             `${name} is an archive of a local build, which pins no images.`,

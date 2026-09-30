@@ -193,7 +193,7 @@ A home whose capture or verify fails gets `failed` with the reason in the manife
 | Reason | Kept |
 |---|---|
 | scheduled | The newest `keep` whose job ended done, plus up to `keep` failed ones newer than the newest good one |
-| pre-update | The newest two: what `./eigen rollback` restores, and the one before |
+| pre-update | The same rule with a `keep` of two, plus the newest good one made by another build than the one running: `.eigen/last-update` names it, which the API cannot read, and an update that failed after its backup leaves a newer one |
 | manual | All of them; the owner deletes them |
 
 A failed night never pushes out the last good archive, and nights that keep failing don't pile up. An archive without a readable sidecar is never deleted, and neither is one a running job still reads. A name the grammar does not read is never touched.

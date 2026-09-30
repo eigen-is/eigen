@@ -27,7 +27,7 @@ import {
     SERVER_DATABASES,
     SERVER_FILES,
 } from '../config/paths';
-import { PIN_KEYS } from '../config/release';
+import { API_IMAGE_KEY, PIN_KEYS } from '../config/release';
 import { getPublicConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
@@ -67,8 +67,6 @@ const UPLOAD_STOPPED = 'Eigen stopped before the upload finished';
 export type ServerBackupOptions = {
     level: BackupLevel;
     reason: BackupReason;
-    // How many good scheduled archives the backups folder keeps once this job has written its own.
-    keep: number;
     startedBy?: string;
     // Wait out a server backup that runs rather than take its 409: the pre-update one does.
     wait?: boolean;
@@ -289,6 +287,18 @@ export async function listServerArchives(): Promise<ServerArchive[]> {
     return archives.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
+// What ./eigen backup follows over the control socket: plain JSON with no dates, since the CLI reads it
+// without Eden's reviver. `bytes` is null until the archive is renamed into place.
+export type ControlBackupJob = Pick<BackupJob, 'id' | 'state' | 'progress' | 'artifact' | 'error' | 'uploadJobId'> & {
+    bytes: number | null;
+};
+
+export function toControlJob({ id, state, progress, artifact, error, uploadJobId }: BackupJob): ControlBackupJob {
+    const archivePath = artifact && path.join(backupsDirPath(), artifact);
+    const bytes = archivePath ? (fs.statSync(archivePath, { throwIfNoEntry: false })?.size ?? null) : null;
+    return { id, state, progress, artifact, error, uploadJobId, bytes };
+}
+
 // The schedule's one question. A failed or refused attempt left its record, so it counts: a night
 // that fails is one alert, not a retry every tick.
 export function hasScheduledAttemptOn(day: Date): boolean {
@@ -316,24 +326,26 @@ export async function deleteServerArchive(name: string): Promise<void> {
     fs.rmSync(recordPath, { force: true });
 }
 
-// Retention over the folder, judged by each sidecar: a scheduled archive counts as good only when its
-// job ended done. An archive and its sidecar go together. One whose sidecar is missing or unreadable
-// is left alone: nothing is deleted on a record nobody can read.
-async function pruneLocalArchives(keep: number): Promise<void> {
+// Retention over the folder, judged by each sidecar: an archive counts as good only when its job ended
+// done. An archive and its sidecar go together. One whose sidecar is missing or unreadable is left
+// alone: nothing is deleted on a record nobody can read.
+async function pruneLocalArchives(): Promise<void> {
     const dir = getBackupsDir();
-    const archives: { name: string; good: boolean }[] = [];
+    const archives: { name: string; good: boolean; build?: string }[] = [];
     const unread: string[] = [];
     for (const name of listServerRecords(dir)) {
         const sidecar = await readServerSidecar(path.join(dir, name)).catch(() => null);
-        if (sidecar) archives.push({ name, good: sidecar.state === 'done' });
-        else unread.push(name);
+        if (sidecar) {
+            archives.push({ name, good: sidecar.state === 'done', build: sidecar.manifest?.images[API_IMAGE_KEY] });
+        } else unread.push(name);
     }
     if (unread.length > 0) {
         console.warn(`[backup] retention skips archives without a readable record: ${unread.join(', ')}`);
     }
     // An archive a job still reads, as an upload does, stays until the next round.
     const busy = new Set(listBackupJobs().flatMap((job) => (job.state === 'running' ? [job.artifact] : [])));
-    for (const name of pruneServerArchives(archives, keep)) {
+    const { keep } = getServerSettings().backups.schedule;
+    for (const name of pruneServerArchives(archives, keep, process.env[API_IMAGE_KEY])) {
         if (busy.has(name)) continue;
         fs.rmSync(path.join(dir, name), { force: true });
         fs.rmSync(serverSidecarPath(path.join(dir, name)), { force: true });
@@ -381,7 +393,7 @@ export async function recoverInterruptedServerBackups(): Promise<void> {
 async function runServerBackup(
     job: BackupJob,
     archivePath: string,
-    options: { level: BackupLevel; reason: BackupReason; at: Date; keep: number },
+    options: { level: BackupLevel; reason: BackupReason; at: Date },
     admit: () => void,
     onProgress: SnapshotProgress,
 ): Promise<string> {
@@ -414,7 +426,7 @@ async function runServerBackup(
         sidecar.finishedAt = new Date();
         await writeServerSidecar(archivePath, sidecar);
         // Retention that throws must not replace the job's own outcome.
-        await pruneLocalArchives(options.keep).catch(console.error);
+        await pruneLocalArchives().catch(console.error);
         // An archive that verified goes even when a home failed: the owner heard of the home, and the rest of the
         // server is worth its copy off the box. A pre-update archive exists for ./eigen rollback on this box.
         const uploads = getServerSettings().backups.upload.enabled && options.reason !== 'pre-update';
@@ -515,7 +527,6 @@ export async function startArchiveUpload(name: string, startedBy: string): Promi
 export async function startServerBackup({
     level,
     reason,
-    keep,
     startedBy,
     wait,
     signal,
@@ -528,13 +539,7 @@ export async function startServerBackup({
         return startBackupJob('server-backup', ownerId, startedBy, (started, onProgress) => {
             started.reason = reason;
             started.artifact = path.basename(archivePath);
-            const run = runServerBackup(
-                started,
-                archivePath,
-                { level, reason, at, keep },
-                admitted.resolve,
-                onProgress,
-            );
+            const run = runServerBackup(started, archivePath, { level, reason, at }, admitted.resolve, onProgress);
             // A promise settles once, so after admission this reject is a no-op.
             run.catch(admitted.reject);
             return run;

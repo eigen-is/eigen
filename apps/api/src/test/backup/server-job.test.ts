@@ -13,6 +13,7 @@ import { readServerSidecar, recoverInterruptedServerBackups, startServerBackup }
 import { verifyArchiveTransport } from '../../lib/backup/verify';
 import { getServerDataPath, SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
+import { updateServerSettings } from '../../lib/config/server-settings';
 import { ApiError } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
@@ -33,9 +34,9 @@ async function waitForJob(id: string): Promise<BackupJob> {
 }
 
 async function runJob(
-    options: { level?: BackupLevel; reason?: BackupReason; keep?: number } = {},
+    options: { level?: BackupLevel; reason?: BackupReason } = {},
 ): Promise<{ job: BackupJob; archivePath: string }> {
-    const started = await startServerBackup({ level: 'full', reason: 'manual', keep: 7, ...options });
+    const started = await startServerBackup({ level: 'full', reason: 'manual', ...options });
     const job = await waitForJob(started.id);
     if (!job.artifact) throw new Error('the server job names no archive');
     return { job, archivePath: join(getBackupsDir(), job.artifact) };
@@ -147,7 +148,7 @@ describe('Server backup job', () => {
                 }),
             );
 
-            const server = await startServerBackup({ level: 'full', reason: 'manual', keep: 7 });
+            const server = await startServerBackup({ level: 'full', reason: 'manual' });
             const archivePath = join(getBackupsDir(), server.artifact!);
             for (
                 let attempt = 0;
@@ -161,7 +162,7 @@ describe('Server backup job', () => {
             expect(perHomeStateAtCapture).toBeUndefined();
             expect((await readServerSidecar(archivePath))?.state).toBe('running');
 
-            const second = await startServerBackup({ level: 'full', reason: 'manual', keep: 7 }).catch((e) => e);
+            const second = await startServerBackup({ level: 'full', reason: 'manual' }).catch((e) => e);
             expect(second).toBeInstanceOf(ApiError);
             expect(second.status).toBe(409);
             expect(second.message).toContain(server.artifact);
@@ -330,7 +331,7 @@ describe('Server backup job', () => {
         spies.push(spyOn(homeRelay, 'pullHomeBackupBytes').mockResolvedValue(2 ** 50));
         const before = new Set(readdirSync(getBackupsDir()));
 
-        const refused = await startServerBackup({ level: 'full', reason: 'manual', keep: 7 }).catch((e) => e);
+        const refused = await startServerBackup({ level: 'full', reason: 'manual' }).catch((e) => e);
         expect(refused).toBeInstanceOf(ApiError);
         expect(refused.status).toBe(507);
 
@@ -391,7 +392,10 @@ describe('Server backup job', () => {
             writeFileSync(unreadable, 'archive');
             writeFileSync(serverSidecarPath(unreadable), '{"state": "half-written');
 
-            const { job, archivePath } = await runJob({ reason: 'scheduled', keep: 2 });
+            await updateServerSettings({ backups: { schedule: { keep: 2 } } });
+            const { job, archivePath } = await runJob({ reason: 'scheduled' }).finally(() =>
+                updateServerSettings({ backups: { schedule: { keep: 7 } } }),
+            );
             expect(job.state).toBe('done');
             expect(existsSync(archivePath)).toBe(true);
             expect(existsSync(scheduled[2])).toBe(true);

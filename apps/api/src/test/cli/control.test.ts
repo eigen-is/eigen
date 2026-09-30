@@ -19,13 +19,13 @@ import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { verifyProtocolAuth } from '../../lib/auth/protocol-auth';
 import { getBackupJob } from '../../lib/backup/jobs';
 import { buildServerArchiveName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
-import { startServerBackup } from '../../lib/backup/server-job';
+import { type ControlBackupJob, startServerBackup } from '../../lib/backup/server-job';
 import { getDataRoot } from '../../lib/config/paths';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import type { ControlStatus } from '../../lib/config/server-status';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
-import { type ControlBackupJob, controlRouter, startControlSocket } from '../../routes/control';
+import { controlRouter, startControlSocket } from '../../routes/control';
 import * as cli from '../cli-test-helpers';
 import { DUMMY_S3 } from '../fault-storage-helpers';
 import { createTestUser, ensureServer, getTestContext, hasSession, signsIn, TEST_DATA_DIR } from '../setup';
@@ -615,7 +615,7 @@ describe('the server backup on the control socket', () => {
             async () => {
                 const held = holdCaptures();
                 try {
-                    const running = await startServerBackup({ level: 'light', reason: 'manual', keep: 7 });
+                    const running = await startServerBackup({ level: 'light', reason: 'manual' });
                     const refused = await runCli(['backup']);
                     expect(refused.code).toBe(1);
                     expect(refused.stderr).toContain(running.artifact!);
@@ -638,7 +638,7 @@ describe('the server backup on the control socket', () => {
             async () => {
                 const held = holdCaptures();
                 try {
-                    await startServerBackup({ level: 'light', reason: 'manual', keep: 7 });
+                    await startServerBackup({ level: 'light', reason: 'manual' });
                     const waiting = runCli(
                         ['backup', '--level', 'light', '--reason', 'pre-update', '--wait'],
                         undefined,
@@ -664,7 +664,7 @@ describe('the server backup on the control socket', () => {
             async () => {
                 const held = holdCaptures();
                 try {
-                    const running = await startServerBackup({ level: 'light', reason: 'manual', keep: 7 });
+                    const running = await startServerBackup({ level: 'light', reason: 'manual' });
                     const caller = new AbortController();
                     const waiting = fetch('http://eigen/backup', {
                         unix: SOCKET,

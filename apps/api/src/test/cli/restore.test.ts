@@ -192,7 +192,7 @@ async function waitForJob(id: string): Promise<BackupJob> {
 }
 
 async function backup(level: BackupLevel): Promise<string> {
-    const started = await startServerBackup({ level, reason: 'manual', keep: 7 });
+    const started = await startServerBackup({ level, reason: 'manual' });
     const job = await waitForJob(started.id);
     expect(job.error).toBeUndefined();
     if (!job.artifact) throw new Error('the server job names no archive');
