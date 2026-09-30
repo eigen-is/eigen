@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_TRASH, STANDARD_MAILBOXES } from '@workspace/lib/constants/mailboxes';
@@ -74,6 +74,12 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
         // either; both are skipped rather than failing the whole listing.
         seedMaildirFolder(userId, 'bad..name');
         seedMaildirFolder(userId, 'ctrl\u0001name');
+    });
+
+    // The data root is the whole suite's, and a backup refuses a path with a control character: left
+    // behind, this home fails every server backup a later file verifies.
+    afterAll(() => {
+        rmSync(boxDir(userId, 'ctrl\u0001name'), { recursive: true, force: true });
     });
 
     test('a folder an IMAP client created is listed at once, and indexed in the background', async () => {

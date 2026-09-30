@@ -10,6 +10,7 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { EMPTY_S3 } from '@workspace/lib/types/mount';
 import { eq } from 'drizzle-orm';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { account as accountSchema, user as userSchema } from '../../../auth-schema';
@@ -20,17 +21,21 @@ import { getBackupJob } from '../../lib/backup/jobs';
 import { buildServerArchiveName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
 import { startServerBackup } from '../../lib/backup/server-job';
 import { getDataRoot } from '../../lib/config/paths';
+import { updateServerSettings } from '../../lib/config/server-settings';
 import type { ControlStatus } from '../../lib/config/server-status';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
 import { type ControlBackupJob, controlRouter, startControlSocket } from '../../routes/control';
 import * as cli from '../cli-test-helpers';
+import { DUMMY_S3 } from '../fault-storage-helpers';
 import { createTestUser, ensureServer, getTestContext, hasSession, signsIn, TEST_DATA_DIR } from '../setup';
 
 const FIXTURE_CERT = join(import.meta.dir, '../fixtures/control/expires-2036.crt');
 // Short: a Unix socket path is capped at 104 bytes on macOS.
 const SOCKET = join(TEST_DATA_DIR, 'c.sock');
 const OLD_PASSWORD = 'old-password-1';
+// Nothing listens there; the secret is one no output may carry.
+const UNREACHABLE = { ...DUMMY_S3, secretAccessKey: 'backup-secret-never-shown' };
 
 function post(path: string, body: unknown): Promise<Response> {
     return controlRouter.handle(
@@ -497,6 +502,7 @@ describe('the server backup on the control socket', () => {
                 scheduleEnabled: false,
                 newest: null,
                 scheduledFailure: null,
+                scheduledNotUploaded: null,
                 newestGoodFullAt: null,
             });
         });
@@ -516,8 +522,26 @@ describe('the server backup on the control socket', () => {
                 scheduleEnabled: false,
                 newest: { name, createdAt: '2026-09-02T02:00:00.000Z', state: 'failed', bytes: null, error: 'no room' },
                 scheduledFailure: { name, createdAt: '2026-09-02T02:00:00.000Z', error: 'no room' },
+                scheduledNotUploaded: null,
                 newestGoodFullAt: '2026-09-01T02:00:00.000Z',
             });
+        });
+
+        test('names the newest scheduled archive that saved but did not reach the bucket', async () => {
+            const at = '2026-09-03T02:00:00.000Z';
+            const upload = { state: 'failed', at, key: 'nightly/x.tar', error: 'bucket refused' };
+            const archivePath = writeRecord('scheduled', 'full', at, { state: 'done', upload });
+            writeFileSync(archivePath, 'archive bytes');
+            const name = archivePath.slice(archivePath.lastIndexOf('/') + 1);
+            const { backup } = await getStatus();
+            expect(backup.scheduledFailure).toBeNull();
+            expect(backup.scheduledNotUploaded).toEqual({ name, createdAt: at, error: 'bucket refused' });
+
+            writeRecord('scheduled', 'full', at, {
+                state: 'done',
+                upload: { ...upload, state: 'done', error: undefined },
+            });
+            expect((await getStatus()).backup.scheduledNotUploaded).toBeNull();
         });
     });
 
@@ -557,6 +581,25 @@ describe('the server backup on the control socket', () => {
             }
             expect(serverRecords()).toEqual([]);
         });
+
+        test(
+            'an archive it saved but could not upload exits 4, still naming the archive',
+            async () => {
+                await updateServerSettings({ backups: { upload: { enabled: true, s3: UNREACHABLE } } });
+                try {
+                    const { stdout, stderr, code } = await runCli(['backup', '--level', 'light']);
+                    expect(code).toBe(4);
+                    expect(stderr).toContain('Not uploaded');
+                    expect(stderr).not.toContain(UNREACHABLE.secretAccessKey);
+                    const archive = stdout.match(/\narchive=(server-manual-light-\d{8}-\d{6}\.tar)\n$/)?.[1];
+                    expect(archive).toBeDefined();
+                    expect(existsSync(join(getBackupsDir(), archive!))).toBe(true);
+                } finally {
+                    await updateServerSettings({ backups: { upload: { enabled: false, s3: EMPTY_S3 } } });
+                }
+            },
+            JOB_TIMEOUT_MS,
+        );
 
         test('with Eigen down it refuses, and says a plain copy is a backup too', async () => {
             const { stderr, code } = await runCli(['backup'], undefined, {

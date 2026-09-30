@@ -71,7 +71,7 @@ describe('status', () => {
 });
 
 describe('the Backup row', () => {
-    const SOCKET = join(TEST_DATA_DIR, 'st.sock');
+    const SOCKET = join(TEST_DATA_DIR, 'status.sock');
     const HOUR_MS = 60 * 60 * 1000;
     const hoursAgo = (hours: number) => new Date(Date.now() - hours * HOUR_MS);
     const archive = (reason: BackupReason, at: Date) => ({
@@ -122,6 +122,7 @@ describe('the Backup row', () => {
             scheduleEnabled: true,
             newest: { ...newest, state: 'done', bytes: 1024 * 1024, error: null },
             scheduledFailure: null,
+            scheduledNotUploaded: null,
             newestGoodFullAt: hoursAgo(3).toISOString(),
         });
         expect(row).toBe(`◇  Backup       ${newest.name}, 3h ago, 1.0 MB`);
@@ -133,9 +134,22 @@ describe('the Backup row', () => {
             scheduleEnabled: true,
             newest: { ...archive('manual', hoursAgo(1)), state: 'done', bytes: 1024, error: null },
             scheduledFailure: { ...failed, error: 'no room' },
+            scheduledNotUploaded: null,
             newestGoodFullAt: hoursAgo(1).toISOString(),
         });
         expect(row).toBe(`■  Backup       ${failed.name} failed, 5h ago: no room`);
+    });
+
+    test('is yellow while the newest scheduled archive saved but did not reach the bucket', async () => {
+        const missed = archive('scheduled', hoursAgo(5));
+        const row = await backupRow({
+            scheduleEnabled: true,
+            newest: { ...missed, state: 'done', bytes: 1024, error: null },
+            scheduledFailure: null,
+            scheduledNotUploaded: { ...missed, error: 'bucket refused' },
+            newestGoodFullAt: hoursAgo(5).toISOString(),
+        });
+        expect(row).toBe(`▲  Backup         ${missed.name} not uploaded, 5h ago: bucket refused`);
     });
 
     test('is yellow while the schedule is on and no Full verified in two days', async () => {
@@ -143,6 +157,7 @@ describe('the Backup row', () => {
         const facts = {
             newest: { ...newest, state: 'done' as const, bytes: 1024, error: null },
             scheduledFailure: null,
+            scheduledNotUploaded: null,
             newestGoodFullAt: hoursAgo(49).toISOString(),
         };
         expect(await backupRow({ scheduleEnabled: true, ...facts })).toBe(
@@ -159,6 +174,7 @@ describe('the Backup row', () => {
             scheduleEnabled: false,
             newest: { ...newest, state: 'running', bytes: null, error: null },
             scheduledFailure: null,
+            scheduledNotUploaded: null,
             newestGoodFullAt: null,
         });
         expect(running).toBe(`◇  Backup       ${name}, just now, running`);
@@ -166,6 +182,7 @@ describe('the Backup row', () => {
             scheduleEnabled: false,
             newest: { ...newest, state: 'failed', bytes: null, error: 'no room' },
             scheduledFailure: null,
+            scheduledNotUploaded: null,
             newestGoodFullAt: null,
         });
         expect(failed).toBe(`▲  Backup       ${name}, just now, failed: no room`);
@@ -173,6 +190,7 @@ describe('the Backup row', () => {
             scheduleEnabled: false,
             newest: null,
             scheduledFailure: null,
+            scheduledNotUploaded: null,
             newestGoodFullAt: null,
         });
         expect(none).toBe('▲  Backup       none yet; ./eigen backup makes one');

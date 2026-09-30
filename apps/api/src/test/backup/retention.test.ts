@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { BackupReason } from '@workspace/lib/types/backup';
 import { buildServerArchiveName } from '../../lib/backup/paths';
-import { pruneServerArchives } from '../../lib/backup/retention';
+import { pruneBucketArchives, pruneServerArchives } from '../../lib/backup/retention';
 
 // One archive a night at 02:00 UTC, `night` days after 1 September.
 function archive(reason: BackupReason, night: number, good = true): { name: string; good: boolean } {
@@ -65,5 +65,14 @@ describe('Server archive retention', () => {
         expect(pruneServerArchives([stray, archive('scheduled', 1), archive('scheduled', 2)], 1)).toEqual([
             archive('scheduled', 1).name,
         ]);
+    });
+
+    test('the bucket counts a partial archive toward keep, but keeps the newest complete one past it', () => {
+        const nights = [1, 2, 3, 4, 5].map((night) => archive('scheduled', night).name);
+        const partial = new Set([nights[3], nights[4]]);
+        expect(pruneBucketArchives(nights, partial, 2).sort()).toEqual([nights[0], nights[1]].sort());
+        expect(pruneBucketArchives(nights, new Set(nights), 2).sort()).toEqual(nights.slice(0, 3).sort());
+        const others = [archive('manual', 0).name, archive('pre-update', 0).name, 'notes.txt'];
+        expect(pruneBucketArchives([...others, ...nights], new Set(), 1).sort()).toEqual(nights.slice(0, 4).sort());
     });
 });

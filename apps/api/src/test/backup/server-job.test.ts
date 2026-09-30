@@ -301,6 +301,30 @@ describe('Server backup job', () => {
         for (const archivePath of [...interrupted, done]) rmSync(serverSidecarPath(archivePath), { force: true });
     });
 
+    test('marks an upload a restart left running as failed at boot, and alerts the owner once', async () => {
+        const relay = quietRelay();
+        const archivePath = join(
+            getBackupsDir(),
+            buildServerArchiveName('scheduled', 'full', new Date(Date.UTC(2019, 0, 4, 2))),
+        );
+        const upload = { state: 'running', at: new Date(), key: 'nightly/x.tar' };
+        writeFileSync(serverSidecarPath(archivePath), JSON.stringify({ state: 'done', startedAt: new Date(), upload }));
+
+        await recoverInterruptedServerBackups();
+        const sidecar = await readServerSidecar(archivePath);
+        expect(sidecar?.state).toBe('done');
+        expect(sidecar?.upload).toMatchObject({
+            state: 'failed',
+            key: 'nightly/x.tar',
+            error: 'interrupted by a restart',
+        });
+
+        await recoverInterruptedServerBackups();
+        await Bun.sleep(50);
+        expect(alertsTo(relay, ctx.alice.user.id)).toHaveLength(1);
+        rmSync(serverSidecarPath(archivePath), { force: true });
+    });
+
     test('refuses with 507 when the backups disk has no room, writes no archive and leaves a failed record', async () => {
         const relay = quietRelay();
         spies.push(spyOn(homeRelay, 'pullHomeBackupBytes').mockResolvedValue(2 ** 50));

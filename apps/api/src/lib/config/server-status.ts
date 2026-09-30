@@ -1,7 +1,8 @@
 import { X509Certificate } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ServerArchiveSidecar } from '@workspace/lib/types/backup';
+import type { ServerArchive, ServerArchiveSidecar } from '@workspace/lib/types/backup';
+import { listBackupJobs } from '../backup/jobs';
 import { listServerArchives } from '../backup/server-job';
 import { getRelayHost, isBundledCaddy, isMailEnabled } from './env';
 import { getDataRoot } from './paths';
@@ -34,9 +35,19 @@ export type ControlStatus = {
         } | null;
         // The newest scheduled attempt, when it failed.
         scheduledFailure: { name: string; createdAt: string; error: string | null } | null;
+        // The newest scheduled attempt, when its archive is here but not in the bucket: its last upload failed, or
+        // it verified while uploads are on and no upload was tried or runs, as when a restart cut in between.
+        scheduledNotUploaded: { name: string; createdAt: string; error: string | null } | null;
         newestGoodFullAt: string | null;
     };
 };
+
+function isNotUploaded({ name, record }: ServerArchive): boolean {
+    if (record?.upload?.state === 'failed') return true;
+    if (record?.upload || record?.verify?.status !== 'verified') return false;
+    if (!getServerSettings().backups.upload.enabled) return false;
+    return !listBackupJobs().some((job) => job.state === 'running' && job.artifact === name);
+}
 
 async function getBackupStatus(): Promise<ControlStatus['backup']> {
     const archives = await listServerArchives();
@@ -60,6 +71,14 @@ async function getBackupStatus(): Promise<ControlStatus['backup']> {
                       name: scheduled.name,
                       createdAt: scheduled.createdAt.toISOString(),
                       error: scheduled.record.error ?? null,
+                  }
+                : null,
+        scheduledNotUploaded:
+            scheduled && isNotUploaded(scheduled)
+                ? {
+                      name: scheduled.name,
+                      createdAt: scheduled.createdAt.toISOString(),
+                      error: scheduled.record?.upload?.error ?? null,
                   }
                 : null,
         newestGoodFullAt: goodFull?.createdAt.toISOString() ?? null,

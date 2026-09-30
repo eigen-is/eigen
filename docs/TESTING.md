@@ -57,6 +57,8 @@ Two pins are the app's own and outlive a file on any Bun: each Home's idle timeo
 
 A plain local run stays sequential in one process. The per-file server boot (about 1 s) is the price of `--isolate`, and on a laptop with few spare cores it eats the parallel gain, because many files spawn their own transform and thumbnail Worker threads on top of the test worker. CI runs `--parallel=4`, the runner's core count, for the isolation, not the speed. One sequential process holds every Home of the run and stalls on what ran before, and bun's file order differs per run on Linux.
 
+That one process also shares one data root, so a file that passes alone can fail a later one locally while CI stays green. Leave behind nothing a later file reads: server settings, archives in the backups folder, a socket file at a fixed path, a home no backup can verify (a corrupted document, a control character in a path) or a stray home with an s3 mount. A server backup test verifies every home in the data root and lists every archive, so it is the usual victim.
+
 ## Slow end-to-end suites run on CI only
 
 A suite that takes tens of seconds skips unless `CI` (set by GitHub Actions) or `EIGEN_SLOW_TESTS=1` is set. The demo seeder contract test, `server/seed-demo.test.ts`, spawns the whole seeder in about 30 s. Run it with `EIGEN_SLOW_TESTS=1 bun run test:api` after you touch `apps/api/src/scripts/demo/` or a reader it decodes with.

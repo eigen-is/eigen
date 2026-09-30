@@ -1,4 +1,5 @@
 export { validateACLEntries } from './acl';
+export type { BackupMountSettings } from './backup';
 export {
     BACKUP_ARTIFACT_EXTENSION,
     BACKUP_FORMAT_VERSION,

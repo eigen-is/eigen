@@ -6,6 +6,7 @@ import type {
     BackupVerifyRecord,
     ServerArchiveManifest,
     ServerArchiveSidecar,
+    ServerArchiveUpload,
 } from '../types/backup';
 import type { MountConfig, S3Config } from '../types/mount';
 import { parseOwnerId } from '../types/owner';
@@ -369,7 +370,27 @@ export function parseServerArchiveSidecar(text: string): ServerArchiveSidecar | 
         if (!verify) return null;
         sidecar.verify = verify;
     }
+    if ('upload' in value) {
+        const upload = parseUploadRecord(value.upload);
+        if (!upload) return null;
+        sidecar.upload = upload;
+    }
     return sidecar;
+}
+
+const UPLOAD_STATES: readonly ServerArchiveUpload['state'][] = ['running', 'done', 'failed'];
+
+function parseUploadRecord(value: unknown): ServerArchiveUpload | null {
+    if (typeof value !== 'object' || value === null) return null;
+    const state = 'state' in value ? UPLOAD_STATES.find((candidate) => candidate === value.state) : undefined;
+    const at = 'at' in value ? reviveDate(value.at) : undefined;
+    if (!state || !at || !('key' in value) || typeof value.key !== 'string') return null;
+    const upload: ServerArchiveUpload = { state, at, key: value.key };
+    if ('error' in value) {
+        if (typeof value.error !== 'string') return null;
+        upload.error = value.error;
+    }
+    return upload;
 }
 
 // `auth.json`: one array of rows per users3.db table. The columns are better-auth's and change with
