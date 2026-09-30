@@ -32,7 +32,7 @@ What, then why, then where. One idea per section.
 - Every section carries a why. A section with no reason in it is a catalogue. Cut it or point at the directory.
 - Tables hold parallel facts (values and their effect, a crash point and its repair). Bullets for short lists. Prose for reasons. A code block only for a type or route shape that is the contract, ten lines at most.
 - Name a symbol when the reader will grep for it. Otherwise use plain words. Point at a directory, not at every file in it.
-- A term the code doesn't use is defined in the sentence that introduces it, or replaced.
+- A term the code doesn't use is defined in the sentence that introduces it, or replaced. A term another doc defines is linked at first use.
 
 ## Length follows the domain
 
@@ -53,7 +53,8 @@ A doc is as long as its domain needs. It gets shorter only by cutting narration,
 | An edge case | The test that pins it. The doc names the test file if the case matters |
 | A reason that only matters at one line of code | One terse comment there, if a maintainer could not derive it |
 | History: "used to", "previously", "no longer", dates, incidents | Nowhere. Git keeps it |
-| A measurement | The doc, once, when a decision rests on it ("a 48 MB snapshot is 1 MB at zstd" is why the codec exists). Otherwise nowhere |
+| A measurement | The doc, once, when a decision rests on it ("a 48 MB snapshot is 1 MB at zstd" is why the codec exists). An example's numbers come from the test that pins it, never invented. Otherwise nowhere |
+| A stored format with live user data (stickies) | The doc, as a contract: every root, field and default the reader tolerates |
 | Open work and known bugs | `docs/ROADMAP.md` |
 | What a user sees and clicks | The help center, via the support-article skill |
 | Another domain's mechanics | That domain's doc, linked |
@@ -61,9 +62,9 @@ A doc is as long as its domain needs. It gets shorter only by cutting narration,
 ## Rewriting or merging a doc
 
 1. **List the claims first.** Walk the old doc (every doc, when merging) and write down every design decision, invariant and gotcha, one line each. This list is what you must not lose.
-2. **Check each claim against the code.** Find the line that makes it true. A claim with only, every, never or instead is checked against the code path that makes the quantifier true, not just the happy path. A claim you can't confirm in a few greps stays out, or goes in your report as unverified. A wrong doc is worse than a short one.
+2. **Check each claim against the code.** Find the line that makes it true. A claim with only, every, never or instead is checked against the code path that makes the quantifier true, not just the happy path. A what you can't confirm in a few greps stays out, or goes in your report as unverified. A why stays unless the code contradicts it. A wrong doc is worse than a short one.
 3. **Write the TLDR**, then one section per claim that needs one. Merge claims that share a reason.
-4. **Give every claim a home** from the table above, and verify the home of every reason. A reason survives even when its "what" goes. For every why you drop from the doc, grep the code for the reason (not the symbol). If it is absent, add a one-line comment in the same commit. The report lists each dropped why with its home as `file:line`, doc §, or test name.
+4. **Give every claim a home** from the table above, and verify the home of every reason. A reason survives even when its "what" goes. For every why you drop from the doc, grep the code for the reason (not the symbol). If it is absent, add a one-line comment in the same commit. Your report to the caller, not only the commit message, lists each dropped why with its home as `file:line`, doc §, or test name.
 5. **Check.** Run the checklist.
 
 Editing one section follows the same steps, and the TLDR changes only when one of its claims does. A doc that receives moved material runs the whole checklist too. Renaming a heading breaks its anchor and its prose citations: grep `docs/`, `AGENTS.md` and `.claude/` for `NAME.md#old-anchor`, and `apps/ packages/ docker/ scripts/` for `NAME.md § Old heading`, skipping `.claude/worktrees/` and `docs/superpowers/`, and fix every hit.
@@ -81,7 +82,7 @@ grep -oE '\]\(([A-Za-z0-9_./-]*\.md)?#[^)]+\)' AGENTS.md docs/*.md .claude/skill
 done
 ```
 
-- The TLDR is one short paragraph and makes sense alone.
+- The TLDR is one short paragraph and makes sense alone. Every claim in it has a section that carries it.
 - Every heading states a fact. Every section has a why.
 - Present tense. Short sentences in simple English. No em-dashes, no "Note that", "robust", "seamlessly".
 - No hard line breaks inside a paragraph.
@@ -93,5 +94,6 @@ done
 - Splitting a doc, or starting a new one for a feature, instead of cutting narration.
 - Compressing the catalogue instead of cutting it. Six files in six clauses is still a file tour.
 - Cutting the why and keeping the what. The what is in the code. The why is not.
+- Compressing a gotcha until it no longer says what breaks.
 - Keeping claims from the old doc unchecked because they were already there. An inherited only or every is the likeliest to be wrong.
 - Bold lead-ins on every bullet. Bold one key rule per section at most.
