@@ -17,7 +17,7 @@ import { avatarNameOf, CARD_MAX_BYTES, cardBytes, PURGED_CARD, prepareCard, sani
 import type { Contacts } from './contacts';
 import * as schema from './schema';
 
-// The CardDAV store seam over the Contacts facade. See docs/CONTACTS.md § CardDAV surface.
+// The CardDAV store seam over the Contacts facade. See docs/CARDDAV.md § A PUT parses before the lock and decides inside it.
 
 // The size lets a REPORT weigh a row against its byte budget before reading the bytes at all; the id is what
 // an announcement names.

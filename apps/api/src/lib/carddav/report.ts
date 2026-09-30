@@ -86,7 +86,7 @@ async function handleQuery(
     // RFC 6352 § 8.6 requires a CARDDAV:filter in the report; a body without one is malformed.
     if (!report.filter) return new Response('Bad Request: addressbook-query requires a filter', { status: 400 });
 
-    // Matching stops at the cap, so the assembly is bounded too, not just the response (docs/CONTACTS.md § CardDAV surface).
+    // Matching stops at the cap, so the assembly is bounded too, not just the response (docs/CARDDAV.md § REPORTs answer from the database, within bounds).
     const cap = Math.min(report.limit ?? QUERY_RESULT_CAP, QUERY_RESULT_CAP);
     const matched: { row: CardRow; served: { bytes: Uint8Array; etag: string } }[] = [];
     for (const card of await contacts.listCards()) {

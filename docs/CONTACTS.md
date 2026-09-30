@@ -1,232 +1,80 @@
-# Contacts & CardDAV
+# Contacts
 
-> **TLDR**: A contact **is** its vCard bytes, and those bytes live in `contacts.db` — the `vcard` BLOB of its `contacts` row, written in the same transaction as the columns that index it. The blob is the truth; every other column is a projection of it and rebuilds from it. That makes round-trips lossless by construction: a CardDAV GET returns the exact bytes the client PUT, unknown properties and all, and the ETag is the hash of those very bytes. The `apps/api/src/lib/carddav/` layer serves RFC 6352 at `/dav/addressbooks/:ownerId/…`, a near-clone of the CalDAV layer minus recurrence and timezones, with the same Basic-auth app-password story. One address book per user named "Contacts", vCard 3.0 in the row and on the wire, your own book only — nothing about it is shareable. The domain lives in `apps/api/src/lib/contacts/`; the REST surface carries a required conditional-write `etag` (a body field on update, a `?etag=` param on delete), and the app UI has a contact menu, a field-array edit form and an Integrations card.
+> **TLDR:** Contacts is one personal address book per user. The domain is `apps/api/src/lib/contacts/`, the vCard format is `apps/api/src/lib/vcard/`. A contact is its vCard bytes, stored as a BLOB in its `contacts.db` row, and every other column rebuilds from them. Label membership lives in each card's `CATEGORIES`, so a rename rewrites every member card. Every write, from the web app, a device or an import, goes through one function under one lock. The protocol side is [CARDDAV.md](CARDDAV.md).
 
-## Storage model
+## A contact is its vCard bytes
 
-```
-eigen.contacts/
-  contacts.db                   ← the book itself: one vCard per row as a BLOB, plus the sync and label metadata
-  avatars/<id>-<hash8>.webp     ← the photo rendition the web UI serves + staged uploads
-```
+The `vcard` column of a `contacts` row holds the card exactly as it was stored. The names, the `uid`, the `data` JSON, the `etag` and the label junction are a projection of those bytes, written in the same transaction. So a CardDAV GET returns the bytes a client PUT, unknown properties and all, and body and ETag can never disagree. `rebuildProjection` (`contacts.ts`) proves the claim: it rebuilds every projected column from the blobs, and `contacts/contacts-store.test.ts` pins it.
 
-**The `vcard` column is the truth**, and every other column of the `contacts` table is a projection of those bytes. `rebuildProjection` (`contacts.ts`) is the proof and the tool: it parses each row's blob and rewrites the names, the `uid`, the `data` JSON, the `etag` and the label junction from it in one transaction, carrying over only `data.avatar` (the rendition is derived asynchronously, outside a transaction), leaving the `vcard` column itself alone — rewriting it would be a value-identical write of every card — and leaving alone the half no blob carries: the self-link, the ctags, the tombstones, and each label's id and color. Its caller today is the test that pins the contract (`rebuildProjection` in `test/contacts/contacts-store.test.ts`); the next projected column is added by altering the table and calling it.
+Some facts no card carries, so they live only in the database: label ids and colors, the server-owned `eigenId` self-link, the one-row `book` (the `ctag`, the `syncGen` and the `ownerSeeded` latch) and the delete tombstones. The schema is `schema.ts`.
 
-| | Lives in | Rebuilds from the bytes |
-|---|---|---|
-| A contact's names, fields, photo and `CATEGORIES` | the row's `vcard` blob | it *is* the truth — the bytes a CardDAV GET serves back |
-| `firstName`/`lastName`, `uid`, `isGroup`, the `data` projection, the content-hash `etag`, label membership | the other `contacts` columns + `contacts_to_labels` | yes, by `rebuildProjection` |
-| Label ids and colors, the `book` row (`ctag`, `syncGen`, `ownerSeeded`), `contact_tombstones`, the server-owned `eigenId` | `contacts.db` | no — database-only |
-| The photo rendition the web UI serves | `avatars/` | no — a second source of truth (see Photos) |
+The database runs `synchronous: 'FULL'` ([DATABASE.md § Pragmas](DATABASE.md#pragmas)), because the cards themselves live in these rows. An acknowledged PUT must survive a power loss, and a book writes little enough that it costs nothing.
 
-`CONTACTS_DB_CONFIG` (`db-config.ts`) is at `currentVersion: 5`; v5 drops every v4 table and creates the shape below, and the emptied book reseeds through the normal fresh-account path (yourself, plus the org owner if `onboarding.autoAddOwnerContact`). See the reset-on-deploy note at the end: existing contact data is **dropped, not migrated** (a decided trade — eigen.is books are seed-scale, and zero export code beats carrying a legacy path forever). The config also sets `synchronous: 'FULL'` ([DATABASE.md § Pragmas](DATABASE.md#pragmas)): the cards themselves live in these rows, so an acknowledged CardDAV PUT must survive a power loss, and a book's write volume makes that free.
+A book is personal. `resolveContacts` (`get-contacts.ts`) requires the caller to be the owner, so no team holds a book and none is shared. There are no file watchers either: unlike mail, nothing outside the API writes the book ([MAIL.md](MAIL.md)).
 
-### Schema (`schema.ts`)
+## Every card write goes through one function, under one lock
 
-| Table | Role |
-|---|---|
-| `contacts` | The book: `id` (random app PK — REST identity + avatar-cache key), `uri` (the client-chosen resource name, **unique as written**), `uid` (vCard UID, unique per book, immutable), **`vcard`** (the stored bytes — the truth), `firstName`/`lastName`, `eigenId` (server-owned self-link), `isGroup`, `data` JSON projection (**avatar URL only, never photo bytes**), `etag` (SHA-256 of the blob), `cardCtag` (book ctag at this card's last change — the sync-delta key, **NOT NULL**) |
-| `book` | One row: `ctag` (bumps on any card change), `syncGen` (the generation a recreated book comes back under), `ownerSeeded` (one-shot latch so a deleted owner contact never resurrects) |
-| `contact_tombstones` | `{uri, deletedAtCtag}` — the sync-collection 404 rows. Keyed by `uri` (PK), so a re-created card clears its own tombstone and no href is ever both a 200 and a 404 in one response |
-| `labels` | Label *definitions*: `id`, `name`, `nameKey` (normalized, unique), `color` |
-| `contacts_to_labels` | Junction, **projected** — rebuilt from each card's `CATEGORIES` at every write |
+bun:sqlite makes a transaction atomic by itself. `writeLock` exists for the async gaps between a check and its commit: the quota lookup and the avatar derivation. A racing `If-Match` PUT must lose inside the lock, not after it. Reads take no lock.
 
-A uri is unique **as written**: the only fold is NFC (`normalizeResourceUri`, `lib/core/blob-store.ts`), because macOS clients send the same name in NFD form in a URL and one resource must not answer under two spellings. Case is not folded — nothing in CardDAV asks for it, so `contact.vcf` and `Contact.vcf` are two cards.
+`writeCard` (`contacts.ts`) owns the order. First the card ceiling and the storage quota judge the bytes, then the avatar rendition is derived, then one transaction commits. A 413 or a 507 therefore leaves neither a row nor a webp behind. The commit bumps the book `ctag`, upserts the row, rebuilds the label junction and clears any tombstone for that name. `purgeCard` is the reverse: one transaction deletes the row and writes the tombstone, then the card's own avatar is unlinked.
 
-## The Contacts class — write path
+The byte delta is read inside the transaction and applied to the counter after it. A rollback would otherwise leave the delta applied.
 
-`apps/api/src/lib/contacts/contacts.ts` (`class Contacts`) holds what must be one per Home — the database handle, the write lock, the byte counters and the broadcast batch — plus the REST contact CRUD and the self card. The siblings are plain functions over it: `dav-store.ts` (the CardDAV store seam), `card-store.ts` (what a card means as columns), `mappers.ts` (the row ↔ DTO pair), `labels.ts`, `avatars.ts` and `transfer.ts`.
+## An event goes out after the lock is released
 
-**One lock, and one line for why it exists.** bun:sqlite is synchronous, so a transaction is already atomic and serial; `writeLock` (a `Semaphore(1)`, the shape `MaildirStore.storeLock` and the calendar both have) is there for the async gaps a write path holds between a check and its commit — the quota lookup, the avatar derivation — so a racing `If-Match` PUT loses *inside* the lock rather than after it. Reads take no lock and there is nothing to drain.
+The store emits nothing. The facade announces each write once `writeLock.run` returns, naming the row id the store result carries. Reading the id back after the lock could race a delete and lose the event. The calendar announces from the same place.
 
-**One write function, and it owns the order.** Every card path — a REST create or update, a CardDAV PUT, an imported card — goes through `writeCard`: both ceilings judge the bytes first (`CARD_MAX_BYTES`, then `enforceHomeDataQuota` when the Home is metered), then the caller's `cache` callback derives the avatar rendition, then the commit stores them. A 413 or a 507 therefore leaves neither a row nor a webp behind. `prepareCard` (`card-store.ts`) is the pure half — bytes and their parse in, the projection they decide out — and `commitCard` the single index-write seam: one transaction carrying the book `ctag` bump, the upsert of the row with its blob, the label junction rebuild (`syncCardLabels`) and the tombstone clear by `uri`. The byte delta is read *inside* that transaction and applied to `cardsBytes` after it returns, because a rollback would otherwise leave the delta applied — the counter rule both DAV domains follow.
+A whole-file import runs inside `withBatchedEvents`, which holds the per-card events and closes on one `contacts:changed`. That event carries no ids, because every contact event invalidates the owner's whole list anyway. It fires from a `finally`, so the cards committed before a failure still reach open tabs. A device sync is one request per card, so nothing server-side spans it. There the client collapses the burst: `handleContactsSSEvent` (`packages/lib/src/core/contacts/sse-handlers.ts`) debounces the list invalidation by 250 ms per owner.
 
-`purgeCard` is the same shape in reverse: one transaction bumps the ctag, deletes the row and writes the tombstone; then the counter drops and the card's own hash-named avatar is unlinked, a cleanup failure being logged rather than raised over a delete that already committed. There is no second store to fall out of step with the first, so a throw anywhere in a write leaves the previous bytes readable through `getCard` and the index exactly as it was.
+## Label membership lives in the card's CATEGORIES
 
-**Init** mints the `book` row when it is missing, with a clock-seeded `syncGen` (`newSyncGen()`, `lib/core/blob-store.ts`: the wall clock in seconds) so a recreated book never reissues a generation a client has seen and every token minted against the old one is refused. It then seeds `cardsBytes` from `SUM(length(vcard))` and `avatarsBytes` from the avatars directory, seeds the default labels, adds your own card and — once, behind the `ownerSeeded` latch — the org owner's. Metering (`meteredIngest`) is switched on at the very end: the quota lookup goes through `getHome`, which during init would await the very init doing the write.
+If the junction were the truth, it and the blob would hold one fact twice, and every DAV rewrite could drift. So the `labels` table holds only definitions: id, name and color, since a color has no vCard home. Each write parses every `CATEGORIES` line of the card, because external clients split them, and rebuilds the junction from them.
 
-**A broadcast waits for the lock to be released.** The store module emits nothing, and neither does `purgeCard`: every mutation is announced by the facade once its `writeLock.run` returns — `putCard`, `deleteCard` and `deleteContact` alike — naming the row the write landed on, which the store result carries (`id` on `PutResourceResult` / `DeleteResourceResult`) so nothing has to read it back and race a delete. `Calendar.putResource` and `Calendar.deleteResource` announce in the same place, for the same reason. `announce(type, contactId)` holds the batch check, so a whole-file import's per-card events are held back and closed by one list-level event.
+A category with no matching label mints one, keyed on the normalized name (NFC, trimmed, lowercase) with a color hashed from that key. A DAV write can therefore emit `contacts:label-created`. REST label writes enforce the same unique key and answer a duplicate with 409.
 
-**There are no fs-watchers and nothing to reconcile.** Contacts have no out-of-process writer — unlike mail, where Dovecot moves `new/` → `cur/` behind the API's back ([MAIL.md](MAIL.md)) — and a card and the columns that index it are one row, written in one transaction.
-
-
-## CardDAV surface
-
-`apps/api/src/lib/carddav/` mirrors `caldav/` file-for-file, mounted in `app.ts` next to `caldavRouter`. Every route is `authenticateBasic` (app password → primary-password fallback, shared `protocol-auth.ts`), and the owner check rides on `resolveContacts`, which every handler calls first — before the body is read and before anything is parsed, the way the CalDAV twin calls `requireSelf` first. The one handler that answers without a book — the `MKCOL`/`MKADDRESSBOOK` refusal — calls `requireSelf` itself, which is the whole of its use here.
-
-```
-PROPFIND /dav/addressbooks/:ownerId              addressbook home collection
-PROPFIND /dav/addressbooks/:ownerId/*            home / the one book / a single card (Depth 0|1)
-GET      /dav/addressbooks/:ownerId/contacts/:uri  stored bytes verbatim (text/vcard), quoted content-hash ETag
-PUT      /dav/addressbooks/:ownerId/contacts/:uri  create/replace — transcode, preconditions, UID, quota
-DELETE   /dav/addressbooks/:ownerId/contacts/:uri  404 unknown · 403 own card · 412 stale If-Match
-REPORT   /dav/addressbooks/:ownerId/contacts/     addressbook-multiget · addressbook-query · sync-collection
-MKCOL / MKADDRESSBOOK                             → 403 (one fixed book, spec Non-goals)
-```
-
-**One book, `contacts`.** The URL segment is `contacts`, the displayname "Contacts"; any other book name is a 404, and there is no `MKADDRESSBOOK`. The wildcard decodes to at most two segments (book + optional card name); a third segment or a malformed percent-escape is a 400.
-
-**PROPFIND honors the requested prop list** via the shared core in `lib/dav/propfind.ts` (the CalDAV twin uses the same): requested props we have come back in the 200 propstat, unknown ones in a 404 propstat echoing their namespace (omitted under `Brief: t` / `Prefer: return=minimal`), a bodyless PROPFIND stays allprop, and card member rows carry an empty `resourcetype`.
-
-**Discovery** is edge + principal chain. `/.well-known/carddav` redirects to `/dav/` at the Caddy edge (the CalDAV twin — no API route). From there: `PROPFIND /dav/` → `current-user-principal` → `/dav/principals/:userId/` whose `principalProps` carry **both** `calendar-home-set` *and* `CARD:addressbook-home-set` → `/dav/addressbooks/:userId/`. One principal serves both protocols; a client reads only the props it knows. The book collection advertises: `CARD:addressbook` resourcetype, displayname "Contacts", `getctag`, `sync-token`, `supported-address-data` (vCard 3.0), `max-resource-size` (5 MiB), and a `supported-report-set` listing exactly the three REPORTs that exist. **OPTIONS + realm live in `app.ts`, not the cloned dir**: one combined header for the whole `/dav` tree, `DAV: 1, 2, 3, calendar-access, addressbook` (clients check for the `addressbook` token before trusting the account), and the 401 realm is the protocol-neutral `Basic realm="Eigen DAV"`.
-
-**vCard 3.0, with a 4.0→3.0 transcode at PUT.** The book is 3.0 in the row and on the wire (what iOS and DAVx⁵ speak, and every client accepts). Thunderbird 102+ PUTs `VERSION:4.0` regardless, and 4.0 bytes served verbatim lose the photo on iOS, so `transcodeTo30` rewrites a 4.0 card before storage: `VERSION`, `PHOTO` `data:`-URI → `ENCODING=b`, `tel:`-scheme `TEL` unwrapped, ISO-basic `BDAY` → extended form, numeric `PREF` → `TYPE=PREF`; every construct with no 3.0 equivalent rides through verbatim. A transcoded body is not the one the client sent, so the response carries **no ETag** (RFC 4918 § 9.7.2) and the 4.0 client re-converges on its next fetch — the same answer a PUT gets when the self-link merge restores `X-EIGEN-ID`. The **verbatim-bytes contract holds exactly for 3.0 clients** and semantically for 4.0 ones.
-
-**ETag = content hash.** The resource *is* the bytes, so the etag is the SHA-256 hex of the stored blob — the shared `computeResourceEtag` (`lib/core/blob-store.ts`) the calendar store hashes its `.ics` bytes with. It is computed once at the write and stored in the row beside the bytes it hashed, so body and validator are one row by construction and a GET hashes nothing.
-
-**Preconditions inside the lock, the parse before it.** The body ceiling, the 4.0→3.0 transcode, the parse and the UID-required rule say nothing about stored state, so `putCard` runs them before it takes the lock and a 5 MiB parse waits for no other writer — the CalDAV twin's order. `If-Match`/`If-None-Match` are **not** checked handler-side: `putCard`/`deleteCard` evaluate them *inside* the write lock, against the state the write overwrites, so two racing `If-Match` PUTs serialize and the loser gets a typed precondition result → 412. `putResource` in the calendar store does the same, in the same place, for the same reason. UID is required and immutable: a UID another resource already owns → 409 `CARDDAV:no-uid-conflict` carrying that resource's `DAV:href`, and a PUT that changes an existing resource's own UID → the bare 409 element (never a raw constraint 500). Oversize → 413 `CARDDAV:max-resource-size` (`CARD_MAX_BYTES` = 5 MiB). The client-chosen name is the row's own identity, so `sanitizeCardUri` runs before any store call: NFC-normalized, then `isSafePathSegment` (`lib/core/path-utils.ts`, the one rule every client-chosen segment takes — mail draft ids and calendar ids included) plus the `.vcf` suffix. The predicate takes Unicode letters, marks and numbers, so an accented name is a name a client may choose, and refuses a slash, a backslash, a leading dot, a space, a control character and every other punctuation, under a 200-**byte** budget so `writeAtomic`'s `.`-prefixed temp name stays under NAME_MAX for an accented name too. The NFC fold runs before the check, so one spelling is stored and a decomposed request finds that same row. Anything else → 400.
-
-### The three REPORTs
-
-- **`addressbook-multiget`** — hrefs → etag + `CARD:address-data` per card. Hrefs are **percent-decoded** before matching and **percent-encoded** on every emission (the WebDAV convention the CalDAV template skips, safe there only because its uris are server-generated). Capped at 500 hrefs and **deduped per resource** so a repeated href can't amplify the response.
-- **`addressbook-query`** — real **match-only** server-side filtering (RFC 6352 § 8.6: clients treat every returned card as a match). The engine (`query-filter.ts`) evaluates `prop-filter` / `param-filter` / `is-not-defined` / `text-match` (with negation and equals/contains/starts-with/ends-with) under `anyof` / `allof`, in-memory over every parsed card (group cards included — DAV sees the whole book). Exactly the two RFC-required collations are supported (`i;ascii-casemap`, `i;unicode-casemap`); an unsupported collation → 403 `CARDDAV:supported-collation`, an unmappable filter → 403 `CARDDAV:supported-filter`, never a superset. Results honor the client `limit` then a server cap of 1000 (truncate + log, never unbounded assembly).
-- **`sync-collection`** (RFC 6578) — generation-stamped tokens `urn:eigen:sync:<syncGen>-<ctag>`, emitted and parsed in `lib/dav/sync-token.ts`, one grammar for both protocols: a calendar carries a `syncGen` of its own and the CalDAV twin takes the same `formatSyncToken`, `parseSyncToken` and `invalidSyncToken`. The delta is `cardCtag > sinceCtag` as 200 rows plus tombstones as 404 rows. A token whose generation is **stale** (the book was recreated) **or whose ctag is ahead** of the current book → 403 `D:valid-sync-token` (sabre's status, which clients key their full resync on), forcing the full comparison that heals ghost deletions. (The ctag-ahead case refuses the same way in CalDAV, for the same reason: a future token answered with an empty delta and a *lower* token would stall that client permanently.)
-
-**Partial `address-data`.** When a query or multiget asks for a property subset (RFC 6352 § 10.4.2), the row serves the AST projected down to that subset plus the mandatory skeleton (`address-data.ts`); a full request, or a card that won't parse, serves the whole bytes.
-
-**Request bounds.** REPORT bodies are capped at 1 MiB (enforced in the router *before* the body reaches the XML parser), multiget hrefs at 500, query results at 1000, and the card data one REPORT serves at `REPORT_DATA_BUDGET_BYTES` (32 MiB, the shared budget in `lib/dav/report-row.ts` the CalDAV rows take as well): a card past the remaining budget still gets a row carrying its etag and a **404 propstat for `<CARD:address-data/>`** (RFC 4918 § 9.1), which the client then multigets, because a silently truncated collection would lose cards instead.
-
-Reads never leave the database, and only the responses that carry a card read its bytes. `PROPFIND` Depth 1 and a plain `sync-collection` project `uri`, `etag` and `length(vcard)` without touching the blob; GET, `addressbook-multiget`, `addressbook-query` and a `sync-collection` row that also serves `address-data` read the `vcard` column of the rows they answer with. The etag every one of them quotes is the row's own, hashed from those very bytes at the write, so body and validator can never disagree and a GET takes no lock. Query filtering parses the blobs of a small book on a rare request, never on an app hot path.
-
-Regression nets, under `apps/api/src/test/`: `contacts/contacts-store.test.ts` (the write seam, the counters, the projection rebuild), `contacts/card-store.test.ts` (the card shape, the ceiling, the CATEGORIES fan-out), `contacts/dav-store.test.ts` (the store seam's preconditions and uid rules), `contacts/contacts-migration.test.ts` (v5 and migration/schema index parity), `contacts/contacts-photos.test.ts`, `contacts/contacts-quota.test.ts`, `contacts/contacts-transfer.test.ts`, `carddav/carddav.test.ts` (protocol), `carddav/query-filter.test.ts` and `carddav/address-data.test.ts` (the addressbook-query matcher and the partial projection), `vcard/*` (the format).
-
-## Labels ↔ CATEGORIES
-
-Membership truth lives **in the card's bytes** (`CATEGORIES:Friends,Work`) — otherwise the junction and the blob are two sources of one fact and every DAV rewrite risks drift. The `labels` table is the *definition* store (id, name, **color** — color has no vCard home). Parse aggregates **every** `CATEGORIES` line of a card (external clients legitimately split them) and rebuilds the junction, auto-creating an unknown label name via a conflict-safe upsert keyed on the **normalized name** (`nameKey` = NFC + trim + lowercase, uniquely indexed) with a deterministic color (FNV-1a hash of the key into `EIGEN_ACCENT_COLORS`). A DAV write that creates a label emits `LABEL_CREATED` too (label and contact caches invalidate separately), and REST `addLabel` / `updateLabel` enforce the same uniqueness (duplicate normalized name → 409).
-
-**Rename fans out.** A label rename rewrites `CATEGORIES` in every member card (their etags change — correct, clients must re-fetch). The row and its members move together because they are one transaction: `rewriteCardCategories` (`labels.ts`) runs inside the transaction that renames the label row, parses each member's blob, merges the new category list and writes the member back through `indexCard` — new bytes, new `etag`, a fresh `cardCtag` — under one book ctag, because a rename is one change to the book. A member whose bytes will not parse is skipped with a warning rather than failing every later label write, and the accumulated byte delta settles after the transaction returns. Label delete strips the category from member cards the same way; the junction rows cascade with the label row.
+A rename rewrites `CATEGORIES` in every member card, so their etags change and clients re-fetch them. `rewriteCardCategories` (`labels.ts`) runs inside the transaction that renames the label row, so the label and its members move together under one `ctag` bump. A member card that won't parse is skipped with a warning. A label delete strips the category the same way.
 
 ## Photos
 
-Inline `PHOTO` in the card's bytes is **canonical**; `avatars/` holds the rendition the web UI serves. Its files are named `<contactId>-<hash8>.webp` (`avatarCacheName` — first 8 chars of the embedded photo's hash), so a changed photo yields a new filename and the sweep reclaims the superseded one. The `data.avatar` projection carries only that URL string — **base64 `PHOTO` bytes never enter the projection, the list response, or an SSE event** (the one place the design could silently multiply the list payload by ~1000×, so it's an invariant).
+The inline `PHOTO` in the card is canonical. `avatars/` holds the webp the web UI serves, named `<contactId>-<hash8>.webp` after the embedded bytes' hash. A changed photo gets a new name, and the sweep reclaims the old one. The `data.avatar` projection holds only that URL. **Photo bytes never enter the projection, a list response or an SSE event**, because base64 photos would multiply the list payload many times over.
 
-The app side keeps `uploadAvatar` as a pure staging endpoint (a file in, a webp URL out, before the contact even exists), and it stages a **first-generation sibling pair** from the pristine upload: the 512px webp Eigen serves (`<uuid>.webp`, alpha and animation preserved) and an Apple-safe embed (`<uuid>.embed.<ext>` — JPEG q80 for opaque stills, PNG for alpha, animated GIF for animated sources with a 2 MiB fallback to first-frame JPEG, since Apple Contacts decodes only JPEG/BMP/PNG/GIF, never webp). A save embeds the staged embed bytes **verbatim** into `PHOTO` and promotes the sibling webp under `avatarCacheName(contactId, embedBytes)` (`promoteAvatarCache`) — the exact name a derivation from the stored card computes, so a later write that finds it present keeps the promoted copy and never re-derives over it, while any change to the embedded bytes yields a new name (`deriveCardPhotoCache` regenerates only what is missing, from the embed — one generation older, which is what an external DAV PUT gets anyway). A DAV PUT carrying an inline photo is decoded and thumbnailed into the same hash-named webp (`cacheCardPhoto`, animation and alpha carried through). **That makes `avatars/` a second source of truth, not derived data**: the served webp comes from the pristine upload and can carry animation and alpha the card's Apple-safe `PHOTO` gave up, so a backup archives the directory rather than re-deriving it ([BACKUP.md](BACKUP.md)). Remote `PHOTO;VALUE=uri` images are kept verbatim in the card and **never fetched server-side** (SSRF, spec Non-goals). Staged orphans — both siblings — are swept by `cleanupAvatarImages`.
+An upload is staged before the contact exists. It becomes two siblings, each encoded from the pristine upload: the 512 px webp Eigen serves, with alpha and animation, and an Apple-safe embed. The embed is JPEG, PNG for alpha, or GIF for animation. Apple Contacts decodes no webp. A save embeds the staged bytes verbatim into `PHOTO` and promotes the webp under the hash name. A later write that finds that name present keeps it, so a phone re-PUTting the card for a name edit does not replace the first-generation webp.
 
-## Quotas
+That makes `avatars/` a second source of truth, not a cache. The served webp can carry animation and alpha the Apple-safe `PHOTO` lost, so a backup archives the directory ([BACKUP.md](BACKUP.md)). A `PHOTO;VALUE=uri` stays in the card and is never fetched server-side, to rule out SSRF.
 
-Two ceilings guard every card write, and `writeCard` (`contacts.ts`) holds both before it commits anything. `CARD_MAX_BYTES` (5 MiB) is the whole-vCard safety ceiling — checked on the raw body before any parse and again on the bytes that would land (413 / `max-resource-size`). Beyond it, contacts share the **home data** storage budget with mail and calendar: `enforceHomeDataQuota` credits the size of the card being replaced, and a projection over budget → 507. `Contacts.size()` answers from in-memory byte counters (`cardsBytes + avatarsBytes`), seeded at init from `SUM(length(vcard))` and the avatars directory and moved by delta at each commit and purge, so contact growth is always exact. The mail half of the budget is the index sum plus the bytes staged in `draft-attachments/`, both answered from in-memory counters `MaildirStore` keeps live (`MaildirStore.size()`), not a maildir walk and nothing memoized, so a device sync that PUTs hundreds of cards costs no query per card and every write is charged to the very next check ([QUOTA.md](QUOTA.md)).
+## A book's size is two in-memory counters
 
-## vCard import / export
+`Contacts.size()` answers `cardsBytes + avatarsBytes`. Both are seeded at init and moved by delta at every commit, purge and avatar write. A `SUM` per metered write would make a device sync of N cards cost O(N²). Contacts share the home data budget with mail and calendar ([QUOTA.md](QUOTA.md)). `writeCard` credits the size of the card being replaced, so a rewrite that shrinks a card is never refused.
 
-The whole-file counterpart to the per-card DAV surface: one route exports stored cards as a `.vcf` file, two import one. `apps/api/src/lib/contacts/transfer.ts` holds both halves as plain functions over the `Contacts` facade, like the other siblings.
+Metering switches on at the very end of init. The quota lookup opens the Home, and during init that would await the init doing the write.
 
-```
-POST /contacts/:ownerId/export             { ids? }                                          → text/vcard attachment
-POST /contacts/:ownerId/import             the .vcf file as the raw body                     → { imported, skipped, failed }
-POST /contacts/:ownerId/import-from-drive  { sourceOwnerId, sourceMountId, sourcePathId }    → the same counts
-```
+## Import replays each card through the CardDAV PUT
 
-All three are `requireNonGuest` + `resolveContacts`, like every other contacts route.
+`transfer.ts` holds both halves of the whole-file `.vcf` transfer. Import splits the file with `splitVCards` and writes each card through `putCard` under a fresh `<uuid>.vcf` name with `If-None-Match: *`. A UID is not a safe resource name (Apple writes `…:ABPerson`). An imported card is therefore metered, quota-checked and stored byte-faithfully by the same code a device sync takes. A card with no `UID` gets one minted.
 
-**Caps.** `VCARD_MAX_BYTES` (20 MiB) lives in `packages/lib/src/constants/contact.ts`, shared FE/BE so a surface refuses an oversize file before uploading it; `VCARD_IMPORT_MAX_CARDS` (1000) is the server's own, in `apps/api/src/lib/core/transfer.ts` with the other whole-file transfer ceilings. The Drive quick look — the same parser, served as contact cards ([PREVIEWS.md](PREVIEWS.md)) — bounds itself by the same two numbers. `/import` reads the body itself (`parse: 'none'`) through `readBoundedBodyBytes`, which checks `Content-Length` before anything is buffered and cancels the stream the moment the running total crosses the cap, because the header can be missing or lying. Both import routes hand the bytes to `Contacts.importCards(bytes)`, which owns the decode as the mail and calendar imports own theirs: `new TextDecoder('utf-8', { fatal: true })`, so a file in another encoding is a 400 ("File is not UTF-8 encoded") rather than a book of names stored with replacement characters. `/import-from-drive` reads its source through the shared `readImportSourceBytes` ([ARCHITECTURE.md](ARCHITECTURE.md)), so the ACL decides what a user may read; a folder or Eigen container, or a name and mime `isVCardFile` doesn't recognize, is a 400 (`NOT_A_VCARD_FILE`, spelled once for every whole-file transfer in `apps/api/src/lib/core/transfer.ts`), a size over the ceiling a 413 — on the stored size and again on the bytes as they are read. `importCards` refuses a file holding more than `VCARD_IMPORT_MAX_CARDS` cards right after the split, and the export body schema caps `ids` at the same number, so one selection can't outgrow one file. The per-card `CARD_MAX_BYTES` (5 MiB) still applies: every imported card goes through `putCard`, which checks it on the raw body and again on the stored bytes. Both import routes exempt themselves from the server idle timeout (`server?.timeout(request, 0)`), because a whole book replays card by card and answers nothing until the last one lands.
+The file is decoded as strict UTF-8, because a lenient decode would store replacement characters in every accented name and serve them to devices. Both import routes lift the server idle timeout, since a whole book answers nothing until its last card lands.
 
-**Export** reads each card's `vcard` blob, one row at a time — the whole book's bytes in one query is the read that would not scale — and joins them, normalizing every terminator to exactly one CRLF so the concatenation is one well-formed directory whatever the writers left behind. Every line but Eigen's own `X-EIGEN-*` — the self-link carries the account's uuid, which no export hands out — re-emits from its own source bytes, `PHOTO` and unknown properties included. A row whose bytes will not parse is passed over with a warning, because Eigen's own lines cannot be taken out of text nothing can read. Without `ids` it exports the whole book in the table's own row order, minus the group cards — symmetric with import skipping them; an unknown id is a 404. A one-card export is named after the card's own `FN`, clamped to 200 characters, and a multi-card one `contacts.vcf`, with `contentDisposition` sanitizing whatever comes back before it reaches the header.
+Duplicates are skipped, never merged. A card is skipped when its `UID` is already in the book, or its first email is one any contact already has, including earlier cards in the same file. Group cards are skipped too. A card that won't parse or that `putCard` refuses counts as failed, and the file continues. Only a quota refusal stops the run, with a 507 naming how many cards went in, because every later card would fail the same way. The cases are pinned in `contacts/contacts-transfer.test.ts`.
 
-**Import replays the file through the CardDAV PUT seam.** `splitVCards` cuts the directory into one text per card, and each card is then transcoded to 3.0, parsed, and written by `putCard` under a fresh `<uuid>.vcf` resource name with `If-None-Match: *` — a UID is its author's string and not a safe resource name (Apple's `…:ABPerson`, `urn:uuid:`, and anything else `sanitizeCardUri` refuses), and the precondition keeps the write a create. A card that carries no `UID` gets one minted and spliced in after `VERSION`, with every other line re-emitted from its own source bytes. An imported card is therefore metered, quota-gated, self-link-resolved and stored byte-faithfully by the same code an initial device sync takes.
+Export reads one row at a time, since the whole book's bytes in one query would not scale. It drops every `X-EIGEN-*` line, because the self-link carries the account's id. A whole-book export leaves out group cards, to match import.
 
-**Duplicates skip, never merge** (no field is ever combined into an existing card). A card is passed over when its `UID` is already in the book, when its first email address equals an address any contact already carries, or when that address appeared earlier in the same file: the running `Set` grows with every card that lands, so a file repeating an address imports it once. The UID check queries the index per card rather than pre-collecting, so the loop's own writes count — a file that repeats a UID skips its second copy through the same check a re-import takes. Group cards are skipped as well.
+## The web app writes with the etag it loaded
 
-**One import, one event.** The import runs inside `Contacts.withBatchedEvents()`, which holds the per-card events back and closes on a single `contacts:changed`, the list-level event that stands for the whole burst. It carries no ids: a card change invalidates the owner's whole list either way, so a thousand of them would be payload no handler reads. It fires from a `finally`, so the cards committed before a quota refusal still reach the open tabs, and it is skipped when no card event was held back. Whatever sets the flag owes that event, which is what makes swallowing a concurrent write's event safe — the batch that follows invalidates the same keys. A CardDAV bulk sync keeps its per-card `contacts:contact-created`: a device PUT is one request and nothing spans them server-side, so the client is what collapses that burst. `handleContactsSSEvent` (`packages/lib/src/core/contacts/sse-handlers.ts`) debounces the owner-wide half of the invalidation — `invalidateContactList`, which covers the list, `me` and the home size — by 250 ms per owner, and the batched event takes the very same path. The detail pane renders from that list (`apps/contacts` `contact-detail.tsx`), so the debounced refetch is the whole invalidation; the importing tab's own `onSuccess` invalidation is unchanged.
+A REST update carries the `etag` its form loaded in the body, and a delete carries it as a query parameter. Both are required. A mismatch is a 412, which the hook answers by reloading the list and telling the user, so two tabs can't last-write-win. The etag is the same content hash CardDAV quotes.
 
-**The counters say what happened.** `ImportCountsResult` (`packages/lib/src/types/transfer.ts`) is `{ imported, skipped, failed }`. `skipped` is the duplicate and group cases above, plus a `uid-conflict` from `putCard`. `failed` is a card that is its own problem — one that won't transcode or parse, or that `putCard` refuses as `invalid`, `too-large` or on a precondition — and the file continues past it. Only the shared storage budget stops the run: a `quota` refusal throws `507` naming how many cards went in before it, and those cards stay committed, because every later card would be refused the same way.
+A REST field bound is never tighter than what a CardDAV PUT may store (`routes/contacts.ts`). A tighter bound would make a card a device stored uneditable in the web app.
 
-**`splitVCards` is the only multi-card entry point.** `parseVCardLines` refuses any payload holding a second `BEGIN:VCARD`, so the DAV single-card invariant holds regardless: a two-card `PUT` is a 400.
+A REST save is a full replacement, but `mergeVCard` (`vcard/serialize.ts`) diffs by value, so unchanged lines keep their bytes. Changing one email, phone or address is a dropped line plus an appended one. When one save drops exactly one line of a property and appends exactly one value, the new line inherits the old one's params and group, like `TYPE=WORK` or an `item1.X-ABLabel`. Any other shape has no unambiguous pairing, so the new values append bare.
 
-Two accepted limitations. The email-dedupe set is built once before the loop and outside the write lock, so two concurrent imports — or an import racing a DAV PUT — can each admit a card for the same address. And an imported card carrying the account owner's own email can claim the self-link exactly as any DAV PUT can (`resolveSelfLinkOnPut`), because the importer hands `putCard` the same create a device would.
+## Your own card is linked by X-EIGEN-ID
 
-## API routes
+Init adds your own card and, once, the org owner's. The `ownerSeeded` latch stops a deleted owner card from coming back. Your card carries `X-EIGEN-ID` with your user id, and the server-owned `eigenId` column holds the link. At most one row holds it.
 
-`apps/api/src/routes/contacts.ts`; `ownerId` is always the caller's own id — a book is personal, so no team home holds one and none is ever shared:
+An update keeps the row's link and writes `X-EIGEN-ID` back when a client strips it. A create claims the link only when no row holds it yet, by carrying your id or your email (`resolveSelfLinkOnPut`, `dav-store.ts`). Editing your own card renames you across the org and sets your avatar (`pushUserProfile`). Deleting it is refused: REST answers 400, CardDAV 403 ([CARDDAV.md](CARDDAV.md#a-refused-self-delete-lists-the-card-again)).
 
-```
-GET    /contacts/:ownerId/contacts
-GET    /contacts/:ownerId/contacts/:id
-POST   /contacts/:ownerId/contacts                 → the new contact's id
-PUT    /contacts/:ownerId/contacts/:id             (the body carries the etag the form loaded)
-DELETE /contacts/:ownerId/contacts/:id?etag=       (the etag is required, not optional)
-GET    /contacts/:ownerId/me                       (the self card, minted when it is missing)
-GET    /contacts/:ownerId/labels
-POST   /contacts/:ownerId/labels
-PUT    /contacts/:ownerId/labels/:id
-DELETE /contacts/:ownerId/labels/:id
-POST   /contacts/:ownerId/avatar                   (staging: a file in, a webp URL out)
-GET    /contacts/:ownerId/avatar/:filename         (the served rendition, cached 900 s)
-POST   /contacts/:ownerId/export                   ({ ids? })
-POST   /contacts/:ownerId/import                   (the .vcf file as the raw body)
-POST   /contacts/:ownerId/import-from-drive        (the Drive source)
-```
+## See also
 
-Every route is `requireNonGuest` + `resolveContacts`, which is where the owner check lives ([GUEST-ACCESS.md](GUEST-ACCESS.md)). Every mutation but the create answers **nothing**: a write's own result is the list the SSE event invalidates.
-
-**A conditional write on both mutations.** A `PUT` echoes the `etag` its form loaded and a `DELETE` carries it as a query parameter; a mismatch is a 412 the hook recovers from by reloading the list and telling the user, so two web clients editing one card cannot last-write-win (the calendar's REST update has no such rule, [ROADMAP.md](ROADMAP.md)). The etag is the card's own content hash — the same validator CardDAV quotes.
-
-**A REST bound is never tighter than what the PUT seam stores.** `routes/contacts.ts` caps what Eigen mints — a birthday, an avatar name, a label id, the `eigenId` — at 512 characters, and everything a card may spell for itself at `CARD_MAX_BYTES`, with the list bounds sized the same way (a file holds no more lines than it holds bytes). A shorter bound would leave a card a CardDAV client legitimately stored uneditable from the web app.
-
-## Types
-
-```typescript
-type Address = { street?, city?, state?, zipCode?, country? }
-type CreateContactInput = { firstName, lastName, email: string[], phone: string[], company?, jobTitle?, address?: Address[], birthday?, notes?, avatar?, labels?: string[], eigenId? }
-type Contact = CreateContactInput & { id: string; etag: string }   // etag = sha256 of the card's bytes
-type UpdateContactInput = CreateContactInput & { etag: string }    // the PUT body; the id travels in the path
-type ContactSuggestion = { kind: 'personal' | 'team', id, displayName, email, teamId? }
-type Label = { id: string; name: string; color: string }
-```
-
-Defined in `packages/lib/src/types/contact.ts` (`Label` in `types/label.ts`). A `Contact` is the row's projection spread flat — `dbRowToContact` (`contacts/mappers.ts`) is the one place it is shaped, beside `toData`, the inverse every write stores.
-
-## Frontend hooks
-
-All in `packages/lib/src/core/contacts/hooks/`; each one resolves the owner from the session, so none takes an `ownerId`:
-
-| Hook | Purpose |
-|---|---|
-| `useContacts()` | the book, group cards excluded |
-| `useMeContact()` | the self card |
-| `useAddContact()` / `useUpdateContact()` / `useDeleteContact()` | the contact mutations, the 412 recovery included |
-| `useUploadContactAvatar()` | stage a photo and get its webp URL back |
-| `useLabels()` / `useAddLabel()` / `useUpdateLabel()` / `useDeleteLabel()` | label definitions |
-| `useContactSuggestions(query)` | personal contacts + team members, de-duped — what every address autosuggest and the command palette read |
-
-The transfer hooks live beside them in `use-transfer.ts`: `useExportContacts` downloads the book, or the cards an `ids` selection names, as one `.vcf`, `useImportContacts` posts a picked file and `useImportContactsFile` takes a `FileImportSource`; both report the three counts in one toast.
-
-**Query keys**: `contactKeys` and `labelKeys`, `ownerId`-scoped. The SSE handler in `packages/lib/src/core/contacts/sse-handlers.ts` routes events to `invalidateContactList` (debounced 250 ms per owner), `invalidateLabelCreated` and `invalidateLabelChanged`.
-
-## SSE events
-
-Defined in `packages/lib/src/types/sse.ts`:
-
-| Event | Trigger |
-|---|---|
-| `contacts:contact-created` | card created (REST or a CardDAV PUT) |
-| `contacts:contact-updated` | card updated |
-| `contacts:contact-deleted` | card deleted |
-| `contacts:changed` | one bulk write (a whole-file import) stands for every per-card event it held back |
-| `contacts:label-created` | a label minted, by REST or by a card's `CATEGORIES` |
-| `contacts:label-updated` / `contacts:label-deleted` | the label definition changed or went |
-
-A contact event carries the card's id, but every handler invalidates the owner's whole list, so the id is shape rather than a filter. The announcement is made once the write lock is released, from the facade.
-
-## Caveats & decisions
-
-- **Apple clients require `current-user-privilege-set` + `owner` on the home and collection, or they treat every existing resource as read-only** — and macOS Contacts silently saves each edit of a "read-only" card as a NEW card with a fresh UID (`If-None-Match: *` create), producing server-side duplicates while linking the pair locally so the Mac shows one contact. Wire-diagnosed on eigen.is 2026-08-18 (tcpdump: perfect sync-collection + multiget ingest, then create-only PUTs; fixed by `ownershipEntries` in `lib/dav/xml.ts`, which answers the pair as prop-map entries so a PROPFIND serves only what was asked for, served by both CardDAV and CalDAV prop builders and pinned by tests in both suites). The privileges are truthful: the DAV surface is single-owner, every book resolution checking the caller against the owner id.
-- **Apple group cards.** Apple Contacts creates groups as separate `X-ADDRESSBOOKSERVER-KIND:group` cards. v1 stores them **verbatim** (fidelity) but hides them from the app's contact list (`isGroup`). Known cosmetic consequence: an Apple-created group card renders as a **blank contact** in DAVx⁵'s default per-contact `CATEGORIES` mode and in Thunderbird (Mozilla bug 1807394). Mapping group cards to labels is deferred.
-- **Thunderbird does not render animated GIF contact photos** (verified live 2026-08-17: the GIF embed syncs byte-correct and round-trips TB edits untouched, TB just doesn't display it; transparent PNG and JPEG show fine). Client rendering limitation, not a sync defect — noted in the help-center article's troubleshooting.
-- **The deploy resets every contact book** to the seeded state (yourself + org owner) — decided, not accidental. The v5 migration drops the v4 tables rather than converting them; eigen.is books are seed-scale, and anyone with manual entries re-adds them or syncs them back from a phone once CardDAV is live. Say so in the release note.
-- **SSE under bulk sync.** An initial device sync PUTs hundreds of cards, each its own request, so there is no server-side loop to batch them the way an import batches its file: every PUT broadcasts its own contact event and the client's 250 ms debounce is what turns the burst into one list refetch (above).
-- **Self-link.** The `eigenId` ↔ user link rides as `X-EIGEN-ID`. It is server-owned in the `eigenId` column (accepted only when it equals the account owner's id; at most one row per book), and a rematch on the account owner's own email restores it when a client strips the property. Only a client edit that strips the property *and* changes the email in one go loses the link until the user re-saves their profile. A `DELETE` of the self card is refused **403** (`deleteCard` → `self-delete`); because a client like Thunderbird drops the card from its view before the request and ignores the 403, the refusal also **touches** the self card (bumps the book `ctag` and re-stamps its `cardCtag`, bytes/etag untouched) so the next `sync-collection` delta lists it as an unchanged 200 row and any client that locally dropped it re-downloads it — the refused delete self-heals on the client's own schedule, at the cost of one phantom re-fetch row for other clients.
-- **Editing a value keeps its params only when the change is unambiguous.** The app diffs a multi-value property (`EMAIL`, `TEL`, `ADR`) by *value*, so changing one value is a dropped line plus an appended one; when a single save drops exactly one line of a property and appends exactly one value, the merge pairs them and the replacement inherits the dropped line's group and params (`TYPE=WORK`, a grouped `item1.X-ABLabel`), which also keeps the label anchored to its group. Any other shape — one out and two in, a swap of two values in one save — has no unambiguous pairing, so those values append bare and re-picking the type on the client restores the label.
-
-## Client setup
-
-Same credential story as CalDAV/IMAP: HTTP Basic auth, app password (primary-password fallback fails under 2FA). Point clients at `https://<domain>/` (or `/.well-known/carddav` discovery) with the Eigen email as username. The device-setup how-to is the help-center article [connect/contacts-client](../apps/index/src/data/support/connect/contacts-client.md) (Apple Contacts on macOS/iOS, DAVx⁵ on Android). The **Integrations** page (`apps/space/src/routes/_auth.services.tsx`) surfaces a CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
-
-## Where the code lives
-
-- **`apps/api/src/lib/contacts/`** — the domain, split Mount-style: `contacts.ts` (the `Contacts` facade — the write lock, the database handle, the byte counters, the broadcast batch, the commit seams, REST contact CRUD and the self card; every sibling call goes through it) with sibling modules of plain functions over the facade: `dav-store.ts` (the CardDAV store seam — the row reads plus `putCard`/`deleteCard`, the self-link ranking and the seam types), `labels.ts` (label definitions + the CATEGORIES fan-out), `avatars.ts` (avatar staging + the served photo rendition), `get-contacts.ts` (`resolveContacts(user, ownerId)`, the Home resolution a route binds, the `get-calendar.ts`/`get-drive.ts` analogue), `mappers.ts` (`dbRowToContact` and `toData`, the row ↔ DTO pair). Beside them: `card-store.ts` (what a card means as columns — `sanitizeCardUri`, `cardBytes`, `readContactsTotalSize`, `avatarCacheName`, `prepareCard`, `indexCard`, `CARD_MAX_BYTES` — over the domain-neutral half both DAV domains share in `apps/api/src/lib/core/blob-store.ts`: `normalizeResourceUri`, `sanitizeResourceUri`, `computeResourceEtag`, the generation seed `newSyncGen`, the cold size reader `readBlobTableSize`, the shared `ResourcePreconditions`, the `BroadcastBatch` and the store result types, none of which knows the schema), `transfer.ts` (whole-file vCard export and import, above), `schema.ts`, `db-config.ts`, `sse-events.ts`.
-- **`apps/api/src/lib/carddav/`** — the protocol layer: `carddav-router.ts`, `discovery.ts`, `resource.ts`, `report.ts`, `query-filter.ts`, `address-data.ts`, and `xml-builder.ts`/`xml-parser.ts`. The shared XML envelope and principal props live in `dav/xml.ts`, the store-result → HTTP mapping both write surfaces take in `dav/write-result.ts`, the sync-token grammar and the `valid-sync-token` refusal in `dav/sync-token.ts`, the OPTIONS header and realm in `app.ts`; the fold/escape/C0-strip primitives both the vCard and iCalendar serializers ride on live in `packages/lib/src/core/content-line.ts`, imported as `@workspace/lib/content-line`.
-- **`apps/api/src/lib/vcard/`** — the format itself: `ast.ts` (content-line parse/serialize, single-card envelope), `split.ts` (a multi-card file into one text per card), `parse.ts` (the `ParsedCard` projection), `to-contact.ts` (a parsed card as the `Contact` shape the app renders, for preview only), `transcode.ts` (vCard 4.0 -> 3.0), `serialize.ts` (the merge/create seam Eigen-owned edits go through), behind the `index.ts` barrel; the format's own `VCardLine`/`ParsedCard`/`ParsedCardPhoto`/`CardEdits` types live in `types.ts` beside it, while `Contact` and `Address` stay shared in `packages/lib/src/types/contact.ts`.
-- **`apps/api/src/routes/contacts.ts`** — thin REST bindings: contact and label CRUD with the conditional-write `etag`, avatar staging, and the three transfer routes above.
-- **`packages/lib/src/core/contacts/`** — FE hooks + SSE handlers, including `hooks/use-transfer.ts` (`useExportContacts`, `useImportContacts` for a picked file, `useImportContactsFile` for a `FileImportSource`); the counted lines the Drive vCard preview ends on come from `core/transfer.ts` ([PREVIEWS.md](PREVIEWS.md)); shared types in `packages/lib/src/types/contact.ts`.
-
-Storage layout: [STORAGE.md](STORAGE.md). Database inventory: [DATABASE.md](DATABASE.md).
+- [CARDDAV.md](CARDDAV.md): the protocol surface, sync and the client quirks
+- [STORAGE.md](STORAGE.md) and [DATABASE.md](DATABASE.md): where `eigen.contacts/` sits
+- [PREVIEWS.md](PREVIEWS.md): the Drive quick look of a `.vcf` file
+- The help-center article [connect/contacts-client](../apps/index/src/data/support/connect/contacts-client.md)

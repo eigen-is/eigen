@@ -22,7 +22,7 @@ import type { ParsedCard, VCardLine } from '../vcard/types';
 import type { Contacts } from './contacts';
 import * as schema from './schema';
 
-// Whole-file vCard transfer; import replays each card through the CardDAV PUT seam. See docs/CONTACTS.md § vCard import / export.
+// Whole-file vCard transfer; import replays each card through the CardDAV PUT seam. See docs/CONTACTS.md § Import replays each card through the CardDAV PUT.
 
 // X-EIGEN-ID carries the account's uuid, which no export may hand out.
 const isEigenName = (name: string) => name.startsWith('X-EIGEN-');
@@ -81,6 +81,7 @@ export async function importCards(contacts: Contacts, bytes: Uint8Array): Promis
     }
     if (cards.length > VCARD_IMPORT_MAX_CARDS) throw new ApiError(413, 'Too many cards');
 
+    // Built outside the write lock, so a concurrent import or DAV PUT can still admit the same address. Accepted.
     const emails = new Set<string>();
     for (const contact of await contacts.getContacts()) {
         for (const email of contact.email) {

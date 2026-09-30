@@ -10,7 +10,7 @@ import { indexCard, normalizeLabelName } from './card-store';
 import type { Contacts } from './contacts';
 import * as schema from './schema';
 
-// Membership truth lives in each card's CATEGORIES, so a rename or delete rewrites every member card. See docs/CONTACTS.md § Labels ↔ CATEGORIES.
+// Membership truth lives in each card's CATEGORIES, so a rename or delete rewrites every member card. See docs/CONTACTS.md § Label membership lives in the card's CATEGORIES.
 
 // bun:sqlite names the column in the violation ("UNIQUE constraint failed: labels.nameKey"), so an id collision still surfaces as a real error.
 function rethrowDuplicateLabelName(e: unknown): never {
