@@ -9,7 +9,7 @@ A domain doc tells a developer how one part of Eigen works now and why it is bui
 
 **A doc covers a domain, an app or a core function**: SHEETS.md for the sheets app, COLLAB.md for the collab core, CALDAV.md for the CalDAV service beside CALENDAR.md for the calendar app. A service with its own protocol (CalDAV, CardDAV, WebDAV) may have its own doc next to its app's; that is a judgment call, not a rule. Never a doc per feature or per sub-mechanism. New material goes into the doc of the domain it belongs to, and a doc is not split to shorten it: every extra doc is one more place to look and one more to keep in sync.
 
-Read the two exemplars before you write: `docs/COLLAB.md` and `docs/ACL.md`. Don't copy ACL.md's em-dashes: they predate the rule. What to avoid is MAIL.md and CANVAS.md before their rewrite: `git show 0cd4d14ab^:docs/MAIL.md` and `git show c4eda8702^:docs/CANVAS.md`, all narration, catalogues and file tours.
+Read the two exemplars before you write: `docs/COLLAB.md` and `docs/ACL.md`. What to avoid: narration, catalogues and file tours.
 
 Not domain docs: the backlogs (`ROADMAP*.md`, `SHEETS-TODO.md`), the generated `SHARED-PRIMITIVES.md`, the standards and guides (`CODE-STANDARDS.md`, `CODE-EXAMPLES.md`, `REVIEW-STANDARD.md`, `SUPPORT-STYLE-GUIDE.md`, `CONTRIBUTING.md`) and the operator guide `SELF-HOSTING.md`. The voice rules still apply to them.
 
@@ -94,7 +94,7 @@ EOF
 
 - The TLDR is one short paragraph and makes sense alone. Every claim in it has a section that carries it. A TLDR that counts its claims ("four things") is recounted after every edit.
 - Every heading states a fact. Every section has a why.
-- The doc never talks about itself: no "here", "above", "below" or "see this doc". It states facts and links to other docs, or to its own section by heading. A rewrite owns the whole file, so a hit that predates it is fixed too.
+- The doc never talks about itself: no "here", "above", "below" or "see this doc". It states facts and links to other docs, or to its own section by heading. A rewrite owns the whole file, so every hit in it is fixed.
 - Present tense. Short sentences in simple English. No em-dashes, no "Note that", "robust", "seamlessly".
 - No hard line breaks inside a paragraph.
 - Every path you name exists, and both link checks print nothing. A symbol named with a path is grepped in that file. A symbol named without one must have its definition in exactly one file of a repo grep, or it gets its path.
