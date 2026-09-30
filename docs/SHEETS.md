@@ -6,8 +6,6 @@
 
 The whole upstream library (UI components, state runtime, formula parser) lives in `packages/sheet/`, with no external fortune-sheet dependency. `src/engine/` is the DOM-free half the server imports, `src/state/` the workbook context and its immer reducers, `src/components/` the React UI. How the canvas and the DOM overlays stack is in [RENDERING.md](../packages/sheet/RENDERING.md).
 
-`engine/` has had its standards audit. `state/` is audited a directory at a time, when a feature touches it, with [SHEETS-TODO.md](SHEETS-TODO.md) as the ledger. A full pass now would be spent twice, because [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md) rewrites the model `state/` is built on.
-
 ## An edit is an op in a Y.Array
 
 The Yjs doc has two roots. `state` is a Y.Map whose `snapshot` holds the encoded workbook. `ops` is a Y.Array of op batches. A local edit is an immer recipe; its patches become one op batch, which `use-sheet.ts` pushes to `ops`. A peer applies it with `applyOp()` (`components/Workbook/api.ts`), which patches the context without remounting the grid.

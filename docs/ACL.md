@@ -77,16 +77,16 @@ Used by:
 
 Push-based sharing for Drive and Calendar. On share: resolve targets, write to recipient's DB. If the target doesn't exist yet, write to the share registry. On account/team join: pull from registry to reconcile missed shares.
 
-`Drive.updateACL` awaits the target resolution and its registry writes, because they are the durable record for targets without an account. The pushes to recipient homes are queued (`acl-propagation.ts`): bounded concurrency, in order per path, since an out-of-order add and revoke would resurrect a stale mirror row. A crash loses deliveries still in flight ([ROADMAP](ROADMAP.md) § Durable home-relay outbox).
+`Drive.updateACL` awaits the target resolution and its registry writes, because they are the durable record for targets without an account. The pushes to recipient homes are queued (`acl-propagation.ts`): bounded concurrency, in order per path, since an out-of-order add and revoke would resurrect a stale mirror row. A crash loses deliveries still in flight: the "Durable home-relay outbox" row of [ROADMAP.md](ROADMAP.md) closes that, and [SCALABILITY.md](SCALABILITY.md#a-relay-message-in-flight-is-lost-on-a-crash) has the relay side.
 
-A saved ACL change also closes the live collab sockets of anyone who lost read below that path (`enforceReadAccessBelow`), so a revoke takes effect now, not at the next reconnect.
+A saved ACL change also closes the live collab sockets of anyone who lost read below that path (`enforceReadAccessBelow`), so a revoke takes effect now, not at the next reconnect. How it walks the open documents: [COLLAB.md](COLLAB.md#read-is-checked-at-open-write-on-every-message).
 
 ### Model
 
 **Direct push (on share):**
 
 1. Resolve targets (email → user, team → members), from both the old and the new ACL so a removed user hears about it
-2. For each resolved user: the home relay pushes the change into the recipient's `shared.db` (`receiveSharedPathChange`)
+2. For each resolved user: the [home relay](SCALABILITY.md#every-cross-home-call-goes-through-the-relay) pushes the change into the recipient's `shared.db` (`receiveSharedPathChange`)
 3. For unresolved targets: write to share registry
 4. For team targets: push to current members AND write registry (for future members)
 
@@ -222,4 +222,4 @@ Leaving a share is a delete: `SharedDrive.deletePath` checks whether the path's 
 
 Integration tests: `apps/api/src/test/acl/acl-bubbling.test.ts`, `apps/api/src/test/acl/sharing-restricted.test.ts`.
 
-See: [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md) for team ACL details, [CHAT.md](CHAT.md) for the chat system, [SERVER-SETTINGS.md](SERVER-SETTINGS.md) for the email-notification settings
+See: [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md) for team ACL details, [CHAT.md](CHAT.md) for the chat system, [SERVER-SETTINGS.md](SERVER-SETTINGS.md) for the email-notification settings, [SCALABILITY.md](SCALABILITY.md) for the home relay, [GUEST-ACCESS.md](GUEST-ACCESS.md) for guests and the share registry, [COLLAB.md](COLLAB.md) for live collab sockets

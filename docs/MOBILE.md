@@ -56,13 +56,12 @@ On a phone `DropdownMenu` shows a `DropdownMenuSub` as a page of the same menu, 
 - A `DropdownMenuSub` directly inside a `DropdownMenuGroup` does not drill. No consumer nests it that way.
 - Non-item JSX on an ancestor page stays visible while a deeper page is open. All such JSX sits on leaf pages.
 
-## Small differences that are decided
+## Four small differences are decided, not bugs
 
 - The read-only Eye marker is dropped on a phone. Its tooltip can't show on touch, so the explanation is lost either way.
 - A read-only member of a team chat has no entry to the access dialog on any viewport. A personal chat keeps `DriveShareSummary` in the toolbar.
 - A pane row shows the comment's anchor text, the card dialog its title.
 - On desktop, tapping a card in the docs activity panel switches to the comments panel to reveal its anchor. Every phone pane stays put.
-- A desktop viewport resized to phone width with the slides rail menu open leaves that menu on screen once. A tap dismisses it.
 
 Open mobile work, and the real-device check still owed, is the Mobile row in [ROADMAP.md](ROADMAP.md). How to verify at phone sizes: the [verify-in-browser skill](../.claude/skills/verify-in-browser/SKILL.md).
 

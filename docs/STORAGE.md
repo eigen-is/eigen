@@ -45,7 +45,7 @@ Every Drive row lives in the mount's `paths` table (`apps/api/src/lib/mount/sche
 | `local-key` | `data/{id}.{ext}`, flat |
 | `s3` | `{prefix}/{id}.{ext}` in a bucket, written behind by the upload queue ([SYNC.md](SYNC.md)) |
 
-An id key never moves, so on `local-key` and `s3` a rename, a move or a trash changes only the row. On `local` the same operations rename files and directories on disk. That difference drives the tree lock below and the `.trash/` directory ([SOFT-DELETE.md](SOFT-DELETE.md#only-local-moves-bytes-into-trash)).
+An id key never moves, so on `local-key` and `s3` a rename, a move or a trash changes only the row. On `local` the same operations rename files and directories on disk. That difference drives the [tree lock](#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree) and the `.trash/` directory ([SOFT-DELETE.md](SOFT-DELETE.md#only-local-moves-bytes-into-trash)).
 
 `read()` returns a `StorageFile`, a lazy `BunFile` or `S3File` that holds no bytes yet. A local file goes into a `Response` as is, which keeps serving zero-copy. An `S3File` goes in as `file.stream()`, since it takes no `ResponseInit` options. Both local backends resolve every key through `resolveWithinBase` (`apps/api/src/lib/core/path-utils.ts`), and `S3Storage` validates key segments, so no key escapes its base.
 
@@ -80,7 +80,7 @@ A container database's open reads the freshest copy first: the crash temp, then 
 
 ## Creating a container is all or nothing
 
-`Drive.create` (`apps/api/src/lib/drive/drive.ts`) creates the container folder, then provisions it (`ChatRoom.create` or `CollabDocument.create`, plus the comment row a card chat seeds). When provisioning throws, `mount.deletePath` removes the row and the error propagates. That delete sends no SSE, because the row was never announced. On a remote mount it cancels the container's queued uploads, so a staged PUT cannot bring the object back. The name is free again, so an immediate retry with the same name starts clean. A rollback that itself fails is logged and leaves a container nobody has seen. The integrity sweep's orphaned-container scan exists for that leftover ([PROPOSAL_DATA_INTEGRITY.md](proposals/PROPOSAL_DATA_INTEGRITY.md)).
+`Drive.create` (`apps/api/src/lib/drive/drive.ts`) creates the container folder, then provisions it (`ChatRoom.create` or `CollabDocument.create`, plus the comment row a card chat seeds). When provisioning throws, `mount.deletePath` removes the row and the error propagates. That delete sends no SSE, because the row was never announced. On a remote mount it cancels the container's queued uploads, so a staged PUT cannot bring the object back. The name is free again, so an immediate retry with the same name starts clean. A rollback that itself fails is logged and the container stays: a row nobody has seen, which holds the name and fails every open. Nothing finds it yet: the orphaned-container scan is part of the "Data integrity + verified backups" row of [ROADMAP.md](ROADMAP.md).
 
 The stem passes the mount's name rule (`validateName`, `apps/api/src/lib/mount/helpers.ts`) before the extension goes on, so an empty stem cannot become a nameless `.eigendoc`. Names are stored NFC. Every dedup (copy, upload, chat `dedupeName`, trash restore) compares in NFC, and `getUniqueFileName` trims the stem so the ` (n)` suffix still fits the 255-byte limit.
 
@@ -110,8 +110,6 @@ A container that opts in (collab documents and chats, the `snapshot` key in thei
 - A manual save and the pre-restore snapshot block on the container's path lock, because an explicit user action must never skip.
 - The timer and close path try-locks and skips when the lock is held (`trySnapshotContainerDataDb`). It runs inside a close that a lock holder may be waiting on, and a skip loses one history entry, never bytes.
 - A restore first copies the chosen snapshot to a temp file, since the pre-restore snapshot prunes and could delete it. It then replays the snapshot into the live Y.Doc for a collab document ([COLLAB.md](COLLAB.md#a-version-restore-rewrites-an-open-document-in-one-transaction)) or overwrites the chat's `data.db` bytes (`replaceContainerDataDb`). No lock is held across the steps.
-
-The routes are `/drive/:ownerId/:mountId/file/:pathId/versions` and its `save` and `:snapshotName/restore` children in `apps/api/src/routes/drive.ts`.
 
 ## Copy goes anywhere, a move stays in its mount
 

@@ -1,6 +1,6 @@
-# Notification System
+# Toasts
 
-> **TLDR:** The toast contract. Error toasts come from `onMutationError` in the mutation hooks under `packages/lib/src/core/[domain]/hooks/`, so an app never toasts a mutation's error itself. Success toasts are rare and live in the hook too. A toast's action button needs `pointer-events` of its own, because it often appears over a modal. Persistent cross-user notifications are a different system: [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md).
+> **TLDR:** The toast contract. Error toasts come from `onMutationError` in the mutation hooks under `packages/lib/src/core/[domain]/hooks/`, so an app never toasts a mutation's error itself. Success toasts are rare and live in the hook too. A toast's action button needs `pointer-events` of its own, because it often appears over a modal. Persistent cross-user notifications are a different system, and it raises their toasts: [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md).
 
 ## Error toasts come from the mutation hook
 
@@ -27,10 +27,6 @@ A toast that is not one mutation's outcome is raised where the action is: mail's
 ## A toast action works over a modal dialog
 
 A toast with an `action` (the "Open folder" row after a save to Drive) is often raised from inside a modal. `SaveToDrivePicker` awaits its mutation, so the picker is still open when the hook toasts, and a convert stacks the progress dialog on top. A Radix modal parks `pointer-events: none` on `<body>` for as long as one is mounted, and the toaster lives under `<body>`. So `Toaster` gives every toast `pointer-events: auto` of its own (`packages/ui/src/components/sonner.tsx`). Without it the action draws and swallows every click.
-
-## Cross-user events are notifications, not toasts
-
-Shares, invites, mentions, incoming mail and watched-file activity persist a row in the recipient's notification center and broadcast one `notification:created` SSE event. `handleNotificationSSEvent()` turns that event into the toast and refreshes the bell. Domain SSE handlers only invalidate caches and never toast, so one event never shows twice.
 
 ## See also
 

@@ -94,7 +94,7 @@ export async function resolveACLToEmails(acls: DriveACL[]): Promise<Map<string, 
 // so the request never waits on per-recipient home opens. The semaphore bounds concurrent opens
 // (~25–30 fds each); the per-path chain keeps successive changes to one path ordered per recipient,
 // since an out-of-order add→revoke would resurrect a stale mirror row. In-flight deliveries are lost
-// on a crash — the durable outbox that closes it is roadmapped (ROADMAP.md § Durable home-relay outbox).
+// on a crash. The "Durable home-relay outbox" row of docs/ROADMAP.md closes that.
 const FAN_OUT_CONCURRENCY = 8;
 const fanOutSemaphore = new Semaphore(FAN_OUT_CONCURRENCY);
 const pendingFanOuts = new Map<string, Promise<void>>();

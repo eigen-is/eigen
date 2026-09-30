@@ -1,6 +1,6 @@
 # File History and Watch
 
-> **TLDR:** Every Drive path has a typed event log, and anyone who can read a path can watch it. Both live in the mount's `metadata.db` (`file_events`, `path_watchers`), owned by `FileHistory` (`apps/api/src/lib/drive/history.ts`). Four things are not obvious. An event with no actor is never recorded, and container internals never enter the timeline. A folder watch covers every descendant, including later ones, and read access is checked again at delivery. Mutations that rewrite the parent chain capture it before they run. Retention is a count per file, never an age.
+> **TLDR:** Every Drive path has a typed event log, and anyone who can read a path can watch it. Both live in the mount's `metadata.db` (`file_events`, `path_watchers`), owned by `FileHistory` (`apps/api/src/lib/drive/history.ts`). Not obvious from the code: an event with no actor is never recorded, and container internals never enter the timeline. A folder watch covers every descendant, including later ones, and read access is checked again at delivery. Mutations that rewrite the parent chain capture it before they run. Retention is a count per file, never an age.
 
 ## History lives in the mount's `metadata.db`
 
@@ -22,11 +22,11 @@ Drive mutations take an optional `user`. Without one, nothing is recorded, so in
 
 Some mutations change the parent chain that the fan-out walks, or recurse through the mount. They record and fan out inline, and each broadcasts the live refresh itself:
 
-- **Move** captures the old breadcrumb before `updatePath`, and fans out over both chains, so watchers of the source folder still qualify.
-- **Trash** captures the old breadcrumb and the old effective members before `trashPath` re-parents the item to the root and strips its shares. After the trash neither resolves.
-- **Permanent delete** only notifies. The FK cascade would delete a row at once, so it collects the watchers and the `trashedFrom` chain before the delete.
-- **Upload** writes one row per file and fans out once per batch, so a 100-file upload is one notification.
-- **Copy** records `copied` for the root and every descendant, and fans out only at the root, since fresh paths have no watchers yet.
+- Move captures the old breadcrumb before `updatePath`, and fans out over both chains, so watchers of the source folder still qualify.
+- Trash captures the old breadcrumb and the old effective members before `trashPath` re-parents the item to the root and strips its shares. After the trash neither resolves.
+- Permanent delete only notifies. The FK cascade would delete a row at once, so it collects the watchers and the `trashedFrom` chain before the delete.
+- Upload writes one row per file and fans out once per batch, so a 100-file upload is one notification.
+- Copy records `copied` for the root and every descendant, and fans out only at the root, since fresh paths have no watchers yet.
 
 ## Collab edits are attributed on the server
 

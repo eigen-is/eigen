@@ -48,7 +48,7 @@ Eigen creates the standard six (`STANDARD_MAILBOXES`) when it first creates the 
 
 `mailboxDir` maps the empty name and `INBOX` to the root and any other name to `.{name}`. It joins a `/`-delimited name with `.`, so `Clients/Acme` and `Clients.Acme` are one directory. `isValidMailboxPath` splits a name on both delimiters and refuses a segment that is empty, over 200 characters, holds a control character, or starts or ends with a space. Splitting on both leaves no way to spell `..`. It refuses nothing else, because Dovecot writes non-ASCII names in modified UTF-7 (`Ärger` is `.&AMQ-rger`), and those are ordinary folders ([MAIL.md § A mailbox name is a folder name](MAIL.md#a-mailbox-name-is-a-folder-name-not-an-id)).
 
-`canonicalMailbox` (`packages/lib/src/constants/mailboxes.ts`) case-folds the six standard names, maps `INBOX` in any case to the empty inbox name, folds `/` onto `.`, and passes any other name through. So a folder's own spelling is the one Eigen addresses it by. On a case-sensitive file system this has a limit: a folder whose name differs from a standard one only in case (`.archive` beside `.Archive`) is neither listed nor addressable, because every spelling of it lands on the standard one ([ROADMAP.md](ROADMAP.md)).
+`canonicalMailbox` folds every spelling of a standard name onto one and passes any other name through ([MAIL.md § The inbox has three spellings](MAIL.md#the-inbox-has-three-spellings)). So a folder's own spelling is the one Eigen addresses it by. On a case-sensitive file system this has a limit: a folder whose name differs from a standard one only in case (`.archive` beside `.Archive`) is neither listed nor addressable, because every spelling of it lands on the standard one ([ROADMAP.md](ROADMAP.md)).
 
 ## A read answers from the index
 
@@ -72,13 +72,13 @@ For each folder outside the six, a listing starts a background reconcile, at mos
 | under another filename | yes | re-reads the flags from the name, reports `flagsChanged` |
 | no | yes | deletes the row, reports `deleted` |
 
-New files go in chunks of 250: one upsert transaction and one burst of `received` events per chunk. Batching is the cold-index win, since a row-by-row insert was most of a 100k-message sync. A file that fails to parse is logged and skipped, so one bad `.eml` can't drop the rest of its chunk.
+New files go in chunks of 250: one upsert transaction and one burst of `received` events per chunk. Row-by-row inserts would be most of the time a cold 100k-message sync takes. A file that fails to parse is logged and skipped, so one bad `.eml` can't drop the rest of its chunk.
 
 A sync runs on a watcher event, after the store's own `append`, and on reads. A sync requested while one runs for that mailbox joins it (`reconcilingMailboxes`). Syncs run under `storeLock`, which every mutation also holds around its file-and-row pair: a sync between a move's rename and its row update would see the message as deleted.
 
 ## Only a delivered message is new mail
 
-`append` records the id it is about to write, and whether it is an arrival, before the file lands, because a watcher's sync can reach the file first. Whichever sync reaches it answers for that id. An import, a copy and the welcome mail pass `arrival: false` and notify no one.
+`append` records the id it is about to write, and whether it is an arrival, before the file lands, because a watcher's sync can reach the file first. Whichever sync reaches it answers for that id. An import, a copy and the welcome mail pass `arrival: false` and notify no one, since the user or Eigen put them there.
 
 Every other file follows its mailbox. A mailbox with no rows yet is a first index: its files were already there, so they reach `received` as not new. An old IMAP folder, an unindexed welcome mail or a home whose `mail.db` was lost announces no new mail. In a mailbox the index already knows, a file that appears is an arrival, which is how a message an IMAP client files into a folder still notifies. `mail-sync.test.ts` and `mail-custom-mailboxes.test.ts` pin both sides.
 

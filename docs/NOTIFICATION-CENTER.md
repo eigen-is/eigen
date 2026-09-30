@@ -8,7 +8,7 @@
 
 ## Notifications and domain events are separate broadcasts
 
-A cross-user event does two things. `persist()` writes the row and broadcasts `notification:created`, which becomes the toast and refreshes the bell. The producer's own `home.broadcast(domainEvent)` invalidates the domain's query caches. Toasts come only from the notification handler, and domain SSE handlers never toast ([NOTIFICATIONS.md](NOTIFICATIONS.md)). Read, read-all and dismiss broadcast `notification:changed`, which refetches the bell without a toast.
+A cross-user event does two things. `persist()` writes the row and broadcasts `notification:created`, which `handleNotificationSSEvent()` turns into the toast and a refreshed bell. The producer's own `home.broadcast(domainEvent)` invalidates the domain's query caches. Toasts come only from the notification handler, and domain SSE handlers never toast, so one event never shows twice. Read, read-all and dismiss broadcast `notification:changed`, which refetches the bell without a toast.
 
 ## A notification's tag is its identity
 
@@ -22,7 +22,7 @@ The tag also carries the ids the link is built from, so each producer's tag deci
 | `calendar-share` / `calendar-unshare` | `lib/calendar/shares.ts` | `calendar-share:{calId}:{ownerUserId}` / none |
 | `calendar-invite`, `-updated`, `-cancelled` | `lib/calendar/invitations.ts` | `calendar-invite:{eventId}:{startTime}`, shared by all three, so one occurrence is one row |
 | `mail` | `MailDomain` (`lib/mail/mail-domain.ts`) | `mail:new`, a constant, so all incoming mail folds into one row |
-| `mention-chat`, `mention-comment`, `chat-message`, `comment-reply` | `ChatRoom.postMessage` | built in `core/notification/tags.ts`, see below |
+| `mention-chat`, `mention-comment`, `chat-message`, `comment-reply` | `ChatRoom.postMessage` | built in `core/notification/tags.ts` ([the tags name the thread](#chat-and-comment-tags-name-the-thread)) |
 | `assigned` | the assignee route in `routes/collab.ts` | built in `core/notification/tags.ts` |
 | `access-request` | `propagateAccessRequest` (`lib/drive/access-request-propagation.ts`) | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
 | `file-event` | `FileHistory.notifyWatchers` | `file-event:{ownerId}:{mountId}:{pathId}`; burst events tag the parent folder ([FILE-HISTORY.md](FILE-HISTORY.md#notifications-coalesce-per-file-and-bursts-per-folder)) |
@@ -36,7 +36,7 @@ With `coalesce: true`, `persist()` reads the row with the same tag first. If tha
 
 ## `details` is typed per notification type
 
-`details` is a JSON column holding the row's secondary line and deep-link parameters, keyed by type in `NotificationDetailsMap` (`packages/lib/src/types/notification.ts`). The write input `NotificationPersistInput` is discriminated, so `details` type-checks only for a type that defines an entry. The column is nullable (migration v2), so a row without it renders title and body only. The read shape keeps `type` a `string`, because a stored row can hold a retired type string and there is no honest value to coerce it to.
+`details` is a JSON column holding the row's secondary line and deep-link parameters, keyed by type in `NotificationDetailsMap` (`packages/lib/src/types/notification.ts`). The write input `NotificationPersistInput` is discriminated, so `details` type-checks only for a type that defines an entry. The column is nullable, so a row without it renders title and body only. The read shape keeps `type` a `string`, because a stored row can hold a retired type string and there is no honest value to coerce it to.
 
 ## Chat and comment tags name the thread
 

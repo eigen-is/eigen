@@ -4,7 +4,7 @@
 
 ## Mail is personal and sits behind a swappable store
 
-Every user route in `apps/api/src/routes/mail.ts` is `requireSelf`: a mailbox belongs to one user and has no ACL. The route hands off to the user's `Mail` (`mail-domain.ts`), which talks to a `MailStore`. `MaildirStore` is the only one. The interface is the seam for a second backend ([JMAP](proposals/PROPOSAL_STALWART_MAIL.md), or [the user's own provider over IMAP](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)), so no file name crosses into the domain or the routes.
+Every user route in `apps/api/src/routes/mail.ts` is `requireSelf`: a mailbox belongs to one user and has no ACL. The route hands off to the user's `Mail` (`mail-domain.ts`), which talks to a `MailStore`. `MaildirStore` is the only one. The interface is where a second backend plugs in ([JMAP](proposals/PROPOSAL_STALWART_MAIL.md), or [the user's own provider over IMAP](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)), so no file name crosses into the domain or the routes.
 
 The `emails` row is the `EmailSummary` the list returns, unmapped; a full message is re-parsed from its `.eml`.
 
@@ -40,9 +40,9 @@ The reader's sanitize keeps remote images, and the apps' CSP allows any `https:`
 
 The mailbox list holds the standard six, then every other Maildir++ folder on disk, so a folder an IMAP client made just shows up. Eigen's UI creates, renames and deletes none. A custom name is literal: `Projects` and `projects` are two folders.
 
-`isValidMailboxPath` refuses only what would break a path, not what falls outside an allowlist. Dovecot writes `&` and non-ASCII in modified UTF-7 (`Ärger` is `.&AMQ-rger`), and those are ordinary folders that `mailboxDisplayName` decodes for the sidebar. The rules and the case-clash limit are in [IMAP.md § A mailbox name is refused only for what breaks a path](IMAP.md#a-mailbox-name-is-refused-only-for-what-breaks-a-path).
+Dovecot writes `&` and non-ASCII names in modified UTF-7, and `mailboxDisplayName` decodes them for the sidebar. Which names the store refuses, and the case-clash limit: [IMAP.md § A mailbox name is refused only for what breaks a path](IMAP.md#a-mailbox-name-is-refused-only-for-what-breaks-a-path).
 
-Custom folders have no watcher. A listing kicks a background reconcile of each one, at most once a minute per folder, because every burst of mail SSE events re-lists the mailboxes and each reconcile takes the lock user mutations need.
+Custom folders have no watcher, so a listing reconciles them in the background ([IMAP.md § Only the six standard folders have a watcher](IMAP.md#only-the-six-standard-folders-have-a-watcher)).
 
 ## The list pages by keyset and patches its own mutations
 
@@ -53,7 +53,7 @@ At 50k messages a mailbox, the whole list is 34 MB and one 200-row page is 130 K
 - The server echoes each mutation over SSE. The mutation records the echo it expects (`markRecentMailMutation`), and the SSE handler skips that one refetch.
 - `listMessages` answers from the DB and reconciles in the background, except on the first open of an empty mailbox ([IMAP.md § A read answers from the index](IMAP.md#a-read-answers-from-the-index)).
 
-A notification goes out only for mail that arrives, coalesced on the `mail:new` tag. The first index of an empty mailbox rings nothing, because the mail it finds was already on disk. An import, a copy and the welcome message pass `arrival: false`, since the user or Eigen put them there.
+A notification goes out only for mail that arrives, coalesced on the `mail:new` tag. What counts as an arrival: [IMAP.md § Only a delivered message is new mail](IMAP.md#only-a-delivered-message-is-new-mail).
 
 ## A draft skips the rebuild until its attachments change
 
@@ -103,7 +103,7 @@ The preview routes feed Drive's bytes-in renderers, so the quick look draws a ma
 
 `POST /mail/deliver/:to` is unauthenticated but `requireLocalhost`, for Postfix. It appends the bytes to the INBOX and scans them for iMIP ([CALENDAR.md § Inbound iMIP](CALENDAR.md#inbound-imip-acts-only-on-a-sender-our-own-mta-verified)). Mail to `postmaster`, `abuse` or `noreply` (`isRoleAddress`) goes to every org admin, so DMARC reports and bounces reach a human. No account and no guest can claim those addresses.
 
-An imported `.eml` is not an arrival. It lands unread with `arrival: false`, so no notification shows a stranger's name for the user's own action. It never runs iMIP: the file has no DKIM verdict this server recorded, so an invitation inside it can't touch the calendar.
+An imported `.eml` is not an [arrival](IMAP.md#only-a-delivered-message-is-new-mail). It lands unread, and no notification shows a stranger's name for the user's own action. It never runs iMIP: the file has no DKIM verdict this server recorded, so an invitation inside it can't touch the calendar.
 
 ## See also
 

@@ -45,7 +45,7 @@ File locations and patterns per concept (backend + frontend tables, package boun
 - Contacts: [CONTACTS.md](docs/CONTACTS.md); CardDAV: [CARDDAV.md](docs/CARDDAV.md)
 - WebDAV: [WEBDAV.md](docs/WEBDAV.md)
 - Search: [SEARCH.md](docs/SEARCH.md); in-document find bar: [IN_DOCUMENT_SEARCH.md](docs/IN_DOCUMENT_SEARCH.md)
-- SSE, toasts, notification center, activity rows: [SSE.md](docs/SSE.md), [NOTIFICATIONS.md](docs/NOTIFICATIONS.md), [NOTIFICATION-CENTER.md](docs/NOTIFICATION-CENTER.md), [ACTIVITY-ROWS.md](docs/ACTIVITY-ROWS.md)
+- SSE: [SSE.md](docs/SSE.md); toasts: [NOTIFICATIONS.md](docs/NOTIFICATIONS.md); notification center: [NOTIFICATION-CENTER.md](docs/NOTIFICATION-CENTER.md); activity rows: [ACTIVITY-ROWS.md](docs/ACTIVITY-ROWS.md)
 - Previews, quick look and file actions, export, off-thread transforms: [PREVIEWS.md](docs/PREVIEWS.md), [EXPORT.md](docs/EXPORT.md), [DOCUMENT-TRANSFORMS.md](docs/DOCUMENT-TRANSFORMS.md)
 - Uploads and S3 sync: [SYNC.md](docs/SYNC.md), [STREAMING_UPLOADS.md](docs/STREAMING_UPLOADS.md)
 - Backup and restore: [BACKUP.md](docs/BACKUP.md)

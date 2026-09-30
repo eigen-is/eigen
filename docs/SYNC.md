@@ -20,15 +20,15 @@ A queue exists only when `buildUploadDestinationKey` (`apps/api/src/lib/mount/he
 
 ## Code comments cite seven numbered invariants
 
-Comments name these by number ("invariant 7"). They also cite the design's parts: Phase 1a is the crash-temp recovery, Phase 1b the write-behind pipeline, §3 staging and version snapshots, §9 the queue-depth count (`pendingCount`).
+Comments and tests name these by number ("invariant 7"). Some cite four more labels: Phase 1a is the crash-temp recovery, Phase 1b the write-behind pipeline, §3 staging and version snapshots, and §9 the queue-depth count (`pendingCount`).
 
-1. **The payload is a frozen `VACUUM INTO` staged copy**, captured at enqueue, never the live temp. The row's `paths.size` is stat'd from that staged copy too (`syncDocumentDbSize`), so it matches the object that range requests and WebDAV HEAD are served against. On `local` and `local-key` the live file is the object, and the size comes from it.
-2. **Staged copies live in the per-mount `staging/` folder, which the startup `tmp/` sweep never touches.** A staged copy lives until its PUT acks.
-3. **Local bytes count as synced only on ack.** `ManagedDatabase` moves its dirty watermark once the copy is staged and its row written. The row is the durable marker, and only an ack clears it.
-4. **At most one pending upload per storage key, and the newest staged copy wins** (a primary-key upsert on `pending_uploads`). The superseded copy is deleted unless it is mid-PUT, in which case the worker deletes it afterwards.
-5. **Every enqueue is on disk in `metadata.db` before the producer returns**, and `UploadQueue.reconcile` runs **before** the `tmp/` sweep at mount init, so replay can't lose to it.
-6. **Uploads are idempotent**: stable UUID keys and whole-file overwrites, so a replay is harmless.
-7. **Permanent delete and the chat-restore replace cancel the pending upload and its staged copy**, so a queued or in-flight PUT never brings deleted bytes back.
+1. The payload is a frozen `VACUUM INTO` staged copy, captured at enqueue, never the live temp. The row's `paths.size` is stat'd from that staged copy too (`syncDocumentDbSize`), so it matches the object that range requests and WebDAV HEAD are served against. On `local` and `local-key` the live file is the object, and the size comes from it.
+2. Staged copies live in the per-mount `staging/` folder, which the startup `tmp/` sweep never touches. A staged copy lives until its PUT acks.
+3. Local bytes count as synced only on ack. `ManagedDatabase` moves its dirty watermark once the copy is staged and its row written. The row is the durable marker, and only an ack clears it.
+4. At most one pending upload per storage key, and the newest staged copy wins (a primary-key upsert on `pending_uploads`). The superseded copy is deleted unless it is mid-PUT, in which case the worker deletes it afterwards.
+5. Every enqueue is on disk in `metadata.db` before the producer returns, and `UploadQueue.reconcile` runs before the `tmp/` sweep at mount init, so replay can't lose to it.
+6. Uploads are idempotent: stable UUID keys and whole-file overwrites, so a replay is harmless.
+7. Permanent delete and the chat-restore replace cancel the pending upload and its staged copy, so a queued or in-flight PUT never brings deleted bytes back.
 
 ## Pending uploads survive a restart
 
