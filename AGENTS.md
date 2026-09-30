@@ -37,7 +37,7 @@ File locations and patterns per concept (backend + frontend tables, package boun
 - Sharing and permissions: [ACL.md](docs/ACL.md); guests: [GUEST-ACCESS.md](docs/GUEST-ACCESS.md); organizations and teams: [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md)
 - Collab documents (Yjs, offline, restore): [COLLAB.md](docs/COLLAB.md)
 - Canvas engine (vector + slides): [CANVAS.md](docs/CANVAS.md), [SLIDES.md](docs/SLIDES.md); clipboard: [CLIPBOARD.md](docs/CLIPBOARD.md)
-- Sheets: [SHEETS.md](docs/SHEETS.md), [SHEETS-FORMULAS.md](docs/SHEETS-FORMULAS.md), [SHEETS-CELL-GLYPHS.md](docs/SHEETS-CELL-GLYPHS.md), [SHEETS-EXPORT.md](docs/SHEETS-EXPORT.md); stickies: [STICKIES.md](docs/STICKIES.md); documents: [DOCUMENT-CONTENT-LAYER.md](docs/DOCUMENT-CONTENT-LAYER.md), [INLINE-EDITING.md](docs/INLINE-EDITING.md), [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)
+- Sheets: [SHEETS.md](docs/SHEETS.md); stickies: [STICKIES.md](docs/STICKIES.md); documents: [DOCUMENT-CONTENT-LAYER.md](docs/DOCUMENT-CONTENT-LAYER.md), [INLINE-EDITING.md](docs/INLINE-EDITING.md), [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)
 - Comments: [COMMENTS.md](docs/COMMENTS.md)
 - Mail: [MAIL.md](docs/MAIL.md), [IMAP.md](docs/IMAP.md)
 - Chat: [CHAT.md](docs/CHAT.md)

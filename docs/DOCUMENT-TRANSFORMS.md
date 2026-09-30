@@ -41,7 +41,7 @@ Every operation follows the same layout: a Worker-pure module per type behind a 
 |---|---|---|---|
 | Preview  | `preview/preview-document.ts` (collab), `preview/preview-cache.ts` (bytes) | `preview/eigen{doc,slides,sheets,vector}-render.ts`, `preview/{vcard,eml,ics}-preview.ts` | [PREVIEWS.md](PREVIEWS.md) |
 | Export   | `export/export-document.ts` (`runDocumentExport` + the format→envelope table) | `export/{doc,sheets,vector}/{render,transform}.ts`, `export/canvas/{render,transform}.ts` (both canvas types) | [EXPORT.md](EXPORT.md) |
-| Import / convert | `import/import-document.ts` | `import/{doc,sheets}/transform.ts` | [EXPORT.md](EXPORT.md), [SHEETS-EXPORT.md](SHEETS-EXPORT.md) |
+| Import / convert | `import/import-document.ts` | `import/{doc,sheets}/transform.ts` | [EXPORT.md](EXPORT.md), [SHEETS.md](SHEETS.md) |
 | Search extraction | `search/extract-text.ts` | `search/extract-render.ts` | [SEARCH.md](SEARCH.md) |
 
 **Boundary rules.** Workers receive transferred `ArrayBuffer`s (compressed Yjs blobs, upload bytes, previewed file bytes, media
@@ -105,7 +105,7 @@ only where they pin contracts).
   (`isValidResponse` in `runner.ts`); a half-valid response becomes a structured failure, not a hung promise.
 - A recalc failure inside the Worker returns replayed values plus a `recalc-failed` warning — it never fails
   a preview or export. Preview and extract reads never recalc at all; export is the only recalc'ing read
-  (SHEETS-FORMULAS.md § The editor computes on write, the server only what nobody computed).
+  (SHEETS.md § The editor computes on write, the server only what nobody computed).
 - Sanitization happens inside the Worker: previews use DOMPurify with `FORCE_BODY` only; exports go through
   `sanitizeExportHtml` (the call-scoped data-URI-only SSRF hook — see [EXPORT.md](EXPORT.md)).
 - Decompressed-size guards (`import/zip-size-guard.ts`) run before ExcelJS or mammoth materialize anything;

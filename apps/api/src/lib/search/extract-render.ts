@@ -85,7 +85,7 @@ function collectCanvasText(elements: VectorElement[], kinds: ElementKindRegistry
 }
 
 // Body text for one collab document, capped at ~100 KB. Sheets index stored values
-// only — like the preview renderer, the read never recalcs (SHEETS-FORMULAS.md § The
+// only — like the preview renderer, the read never recalcs (SHEETS.md § The
 // editor computes on write), so a valueless formula cell contributes nothing.
 export async function extractCollabText(
     documentType: ExtractTextJob['documentType'],

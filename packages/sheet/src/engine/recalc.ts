@@ -3,7 +3,7 @@
 // Turns a persisted `Sheet[]` (snapshot + replayed ops) into a `Sheet[]` whose
 // formula cells carry engine-computed `v` and `m`. The single target population
 // is docs the client never computed for us: xlsx-imported-never-opened files
-// and crash/race divergence (see docs/SHEETS-FORMULAS.md § The editor computes
+// and crash/race divergence (see docs/SHEETS.md § The editor computes
 // on write). Live-edited docs already persist fresh values as ops, so the read
 // path gates this off for them via `sheetsNeedRecalc`.
 //

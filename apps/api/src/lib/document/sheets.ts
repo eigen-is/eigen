@@ -39,7 +39,7 @@ export function readSheetsFromDoc(
     // extract must never pay inside its 30s Worker deadline. Those readers pass
     // { recalc: false } and serve the replayed values as-is. Any recalc failure
     // falls back to the replayed stale-but-valid sheets — an export must never 500
-    // because recalc hiccuped. See docs/SHEETS-FORMULAS.md § The editor computes on write.
+    // because recalc hiccuped. See docs/SHEETS.md § The editor computes on write.
     if (!recalc || !sheetsNeedRecalc(replayed)) return { sheets: replayed, recalcError: null };
     try {
         return { sheets: recalcSheets(replayed), recalcError: null };
