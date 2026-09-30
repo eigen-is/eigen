@@ -676,8 +676,10 @@ describe('Backup snapshotHome under contention', () => {
 
         const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-vanish-'));
         try {
-            const manifest = await snapshotHome(home, target, (step) => {
-                if (step === 'home files') rmSync(raceDir, { recursive: true, force: true });
+            const manifest = await snapshotHome(home, target, {
+                onProgress: (step) => {
+                    if (step === 'home files') rmSync(raceDir, { recursive: true, force: true });
+                },
             });
             const folder = join(target, buildHomeFolderName(owner.id));
             expect(manifest.entries.filter((e) => e.path.startsWith('home/backup-vanish/')).length).toBeLessThan(20);

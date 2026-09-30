@@ -3,17 +3,19 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry } from '@workspace/lib/types/backup';
 import { type DrivePathType, isCollabType, isDocumentType } from '@workspace/lib/types/drive';
+import { eq } from 'drizzle-orm';
 import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import { CHAT_ROOM_DB_CONFIG } from '../chat/db-config';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
 import { ApiError, type DatabaseConfig, type SchemaType } from '../core';
+import { withDocumentDb } from '../mount/document-db';
 import { buildStorageKey, isUsableName } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { errnoOf, isMissingObjectCause } from '../storage';
 import { stageManagedDbCopy } from '../versioning/snapshot';
 import { VERSIONS_FOLDER_NAME } from '../versioning/versions-folder';
-import { captureFile, captureWrittenFile } from './capture';
+import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
 import type { SnapshotProgress } from './snapshot-home';
 
 // The columns every reader of a mount's paths table wants, spelled once: snapshotMountData selects
@@ -311,6 +313,43 @@ export async function snapshotMountData(
     return { entries, databases, pathIds: new Set(fileRows.map((row) => row.id)) };
 }
 
+// A metadata-only capture of an s3 mount reads no object, so an open document's newest commits reach
+// the archive only through staging/: flushing stages them there with a pending row, which the
+// metadata.db staged after this names. comments.db included, which Mount.flushContainerDb skips.
+export async function flushOpenDocumentDbs(mount: Mount): Promise<void> {
+    for (const pathId of [...mount.documentDbs.keys()]) {
+        await withDocumentDb(mount, pathId, async (slot) => {
+            await slot.db?.flush();
+        });
+    }
+}
+
+// The rest of a metadata-only capture: staging/ as it stands, the bytes the bucket does not have yet,
+// under the names the pending rows of metadata.db give them. Nothing counts as a database: a staged
+// copy is a payload for the upload queue, not one this server opens. The ids are the file rows',
+// which the thumbnails are keyed by.
+export async function snapshotMountStaging(mount: Mount, targetDir: string, relPrefix: string): Promise<MountSnapshot> {
+    const entries: BackupEntry[] = [];
+    if (fs.existsSync(mount.stagingDir)) {
+        for (const entry of fs.readdirSync(mount.stagingDir, { withFileTypes: true })) {
+            if (!entry.isFile()) continue;
+            // A staged copy goes once its PUT acks (its bytes are in the bucket) or a newer copy
+            // supersedes it (UploadQueue.enqueueStaged), so one can vanish mid-copy. It is left out:
+            // the archived pending row then names a missing file, which reconcile drops, and a
+            // restore of this level takes the bucket as it is.
+            const source = Bun.file(path.join(mount.stagingDir, entry.name));
+            const captured = await captureUnlessGone(
+                source,
+                path.join(targetDir, entry.name),
+                `${relPrefix}/${entry.name}`,
+            );
+            if (captured) entries.push(captured);
+        }
+    }
+    const rows = await mount.db.select({ id: paths.id }).from(paths).where(eq(paths.type, 'file')).all();
+    return { entries, databases: 0, pathIds: new Set(rows.map((row) => row.id)) };
+}
+
 // Thumbnails are not derived data: they are generated once, when a file is uploaded, and never
 // regenerated — the drive route answers 404 for a file whose thumbnail is gone — so a restore
 // without them loses every thumbnail the home ever had. They are keyed by path id, which a restore
@@ -326,11 +365,13 @@ export async function snapshotMountThumbs(
     for (const entry of fs.readdirSync(thumbsDir, { withFileTypes: true })) {
         if (!entry.isFile() || !pathIds.has(path.parse(entry.name).name)) continue;
         const source = Bun.file(path.join(thumbsDir, entry.name));
-        // A thumbnail regenerated (and briefly unlinked) mid-walk is out of the archive either way;
-        // losing the whole snapshot over one is not.
-        if (await source.exists()) {
-            entries.push(await captureFile(source, path.join(targetDir, entry.name), `${relPrefix}/${entry.name}`));
-        }
+        // Deleting a file for good deletes its thumbnail (Mount.deletePath), so one can go mid-copy.
+        const captured = await captureUnlessGone(
+            source,
+            path.join(targetDir, entry.name),
+            `${relPrefix}/${entry.name}`,
+        );
+        if (captured) entries.push(captured);
     }
     return entries;
 }

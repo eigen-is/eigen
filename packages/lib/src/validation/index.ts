@@ -7,6 +7,7 @@ export {
     BACKUP_STAMP_PATTERN,
     buildBackupStamp,
     FAILED_RESTORE_SUFFIX,
+    incompleteReason,
     PRE_RESTORE_SUFFIX,
     parseBackupArtifactName,
     parseBackupAuthRows,

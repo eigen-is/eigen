@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry } from '@workspace/lib/types/backup';
-import { hashFile, type StorageFile, writeTempWithHash } from '../storage';
+import { hashFile, isMissingObjectCause, type StorageFile, writeTempWithHash } from '../storage';
 
 // Copy one file into the archive folder and return its manifest entry. The sha256 is taken on the
 // bytes as they stream through, so nothing is read a second time to hash it.
@@ -13,6 +13,21 @@ export async function captureFile(
     fs.mkdirSync(path.dirname(destPath), { recursive: true });
     const { size, hash } = await writeTempWithHash(destPath, source);
     return { path: relPath, bytes: size, sha256: hash };
+}
+
+// captureFile for a live file something may legitimately remove between the listing and the copy:
+// one gone by then is left out, with the partial copy, rather than failing the whole snapshot.
+export async function captureUnlessGone(
+    source: StorageFile,
+    destPath: string,
+    relPath: string,
+): Promise<BackupEntry | null> {
+    return captureFile(source, destPath, relPath).catch((error: unknown) => {
+        // A local file's ENOENT arrives as the cause of a storage error (consumeStream).
+        if (!isMissingObjectCause(error)) throw error;
+        fs.rmSync(destPath, { force: true });
+        return null;
+    });
 }
 
 // The entry for a file already sitting in the archive — a VACUUM INTO copy, which SQLite writes

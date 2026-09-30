@@ -83,6 +83,15 @@ export function materializeMount(
     summary: BackupManifest['mounts'][number],
     stamp: string,
 ): VersionedDatabase[] {
+    // restoreHome refuses such an archive from its manifest (incompleteReason); this is the second
+    // lock, where the harm would be: below, an s3 mount's rows get fresh keys and a body the archive
+    // does not hold reads as missing at backup, so every file of the mount would be lost.
+    if (summary.contents === 'metadata') {
+        throw new ApiError(
+            400,
+            `Mount ${summary.id} holds only its metadata in the archive, not its files, so it cannot be restored`,
+        );
+    }
     // The id comes out of the archive's manifest. The parser holds it to the class a real mount id
     // uses, and this is the second lock on the same door.
     const mountDir = requireMountDir(homeDir, summary.id);

@@ -13,7 +13,7 @@ import { getBackupArtifactUrl } from '@workspace/lib/api';
 import { formatDateTime } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
-import { BACKUP_ARTIFACT_EXTENSION } from '@workspace/lib/validation';
+import { BACKUP_ARTIFACT_EXTENSION, incompleteReason } from '@workspace/lib/validation';
 import { DeleteDialog, ErrorState, LoadingState, TooltipButton } from '@workspace/ui';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Badge } from '@workspace/ui/components/badge';
@@ -285,6 +285,9 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
     // A mount the home had turned off whose storage could not be read: the archive holds nothing for
     // it, and the row says so rather than letting the admin assume it is in there.
     const skipped = artifact.manifest?.mounts.filter((mount) => mount.skipped) ?? [];
+    // A Light or metadata-only member of a whole-server archive: restoreHome refuses it, so the
+    // row says why instead of offering it.
+    const incomplete = artifact.manifest && incompleteReason(artifact.manifest);
     return (
         <div className="group flex flex-col gap-1 p-3 border rounded-lg">
             <div className="flex items-center gap-3">
@@ -310,8 +313,9 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
                         disabled={busy}
                         onClick={onVerify}
                     />
-                    {/* An archive that failed its verify is not offered for restore — the failures below say why. */}
-                    {artifact.verify.status !== 'failed' && (
+                    {/* An archive that failed its verify or is not a complete home is not offered for
+                        restore — the lines below say why. */}
+                    {artifact.verify.status !== 'failed' && !incomplete && (
                         <TooltipButton
                             icon={RotateCcw}
                             tooltipText="Restore"
@@ -329,6 +333,7 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
                     />
                 </div>
             </div>
+            {incomplete && <p className="text-xs text-muted-foreground pl-7">This archive {incomplete}.</p>}
             {skipped.map((mount) => (
                 <p key={mount.id} className="text-xs text-muted-foreground pl-7 truncate">
                     Skipped mount {mount.id}: {mount.skipped}

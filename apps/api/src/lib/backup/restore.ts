@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { parseBackupArtifactName } from '@workspace/lib/validation';
+import { incompleteReason, parseBackupArtifactName } from '@workspace/lib/validation';
 import { closeCollabConnectionsForHome } from '../collab/connections';
 import { ApiError, PATHS } from '../core';
 import { rotateHomeDataEpoch } from '../home/data-epoch';
@@ -151,6 +151,13 @@ export async function restoreHome(
             await extractArtifact(artifactPath, unpackDir);
             onProgress?.('extract', 1, 1);
             const { folder, manifest } = readUnpackedHome(unpackDir, ownerId, artifactName);
+            // A member of a whole-server archive that left out what only a restore of that archive
+            // puts back. Refused here, before the home is moved aside: after that, a refusal would
+            // already have cost the user their open pages. The refusal trusts the manifest: one
+            // stripped of `level` and `contents` over missing bodies verifies, since verify lets a
+            // body be missing (a delete can race the backup), and restores to files with no bytes.
+            const incomplete = incompleteReason(manifest);
+            if (incomplete) throw new ApiError(400, `${artifactName} ${incomplete}`);
             const verified = await verifyFolder(folder, onProgress);
             if (verified.status !== 'verified') {
                 const failures = verified.failures.slice(0, FAILURES_IN_MESSAGE).join('; ');
