@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1595 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1596 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -888,7 +888,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (743)
+## Utilities & constants (744)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1071,6 +1071,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `writeCardToDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `APP_URLS` | `@workspace/lib/constants` | packages/lib/src/constants/app-urls.ts |
 | `BACKUP_DESTINATION_NOTICE` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
+| `BACKUP_KEEP_MAX` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `BACKUP_LEVEL_NAMES` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `BACKUP_UPLOAD_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `BACKUP_UPLOAD_MAX_LABEL` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
