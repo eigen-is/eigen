@@ -16,21 +16,21 @@ Everything you do with Eigen on the server goes through `./eigen` in the install
 | Command | What it does |
 |---|---|
 | `./eigen setup` | Asks the setup questions, starts Eigen, and prints the link that finishes the setup. Run it again to change an answer. |
-| `./eigen status` | Shows the version, a waiting update, the services, disk space, the snapshots, the certificate, and the mail queue |
+| `./eigen status` | Shows the version, a waiting update, the services, disk space, the newest backup, the certificate, and the mail queue |
 | `./eigen logs [service]` | Follows the logs of every service, or of one. Ctrl-C stops it. |
 | `./eigen restart` | Starts Eigen, and any part of it that stopped |
 | `./eigen stop` | Stops Eigen. `./eigen restart` starts it again. |
 | `./eigen update` | Installs a new release. See [Update Eigen](/support/self-hosting/update). |
 | `./eigen rollback` | Goes back to the version before the last update |
-| `./eigen backup` | Saves a snapshot. See [Back up and restore the whole server](/support/self-hosting/back-up-and-restore). |
-| `./eigen restore <snapshot>` | Puts a snapshot back |
+| `./eigen backup` | Backs up the whole server into `backups/` while Eigen runs. See [Back up and restore the whole server](/support/self-hosting/back-up-and-restore). |
+| `./eigen restore <backup>` | Puts a whole-server backup back, on this server or a new one |
 | `./eigen reset-password <email>` | Sets a new password for an account. See [Reset a password from the server](/support/self-hosting/reset-a-password). |
 
-`./eigen` runs one command that changes Eigen at a time. A second one, like a nightly backup in the middle of an update, stops with "Another ./eigen command is running."
+`./eigen` runs one command that changes Eigen at a time, like an update, a rollback, or a restore. A second one stops with "Another ./eigen command is running." `./eigen backup` does not count: it changes nothing, and runs on the running server.
 
 ## Status
 
-`./eigen status` also names the install folder, the newest snapshot, and how many snapshots `snapshots/` holds and their size. An update that stopped halfway shows as `files of <new version>, running <old version>`, and `./eigen update` finishes it.
+`./eigen status` also names the install folder, and the newest backup with its age and size. The Backup row turns red when the last nightly backup failed. It warns when that backup did not reach your backup bucket, when there is no backup yet, and when nightly backups are on but no Full backup has checked out in two days. An update that stopped halfway shows as `files of <new version>, running <old version>`, and `./eigen update` finishes it.
 
 ## Logs
 
@@ -64,8 +64,8 @@ Everything is in the install folder, like `/opt/eigen`:
 | `data/server/` | The accounts, the server settings, and the organization |
 | `data/dkim/` | The key that signs outgoing mail |
 | `data/certs/` | The certificate of the mail server |
-| `backups/` | Backups of single users and teams, made in Admin |
-| `snapshots/` | Snapshots from `./eigen backup` and `./eigen update`. Only the owner of the install folder can read them. |
+| `backups/` | Whole-server backups, and backups of single users and teams made in Admin |
+| `snapshots/` | Only after the update from Eigen 0.3.0: the snapshot that update saved. See [Update Eigen](/support/self-hosting/update#after-the-update-from-030). |
 | `caddy-data/` | The HTTPS certificates of Eigen's own web server |
 | `eigen.nginx.conf`, `eigen.apache.conf`, `eigen.Caddyfile` | Settings for your own web server, when it forwards to Eigen |
 | `docker/fail2ban/` | Rules for fail2ban, when you host mail |

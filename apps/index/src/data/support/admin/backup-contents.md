@@ -74,15 +74,15 @@ Click **Verify** on any archive to run the checks again and update its badge.
 
 | Limit | Detail |
 |---|---|
-| Scheduling | None. Every backup is started by hand. |
-| Clean-up | None. Old archives and safety copies stay until you delete them. |
+| Scheduling | None for one user or team. The nightly backup of the whole server holds every user and team. |
+| Clean-up | None. Archives of one user or team and safety copies stay until you delete them. |
 | Whole server | The panel backs up one user or team, not the whole server. |
-| Concurrent jobs | One at a time per user or team. A second request is refused while one runs. |
+| Concurrent jobs | One at a time per user or team. A second request is refused while one runs, and while the whole-server backup copies that user or team. |
 | Restore target | An archive restores only to the same user or team it came from. |
 | Upload size | About 1 GB through **Upload backup**. For a larger archive, copy the file into the backups folder by hand. |
 
 ## Whole-server backup
 
-The panel covers one user or team at a time. To back up the whole server, run `./eigen backup` in the install folder on the server. It saves everything, the server's own databases and settings included, but Eigen is down while it runs and the snapshot is not verified. See [Back up and restore the whole server](/support/self-hosting/back-up-and-restore).
+The panel covers one user or team at a time. The owner backs up the whole server in [Settings](/support/admin/server-settings#backups), every night or by hand, or with `./eigen backup` on the server. It runs while Eigen runs, holds the server's own databases and settings as well, is checked the same way, and can go to a backup bucket off the server. See [Back up and restore the whole server](/support/self-hosting/back-up-and-restore).
 
-Use `./eigen backup` for disaster recovery of the entire server. Use the **Backup** panel when you want a verified copy of a single user or team, or a restore that does not take the server down.
+A whole-server backup holds an archive of every user and team. Copied into the backups folder, one lists in that user's or team's **Backup** section like any other archive. A copy out of a **Light** backup holds no files and no mail, and one out of a **Full** backup holds no files of a drive in an S3 bucket. Neither restores on its own: the row says why and offers no **Restore**.

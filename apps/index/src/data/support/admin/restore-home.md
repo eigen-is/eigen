@@ -15,14 +15,14 @@ You can put a single user's or team's account back to the state held in a backup
 
 A backup archive can only restore the same account it was made from. You cannot use one user's archive to fill in another user, and you cannot restore an archive onto a different server. If you need to bring an archive over from another machine first, see [Back up a user or team](/support/admin/back-up-home).
 
-To see what an archive contains, read [What a backup contains](/support/admin/backup-contents).
+To see what an archive contains, read [What a backup contains](/support/admin/backup-contents). A backup of the whole server holds an archive of every user and team, which whoever runs the server can [copy into the backups folder](/support/self-hosting/back-up-and-restore#restore-one-user-or-team-from-a-server-backup) to restore from here.
 
 ## Restore an account
 
 1. Sign in to Eigen as an admin and open [Admin](/admin).
 2. For a person, click **Users** in the sidebar and pick the user. For a team, click **Teams** and pick the team.
 3. Scroll to the **Backup** section. It lists every archive for that account.
-4. Find the archive you want, hover over its row, and click **Restore** (the circular arrow icon). An archive that failed its check has no **Restore** button: fix or replace it first.
+4. Find the archive you want, hover over its row, and click **Restore** (the circular arrow icon). An archive that failed its check has no **Restore** button: fix or replace it first. Neither has an archive that holds only part of the account, like a copy out of a Light backup of the whole server. Its row says what it leaves out.
 5. A dialog titled **Restore this home** asks you to confirm. It explains that this replaces every file, email, and setting in the account with the archive, that the account is unavailable while the restore runs, that every open page of it reloads, and that the current state is kept beside it as a safety copy.
 6. Click **Restore** to start. The section shows **Restoring home** with its progress while the job runs, then **Home restored** when it finishes.
 

@@ -21,7 +21,7 @@ When it says Docker Compose is too old, update the Docker Compose plugin to 2.20
 
 ## Another ./eigen command is running
 
-`./eigen` runs one command that changes Eigen at a time, so a nightly backup never stops Eigen in the middle of an update. Wait for the other command to end, then run yours again. If no other command runs, remove `.eigen/lock` in the install folder.
+`./eigen` runs one command that changes Eigen at a time, so two of them never stop and start Eigen at the same time. Wait for the other command to end, then run yours again. If no other command runs, remove `.eigen/lock` in the install folder.
 
 ## The data folders are not writable
 

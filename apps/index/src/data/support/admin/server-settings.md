@@ -1,14 +1,14 @@
 ---
 title: "Server settings"
-description: "A reference for the Settings page in Admin, covering your organization name, the server status, the sender of Eigen's mail, storage quotas, default storage type, and email notifications."
+description: "A reference for the Settings page in Admin, covering your organization name, the server status, the sender of Eigen's mail, storage quotas, default storage type, backups of the whole server, and email notifications."
 type: reference
-tags: [admin, settings, quotas, storage, notifications, mail]
-related: [admin/get-started, admin/storage-quotas]
+tags: [admin, settings, quotas, storage, notifications, mail, backup]
+related: [admin/get-started, admin/storage-quotas, self-hosting/back-up-and-restore]
 order: 80
-updated: 2026-09-24
+updated: 2026-09-30
 ---
 
-The **Settings** page in Admin lets the server owner rename the organization, check on the server, set the sender of Eigen's own mail, and control storage limits, how new users' files are stored, and which events trigger email notifications. Only the server owner sees this page in the sidebar.
+The **Settings** page in Admin lets the server owner rename the organization, check on the server, set the sender of Eigen's own mail, control storage limits and how new users' files are stored, back up the whole server, and choose which events trigger email notifications. Only the server owner sees this page in the sidebar.
 
 To open it, sign in to Eigen as the owner and go to [Admin](/admin), then click **Settings** in the sidebar.
 
@@ -85,6 +85,25 @@ When you select **S3 Bucket**, an **S3 Configuration** form appears. Fill in all
 If the connection test reports that bucket versioning is off or suspended, click **Enable safe defaults** under **Bucket safety**. Without versioning, an overwritten file cannot be recovered.
 
 </div>
+
+## Backups
+
+A backup of the whole server: every user and team, and the server's own databases and settings. Backups are not encrypted. For how to use them, see [Back up and restore the whole server](/support/self-hosting/back-up-and-restore).
+
+| Field | What it controls | Default |
+|---|---|---|
+| **Back up every night** | A Full backup once a day, at the time below. Turned on after that time, the first one starts within a few minutes. | Off |
+| **Time** | When the nightly backup starts. The list shows your own time with UTC beside it. | 02:00 UTC |
+| **Nightly backups to keep** | How many good nightly backups stay on the server. A night that failed never pushes out the last good one. | 7 |
+| **Include files in S3 buckets** | Only there when nightly backups are on and a user or team keeps a drive in an S3 bucket. On, the nightly backup copies every file of those drives. Off, it holds their file list and the bucket keeps the files. | Off |
+| **Upload to a backup bucket** | Sends each backup that checks out to a private S3 bucket that holds nothing else of Eigen. Backups made before an update stay on this server. | Off |
+| **Backups to keep in the bucket** | How many nightly backups the bucket keeps. It always keeps the newest one that holds every user and team, and backups made by hand stay. | 30 |
+
+With **Upload to a backup bucket** on, the same S3 fields appear as for the storage type, with **Test Connection**. The test refuses a bucket or an access key that Eigen keeps files with, and a bucket anyone can read. It warns when no rule cleans up uploads that were cut off halfway. The **Secret Access Key** is never shown again: leave it empty to keep the saved one. Once you save a new bucket, a notice asks you to write its details down somewhere other than this server.
+
+Below the settings, **Back up now** makes a backup at the level you pick: **Full**, **Light**, or **Full + S3** when a drive is in an S3 bucket. The section shows its progress while it runs. Each backup in the list shows its date, level, why it was made (**Scheduled**, **Manual**, or **Before an update**), its size, and whether it verified and reached the bucket. A user or team that failed is listed under **Not in this backup**. Hover over a row for **Upload to the bucket**, when a good backup is not in the bucket yet, and **Delete**.
+
+There is no download: a backup leaves the server by the bucket, or by a copy you make on the server, like `scp`.
 
 ## Email notifications
 

@@ -52,7 +52,9 @@ Eigen's software comes as Docker images. They take about 2.8 GB of disk, or 3.2 
 
 A fresh install starts with almost no data: under 1 MB before anyone uploads a file.
 
-Everything else lives in one install folder: the files, the mail, the databases, and the backups. Leave room for your data and for its snapshots. A full snapshot is a compressed copy of all of it, and `./eigen backup` keeps the newest three. An update saves a snapshot too. Both check that the snapshot fits before they stop anything.
+Everything else lives in one install folder: the files, the mail, the databases, and the backups in `backups/`. Leave room for your data and for its backups. A Full backup is a compressed copy of all of it. Eigen keeps the nightly ones you ask for, seven by default, the two newest an update made, and every one you make by hand.
+
+While it works, a backup needs more room than it ends up taking. Before it starts, it checks that `backups/` has room for all the data uncompressed and some to work with, and refuses when it has not. A restore unpacks the backup inside `data/`, on its disk, and checks for room the same way.
 
 ## Network ports
 

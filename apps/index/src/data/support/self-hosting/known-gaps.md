@@ -1,6 +1,6 @@
 ---
 title: "What Eigen does not do yet"
-description: "The known gaps of a pre-1.0 Eigen, from single sign-on to scheduled backups, so you know them before you install."
+description: "The known gaps of a pre-1.0 Eigen, from single sign-on to encrypted backups, so you know them before you install."
 type: reference
 category: Basics
 tags: [self-hosting, limits, roadmap, sso, backup]
@@ -16,7 +16,7 @@ Eigen is not 1.0 yet, and it is built by one person. The core works, but some th
 | Missing | What there is today |
 |---|---|
 | A promise that your data survives every release | Before 1.0, a release can change how something is stored. See [what 1.0 means for your data](/support/self-hosting/update#what-10-means-for-your-data). |
-| Scheduled whole-server backups, and copies to another place | `./eigen backup` on a schedule you set up yourself, and a copy you make. See [Back up and restore the whole server](/support/self-hosting/back-up-and-restore). |
+| Encrypted backups | Backups are not encrypted, in `backups/` or in your backup bucket. Keep the bucket private and its keys for it alone. See [Back up and restore the whole server](/support/self-hosting/back-up-and-restore). |
 | A ready-made setup for Synology and other NAS systems | None. Eigen has not been tested on a NAS. |
 | Kubernetes, Helm, or an installer with windows and buttons | Docker Compose, through `./eigen` |
 | 32-bit processors | amd64 and arm64 only |

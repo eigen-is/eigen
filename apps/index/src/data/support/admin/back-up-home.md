@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/restore-home, admin/backup-contents]
 order: 90
-updated: 2026-09-26
+updated: 2026-09-30
 ---
 
 You can make a backup of a single user or a single team from the admin panel. The backup is one archive file that holds everything in that account: files, mail, documents, and settings. It covers one user or one team at a time, not the whole server.
@@ -36,7 +36,7 @@ A backup file holds everything in that account, including the stored storage cre
 
 </div>
 
-Only one backup or restore can run per user or per team at a time. If a job is already running, **Create backup** stays disabled until it finishes.
+Only one backup or restore can run per user or per team at a time. If a job is already running, **Create backup** stays disabled until it finishes. While a backup of the whole server copies this user or team, a new job is refused for that moment too.
 
 ## Download an archive
 
@@ -58,6 +58,8 @@ If you have a backup file from another machine, you can bring it back in.
 The file must be up to about 1 GB, and its name must match the pattern this server uses for that user or team. A file that arrives this way lists as **Not verified**, so click **Verify** afterwards.
 
 For a file larger than 1 GB, copy it into the server's backups folder by hand instead. That folder is set by `EIGEN_BACKUPS_DIR`, or it is a `backups` folder next to the data directory if that variable is not set. The archive appears in the list once it is in place.
+
+A backup of the whole server holds an archive of every user and team too. Whoever runs the server can copy one out into the backups folder: see [Restore one user or team from a server backup](/support/self-hosting/back-up-and-restore#restore-one-user-or-team-from-a-server-backup).
 
 ## Delete an archive
 
