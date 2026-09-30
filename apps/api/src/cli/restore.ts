@@ -502,13 +502,14 @@ function runSwap(ui: Ui, swap: RestoreSwap): void {
         chmodSync(ENV_PATH, 0o600);
     }
     rmSync(swap.leftover, { recursive: true, force: true });
-    // An aside that keeps nothing goes: a new machine's empty data/, and the .env.production the archive's replaced there.
+    rmSync(SWAP_MARKER);
+    // An aside that keeps nothing goes: a new machine's empty data/, and the .env.production the archive's replaced
+    // there. Only once the marker is gone: a rerun would find the restored ones with no aside and move them again.
     const [dataAside = '', envAside = ''] = swap.aside;
     if (lstatSync(dataAside, { throwIfNoEntry: false })?.isDirectory() && readdirSync(dataAside).length === 0) {
         rmSync(dataAside, { recursive: true });
     }
     if (existsSync(envAside) && readFileSync(envAside).equals(readFileSync(ENV_PATH))) rmSync(envAside);
-    rmSync(SWAP_MARKER);
     console.log(glyphLine('ok', `Swapped in ${swap.archive}`));
     const aside = swap.aside.filter((path) => existsSync(path));
     if (aside.length) console.log(glyphLine('ok', `Kept aside: ${aside.join(', ')}`));

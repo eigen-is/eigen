@@ -1162,6 +1162,36 @@ describe('an interrupted swap', () => {
     );
 
     test(
+        'one cut off before its marker goes, on a new machine, keeps data/ and .env.production in place',
+        async () => {
+            const dir = scratch('restore-new-machine-');
+            mkdirSync(join(dir, 'data'));
+            mkdirSync(join(dir, '.eigen'));
+            writeFileSync(join(dir, '.env.production'), ARCHIVED_ENV, { mode: 0o600 });
+            expect((await stage(dir, basename(fullArchive))).code).toBe(0);
+            const broken = await restoreCli(dir, ['--swap'], {
+                preamble: [
+                    `import { spyOn } from 'bun:test';`,
+                    `import * as fs from 'node:fs';`,
+                    'const rm = fs.rmSync;',
+                    `spyOn(fs, 'rmSync').mockImplementation((path, options) => { if (String(path) === ${JSON.stringify(SWAP_MARKER)}) process.exit(9); return rm(path, options); });`,
+                ],
+            });
+            expect(broken.code).toBe(9);
+            expect(existsSync(join(dir, SWAP_MARKER))).toBe(true);
+
+            const finished = await swap(dir);
+            expect(finished.stderr).toBe('');
+            expect(finished.code).toBe(0);
+            expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(ARCHIVED_ENV);
+            expect(existsSync(join(homeDirOf(dir, alice.id), 'mounts'))).toBe(true);
+            expect(readdirSync(dir).filter((name) => name.includes('.pre-restore-'))).toEqual([]);
+            expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
         'one that cannot go on names the half-done state and keeps its marker',
         async () => {
             const dir = install();

@@ -331,11 +331,14 @@ upgrade_published() {
         started=$SECONDS
         eigen update "$RELEASE" --accept-breaking
         show
-    elif [ "${ACCEPT_BREAKING:-}" = 1 ]; then
-        fail "the gate ran with breaking: true, but $RELEASE lists no breaking change since $PUBLISHED. A (breaking)" \
-            "line counts only under ## [$RELEASE] in CHANGELOG.md, not under [Unreleased]"
-    else
-        ok "$RELEASE lists no breaking changes since $PUBLISHED, so it updates without --accept-breaking"
+    # An update that failed otherwise says nothing of its breaking changes; the check below reports it.
+    elif [ "$CODE" = 0 ]; then
+        if [ "${ACCEPT_BREAKING:-}" = 1 ]; then
+            fail "the gate ran with breaking: true, but $RELEASE lists no breaking change since $PUBLISHED. A (breaking)" \
+                "line counts only under ## [$RELEASE] in CHANGELOG.md, not under [Unreleased]"
+        else
+            ok "$RELEASE lists no breaking changes since $PUBLISHED, so it updates without --accept-breaking"
+        fi
     fi
     if [ "$CODE" = 0 ] &&
         says "◇  Eigen $PUBLISHED (.*) → $RELEASE ($RELEASE_COMMIT) is running at https://localhost/"; then

@@ -659,7 +659,7 @@ put_back() {
 }
 
 # finish_swap: a swap that was cut off, finished by the build whose files run it, then what follows any swap, and the
-# start.
+# start, which ./eigen stop leaves out.
 finish_swap() {
     lock
     trap '' HUP
@@ -670,7 +670,7 @@ finish_swap() {
         "The restore that was cut off cannot be finished" with_image "$swapper" cli_as 0 restore --swap
     NEXT=''
     after_swap "$swapper"
-    restart
+    if [ "$COMMAND" != stop ]; then restart; fi
 }
 
 # The IDs of the mail containers, stopped ones too: fail2ban's jails follow their logs by container ID.
@@ -1144,6 +1144,8 @@ rollback() {
     fi
     need_install
     wordmark rollback
+    # First: a swap that was cut off, finished here, clears .eigen/last-update.
+    preflight
     if [ ! -f .eigen/last-update ]; then
         die "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
     fi
@@ -1159,7 +1161,6 @@ rollback() {
         exit 0
         ;;
     esac
-    preflight
     lock
     api_here
     current=$(describe "$(image api)")

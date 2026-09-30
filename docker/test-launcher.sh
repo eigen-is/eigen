@@ -728,11 +728,11 @@ for SHELL_NAME in dash busybox host; do
     fi
     launch release rollback --yes
     rm "$FIX/release/.eigen/last-update"
-    if [ "$CODE" = 0 ] && [ -z "$CALLS" ] &&
+    if [ "$CODE" = 0 ] && [ -z "$(printf '%s\n' "$CALLS" | grep -v -e '^info ' -e '^compose version ')" ] &&
         printf '%s\n' "$OUT" | grep -q "│  docker run --rm -v \"\$PWD:/install\" ghcr.io/eigen-is/eigen/api:local bootstrap --force --out /install$" &&
         printf '%s\n' "$OUT" | grep -q '│  EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:local ./eigen restore eigen-pre-update-light-20260101-000000.tar.gz$' &&
         printf '%s\n' "$OUT" | grep -q '│  rm -f .eigen/last-update .eigen/bundle$'; then
-        ok "$SHELL_NAME: rollback after that prints the commands that go back with the image of Eigen 0.3.0 and clear what this version recorded, and runs nothing"
+        ok "$SHELL_NAME: rollback after that prints the commands that go back with the image of Eigen 0.3.0 and clear what this version recorded, and runs nothing past the Docker check"
     else
         fail "$SHELL_NAME: rollback of a snapshot: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
@@ -849,6 +849,24 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: status after a swap cut off: exit $CODE, steps '$(steps)', '$OUT'"
     fi
     rm -f "$FIX/release/.eigen/last-update"
+    : >"$FIX/release/.eigen/restore-swap"
+    echo server-pre-update-light-20260101-000000.tar >"$FIX/release/.eigen/last-update"
+    launch release rollback --yes
+    rm -f "$FIX/release/.eigen/last-update"
+    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  There is no update to roll back.' &&
+        [ "$(steps)" = 'restore --swap (ghcr.io/eigen-is/eigen/api:local)|share|up|' ]; then
+        ok "$SHELL_NAME: rollback finishes a swap that was cut off first, and then has no update to roll back"
+    else
+        fail "$SHELL_NAME: rollback after a swap cut off: exit $CODE, steps '$(steps)', '$ERR'"
+    fi
+    : >"$FIX/release/.eigen/restore-swap"
+    STUB_FAIL=compose-up launch release stop
+    if [ "$CODE" = 0 ] && [ "$(steps)" = 'restore --swap (ghcr.io/eigen-is/eigen/api:local)|stop|' ] &&
+        [ ! -e "$FIX/release/.eigen/restore-swap" ]; then
+        ok "$SHELL_NAME: stop finishes a swap that was cut off without starting Eigen, then stops it"
+    else
+        fail "$SHELL_NAME: stop after a swap cut off: exit $CODE, steps '$(steps)', '$ERR'"
+    fi
 
     STUB_CHECKED=EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:local launch release restore "$ARCHIVE" --yes
     if [ "$CODE" = 0 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|share|up|" ]; then
