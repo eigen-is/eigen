@@ -19,7 +19,10 @@ export function atHome(ownerId: string): boolean {
 // Resets the idle timer on an already-loaded home. peek() never triggers the factory,
 // so a keepalive tick pins a live home without resurrecting an evicted one.
 export function touchHomeIfLoaded(ownerId: string): void {
-    homeFactories.get(ownerId)?.peek()?.touch();
+    const home = homeFactories.get(ownerId)?.peek();
+    if (!home) return;
+    home.requestedAt = Date.now();
+    home.touch();
 }
 
 // A home refused because its folder is being replaced. Its own class so a caller can tell it from
@@ -48,6 +51,13 @@ export function clearHomeRestoring(ownerId: string): void {
 }
 
 export async function getHome(ownerId: string): Promise<Home> {
+    const home = await getHomeForBackup(ownerId);
+    home.requestedAt = Date.now();
+    return home;
+}
+
+// getHome without recording a request: a backup reaching a home is nobody opening it (pullHomeSnapshot).
+export async function getHomeForBackup(ownerId: string): Promise<Home> {
     if (restoringHomes.has(ownerId)) {
         throw new HomeRestoringError();
     }

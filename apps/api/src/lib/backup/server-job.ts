@@ -8,7 +8,7 @@ import type {
     ServerArchiveManifest,
     ServerArchiveSidecar,
 } from '@workspace/lib/types/backup';
-import { orgOwnerId } from '@workspace/lib/types/owner';
+import { orgOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
 import {
     BACKUP_FORMAT_VERSION,
     parseServerArchiveName,
@@ -28,7 +28,8 @@ import { PIN_KEYS } from '../config/release';
 import { getPublicConfig } from '../config/server-config';
 import { ApiError } from '../core';
 import { pullHomeBackupBytes, pullHomeSnapshot, sendToHome } from '../home/home-relay';
-import { getOrgOwner } from '../user';
+import { getTeamExists } from '../team/team';
+import { getOrgOwner, getUserById } from '../user';
 import { type ArchiveWriter, createArchiveWriter, packFolder } from './archive';
 import { enumerateHomes, type ServerHome } from './enumerate-homes';
 import { describeError } from './errors';
@@ -121,6 +122,11 @@ async function appendPacked(writer: ArchiveWriter, member: string, packed: strin
     }
 }
 
+// A 404 means the home is gone only when its row is: one from its storage is a failure like any other.
+async function ownerDeleted({ ownerId, kind }: ServerHome): Promise<boolean> {
+    return kind === 'team' ? !(await getTeamExists(parseOwnerId(ownerId).id)) : !(await getUserById(ownerId));
+}
+
 // Step 5 of the job for one home. A home that fails is named in the manifest and the archive goes
 // on without it: one broken bucket must not leave every other home without a backup. A home deleted
 // since the listing is skipped, which is no failure. A failed append is the archive's failure, not
@@ -146,7 +152,9 @@ async function appendHome(
         await packFolder(folder, packed);
         bytes = manifest.counts.bytes;
     } catch (error) {
-        if (error instanceof ApiError && error.status === 404) return { ...home, skipped: HOME_DELETED };
+        if (error instanceof ApiError && error.status === 404 && (await ownerDeleted(home))) {
+            return { ...home, skipped: HOME_DELETED };
+        }
         return { ...home, failed: describeError(error) };
     } finally {
         fs.rmSync(folder, { recursive: true, force: true });
@@ -280,7 +288,12 @@ export async function recoverInterruptedServerBackups(): Promise<void> {
         const archivePath = path.join(dir, name);
         const sidecar = await readServerSidecar(archivePath).catch(() => null);
         if (sidecar?.state !== 'running') continue;
-        await writeServerSidecar(archivePath, { ...sidecar, state: 'failed', error: INTERRUPTED });
+        await writeServerSidecar(archivePath, {
+            ...sidecar,
+            state: 'failed',
+            error: INTERRUPTED,
+            finishedAt: new Date(),
+        });
         interrupted.push(name);
     }
     if (interrupted.length > 0) alertOwner('interrupted', `${interrupted.join(', ')}: ${INTERRUPTED}`);

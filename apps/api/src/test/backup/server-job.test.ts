@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupJob, BackupLevel, BackupReason, ServerArchiveManifest } from '@workspace/lib/types/backup';
@@ -16,6 +16,7 @@ import { getServerConfig } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
+import { deleteUserCompletely } from '../../lib/user/delete-user';
 import { createTeam, createTestUser, getTestContext, type TestContext } from '../setup';
 
 // A server job snapshots, verifies and packs every home of the file's fixture for real.
@@ -223,10 +224,12 @@ describe('Server backup job', () => {
         'a home deleted during the backup is skipped, without failing the job or alerting anyone',
         async () => {
             const relay = quietRelay();
-            const deleted = ctx.bob.user.id;
+            const doomed = await createTestUser(`doomed-${Date.now()}@test.eigen.is`, 'testpassword123', 'Doomed');
+            const deleted = doomed.id;
+            await getHome(deleted);
             spies.push(
                 spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
-                    if (ownerId === deleted) throw new ApiError(404, 'User not found');
+                    if (ownerId === deleted) await deleteUserCompletely(deleted, null);
                     return pullHomeSnapshot(ownerId, dir, options);
                 }),
             );
@@ -242,6 +245,26 @@ describe('Server backup job', () => {
             expect((await readServerSidecar(archivePath))?.state).toBe('done');
             await Bun.sleep(50);
             expect(alertsTo(relay, ctx.alice.user.id)).toEqual([]);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a 404 from the capture of a home whose owner still exists is a failure, not a deletion',
+        async () => {
+            quietRelay();
+            const broken = ctx.bob.user.id;
+            spies.push(
+                spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
+                    if (ownerId === broken) throw new ApiError(404, 'Object not found');
+                    return pullHomeSnapshot(ownerId, dir, options);
+                }),
+            );
+            const { job, archivePath } = await runJob();
+            expect(job.state).toBe('failed');
+            const home = (await readManifest(archivePath)).homes.find((home) => home.ownerId === broken);
+            expect(home?.failed).toContain('Object not found');
+            expect(home?.skipped).toBeUndefined();
         },
         JOB_TIMEOUT_MS,
     );
@@ -263,6 +286,7 @@ describe('Server backup job', () => {
             const sidecar = await readServerSidecar(archivePath);
             expect(sidecar?.state).toBe('failed');
             expect(sidecar?.error).toBe('interrupted by a restart');
+            expect(sidecar?.finishedAt).toBeInstanceOf(Date);
         }
         const untouched = await readServerSidecar(done);
         expect(untouched?.state).toBe('done');
@@ -296,6 +320,26 @@ describe('Server backup job', () => {
         await Bun.sleep(50);
         expect(alertsTo(relay, ctx.alice.user.id)).toHaveLength(1);
     });
+
+    test(
+        'sizes only what the server member takes: a stray file in server/ does not count against the room',
+        async () => {
+            quietRelay();
+            spies.push(spyOn(homeRelay, 'pullHomeBackupBytes').mockResolvedValue(0));
+            // Sparse: a petabyte on paper, no disk behind it.
+            const stray = getServerDataPath('stray.bin');
+            writeFileSync(stray, '');
+            truncateSync(stray, 2 ** 50);
+            try {
+                const { job } = await runJob();
+                expect(job.error).toBeUndefined();
+                expect(job.state).toBe('done');
+            } finally {
+                rmSync(stray, { force: true });
+            }
+        },
+        JOB_TIMEOUT_MS,
+    );
 
     test(
         'prunes scheduled archives beyond keep, with their sidecars, and leaves manual ones alone',

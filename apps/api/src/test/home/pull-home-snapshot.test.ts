@@ -11,6 +11,7 @@ import { createTestUser, getTestContext } from '../setup';
 const snapshotHome = snapshotModule.snapshotHome;
 // Past the release, well inside the five-minute idle of a user home.
 const LONG_AFTER_RELEASE_MS = BACKUP_RELEASE_MS + 60_000;
+const USER_IDLE_MS = 5 * 60_000;
 
 // A backup boots a home it found asleep only for as long as its capture, and never takes one away
 // from a user who opened it meanwhile: it hands the home a short idle instead of evicting it.
@@ -86,6 +87,22 @@ describe('pullHomeSnapshot', () => {
         expect(atHome(ownerId)).toBe(true);
         expect(opened!.destructing).toBe(false);
         expect(await getHome(ownerId)).toBe(opened!);
+    });
+
+    test('a request that reaches the home mid-capture keeps the full idle, with no keepalive after it', async () => {
+        await evictHome(ownerId);
+        let opened: Home | undefined;
+        captureThenFakeTimers(async () => {
+            opened = await getHome(ownerId);
+        });
+        await pullHomeSnapshot(ownerId, targetDir(), {});
+
+        jest.advanceTimersByTime(LONG_AFTER_RELEASE_MS);
+        expect(atHome(ownerId)).toBe(true);
+        expect(opened!.destructing).toBe(false);
+        jest.advanceTimersByTime(USER_IDLE_MS);
+        await waitForEviction();
+        expect(atHome(ownerId)).toBe(false);
     });
 
     test('a home that was open before the capture keeps its full idle', async () => {

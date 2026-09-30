@@ -35,6 +35,9 @@ export class Home {
     protected _notifications!: NotificationCenter;
 
     protected idleMs = 1000 * 60 * 5;
+    // When a request last reached this home through getHome or a keepalive; a backup's own reach and
+    // the getters leave it be, so pullHomeSnapshot can tell whether anybody else opened the home.
+    public requestedAt = 0;
 
     private initPromise: Promise<this> | null = null;
     private timeout: Timer | undefined;
