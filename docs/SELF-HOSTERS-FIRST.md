@@ -2,7 +2,7 @@
 
 The work list for the weeks before the open-source repository is announced. One question orders it: what does a stranger with a VPS or a NAS hit, in the order they hit it? Install, then update, then "is my data safe", then "do I have to run a mail server". Designs live in the linked proposals; this file is the order, the scope cut, and the checkboxes. Delete a line once it is done, and a block once its "done when" holds and it is recorded in its own doc.
 
-Done and recorded elsewhere: install, update and rollback without host Bun, prebuilt images with the bundle inside, the first tagged release through `publish.yml` (v0.3.0), eigen.is and demo.eigen.is as release installs on the `main` channel, mail off as a first-class setup path with a relay in both modes, release hygiene (upgrade notes, secret scan, `SECURITY.md`, issue templates, `CONTRIBUTING.md`), and the self-hosting docs ([SELF-HOSTING.md](SELF-HOSTING.md) and the help center's Self-hosting section, Traefik recipe and known gaps included).
+Done and recorded elsewhere: install, update and rollback without host Bun, prebuilt images with the bundle inside, the first tagged release through `publish.yml` (v0.3.0), a release gate that proves the upgrade from the previous published release and its rollback before every release, eigen.is and demo.eigen.is as release installs on the `main` channel, mail off as a first-class setup path with a relay in both modes, release hygiene (upgrade notes, secret scan, `SECURITY.md`, issue templates, `CONTRIBUTING.md`), and the self-hosting docs ([SELF-HOSTING.md](SELF-HOSTING.md) and the help center's Self-hosting section, Traefik recipe and known gaps included).
 
 ## Ready to announce when
 
@@ -10,15 +10,7 @@ Done and recorded elsewhere: install, update and rollback without host Bun, preb
 - The whole server backs itself up on a schedule, off the box if the admin wants, and a restore onto a fresh machine has been done for real once.
 - The README, [SELF-HOSTING.md](SELF-HOSTING.md) and the help center's Self-hosting section tell the truth about requirements, updates, breaking releases, and what pre-1.0 means for someone's data.
 
-## 1. The release gate
-
-[PROPOSAL_DOCKER_ONLY_SETUP.md](proposals/PROPOSAL_DOCKER_ONLY_SETUP.md) milestone 2. Today `docker/test-release.sh` builds its releases from the working tree into a registry of its own.
-
-- [ ] The gate installs the previous published release, seeds it, updates to the new release, and rolls back
-
-Done when: the gate is green on a real previous-to-new upgrade and its rollback.
-
-## 2. Whole-server backup
+## 1. Whole-server backup
 
 [PROPOSAL_BACKUP_RESTORE.md](proposals/PROPOSAL_BACKUP_RESTORE.md) phase ③, the P1 row in [ROADMAP.md](ROADMAP.md). Size S–M; phase ② left every primitive generic for it. This, not more passes over per-home backup, is what a self-hoster means by "backups".
 
@@ -32,7 +24,7 @@ Done when: the gate is green on a real previous-to-new upgrade and its rollback.
 
 Not in this block: phase ④ migration between servers, chunked artifact upload, the orphaned-bucket-object sweep. Their ROADMAP rows stand.
 
-## 3. The documentation a stranger needs
+## 2. The documentation a stranger needs
 
 - [ ] Measured runtime memory in the requirements (README, [SELF-HOSTING.md](SELF-HOSTING.md) and the help center's requirements article say 2 GB, which is not a measurement)
 

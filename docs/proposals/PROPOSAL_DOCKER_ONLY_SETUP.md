@@ -57,7 +57,7 @@ The launcher is plain `sh`, tested under `dash` and BusyBox `sh`: no Bash, no GN
 
 **Local builds.** A folder with the build overlay, `docker-compose.build.yml`, such as a clone of the repository, is a local build. There the launcher and Compose files come from the folder, not from the image, and `eigen setup` builds the images through the overlay with no host Bun and pins none. It is for developing Eigen: `eigen update` and `eigen rollback` refuse, and a rerun of `eigen setup` builds new code.
 
-**Snapshots.** Until whole-server backup lands ([SELF-HOSTERS-FIRST.md](../SELF-HOSTERS-FIRST.md) block 3), `eigen backup`, the update snapshot and `eigen restore` are an offline stop-and-archive of `data/` plus `.env.production`. They run inside a container, so file ownership never depends on the host user. The archive records the Eigen version, and a restore refuses an archive newer than the install. Block 3 swaps the engine without changing the command.
+**Snapshots.** Until whole-server backup lands ([SELF-HOSTERS-FIRST.md](../SELF-HOSTERS-FIRST.md) block 1), `eigen backup`, the update snapshot and `eigen restore` are an offline stop-and-archive of `data/` plus `.env.production`. They run inside a container, so file ownership never depends on the host user. The archive records the Eigen version, and a restore refuses an archive newer than the install. Block 1 swaps the engine without changing the command.
 
 `eigen setup` runs these steps:
 
@@ -147,7 +147,7 @@ What happens to today's other steps: the Caddy reload goes away, because the Cad
 
 **Breaking releases.** Before 1.0 a release may drop or convert a persisted format ([ROADMAP.md](../ROADMAP.md) states the policy). A `(breaking)` line in the new image's `CHANGELOG.md` flags such a release; `eigen update` prints the release note and asks for confirmation before it touches anything, and refuses in a non-interactive run without `--accept-breaking`. A self-hoster must never learn this from missing data.
 
-**Moving an existing install.** eigen.is and demo.eigen.is move by hand to release installs on the main channel, since no shim replaces the deleted scripts ([SELF-HOSTERS-FIRST.md](../SELF-HOSTERS-FIRST.md) block 1 lists what changes).
+**Moving an existing install.** eigen.is and demo.eigen.is move by hand to release installs on the main channel, since no shim replaces the deleted scripts.
 
 The snapshot (§ 1) archives `data/`, `data/certs` included, and `.env.production` after stopping every service. `caddy-data` and the `postfix-queue` volume are outside it. Whole-stack recovery is the [backup proposal's](PROPOSAL_BACKUP_RESTORE.md) phase ③. The update path calls `eigen backup`'s engine, which switches to the phase ③ backup once it exists.
 
