@@ -1,6 +1,7 @@
 import { formatDateTime } from '@workspace/lib/date';
 import type { BackupVerifyRecord } from '@workspace/lib/types/backup';
 import { Badge } from '@workspace/ui/components/badge';
+import type { LucideIcon } from 'lucide-react';
 import { Archive } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -30,20 +31,28 @@ export function VerifyFailures({ verify }: { verify: BackupVerifyRecord }) {
 }
 
 type BackupArtifactRowProps = {
+    icon?: LucideIcon;
     createdAt: Date;
     detail: string;
-    badges: ReactNode;
+    badges?: ReactNode;
     actions: ReactNode;
     // The lines under the row, each saying what the archive lacks or what went wrong.
     children?: ReactNode;
 };
 
-// One archive in a backup list, a home's or the server's.
-export function BackupArtifactRow({ createdAt, detail, badges, actions, children }: BackupArtifactRowProps) {
+// One archive or safety copy in a backup list, a home's or the server's.
+export function BackupArtifactRow({
+    icon: Icon = Archive,
+    createdAt,
+    detail,
+    badges,
+    actions,
+    children,
+}: BackupArtifactRowProps) {
     return (
         <div className="group flex flex-col gap-1 p-3 border rounded-lg">
             <div className="flex items-center gap-3">
-                <Archive className="h-4 w-4 text-muted-foreground shrink-0" />
+                <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div className="flex-1 min-w-0">
                     <div className="text-sm truncate">{formatDateTime(createdAt)}</div>
                     <div className="text-xs text-muted-foreground truncate">{detail}</div>

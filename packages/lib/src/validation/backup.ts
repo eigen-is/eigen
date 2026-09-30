@@ -297,12 +297,12 @@ export function parseBackupManifest(text: string): BackupManifest | null {
 // its bucket (an s3 mount at Full). Phrased to follow the archive's name.
 export function incompleteReason(manifest: Pick<BackupManifest, 'level' | 'mounts'>): string | null {
     if (manifest.level === 'light') {
-        return 'is a light backup: it holds no files and no mail, so it cannot restore a home on its own';
+        return 'is a light backup: it holds no files and no mail, so it cannot restore an account on its own';
     }
     const metadataOnly = manifest.mounts.filter((summary) => summary.contents === 'metadata');
     if (metadataOnly.length === 0) return null;
     const ids = metadataOnly.map((summary) => summary.id).join(', ');
-    return `holds only the metadata of mount ${ids}, not its files, so it cannot restore a home on its own`;
+    return `holds only the metadata of mount ${ids}, not its files, so it cannot restore an account on its own`;
 }
 
 function isStatus(value: string): value is BackupVerifyRecord['status'] {

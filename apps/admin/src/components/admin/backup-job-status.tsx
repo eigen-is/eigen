@@ -2,12 +2,12 @@ import type { BackupJob } from '@workspace/lib/types/backup';
 import { TooltipButton } from '@workspace/ui';
 import { Progress } from '@workspace/ui/components/progress';
 import { cn } from '@workspace/ui/lib/utils';
-import { X } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 
 const JOB_LABEL: Record<BackupJob['kind'], string> = {
     backup: 'Creating backup',
     verify: 'Verifying archive',
-    restore: 'Restoring home',
+    restore: 'Restoring account',
     'server-backup': 'Backing up the server',
     upload: 'Uploading the server backup',
 };
@@ -15,7 +15,7 @@ const JOB_LABEL: Record<BackupJob['kind'], string> = {
 const JOB_DONE_LABEL: Record<BackupJob['kind'], string> = {
     backup: 'Backup created',
     verify: 'Archive verified',
-    restore: 'Home restored',
+    restore: 'Account restored',
     'server-backup': 'Server backed up',
     upload: 'Server backup uploaded',
 };
@@ -23,13 +23,21 @@ const JOB_DONE_LABEL: Record<BackupJob['kind'], string> = {
 // A running job's step and progress, or the line a finished one leaves until it is dismissed.
 export function BackupJobStatus({ job, onDismiss }: { job: BackupJob; onDismiss: () => void }) {
     if (job.state === 'running') {
+        const { step, done, total } = job.progress;
+        // A one-shot step (total 1) says no more than the job's label. A counted step shows its bar until its last
+        // item; the work after that reports nothing, so it spins rather than rest at 100%.
+        const counting = total > 1 && done < total;
         return (
             <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">
-                    {JOB_LABEL[job.kind]} · {job.progress.step}
-                    {job.progress.total > 0 && ` (${job.progress.done}/${job.progress.total})`}
+                <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                    {!counting && <Loader2 className="h-3 w-3 shrink-0 animate-spin" />}
+                    <span>
+                        {JOB_LABEL[job.kind]}
+                        {total !== 1 && ` · ${step}`}
+                        {counting && ` (${done}/${total})`}
+                    </span>
                 </p>
-                {job.progress.total > 0 && <Progress value={(job.progress.done / job.progress.total) * 100} />}
+                {counting && <Progress value={(done / total) * 100} />}
             </div>
         );
     }

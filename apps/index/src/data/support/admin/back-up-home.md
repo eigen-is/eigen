@@ -20,7 +20,7 @@ Only admins can do this. The **Backup** section lives inside a user's or a team'
 3. Scroll to the **Backup** section.
 4. Click **Create backup**.
 
-The backup runs in the background, so you can keep working. The section shows its progress while it runs: first **Creating backup**, then **Verifying archive**, each with the current step and a progress bar. When it finishes, you see **Backup created** with the name of the new archive, and the archive appears in the list below.
+The backup runs in the background, so you can keep working. The section shows its progress while it runs: first **Creating backup**, then **Verifying archive**, each with the current step and its progress. When it finishes, you see **Backup created** with the name of the new archive, and the archive appears in the list below.
 
 The backup stops if a file Eigen has on record is gone from its disk or bucket, for example because someone deleted it outside Eigen. The section then shows **Creating backup failed** and names the file. The same goes for a document whose data is gone. Only an empty file, or one deleted while the backup runs, is left out.
 
@@ -57,7 +57,7 @@ If you have a backup file from another machine, you can bring it back in.
 
 The file must be up to about 1 GB, and its name must match the pattern this server uses for that user or team. A file that arrives this way lists as **Not verified**, so click **Verify** afterwards.
 
-For a file larger than 1 GB, copy it into the server's backups folder by hand instead. That folder is set by `EIGEN_BACKUPS_DIR`, or it is a `backups` folder next to the data directory if that variable is not set. The archive appears in the list once it is in place.
+For a file larger than 1 GB, copy it into the server's backups folder by hand instead. That folder is set by `EIGEN_BACKUPS_DIR`, or it is a `backups` folder next to the data directory if that variable is not set. The archive appears in the list once it is in place. Its row says **Verify first**: click **Verify** before you restore from it.
 
 A backup of the whole server holds an archive of every user and team too. Whoever runs the server can copy one out into the backups folder: see [Restore one user or team from a server backup](/support/self-hosting/back-up-and-restore#restore-one-user-or-team-from-a-server-backup).
 

@@ -22,9 +22,9 @@ To see what an archive contains, read [What a backup contains](/support/admin/ba
 1. Sign in to Eigen as an admin and open [Admin](/admin).
 2. For a person, click **Users** in the sidebar and pick the user. For a team, click **Teams** and pick the team.
 3. Scroll to the **Backup** section. It lists every archive for that account.
-4. Find the archive you want, hover over its row, and click **Restore** (the circular arrow icon). An archive that failed its check has no **Restore** button: fix or replace it first. Neither has an archive that holds only part of the account, like a copy out of a Light backup of the whole server. Its row says what it leaves out.
-5. A dialog titled **Restore this home** asks you to confirm. It explains that this replaces every file, mail, and database of the account with the archive, that the account is unavailable while the restore runs, that every open page of it reloads, and that the current state is kept beside it as a safety copy.
-6. Click **Restore** to start. The section shows **Restoring home** with its progress while the job runs, then **Home restored** when it finishes.
+4. Find the archive you want, hover over its row, and click **Restore** (the circular arrow icon). An archive that failed its check has no **Restore** button: fix or replace it first. An archive copied into the backups folder by hand has none until you click **Verify**, and its row says **Verify first**. Neither has an archive that holds only part of the account, like a copy out of a Light backup of the whole server. Its row says what it leaves out.
+5. A dialog titled **Restore this account** asks you to confirm. It explains that this replaces every file, mail, and database of the account with the archive, that the account is unavailable while the restore runs, that every open page of it reloads, and that the current state is kept beside it as a safety copy.
+6. Click **Restore** to start. The section shows **Restoring account** with its progress while the job runs, then **Account restored** when it finishes.
 
 Eigen verifies the archive before it touches anything. If the check fails, the job stops and the account is left exactly as it was.
 
@@ -43,7 +43,7 @@ The account is unavailable for the length of the restore, which is usually secon
 - Every open Eigen tab of the account reloads itself once the restore is done, in every app, so it shows the restored content instead of what it was holding. This usually takes a few seconds, and can take up to a minute. For a team, that goes for the tabs of every member.
 - A tab that was offline during the restore reloads once, the next time it reconnects. That way it can't put old content back.
 - Other people's tabs don't reload, unless they have a document of this account open. That document reloads the same way.
-- If you restore your own account, your page reloads too, and it may reload before the **Backup** section shows **Home restored**.
+- If you restore your own account, your page reloads too, and it may reload before the **Backup** section shows **Account restored**.
 - A mail client connected over IMAP keeps seeing the old mailbox until the restore finishes. What it does in that window, like flagging, moving, or saving a message, lands in the safety copy, not in the restored account. For a mail-heavy restore, either pause the mail client for the window or copy any missing messages out of the safety copy afterwards.
 - New mail is not lost. It waits on the server and arrives in the restored account once the restore is done.
 
@@ -51,9 +51,9 @@ The account is unavailable for the length of the restore, which is usually secon
 
 Every restore keeps the account as it stood beforehand. These show up under a **Safety copies** heading in the same **Backup** section:
 
-- **The home before a restore** is the account exactly as it was just before you restored it.
+- **The account before a restore** is the account exactly as it was just before you restored it.
 - **A restore that did not finish** is the leftover of a restore that was interrupted. It is not a working account, so you can only delete it.
 
-To undo a restore, hover over the matching **The home before a restore** row and click **Restore this copy**. The account goes back to that earlier state, and the version it is in now becomes a new safety copy beside it. This makes a restore reversible by hand.
+To undo a restore, hover over the matching **The account before a restore** row and click **Restore this copy**. The account goes back to that earlier state, and the version it is in now becomes a new safety copy beside it. This makes a restore reversible by hand.
 
 To free up space, click **Delete safety copy** on any row. Safety copies are never removed automatically and each one keeps a full second copy of the account on disk, so delete them once you are sure you no longer need them.

@@ -33,7 +33,7 @@ describe('incompleteReason', () => {
 
     test('a Light one is refused by its level', () => {
         expect(incompleteReason({ level: 'light', mounts: [mount('drive', 'local')] })).toBe(
-            'is a light backup: it holds no files and no mail, so it cannot restore a home on its own',
+            'is a light backup: it holds no files and no mail, so it cannot restore an account on its own',
         );
     });
 
@@ -44,7 +44,7 @@ describe('incompleteReason', () => {
             { ...mount('other', 's3'), contents: 'metadata' as const },
         ];
         expect(incompleteReason({ level: 'full', mounts })).toBe(
-            'holds only the metadata of mount bucket, other, not its files, so it cannot restore a home on its own',
+            'holds only the metadata of mount bucket, other, not its files, so it cannot restore an account on its own',
         );
     });
 });

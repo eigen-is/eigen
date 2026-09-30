@@ -120,7 +120,7 @@ A restore needs about twice the home's uncompressed size free in the backups fol
 
 ## An archive from another machine goes in by upload or scp
 
-**Upload backup** takes an archive up to 1 GB, named as this server names them, with the ownerId in the name matching its manifest. A larger one is copied into the backups folder by hand and given to uid 1000 ([ROADMAP.md](ROADMAP.md) has the chunked upload). A file copied in has no sidecar and lists as unverified until **Verify** runs. A restore verifies anyway, but a bad archive is better caught without taking the home offline.
+**Upload backup** takes an archive up to 1 GB, named as this server names them, with the ownerId in the name matching its manifest. A larger one is copied into the backups folder by hand and given to uid 1000 ([ROADMAP.md](ROADMAP.md) has the chunked upload). A file copied in has no sidecar and lists as unverified until **Verify** runs, and the pane offers no **Restore** until then: without a manifest it cannot tell a Light member of a server archive, which the restore refuses. A restore verifies anyway, but a bad archive is better caught without taking the home offline.
 
 A member of a whole-server archive is an ordinary per-home artifact: extract `homes/home-{ownerId}-{stamp}.tar.zst` into the backups folder and it lists on that home's pane.
 
