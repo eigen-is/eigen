@@ -1,15 +1,17 @@
 ---
 name: domain-doc
-description: Use when writing, rewriting, extending, shortening or reviewing a domain doc under `docs/` (MAIL.md, CANVAS.md, ACL.md, COLLAB.md and their siblings), including the docs update that closes a feature, adding a gotcha or design decision to a doc, shrinking a doc that grew too long, or a claim-by-claim docs review. Not for drafts under `docs/superpowers/`, and not for help-center articles under `apps/index/src/data/support/`, which have the support-article skill.
+description: Use when writing, rewriting, extending, shortening or reviewing a domain doc under `docs/` (MAIL.md, CANVAS.md, ACL.md, COLLAB.md and their siblings), including the docs update that closes a feature, adding a gotcha or design decision to a doc, shrinking a doc that grew too long, merging docs that cover one domain, or a claim-by-claim docs review. Not for drafts under `docs/superpowers/`, and not for help-center articles under `apps/index/src/data/support/`, which have the support-article skill.
 ---
 
 # Domain doc
 
 A domain doc tells a developer how one part of Eigen works now and why it is built that way. They read it before they touch the code. The code answers "what does this function do". The doc answers what the code can't: the design decisions, the invariants, and the gotchas that already bit someone.
 
-Read the two exemplars before you write: `docs/COLLAB.md` (1,500 words) and `docs/ACL.md` (1,900 words). Don't copy ACL.md's em-dashes: they predate the rule. What to avoid is MAIL.md (8,500) and CANVAS.md (9,900) before their rewrite: `git show 0cd4d14ab^:docs/MAIL.md` and `git show c4eda8702^:docs/CANVAS.md`.
+**A doc covers a domain, an app or a core function**: SHEETS.md for the sheets app, COLLAB.md for the collab core, CALENDAR.md for calendar with its CalDAV server. Never a doc per feature or per sub-mechanism. New material goes into the doc of the domain it belongs to, and a doc is never split: every extra doc is one more place to look and one more to keep in sync.
 
-Not domain docs, so not held to this budget: the backlogs (`ROADMAP*.md`, `SHEETS-TODO.md`), the generated `SHARED-PRIMITIVES.md`, the standards and guides (`CODE-STANDARDS.md`, `CODE-EXAMPLES.md`, `REVIEW-STANDARD.md`, `SUPPORT-STYLE-GUIDE.md`, `CONTRIBUTING.md`) and the operator guide `SELF-HOSTING.md`. The voice rules still apply to them.
+Read the two exemplars before you write: `docs/COLLAB.md` and `docs/ACL.md`. Don't copy ACL.md's em-dashes: they predate the rule. What to avoid is MAIL.md and CANVAS.md before their rewrite: `git show 0cd4d14ab^:docs/MAIL.md` and `git show c4eda8702^:docs/CANVAS.md`, all narration, catalogues and file tours.
+
+Not domain docs: the backlogs (`ROADMAP*.md`, `SHEETS-TODO.md`), the generated `SHARED-PRIMITIVES.md`, the standards and guides (`CODE-STANDARDS.md`, `CODE-EXAMPLES.md`, `REVIEW-STANDARD.md`, `SUPPORT-STYLE-GUIDE.md`, `CONTRIBUTING.md`) and the operator guide `SELF-HOSTING.md`. The voice rules still apply to them.
 
 ## The shape
 
@@ -32,19 +34,14 @@ What, then why, then where. One idea per section.
 - Name a symbol when the reader will grep for it. Otherwise use plain words. Point at a directory, not at every file in it.
 - A term the code doesn't use is defined in the sentence that introduces it, or replaced.
 
-## The budget
+## Length follows the domain
 
-Measured on the exemplars. Words, not lines: a paragraph is one line.
+A doc is as long as its domain needs. It gets shorter only by cutting narration, repetition and code tours, never by moving content to another file. For readability:
 
-| Unit | Budget | Exemplars | MAIL and CANVAS before rewrite |
-|---|---|---|---|
-| Whole doc | aim for 1,500 to 3,000, longer when the domain needs it | 1,496 and 1,857 | 8,533 and 9,916 |
-| TLDR | 100 words max | 68 and 108 | |
-| Section, any heading level | 300 words max | 272 and 306 | 1,375 and 2,692 |
-| Paragraph | 150 words max | 139 and 187 | 411 and 2,680 |
-| Sentence | aim under 20 words, split anything over 35 | average 18 (ACL) | average 32 and 36 |
-
-**One topic, one doc. Never split a doc** or move a topic into a new file to meet the budget: every extra doc is one more place to look and one more to keep in sync. Shrink by cutting narration, catalogues and file tours. A long doc that says only what the code can't is fine. A doc past 3,000 words, or a section or paragraph within 5% of its cap, gets a line in the report on what was cut and why the rest stays.
+- The TLDR orients in one short paragraph.
+- Each section makes one point. A section that makes two becomes two sections of the same doc.
+- Paragraphs stay short enough to read in one go. A paragraph is one line: no hard wraps.
+- Sentences are plain and short. Split one that needs a second read.
 
 ## What goes where
 
@@ -61,23 +58,20 @@ Measured on the exemplars. Words, not lines: a paragraph is one line.
 | What a user sees and clicks | The help center, via the support-article skill |
 | Another domain's mechanics | That domain's doc, linked |
 
-## Shrinking an overgrown doc
+## Rewriting or merging a doc
 
-1. **List the claims first.** Walk the old doc and write down every design decision, invariant and gotcha, one line each. This list is what you must not lose.
+1. **List the claims first.** Walk the old doc (every doc, when merging) and write down every design decision, invariant and gotcha, one line each. This list is what you must not lose.
 2. **Check each claim against the code.** Find the line that makes it true. A claim with only, every, never or instead is checked against the code path that makes the quantifier true, not just the happy path. A claim you can't confirm in a few greps stays out, or goes in your report as unverified. A wrong doc is worse than a short one.
 3. **Write the TLDR**, then one section per claim that needs one. Merge claims that share a reason.
 4. **Give every claim a home** from the table above, and verify the home of every reason. A reason survives even when its "what" goes. For every why you drop from the doc, grep the code for the reason (not the symbol). If it is absent, add a one-line comment in the same commit. The report lists each dropped why with its home as `file:line`, doc §, or test name.
-5. **Measure.** Run the checklist.
+5. **Check.** Run the checklist.
 
-Editing one section follows the same steps. The section and paragraph budgets apply, and the TLDR changes only when one of its claims does. A doc that receives moved material runs the whole checklist too. Renaming a heading breaks its anchor and its prose citations: grep `docs/`, `AGENTS.md` and `.claude/` for `NAME.md#old-anchor`, and `apps/ packages/ docker/ scripts/` for `NAME.md § Old heading`, skipping `.claude/worktrees/` and `docs/superpowers/`, and fix every hit.
+Editing one section follows the same steps, and the TLDR changes only when one of its claims does. A doc that receives moved material runs the whole checklist too. Renaming a heading breaks its anchor and its prose citations: grep `docs/`, `AGENTS.md` and `.claude/` for `NAME.md#old-anchor`, and `apps/ packages/ docker/ scripts/` for `NAME.md § Old heading`, skipping `.claude/worktrees/` and `docs/superpowers/`, and fix every hit.
 
 ## Checklist before you commit
 
 ```bash
 f=docs/NAME.md
-wc -w < $f                                                                  # aim 1,500 to 3,000
-awk '/^#/{if(n)print n; n=0; next}{n+=NF}END{print n}' $f | sort -n | tail -1  # section, 300 max
-awk -v RS= '!/^\|/{print NF}' $f | sort -n | tail -1                        # paragraph, 150 max
 grep -nE '—|used to|previously|no longer' $f                                # expect nothing
 bun scripts/check-docs-links.ts                                             # files exist, not anchors
 # every #anchor resolves: prints each link whose heading is gone
@@ -87,7 +81,7 @@ grep -oE '\]\(([A-Za-z0-9_./-]*\.md)?#[^)]+\)' AGENTS.md docs/*.md .claude/skill
 done
 ```
 
-- The TLDR is under 100 words and makes sense alone.
+- The TLDR is one short paragraph and makes sense alone.
 - Every heading states a fact. Every section has a why.
 - Present tense. Short sentences in simple English. No em-dashes, no "Note that", "robust", "seamlessly".
 - No hard line breaks inside a paragraph.
@@ -96,6 +90,7 @@ done
 
 ## Common mistakes
 
+- Splitting a doc, or starting a new one for a feature, instead of cutting narration.
 - Compressing the catalogue instead of cutting it. Six files in six clauses is still a file tour.
 - Cutting the why and keeping the what. The what is in the code. The why is not.
 - Keeping claims from the old doc unchecked because they were already there. An inherited only or every is the likeliest to be wrong.
