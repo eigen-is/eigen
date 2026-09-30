@@ -1,152 +1,139 @@
 # Server Settings
 
-> **TLDR**: Runtime-configurable server settings in `data/server/settings.json`, held by a `JsonStore` with typed defaults. The owner edits them from the Admin app. `config.json` is the separate identity file: the auth secret (made at first boot, never changed), and the orgName, orgId and mail domain setup records. Only orgName changes after setup, from the owner's Settings page. Neither file holds the web address, which is `DOMAIN` alone (`getDomain()`). The storage type and S3 credentials are settings, under `defaults.mount`; the system sender is a setting, under `mail`.
+> **TLDR:** A server keeps two JSON files in `data/server/`. `settings.json` holds the runtime settings the owner edits in the Admin app (`apps/api/src/lib/config/server-settings.ts`). `config.json` is the identity file (`server-config.ts`): the auth secret and what setup recorded. Neither holds the web address or whether this server hosts mail: those are environment. Not obvious from the code: the mail domain is recorded once and a boot on another one exits, a settings file that does not parse stops the boot instead of being overwritten, S3 becomes the default only while a saved config connects, and one sender rule in `buildMailOptions()` decides whether mail goes out as the person or "via" the organization.
 
-## config.json vs settings.json
+## config.json is identity, settings.json is runtime
 
-|              | `config.json`                     | `settings.json`                              |
-|--------------|-----------------------------------|----------------------------------------------|
-| **Path**     | `data/server/config.json`         | `data/server/settings.json`                  |
-| **Written**  | Secret at first boot, the rest at setup completion | By the owner at runtime, and the wizard's storage and sender at setup |
-| **Contains** | orgName, orgId, secret, setupCompleted, setupCompletedAt, mailDomain | quotas, mount defaults, onboarding, guests, landing, notifications, mail |
-| **Editable** | orgName only (`PUT /settings/organization`) | Yes (the owner's admin settings pages)       |
+|  | `config.json` | `settings.json` |
+|---|---|---|
+| Holds | `secret`, `orgName`, `orgId`, `setupCompleted`, `setupCompletedAt`, `mailDomain` | quotas, mount defaults, onboarding, guests, landing, notifications, mail |
+| Written | The secret at first boot, the rest when setup completes | By the owner at runtime; setup writes the storage type and the sender |
+| Changes after setup | `orgName` only | Everything |
 
-`config.json` has **no** storage field (`apps/api/src/lib/config/server-config.ts`). Storage type and S3 credentials live in `settings.json` under `defaults.mount`. The settings store is a plain `JsonStore` with a hardcoded `'local-fullnames'` default; it does not read anything out of `config.json`.
+The secret is made at first boot and never changes, so a session signed in right after setup outlives the next restart. Setup writes `setupCompleted` last, so a failure in any earlier step leaves setup re-runnable (`completeSetup` in `apps/api/src/lib/setup/setup.ts`). The two stores are independent: the storage type and the S3 credentials are settings, under `defaults.mount`, and `config.json` has no storage field.
 
-`mailDomain` is the `MAIL_DOMAIN` setup ran on, recorded at setup, or for an install that predates the field at the first boot whose `MAIL_DOMAIN` the owner's address is on; a boot it is not on records nothing. Every account's address was made on it, so it cannot change: once it is recorded, `./eigen setup` states it instead of asking and refuses a different `--mail-domain` (`apps/api/src/cli/configure.ts`). At boot the API compares `MAIL_DOMAIN` from `.env.production` with the recorded one (`apps/api/src/server.ts`); on a mismatch it exits in production, naming the value to put back, and warns in development. An owner address on another domain only logs a warning.
+## The web address and the mail domain come from the environment
 
-## JsonStore
+`getDomain()` reads `DOMAIN` and `getMailDomain()` reads `MAIL_DOMAIN`, falling back to `DOMAIN`. Both are what `./eigen setup` wrote to `.env.production`, because they are deployment identity: DNS, certificates and every account's address depend on them. The Admin app shows both read-only. Hosted mail and the relay are environment too ([below](#hosted-mail-and-the-relay-are-environment-not-settings)).
 
-Generic JSON persistence with deep-merge updates (`apps/api/src/lib/core/json-store.ts`), shared by ServerSettings,
-UserSettings and TeamSettings.
+## The mail domain is recorded once and never changes
 
-- Constructed with a `LocalFilesystem`, a filename, and typed defaults
-- `load()` reads the file and deep-merges it onto the defaults, so keys added later get their default value. A
-  missing file leaves the defaults in place; a file that does not parse rejects the load, so the home fails to boot
-  rather than letting the next `set()` persist defaults over the real bytes
-- The merge recurses into plain objects only: an array or `null` in the update replaces the stored value wholesale,
-  and an explicitly `undefined` key clears it (how `routes/team.ts` clears a member override)
-- `get()` returns the in-memory state; `set(update)` deep-merges a partial, writes atomically (tmp + rename),
-  rolls back on failure, and returns the merged state
-- The file is created on the first `set()`, not on `load()`
+Every account's address was made on the mail domain, so on another one nobody can sign in. Setup records `MAIL_DOMAIN` as `mailDomain` in `config.json`. Once it is recorded, `./eigen setup` states it instead of asking and refuses a different `--mail-domain` (`apps/api/src/cli/configure.ts`).
 
-## What ServerSettings Holds
+At boot `assertMailDomainUnchanged()` compares `MAIL_DOMAIN` with the recorded value. On a mismatch it exits in production, naming the value to put back, and warns in development. An install from before the field records the domain at the first boot whose `MAIL_DOMAIN` the owner's address is on. A boot it is not on records nothing, so a wrong value at that boot is never taken as the truth. An owner address on another domain only logs a warning.
 
-The type is defined in `packages/lib/src/types/settings.ts`; the defaults live next to the store in
-`apps/api/src/lib/config/server-settings.ts`. Read those two for the exact shape — the branches are:
+## Renaming the organization renames its default team
 
-**`quotas`** — `mailAndContactsMaxMB` (100), `defaultMountMaxSizeMB` (500), `maxUploadSizeMB` (35), and
-`trashRetentionDays` (30), which is how long `Mount` keeps soft-deleted paths before purging them. See
-[QUOTA.md](QUOTA.md) and [SOFT-DELETE.md](SOFT-DELETE.md).
+`orgName` is the one identity field that changes after setup (`PUT /settings/organization`, `renameOrganization` in `apps/api/src/lib/org/org.ts`). The rename writes `config.json` and the better-auth organization. It also renames the team that still carries the old name, which is the default team setup made. A team renamed by hand keeps its name. The web address and the mail domain stay. `useUpdateOrgName` invalidates the public config, which carries the name to every app, and the team lists, which carry the default team's.
 
-**`defaults.mount`** — `storageType` (`local-id` | `local-fullnames` | `s3`) and an optional `s3Config`. The
-storage type is the backend given to a **new** user or team drive; existing mounts are never migrated.
-`mapStorageType()` translates it to the mount-level type (`local-id` → `local-key`, `local-fullnames` → `local`,
-`s3` → `s3`), and `UserHome`/`TeamHome` call it when they create a default mount. See [STORAGE.md](STORAGE.md).
+## JsonStore merges onto defaults and fails closed
 
-**`onboarding`** — `waitlist.enabled` puts the "Join Waitlist" form on the landing page and gates every waitlist
-route (`requireWaitlistEnabled`); `autoAddOwnerContact` seeds a new user's contacts with the org owner;
-`welcomeMail` (enabled, subject, body) goes to a new account; `inviteEmail` (subject, body) is the mail a waitlist
-accept sends. Bodies are HTML with `{name}` / `{orgName}` / `{domain}` / `{inviteLink}` placeholders.
+`JsonStore` (`apps/api/src/lib/core/json-store.ts`) is the persistence behind `settings.json`, `config.json` and every Home's `UserSettings` and `TeamSettings`.
 
-**`guests`** — `openSignup` (any address may request an OTP) and `inactivityDays` (how long a guest survives
-without session activity). See [GUEST-ACCESS.md](GUEST-ACCESS.md).
+- `load()` deep-merges the file onto the typed defaults, so a key added to the defaults gets its value without a migration.
+- A file that does not parse rejects the load, so the Home or the server fails to boot. Loading defaults instead would let the next `set()` write them over the real bytes.
+- The merge recurses into plain objects only. An array or `null` in an update replaces the stored value whole, and an explicit `undefined` clears the key. That is how `routes/team.ts` clears a member override.
+- `set()` writes a temp file and renames it over the old one, and rolls the in-memory state back when the write fails.
+- The file appears at the first `set()`, not at `load()`.
 
-**`landing.links`** — optional extra buttons on the public landing page, each `{ title, url }`. Served to the
-unauthenticated frontend through the public config route.
+## What settings.json holds
 
-**`mail`** — the system sender and how the relay treats users. `senderName` and `senderAddress` name the From of the mail the server sends itself (codes, notifications, invitations); empty means derived, the org name and `noreply@` the mail domain, so a later rename carries through. The setup wizard and the settings route store a sender only when it differs from those defaults. `relaySendsAsUsers` matters only without hosted mail: on, the relay accepts every address on the mail domain as a sender, so a user's mail goes out from their own address. See [Sending as a user](#mail-environment).
+The shape is `ServerSettings` in `packages/lib/src/types/settings.ts`, and the defaults are next to the store in `server-settings.ts`.
 
-### notifications.email
+| Branch | What it decides | Where it is read |
+|---|---|---|
+| `quotas` | The per-user budgets, the per-file upload cap, trash retention | [QUOTA.md](QUOTA.md), [SOFT-DELETE.md](SOFT-DELETE.md) |
+| `defaults.mount` | The storage backend of a new drive, and the S3 config it uses | [Below](#s3-becomes-the-default-only-while-it-connects) |
+| `onboarding` | The waitlist, seeding the owner as a contact, the welcome mail, the waitlist invite mail | `requireWaitlistEnabled` gates every waitlist route; `welcome.ts` skips the welcome mail without hosted mail |
+| `guests` | Whether any address may ask for a sign-in code, and how long an idle guest lives | [GUEST-ACCESS.md](GUEST-ACCESS.md) |
+| `landing.links` | Extra buttons on the public landing page | `GET /p/config`, which is unauthenticated |
+| `notifications.email` | Which events also send an email | [Below](#the-notification-flags-gate-the-email-only) |
+| `mail` | The system sender, and whether the relay may send as users | [Below](#one-rule-decides-who-a-mail-is-from) |
 
-The cross-cutting seam. Each flag turns one *email* on or off; the matching in-app notification always fires
-regardless.
+The storage type is `local-id`, `local-fullnames` or `s3`. `mapStorageType()` translates it to the mount's own vocabulary (`local-key`, `local`, `s3`). It reaches only a drive made after the change: `UserHome` and `TeamHome` stamp it into a new mount, and an existing mount keeps its backend ([QUOTA.md](QUOTA.md#a-mount-keeps-what-it-was-stamped-with)).
 
-| Flag                   | Default | Fires when                                                          |
-|------------------------|---------|---------------------------------------------------------------------|
-| `guestOnAclAdd`        | `true`  | An address with no account (or a guest) is added to an ACL. This is the guest-onboarding trigger — see [GUEST-ACCESS.md](GUEST-ACCESS.md) |
-| `userOnAclAdd`         | `false` | A registered user is added to an ACL — the bell already covers it    |
-| `userOnCalendarInvite` | `true`  | A user is invited to an event — time-sensitive, matches Google/Outlook |
-| `ownerOnAccessRequest` | `true`  | Someone requests access to an owner's path                          |
+## The notification flags gate the email only
 
-The ACL flags are read by `emailNewlyAddedAclEntries` in `apps/api/src/lib/drive/acl-propagation.ts`, the
-access-request flag by `propagateAccessRequest` in `access-request-propagation.ts`. See [ACL.md](ACL.md).
+Each `notifications.email` flag turns one email on or off. The in-app notification fires either way for a recipient with an account.
 
-## Server-Side Store
+| Flag | Default | The email goes out when | Why the default |
+|---|---|---|---|
+| `guestOnAclAdd` | on | An address without an account, or a guest, is added to an ACL | The email is the guest's only way in ([GUEST-ACCESS.md](GUEST-ACCESS.md)) |
+| `userOnAclAdd` | off | A registered user is added to an ACL | The bell already tells them |
+| `userOnCalendarInvite` | on | An Eigen user is invited to an event | An invitation is time-sensitive, and Google and Outlook mail it too |
+| `ownerOnAccessRequest` | on | Someone asks for access to a user's path | A team-owned path sends no email |
 
-`apps/api/src/lib/config/server-settings.ts` builds the store at module load and awaits one `load()`.
+The ACL flags are read in `emailNewlyAddedAclEntries` (`apps/api/src/lib/drive/acl-propagation.ts`), the access-request flag in `access-request-propagation.ts` and the invite flag in `invite-propagation.ts`. See [ACL.md](ACL.md).
 
-| Function                       | Returns                                             |
-|--------------------------------|-----------------------------------------------------|
-| `getServerSettings()`          | The full `ServerSettings` object                    |
-| `updateServerSettings(update)` | Deep-merges a partial update and persists it        |
-| `getMaxUploadSize()`           | `quotas.maxUploadSizeMB` in bytes                   |
-| `getStorageType()`             | `defaults.mount.storageType`                        |
-| `getS3Config()`                | `defaults.mount.s3Config` (undefined when unset)    |
+## Settings are the owner's, the pages admins need are theirs too
 
-## Admin API
+`apps/api/src/routes/settings.ts` holds the routes. Changing the server's settings is the org owner's (`requireOwner`), and so is the waitlist (`apps/api/src/routes/waitlist.ts`). In the Admin app the `_owner` route guard puts Settings, Onboarding, Guest settings and Waitlist behind the same rule, and an admin who types one of those URLs sees "Only the server owner can open this page."
 
-Defined in `apps/api/src/routes/settings.ts`. Changing the server's settings is the org owner's (`requireOwner`); admins keep what the Users, Guests and team pages read.
+Admins keep what the Users, Guests and team pages need. They read `GET /settings/server`, because the team page shows the quota defaults and the team mount form starts from the S3 defaults. A non-owner gets the S3 config with an empty `secretAccessKey`: the secret is the owner's. They can also test an S3 connection and harden a bucket (`/settings/s3check`, `/settings/s3harden`) for a team mount, and manage user accounts. Deleting refuses your own account and the owner's.
 
-| Method | Path                      | Who   | Description                                                    |
-|--------|---------------------------|-------|----------------------------------------------------------------|
-| GET    | `/settings/server`        | admin | Read current server settings (the team page reads the quota defaults); a non-owner gets `s3Config` with an empty `secretAccessKey` |
-| PUT    | `/settings/server`        | owner | Partial update of any branch; a `mail.senderAddress` must be an email address, a sender name or address equal to its derived default is stored empty (`storedSender()` in `mailer.ts`, shared with the setup wizard) |
-| GET    | `/settings/s3config`      | owner | Read the saved S3 configuration                                |
-| PUT    | `/settings/s3config`      | owner | Validate a connection, then write `defaults.mount.s3Config`     |
-| POST   | `/settings/s3check`       | admin | Test an S3 connection without saving                           |
-| POST   | `/settings/s3harden`      | admin | Turn on the bucket's versioning and expire noncurrent versions                 |
-| GET    | `/settings/status`        | owner | `getServerStatus()`: version, hosted mail, disk, the expiry of `data/certs/cert.pem` and whether it is self-signed (Postfix's stand-in), and whether the bundled Caddy runs (`edge` in `COMPOSE_PROFILES`, which the API reads through Compose's `env_file`); what `./eigen status` reports |
-| PUT    | `/settings/organization`  | owner | Rename the organization: `config.json`'s orgName and the better-auth organization, plus the team still named after it (setup's default team; a team renamed by hand keeps its name). The web address and mail domain stay |
-| POST   | `/settings/mail/test`     | owner | Send one mail from the owner to the owner through `buildMailOptions`, so it tests the sender rule; a failure returns 502 with the transport's error |
-| GET    | `/settings/users`         | admin | `AdminUserRow[]` — every org member **and** orphan for the Users page (auth-DB join incl. `lastLoginAt` + session-derived `lastActiveAt`, teams) |
-| GET    | `/settings/users/usage`   | admin | `Record<userId, HomeSizeResponse>` — per-user disk usage via the `pullHomeSize` home-relay read, which sizes a home from its own databases (the mount `metadata.db`, `mail.db`, `contacts.db` and `calendar.db` totals, plus the avatars walk) rather than booting it (concurrency 4, 5-min in-memory cache) |
-| GET    | `/settings/users/guests`  | admin | Guest accounts only, for the admin Guests page                 |
-| DELETE | `/settings/user/:userId`  | admin | Delete a user account; refuses your own account and the owner's |
-| PUT    | `/settings/user/:userId/password` | admin | Set a user's password via `resetUserPassword()`, the CLI's `./eigen reset-password` path: signs them out everywhere and revokes their app passwords. Refuses guests, and the owner unless the owner resets their own. better-auth's own `/auth/admin/set-user-password`, which revokes nothing, is in `disabledPaths` |
+## An admin password reset revokes every way in
 
-The waitlist routes (`/waitlist/entries`, `apps/api/src/routes/waitlist.ts`) are the owner's too, like the Waitlist page.
+`PUT /settings/user/:userId/password` calls `resetUserPassword()` (`apps/api/src/lib/user/reset-password.ts`), the same path as `./eigen reset-password`. It signs the user out everywhere and revokes their app passwords, since those open IMAP, CalDAV and WebDAV without the password. It refuses a guest, who signs in with a code, and it refuses the owner unless the owner resets their own. better-auth's own `/admin/set-user-password` revokes nothing, so it is in `disabledPaths` (`apps/api/src/lib/auth/auth.ts`).
 
-Both S3 paths refuse a configuration that does not connect: `PUT /settings/s3config` runs `checkS3Connection`
-before saving, and `PUT /settings/server` refuses `storageType: 's3'` unless a saved S3 config exists **and** still
-connects. So the server never ends up defaulting new drives to a bucket it cannot reach.
+## The Users page sizes homes without booting them
 
-## Frontend
+`GET /settings/users/usage` sizes every user through `pullHomeSize` (`apps/api/src/lib/home/home-relay.ts`), which reads the home's own databases and folders instead of booting the Home. A boot apiece costs seconds. `getAllUsersUsage` (`apps/api/src/lib/user/admin-usage.ts`) still caps the disk work at four homes at once, caches the result for five minutes per exact set of users, and skips a home that fails rather than failing the page. What each number counts is in [QUOTA.md](QUOTA.md#a-cold-read-reports-what-a-live-home-reports).
 
-Hooks in `packages/lib/src/core/settings/hooks/`: `useServerSettings()` / `useUpdateServerSettings()` / `invalidateServerSettings()` over query key `['settings', 'server']`, `useServerS3Config()` / `useUpdateServerS3Config()` / `invalidateServerS3Config()` over `['settings', 's3config']`, `useCheckS3Connection()` for the test button, `useServerStatus()` (fetched only for the owner), `useUpdateOrgName(orgId)` (invalidates the public config, which carries the name, and the team lists, which carry the default team's) and `useSendTestMail()`.
+## The status section is what ./eigen status reports
 
-The Admin app's `/settings` route sits behind the `_owner` guard, with Onboarding, Guest settings and Waitlist; an admin who opens one by URL sees "Only the server owner can open this page." It renders `ServerSettingsPage` (`apps/admin/src/components/admin/server-settings.tsx`) with these sections, each a shared `SettingsSection` over one `SettingsFooter`, which asks before the page is left with unsaved changes:
+`getServerStatus()` (`apps/api/src/lib/config/server-status.ts`) answers both `GET /settings/status` and `/status` on the CLI's control socket (`apps/api/src/routes/control.ts`), so the page and the command never disagree. The certificate is read from `data/certs/cert.pem`, where Caddy's export script copies its Let's Encrypt certificate. Without one, Postfix writes a self-signed stand-in, which the report flags. Whether the bundled Caddy runs is the `edge` profile in `COMPOSE_PROFILES`, which the API reads from `.env.production` through Compose's `env_file`.
 
-- **General** — the organization name, editable, beside the web address and mail domain, read-only
-- **Server** — what `./eigen status` reports: version, hosted mail, disk, certificate (`server-status-section.tsx`)
-- **Mail** — the sender name and address, **Relay sends as users** (only without hosted mail), and **Send test mail**
-- **Storage Quotas** — mail/contacts max, default mount max, upload limit, trash retention
-- **Defaults** — the storage type picker, which carries the S3 endpoint/bucket/credentials and the connection test
-  inline (there is no separate S3 section)
-- **Email notifications** — the four `notifications.email` switches
-- **Landing page** — the landing link buttons
+## S3 becomes the default only while it connects
 
-Onboarding and guest settings are separate admin pages over the same `PUT /settings/server` route — see
-[ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md).
+`PUT /settings/s3config` runs `checkS3Connection` before it saves. `PUT /settings/server` refuses `storageType: 's3'` unless a saved S3 config exists and still connects. So new drives never default to a bucket the server cannot reach. The Admin settings page saves the S3 config before the other settings, so switching to S3 and entering its config in one Save passes that check. A team mount's own S3 config gets the same check when it is added or changed (`TeamHome.addMount`, `updateMount`).
 
-## Mail environment
+## The settings page asks before it drops changes
 
-Whether this deployment hosts mailboxes at all, and how the API hands mail to an MTA, are deployment identity rather than runtime settings, so they live in the environment: `isMailEnabled()` (`apps/api/src/lib/config/env.ts`) and `createTransport()` (`apps/api/src/lib/core/mailer.ts`). The operator sets one relay, `SMTP_RELAY_*`, read in both modes: with hosted mail the API hands everything to the bundled Postfix (`SMTP_HOST`, set by Compose) and Postfix relays through `SMTP_RELAY_*`; without it the API sends through `SMTP_RELAY_*` itself. With no server to hand mail to, `createTransport()` throws, and outside production `sendMail()` logs the message instead of sending it.
+The Admin settings page (`apps/admin/src/components/admin/server-settings.tsx`) edits a draft and saves every section with one `SettingsFooter`, whose `LeaveGuard` asks before the page is left with unsaved changes. What each section does for the owner is in the help center: [Server settings](../apps/index/src/data/support/admin/server-settings.md) and [Storage quotas](../apps/index/src/data/support/admin/storage-quotas.md). The hooks are in `packages/lib/src/core/settings/hooks/`.
 
-| Variable              | Default              | Meaning                                                                    |
-|-----------------------|----------------------|----------------------------------------------------------------------------|
-| `MAIL_ENABLED`        | on                   | `0` on a server run without the `mail` docker profile — no hosted mailboxes |
-| `SMTP_HOST`           | `postfix` in compose | With hosted mail: where the API hands its mail (Mailpit in dev)             |
-| `SMTP_PORT`           | `25`                 | Its port                                                                    |
-| `SMTP_RELAY_HOST`     | unset                | The outgoing relay. Unset: Postfix delivers directly, or, without hosted mail, every email fails |
-| `SMTP_RELAY_PORT`     | `587`                | Its port. `465` is implicit TLS, any other port STARTTLS                    |
-| `SMTP_RELAY_USER`     | unset                | SASL username. Set it and the transport authenticates                       |
-| `SMTP_RELAY_PASSWORD` | unset                | SASL password. Required whenever `SMTP_RELAY_USER` is set                   |
+## Hosted mail and the relay are environment, not settings
 
-`MAIL_ENABLED` rides out to the frontend as `mailEnabled` on `GET /p/config`, where `useMailEnabled()` (`packages/lib/src/core/public/hooks/use-public.ts`) is the one read of it: it reports on until the config lands, so the common deployment never flashes a missing Mail app. Built on it: `useEnabledApps()` (the app switcher, the Space home and the cycling logo), the `mailOnly` flag on a `FILE_ACTIONS` row (**Import to Mail** on an `.eml`), `useHomeDataLabel()`, and `MailOffState` (`packages/ui`), the one screen for a typed `/mail` URL and the Space mail page. `useMailboxes` is the exception — it gates its fetch on `mailEnabled === true` from the config itself, so a mail-off server is never asked for a mailbox list. Outbound mail goes on with mailboxes off, as long as a relay is set: share notifications, invites and "Email collaborators" go out through it. Without a relay every email fails, two-factor codes by email and guest sign-in codes included; `./eigen setup` says so when it writes that shape.
+Whether this server hosts mailboxes, and which server the API hands mail to, are deployment shape rather than runtime settings. They live in `.env.production`, which `./eigen setup` writes: `isMailEnabled()` (`apps/api/src/lib/config/env.ts`) and `createTransport()` (`apps/api/src/lib/core/mailer.ts`). With hosted mail the API hands everything to the bundled Postfix at `SMTP_HOST`, and Postfix relays through `SMTP_RELAY_*` when it is set. Without hosted mail the API sends through `SMTP_RELAY_*` itself. How an operator picks a relay is in the help center ([Choose a mail relay](../apps/index/src/data/support/self-hosting/mail-relay.md)), and the keys are listed in [SELF-HOSTING.md](SELF-HOSTING.md).
 
-**Sending as a user.** `buildMailOptions()` (`mailer.ts`) holds the one sender rule. A message's `from` is the person it is from; absent, it is the system's own mail and goes out from the system sender (`mail.senderName`, `mail.senderAddress`, empty meaning the org name and `noreply@` the mail domain). A person on the mail domain sends as themselves when Postfix hosts the domain, or when the relay takes any address on it (`mail.relaySendsAsUsers`). Everyone else goes out "via": the From is the system sender's address with `Ada via Acme` as its name, and Reply-To is the person, since a relay refuses an address it does not allow and receivers enforce DMARC. The envelope sender follows the resolved From.
+| Variable | Default | Effect |
+|---|---|---|
+| `MAIL_ENABLED` | on | `0` on a server run without the `mail` Compose profile: no hosted mailboxes |
+| `SMTP_HOST`, `SMTP_PORT` | `postfix`, `25` in Compose | Where the API hands mail with hosted mail (Mailpit in dev) |
+| `SMTP_RELAY_HOST` | unset | The outgoing relay. Unset, Postfix delivers directly, and without hosted mail every email fails |
+| `SMTP_RELAY_PORT` | `587` | `465` is implicit TLS, any other port STARTTLS |
+| `SMTP_RELAY_USER`, `SMTP_RELAY_PASSWORD` | unset | SASL credentials. A user without a password is a config error |
 
-**What mail off leaves out.** No Mail app, no IMAP, no inbound mail. Every home still builds its Maildir and watcher, an idle cost. The `/mail/:ownerId/*` routes stay live apart from the two imports and the send route, which refuse with 403 (`requireMailEnabled()`, `apps/api/src/lib/core/access.ts`); the UI hides them. Calendar invitations go out, but replies from outside attendees go to the organizer's own mailbox and Eigen never updates their status, since inbound iMIP needs hosted mail. The role addresses `postmaster@`, `abuse@` and `noreply@` stay unclaimable, and an address on the server's own mail domain is never a guest, even when its mailbox lives elsewhere.
+With no server to hand mail to, `createTransport()` throws. Outside production, `sendMail()` then logs the message instead of sending it, and a demo box always does.
 
-Transport security follows `SMTP_RELAY_USER`: the hop to Postfix and an anonymous relay (self-signed, no cert) keep opportunistic TLS, while a relay that takes credentials must accept TLS, so credentials never travel in the clear; the API also checks the relay's certificate. `SMTP_RELAY_USER` without `SMTP_RELAY_PASSWORD` is a config error — `createTransport()` throws rather than authenticate with a blank password.
+## Credentials to a relay travel only over verified TLS
+
+A relay that takes credentials must accept TLS and present a valid certificate (`requireTLS` and `rejectUnauthorized` follow `SMTP_RELAY_USER`). Without `requireTLS`, a relay that offers no STARTTLS would get the password in the clear. The hop to Postfix and an anonymous relay keep opportunistic TLS, because Postfix's own certificate is self-signed or missing. `SMTP_RELAY_USER` without `SMTP_RELAY_PASSWORD` makes `createTransport()` throw rather than sign in with a blank password.
+
+## One rule decides who a mail is from
+
+`buildMailOptions()` (`mailer.ts`) holds the sender rule for every outbound mail. A message's `from` is the person it is from. Without one, it is the system's own mail and goes out from the system sender: `mail.senderName` and `mail.senderAddress`, where empty means the org name and `noreply@` the mail domain.
+
+A person on the mail domain sends as themselves when Postfix hosts the domain, or when the owner says the relay takes any address on it (`mail.relaySendsAsUsers`). Everyone else goes out "via": the From is the system sender's address with `Ada via Acme` as its name, and Reply-To is the person. A relay refuses an address it does not allow, and receivers enforce DMARC. The envelope sender follows the resolved From.
+
+`storedSender()` stores a sender name or address only when it differs from the derived default, for both the setup wizard and `PUT /settings/server`. So renaming the organization renames a default sender too. `POST /settings/mail/test` sends one mail from the owner to the owner, so it exercises the same rule, and answers 502 with the transport's error when it fails.
+
+## Mail off hides the Mail app and keeps outbound mail
+
+`GET /p/config` carries `mailEnabled`, which is `isMailAppEnabled()`: hosted mail, or a demo box, which seeds mailboxes without an MTA. `useMailEnabled()` (`packages/lib/src/core/public/hooks/use-public.ts`) is the one read of it. It reports on until the config lands, so the common deployment never flashes a missing Mail app. Everything that hides Mail builds on it: `useEnabledApps()`, the `mailOnly` flag on a `FILE_ACTIONS` row, `useHomeDataLabel()`, and `MailOffState` (`packages/ui`), the one screen for a typed `/mail` URL and the Space mail page. `useMailboxes` is the exception. It waits for `mailEnabled === true` from the config itself, so a server without mail is never asked for a mailbox list.
+
+Outbound mail goes on without mailboxes, as long as a relay is set. Share notifications, invites and "Email collaborators" go out through it. Without a relay every email fails, including two-factor and guest sign-in codes, and `./eigen setup` says so when it writes that shape.
+
+## What a server without hosted mail leaves out
+
+- No Mail app, no IMAP and no inbound mail. Every Home still builds its Maildir and watcher, an idle cost.
+- The `/mail/:ownerId/*` routes stay live, apart from the send route and the two imports, which answer 403 (`requireMailEnabled()`, `apps/api/src/lib/core/access.ts`). The UI hides them.
+- No welcome mail, since nobody would ever read it.
+- Calendar invitations go out, but an outside attendee's reply goes to the organizer's own mailbox and Eigen never updates their status, because inbound iMIP needs hosted mail.
+- The role addresses `postmaster@`, `abuse@` and `noreply@` stay unclaimable, and an address on the server's own mail domain is never a guest, even when its mailbox lives elsewhere.
+
+## See also
+
+- [QUOTA.md](QUOTA.md): how the quota settings resolve and where they are enforced
+- [GUEST-ACCESS.md](GUEST-ACCESS.md), [ACL.md](ACL.md): the guest and notification settings in use
+- [SELF-HOSTING.md](SELF-HOSTING.md) and the [self-hosting help center](../apps/index/src/data/support/self-hosting/): setting up the environment
+- [MAIL.md](MAIL.md): the Mail app on top of hosted mail

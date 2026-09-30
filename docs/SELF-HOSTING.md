@@ -64,7 +64,7 @@ Setup writes it, readable by its owner and by group 1000, the group Eigen runs a
 | `DOMAIN`, `MAIL_DOMAIN`, `ACME_EMAIL` | setup | The web address, the domain of every address (fixed after the first setup), the Let's Encrypt contact |
 | `COMPOSE_PROFILES`, `MAIL_ENABLED` | setup | The deployment shape, above |
 | `EIGEN_STATIC_HOST`, `EIGEN_STATIC_PORT` | setup | Where `eigen-static` listens for your web server (`127.0.0.1:8080` by default) |
-| `SMTP_RELAY_HOST`, `SMTP_RELAY_PORT`, `SMTP_RELAY_USER`, `SMTP_RELAY_PASSWORD` | setup | The relay. Postfix sends through it with hosted mail, the API without. Details in [SERVER-SETTINGS.md § Mail environment](SERVER-SETTINGS.md#mail-environment) |
+| `SMTP_RELAY_HOST`, `SMTP_RELAY_PORT`, `SMTP_RELAY_USER`, `SMTP_RELAY_PASSWORD` | setup | The relay. Postfix sends through it with hosted mail, the API without. Details in [SERVER-SETTINGS.md § Hosted mail and the relay are environment, not settings](SERVER-SETTINGS.md#hosted-mail-and-the-relay-are-environment-not-settings) |
 | `EIGEN_SUBNET`, `EIGEN_UNBOUND_IP` | setup | Eigen's Docker network and the resolver's address in it, on a /24 no other network uses |
 | `API_URL`, `VITE_*` | setup | Derived from `DOMAIN` |
 | `EIGEN_REGISTRY`, `EIGEN_VERSION`, `EIGEN_*_IMAGE` | setup and update | The release or channel the install follows, and every image pinned by digest |
