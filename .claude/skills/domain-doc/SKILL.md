@@ -7,7 +7,7 @@ description: Use when writing, rewriting, extending, shortening or reviewing a d
 
 A domain doc tells a developer how one part of Eigen works now and why it is built that way. They read it before they touch the code. The code answers "what does this function do". The doc answers what the code can't: the design decisions, the invariants, and the gotchas that already bit someone.
 
-**A doc covers a domain, an app or a core function**: SHEETS.md for the sheets app, COLLAB.md for the collab core, CALENDAR.md for calendar with its CalDAV server. Never a doc per feature or per sub-mechanism. New material goes into the doc of the domain it belongs to, and a doc is never split: every extra doc is one more place to look and one more to keep in sync.
+**A doc covers a domain, an app or a core function**: SHEETS.md for the sheets app, COLLAB.md for the collab core, CALDAV.md for the CalDAV service beside CALENDAR.md for the calendar app. A service with its own protocol (CalDAV, CardDAV, WebDAV) may have its own doc next to its app's; that is a judgment call, not a rule. Never a doc per feature or per sub-mechanism. New material goes into the doc of the domain it belongs to, and a doc is not split to shorten it: every extra doc is one more place to look and one more to keep in sync.
 
 Read the two exemplars before you write: `docs/COLLAB.md` and `docs/ACL.md`. Don't copy ACL.md's em-dashes: they predate the rule. What to avoid is MAIL.md and CANVAS.md before their rewrite: `git show 0cd4d14ab^:docs/MAIL.md` and `git show c4eda8702^:docs/CANVAS.md`, all narration, catalogues and file tours.
 
