@@ -5,9 +5,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
+### Added
+
+- **Nightly whole-server backup** — the owner turns it on in Settings → Backups: every user and team, the server's own databases and settings, `.env.production` and the DKIM key, backed up at the hour you pick while Eigen runs, and the newest seven good ones kept (you set the count). **Back up now** makes one at any level, and backups made by hand stay until you delete them. A failed night notifies the owner and turns the Backup row of `./eigen status` red
+- **Backup bucket** — each backup that verifies uploads to a private S3 bucket of its own, which keeps its own count and always the newest complete backup. Eigen refuses a bucket or key it keeps files with, and a public bucket, and never shows the secret again. Keep the bucket's endpoint, name and keys somewhere other than the server: a new machine starts from them
+- **Restore on a new machine** — `curl -fsSL https://eigen.is/install | sh -s -- restore <backup>` sets Eigen up from a whole-server backup, with the version, settings and DKIM key it was made with, and no setup first
+- **One user or team from a server backup** — each server backup holds a per-home archive of every user and team under `homes/`. Copied into `backups/`, one restores from its Admin page
+- **Release gate** — before a release is published, the previous published release is updated to it and rolled back, with a seeded document, sheet, event, contact and chat message checked after each step. A release with breaking changes publishes only when it says so
+
 ### Changed
 
-- **Whole-server backups (breaking)** — `./eigen backup` backs up the server into `backups/` while Eigen runs, and `./eigen restore` puts such an archive back, on this machine or a new one. `./eigen update` backs up the running server first; with Eigen stopped it takes `--no-backup`. Snapshots in `snapshots/` can no longer be restored by Eigen: after the update from 0.3.0, `./eigen rollback` prints the commands that go back
+- **Whole-server backups (breaking)** — `./eigen backup` backs up the server into `backups/` while Eigen runs, Full by default, `--light` without files and mail, `--s3` with the files in S3 buckets, and exits 4 when the backup is good but did not reach the bucket. `./eigen restore` puts such a backup back, staged while Eigen runs and swapped in with a short stop. `./eigen update` backs up the running server first and refuses with Eigen stopped; `--no-backup` skips the backup. Snapshots in `snapshots/` can no longer be restored by Eigen: after the update from 0.3.0, `./eigen rollback` prints the commands that go back
+- **One reload after the update** — after the update from 0.3.0, every open document reloads once when it reconnects. After a restore, every open tab of a restored user or team reloads once, whatever app it shows
 
 ## [0.3.0] - 2026-09-25
 
