@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Verify the outbound mail-relay hardening (2026-08-31 spam-incident fixes) against a scratch
 # edge,mail install of this working tree: sender/login binding on the submission ports, the per-IP
-# SASL failure lockout, and the queue-backlog alert.
+# SASL failure lockout, the queue-backlog alert, and DKIM signing with the key the server backup reads.
 #
 # Usage:
 #   ./docker/test-mail-hardening.sh
@@ -11,7 +11,7 @@
 # Needs:  docker, openssl, nc, curl, git. The install is fresh, so the script creates the admin
 #         alice@eigen.test through the setup wizard's API and logs in as her.
 #
-# Probe 8 sets `defer_transports=smtp` and seeds queue files; the scratch stack goes away afterwards.
+# Probes 8 and 13 set `defer_transports=smtp` and seed queue files; the scratch stack goes away afterwards.
 #
 # No message is ever delivered: the submission dialogs stop at RCPT TO and never send DATA.
 #
@@ -543,6 +543,48 @@ if should_run 12; then
     fi
 else
     skip "probe 12 not selected"
+fi
+
+##############################################################################
+header "Probe 13 — OpenDKIM signs with the key the API can read"
+##############################################################################
+# The server backup reads data/dkim as uid 1000, so the entrypoint gives the key group 1000 and mode 0640, and turns
+# OpenDKIM's RequireSafeKeys off, which refuses a group-readable key. defer_transports parks the probe's message in
+# the queue, where postcat shows whether the milter signed it. Needs no login.
+dkim_headers() {
+    dc exec -T -e SUBJECT="$1" postfix sh -c '
+for f in $(find /var/spool/postfix/incoming /var/spool/postfix/active /var/spool/postfix/deferred -type f); do
+    if postcat -h "$f" 2>/dev/null | grep -qx "Subject: $SUBJECT"; then postcat -h "$f"; fi
+done' | tr -d '\r' || true
+}
+
+if should_run 13; then
+    dkim_modes=$(dc exec -T postfix stat -c '%U:%g %a' /data/dkim /data/dkim/eigen.private | tr -d '\r' | tr '\n' ' ' || true)
+    api_key=$(dc exec -T eigen-api head -n 1 /app/data/dkim/eigen.private | tr -d '\r' || true)
+    subject="dkim-probe-$RUN"
+    dc exec -T postfix sh -c 'postconf -e defer_transports=smtp && postfix reload' >/dev/null 2>&1
+    dc exec -T -e FROM="postmaster@$MAIL_DOMAIN" -e SUBJECT="$subject" postfix sh -c \
+        'printf "From: %s\nTo: dkim-probe@example.com\nSubject: %s\n\nprobe\n" "$FROM" "$SUBJECT" | sendmail -f "$FROM" dkim-probe@example.com' \
+        >/dev/null 2>&1
+    signed=''
+    for _ in $(seq 1 30); do
+        signed=$(dkim_headers "$subject")
+        [ -n "$signed" ] && break
+        sleep 1
+    done
+    if [ "$dkim_modes" != "opendkim:1000 750 opendkim:1000 640 " ]; then
+        fail "data/dkim and its key are '$dkim_modes', expected opendkim:1000 with modes 750 and 640"
+    elif ! printf '%s' "$api_key" | grep -q '^-----BEGIN .*PRIVATE KEY-----$'; then
+        fail "eigen-api cannot read data/dkim/eigen.private: '$api_key'"
+    elif [ -z "$signed" ]; then
+        fail "the probe message never reached the queue; look at: dc logs postfix"
+    elif ! printf '%s\n' "$signed" | grep -q '^DKIM-Signature:' || ! printf '%s\n' "$signed" | grep -qF "d=$MAIL_DOMAIN;"; then
+        fail "OpenDKIM did not sign the probe message as $MAIL_DOMAIN: $(oneline "$signed")"
+    else
+        ok "the DKIM key is opendkim:1000 0640, eigen-api reads it, and OpenDKIM signs as $MAIL_DOMAIN with it"
+    fi
+else
+    skip "probe 13 not selected"
 fi
 
 ##############################################################################

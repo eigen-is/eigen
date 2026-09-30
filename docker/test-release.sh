@@ -134,8 +134,8 @@ missing_items() {
     printf '%s' "$missing"
 }
 
-# check_running <version> [channel]: healthy, status names the version, it or the channel is pinned by digest, every
-# seeded item is there.
+# check_running <version> [channel]: healthy, status names the version, it or the channel is pinned by digest, the API
+# reads .env.production, every seeded item is there.
 check_running() {
     local missing pinned=${2:-$1}
     if stack_up; then ok "every service runs and eigen-api is healthy"; else fail "the stack is not up"; fi
@@ -146,6 +146,7 @@ check_running() {
     else
         fail ".env.production pins $(env_of EIGEN_VERSION) as $(env_of EIGEN_API_IMAGE)"
     fi
+    check_env 0:0 "on $1"
     missing=$(missing_items)
     if [ -z "$missing" ]; then
         ok "the document, sheet, event, contact and chat message are all there"

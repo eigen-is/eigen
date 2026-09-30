@@ -56,7 +56,7 @@ Everything is in the install folder, like `/opt/eigen`:
 | Path | What it holds |
 |---|---|
 | `eigen` | The `eigen` command |
-| `.env.production` | Your setup answers and the version you run. Only its owner can read it. |
+| `.env.production` | Your setup answers and the version you run. Only its owner and Eigen can read it. |
 | `.env.example` | Every setting, with a comment on each |
 | `docker-compose.yml` | Which services run. An update rewrites it. |
 | `docker-compose.override.yml` | Your own Compose settings, if you made one. An update leaves it alone. |

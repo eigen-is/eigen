@@ -67,8 +67,11 @@ if [ ! -f "/data/dkim/eigen.private" ]; then
     echo ""
 fi
 
-# Ensure correct ownership for OpenDKIM
-chown opendkim:opendkim /data/dkim /data/dkim/eigen.private /data/dkim/eigen.txt 2>/dev/null || true
+# OpenDKIM owns the key, and group 1000 reads it: the API, uid 1000 through data/, for the server backup. No process
+# in this image has gid 1000. A key brought from another server may come without its eigen.txt.
+chown -R opendkim:1000 /data/dkim
+chmod 0750 /data/dkim
+find /data/dkim -type f -exec chmod 0640 {} +
 
 # Hosts whose mail OpenDKIM signs (rather than just verifying). Must include the
 # docker bridge subnet — eigen-api submits SMTP from 172.20.0.x, and OpenDKIM's
@@ -87,6 +90,7 @@ mkdir -p /etc/opendkim
 # AuthservID fixes that header's authserv-id to our mail domain (default would be the container
 # hostname); RemoveARFrom strips any pre-existing Authentication-Results claiming our authserv-id
 # before delivery, so an attacker can't forge one — the header the API reads is only ever ours.
+# RequireSafeKeys refuses the group-readable key; the DKIM block above sets its owner and mode instead.
 cat > /etc/opendkim.conf <<EOF
 Syslog              yes
 LogWhy              yes
@@ -95,6 +99,7 @@ Socket              inet:8891@127.0.0.1
 Domain              ${MAIL_DOMAIN}
 Selector            eigen
 KeyFile             /data/dkim/eigen.private
+RequireSafeKeys     no
 Canonicalization    relaxed/simple
 UserID              opendkim
 InternalHosts       /etc/opendkim/TrustedHosts

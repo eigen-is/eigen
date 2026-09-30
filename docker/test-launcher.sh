@@ -5,7 +5,8 @@
 # refused in a local build, a failing compose config, stop, what update asks the CLI and names the builds, on a release
 # and on the main channel, the tags it refuses, a build whose images differ, a tag that moves during an update, a pinned
 # api image that is not here, the files an unfinished update left, which build's CLI the handed-over update saves the
-# snapshot with, what setup downloads with and without pins, what rollback names, a lock without a pid, and what status
+# snapshot with, what setup downloads with and without pins, what rollback names, a lock without a pid, the group and
+# mode every start gives .env.production first, and what status
 # passes the CLI about the snapshots, the files of an unfinished update and the newest build of main, and its folder; setup in a folder
 # that holds the launcher alone, with the registry or the build .env.production names, and the installer script
 # apps/index/public/install on this host, as a file and on stdin.
@@ -176,6 +177,18 @@ first_setup() {
 }
 FIRST_SETUP='pull ghcr.io/eigen-is/eigen/api:latest|bootstrap ghcr.io/eigen-is/eigen/api:latest|pull ghcr.io/eigen-is/eigen/api:0.2.99|configure|'
 
+# The run that gives .env.production group 1000 and mode 0640, as root in a container, in the launcher's call log.
+SHARE='-c chgrp 1000 /install/.env.production && chmod 0640 /install/.env.production'
+
+# shared <folder>: the last launch started Eigen, and gave .env.production of that folder to group 1000 right before
+# every start.
+shared() {
+    printf '%s\n' "$CALLS" | awk -v share="run --rm --user 0 --entrypoint sh -v $FIX/$1:/install " -v script=" $SHARE" '
+        / up -d --wait$/ { ups++; if (index(prev, share) == 1 && substr(prev, length(prev) - length(script) + 1) == script) shared++ }
+        { prev = $0 }
+        END { exit !(ups > 0 && ups == shared) }'
+}
+
 for SHELL_NAME in dash busybox host; do
     case $SHELL_NAME in
         dash) IMAGE=debian:bookworm-slim SHELL_CMD=dash ;;
@@ -274,6 +287,11 @@ for SHELL_NAME in dash busybox host; do
         ok "$SHELL_NAME: a folder with the build overlay runs Compose with it, a release folder without"
     else
         fail "$SHELL_NAME: mode detection: local '$local_calls', release '$CALLS'"
+    fi
+    if shared release; then
+        ok "$SHELL_NAME: restart gives .env.production group 1000 and mode 0640, as root in a container, right before the start"
+    else
+        fail "$SHELL_NAME: restart does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     STUB_IMAGE=1 launch local restore --help
     expect_error 1 '■  Eigen is not built yet.' "restore --help in an unbuilt local build"
@@ -392,6 +410,11 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: setup on main: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
+    if shared channel; then
+        ok "$SHELL_NAME: setup gives the .env.production configure wrote group 1000 and mode 0640 before it starts Eigen"
+    else
+        fail "$SHELL_NAME: setup does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
     STUB_IMAGE=1 launch release setup
     if printf '%s\n' "$CALLS" | grep -q '^pull ghcr.io/eigen-is/eigen/api:0.2.99$' &&
         printf '%s\n' "$ERR" | grep -q 'api:0.2.99 has no registry digest'; then
@@ -492,11 +515,12 @@ for SHELL_NAME in dash busybox host; do
     rm -r "$FIX/release/data" "$FIX/release/.eigen/last-update"
     sequence=$(printf '%s\n' "$CALLS" | sed -n -e 's/^compose .* stop$/stop/p' -e 's/^compose .* up -d --wait$/up/p' \
         -e 's/^run .* \([^ ]*\) snapshot --pre-update --light$/snapshot \1/p' \
-        -e 's/^run .* \([^ ]*\) configure --backfill$/configure \1/p' | tr '\n' '|')
-    if [ "$CODE" = 0 ] && [ "$sequence" = 'configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|snapshot ghcr.io/eigen-is/eigen/api:local|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
+        -e 's/^run .* \([^ ]*\) configure --backfill$/configure \1/p' \
+        -e "s|^run --rm --user 0 --entrypoint sh -v $FIX/release:/install \([^ ]*\) $SHARE\$|share \1|p" | tr '\n' '|')
+    if [ "$CODE" = 0 ] && [ "$sequence" = 'configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|snapshot ghcr.io/eigen-is/eigen/api:local|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|share ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
         printf '%s\n' "$OUT" | grep -q '│  Saved before the update: snapshots/eigen-pre-update-light-20260101-000000.tar.gz, a light snapshot' &&
         printf '%s\n' "$OUT" | grep -q '└  ./eigen rollback goes back to Eigen 0.2.99 (abc1234).'; then
-        ok "$SHELL_NAME: update --pulled saves the snapshot with the running build's CLI, switches with the new one, and names what it saved"
+        ok "$SHELL_NAME: update --pulled saves the snapshot with the running build's CLI, switches with the new one, shares the file it wrote before the start, and names what it saved"
     else
         fail "$SHELL_NAME: update --pulled: exit $CODE, sequence '$sequence', '$OUT', '$ERR'"
     fi
@@ -531,6 +555,11 @@ for SHELL_NAME in dash busybox host; do
         ok "$SHELL_NAME: a local build's restore adds what is new to the restored .env.production, then starts Eigen"
     else
         fail "$SHELL_NAME: a local build's restore: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    if shared local; then
+        ok "$SHELL_NAME: a restore gives the restored .env.production group 1000 and mode 0640 before it starts Eigen"
+    else
+        fail "$SHELL_NAME: a restore does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     STUB_CHECKED=EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:local launch release restore eigen-20260101-000000.tar.gz
     if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -q ' restore eigen-20260101-000000.tar.gz --yes$' &&
@@ -568,6 +597,11 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
         ok "$SHELL_NAME: rollback puts back the snapshot .eigen/last-update names, and names the builds it leaves and reaches"
     else
         fail "$SHELL_NAME: a release rollback: exit $CODE, '$OUT', '$ERR'"
+    fi
+    if shared release; then
+        ok "$SHELL_NAME: rollback gives the .env.production it put back group 1000 and mode 0640 before it starts Eigen"
+    else
+        fail "$SHELL_NAME: rollback does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
 
     mkdir "$FIX/local/.eigen/lock"

@@ -257,7 +257,7 @@ run_setup() {
 }
 
 # The harness's own view of the install's stack, with the files the launcher uses, from the no-Bun container as root:
-# a release install's .env.production is root's, mode 600, which the host user cannot read on Linux.
+# a release install's .env.production is root's, mode 640 for group 1000, which the host user may not read on Linux.
 dc() {
     local build=()
     assert_isolated
@@ -275,6 +275,32 @@ stack_up() {
 }
 
 api_started() { docker inspect --format '{{.State.StartedAt}}' "$(dc ps -q eigen-api)"; }
+
+# check_env <operator uid:gid> <after what>: .env.production is the operator's, group 1000 and mode 640; eigen-api alone
+# mounts it, read-only, and reads what the operator's file says.
+check_env() {
+    local want="${1%%:*}:1000 640" got mounts domain
+    got=$(owner_mode "$INSTALL/.env.production")
+    if [ "$got" = "$want" ]; then
+        ok "$2: .env.production is $want"
+    else
+        fail "$2: .env.production is '$got', expected '$want'"
+    fi
+    mounts=$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT" | xargs docker inspect \
+        --format '{{$name := .Name}}{{range .Mounts}}{{$name}} {{.Source}} {{.RW}}{{println}}{{end}}' |
+        grep '/\.env\.production ' || true)
+    if [ "$(printf '%s\n' "$mounts" | grep -c .)" = 1 ] && printf '%s\n' "$mounts" | grep -q "^/$PROJECT-eigen-api-1 .* false$"; then
+        ok "$2: eigen-api alone mounts .env.production, read-only"
+    else
+        fail "$2: the mounts of .env.production: '$(printf '%s' "$mounts" | tr '\n' '|')'"
+    fi
+    domain=$(dc exec -T eigen-api sh -c 'grep "^DOMAIN=" "$EIGEN_ENV_FILE"' | tr -d '\r' || true)
+    if [ -n "$domain" ] && [ "$domain" = "$(scratch_run grep '^DOMAIN=' "$INSTALL/.env.production")" ]; then
+        ok "$2: eigen-api reads .env.production at \$EIGEN_ENV_FILE ($domain)"
+    else
+        fail "$2: eigen-api reads '$domain' from \$EIGEN_ENV_FILE"
+    fi
+}
 
 # The last KEY= line of the install's .env.production.
 env_of() { scratch_run sed -n "s/^$1=//p" "$INSTALL/.env.production" | tail -n 1; }

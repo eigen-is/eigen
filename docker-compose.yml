@@ -40,9 +40,11 @@ services:
     volumes:
       - ./data:/app/data
       # Backup artifacts live outside data/ so a wipe of the data directory cannot take them with
-      # it. `./eigen backup` writes its whole-server snapshots to ./snapshots instead. The API creates
-      # the folder only when the first backup runs; Docker creates the mount point itself.
+      # it. The API creates the folder only when the first backup runs; Docker creates the mount point itself.
       - ./backups:/app/backups
+      # For the server backup. ./eigen gives the file group 1000 and mode 0640 before every start. A single-file
+      # mount keeps the inode it started with, and every launcher path that rewrites the file restarts the API.
+      - ./.env.production:/app/install/.env.production:ro
     # Lets the API reach a relay on the host (SMTP_RELAY_HOST=host.docker.internal) when Eigen hosts no mail.
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -55,6 +57,7 @@ services:
       NODE_ENV: production
       EIGEN_DATA_ROOT: /app/data
       EIGEN_BACKUPS_DIR: /app/backups
+      EIGEN_ENV_FILE: /app/install/.env.production
       # Demo-instance mode (hourly wipe + reseed via scripts/demo-reset.sh). Unset on real
       # instances → 0, so the demo entry route + auth guards stay inert.
       EIGEN_DEMO: ${EIGEN_DEMO:-0}

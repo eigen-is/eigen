@@ -451,6 +451,14 @@ api_here() {
         die "The image Eigen runs, $(image api), is not here and cannot be downloaded." "Check the network, then run ./eigen $COMMAND again."
 }
 
+# The API, uid 1000, reads .env.production through a read-only mount for the server backup: group 1000 may read it,
+# others not. Every command that writes the file starts Eigen after, so start gives it this. Root in a container sets
+# the group whoever runs the launcher, as prepare_data does for data/; the group goes first, so no other one reads it.
+share_env() {
+    docker run --rm --user 0 --entrypoint sh -v "$PWD:/install" "$API_IMAGE" \
+        -c 'chgrp 1000 /install/.env.production && chmod 0640 /install/.env.production'
+}
+
 # Also removes this project's containers whose service the current profiles leave out, so a rerun that switches web
 # or mail mode converges. Runs under step with set -e off, so failures return explicitly.
 start() {
@@ -462,6 +470,7 @@ start() {
         case $active in (*" $service "*) ;; (*) echo "$id" ;; esac
     done)
     if [ -n "$stale" ]; then docker rm -f $stale || return 1; fi
+    share_env || return 1
     dc up -d --wait
 }
 

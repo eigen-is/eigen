@@ -57,7 +57,7 @@ The help center at eigen.is follows the `main` channel, so it can describe a bui
 
 ## `.env.production`
 
-Setup writes it, readable by its owner only, and a rerun keeps every key it does not know. [`.env.example`](../.env.example) documents each key. In short:
+Setup writes it, readable by its owner and by group 1000, the group Eigen runs as, and Eigen mounts it read-only. A rerun keeps every key it does not know. [`.env.example`](../.env.example) documents each key. In short:
 
 | Keys | Written by | What they are |
 |---|---|---|

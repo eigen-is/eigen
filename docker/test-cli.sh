@@ -18,7 +18,7 @@ OPERATOR=1001:1001
 
 # check_install <operator uid:gid>: the stack, the files and the Docker socket of a fresh install.
 check_install() {
-    local operator="$1" base="https://localhost:$PORT_HTTPS" status mounts env_stat data_stat backups_stat
+    local operator="$1" base="https://localhost:$PORT_HTTPS" status mounts data_stat backups_stat
     probe "/eigen/health" "$base/eigen/health" 200 "OK"
     probe "/ (landing)" "$base/" 200
     probe "/admin/" "$base/admin/" 200 '"/admin/assets/'
@@ -34,14 +34,9 @@ check_install() {
     else
         fail "no network ${PROJECT}_eigen"
     fi
-    env_stat=$(owner_mode "$INSTALL/.env.production")
+    check_env "$operator" 'after setup'
     data_stat=$(owner_mode "$INSTALL/data")
     backups_stat=$(owner_mode "$INSTALL/backups")
-    if [ "$env_stat" = "$operator 600" ]; then
-        ok ".env.production is $operator, mode 600"
-    else
-        fail ".env.production is '$env_stat', expected '$operator 600'"
-    fi
     case "$data_stat $backups_stat" in
         "1000:1000 "*" 1000:1000 "*) ok "data/ and backups/ are 1000:1000" ;;
         *) fail "data/ is '$data_stat' and backups/ is '$backups_stat', expected 1000:1000" ;;
@@ -189,6 +184,7 @@ if [ "${after:0:${#before}}" = "$before" ]; then
 else
     fail ".env.production changed on rerun: $(diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") | tr '\n' ' ')"
 fi
+check_env "$OPERATOR" 'after the rerun'
 SECOND_TOKEN=$(setup_token "$SCRATCH/setup-again.log")
 if [ "${#SECOND_TOKEN}" = 43 ] && [ "$SECOND_TOKEN" != "$FIRST_TOKEN" ]; then
     ok "the rerun prints a fresh link"
@@ -370,8 +366,7 @@ if printf '%s' "$listing" | grep -q '"Kept by the snapshot"' && ! printf '%s' "$
 else
     fail "the drive after the restore: $listing"
 fi
-got=$(owner_mode "$INSTALL/.env.production")
-if [ "$got" = "$OPERATOR 600" ]; then ok ".env.production is the operator's, mode 600"; else fail ".env.production is '$got', expected '$OPERATOR 600'"; fi
+check_env "$OPERATOR" 'after the restore'
 eigen status
 if [ "$CODE" = 0 ]; then ok "the operator runs ./eigen on the restored .env.production"; else fail "status after the restore: exit $CODE"; show; fi
 # The tab still holds 'before after' from before the restore.
