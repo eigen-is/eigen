@@ -22,7 +22,7 @@ The byte delta is read inside the transaction and applied to the counter after i
 
 ## An event goes out after the lock is released
 
-The store emits nothing. The facade announces each write once `writeLock.run` returns, naming the row id the store result carries. Reading the id back after the lock could race a delete and lose the event. The calendar announces from the same place.
+The store emits nothing. `putCard`, `deleteCard` and `deleteContact` announce once `writeLock.run` returns, naming the row id the store result carries. Reading the id back after the lock could race a delete and lose the event. `addContact` and `updateContact` announce inside the lock, with the id they already hold. The calendar announces from the same place.
 
 A whole-file import runs inside `withBatchedEvents`, which holds the per-card events and closes on one `contacts:changed`. That event carries no ids, because every contact event invalidates the owner's whole list anyway. It fires from a `finally`, so the cards committed before a failure still reach open tabs. A device sync is one request per card, so nothing server-side spans it. There the client collapses the burst: `handleContactsSSEvent` (`packages/lib/src/core/contacts/sse-handlers.ts`) debounces the list invalidation by 250 ms per owner.
 
@@ -70,7 +70,7 @@ A REST save is a full replacement, but `mergeVCard` (`vcard/serialize.ts`) diffs
 
 Init adds your own card and, once, the org owner's. The `ownerSeeded` latch stops a deleted owner card from coming back. Your card carries `X-EIGEN-ID` with your user id, and the server-owned `eigenId` column holds the link. At most one row holds it.
 
-An update keeps the row's link and writes `X-EIGEN-ID` back when a client strips it. A create claims the link only when no row holds it yet, by carrying your id or your email (`resolveSelfLinkOnPut`, `dav-store.ts`). Editing your own card renames you across the org and sets your avatar (`pushUserProfile`). Deleting it is refused: REST answers 400, CardDAV 403 ([CARDDAV.md](CARDDAV.md#a-refused-self-delete-lists-the-card-again)).
+An update keeps the row's link and writes `X-EIGEN-ID` back when a client strips it. A create claims the link only when no row holds it yet, by carrying your `X-EIGEN-ID`, or your email on a card with no `X-EIGEN-ID` at all. A foreign id never claims (`selfClaimRank`, `dav-store.ts`). Editing your own card renames you across the org and sets your avatar (`pushUserProfile`). Deleting it is refused: REST answers 400, CardDAV 403 ([CARDDAV.md](CARDDAV.md#a-refused-self-delete-lists-the-card-again)).
 
 ## See also
 

@@ -64,6 +64,6 @@ Apple Contacts writes each group as a separate `X-ADDRESSBOOKSERVER-KIND:group` 
 ## See also
 
 - [CONTACTS.md](CONTACTS.md): the storage model, the write path and labels
-- [CALENDAR.md](CALENDAR.md): the CalDAV twin
-- Tests: `apps/api/src/test/carddav/` for the protocol, `apps/api/src/test/contacts/dav-store.test.ts` for the store seam
+- [CALDAV.md](CALDAV.md): the CalDAV twin
+- Tests: `apps/api/src/test/carddav/` for the protocol, `apps/api/src/test/contacts/dav-store.test.ts` for the store
 - Setup for users, including Thunderbird not animating a GIF photo: [connect/contacts-client](../apps/index/src/data/support/connect/contacts-client.md)
