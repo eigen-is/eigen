@@ -84,8 +84,8 @@ export function useCreateCommentCard(
                 writeCardToDoc(doc, mapName, card);
                 anchorInTransact?.(card);
             });
-            // The chat create seeded a comments.db row server-side; without this refetch the new
-            // card's entry-gated menu items (Assign to, Resolve) stay hidden until staleTime.
+            // The chat create seeded a comments.db row server-side and broadcast no index event, so
+            // without this refetch the new card has no entry until staleTime.
             invalidateComments(queryClient, ownerId, mountId, pathId);
             return card;
         },
