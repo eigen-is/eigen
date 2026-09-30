@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/back-up-home, admin/backup-contents]
 order: 91
-updated: 2026-09-24
+updated: 2026-09-30
 ---
 
 You can put a single user's or team's account back to the state held in a backup archive. Eigen checks the archive first, replaces the account from it, and keeps the current state beside it as a safety copy, so nothing is thrown away. Only an admin can do this.
@@ -23,7 +23,7 @@ To see what an archive contains, read [What a backup contains](/support/admin/ba
 2. For a person, click **Users** in the sidebar and pick the user. For a team, click **Teams** and pick the team.
 3. Scroll to the **Backup** section. It lists every archive for that account.
 4. Find the archive you want, hover over its row, and click **Restore** (the circular arrow icon). An archive that failed its check has no **Restore** button: fix or replace it first.
-5. A dialog titled **Restore this home** asks you to confirm. It explains that this replaces every file, email, and setting in the account with the archive, that the account is unavailable while the restore runs, that open editors reload, and that the current state is kept beside it as a safety copy.
+5. A dialog titled **Restore this home** asks you to confirm. It explains that this replaces every file, email, and setting in the account with the archive, that the account is unavailable while the restore runs, that every open page of it reloads, and that the current state is kept beside it as a safety copy.
 6. Click **Restore** to start. The section shows **Restoring home** with its progress while the job runs, then **Home restored** when it finishes.
 
 Eigen verifies the archive before it touches anything. If the check fails, the job stops and the account is left exactly as it was.
@@ -40,8 +40,10 @@ The account is unavailable for the length of the restore, which is usually secon
 
 - Anyone using that account gets a "Restore in progress" message. Requests fail until the restore finishes, then work again.
 - Nobody is signed out. Sessions stay as they are.
-- Open editor tabs reload themselves once the restore is done, so they pick up the restored content instead of the version they were holding.
-- A tab that was offline during the restore reloads this account's documents once, the next time it reconnects. That way it can't put old content back. Documents of other users and teams are not affected.
+- Every open Eigen tab of the account reloads itself once the restore is done, in every app, so it shows the restored content instead of what it was holding. This can take up to 15 seconds. For a team, that goes for the tabs of every member.
+- A tab that was offline during the restore reloads once, the next time it reconnects. That way it can't put old content back.
+- Other people's tabs don't reload, unless they have a document of this account open. That document reloads the same way.
+- If you restore your own account, the **Backup** section shows **Home restored** first, then your page reloads.
 - A mail client connected over IMAP keeps seeing the old mailbox until the restore finishes. Mail delivered or flagged in that window lands in the safety copy, not in the restored account. For a mail-heavy restore, either pause the mail client for the window or copy any missing messages out of the safety copy afterwards.
 
 ## Safety copies and undoing a restore

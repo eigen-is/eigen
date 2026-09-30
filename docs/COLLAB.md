@@ -39,9 +39,9 @@ The walker handles every Y subtype an Eigen container uses — `Y.Map`, `Y.Array
 
 ## Home replacement closes every socket
 
-`closeCollabConnectionsForHome` (`apps/api/src/lib/collab/connections.ts`) closes every socket belonging to one home with `COLLAB_HOME_REPLACED_CLOSE` (`packages/lib/src/constants/collab.ts`) when a backup restore replaces that home's folder, so a tab reloads instead of syncing the document it still holds in memory back over the restored copy. A tab that is offline during the restore has no socket to close, so the restore also rotates that home's part of the data epoch below (`rotateHomeCollabEpoch()`): the home's tabs reload on their next reconnect, and the tabs of every other home sync on. See [BACKUP.md](BACKUP.md).
+When a backup restore replaces a home's folder, `closeCollabConnectionsForHome` (`apps/api/src/lib/collab/connections.ts`) closes every socket of that home with `COLLAB_HOME_REPLACED_CLOSE`. The tab reloads instead of syncing the document it still holds in memory back over the restored copy. A socket that connects while the restore runs meets the same close. See [BACKUP.md](BACKUP.md).
 
-`./eigen restore` and `./eigen rollback` replace every home while the API is stopped, so no socket is open to close, and a tab that was offline would not hear it anyway. The data epoch covers them. It has two parts (`apps/api/src/lib/collab/epoch.ts`): the server's, a random id in `data/server/collab-epoch` drawn on first use, followed by the home's, from `data/server/collab-home-epochs.json`, which only a per-home restore writes (a home never restored on its own has none). Every open sends the epoch of the document's home in a `COLLAB_EPOCH_MESSAGE` frame before the sync, `useCollabDoc` reconnects with `?epoch=`, and the route closes a reconnect that names another epoch with `COLLAB_HOME_REPLACED_CLOSE` before it syncs anything, so the tab reloads. The restore deletes the server's file from the data it puts back, so the next start draws a new server part and every tab reloads; a restart or an update keeps it, so an offline edit still syncs. The hook keeps BroadcastChannel off until the first epoch arrives and then joins a channel named after it: a reloaded tab never takes state from a sibling tab still holding the document from before the restore.
+A tab that was offline through a restore, or through `./eigen restore`, has no socket to close. The home's data epoch catches it ([SSE.md](SSE.md#a-restore-reloads-every-tab-of-the-home) defines it). Every open sends the epoch of the document's home in a `COLLAB_EPOCH_MESSAGE` frame before the sync, `useCollabDoc` reconnects with `?epoch=`, and the route closes a reconnect that names another epoch with `COLLAB_HOME_REPLACED_CLOSE` before it syncs anything. A restart or an update keeps the epoch, so an offline edit still syncs. The hook keeps BroadcastChannel off until the first epoch arrives and then joins a channel named after it: a reloaded tab never takes state from a sibling tab still holding the document from before the restore.
 
 ## The client gates on `loaded`, never `synced`
 
@@ -59,7 +59,7 @@ The codes live in `packages/lib/src/constants/collab.ts`.
 |---|---|
 | 1013 `storage-unavailable` | Shows "retrying" and reconnects itself after 5 s. y-websocket would retry every 2.5 s and re-pay the failing load each time. |
 | 4410 `storage-gone` | Stops for good. The loading screen shows an error and offers the version list to a writer. An open editor stays mounted and reads as offline. |
-| 1012 `home-replaced` | Reloads, one render after clearing the unsynced flag, so the leave prompt doesn't block the reload. |
+| 1012 `home-replaced` | Reloads through `reloadReplacedHome`, the reload the event stream uses too, one render after clearing the unsynced flag, so the leave prompt doesn't block the reload. |
 
 The share cluster's offline icon waits 1.5 s after a disconnect, so a blip or the storage retry's brief connect doesn't flash it.
 
