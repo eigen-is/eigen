@@ -1,6 +1,6 @@
 # Eigen Support Writing Style Guide
 
-> **TLDR**: House rules for the help-center articles in `apps/index/src/data/support/` — voice, structure,
+> **TLDR**: House rules for the help-center articles in `apps/index/src/data/support/`: voice, structure,
 > frontmatter, en-US, no em-dashes. Read this before writing or reviewing any support article.
 
 The single source of truth for **how** Eigen Support articles are written. The goal: every article reads as if
@@ -172,7 +172,7 @@ tags: [drive, sharing, permissions]     # Lowercase. Used for related-article ma
 related: [drive/get-started]            # Optional. Explicit related-article slugs (<section>/<file>).
 crossSections: [getting-started]        # Optional. Extra sections to also list this article under.
 order: 20                               # Lower sorts first within the section. "Get started" is about 10.
-updated: 2026-08-04                     # today's date, YYYY-MM-DD — never copy this literally.
+updated: 2026-08-04                     # today's date, YYYY-MM-DD. Never copy this literally.
 ---
 ```
 

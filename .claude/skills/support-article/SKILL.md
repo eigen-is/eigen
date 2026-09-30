@@ -27,12 +27,12 @@ changed.
 
 ## Read first, in this order
 
-1. `docs/SUPPORT-STYLE-GUIDE.md` — the house style, including the self-check.
+1. `docs/SUPPORT-STYLE-GUIDE.md`: the house style, including the self-check.
 2. The three golden exemplars. Match their voice, length and structure; imitation beats instruction:
    - `apps/index/src/data/support/drive/get-started.md` (an overview).
    - `apps/index/src/data/support/drive/share-a-file.md` (a short how-to).
    - `apps/index/src/data/support/connect/mount-drive-on-your-computer.md` (a longer how-to).
-3. `AGENTS.md` and `docs/ARCHITECTURE.md` — a map for finding the code that implements the feature. (`docs/CODE-STANDARDS.md` is about
+3. `AGENTS.md` and `docs/ARCHITECTURE.md`: a map for finding the code that implements the feature. (`docs/CODE-STANDARDS.md` is about
    writing code, not articles. You don't need it.)
 
 ## Procedure

@@ -77,16 +77,16 @@ need an invoice. Questions? Reach out at [reinder@eigen.is](mailto:reinder@eigen
 I'd rather see feature ideas and larger changes as **issues**, not pull requests.
 
 The codebase moves fast. Things change week to week. A PR for a new feature that sits for a few days often
-needs a full rebase by the time I can review it — and sometimes the approach it was built on has already
+needs a full rebase by the time I can review it, and sometimes the approach it was built on has already
 shifted. That's frustrating for both of us.
 
 A simple rule:
 
 - **Small fixes** (bugs, typos, UI tweaks, one-liners): open a PR directly. Always welcome.
 - **New features or bigger changes**: open an **issue** first. Describe the problem and what you'd like to
-  build. If we agree on the direction, go for it — no wasted work.
-- **Want to adopt a whole area** — a full app (say Docs, Contacts, or Calendar), or a cross-cutting concern
-  like search or accessibility? That's the most valuable kind of contribution. See
+  build. If we agree on the direction, go for it. No wasted work.
+- **Want to adopt a whole area** (a full app, say Docs, Contacts, or Calendar, or a cross-cutting concern
+  like search or accessibility)? That's the most valuable kind of contribution. See
   [Adopt an app or area](#adopt-an-app-or-area) above, and email me at
   [reinder@eigen.is](mailto:reinder@eigen.is) to talk.
 

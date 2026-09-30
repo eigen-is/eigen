@@ -73,7 +73,8 @@ Editing one section follows the same steps, and the TLDR changes only when one o
 
 ```bash
 f=docs/NAME.md
-grep -nE '—|used to|previously|no longer' $f                                # expect nothing
+grep -nE 'used to|previously|no longer' $f                                  # expect nothing
+grep -n '—' $f                                                              # judge each: slop dashes go, a plain single aside may stay
 grep -nE 'showed|was a|turned every' $f                                     # fix narration: say why it is so now
 grep -nE 'kept for|later|not built|will' $f                                 # deferred work: a ROADMAP row instead
 grep -nE 'here|above|below|this doc' $f                                     # the doc talks about itself: cut it
@@ -95,7 +96,7 @@ EOF
 - The TLDR is one short paragraph and makes sense alone. Every claim in it has a section that carries it. A TLDR that counts its claims ("four things") is recounted after every edit.
 - Every heading states a fact. Every section has a why.
 - The doc never talks about itself: no "here", "above", "below" or "see this doc". It states facts and links to other docs, or to its own section by heading. A rewrite owns the whole file, so every hit in it is fixed.
-- Present tense. Short sentences in simple English. No em-dashes, no "Note that", "robust", "seamlessly".
+- Present tense. Short sentences in simple English. No slop em-dashes (dramatic pause, stacked asides, a dash doing a colon's or full stop's job), no "Note that", "robust", "seamlessly".
 - No hard line breaks inside a paragraph.
 - Every path you name exists, and both link checks print nothing. A symbol named with a path is grepped in that file. A symbol named without one must have its definition in exactly one file of a repo grep, or it gets its path.
 - A new doc gets its line in the AGENTS.md index and its row in `docs/ARCHITECTURE.md`.
