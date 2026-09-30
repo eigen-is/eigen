@@ -8,7 +8,7 @@ Each Home has one `eigen.calendar/calendar.db`. Only the API process opens it, s
 
 The `events` rows, `uid`, `etag` and `hasUnindexedRecurrence` are projected from the bytes. `rebuildProjection` (`calendar.ts`) rewrites all of them from the blobs in one transaction, and `apps/api/src/test/calendar/resource-store.test.ts` pins that contract. A new projected column is added by altering the table and calling it.
 
-Some facts no VCALENDAR can hold live only in the database: a calendar's name, color, visibility, default flag, `shares`, `ctag` and `syncGen`, the `resource_tombstones` a sync delta reports as removals, and the recipient-side `shared_calendars`. See `schema.ts` and [DATABASE.md](DATABASE.md). The database runs `synchronous: 'FULL'`, because the events themselves live in these rows and an acknowledged PUT must survive a power loss.
+Some facts no VCALENDAR can hold live only in the database: a calendar's name, color, visibility, default flag, `shares`, `ctag` and `syncGen`, the `resource_tombstones` a sync delta reports as removals, and the recipient-side `shared_calendars`. See `schema.ts` and [DATABASE.md](DATABASE.md). Because the events themselves live in these rows, the database runs synchronous FULL ([DATABASE.md § A database that holds the truth runs synchronous FULL](DATABASE.md#a-database-that-holds-the-truth-runs-synchronous-full)).
 
 ## One resource holds one series
 
@@ -24,7 +24,7 @@ iCalendar has no place for a row id, a creator, a color or an invitation link, s
 |---|---|
 | `X-EIGEN-EVENT-ID` | the `events` row id, so an id survives a projection rebuild |
 | `X-EIGEN-CREATED-BY` | the user who first wrote the resource |
-| `X-EIGEN-ORGANIZER-EVENT`, `-USER` | the invitation link on an attendee's copy ([below](#a-linked-copy-is-an-ordinary-resource-with-the-organizers-stamp)) |
+| `X-EIGEN-ORGANIZER-EVENT`, `-USER` | the invitation link on an attendee's copy ([§ A linked copy is an ordinary resource](#a-linked-copy-is-an-ordinary-resource-with-the-organizers-stamp)) |
 | `X-EIGEN-COLOR` | the per-event color |
 | `X-EIGEN-IMPORTED-ORGANIZER` | the organizer an imported file named |
 | `X-EIGEN-EXDATE` | beside each `EXDATE`: the exclusion's row id, SEQUENCE and message stamp |
@@ -65,7 +65,7 @@ A definition a property still names is the client's own and is never rewritten. 
 
 ## Two readers, one trust rule
 
-`parseIcs(text)` reads bytes a stranger wrote and can't hold a stamp ([above](#eigens-own-facts-ride-as-x-eigen--lines-no-client-can-write)). `projectResource(component)` reads a resource the store wrote and adds the stamps on top of the same projection. `parseResource` is the only place a stored `.ics` becomes a component tree, so nothing else imports ical.js for one.
+`parseIcs(text)` reads bytes a stranger wrote and can't hold a stamp ([§ Eigen's own facts ride as X-EIGEN- lines](#eigens-own-facts-ride-as-x-eigen--lines-no-client-can-write)). `projectResource(component)` reads a resource the store wrote and adds the stamps on top of the same projection. `parseResource` is the only place a stored `.ics` becomes a component tree, so nothing else imports ical.js for one.
 
 A VEVENT the parser can't read is skipped and counted rather than failing the file. Each caller answers for its own surface: a PUT refuses the payload, the quick look counts it in `dropped`, an import in `failed`. Each VEVENT is wrapped in an `ICAL.Event` built with `{ exceptions: [] }`, which skips ical.js's scan for sibling exceptions. That scan is quadratic over a whole file: 20,000 events took 17 s.
 
@@ -198,11 +198,11 @@ Receivers never raise. A message over `EVENT_MAX_BYTES` or the storage budget is
 
 `Mail.mailboxDeliver` (`lib/mail/mail-domain.ts`) scans a delivered message for a `text/calendar` part after the INBOX append ([MAIL.md](MAIL.md)). It waits for the calendar, so a client reacting to the new-mail event already finds the change. A failure is only logged and never fails the delivery.
 
-Every change binds to the `From:` address, so the delivery seam computes a verdict with `verifyImipSender` (`lib/mail/imip-auth.ts`). A sender is verified when the topmost `Authentication-Results` header stamped with our own authserv-id records a `dkim=pass` for a domain aligned with the `From:` domain. OpenDKIM prepends its result and strips older ones with our id (`docker/postfix/entrypoint.sh`), so a header below it is a stale hop or a forgery. Anything else fails closed and the invite stays a plain attachment. An imported `.eml` never reaches the calendar, and an operator whose MTA writes no such header has automatic iMIP off. A message is acted on for its first `IMIP_MAX_EVENTS` (50) events only, since more is a mailed export, not a scheduling message.
+Every change binds to the `From:` address, so the delivery computes a verdict with `verifyImipSender` (`lib/mail/imip-auth.ts`). A sender is verified when the topmost `Authentication-Results` header stamped with our own authserv-id records a `dkim=pass` for a domain aligned with the `From:` domain. OpenDKIM prepends its result and strips older ones with our id (`docker/postfix/entrypoint.sh`), so a header below it is a stale hop or a forgery. Anything else fails closed and the invite stays a plain attachment. An imported `.eml` never reaches the calendar, and an operator whose MTA writes no such header has automatic iMIP off. A message is acted on for its first `IMIP_MAX_EVENTS` (50) events only, since more is a mailed export, not a scheduling message.
 
 A REQUEST or CANCEL from the recipient's own address is dropped. It is their own mail coming back through a forward or a list, and acting on it would turn their own event into somebody else's copy. A REPLY from one's own address is still processed.
 
-REQUEST takes the decision above with `external_<sender>` as the organizer. CANCEL removes the copy, or one occurrence of it under the ordering rule. REPLY moves PARTSTAT on the organizer's master or on that occurrence's override. It only sets the sender's own status, only for an invited attendee, and never brings back an occurrence the organizer deleted.
+REQUEST takes the [locked decision](#every-inbound-request-takes-one-locked-decision) with `external_<sender>` as the organizer. CANCEL removes the copy, or one occurrence of it under the ordering rule. REPLY moves PARTSTAT on the organizer's master or on that occurrence's override. It only sets the sender's own status, only for an invited attendee, and never brings back an occurrence the organizer deleted.
 
 ## The mail app draws an invite from the server's summary
 

@@ -28,7 +28,7 @@ A write on a path that then rejects the operation still ships an op and costs th
 
 `config.borderInfo` maps an `"r_c"` key to that cell's sides. `applyBorder` (`state/modules/border.ts`) expands a toolbar layout per cell at write time, and `border-none` and every carry tombstone delete the key. Order carries nothing, so two clients bordering different cells converge (`packages/sheet/src/test/state/modules/border-convergence.test.ts`).
 
-A shared edge never creates the neighbor's key, because that would be the whole-object `add` above. A neighbor entry that already exists gets its facing side overridden, so the edge just drawn wins on screen. When two neighbors disagree on a shared edge, as after many xlsx imports, the higher-index one wins (B1's left over A1's right), so the color can't flip with the viewport's walk order.
+A shared edge never creates the neighbor's key, because that would be the whole-object `add` of [§ Creating a collection ships it whole](#creating-a-collection-ships-it-whole-so-every-collection-exists). A neighbor entry that already exists gets its facing side overridden, so the edge just drawn wins on screen. When two neighbors disagree on a shared edge, as after many xlsx imports, the higher-index one wins (B1's left over A1's right), so the color can't flip with the viewport's walk order.
 
 A header click selects a whole axis, so it is clipped to the used extent first (`clipToUsedExtent`); one click must not write a key for every row. Cells filled in later rows show no border, an accepted divergence from Excel and Google. Merges are a read-time filter: `mergeEdgeSides` (`packages/lib/src/sheets/borders.ts`) is the one predicate: the canvas calls it, and the xlsx and HTML exports call it through `mergedBorderSides`, and storage stays raw so an unmerge shows the sides again.
 
@@ -50,10 +50,10 @@ Everything that is the cell (value, formula, number format, colors, font, rotati
 
 ## The snapshot is interned and written only through the codec
 
-`encodeSheetsSnapshot` and `decodeSheetsSnapshot` (`packages/lib/src/sheets/snapshot-codec.ts`) are the only way in or out of `state.snapshot`. A real 340k-cell workbook was 56 MB as plain JSON, because 224 style combinations and about 110 border payloads repeated per cell. The v2 envelope interns both into workbook-global dictionaries and is about 4.5 times smaller. The codec sits at the serialization seam only: the in-memory `Sheet[]`, the ops and the replay don't know it exists.
+`encodeSheetsSnapshot` and `decodeSheetsSnapshot` (`packages/lib/src/sheets/snapshot-codec.ts`) are the only way in or out of `state.snapshot`. A real 340k-cell workbook was 56 MB as plain JSON, because 224 style combinations and about 110 border payloads repeated per cell. The v2 envelope interns both into workbook-global dictionaries and is about 4.5 times smaller. The codec runs only where the snapshot is serialized: the in-memory `Sheet[]`, the ops and the replay don't know it exists.
 
 - The dense `data` matrix folds into the cell list at encode and is never stored. `selections`, a per-client cursor, is stripped.
-- `calcChain` is never stored. The envelope's `computed` flag tells the decoder to seed it, which is the signal the server's recalc gate reads ([below](#the-editor-computes-on-write-the-server-only-what-nobody-computed)).
+- `calcChain` is never stored. The envelope's `computed` flag tells the decoder to seed it, which is the signal the server's recalc gate reads ([§ The editor computes on write](#the-editor-computes-on-write-the-server-only-what-nobody-computed)).
 - `images` ride verbatim, since there is nothing to intern.
 
 The editor flushes a snapshot and clears the op log on unmount, and on `beforeunload` only while connected. A flush with no pending ops is skipped, because every edit is an op and rewriting the snapshot would send the whole workbook to every peer on each close. A tab closed offline flushes nothing, so the log grows until a connected tab flushes ([SHEETS-TODO.md](SHEETS-TODO.md#bugs)).
@@ -128,7 +128,7 @@ A typed number is stored as a number in `v`, unless the cell is text-formatted. 
 
 ## Conditional formats evaluate headless
 
-`evaluateConditionalFormat(rules, data, options?)` (`engine/conditional-format.ts`) returns the `"r_c"`-keyed style map the canvas paints, and the HTML export calls it too ([below](#conditional-formats-run-through-the-canvas-engine)). Formula rules need an evaluator, and both pass the same one, `createCfFormulaEvaluator`.
+`evaluateConditionalFormat(rules, data, options?)` (`engine/conditional-format.ts`) returns the `"r_c"`-keyed style map the canvas paints, and the HTML export calls it too ([§ Conditional formats run through the canvas engine](#conditional-formats-run-through-the-canvas-engine)). Formula rules need an evaluator, and both pass the same one, `createCfFormulaEvaluator`.
 
 Every rule scans only the materialized matrix, because Excel writes a whole-column rule as `A1:A1048576`. Overlapping rules layer per style property in rule order, so a later rule's fill never erases an earlier rule's text color. `textContains` ignores case and `duplicateValue` skips blank cells, both as in Excel.
 
@@ -206,9 +206,9 @@ A real workbook repeats a few hundred styles across hundreds of thousands of cel
 
 The preview (`renderSheetsPreviewHtml`) keeps inline styles, because its body fragment embeds without a `<head>` ([PREVIEWS.md](PREVIEWS.md)). Its bytes are golden-pinned in `apps/api/src/test/preview/sheets-preview.test.ts`.
 
-## The stylesheet is guarded at two seams
+## The stylesheet is guarded in two places
 
-Cell values are schemaless CRDT strings, and stylesheet text is a different escaping context from a style attribute. Two guards keep it inert, each at a seam rather than per field:
+Cell values are schemaless CRDT strings, and stylesheet text is a different escaping context from a style attribute. Two guards keep it inert, each where every field passes through rather than per field:
 
 - `serializeStyleRules` strips what is structural in CSS text from every declaration. `<` and `>` would end the `<style>` element, and DOMPurify keeps what follows, so an `<svg><image href>` becomes a server-side fetch under WeasyPrint. `{` and `}` open rule blocks. `\` starts a CSS escape, which spells `url(` or `@import` invisibly to the sanitizer. `/*` opens a comment that would swallow every later rule, so one odd cell would unstyle the rest of the workbook.
 - Numeric fields are coerced, not escaped. Row heights and column widths go through `cssLength`, the same `Number()` guard `getSheetContentSize` applies for the `@page` rule.

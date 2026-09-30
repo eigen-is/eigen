@@ -4,7 +4,7 @@
 
 ## A Home is loaded on demand and dropped when idle
 
-`getHome(ownerId)` (`apps/api/src/lib/home/get-home.ts`) builds the Home on first use and caches it. Each domain getter calls `touch()`, and a Home nobody touches for its idle window shuts down and closes its databases. A user home idles out after 5 minutes. A team home gets 30, because no event stream keeps it alive. `evictHome` shuts one down on purpose (user deletion, backup restore), `shutdownAllHomes` all of them at exit.
+`getHome(ownerId)` (`apps/api/src/lib/home/get-home.ts`) builds the Home on first use and caches it. Each domain getter calls `touch()`, and a Home nobody touches for its idle window shuts down and closes its databases. A user home idles out after 5 minutes. A team home gets 30 (`TEAM_HOME_IDLE_MS` overrides it), because no event stream keeps it alive. `evictHome` shuts one down on purpose (user deletion, backup restore), `shutdownAllHomes` all of them at exit.
 
 | Home | Folder | Services |
 |---|---|---|

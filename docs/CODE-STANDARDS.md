@@ -6,11 +6,11 @@ Code style and conventions. Architecture and file locations: [ARCHITECTURE.md](A
 
 This codebase values **simplicity, directness, and consistency** over cleverness or abstraction. Code should be obvious at a glance. When in doubt, look at what already exists in the same directory and match it exactly.
 
-- **Flat and direct**: no service layers, no repository patterns, no dependency injection. Routes call domain classes directly. Domain classes query the database directly with Drizzle
-- **Don't extract single-use helpers**: a method that handles a complete workflow inline is better than several small methods you have to trace through. Only extract when logic is reused
-- **Trust the type system**: no defensive null checks on typed data, no fallback defaults for required fields. Validate at system boundaries (user input, external APIs), trust internal code everywhere else
-- **Consistency over originality**: new code must look like the code next to it. Same patterns, same naming, same structure. Don't invent new patterns when existing ones work
-- **Fewer lines beat more**: removing code is always a good idea when what remains is cleaner and easier to understand. Over-engineering (a flag threaded through layers, a prop every caller passes the same value for, a seam that closes a case that cannot happen) is a broken window: remove it on touch, and don't add it to close a nit
+- Flat and direct: no service layers, no repository patterns, no dependency injection. Routes call domain classes directly. Domain classes query the database directly with Drizzle
+- Don't extract single-use helpers: a method that handles a complete workflow inline is better than several small methods you have to trace through. Only extract when logic is reused
+- Trust the type system: no defensive null checks on typed data, no fallback defaults for required fields. Validate at system boundaries (user input, external APIs), trust internal code everywhere else
+- Consistency over originality: new code must look like the code next to it. Same patterns, same naming, same structure. Don't invent new patterns when existing ones work
+- Fewer lines beat more: removing code is always a good idea when what remains is cleaner and easier to understand. Over-engineering (a flag threaded through layers, a prop every caller passes the same value for, a seam that closes a case that cannot happen) is a broken window: remove it on touch, and don't add it to close a nit
 
 ## Review Hot Spots
 
@@ -20,26 +20,26 @@ Six slips recur in review here, each with BAD/GOOD code in [CODE-EXAMPLES.md § 
 
 Types flow end-to-end: Elysia route handler return type → Eden Treaty → hook → component. Don't break the chain. Reasoning per rule: [CODE-EXAMPLES.md § Typing](CODE-EXAMPLES.md#typing).
 
-- **No `as any`**: fix the type at the source (route handler return type, schema definition), never by casting in hooks
-- **No `as Type` on Eden Treaty responses**: add an explicit return type to the backend route handler or domain method, using the shared type from `packages/lib/src/types/`
-- **Shared types live in `packages/lib/src/types/[domain].ts`**: never redefine one; if it doesn't exist yet, add it there so FE and BE share it
-- **`type` over `interface`**, except when methods are needed
-- **Infer locally, annotate publicly**: no annotations where TypeScript infers; always explicit return types on backend route handlers, domain methods, and hooks
-- **`import type` for type-only imports**, separate from value imports
-- **Drizzle `.$inferSelect` for DB row types**: never redefine column types by hand
+- No `as any`: fix the type at the source (route handler return type, schema definition), never by casting in hooks
+- No `as Type` on Eden Treaty responses: add an explicit return type to the backend route handler or domain method, using the shared type from `packages/lib/src/types/`
+- Shared types live in `packages/lib/src/types/[domain].ts`: never redefine one; if it doesn't exist yet, add it there so FE and BE share it
+- `type` over `interface`, except when methods are needed
+- Infer locally, annotate publicly: no annotations where TypeScript infers; always explicit return types on backend route handlers, domain methods, and hooks
+- `import type` for type-only imports, separate from value imports
+- Drizzle `.$inferSelect` for DB row types: never redefine column types by hand
 
 ## Code Style
 
 Examples per rule: [CODE-EXAMPLES.md § Code Style](CODE-EXAMPLES.md#code-style).
 
-- **English everywhere**: code, comments, docs, commit messages
-- **No JSDoc**: code should be self-documenting
-- **Comments only for high-complexity code or functions whose use isn't obvious to a maintainer of this repo, and they explain WHY, never WHAT**: simplified technical English, concision over grammar. Most code needs zero comments; no comment beats slop, and reviewers flag comment slop the same as dead code
-- **Backend errors use `ApiError`**: `throw new ApiError(status, message)` for user-facing HTTP errors, never `throw new Error()`; internal invariants (db not open, missing config) may use `throw new Error()`
-- **Theme tokens, not colors**: `text-muted-foreground`, `bg-muted`, not `text-gray-500`; `selection-handle` for selection UI
-- **Use `cn()` for class merging**: from `@workspace/ui/lib/utils`, never raw `clsx`/`twMerge` or string concatenation
-- **Name for grep-ability; don't shadow libraries**: `use*`, `Eigen*`, `*Dialog`, `*Provider`, `invalidate*`, `*Keys`; never reuse a name a dependency owns (`useSearchQuery`, not `useSearch`) or give three helpers one name (`isMobile`)
-- **Z-index: app-level components don't set one, and anything above 50 needs a comment**. The scale and its rules: [LAYOUT.md § One z-index scale, and app code sets none](LAYOUT.md#one-z-index-scale-and-app-code-sets-none)
+- English everywhere: code, comments, docs, commit messages
+- No JSDoc: code should be self-documenting
+- Comments only for high-complexity code or functions whose use isn't obvious to a maintainer of this repo, and they explain WHY, never WHAT: simplified technical English, concision over grammar. Most code needs zero comments; no comment beats slop, and reviewers flag comment slop the same as dead code
+- Backend errors use `ApiError`: `throw new ApiError(status, message)` for user-facing HTTP errors, never `throw new Error()`; internal invariants (db not open, missing config) may use `throw new Error()`
+- Theme tokens, not colors: `text-muted-foreground`, `bg-muted`, not `text-gray-500`; `selection-handle` for selection UI
+- Use `cn()` for class merging: from `@workspace/ui/lib/utils`, never raw `clsx`/`twMerge` or string concatenation
+- Name for grep-ability; don't shadow libraries: `use*`, `Eigen*`, `*Dialog`, `*Provider`, `invalidate*`, `*Keys`; never reuse a name a dependency owns (`useSearchQuery`, not `useSearch`) or give three helpers one name (`isMobile`)
+- Z-index: app-level components don't set one, and anything above 50 needs a comment. The scale and its rules: [LAYOUT.md § One z-index scale, and app code sets none](LAYOUT.md#one-z-index-scale-and-app-code-sets-none)
 
 ### Imports
 

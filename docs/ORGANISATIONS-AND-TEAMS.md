@@ -68,11 +68,11 @@ A team entry is `{ id: 'team_xyz', read: true, write: false }`. `canRead` and `c
 
 `apps/admin/` manages members and teams through better-auth's client (`authClient.organization.*`) and everything else through Eden. The route guard in `_auth.tsx` fetches the org members and shows an access-denied `EmptyState` to anyone who is not `admin` or `owner`. The app switcher shows "Admin" only to them. The admin hooks are in `packages/lib/src/core/admin/hooks/` and the team hooks in `packages/lib/src/core/team/hooks/`. What each page does for the user is in the help center (`apps/index/src/data/support/admin/`).
 
-The Users page (`GET /settings/users`) lists org members **and** orphans, non-guest accounts with no membership in the org, so an orphan is visible and can be deleted from its detail pane. The old `/members` path redirects to `/users`.
+The Users page (`GET /settings/users`) lists org members **and** orphans, non-guest accounts with no membership in the org, so an orphan is visible and can be deleted from its detail pane. `/members` redirects to `/users`.
 
 ## Deleting a user runs one teardown from every entry point
 
-`teardownUserData` (`apps/api/src/lib/user/delete-user.ts`) runs from the `databaseHooks.user.delete.before` hook in `auth.ts`, the one seam every better-auth deletion path passes through while the user row still exists:
+`teardownUserData` (`apps/api/src/lib/user/delete-user.ts`) runs from the `databaseHooks.user.delete.before` hook in `auth.ts`, the one hook every better-auth deletion path passes through while the user row still exists:
 
 1. Evicts the cached Home (closes its databases)
 2. Deletes the home folder (`data/home/{userId}/`, or the guest home for a guest)

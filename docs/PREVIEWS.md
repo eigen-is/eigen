@@ -59,7 +59,7 @@ A preview is a glance, so each type stops at its natural unit and leaves the exp
 | eigenvector | 500 elements in reading order, one page |
 | eigensheets | first sheet, 200 rows × 50 columns, 10,000 cells |
 
-A sheets preview never recalculates. It renders stored values, because a never-computed legacy workbook can cost more than the deadline. The sheet window also bounds declared spans: one merge or conditional-format range can name millions of cells, so both clip to the window. So an aggregate rule (data bars, color scales, top-N, duplicates) takes its extremes over the window, not over the range it declares.
+A sheets preview never recalculates and renders stored values ([SHEETS.md § The editor computes on write](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)). The sheet window also bounds declared spans: one merge or conditional-format range can name millions of cells, so both clip to the window. So an aggregate rule (data bars, color scales, top-N, duplicates) takes its extremes over the window, not over the range it declares.
 
 The caps count units, and one enormous block passes all of them. So `applyPreviewByteGuard` replaces any body over 8 MB with the truncation marker, never with a sliced string. The marker is inline-styled because a preview body is embedded without a `<head>`.
 
@@ -172,7 +172,7 @@ Siblings come from one surface, so a batch is all Drive items or all mail parts,
 
 `PreviewProvider` stores the subject and its siblings and portals `FilePreview` (`packages/ui/src/components/drive/file-preview.tsx`) to `<body>`. `openPreview(subject, siblings?)` takes the siblings the arrow keys page through. A Drive listing passes its folder without the `attachment` flag, so the overlay never offers to copy a folder onto itself.
 
-`getPreviewMode(subject)` runs the text gate above on the client. An image needs a mount to be resized, so only a Drive image uses `/preview`. A mail image shows its original bytes, which makes it an image only for a mime in `BROWSER_IMAGE_MIMES`. A HEIC part gets the file card rather than a broken box.
+`getPreviewMode(subject)` runs the text gate of [§ Loose bytes preview as what their name says](#loose-bytes-preview-as-what-their-name-says) on the client. An image needs a mount to be resized, so only a Drive image uses `/preview`. A mail image shows its original bytes, which makes it an image only for a mime in `BROWSER_IMAGE_MIMES`. A HEIC part gets the file card rather than a broken box.
 
 `ProgressiveImage` stacks the 512 px thumbnail under the screen preview so the image shows at once. The box takes its ratio from the Drive row. A mail part has no stored size, so the box measures the image once it loads and then hugs it, and a click beside it reaches the backdrop that closes the overlay. The component is keyed on the preview URL, so a sibling never inherits the previous image's size.
 

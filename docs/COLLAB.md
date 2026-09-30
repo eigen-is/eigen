@@ -2,7 +2,7 @@
 
 > **TLDR:** `apps/api/src/lib/collab/` is the server half of every Yjs container: one `CollabDocument` per open document, Yjs updates and snapshots persisted as zstd-compressed BLOBs in the container's `data.db`, and a WebSocket route (`apps/api/src/routes/collab.ts`) that fans updates out to the connected peers. Not obvious from the code: the blob codec reads compressed and raw rows alike by magic-byte sniff, awareness frames are validated before apply, the route sends a heartbeat during a cold load, a document lingers 60 s after the last unsubscribe, and a restore closes the home's sockets, so no tab syncs its old state back over the restored copy. Client side, `useCollabDoc` gates the editor on a latched `loaded`.
 
-## The storage seam is zstd
+## Yjs blobs are zstd on disk and raw on the wire
 
 Yjs blobs (`doc_snapshots.stateData`, `doc_updates.updateData`) are compressed at the SQLite boundary only, in `apps/api/src/lib/collab/blob-codec.ts`. **The live WebSocket protocol still exchanges raw Yjs updates**, so sync is untouched by it. The motivation is that a Yjs snapshot embeds the whole document state verbatim: a large sheet's snapshot rides at ~48 MB raw and ~1 MB at zstd level 3. Updates below `COMPRESS_MIN_BYTES` (1 KiB) stay raw, because frame overhead outweighs the gain on a keystroke-sized update.
 

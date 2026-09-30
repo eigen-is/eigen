@@ -4,7 +4,7 @@
 
 ## CalDAV serves the owner's own calendars
 
-Every route runs `authenticateBasic` (an app password, then the primary-password fallback, which a 2FA user can't take) and `requireSelf`. So a client sees the user's own calendars only. A team calendar and a calendar someone shared are web-only, and the Integrations page (`apps/space/src/routes/_auth.services.tsx`) lists no address for them.
+Every route runs `authenticateBasic`, the app-password check every protocol shares ([IMAP.md § Dovecot asks the API whether a password is right](IMAP.md#dovecot-asks-the-api-whether-a-password-is-right)), and `requireSelf`. So a client sees the user's own calendars only. A team calendar and a calendar someone shared are web-only, and the Integrations page (`apps/space/src/routes/_auth.services.tsx`) lists no address for them.
 
 A client finds the server at `/.well-known/caldav`, which the Caddy edge redirects to `/dav/`. The Integrations page also lists one address per calendar, because a client such as Thunderbird subscribes per collection and never revisits the home for a calendar made later. How to connect a device is the help-center article [connect/calendar-client](../apps/index/src/data/support/connect/calendar-client.md).
 
@@ -30,11 +30,11 @@ The body is bounded at `EVENT_MAX_BYTES` before it is buffered, so a hostile PUT
 
 **A copy of somebody else's event takes only its alarms.** When the stored resource carries `X-EIGEN-ORGANIZER-EVENT`, the PUT keeps the stored component and adopts only the incoming `VALARM`s, matched on UID plus recurrence key. The rule reads the server's stamp, not the `ORGANIZER` address. Apple Calendar and Thunderbird write the account's own address as `ORGANIZER` on every event they create with guests, so the address alone proves nothing ([CALENDAR.md](CALENDAR.md#an-attendee-may-re-alarm-a-copy-and-nothing-more)).
 
-A PUT fans nothing out: the guests of an event a device created get no invitation until the owner edits it in the web app ([ROADMAP.md](ROADMAP.md)).
+A PUT fans nothing out ([CALENDAR.md § The organizer's writes fan out](CALENDAR.md#the-organizers-writes-fan-out-and-only-the-organizers)): the guests of an event a device created get no invitation until the owner edits it in the web app ([ROADMAP.md](ROADMAP.md)).
 
 ## PROPFIND answers the props asked for
 
-The shared core in `dav/propfind.ts` returns the requested props it has, and echoes unknown ones in a 404 propstat unless the client sent `Brief: t` or `Prefer: return=minimal`. A bodyless PROPFIND is allprop. A collection advertises the ownership and privilege props, because Apple clients read editability from them and treat a server without them as read-only (`dav/xml.ts`). Its `supported-report-set` lists exactly the three REPORTs that exist.
+The shared core in `dav/propfind.ts` returns the requested props it has, and echoes unknown ones in a 404 propstat unless the client sent `Brief: t` or `Prefer: return=minimal`. A bodyless PROPFIND is allprop. A collection advertises the ownership and privilege props, because Apple clients read editability from them ([CARDDAV.md § Apple needs write privileges on the book](CARDDAV.md#apple-needs-write-privileges-on-the-book)). Its `supported-report-set` lists exactly the three REPORTs that exist.
 
 ## A time-range query over-reports rather than lose an occurrence
 
@@ -56,7 +56,7 @@ Partial retrieval is answered whole: a `calendar-data` projection, `expand`, `li
 
 ## Tests
 
-Under `apps/api/src/test/`: `caldav/caldav.test.ts` for the protocol, `caldav/caldav-roundtrip.test.ts` for serialize-and-parse fidelity, `caldav/caldav-client-sync.test.ts` for sync flows as real clients run them, and `calendar/dav-store.test.ts` for the store seam, the ceilings and the move rules.
+Under `apps/api/src/test/`: `caldav/caldav.test.ts` for the protocol, `caldav/caldav-roundtrip.test.ts` for serialize-and-parse fidelity, `caldav/caldav-client-sync.test.ts` for sync flows as real clients run them, and `calendar/dav-store.test.ts` for the store interface, the ceilings and the move rules.
 
 ## See also
 

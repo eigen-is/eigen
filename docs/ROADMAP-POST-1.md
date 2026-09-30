@@ -1,6 +1,6 @@
 # Roadmap after 1.0
 
-Work that waits until after 1.0, or until a trigger appears. The road-to-1.0 backlog is in [ROADMAP.md](ROADMAP.md). Eigen does not implement backward compatibility for persisted formats before 1.0: a format-breaking change is done outright now (existing data is dropped, or converted with a one-off). So from 1.0 every change to a persisted format needs the migration machinery in the first row below.
+Work that waits until after 1.0, or until a trigger appears. The road-to-1.0 backlog is in [ROADMAP.md](ROADMAP.md). Before 1.0 a format-breaking change is done outright ([ROADMAP.md](ROADMAP.md) states the policy). From 1.0 every change to a persisted format needs the migration machinery in the first row.
 
 **Legend**: Effort: S / M / L / XL (rough T-shirt size). Frozen-format: from 1.0 a change to a persisted format (Yjs roots, DB schema, drive MIME values) needs a versioned migration; the machinery in the first row is what makes that possible.
 

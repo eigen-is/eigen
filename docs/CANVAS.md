@@ -16,7 +16,7 @@ A rich-text box's `html` is one scalar, so two people typing in one box resolve 
 
 ## The reader is the trust boundary
 
-`readVectorFromDoc` (`read-vector.ts`) turns a Y.Doc into a `VectorScene`. It needs only yjs, so the API Worker runs it too. Each kind's `read` validates its own fields: enums, clamps, string caps, color tokens. Then it repairs what a concurrent merge can leave: colliding fractional indices get fresh ones, an element whose `frameId` names no frame moves to the first frame, and a binding to a missing shape is dropped. The repair lives only in the returned scene; the next real write persists it. It can't sanitize rich-text `html`, which needs a DOM, so the DOM seams do ([below](#one-layer-per-element-on-the-canvas-and-on-the-server)).
+`readVectorFromDoc` (`read-vector.ts`) turns a Y.Doc into a `VectorScene`. It needs only yjs, so the API Worker runs it too. Each kind's `read` validates its own fields: enums, clamps, string caps, color tokens. Then it repairs what a concurrent merge can leave: colliding fractional indices get fresh ones, an element whose `frameId` names no frame moves to the first frame, and a binding to a missing shape is dropped. The repair lives only in the returned scene; the next real write persists it. It can't sanitize rich-text `html`, which needs a DOM, so the layers that render it do ([§ One layer per element](#one-layer-per-element-on-the-canvas-and-on-the-server)).
 
 A pasted clipboard record goes through the same `readElementFromFields`, so a forged clipboard is exactly as safe as a hostile peer write.
 
@@ -52,7 +52,7 @@ An arrow is the one kind that depends on other elements. Its math lives in `pack
 
 An arrow end binds by storing the target's id and a `fixedPoint`, the anchor as a proportion of the target's width and height. The end follows a move, resize or rotate of the target by construction. Which kinds an arrow may bind to is the `bindable` capability: the three closed shapes, rich text and images.
 
-There is no stored reverse index. `arrowsBoundTo` derives "which arrows dock on this shape" in memory, so there is no second write to keep consistent. A binding to a missing or unbindable shape is dropped on read and never written ([above](#the-reader-is-the-trust-boundary)).
+There is no stored reverse index. `arrowsBoundTo` derives "which arrows dock on this shape" in memory, so there is no second write to keep consistent. A binding to a missing or unbindable shape is dropped on read and never written ([§ The reader is the trust boundary](#the-reader-is-the-trust-boundary)).
 
 After any element patch, `useCanvasDoc` runs `followBindings` for the affected arrows and writes the new geometry inside the same transaction. So a nudge, an align or a paste-move re-glues for free, in one undo step and one broadcast. A shape and its arrow moved together return null and write nothing. This runs on every gesture, so it materializes only the arrows and the shapes they dock on, never the whole scene.
 
@@ -120,7 +120,7 @@ Double-click opens the kind's `InPlaceEditor` inside the element's own layer, ov
 
 During a text session the canvas keymap is disabled, because `ignoreInputs` does not cover ProseMirror. The viewport freezes so the editor stays on its element.
 
-A box's height only grows (`richTextFitHeight`): the stored height is the user's minimum, and the room below the text is what vertical alignment uses. The layer measures its own text, so every change re-fits through one seam. Every client measures the same box and only a shortfall of 1 px or more is written, so concurrent writers converge instead of echoing. The typing user's fit is tracked, so ⌘Z takes back the text and the growth together.
+A box's height only grows (`richTextFitHeight`): the stored height is the user's minimum, and the room below the text is what vertical alignment uses. The layer measures its own text, so every change re-fits in one place. Every client measures the same box and only a shortfall of 1 px or more is written, so concurrent writers converge instead of echoing. The typing user's fit is tracked, so ⌘Z takes back the text and the growth together.
 
 ## Escape is layered per host, on purpose
 

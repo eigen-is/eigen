@@ -26,7 +26,7 @@ An upload is not resumable. A dropped connection starts over.
 
 ## A crashed upload's temp is swept at the next mount init
 
-`Mount.init` removes `tmp/` files older than an hour, which clears the partials an interrupted upload leaves behind. Upload temps have random names, so the sweep's one exception, a document's crash temp named after its row, never covers them ([SYNC.md](SYNC.md#a-crash-temp-is-adopted-and-re-synced)).
+The mount's startup `tmp/` sweep ([SYNC.md § A crash temp is adopted and re-synced](SYNC.md#a-crash-temp-is-adopted-and-re-synced)) clears the partials an interrupted upload leaves behind. Upload temps have random names, so the sweep's one exception, a document's crash temp named after its row, never covers them.
 
 ## A plain file goes to the bucket in the request
 

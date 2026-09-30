@@ -17,7 +17,7 @@ A trailing slash is stripped, so `/foo/` and `/foo` name one row. The path and t
 
 ## Basic auth needs TLS
 
-Every request carries HTTP Basic, checked by `verifyProtocolAuth` (`apps/api/src/lib/auth/protocol-auth.ts`): an app password first, then the primary password unless the account has 2FA. The failure limiter keys on the `X-Real-IP` Caddy sets on the `/webdav` route. TLS is mandatory in practice: Windows' WebClient sends Basic only over HTTPS (`BasicAuthLevel = 1`), Windows 11 included.
+Every request carries HTTP Basic, checked by `verifyProtocolAuth` ([IMAP.md § Dovecot asks the API whether a password is right](IMAP.md#dovecot-asks-the-api-whether-a-password-is-right)). The failure limiter keys on the `X-Real-IP` Caddy sets on the `/webdav` route. TLS is mandatory in practice: Windows' WebClient sends Basic only over HTTPS (`BasicAuthLevel = 1`), Windows 11 included.
 
 ## Every handler resolves through SharedDrive
 

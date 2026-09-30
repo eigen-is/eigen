@@ -4,7 +4,7 @@
 
 ## One principal serves both CalDAV and CardDAV
 
-Every route authenticates with HTTP Basic: an app password, or the primary password when 2FA is off (`lib/auth/protocol-auth.ts`). Each handler calls `resolveContacts` first, before it reads the body, so a stranger's request never costs a parse. The shape clients depend on:
+Every route authenticates with HTTP Basic, through the app-password check every protocol shares ([IMAP.md § Dovecot asks the API whether a password is right](IMAP.md#dovecot-asks-the-api-whether-a-password-is-right)). Each handler calls `resolveContacts` first, before it reads the body, so a stranger's request never costs a parse. The shape clients depend on:
 
 ```
 PROPFIND /dav/addressbooks/:ownerId/*               home, the book, or one card (Depth 0 or 1)
@@ -39,9 +39,9 @@ The resource name is client-chosen, so `sanitizeCardUri` runs before any store c
 
 ## A sync token carries the book's generation
 
-Tokens read `urn:eigen:sync:<syncGen>-<ctag>`, one grammar for both protocols (`lib/dav/sync-token.ts`). The delta is every row whose `cardCtag` is past the token, plus tombstones as 404 rows. Tombstones are keyed by name, so a re-created card clears its own, and no href is both a 200 and a 404.
+Tokens have the grammar and the generation rules of CalDAV's ([CALDAV.md § A sync token carries the calendar's generation](CALDAV.md#a-sync-token-carries-the-calendars-generation)), from one module (`lib/dav/sync-token.ts`). The delta is every row whose `cardCtag` is past the token, plus tombstones as 404 rows. Tombstones are keyed by name, so a re-created card clears its own, and no href is both a 200 and a 404.
 
-`syncGen` is seeded from the wall clock when a book is created, so a recreated book never reissues a generation a client has seen. A token with a stale generation, or a ctag ahead of the book, gets 403 `valid-sync-token`. That forces the full resync that heals ghost deletions. An empty delta with a lower token would stall the client instead.
+A stale token gets 403 `valid-sync-token`, and that full resync is what heals ghost deletions.
 
 ## REPORTs answer from the database, within bounds
 
@@ -51,7 +51,7 @@ A metadata-only answer, like a `PROPFIND` Depth 1 or a plain `sync-collection`, 
 - **`addressbook-query`** filters in memory over every card, group cards included (`query-filter.ts`). RFC 6352 is match-only: clients treat every returned card as a match. So an unsupported collation or filter is a 403, never a superset. Results stop at the client's limit or 1000.
 - **Partial `address-data`** serves only the asked properties plus the skeleton the RFC requires (`address-data.ts`).
 
-A REPORT body is capped at 1 MiB before it reaches the XML parser. The card data one REPORT serves is capped at 32 MiB (`lib/dav/report-row.ts`). A card past the budget still gets its row, with a 404 for its data, and the client multigets it next. A silently truncated collection would lose cards.
+A REPORT body is capped at 1 MiB before it reaches the XML parser. The card data one REPORT serves has CalDAV's byte budget, and a card past it still gets its row ([CALDAV.md § A REPORT past its byte budget still lists every resource](CALDAV.md#a-report-past-its-byte-budget-still-lists-every-resource)).
 
 ## A refused self-delete lists the card again
 

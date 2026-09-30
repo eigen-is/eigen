@@ -10,7 +10,7 @@ Each fact lives where its writer is. Text, color and creator change in the edito
 
 ## The card is sanitized where it is read
 
-`readCards` (`hooks/use-comment-cards.ts`) is the one seam every consumer of a card passes through. It sanitizes the description with `sanitizeCommentCardHtml`, the LightEditor allowlist plus task lists, and drops malformed attachments. Any peer can write raw values into the Y.Doc, and the description reaches `dangerouslySetInnerHTML` in every viewer.
+`readCards` (`hooks/use-comment-cards.ts`) is the one function every consumer of a card reads through. It sanitizes the description with `sanitizeCommentCardHtml`, the LightEditor allowlist plus task lists, and drops malformed attachments. Any peer can write raw values into the Y.Doc, and the description reaches `dangerouslySetInnerHTML` in every viewer.
 
 `useCommentCards` reads the map synchronously on mount. A host that mounts after sync must see its cards on the first render, or a `?chat=` deep link resolves against an empty map and gives up. It also keeps a card object's identity while its fields are unchanged, so memoized card components skip the re-render.
 
@@ -23,7 +23,7 @@ Each fact lives where its writer is. Text, color and creator change in the edito
 | Stickies | The card id in a column's `taskIds` |
 | Slides, vector | `VectorElementBase.commentCardIds`, a JSON id string, because every stored canvas field is a scalar ([CANVAS.md](CANVAS.md#every-stored-field-is-a-scalar)) |
 
-`useCreateCommentCard` creates the chat, then writes the card and runs the host's anchor callback inside one Y.Doc transaction, so in docs and stickies the card and its anchor are one undo step. The callback must be synchronous: anything it defers escapes the transaction. The canvas is the exception, see below.
+`useCreateCommentCard` creates the chat, then writes the card and runs the host's anchor callback inside one Y.Doc transaction, so in docs and stickies the card and its anchor are one undo step. The callback must be synchronous: anything it defers escapes the transaction. The canvas is the exception: it anchors once the card exists, as an untracked write, because its `comments` map is outside the undo scope ([CANVAS.md § One discrete op is one undo step](CANVAS.md#one-discrete-op-is-one-undo-step)).
 
 A docs image anchors through an attribute, not the mark, because the Yjs binding persists marks only on text: a mark on the figure would vanish on reload and never reach a peer. `nodeCommentCardId` (`apps/docs/src/components/docs/extensions/comment-mark.ts`) reads either form, and everything outside the figure's node view goes through it: the active set, the decorations, scroll-to and delete. A text selection that spans a figure marks only the text. The figure reads as "Image" in a card's anchor text, so a comment on an image alone has something to quote.
 
@@ -43,7 +43,7 @@ The canvas counts every card in its map as active. A card whose element was dele
 
 ## Card attachments are staged until Save
 
-Attachments reuse chat's wire type, `ChatAttachment`: a string names a file in the container's `media/` folder, a reference points at a drive item. The form stages drafts locally and `useResolveCardAttachments` settles them on Save, so Cancel leaves nothing behind. A device file uploads into `media/`. A regular drive file is copied there, because the container's ACL must cover it for every collaborator, the same rule as chat. A container stays a reference. A failed upload aborts the save, so no card is half-attached. A container without a media folder hides the attachment controls.
+Attachments reuse chat's wire type, `ChatAttachment`: a string names a file in the container's `media/` folder, a reference points at a drive item. The form stages drafts locally and `useResolveCardAttachments` settles them on Save, so Cancel leaves nothing behind. A device file uploads into `media/`. A regular drive file is copied there, because the container's ACL must cover it for every collaborator, the same rule as chat ([CHAT.md § Attachments live in the room's media folder](CHAT.md#attachments-live-in-the-rooms-media-folder)). A container stays a reference. A failed upload aborts the save, so no card is half-attached. A container without a media folder hides the attachment controls.
 
 Removing an attachment leaves its file in `media/` on purpose, like an inline image in a document: undo and version restore then bring the attachment back intact. Attachments on the thread's messages are the chat's own and live in the chat's `media/`.
 
