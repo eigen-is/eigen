@@ -35,7 +35,7 @@ ProseMirror never sees a right-click inside a node view, so the figure's node vi
 
 ## An anchorless card is an orphan, not deleted
 
-Docs and sheets delete a comment by stripping its anchor. The card, its thread and its index row stay. The panel shows only active cards, the ones the host finds anchored in its content, so the orphan disappears from view. An undo or a version restore that brings the anchor back brings the whole comment back, thread included. The `comments` map is not one of the declared `yjsRoots` of docs, sheets or the canvas, so a version restore leaves the cards alone and moves only the anchors ([COLLAB.md](COLLAB.md#a-version-restore-rewrites-an-open-document-in-one-transaction)).
+Docs and sheets delete a comment by stripping its anchor. The card, its thread and its index row stay. The panel shows only active cards, the ones the host finds anchored in its content, so the orphan disappears from view. An undo or a version restore that brings the anchor back brings the whole comment back, thread included. This holds for docs, sheets and the canvas: their `comments` map is not one of their declared `yjsRoots`, so a version restore leaves the cards alone and moves only the anchors ([COLLAB.md](COLLAB.md#a-version-restore-rewrites-an-open-document-in-one-transaction)). Stickies is different. Its `tasks` map is a declared root, so a restore rewrites the cards too: a card added after the version drops off the board while its thread and row stay, and an edit made since to a card's text or color reverts.
 
 Stickies deletes a card from its column and from `tasks` in one transaction (`deleteCardFromBoard`). Its UndoManager tracks `tasks`, so one ⌘Z brings back the card and its place. It is the only host whose undo scope holds the comment map.
 
@@ -49,7 +49,7 @@ Removing an attachment leaves its file in `media/` on purpose, like an inline im
 
 ## A thread's index row is seeded at creation and healed on write
 
-`Drive.create` seeds the row when a chat is created inside a container's `chat/` folder (`seedCommentRow`). A standalone chat has no container and gets no row. `ensureComment` is an upsert that fills `createdBy` only while it is null, so any writer may call it. Posting a message calls it, and so does an assignment, so a thread with no row heals on its first message or assignment. The frontend treats a missing row as open and unassigned (`matchesCommentFilter`), so a card is usable before its row exists.
+`Drive.create` seeds the row when a chat is created inside a container's `chat/` folder (`seedCommentRow`). A standalone chat has no container and gets no row. `ensureComment` is an upsert that fills `createdBy` only while it is null, so any writer may call it. Posting a message calls it, and so does an assignment, so a thread with no row heals on its first message or assignment. A status write does not call it. On a thread with no row, `setCommentStatus` updates nothing, yet it still records the resolved or reopened activity row and the route still sends the index event, so the resolve is lost while everyone is told it happened ([ROADMAP.md](ROADMAP.md)). The frontend treats a missing row as open and unassigned (`matchesCommentFilter`), so a card is usable before its row exists.
 
 A status or assignee write first checks that the name resolves to a real `.eigenchat` under the container's `chat/` folder (`assertCommentChatExists`), and answers 404 otherwise. Without it a writer could mint a row, an activity row and a dead-link notification for a thread that does not exist. Both writes need write access, through the `SharedDrive` wrappers of `Drive.setCommentStatus` and `Drive.assignComment`.
 
@@ -67,9 +67,9 @@ The assignee is a lowercased email that must belong to an effective member of th
 
 The client posts the card title with every status and assignee write, and the server caches it in `title` for activity labels. It trusts the client the way the stickies card events do ([FILE-HISTORY.md](FILE-HISTORY.md)), and it lags a rename until the next action, so the UI never reads it and reads the card instead.
 
-The toolbar badge counts the open, anchored comments assigned to you (`useAssignedCommentCount`). A document-wide unresolved count showed the same red number to every viewer, for threads that belong to someone else.
+The toolbar badge counts the open, anchored comments assigned to you (`useAssignedCommentCount`). It is personal because a document-wide unresolved count would show every viewer the same red number, for threads that belong to someone else.
 
-Mentions are recorded in `comment_mentions` on every message, and nothing reads them. The table is kept for a cross-document mentions view.
+Mentions are recorded in `comment_mentions` on every message, and nothing reads them yet ([ROADMAP.md](ROADMAP.md)).
 
 ## One lifecycle bundle drives every host
 
