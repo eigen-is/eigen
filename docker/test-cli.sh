@@ -331,7 +331,7 @@ fi
 
 # A cut archive is refused by the stage, while Eigen runs.
 CUT=server-manual-full-20200101-000000.tar
-scratch_run sh -c 'head -c 65536 "$1/$2" >"$1/$3"' sh "$INSTALL/backups" "$ARCHIVE" "$CUT"
+scratch_run sh -c 'head -c $(($(stat -c %s "$1/$2") / 2)) "$1/$2" >"$1/$3"' sh "$INSTALL/backups" "$ARCHIVE" "$CUT"
 eigen restore "$CUT" --yes
 scratch_run rm "$INSTALL/backups/$CUT"
 if [ "$CODE" = 1 ] && says "$CUT" && unchanged; then

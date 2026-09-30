@@ -309,7 +309,7 @@ check_env() {
 env_of() { scratch_run sed -n "s/^$1=//p" "$INSTALL/.env.production" | tail -n 1; }
 
 # How many data/ folders restores have kept aside.
-aside_count() { (cd "$INSTALL" && ls -d data.pre-restore-* 2>/dev/null | wc -l | tr -d ' '); }
+aside_count() { (cd "$INSTALL" && { ls -d data.pre-restore-* 2>/dev/null || :; } | wc -l | tr -d ' '); }
 
 # setup_token <log>: the token of the last setup link in ./eigen setup output.
 setup_token() { grep -o 'setup=[A-Za-z0-9_-]*' "$1" | tail -n 1 | cut -d= -f2 || true; }
