@@ -1,20 +1,14 @@
 # Contributing to Eigen
 
-Eigen started as a solo project. I wanted to see how far one person could get building a self-hosted workspace
-from scratch. Turns out: pretty far, but not far enough. There's way more to build than one person can do, and
-I'm looking for people who want to help.
+Eigen started as a solo project. I wanted to see how far one person could get building a self-hosted workspace from scratch. Turns out: pretty far, but not far enough. There's way more to build than one person can do, and I'm looking for people who want to help.
 
-If you're curious about how this started, I wrote about it here:
-[Eigen: Building a Workspace](https://reindernijhoff.net/2025/10/eigen-building-a-workspace/).
+If you're curious about how this started, I wrote about it here: [Eigen: Building a Workspace](https://reindernijhoff.net/2025/10/eigen-building-a-workspace/).
 
 ## Current state
 
-A lot has happened since that first blog post. Mail, Drive, Docs, Sheets, Slides, Stickies, Calendar, Contacts,
-Chat, and an Admin panel are all working. Real-time collaboration, CalDAV sync, file sharing, document export,
-passkey login. It's a real thing now.
+A lot has happened since that first blog post. Mail, Drive, Docs, Sheets, Slides, Stickies, Calendar, Contacts, Chat, and an Admin panel are all working. Real-time collaboration, CalDAV sync, file sharing, document export, passkey login. It's a real thing now.
 
-But it's still early. Rough edges everywhere, missing features, architecture decisions that could still go either
-way. If you like working on something where your input actually matters, this is that kind of project.
+But it's still early. Rough edges everywhere, missing features, architecture decisions that could still go either way. If you like working on something where your input actually matters, this is that kind of project.
 
 I move fast on the codebase; things change week to week. A few things to keep in mind:
 
@@ -27,68 +21,56 @@ I move fast on the codebase; things change week to week. A few things to keep in
 
 ### Use it and break things
 
-Honestly, the most helpful thing right now is just using Eigen and telling me what's broken. Deploy it, connect
-a CalDAV client, try editing a doc with two people, upload weird files. Then open an issue when something
-doesn't work.
+Honestly, the most helpful thing right now is just using Eigen and telling me what's broken. Deploy it, connect a CalDAV client, try editing a doc with two people, upload weird files. Then open an issue when something doesn't work.
 
 ### Adopt an app or area
 
-Eigen has 13 apps and a lot of infrastructure underneath. I can't give everything equal attention. If
-something here interests you, I'd love to hand you the keys. Maintain it, improve it, triage bugs.
+Eigen has 13 apps and a lot of infrastructure underneath. I can't give everything equal attention. If something here interests you, I'd love to hand you the keys. Maintain it, improve it, triage bugs.
 
 Every app needs work:
 
-- **Mail**: threading, search, filters, attachment handling
+- **Mail**: threading, filters, attachment handling
 - **Drive**: bulk operations, drag-and-drop improvements
-- **Docs**: import from DOCX/Markdown, more export polish
-- **Sheets**: import, export, sheet engine cleanup (forked from fortune-sheet)
+- **Docs**: import from Markdown, more export polish
+- **Sheets**: sheet engine cleanup (forked from fortune-sheet)
 - **Slides**: import, export to PPTX, more object types
-- **Stickies**: labels, filters, archiving, assigning cards to people
+- **Stickies**: labels, filters, archiving
 - **Calendar**: recurring event edge cases, CalDAV compliance
-- **Contacts**: import, export (vCard), CardDAV support, merge/deduplicate
+- **Contacts**: merge and deduplicate
 - **Chat**: threads, search, richer formatting
 - **Admin**: dashboards, usage stats, bulk user management
 - **Space**: account settings, profile improvements
 
 And cross-cutting concerns:
 
-- **Search**: unified search across all apps (there's a detailed proposal in `docs/`)
+- **Search**: calendar, contacts and chat in the one search that covers mail and Drive ([SEARCH.md](SEARCH.md))
 - **IMAP/Dovecot**: edge cases, flag sync, mailbox management
 - **CalDAV**: client compatibility (Apple Calendar, DAVx5, etc.)
-- **Mobile/responsive**: works on desktop, needs love on smaller screens
+- **Mobile/responsive**: the open items in the Mobile row of [ROADMAP.md](ROADMAP.md), and testing on real devices
 - **Accessibility**: keyboard nav, screen readers, ARIA
 - **Performance**: profiling, optimizations, offloading heavy work to workers
 - **Security**: audits, penetration testing, hardening
 - **Copy/paste**: from external sources into Docs/Sheets/Slides, and between apps
-- **Testing**: more coverage, CI pipeline
+- **Testing**: more coverage
 - **Documentation**: tutorials, guides, API docs
 
 Reach out at [reinder@eigen.is](mailto:reinder@eigen.is) or just open an issue saying "I want to work on X".
 
 ### Sponsor
 
-If you or your company want to support the project, you can sponsor Eigen through
-[GitHub Sponsors](https://github.com/sponsors/eigen-is) or
-[Open Collective](https://opencollective.com/eigen). Open Collective is the better fit if you
-need an invoice. Questions? Reach out at [reinder@eigen.is](mailto:reinder@eigen.is).
+If you or your company want to support the project, you can sponsor Eigen through [GitHub Sponsors](https://github.com/sponsors/eigen-is) or [Open Collective](https://opencollective.com/eigen). Open Collective is the better fit if you need an invoice. Questions? Reach out at [reinder@eigen.is](mailto:reinder@eigen.is).
 
 ### Issues first, PRs for small fixes
 
 I'd rather see feature ideas and larger changes as **issues**, not pull requests.
 
-The codebase moves fast. Things change week to week. A PR for a new feature that sits for a few days often
-needs a full rebase by the time I can review it, and sometimes the approach it was built on has already
-shifted. That's frustrating for both of us.
+The codebase moves fast. Things change week to week. A PR for a new feature that sits for a few days often needs a full rebase by the time I can review it, and sometimes the approach it was built on has already shifted. That's frustrating for both of us.
 
 A simple rule:
 
 - **Small fixes** (bugs, typos, UI tweaks, one-liners): open a PR directly. Always welcome.
-- **New features or bigger changes**: open an **issue** first. Describe the problem and what you'd like to
-  build. If we agree on the direction, go for it. No wasted work.
-- **Want to adopt a whole area** (a full app, say Docs, Contacts, or Calendar, or a cross-cutting concern
-  like search or accessibility)? That's the most valuable kind of contribution. See
-  [Adopt an app or area](#adopt-an-app-or-area) above, and email me at
-  [reinder@eigen.is](mailto:reinder@eigen.is) to talk.
+- **New features or bigger changes**: open an **issue** first. Describe the problem and what you'd like to build. If we agree on the direction, go for it. No wasted work.
+- **Want to adopt a whole area** (a full app, say Docs, Contacts, or Calendar, or a cross-cutting concern like search or accessibility)? That's the most valuable kind of contribution. See [Adopt an app or area](#adopt-an-app-or-area), and email me at [reinder@eigen.is](mailto:reinder@eigen.is) to talk.
 
 #### PR checklist (for small fixes)
 
@@ -171,13 +153,11 @@ Replace `you@eigen.localhost` with your address. To connect a mail or calendar c
 
 ## Finding your way around
 
-It's a monorepo: one API server in `apps/api/`, frontend apps in `apps/*/`, and shared code in
-`packages/lib/` (types, hooks, API client) and `packages/ui/` (components).
+It's a monorepo: one API server in `apps/api/`, frontend apps in `apps/*/`, and shared code in `packages/lib/` (types, hooks, API client) and `packages/ui/` (components).
 
 Start here:
 
-- **[AGENTS.md](../AGENTS.md)** has the full project context and the critical rules. Written for
-  humans and AI assistants alike.
+- **[AGENTS.md](../AGENTS.md)** has the full project context and the critical rules. Written for humans and AI assistants alike.
 - **[CODE-STANDARDS.md](CODE-STANDARDS.md)** covers code patterns and Eden Treaty usage; **[ARCHITECTURE.md](ARCHITECTURE.md)** has the backend and frontend location tables, the Drive layers and the pitfalls.
 - **[STORAGE.md](STORAGE.md)** explains the per-user SQLite + file storage design.
 - **[ACL.md](ACL.md)** describes sharing and permissions.
@@ -191,7 +171,7 @@ Most subsystems have their own doc in `docs/`.
 - No `as any`. Fix the type at the source
 - Theme tokens (`text-muted-foreground`), not hardcoded colors (`text-gray-500`)
 - Data hooks go in `packages/lib/`, not in app components
-- Error handling goes in hooks, not in UI code
+- Error handling goes in hooks, not in UI code ([CODE-STANDARDS.md § Key Patterns](CODE-STANDARDS.md#key-patterns))
 
 Full version: [CODE-STANDARDS.md](CODE-STANDARDS.md).
 
