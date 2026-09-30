@@ -36,7 +36,7 @@ Dragging a segment pins it (`fixedSegments`, `elbow-pins.ts`). From then on the 
 
 ## Lines trade the transform box for point handles
 
-A selected line or arrow shows a dot per vertex and a translucent dot between each pair (`tools/point-handles.tsx`). Dragging a middle dot inserts a vertex, and the insert and the drag are one sealed write. A two-point line shows only these dots, no transform box. An elbow arrow shows segment-pin dots instead (`tools/elbow-pin-handles.tsx`), because its bends are not the user's vertices until pinned.
+A selected line or arrow shows a dot per vertex and a translucent dot between each pair (`tools/point-handles.tsx`). Dragging a middle dot inserts a vertex, and the insert and the drag are one sealed write. A two-point line shows only these dots, no transform box. An elbow arrow keeps only its two endpoint dots, with no middle dots, and adds segment-pin dots (`tools/elbow-pin-handles.tsx`), because its bends are not the user's vertices until pinned.
 
 ## The label cuts a hole in the shaft
 

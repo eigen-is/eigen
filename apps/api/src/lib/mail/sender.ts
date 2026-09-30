@@ -3,7 +3,7 @@ import type { OutboundAttachment, OutboundMail } from '../core/mailer';
 import { buildMessageId } from './mailutils';
 import { canonicalizeRecipients } from './recipients';
 
-// `from` is the draft's own address, else the account's; the mailer decides whether it goes out as that address.
+// `from` is the draft's From, which every draft save pins to the account, else the account's; the mailer decides whether it goes out as that address.
 export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): OutboundMail {
     const fromValue = draft.from?.value?.[0];
 

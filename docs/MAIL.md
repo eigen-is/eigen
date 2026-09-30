@@ -1,12 +1,12 @@
 # Mail
 
-> **TLDR:** Mail is a personal email client over a per-user Maildir. The server half is `apps/api/src/lib/mail/`, the app is `apps/mail/`. Three things surprise. The Maildir files are the truth and `mail.db` is an index rebuilt from them, because Dovecot writes the same files out of process. The inbox has three spellings, one per layer. And a send can grant its recipients access to the documents it links. The Maildir format, the sync engine and Dovecot are in [IMAP.md](IMAP.md).
+> **TLDR:** Mail is a personal email client over a per-user Maildir. The server half is `apps/api/src/lib/mail/`, the app is `apps/mail/`. The Maildir files are the truth and `mail.db` is only an index rebuilt from them, because Dovecot writes the same files out of process. The inbox has three spellings, one per layer. A send can grant its recipients access to the documents it links. The Maildir format, the sync engine and Dovecot are in [IMAP.md](IMAP.md).
 
 ## Mail is personal and sits behind a swappable store
 
 Every user route in `apps/api/src/routes/mail.ts` is `requireSelf`: a mailbox belongs to one user and has no ACL. The route hands off to the user's `Mail` (`mail-domain.ts`), which talks to a `MailStore`. `MaildirStore` is the only one. The interface is the seam for a second backend ([JMAP](proposals/PROPOSAL_STALWART_MAIL.md), or [the user's own provider over IMAP](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)), so no file name crosses into the domain or the routes.
 
-The `emails` row is the `EmailSummary` the list returns, unmapped; a full message is re-parsed from its `.eml`. There is no IMAP server in the repo; Dovecot serves IMAP. Mail preferences live in the space app.
+The `emails` row is the `EmailSummary` the list returns, unmapped; a full message is re-parsed from its `.eml`.
 
 ## The Maildir is the truth and the index follows it
 
@@ -51,7 +51,7 @@ At 50k messages a mailbox, the whole list is 34 MB and one 200-row page is 130 K
 - The server echoes each mutation over SSE. The mutation records the echo it expects (`markRecentMailMutation`), and the SSE handler skips that one refetch.
 - `listMessages` answers from the DB and reconciles in the background, except on the first open of an empty mailbox ([IMAP.md § Sync Engine](IMAP.md#sync-engine)).
 
-A notification goes out only for mail that arrives, coalesced on the `mail:new` tag. A first index is discovery, and an import, a copy and the welcome message pass `arrival: false`, so none of them rings the bell.
+A notification goes out only for mail that arrives, coalesced on the `mail:new` tag. The first index of an empty mailbox rings nothing, because the mail it finds was already on disk. An import, a copy and the welcome message pass `arrival: false`, since the user or Eigen put them there.
 
 ## A draft skips the rebuild until its attachments change
 
@@ -63,9 +63,9 @@ The client chooses a draft's id, and that id names a file. So the domain answers
 
 ## Delivery attempts every copy and retries none
 
-`messageSend` full-saves the draft and hands each copy to `sendMail` (`lib/core/mailer.ts`). The route needs hosted mail, so user mail leaves through the bundled Postfix ([SERVER-SETTINGS.md § Mail environment](SERVER-SETTINGS.md#mail-environment)).
+`messageSend` full-saves the draft and hands each copy to `sendMail` (`lib/core/mailer.ts`). That save pins From to the account, so a crafted draft can't send as anyone else. The route needs hosted mail, so user mail leaves through the bundled Postfix ([SERVER-SETTINGS.md § Mail environment](SERVER-SETTINGS.md#mail-environment)).
 
-`sendMail` returns `false` instead of throwing, so the loop tries every copy. If any is accepted, the draft moves to Sent and the response lists `failedRecipients`. If all fail, the route answers 500. Nothing retries, because a retry would deliver the accepted copies twice. Every copy carries the Sent item's `Message-ID`, so a reply threads against a header the recipient saw.
+`sendMail` returns `false` instead of throwing, so the loop tries every copy. If any is accepted, the draft moves to Sent and the response lists `failedRecipients`. If all fail, the route answers 500. Nothing retries, because a retry would deliver the accepted copies twice.
 
 ## A send with links splits per external recipient
 
@@ -89,7 +89,7 @@ Password guessing meets three layers:
 
 A send can grant its recipients read access to the documents it links, so the `?email=` link opens. The composer checks each link through the drive `access-check` route and asks once per send, in `ShareAndSendDialog`, whenever there is something to grant or to say.
 
-The send carries `grantAccessRefIds`, so one send can share some documents and not others. `grantAccessForReferences` runs after the demo check and before the first copy, so a rejected send touches no ACL and every grant exists before a recipient clicks. It checks every link before writing any, judging chats by the resolved path type, never the client's `driveType`. A recipient covered by a public ancestor gets only a share-registry entry, sourced from the path owner. Only To and Cc are granted, because an ACL entry would show a Bcc recipient to every reader. The grants pass `suppressShareEmail: 'all'`, since the user's own mail is the invite. They are never rolled back, and a retry is idempotent.
+The send carries `grantAccessRefIds`, so one send can share some documents and not others. `grantAccessForReferences` runs after the demo check and before the first copy, so a rejected send touches no ACL and every grant exists before a recipient clicks. It checks every link before writing any, judging chats by the resolved path type, never the client's `driveType`. A recipient who can already read gets no ACL entry, and a share-registry entry, sourced from the path owner, only if closed signup would otherwise keep them out. Only To and Cc are granted, because an ACL entry would show a Bcc recipient to every reader. The grants pass `suppressShareEmail: 'all'`, since the user's own mail is the invite. They are never rolled back, and a retry is idempotent.
 
 ## A mail part is revalidated on every request
 

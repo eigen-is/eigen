@@ -26,7 +26,7 @@ roots, so a card add/remove and its column reference undo as one step.
 
 ## A concurrent merge can leave a card in two columns, or none
 
-Two peers moving the same card at once can leave it in two columns' `taskIds`, or in none. `normalizeBoard` runs the shared `normalizeParentChildRefs` (`packages/lib/src/core/collab/normalize-refs.ts`) on the first sync and inside every drag commit. A card in several columns keeps the last one; a card in none joins the first. **First and last come from `columnOrder`, never from Y.Map key order.** Key order is each peer's local integration order, so peers would disagree and could delete each other's survivor. A column missing from `columnOrder` ranks before every listed one, so it never receives a re-homed card: the board doesn't render it.
+Two peers moving the same card at once can leave it in two columns' `taskIds`, or in none. The canvas needs no such repair, because an element names its own `frameId` and a frame holds no id list. `normalizeBoard` runs the shared `normalizeParentChildRefs` (`packages/lib/src/core/collab/normalize-refs.ts`) on the first sync and inside every drag commit. A card in several columns keeps the last one; a card in none joins the first. **First and last come from `columnOrder`, never from Y.Map key order.** Key order is each peer's local integration order, so peers would disagree and could delete each other's survivor. A column missing from `columnOrder` ranks before every listed one, so it never receives a re-homed card: the board doesn't render it.
 
 The repair is idempotent. Run alone it writes under `NORMALIZE_ORIGIN`, which no UndoManager tracks, so it syncs to peers but ⌘Z can't restore the corruption. Inside a drag it joins the drag's undo step.
 

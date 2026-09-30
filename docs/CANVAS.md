@@ -1,6 +1,6 @@
 # Canvas Engine
 
-> **TLDR:** One engine draws every free-canvas document. `packages/lib/src/vector/` is the React-free half (element model, kind registry, reader, layers, SVG) and `packages/ui/src/components/vector/` is the host, `CanvasEditor`. The drawing app mounts it on the infinite canvas, the deck app in frame mode ([SLIDES.md](SLIDES.md)). Not obvious from the code: a kind is one registry entry and nothing switches on a shape's type, the reader is the trust boundary, the live canvas and the server share one layer per element, and one discrete op is one undo step. Arrows: [CANVAS-ARROWS.md](CANVAS-ARROWS.md).
+> **TLDR:** One engine draws every free-canvas document. `packages/lib/src/vector/` is the React-free half (element model, kind registry, reader, layers, SVG) and `packages/ui/src/components/vector/` is the host, `CanvasEditor`. The drawing app mounts it on the infinite canvas, the deck app in frame mode ([SLIDES.md](SLIDES.md)). Not obvious from the code: a kind is one registry entry and nothing switches on a shape's type, the reader validates every stored field, the live canvas and the server share one layer per element, and one discrete op is one undo step. Arrows: [CANVAS-ARROWS.md](CANVAS-ARROWS.md).
 
 ## Every stored field is a scalar
 
@@ -16,7 +16,7 @@ A rich-text box's `html` is one scalar, so two people typing in one box resolve 
 
 ## The reader is the trust boundary
 
-`readVectorFromDoc` (`read-vector.ts`) turns a Y.Doc into a `VectorScene`. It needs only yjs, so the API Worker runs it too. Each kind's `read` validates its own fields: enums, clamps, string caps, color tokens. The scene passes then heal what a concurrent merge can leave: colliding fractional indices, a `frameId` no frame answers to (re-homed to the first frame), a binding to a missing shape (dropped). They heal on read and never write the doc; the next real write persists the fix.
+`readVectorFromDoc` (`read-vector.ts`) turns a Y.Doc into a `VectorScene`. It needs only yjs, so the API Worker runs it too. Each kind's `read` validates its own fields: enums, clamps, string caps, color tokens. Then it repairs what a concurrent merge can leave: colliding fractional indices get fresh ones, an element whose `frameId` names no frame moves to the first frame, and a binding to a missing shape is dropped. The repair lives only in the returned scene; the next real write persists it. It can't sanitize rich-text `html`, which needs a DOM, so the DOM seams do ([below](#one-layer-per-element-on-the-canvas-and-on-the-server)).
 
 A pasted clipboard record goes through the same `readElementFromFields`, so a forged clipboard is exactly as safe as a hostile peer write.
 
@@ -42,15 +42,15 @@ Adding a kind: add it to `VectorElementType`, write its file, add one line to `E
 
 The live layer is positioned with `transform: translate() rotate()`, never `left`/`top`, because the browser snaps a box origin to whole pixels but not a transform. `ElementLayer`'s memo compares the scalar fields, so pan and drag never rerun rough path generation. An elbow arrow also depends on its two bound shapes, so the memo compares those two rather than routing, which costs 50x more.
 
-Rich text carries the class `eigen-canvas-text` everywhere, backed by `packages/ui/src/styles/canvas-text.css`, because list markers and link underlines are out of reach of an inline style. `html` arrives verbatim from any peer or a forged paste, but the reader can't sanitize it: the allowlist needs a DOM and the reader runs in the Worker. So `ElementLayer` and the paste path both run `sanitizeToLightEditorHtml`.
+Rich text carries the class `eigen-canvas-text` everywhere, backed by `packages/ui/src/styles/canvas-text.css`, because list markers and link underlines are out of reach of an inline style. `html` arrives verbatim from any peer or a forged paste, so `ElementLayer` and the paste path both run `sanitizeToLightEditorHtml`.
 
 Gradients carry nine stops sampled in OKLab (`packages/lib/src/background/gradient.ts`), because browsers and WeasyPrint blend two stops in sRGB, through a muddy gray.
 
 ## The live viewport is a ref
 
-A pan or zoom writes `viewportRef` and one animation frame sets the transform of three nodes: the scene layer, the overlay group and the screen-space chrome. A gesture costs no React render, where a render per pointer event costs about 150 ms of JS. React state holds the last committed viewport, published once input stops, and layout reads that. `chromeTransform` corrects the chrome from committed to live.
+A pan or zoom writes `viewportRef` and one animation frame sets the transform of three nodes: the scene layer, the overlay group and the screen-space chrome. A gesture costs no React render, where a render per pointer event costs about 150 ms of JS. React state holds the last committed viewport, published once input stops, and layout reads that. The chrome is laid out at that viewport, and mid-gesture `chromeTransform` moves and scales the whole chrome layer to the live one.
 
-Anything that must be exact mid-gesture reads the ref: scene conversion, hit-test thresholds, the drawing tools' screen-px radii. The rendered `zoom` is right only for chrome laid out at it.
+Anything that must be exact mid-gesture reads the ref: scene conversion, hit-test thresholds, the drawing tools' screen-px radii. React's `zoom` lags behind a gesture, so only chrome layout may use it.
 
 ## Frame mode always shows the whole page
 
@@ -58,7 +58,7 @@ Frame mode fits the page on open, on every resize and on every frame switch (`pa
 
 The page card's border is drawn in the screen-space chrome at 1 px. A border inside the scaled scene layer fails, because the browser floors `border-width` to whole px: at a 0.57 fit it becomes a blurry, drifting hairline.
 
-`.eigen-paper` pins the light palette on a surface that shows user content (`paper.tsx`). The infinite canvas is all paper; in frame mode only the card is, and the surround follows the theme. Both chrome layers carry the pin too, so a resize grip is not dark gray on a white slide.
+`.eigen-paper` (`packages/ui/src/styles/globals.css`) pins the light palette on a surface that shows user content, and `paper.tsx` decides which surface gets it. The infinite canvas is all paper; in frame mode only the card is, and the surround follows the theme. Both chrome layers carry the pin too, so a resize grip is not dark gray on a white slide.
 
 The canvas and the page use `overflow-clip`, not `overflow-hidden`. A hidden box scrolls to reveal a focused caret, which slid the page away from its chrome during text editing.
 
@@ -68,7 +68,7 @@ In frame mode, rendering, hit testing, marquee, snap, select-all and the keyboar
 
 ## One discrete op is one undo step
 
-`Y.UndoManager` merges everything within 500 ms. So every discrete op (delete, duplicate, z-order, a panel row, a frame op) runs through `sealed()` (`hooks/use-canvas-doc.ts`), which stops capturing on both sides. A gesture that writes as it goes (the opacity slider, a typed number, a run of arrow-key nudges) takes `holdCapture()` instead. That holds the window open until the gesture ends, however long it lasts, and `sealed` stands down inside it. The panel publishes the hold on `PropertyGestureContext`, so every number input is one step without threading it.
+`Y.UndoManager` merges everything within 500 ms. So every discrete op (delete, duplicate, z-order, a panel row, a frame op) runs through `sealed()` (`hooks/use-canvas-doc.ts`), which stops capturing on both sides. A gesture that writes as it goes (the opacity slider, a typed number, a run of arrow-key nudges) takes `holdCapture()` instead. It holds the window open until the gesture ends, and `sealed` stands down inside it. The panel publishes the hold on `PropertyGestureContext`, so every number input is one step without threading it.
 
 Fixups that must never be undone write under a non-null origin, which the UndoManager does not track: the image's pending-to-real media name swap, the sweep of abandoned upload placeholders, a text box re-fit caused by someone else, the deck's seed. They still sync to peers. The comments map is outside the undo scope, so ⌘Z never resurrects a card.
 
@@ -86,7 +86,7 @@ On the canvas Escape goes to the innermost active mode: rich-text editing, then 
 
 ## Touch policy lives beside the canvas
 
-`tools/touch-gestures.ts` holds the policy, ported from Excalidraw. `canvas-editor.tsx` only dispatches into it, so the canvas file does not grow.
+`tools/touch-gestures.ts` holds the policy, ported from Excalidraw.
 
 - The first pen contact latches pen mode, after which a finger can only select or edit text, so a resting palm can't draw.
 - A second finger aborts the first one's gesture, then pans and pinches. A stroke under 10 points is a palm spike and is discarded.
