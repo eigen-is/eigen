@@ -1,4 +1,4 @@
-import type { BackupEntry, BackupManifest, BackupVerifyRecord } from '../types/backup';
+import type { BackupEntry, BackupLevel, BackupManifest, BackupVerifyRecord } from '../types/backup';
 import type { MountConfig, S3Config } from '../types/mount';
 
 // One grammar for the names in the backups folder, so the pane, the upload route and the artifact
@@ -57,6 +57,7 @@ export const BACKUP_FORMAT_VERSION = 1;
 // The annotations are what keep these lists from drifting from the shared unions.
 const KINDS: readonly BackupManifest['kind'][] = ['user', 'team', 'server'];
 const STORAGE_TYPES: readonly MountConfig['storageType'][] = ['local', 'local-key', 's3'];
+const LEVELS: readonly BackupLevel[] = ['light', 'full', 'full-s3'];
 
 function isKind(value: string): value is BackupManifest['kind'] {
     return KINDS.some((kind) => kind === value);
@@ -64,6 +65,11 @@ function isKind(value: string): value is BackupManifest['kind'] {
 
 function isStorageType(value: string): value is MountConfig['storageType'] {
     return STORAGE_TYPES.some((type) => type === value);
+}
+
+// An unknown level is refused rather than read as complete: a restore trusts this field to say so.
+function isLevel(value: unknown): value is BackupLevel {
+    return LEVELS.some((level) => level === value);
 }
 
 function isEntry(value: unknown): value is BackupEntry {
@@ -95,7 +101,8 @@ function isMountSummary(value: unknown): value is BackupManifest['mounts'][numbe
         typeof value.files === 'number' &&
         'bytes' in value &&
         typeof value.bytes === 'number' &&
-        (!('skipped' in value) || typeof value.skipped === 'string')
+        (!('skipped' in value) || typeof value.skipped === 'string') &&
+        (!('contents' in value) || value.contents === 'metadata')
     );
 }
 
@@ -164,6 +171,7 @@ function isManifest(value: unknown): value is BackupManifest {
         Array.isArray(value.entries) &&
         value.entries.every(isEntry) &&
         (!('email' in value) || value.email === undefined || typeof value.email === 'string') &&
+        (!('level' in value) || isLevel(value.level)) &&
         (!('homes' in value) ||
             value.homes === undefined ||
             (Array.isArray(value.homes) && value.homes.every(isHomeSummary)))

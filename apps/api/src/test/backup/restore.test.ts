@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'nod
 import { join } from 'node:path';
 import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON } from '@workspace/lib/constants/collab';
 import { teamOwnerId } from '@workspace/lib/types';
-import type { BackupManifest } from '@workspace/lib/types/backup';
+import type { BackupLevel, BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
@@ -19,6 +19,7 @@ import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getAvatarsDir } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { avatarNameOf } from '../../lib/contacts/card-store';
+import type { Home } from '../../lib/home';
 import { getDataEpoch } from '../../lib/home/data-epoch';
 import { getHome } from '../../lib/home/get-home';
 import { createSSEStream } from '../../lib/home/sse-stream';
@@ -61,16 +62,18 @@ const LOCAL_MOUNT_ID = 'restore-local';
 // One artifact of the home as it stands now, in the backups folder restoreHome reads from.
 // `patch` doctors the unpacked folder before it is packed, which is how a restore is made to fail
 // after the move-aside — the manifest itself is not hashed, so a doctored file only has to restate
-// its own entry (restateEntry) to get past verify and be judged by the step under test.
+// its own entry (restateEntry) to get past verify and be judged by the step under test. `level` is
+// a capture mode of the whole-server archive; left out, it is the per-home backup the pane runs.
 async function backup(
     userId: string,
     at: Date,
     patch?: (manifest: BackupManifest, folder: string) => Promise<void> | void,
+    level?: BackupLevel,
 ): Promise<string> {
     const home = await getHome(userId);
     const staging = mkdtempSync(join(TEST_DATA_DIR, 'restore-backup-'));
     const folder = join(staging, buildHomeFolderName(userId));
-    const manifest = await snapshotHome(home, staging);
+    const manifest = await snapshotHome(home, staging, undefined, level);
     if (patch) {
         await patch(manifest, folder);
         writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
@@ -1181,5 +1184,93 @@ describe('Backup restore of a disabled mount', () => {
         rmSync(join(getBackupsDir(), artifact), { force: true });
 
         expect(existsSync(join(mountDir, 'tmp'))).toBe(false);
+    });
+});
+
+describe('Backup restore refuses a member that is not a complete home', () => {
+    // A Light or Full member of a whole-server archive leaves out what only a restore of that whole
+    // archive puts back. restoreHome refuses one from its manifest before it touches the home.
+    const S3_MOUNT_ID = 'restore-partial-s3';
+    const S3_BACKING = join(TEST_DATA_DIR, 'restore-partial-backing');
+    let user: TestUser;
+    let mountId: string;
+    let rootId: string;
+
+    beforeAll(async () => {
+        await getTestContext();
+        user = await createTestUser('restore-partial@test.eigen.is', PASSWORD, 'Restore Partial');
+        const mounts = await assertJson<{ id: string }[]>(
+            await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`),
+        );
+        mountId = mounts[0].id;
+        rootId = (
+            await assertJson<DrivePath>(await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/root`))
+        ).id;
+        await driveUpload(
+            user.sessionToken,
+            user.id,
+            mountId,
+            rootId,
+            new File([TEST_PNG_BYTES], 'live.png', { type: 'image/png' }),
+        );
+    });
+
+    // Never evicted, nothing moved aside or parked, no tab told to reload, the home serving what it served.
+    async function expectUntouched(home: Home, before: string[], epoch: string): Promise<void> {
+        expect(await getHome(user.id)).toBe(home);
+        expect(safetyCopies(user.id, PRE_RESTORE_SUFFIX)).toEqual([]);
+        expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX)).toEqual([]);
+        expect(getDataEpoch(user.id)).toBe(epoch);
+        expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(before);
+    }
+
+    test('a Light member is refused by its level and the live home is untouched', async () => {
+        const home = await getHome(user.id);
+        const before = await rootNames(user.sessionToken, user.id, mountId, rootId);
+        const epoch = getDataEpoch(user.id);
+        const artifact = await backup(user.id, new Date(), undefined, 'light');
+
+        await expect(restoreHome(artifact, user.id, `restore-light-${Date.now()}`)).rejects.toThrow(
+            `${artifact} is a light backup`,
+        );
+
+        await expectUntouched(home, before, epoch);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
+    test('a Full member of a home without s3 mounts is complete and restores', async () => {
+        const artifact = await backup(user.id, new Date(Date.now() + 60_000), undefined, 'full');
+        await restoreHome(artifact, user.id, `restore-full-${Date.now()}`);
+        expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toContain('live.png');
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+        for (const name of safetyCopies(user.id, PRE_RESTORE_SUFFIX)) {
+            rmSync(join(TEST_DATA_DIR, 'home', name), { recursive: true, force: true });
+        }
+    });
+
+    test('a metadata-only mount is refused by name and the live home is untouched', async () => {
+        const home = await getHome(user.id);
+        const { mount } = createHomeFaultMount(home, S3_MOUNT_ID, S3_BACKING);
+        await mount.init();
+        registerFaultMount(home.drive, mount);
+        try {
+            const s3Root = (await mount.getRootFolder())!.id;
+            await mount.createFile(s3Root, 'remote.png', 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
+            await mount.drainPendingUploads({ flushNow: true });
+            const before = await rootNames(user.sessionToken, user.id, mountId, rootId);
+            const epoch = getDataEpoch(user.id);
+            const artifact = await backup(user.id, new Date(Date.now() + 120_000), undefined, 'full');
+
+            await expect(restoreHome(artifact, user.id, `restore-metadata-${Date.now()}`)).rejects.toThrow(
+                `${artifact} holds only the metadata of mount ${S3_MOUNT_ID}`,
+            );
+
+            await expectUntouched(home, before, epoch);
+            rmSync(join(getBackupsDir(), artifact), { force: true });
+        } finally {
+            unregisterFaultMount(home.drive, S3_MOUNT_ID);
+            await mount.closeAllDatabases().catch(() => {});
+            rmSync(S3_BACKING, { recursive: true, force: true });
+        }
     });
 });

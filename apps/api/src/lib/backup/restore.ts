@@ -151,6 +151,22 @@ export async function restoreHome(
             await extractArtifact(artifactPath, unpackDir);
             onProgress?.('extract', 1, 1);
             const { folder, manifest } = readUnpackedHome(unpackDir, ownerId, artifactName);
+            // A member of a whole-server archive below full-s3 leaves out what only a restore of that
+            // archive puts back. Refused here, before the home is moved aside: after that, a refusal
+            // would already have cost the user their open pages.
+            if (manifest.level === 'light') {
+                throw new ApiError(
+                    400,
+                    `${artifactName} is a light backup: it holds no files and no mail, so it cannot restore a home on its own`,
+                );
+            }
+            const metadataOnly = manifest.mounts.filter((summary) => summary.contents === 'metadata');
+            if (metadataOnly.length > 0) {
+                throw new ApiError(
+                    400,
+                    `${artifactName} holds only the metadata of mount ${metadataOnly.map((summary) => summary.id).join(', ')}, not its files, so it cannot restore a home on its own`,
+                );
+            }
             const verified = await verifyFolder(folder, onProgress);
             if (verified.status !== 'verified') {
                 const failures = verified.failures.slice(0, FAILURES_IN_MESSAGE).join('; ');

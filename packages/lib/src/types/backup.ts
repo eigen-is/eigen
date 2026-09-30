@@ -8,6 +8,11 @@ export type BackupEntry = {
     sha256: string;
 };
 
+// How much of a home a capture takes. `full-s3` is complete, what the per-home backup writes. `full`
+// leaves an s3 mount's objects to its bucket and keeps its metadata.db and staged uploads. `light`
+// keeps the databases and the home outside its mounts and mail: no file bodies, no Maildir.
+export type BackupLevel = 'light' | 'full' | 'full-s3';
+
 export type BackupManifest = {
     formatVersion: 1;
     kind: 'user' | 'team' | 'server';
@@ -19,10 +24,20 @@ export type BackupManifest = {
     server: { domain: string; orgId: string };
     // databases and files are disjoint, so entries.length === databases + files.
     counts: { databases: number; files: number; bytes: number };
+    // Absent in an archive written before levels existed, which was complete.
+    level?: BackupLevel;
     // `skipped` is set only for a mount the home has turned off whose storage could not be read: it
     // carries the reason, holds no files, and a restore leaves it disabled and absent. An enabled
-    // mount's storage failure fails the whole backup instead.
-    mounts: { id: string; storageType: MountConfig['storageType']; files: number; bytes: number; skipped?: string }[];
+    // mount's storage failure fails the whole backup instead. `contents: 'metadata'` marks a mount
+    // whose file bodies the archive does not hold (every mount at level light, an s3 one at full).
+    mounts: {
+        id: string;
+        storageType: MountConfig['storageType'];
+        files: number;
+        bytes: number;
+        skipped?: string;
+        contents?: 'metadata';
+    }[];
     // Every file under the folder except manifest.json itself, relative to the folder root.
     entries: BackupEntry[];
     // Server archives only: one row per home folder, each keeping its own manifest. Reserved by the

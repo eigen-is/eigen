@@ -3,10 +3,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry } from '@workspace/lib/types/backup';
 import { type DrivePathType, isCollabType, isDocumentType } from '@workspace/lib/types/drive';
+import { eq } from 'drizzle-orm';
 import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import { CHAT_ROOM_DB_CONFIG } from '../chat/db-config';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
 import { ApiError, type DatabaseConfig, type SchemaType } from '../core';
+import { withDocumentDb } from '../mount/document-db';
 import { buildStorageKey, isUsableName } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
@@ -309,6 +311,37 @@ export async function snapshotMountData(
         onProgress('mount files', index + 1, fileRows.length);
     }
     return { entries, databases, pathIds: new Set(fileRows.map((row) => row.id)) };
+}
+
+// A metadata-only capture of an s3 mount reads no object, so an open document's newest commits reach
+// the archive only through staging/: flushing stages them there with a pending row, which the
+// metadata.db staged after this names. comments.db included, which Mount.flushContainerDb skips.
+export async function flushOpenDocumentDbs(mount: Mount): Promise<void> {
+    for (const pathId of [...mount.documentDbs.keys()]) {
+        await withDocumentDb(mount, pathId, async (slot) => {
+            await slot.db?.flush();
+        });
+    }
+}
+
+// The rest of a metadata-only capture: staging/ as it stands, the bytes the bucket does not have yet,
+// under the names the pending rows of metadata.db give them. Nothing counts as a database: a staged
+// copy is a payload for the upload queue, not one this server opens. The ids are the file rows',
+// which the thumbnails are keyed by.
+export async function snapshotMountStaging(mount: Mount, targetDir: string, relPrefix: string): Promise<MountSnapshot> {
+    const entries: BackupEntry[] = [];
+    if (fs.existsSync(mount.stagingDir)) {
+        for (const entry of fs.readdirSync(mount.stagingDir, { withFileTypes: true })) {
+            if (!entry.isFile()) continue;
+            const source = Bun.file(path.join(mount.stagingDir, entry.name));
+            // The queue unlinks a staged copy once its PUT acks: one gone since the listing is in the bucket.
+            if (await source.exists()) {
+                entries.push(await captureFile(source, path.join(targetDir, entry.name), `${relPrefix}/${entry.name}`));
+            }
+        }
+    }
+    const rows = await mount.db.select({ id: paths.id }).from(paths).where(eq(paths.type, 'file')).all();
+    return { entries, databases: 0, pathIds: new Set(rows.map((row) => row.id)) };
 }
 
 // Thumbnails are not derived data: they are generated once, when a file is uploaded, and never

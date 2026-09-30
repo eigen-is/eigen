@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
+import type { BackupEntry, BackupLevel, BackupManifest } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_FORMAT_VERSION } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
@@ -31,7 +31,7 @@ import {
     buildHomeFolderName,
     requireBackableOwner,
 } from './paths';
-import { snapshotMountData, snapshotMountThumbs } from './snapshot-mount';
+import { flushOpenDocumentDbs, snapshotMountData, snapshotMountStaging, snapshotMountThumbs } from './snapshot-mount';
 
 export type SnapshotProgress = (step: string, done: number, total: number) => void;
 
@@ -55,8 +55,10 @@ const SKIPPED_HOME_DIRS = new Set<string>([PATHS.DRIVE.ROOT]);
 // beside its `cur/` and `new/`, holding half-written deliveries only.
 const MAILDIR_ROOT = `${PATHS.MAIL.ROOT}/${PATHS.MAIL.MAILDIR}`;
 
-function isSkippedHomeDir(rel: string): boolean {
+function isSkippedHomeDir(rel: string, level: BackupLevel): boolean {
     if (SKIPPED_HOME_DIRS.has(rel)) return true;
+    // Light leaves the mail where it is: a whole-server restore of one keeps the Maildir in place.
+    if (level === 'light' && rel === MAILDIR_ROOT) return true;
     return path.basename(rel) === PATHS.MAIL.TMP && rel.startsWith(`${MAILDIR_ROOT}/`);
 }
 
@@ -75,13 +77,13 @@ const DB_FILE = /\.db(-wal|-shm)?$/;
 // MaildirStore.watch to install its watcher on, and mail stops syncing in silence.
 type HomeTree = { files: string[]; dirs: string[] };
 
-function listHomeTree(dir: string, relDir: string, out: HomeTree): void {
+function listHomeTree(dir: string, relDir: string, level: BackupLevel, out: HomeTree): void {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
         if (entry.isDirectory()) {
-            if (isSkippedHomeDir(rel)) continue;
+            if (isSkippedHomeDir(rel, level)) continue;
             out.dirs.push(rel);
-            listHomeTree(path.join(dir, entry.name), rel, out);
+            listHomeTree(path.join(dir, entry.name), rel, level, out);
             continue;
         }
         if (!entry.isFile()) continue;
@@ -97,14 +99,16 @@ function listHomeTree(dir: string, relDir: string, out: HomeTree): void {
     }
 }
 
-// Writes a complete, storage-independent copy of one home into `{targetDir}/home-{ownerId}/` and
-// returns the manifest describing it. Every database copy is internally consistent (VACUUM INTO);
-// the folder as a whole is not one instant, which is the standard guarantee for a live-system
-// backup — the home keeps serving its user throughout.
+// Writes a storage-independent copy of one home into `{targetDir}/home-{ownerId}/` and returns the
+// manifest describing it. Every database copy is internally consistent (VACUUM INTO); the folder as a
+// whole is not one instant, which is the standard guarantee for a live-system backup — the home keeps
+// serving its user throughout. Only `full-s3` is a complete home: the other levels are capture modes
+// of the whole-server archive, and their manifest says what they left out (BackupLevel).
 export async function snapshotHome(
     home: Home,
     targetDir: string,
     onProgress?: SnapshotProgress,
+    level: BackupLevel = 'full-s3',
 ): Promise<BackupManifest> {
     const ownerId = home.user.id;
     const owner = parseOwnerId(ownerId);
@@ -148,33 +152,42 @@ export async function snapshotHome(
     );
     const mountSummaries: BackupManifest['mounts'] = [];
 
-    // One mount's own bytes, enabled or disabled: its data tree, its thumbnails and the summary row.
-    // metadata.db is staged by the caller and counted as a database, so the summary means the files
-    // the archive holds for this mount.
+    // One mount's own bytes, enabled or disabled: its metadata.db, whatever else the level takes of
+    // it, and the summary row. metadata.db is counted as a database, so the summary means the files
+    // the archive holds for this mount. Light takes no more; Full leaves an s3 mount's objects to its
+    // bucket (whose versioning is their history) and takes the uploads still in staging/ instead.
     const archiveMount = async (mount: Mount): Promise<void> => {
-        const relData = archiveMountPath(mount.id, PATHS.DRIVE.DATA_DIR);
-        const relThumbs = archiveMountPath(mount.id, PATHS.DRIVE.THUMBS_DIR);
-        const data = await snapshotMountData(mount, path.join(folder, relData), relData, report);
-        const thumbs = await snapshotMountThumbs(
-            mount.thumbsDir,
-            path.join(folder, relThumbs),
-            relThumbs,
-            data.pathIds,
-        );
-        const mountEntries = [...data.entries, ...thumbs];
+        const stagedOnly = level === 'full' && mount.isRemote;
+        if (stagedOnly) await flushOpenDocumentDbs(mount);
+        await stageDatabase(MOUNT_DB_CONFIG, `${PATHS.DRIVE.ROOT}/${mount.id}/${PATHS.DRIVE.METADATA_DB}`);
+        const mountEntries: BackupEntry[] = [];
+        if (level !== 'light') {
+            const relFiles = archiveMountPath(mount.id, stagedOnly ? PATHS.DRIVE.STAGING_DIR : PATHS.DRIVE.DATA_DIR);
+            const relThumbs = archiveMountPath(mount.id, PATHS.DRIVE.THUMBS_DIR);
+            const data = stagedOnly
+                ? await snapshotMountStaging(mount, path.join(folder, relFiles), relFiles)
+                : await snapshotMountData(mount, path.join(folder, relFiles), relFiles, report);
+            const thumbs = await snapshotMountThumbs(
+                mount.thumbsDir,
+                path.join(folder, relThumbs),
+                relThumbs,
+                data.pathIds,
+            );
+            mountEntries.push(...data.entries, ...thumbs);
+            databases += data.databases;
+        }
         entries.push(...mountEntries);
-        databases += data.databases;
         mountSummaries.push({
             id: mount.id,
             storageType: mount.config.storageType,
             files: mountEntries.length,
             bytes: mountEntries.reduce((sum, entry) => sum + entry.bytes, 0),
+            ...((level === 'light' || stagedOnly) && { contents: 'metadata' }),
         });
     };
 
     const total = mounts.length + disabled.length;
     for (const [index, mount] of mounts.entries()) {
-        await stageDatabase(MOUNT_DB_CONFIG, `${PATHS.DRIVE.ROOT}/${mount.id}/${PATHS.DRIVE.METADATA_DB}`);
         await archiveMount(mount);
         report('mounts', index + 1, total);
     }
@@ -191,12 +204,11 @@ export async function snapshotHome(
         const databasesBefore = databases;
         let mount: Mount | undefined;
         try {
-            await stageDatabase(MOUNT_DB_CONFIG, relMetadata);
             // Archived through the same Mount an enabled one goes through — one spelling of the
             // capture rules (freshest-first, managed databases, manifest entries) for both. Opened
             // passively because the drive does not serve this one: nothing is created, purged or
-            // uploaded (Mount.init). Its metadata.db is the Home's own cached handle, the one the
-            // copy above was staged from, so this opens nothing a second time.
+            // uploaded (Mount.init). Its metadata.db is the Home's own cached handle, the one
+            // archiveMount stages its copy from, so this opens nothing a second time.
             mount = new Mount(ownerId, home.homeDir, config, home.getLocalDatabase.bind(home));
             await mount.init({ passive: true });
             await archiveMount(mount);
@@ -224,7 +236,7 @@ export async function snapshotHome(
     }
 
     const tree: HomeTree = { files: [], dirs: [] };
-    listHomeTree(home.homeDir, '', tree);
+    listHomeTree(home.homeDir, '', level, tree);
     for (const rel of tree.dirs) fs.mkdirSync(path.join(folder, ARCHIVE_HOME_DIR, rel), { recursive: true });
     for (const [index, rel] of tree.files.entries()) {
         const source = Bun.file(path.join(home.homeDir, rel));
@@ -286,6 +298,7 @@ export async function snapshotHome(
             files: entries.length - databases,
             bytes: entries.reduce((sum, entry) => sum + entry.bytes, 0),
         },
+        level,
         mounts: mountSummaries,
         entries,
     };
