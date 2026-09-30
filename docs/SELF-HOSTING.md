@@ -4,12 +4,15 @@ How to run Eigen on your own server. The step-by-step guide lives in the help ce
 
 ## Requirements
 
-- A Linux server, amd64 or arm64, with 2 GB of RAM or more
+- A Linux server, amd64 or arm64, with 2 GB of RAM, 4 GB recommended
+- 10 GB of disk for the images, plus your data and its snapshots
 - Docker, with the Docker Compose plugin 2.20 or newer. Nothing else: no Bun, no Node
 - A domain you control
 - A mail relay when you keep your existing mail. When Eigen hosts your mail, only when your provider blocks outgoing port 25
 
-Disk and ports per setup: [What you need to run Eigen](https://eigen.is/support/self-hosting/requirements).
+The containers use about 200 MB of RAM idle, 250 MB with the mail services. The API is almost all of it. Exports are the peak: five PDF exports at once took the stack to about 850 MB, one sheet PDF to about 600 MB. The images unpack to about 2.8 GB, 3.2 GB with mail (the api image alone is 2.6 GB). Docker's containerd image store keeps the downloaded layers too, which makes it 3.8 and 4.3 GB. An update keeps the previous release's images for `./eigen rollback`, so there can be two sets. A fresh `data/` is under 1 MB. More users and bigger documents need more.
+
+Memory, disk and ports per setup: [What you need to run Eigen](https://eigen.is/support/self-hosting/requirements).
 
 ## Quick start
 

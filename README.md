@@ -104,7 +104,7 @@ Eigen doesn't lock you into its web interface. Standard protocols let you use yo
 
 You need:
 
-- A Linux server, amd64 or arm64, with 2 GB of RAM or more
+- A Linux server, amd64 or arm64, with 2 GB of RAM (4 GB recommended) and 10 GB of disk for Eigen's images, plus room for your data
 - Docker, with the Docker Compose plugin 2.20 or newer. No Bun, no Node
 - A domain that points at the server
 - A mail relay when you keep your existing mail. When Eigen hosts your mail, only when your provider blocks outgoing port 25
