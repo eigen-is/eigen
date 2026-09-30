@@ -44,8 +44,8 @@ the aim is to make Eigen reliable enough for mid-to-large organizations as well.
 
 Eigen is **pre-1.0 and actively developed**. The core works, but be deliberate about what you put on it:
 
-- **Breaking changes** are likely between minor versions until 1.0. A release that changes how data is stored converts it once or drops it, and only stickies stay backward compatible. `./eigen update` shows such a release's notes, asks, and saves a full snapshot first, so `./eigen rollback` can go back.
-- **You own your data, including the backups.** Use `./eigen backup` (or your own routine) and verify it restores. Eigen does not back up your data for you.
+- **Breaking changes** are likely between minor versions until 1.0. A release that changes how data is stored converts it once or drops it, and only stickies stay backward compatible. `./eigen update` shows such a release's notes, asks, and makes a Full backup first, so `./eigen rollback` can go back.
+- **You own your data, including the backups.** Eigen backs up only once you turn on the nightly backup in Settings, or run `./eigen backup`. Send the backups off the server to a bucket of their own, keep that bucket's keys somewhere else, and try a restore.
 - **You own your server's security.** Keep the host patched, lock down SSH, use strong passwords, and watch your logs. A self-hosted server is your responsibility end-to-end.
 - **No warranty**: see [LICENSE.txt](LICENSE.txt). Eigen is built by a single developer in their spare time. It's provided as-is, in good faith, with no SLA.
 

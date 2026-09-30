@@ -5,7 +5,7 @@ How to run Eigen on your own server. The step-by-step guide lives in the help ce
 ## Requirements
 
 - A Linux server, amd64 or arm64, with 2 GB of RAM, 4 GB recommended
-- 10 GB of disk for the images, plus your data and its snapshots
+- 10 GB of disk for the images, plus your data and its backups
 - Docker, with the Docker Compose plugin 2.20 or newer. Nothing else: no Bun, no Node
 - A domain you control
 - A mail relay when you keep your existing mail. When Eigen hosts your mail, only when your provider blocks outgoing port 25
@@ -36,14 +36,34 @@ Developing Eigen? `./eigen setup` in a clone builds the images instead: [CONTRIB
 | Which relay, and which senders it must accept | [Choose a mail relay](https://eigen.is/support/self-hosting/mail-relay) |
 | nginx, Apache, Caddy, Traefik, a web server in Docker, tunnels, mail certificates without Caddy | [Run Eigen behind your own web server](https://eigen.is/support/self-hosting/behind-your-web-server) |
 | `./eigen update`, breaking releases, the pre-1.0 data policy, rollback, the `main` channel | [Update Eigen](https://eigen.is/support/self-hosting/update) |
-| `./eigen backup`, the cron line, what a snapshot leaves out, `./eigen restore` | [Back up and restore the whole server](https://eigen.is/support/self-hosting/back-up-and-restore) |
-| A new machine | [Move Eigen to another server](https://eigen.is/support/self-hosting/move-to-another-server) |
+| The nightly backup, the backup bucket and its keys, `./eigen backup`, what a backup leaves out, `./eigen restore` | [Back up and restore the whole server](https://eigen.is/support/self-hosting/back-up-and-restore) |
+| A new machine, restored from a backup with no setup first | [Move Eigen to another server](https://eigen.is/support/self-hosting/move-to-another-server) |
 | Every command, the services, the logs, the install folder | [Commands, logs, and files](https://eigen.is/support/self-hosting/commands-and-files) |
 | `./eigen reset-password` | [Reset a password from the server](https://eigen.is/support/self-hosting/reset-a-password) |
 | Errors, HTTPS, mail that does not arrive | [Fix common server problems](https://eigen.is/support/self-hosting/troubleshooting) |
 | Known gaps | [What Eigen does not do yet](https://eigen.is/support/self-hosting/known-gaps) |
 
 The help center at eigen.is follows the `main` channel, so it can describe a build newer than the newest release. Every install serves its own copy at `/support`, which matches the version it runs.
+
+## The commands
+
+`./eigen` runs in the install folder. `./eigen <command> --help` tells more about each.
+
+| Command | What it does |
+|---|---|
+| `setup` | Asks the setup questions, writes `.env.production`, starts Eigen and prints the setup link. Run it again to change an answer |
+| `status` | The version, a waiting update, the services, disk space, the newest backup, the certificate and the mail queue |
+| `update [version]` | Backs up the running server, then switches to the new release. `--full` makes that backup Full, `--no-backup` makes none |
+| `rollback` | Restores the backup the last update made, with the version it ran |
+| `backup` | Backs up the whole server into `backups/` while Eigen runs. `--light`, `--full` (the default), `--s3`, `--wait` |
+| `restore <archive>` | Puts a whole-server backup back, from `backups/` or a path, on this machine or a new one |
+| `restart`, `stop`, `logs [service]`, `reset-password` | What they say |
+
+One command that changes Eigen runs at a time, under `.eigen/lock`. `backup` takes no lock: it changes nothing and runs inside the API. What the backup and restore do, and why, is in [BACKUP.md](BACKUP.md).
+
+## backups/ is outside data/
+
+Whole-server and per-home backups go to `backups/` in the install folder, mounted into the API as `/app/backups` (`EIGEN_BACKUPS_DIR`). It sits beside `data/`, so a wipe of the data folder cannot take the backups with it. Setup creates both folders and gives an empty one to uid 1000, the user Eigen runs as. `backups/` is not in any backup: copy archives off the box, or turn on the backup bucket in Settings.
 
 ## Compose profiles
 
@@ -60,7 +80,7 @@ The help center at eigen.is follows the `main` channel, so it can describe a bui
 
 ## `.env.production`
 
-Setup writes it, readable by its owner and by group 1000, the group Eigen runs as, and Eigen mounts it read-only. A rerun keeps every key it does not know. [`.env.example`](../.env.example) documents each key. In short:
+Setup writes it, readable by its owner and by group 1000, the group Eigen runs as, and Eigen mounts it read-only at `EIGEN_ENV_FILE` so the server backup can archive it. Every `./eigen` command that starts Eigen gives the file that group and mode 0640 again, so after a hand edit run `./eigen restart` rather than `docker compose up`, or the backup may miss it. A rerun of setup keeps every key it does not know. [`.env.example`](../.env.example) documents each key. In short:
 
 | Keys | Written by | What they are |
 |---|---|---|
