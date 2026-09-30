@@ -98,6 +98,24 @@ export type ServerArchiveSidecar = {
     verify?: BackupVerifyRecord;
 };
 
+// A whole-server archive in the backups folder as the owner's list shows it, read off its name and
+// sidecar and never out of the archive. `bytes` is null for an attempt refused before it wrote one,
+// `record` for a sidecar that is missing or does not read.
+export type ServerArchive = {
+    name: string;
+    level: BackupLevel;
+    reason: BackupReason;
+    createdAt: Date;
+    bytes: number | null;
+    record: ServerArchiveSidecar | null;
+};
+
+// Full + S3 is offered only while `hasS3Mounts`.
+export type ServerArchiveList = {
+    archives: ServerArchive[];
+    hasS3Mounts: boolean;
+};
+
 // A backup, verify or restore running on the server. The job map in the API is the truth; the
 // `backup:job-updated` SSE event only tells the admin's browser to refetch this. A server backup's
 // `ownerId` is the org's, and it names its archive from the start.

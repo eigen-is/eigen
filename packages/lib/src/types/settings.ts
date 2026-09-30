@@ -123,6 +123,13 @@ export type ServerSettings = {
         // Without hosted mail, whether the relay accepts every address on the mail domain as a sender.
         relaySendsAsUsers: boolean;
     };
+    backups: {
+        // A Full once per UTC day from `hourUtc`, Full + S3 with `withS3`. Retention keeps `keep` good
+        // scheduled archives; manual ones are the owner's to delete.
+        schedule: { enabled: boolean; hourUtc: number; withS3: boolean; keep: number };
+        // The private bucket archives go to; `keep` is its own count there.
+        upload: { enabled: boolean; s3: S3Config; keep: number };
+    };
 };
 
 export type MountResponse = {

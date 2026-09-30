@@ -1,4 +1,4 @@
-import type { S3Config } from '@workspace/lib/types/mount';
+import { EMPTY_S3, type S3Config } from '@workspace/lib/types/mount';
 import type { ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { JsonStore } from '../core/json-store';
@@ -54,6 +54,10 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, SERVER_FILES.setti
         senderName: '',
         senderAddress: '',
         relaySendsAsUsers: false,
+    },
+    backups: {
+        schedule: { enabled: false, hourUtc: 2, withS3: false, keep: 7 },
+        upload: { enabled: false, s3: EMPTY_S3, keep: 30 },
     },
 });
 

@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import type { BackupJob } from '@workspace/lib/types/backup';
 import { ApiError } from '../core';
 import { pullHomeSnapshot, sendToHome } from '../home/home-relay';
-import { getOrgAdmins } from '../user';
+import { getOrgAdmins, getOrgOwner } from '../user';
 import { extractArtifact, packFolder, readUnpackedHome, writeSidecar } from './archive';
 import { describeError } from './errors';
 import {
@@ -43,25 +43,30 @@ function dropExpiredJobs(): void {
 }
 
 // Every admin sees the same pane, so the poke goes to all of them and not only to the one who
-// pressed the button. sendToHome drops the ones with no home loaded, which is every admin who has
-// nothing open. The event carries no state, so one that lands out of order costs nothing.
+// pressed the button; a server backup's goes to the owner alone, who alone sees it. sendToHome drops
+// the ones with no home loaded, which is every admin who has nothing open. The event carries no
+// state, so one that lands out of order costs nothing.
 function poke(job: BackupJob): void {
     const event = buildBackupJobEvent(job.id, job.ownerId);
-    getOrgAdmins()
-        .then((admins) => Promise.all(admins.map((admin) => sendToHome(admin.id, { type: 'broadcast', event }))))
+    const recipients =
+        job.kind === 'server-backup' ? getOrgOwner().then((owner) => (owner ? [owner] : [])) : getOrgAdmins();
+    recipients
+        .then((users) => Promise.all(users.map((user) => sendToHome(user.id, { type: 'broadcast', event }))))
         .catch(() => {});
 }
 
 // One piece of work per home at a time — a second backup while one is running would read a folder
 // the first is still walking, a second restore would move aside a folder the first is writing, and a
-// safety-copy delete overlapping a restore would judge the wrong home's keys as garbage.
-function requireHomeSlotFree(ownerId: string): void {
+// safety-copy delete overlapping a restore would judge the wrong home's keys as garbage. A server
+// backup's archive is the owner's to know (D11), so only a second server backup hears its name.
+function requireHomeSlotFree(ownerId: string, starting?: BackupJob['kind']): void {
     dropExpiredJobs();
     const held = heldSlots.get(ownerId);
     if (held) throw new ApiError(409, `A ${held.holder} of this home is running`);
     for (const running of jobs.values()) {
         if (running.ownerId === ownerId && running.state === 'running') {
-            const named = running.artifact ? `: ${running.artifact}` : '';
+            const shown = running.kind !== 'server-backup' || starting === 'server-backup';
+            const named = running.artifact && shown ? `: ${running.artifact}` : '';
             throw new ApiError(409, `A ${running.kind} of this home is already running${named}`);
         }
     }
@@ -100,12 +105,17 @@ export async function withBackupJobSlot(ownerId: string, run: () => Promise<void
     }
 }
 
-// The server backup's way into a home's slot: it waits out whatever holds it rather than failing a
-// night on an admin's click, then takes it in the same tick it found it free. Routes keep the 409.
-// The caller releases the slot with the function this resolves to.
-export async function waitForHomeSlot(ownerId: string, holder: string): Promise<() => void> {
+// Waits out whatever holds the slot, then runs `take` in the same tick it found it free: two waiters
+// on one slot must not both see it free.
+export async function whenSlotFree<T>(ownerId: string, take: () => T): Promise<T> {
     for (let busy = slotBusy(ownerId); busy; busy = slotBusy(ownerId)) await busy;
-    return holdSlot(ownerId, holder);
+    return take();
+}
+
+// The server backup's way into a home's slot: it waits rather than failing a night on an admin's
+// click. Routes keep the 409. The caller releases the slot with the function this resolves to.
+export function waitForHomeSlot(ownerId: string, holder: string): Promise<() => void> {
+    return whenSlotFree(ownerId, () => holdSlot(ownerId, holder));
 }
 
 // Runs `run` in the background and hands the caller the job to report back. Every run resolves to
@@ -116,7 +126,7 @@ export function startBackupJob(
     startedBy: string | undefined,
     run: (job: BackupJob, onProgress: SnapshotProgress) => Promise<string>,
 ): BackupJob {
-    requireHomeSlotFree(ownerId);
+    requireHomeSlotFree(ownerId, kind);
 
     const job: BackupJob = {
         id: randomUUID(),

@@ -21,7 +21,7 @@ import { requireAdmin } from '../lib/core/access';
 import { contentDisposition } from '../lib/core/http';
 import { getHome } from '../lib/home';
 import { getTeam } from '../lib/team/team';
-import { getUserById } from '../lib/user';
+import { getOrgRole, getUserById } from '../lib/user';
 import { betterAuth } from './auth';
 
 // The ownerId ends up naming a home folder, so its shape is checked here, against the one class the
@@ -41,6 +41,13 @@ async function requireExistingHome(ownerId: string): Promise<void> {
         return;
     }
     if (!(await getUserById(owner.id))) throw new ApiError(404, 'User not found');
+}
+
+// A server backup's job is the owner's alone, as its routes are (server-backup.ts): it names the
+// archive and the homes that failed.
+async function jobsVisibleTo(userId: string): Promise<(job: BackupJob) => boolean> {
+    const owner = (await getOrgRole(userId)) === 'owner';
+    return (job) => owner || job.kind !== 'server-backup';
 }
 
 // A restore ends with the home evicted. On a remote mount it also ends with every file in the
@@ -90,7 +97,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
         '/admin/backup/jobs',
         async ({ query, user }): Promise<BackupJob[]> => {
             await requireAdmin(user.id);
-            return listBackupJobs(query.ownerId);
+            return listBackupJobs(query.ownerId).filter(await jobsVisibleTo(user.id));
         },
         { auth: true, query: t.Object({ ownerId: t.Optional(t.String()) }) },
     )
@@ -100,7 +107,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
         async ({ params, user }): Promise<BackupJob> => {
             await requireAdmin(user.id);
             const job = getBackupJob(params.id);
-            if (!job) throw new ApiError(404, 'Job not found');
+            if (!job || !(await jobsVisibleTo(user.id))(job)) throw new ApiError(404, 'Job not found');
             return job;
         },
         { auth: true },

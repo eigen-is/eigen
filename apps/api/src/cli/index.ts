@@ -1,4 +1,5 @@
 import { type ParseArgsConfig, parseArgs } from 'node:util';
+import { BACKUP_OPTIONS, BACKUP_USAGE, backup } from './backup';
 import { BOOTSTRAP_OPTIONS, BOOTSTRAP_USAGE, bootstrap } from './bootstrap';
 import { CONFIGURE_OPTIONS, CONFIGURE_USAGE, configure } from './configure';
 import { RESET_PASSWORD_OPTIONS, RESET_PASSWORD_USAGE, resetPassword } from './reset-password';
@@ -50,6 +51,7 @@ const COMMANDS = new Map<string, (args: string[]) => Promise<void>>([
         },
     ],
     ['setup-link', setupLink],
+    ['backup', (args) => backup(parseFlags(args, BACKUP_OPTIONS, BACKUP_USAGE).values)],
     ['snapshot', (args) => snapshot(parseFlags(args, SNAPSHOT_OPTIONS, SNAPSHOT_USAGE).values)],
     [
         'restore',
@@ -69,6 +71,7 @@ Commands:
   status           Report on the running server (run by ./eigen status)
   reset-password   Set a new password for an account and sign it out everywhere
   setup-link       Print a fresh one-time setup link, or where to sign in once set up
+  backup           Back up the whole server into backups/ while Eigen runs
   snapshot         Write data/, or its databases alone, and .env.production into snapshots/ (run by ./eigen backup)
   restore          Put what a snapshot holds of data/ and .env.production back (run by ./eigen restore)
   update-check     Print what changed since a version, and ask about breaking changes (run by ./eigen update)`;

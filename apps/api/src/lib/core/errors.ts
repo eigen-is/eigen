@@ -26,6 +26,11 @@ export function handleApiError({ error, code, set, request }: ErrorHandlerContex
         }
         return error.message;
     }
+    // A caller who left mid-wait: nobody reads the answer, and nothing went wrong on our side.
+    if (error instanceof Error && error.name === 'AbortError') {
+        set.status = 499;
+        return 'Client closed request';
+    }
     console.error('API Error:', error);
     set.status = 500;
     return 'Internal server error';

@@ -3,10 +3,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { teamOwnerId } from '@workspace/lib/types/owner';
+import { parseHomeMountSettings } from '@workspace/lib/validation';
 import { asc } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { team, user } from '../../../auth-schema';
 import { getDataRoot, getTeamDataPath, getUserHomePath, TEAM_HOMES_DIR, USER_HOMES_DIR } from '../config/paths';
+import { PATHS } from '../core';
 import { parseSafetyCopyName } from './paths';
 
 export type ServerHome = Pick<ServerArchiveManifest['homes'][number], 'ownerId' | 'kind' | 'name'>;
@@ -53,4 +55,21 @@ export function enumerateHomes(usersDbPath: string): { homes: ServerHome[]; orph
     } finally {
         sqlite.close();
     }
+}
+
+// Whether some home keeps a drive in a bucket: Full + S3 is offered only then. Read off each home's
+// settings.json, as the room check sizes homes, so no home boots for it.
+export function hasS3Mounts(): boolean {
+    for (const dirName of [USER_HOMES_DIR, TEAM_HOMES_DIR]) {
+        const dir = path.join(getDataRoot(), dirName);
+        if (!fs.existsSync(dir)) continue;
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (!entry.isDirectory() || parseSafetyCopyName(entry.name)) continue;
+            const settingsPath = path.join(dir, entry.name, PATHS.SETTINGS);
+            if (!fs.existsSync(settingsPath)) continue;
+            const mounts = parseHomeMountSettings(fs.readFileSync(settingsPath, 'utf8'));
+            if (Object.values(mounts ?? {}).some((mount) => mount.storageType === 's3')) return true;
+        }
+    }
+    return false;
 }
