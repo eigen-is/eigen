@@ -518,7 +518,7 @@ describe('configure command', () => {
         expect(statSync(join(dir, '.env.production')).ino).toBe(inode);
     });
 
-    test('a flag-driven run prints its intro, notes and outro as glyph lines', async () => {
+    test('a flag-driven run prints its intro, warnings and outro as glyph lines', async () => {
         const run = await runConfigure(tempDir(), [
             '--yes',
             '--domain',
@@ -534,8 +534,9 @@ describe('configure command', () => {
             [
                 '┌  Configure Eigen',
                 '│',
-                '◇  No relay',
-                '│  Eigen sends no email. Run ./eigen setup again to add a relay.',
+                '▲  No relay',
+                '│  Eigen sends no email: no sign-in codes, invitations or notifications.',
+                '│  Run ./eigen setup again to add a relay.',
                 '└  Configuration saved.',
                 '',
             ].join('\n'),

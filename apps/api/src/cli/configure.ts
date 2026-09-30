@@ -436,7 +436,12 @@ export async function configure(
         return;
     }
 
-    if (!mail && !relay) ui.note('No relay', ['Eigen sends no email. Run ./eigen setup again to add a relay.']);
+    if (!mail && !relay) {
+        ui.warn('No relay', [
+            'Eigen sends no email: no sign-in codes, invitations or notifications.',
+            'Run ./eigen setup again to add a relay.',
+        ]);
+    }
 
     if (behindProxy) {
         const [bindHost, bindPort] = staticAddress.split(':');
