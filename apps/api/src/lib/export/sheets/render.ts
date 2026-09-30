@@ -143,7 +143,7 @@ export function renderSheetsPdfDocument(sheets: Sheet[], title: string, mediaUrl
     return wrapInDocument(title, sanitized, pageSize);
 }
 
-// Preview budget (docs/PREVIEWS.md § Compact Previews vs Full Export): rendered from
+// Preview budget (docs/PREVIEWS.md § An Eigen document previews a slice, off the event loop): rendered from
 // the top-left of the used range. maxCells is an independent ceiling so tuning rows/columns
 // against fixtures can never silently remove the bound (at the defaults it never
 // binds: 200 × 50 = 10,000).

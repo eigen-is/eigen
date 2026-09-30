@@ -73,7 +73,7 @@ Test -> Eden Treaty / authedRequest() -> app.handle() -> Real business logic -> 
 
 Every API test lives in a feature folder under `apps/api/src/test/` — `acl/`, `auth/`, `backup/`, `caldav/`, `calendar/`, `carddav/`, `chat/`, `cli/`, `collab/`, `comments/`, `contacts/`, `core/`, `dav/`, `document/`, `drive/`, `export/`, `home/`, `ical/`, `import/`, `mail/`, `mount/`, `preview/`, `search/`, `server/`, `storage/`, `vcard/`, `webdav/` — one `<subject>.test.ts` per subject. Coverage spans CalDAV, WebDAV, mail, drive, collab, file history, search, import/export, demo mode, upload-queue chaos and more — grep the tree rather than assuming an area is untested.
 
-Not part of the suite: `src/test/transform-benchmark.ts` is a standalone responsiveness/memory benchmark for document transforms — run it from `apps/api` with `bun src/test/transform-benchmark.ts` (see PREVIEWS.md).
+Not part of the suite: `src/test/transform-benchmark.ts` is a standalone responsiveness/memory benchmark for document transforms — run it from `apps/api` with `bun src/test/transform-benchmark.ts` (see [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md#observability)).
 
 Not part of the suite either: the Docker harnesses below.
 

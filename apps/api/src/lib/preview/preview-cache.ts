@@ -54,7 +54,7 @@ export const TEXT_FORMAT = 'f5';
 export const VCARD_FORMAT = 'vcard-f1';
 
 // One more reason to bump this one: the payload's html is what a DOMPurify upgrade filters, so a cached
-// body predates every sanitizer fix (PREVIEWS.md).
+// body predates every sanitizer fix (PREVIEW-PAYLOADS.md).
 // eml-f2: CSS is refused on the `url(` token, and a data: reference survives only as a raster image.
 // eml-f3: the parts past the cap are counted as `remainingAttachments`.
 // eml-f4: CSS is read again as the color-scheme deletion a viewer makes would leave it, and a repeated

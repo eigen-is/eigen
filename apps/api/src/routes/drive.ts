@@ -357,7 +357,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         // off the URL, so a stale URL serves stale content after an inline edit.
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
-    // A .vcf answers with the contact cards themselves rather than a body — the overlay and the drive hero render them (PREVIEWS.md).
+    // A .vcf answers with the contact cards themselves rather than a body — the overlay and the drive hero render them (PREVIEW-PAYLOADS.md).
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/vcard-preview',
         async ({ params, request, user, set }): Promise<VCardPreview | ElysiaCustomStatusResponse<304>> => {
@@ -368,7 +368,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
-    // An .eml answers with the message it holds — headers, sanitized body and part list (PREVIEWS.md).
+    // An .eml answers with the message it holds — headers, sanitized body and part list (PREVIEW-PAYLOADS.md).
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/eml-preview',
         async ({ params, request, user, set }): Promise<EmlPreview | ElysiaCustomStatusResponse<304>> => {
@@ -379,7 +379,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
-    // An .ics answers with the events it holds — the overlay draws them as cards (PREVIEWS.md).
+    // An .ics answers with the events it holds — the overlay draws them as cards (PREVIEW-PAYLOADS.md).
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/ics-preview',
         async ({ params, request, user, set }): Promise<IcsPreview | ElysiaCustomStatusResponse<304>> => {

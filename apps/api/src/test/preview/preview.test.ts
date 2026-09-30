@@ -526,7 +526,7 @@ describe('getTextPreview (stale-while-revalidate)', () => {
 });
 
 // A .vcf previews as the contact cards it holds, served as JSON the overlay and the drive hero render
-// (PREVIEWS.md). The parse itself is covered in vcard-preview.test.ts; this pins what the route answers.
+// (PREVIEW-PAYLOADS.md). The parse itself is covered in vcard-preview.test.ts; this pins what the route answers.
 describe('vCard preview route', () => {
     let token: string;
     let ownerId: string;
@@ -620,7 +620,7 @@ describe('vCard preview route', () => {
     });
 });
 
-// An .eml previews as the message it holds, served as JSON the overlay renders (PREVIEWS.md). The parse
+// An .eml previews as the message it holds, served as JSON the overlay renders (PREVIEW-PAYLOADS.md). The parse
 // and the sanitizer are covered in eml-preview.test.ts; this pins what the route answers.
 describe('eml preview route', () => {
     let token: string;
@@ -715,7 +715,7 @@ describe('eml preview route', () => {
     });
 });
 
-// An .ics previews as the events it holds, served as JSON the overlay renders (PREVIEWS.md). The parse
+// An .ics previews as the events it holds, served as JSON the overlay renders (PREVIEW-PAYLOADS.md). The parse
 // is covered in ics-preview.test.ts; this pins what the route answers.
 describe('ics preview route', () => {
     let token: string;
