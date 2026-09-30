@@ -64,8 +64,9 @@ export function hasS3Mounts(): boolean {
         const dir = path.join(getDataRoot(), dirName);
         if (!fs.existsSync(dir)) continue;
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (!entry.isDirectory() || parseSafetyCopyName(entry.name)) continue;
             const settingsPath = path.join(dir, entry.name, PATHS.SETTINGS);
-            if (!entry.isDirectory() || parseSafetyCopyName(entry.name) || !fs.existsSync(settingsPath)) continue;
+            if (!fs.existsSync(settingsPath)) continue;
             const mounts = parseHomeMountSettings(fs.readFileSync(settingsPath, 'utf8'));
             if (Object.values(mounts ?? {}).some((mount) => mount.storageType === 's3')) return true;
         }

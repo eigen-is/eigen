@@ -208,8 +208,8 @@ if (CANONICAL_MIMES.size === 0) {
 
 const ROUTE_FILE = /^apps\/api\/src\/routes\/[^/]+\.ts$/;
 // The home-independent surfaces that deliberately carry no `:ownerId` (docs/ARCHITECTURE.md § Pitfalls):
-// first-run setup, server-wide admin config, the unauthenticated public surface, and the admin backup
-// routes — server-wide too, gated by `requireAdmin` in every handler rather than by home ownership.
+// first-run setup, server-wide admin config, the unauthenticated public surface, and the backup routes,
+// server-wide too: `backup.ts` gated by `requireAdmin` in every handler, `server-backup.ts` by `requireOwner`.
 const OWNER_ID_EXEMPT = new Set([
     'setup.ts',
     'settings.ts',

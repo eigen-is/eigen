@@ -42,9 +42,9 @@ export const controlRouter = new Elysia({ name: 'control' })
     // `wait` is the pre-update backup's: it waits out a server backup that runs instead of taking its 409.
     .post(
         '/backup',
-        async ({ body }): Promise<ControlBackupJob> => {
+        async ({ body, request }): Promise<ControlBackupJob> => {
             const { keep } = getServerSettings().backups.schedule;
-            return toControlJob(await startServerBackup({ ...body, keep }));
+            return toControlJob(await startServerBackup({ ...body, keep, signal: request.signal }));
         },
         {
             body: t.Object({

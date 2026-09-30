@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import type { BackupJob } from '@workspace/lib/types/backup';
 import { ApiError } from '../core';
 import { pullHomeSnapshot, sendToHome } from '../home/home-relay';
-import { getOrgAdmins } from '../user';
+import { getOrgAdmins, getOrgOwner } from '../user';
 import { extractArtifact, packFolder, readUnpackedHome, writeSidecar } from './archive';
 import { describeError } from './errors';
 import {
@@ -43,12 +43,15 @@ function dropExpiredJobs(): void {
 }
 
 // Every admin sees the same pane, so the poke goes to all of them and not only to the one who
-// pressed the button. sendToHome drops the ones with no home loaded, which is every admin who has
-// nothing open. The event carries no state, so one that lands out of order costs nothing.
+// pressed the button; a server backup's goes to the owner alone, who alone sees it. sendToHome drops
+// the ones with no home loaded, which is every admin who has nothing open. The event carries no
+// state, so one that lands out of order costs nothing.
 function poke(job: BackupJob): void {
     const event = buildBackupJobEvent(job.id, job.ownerId);
-    getOrgAdmins()
-        .then((admins) => Promise.all(admins.map((admin) => sendToHome(admin.id, { type: 'broadcast', event }))))
+    const recipients =
+        job.kind === 'server-backup' ? getOrgOwner().then((owner) => (owner ? [owner] : [])) : getOrgAdmins();
+    recipients
+        .then((users) => Promise.all(users.map((user) => sendToHome(user.id, { type: 'broadcast', event }))))
         .catch(() => {});
 }
 

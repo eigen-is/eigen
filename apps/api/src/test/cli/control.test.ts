@@ -578,6 +578,60 @@ describe('the server backup on the control socket', () => {
         );
 
         test(
+            '--wait outlasts the fetch idle timeout, however long the running backup takes',
+            async () => {
+                const held = holdCaptures();
+                try {
+                    await startServerBackup({ level: 'light', reason: 'manual', keep: 7 });
+                    const waiting = runCli(
+                        ['backup', '--level', 'light', '--reason', 'pre-update', '--wait'],
+                        undefined,
+                        { BUN_CONFIG_HTTP_IDLE_TIMEOUT: '1' },
+                    );
+                    // Bun checks idle sockets every few seconds: this is past two checks.
+                    await Bun.sleep(10_000);
+                    held.release();
+                    const { stdout, stderr, code } = await waiting;
+                    expect(stderr).toBe('');
+                    expect(code).toBe(0);
+                    expect(stdout).toStartWith('◆  Waiting for the running server backup to end\n');
+                    expect(stdout).toMatch(/\narchive=server-pre-update-light-\d{8}-\d{6}\.tar\n$/);
+                } finally {
+                    held.restore();
+                }
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        test(
+            'a caller who stops waiting starts no backup once the running one ends',
+            async () => {
+                const held = holdCaptures();
+                try {
+                    const running = await startServerBackup({ level: 'light', reason: 'manual', keep: 7 });
+                    const caller = new AbortController();
+                    const waiting = fetch('http://eigen/backup', {
+                        unix: SOCKET,
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ level: 'light', reason: 'pre-update', wait: true }),
+                        signal: caller.signal,
+                    }).catch(() => null);
+                    await Bun.sleep(300);
+                    caller.abort();
+                    expect(await waiting).toBeNull();
+                    held.release();
+                    expect((await waitForControlJob(running.id)).state).toBe('done');
+                    await Bun.sleep(300);
+                    expect(serverRecords().filter((name) => name.startsWith('server-pre-update-'))).toEqual([]);
+                } finally {
+                    held.restore();
+                }
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        test(
             'a job that fails exits 1 with its error',
             async () => {
                 const failing = spyOn(homeRelay, 'pullHomeSnapshot').mockRejectedValue(new Error('disk on fire'));

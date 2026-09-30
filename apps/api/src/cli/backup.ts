@@ -1,6 +1,6 @@
 import type { parseArgs } from 'node:util';
+import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants';
 import { formatFileSize } from '@workspace/lib/format';
-import type { BackupLevel } from '@workspace/lib/types/backup';
 import { BACKUP_LEVELS, ON_DEMAND_BACKUP_REASONS } from '@workspace/lib/validation';
 import type { ControlBackupJob } from '../routes/control';
 import { callControl } from './control-socket';
@@ -8,7 +8,6 @@ import { createUi, glyphLine } from './ui';
 
 // Each step of a real server lasts seconds; a step shorter than this may go by unprinted.
 const POLL_MS = 500;
-const LEVEL_NAMES: Record<BackupLevel, string> = { light: 'Light', full: 'Full', 'full-s3': 'Full + S3' };
 
 export const BACKUP_OPTIONS = {
     level: { type: 'string', default: 'full' },
@@ -55,11 +54,18 @@ export async function backup(flags: BackupFlags): Promise<void> {
     const lost = (): never =>
         ui.fail('Eigen stopped answering during the backup.', 'Run ./eigen logs eigen-api to see why.');
 
-    const res = await callControl('/backup', down, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ level, reason, wait: flags.wait === true }),
-    });
+    const start = (wait: boolean) =>
+        callControl('/backup', down, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ level, reason, wait }),
+        });
+    let res = await start(false);
+    // Asked first without waiting, so the wait is announced only when there is one.
+    if (res.status === 409 && flags.wait) {
+        console.log(glyphLine('active', 'Waiting for the running server backup to end'));
+        res = await start(true);
+    }
     if (!res.ok) ui.fail(await res.text(), nextAfter(res.status));
     let job: ControlBackupJob = await res.json();
     ui.intro(`Backing up the server into ${job.artifact}`);
@@ -76,6 +82,6 @@ export async function backup(flags: BackupFlags): Promise<void> {
     }
     if (job.state === 'failed')
         ui.fail(job.error ?? 'The backup failed.', 'Run ./eigen logs eigen-api to see what went wrong.');
-    ui.outro(`Saved ${job.artifact}: ${LEVEL_NAMES[level]}, ${formatFileSize(job.bytes ?? 0)}.`);
+    ui.outro(`Saved ${job.artifact}: ${BACKUP_LEVEL_NAMES[level]}, ${formatFileSize(job.bytes ?? 0)}.`);
     console.log(`archive=${job.artifact}`);
 }

@@ -40,11 +40,28 @@ function writeRecord(name: string, record: Record<string, unknown>, archive?: st
     return archivePath;
 }
 
+// Holds every home capture until released, so a job stays running while a test looks at it.
+function holdCaptures(): { release(): void; restore(): void } {
+    const gate = Promise.withResolvers<void>();
+    const pull = homeRelay.pullHomeSnapshot;
+    const spy = spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (...args) => {
+        await gate.promise;
+        return pull(...args);
+    });
+    return {
+        release: () => gate.resolve(),
+        restore: () => {
+            gate.resolve();
+            spy.mockRestore();
+        },
+    };
+}
+
 describe('Server backup routes', () => {
     let ctx: TestContext;
     let admin: TestUser;
     let adminApi: ReturnType<typeof treaty<App>>;
-    const spies: { mockRestore(): void }[] = [];
+    let send: ReturnType<typeof spyOn<typeof homeRelay, 'sendToHome'>>;
 
     function membership(userId: string) {
         const orgId = getServerConfig()?.orgId ?? '';
@@ -58,7 +75,7 @@ describe('Server backup routes', () => {
         admin = await createTestUser('ada-server-backup@test.eigen.is', 'testpassword123', 'Ada Admin');
         await getAuthDrizzleDb().update(memberSchema).set({ role: 'admin' }).where(membership(admin.id));
         adminApi = treaty<App>(ctx.app, { headers: { cookie: `better-auth.session_token=${admin.sessionToken}` } });
-        spies.push(spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined));
+        send = spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined);
     });
 
     afterEach(() => {
@@ -66,7 +83,7 @@ describe('Server backup routes', () => {
     });
 
     afterAll(async () => {
-        for (const spy of spies.splice(0)) spy.mockRestore();
+        send.mockRestore();
         await getAuthDrizzleDb().update(memberSchema).set({ role: 'member' }).where(membership(admin.id));
     });
 
@@ -112,23 +129,44 @@ describe('Server backup routes', () => {
     test(
         'a second start while one runs is refused, naming the archive being written',
         async () => {
-            const gate = Promise.withResolvers<void>();
-            const pull = homeRelay.pullHomeSnapshot;
-            const held = spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (...args) => {
-                await gate.promise;
-                return pull(...args);
-            });
+            const held = holdCaptures();
             try {
                 const first = await ctx.alice.api.admin['server-backup'].post({ level: 'light' });
                 const running = getBackupJob(first.data!.jobId)!;
                 const second = await ctx.alice.api.admin['server-backup'].post({ level: 'full' });
                 expect(second.status).toBe(409);
                 expect(String(second.error?.value)).toContain(running.artifact!);
-                gate.resolve();
+                held.release();
                 expect((await waitForJob(running.id)).state).toBe('done');
             } finally {
-                gate.resolve();
-                held.mockRestore();
+                held.restore();
+            }
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'an admin neither sees nor hears of a server backup, and the owner does',
+        async () => {
+            const held = holdCaptures();
+            try {
+                send.mockClear();
+                const { data } = await ctx.alice.api.admin['server-backup'].post({ level: 'light' });
+                const id = data!.jobId;
+                const ids = async (api: typeof adminApi) =>
+                    ((await api.admin.backup.jobs.get({ query: {} })).data ?? []).map((job) => job.id);
+                expect(await ids(adminApi)).not.toContain(id);
+                expect(await ids(ctx.alice.api)).toContain(id);
+                expect((await adminApi.admin.backup.jobs({ id }).get()).status).toBe(404);
+                expect((await ctx.alice.api.admin.backup.jobs({ id }).get()).data?.id).toBe(id);
+                held.release();
+                await waitForJob(id);
+                await Bun.sleep(100);
+                const poked = send.mock.calls.filter(([, message]) => message.type === 'broadcast');
+                expect(poked.length).toBeGreaterThan(0);
+                expect(new Set(poked.map(([userId]) => userId))).toEqual(new Set([ctx.alice.user.id]));
+            } finally {
+                held.restore();
             }
         },
         JOB_TIMEOUT_MS,
@@ -199,6 +237,26 @@ describe('Server backup routes', () => {
         expect(res.status).toBe(409);
         expect(serverRecords().sort()).toEqual([running, `${running}.json`]);
     });
+
+    test(
+        'delete refuses the archive of a job that runs, whatever its record says',
+        async () => {
+            const held = holdCaptures();
+            try {
+                const { data } = await ctx.alice.api.admin['server-backup'].post({ level: 'light' });
+                const name = getBackupJob(data!.jobId)!.artifact!;
+                writeFileSync(serverSidecarPath(join(getBackupsDir(), name)), '{ not json');
+                const res = await ctx.alice.api.admin['server-backup'].archives({ name }).delete();
+                expect(res.status).toBe(409);
+                expect(serverRecords()).toContain(`${name}.json`);
+                held.release();
+                await waitForJob(data!.jobId);
+            } finally {
+                held.restore();
+            }
+        },
+        JOB_TIMEOUT_MS,
+    );
 
     test('no route hands out a whole-server archive', async () => {
         const name = buildServerArchiveName('manual', 'full', new Date('2026-09-06T02:00:00Z'));

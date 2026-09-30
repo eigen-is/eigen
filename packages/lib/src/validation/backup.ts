@@ -67,7 +67,7 @@ export const BACKUP_FORMAT_VERSION = 1;
 const KINDS: readonly BackupManifest['kind'][] = ['user', 'team', 'server'];
 const STORAGE_TYPES: readonly MountConfig['storageType'][] = ['local', 'local-key', 's3'];
 export const BACKUP_LEVELS = ['light', 'full', 'full-s3'] as const satisfies readonly BackupLevel[];
-export const BACKUP_REASONS: readonly BackupReason[] = ['scheduled', 'manual', 'pre-update'];
+export const BACKUP_REASONS = ['scheduled', 'manual', 'pre-update'] as const satisfies readonly BackupReason[];
 // What ./eigen backup may start one for; only the schedule makes a scheduled archive.
 export const ON_DEMAND_BACKUP_REASONS = ['manual', 'pre-update'] as const satisfies readonly Exclude<
     BackupReason,

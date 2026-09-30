@@ -34,7 +34,7 @@ import { getOrgOwner, getUserById } from '../user';
 import { type ArchiveWriter, createArchiveWriter, packFolder } from './archive';
 import { enumerateHomes, type ServerHome } from './enumerate-homes';
 import { describeError } from './errors';
-import { startBackupJob, waitForHomeSlot, whenSlotFree } from './jobs';
+import { listBackupJobs, startBackupJob, waitForHomeSlot, whenSlotFree } from './jobs';
 import {
     archiveServerPath,
     backupsDirPath,
@@ -67,6 +67,8 @@ export type ServerBackupOptions = {
     startedBy?: string;
     // Wait out a server backup that runs rather than take its 409: the pre-update one does.
     wait?: boolean;
+    // The waiting caller's: once it is gone, nothing starts when the slot frees.
+    signal?: AbortSignal;
 };
 
 async function writeServerSidecar(archivePath: string, sidecar: ServerArchiveSidecar): Promise<void> {
@@ -231,7 +233,7 @@ async function writeServerArchive(
 }
 
 // Fire-and-forget like the poke: a relay that fails must not replace the failure the job records.
-function alertOwner(tag: string, error: string): void {
+export function alertOwner(tag: string, error: string): void {
     getOrgOwner()
         .then((owner) =>
             owner
@@ -294,14 +296,16 @@ export function hasScheduledAttemptOn(day: Date): boolean {
 }
 
 // An archive and its record go together, and a refused attempt's record alone. One still being
-// written is refused: its job would write the record back when it ends.
+// written is refused: its job would write the record back when it ends. The job map says so
+// whatever the record reads.
 export async function deleteServerArchive(name: string): Promise<void> {
     if (!parseServerArchiveName(name)) throw new ApiError(400, 'Not a server backup name');
     const archivePath = path.join(backupsDirPath(), name);
     const recordPath = serverSidecarPath(archivePath);
     if (!fs.existsSync(archivePath) && !fs.existsSync(recordPath)) throw new ApiError(404, 'Archive not found');
+    const writing = listBackupJobs().some((job) => job.state === 'running' && job.artifact === name);
     const record = await readServerSidecar(archivePath).catch(() => null);
-    if (record?.state === 'running') throw new ApiError(409, `${name} is still being written`);
+    if (writing || record?.state === 'running') throw new ApiError(409, `${name} is still being written`);
     fs.rmSync(archivePath, { force: true });
     fs.rmSync(recordPath, { force: true });
 }
@@ -401,6 +405,7 @@ export async function startServerBackup({
     keep,
     startedBy,
     wait,
+    signal,
 }: ServerBackupOptions): Promise<BackupJob> {
     const ownerId = orgOwnerId(getPublicConfig().orgId);
     const admitted = Promise.withResolvers<void>();
@@ -422,7 +427,12 @@ export async function startServerBackup({
             return run;
         });
     };
-    const job = wait ? await whenSlotFree(ownerId, start) : start();
+    const job = wait
+        ? await whenSlotFree(ownerId, () => {
+              signal?.throwIfAborted();
+              return start();
+          })
+        : start();
     await admitted.promise;
     return job;
 }

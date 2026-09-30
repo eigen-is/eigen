@@ -18,9 +18,10 @@ import { buildServerArchiveName, getBackupsDir, serverSidecarPath } from '../../
 import * as serverJob from '../../lib/backup/server-job';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { ApiError } from '../../lib/core';
+import * as homeRelay from '../../lib/home/home-relay';
 import { registerScheduledJobs, serverBackupTick } from '../../lib/scheduler/jobs';
 import { stopAllSchedules } from '../../lib/scheduler/scheduler';
-import { ensureServer } from '../setup';
+import { ensureServer, getTestContext } from '../setup';
 
 const TICK_MS = 5 * 60 * 1000;
 
@@ -111,6 +112,28 @@ describe('The nightly server backup tick', () => {
         await expect(tickAt('2026-10-01T02:00:00Z')).rejects.toThrow('already running');
         await tickAt('2026-10-01T02:05:00Z');
         expect(start).toHaveBeenCalledTimes(2);
+    });
+
+    test('a start that fails before its record alerts the owner once a day, and a refusal not at all', async () => {
+        const { alice } = await getTestContext();
+        const send = spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined);
+        const alerts = () =>
+            send.mock.calls.filter(([, message]) => message.type === 'notification').map(([userId]) => userId);
+        try {
+            start.mockRejectedValueOnce(new ApiError(409, 'A server-backup of this home is already running'));
+            await expect(tickAt('2026-10-01T02:00:00Z')).rejects.toThrow('already running');
+            start.mockRejectedValue(new Error('backups folder is not writable'));
+            for (const iso of ['2026-10-01T02:05:00Z', '2026-10-01T02:10:00Z', '2026-10-01T23:55:00Z']) {
+                await expect(tickAt(iso)).rejects.toThrow('not writable');
+            }
+            await settle();
+            expect(alerts()).toEqual([alice.user.id]);
+            await expect(tickAt('2026-10-02T02:00:00Z')).rejects.toThrow('not writable');
+            await settle();
+            expect(alerts()).toEqual([alice.user.id, alice.user.id]);
+        } finally {
+            send.mockRestore();
+        }
     });
 
     test('a manual or pre-update archive of the day does not stand in for the night', async () => {
