@@ -13,7 +13,7 @@ import type {
 } from '@workspace/lib/types/backup';
 import { parseBackupManifest, parseBackupSidecar } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
-import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath, SIDECAR_SUFFIX, sidecarPath } from './paths';
+import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath, sidecarPath } from './paths';
 import type { SnapshotProgress } from './snapshot-home';
 
 // An artifact is a plain POSIX tar (pax for long paths) piped through zstd, so `tar --zstd -xf`
@@ -554,19 +554,25 @@ export function readUnpackedHome(
     return { folder, manifest };
 }
 
+// A sidecar in one rename from the staging folder, on the disk of the archives: a reader never sees half of one.
+// Indented by two, which ./eigen reads a server sidecar's top-level "state" line by.
+export async function writeRecord(target: string, value: unknown): Promise<void> {
+    const tempPath = getBackupTempPath('.json');
+    try {
+        await Bun.write(tempPath, JSON.stringify(value, null, 2));
+    } catch (error) {
+        fs.rmSync(tempPath, { force: true });
+        throw error;
+    }
+    fs.renameSync(tempPath, target);
+}
+
 export async function writeSidecar(
     artifactPath: string,
     manifest: BackupManifest,
     verify: BackupVerifyRecord,
 ): Promise<void> {
-    const tempPath = getBackupTempPath(SIDECAR_SUFFIX);
-    try {
-        await Bun.write(tempPath, JSON.stringify({ manifest, verify }, null, 2));
-    } catch (error) {
-        fs.rmSync(tempPath, { force: true });
-        throw error;
-    }
-    fs.renameSync(tempPath, sidecarPath(artifactPath));
+    await writeRecord(sidecarPath(artifactPath), { manifest, verify });
 }
 
 // Null when there is no sidecar at all — an artifact copied in by hand has none, and the caller

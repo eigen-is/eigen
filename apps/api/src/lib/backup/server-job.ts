@@ -33,7 +33,7 @@ import { ApiError } from '../core';
 import { pullHomeBackupBytes, pullHomeSnapshot, sendToHome } from '../home/home-relay';
 import { getTeamExists } from '../team/team';
 import { getOrgOwner, getUserById } from '../user';
-import { type ArchiveWriter, createArchiveWriter, packFolder } from './archive';
+import { type ArchiveWriter, createArchiveWriter, packFolder, writeRecord } from './archive';
 import { enumerateHomes, type ServerHome } from './enumerate-homes';
 import { describeError } from './errors';
 import { runningJobOn, startBackupJob, waitForHomeSlot, whenSlotFree } from './jobs';
@@ -74,16 +74,8 @@ export type ServerBackupOptions = {
     signal?: AbortSignal;
 };
 
-// Indented by two: ./eigen waits out a running backup by its top-level "state" line.
-async function writeServerSidecar(archivePath: string, sidecar: ServerArchiveSidecar): Promise<void> {
-    const tempPath = getBackupTempPath(SERVER_SIDECAR_SUFFIX);
-    try {
-        await Bun.write(tempPath, JSON.stringify(sidecar, null, 2));
-    } catch (error) {
-        fs.rmSync(tempPath, { force: true });
-        throw error;
-    }
-    fs.renameSync(tempPath, serverSidecarPath(archivePath));
+function writeServerSidecar(archivePath: string, sidecar: ServerArchiveSidecar): Promise<void> {
+    return writeRecord(serverSidecarPath(archivePath), sidecar);
 }
 
 // Null when there is none, or none that reads: nothing is judged or deleted on a record nobody can read.
@@ -127,11 +119,6 @@ async function appendPacked(writer: ArchiveWriter, member: string, packed: strin
     }
 }
 
-// A 404 means the home is gone only when its row is: one from its storage is a failure like any other.
-async function ownerDeleted({ ownerId, kind }: ServerHome): Promise<boolean> {
-    return kind === 'team' ? !(await getTeamExists(parseOwnerId(ownerId).id)) : !(await getUserById(ownerId));
-}
-
 // One home into the archive. A home that fails is named in the manifest and the archive goes
 // on without it: one broken bucket must not leave every other home without a backup. A home deleted
 // since the listing is skipped, which is no failure. A failed append is the archive's failure, not
@@ -157,8 +144,11 @@ async function appendHome(
         await packFolder(folder, packed);
         bytes = manifest.counts.bytes;
     } catch (error) {
-        if (error instanceof ApiError && error.status === 404 && (await ownerDeleted(home))) {
-            return { ...home, skipped: HOME_DELETED };
+        // A 404 means the home is gone only when its row is: one from its storage is a failure like any other.
+        if (error instanceof ApiError && error.status === 404) {
+            const id = parseOwnerId(home.ownerId).id;
+            const gone = home.kind === 'team' ? !(await getTeamExists(id)) : !(await getUserById(home.ownerId));
+            if (gone) return { ...home, skipped: HOME_DELETED };
         }
         return { ...home, failed: describeError(error) };
     } finally {
@@ -446,12 +436,6 @@ async function runServerBackup(
 // Uploads take turns: two at once share one uplink and gain nothing.
 let uploadsSettled: Promise<unknown> = Promise.resolve();
 
-function inUploadTurn<T>(run: () => Promise<T>): Promise<T> {
-    const turn = uploadsSettled.then(run);
-    uploadsSettled = turn.catch(() => {});
-    return turn;
-}
-
 // An archive's upload is a job of its own that holds no slot, so a backup never waits for the bucket. A failure
 // is never the archive's, which stays good here: the owner hears of it, and the record says so for the list and
 // ./eigen status. Shutdown aborts it, and the next Upload sends it whole.
@@ -460,12 +444,14 @@ function startUploadJob(archivePath: string, startedBy: string | undefined): Bac
     const ownerId = orgOwnerId(getPublicConfig().orgId);
     return startBackupJob('upload', ownerId, startedBy, (job, onProgress, signal) => {
         job.artifact = name;
-        return inUploadTurn(async () => {
+        const turn = uploadsSettled.then(async () => {
             onProgress('upload', 0, 1);
             const upload = await uploadAndRecord(archivePath, signal);
             if (upload.error) throw new Error(upload.error);
             return name;
         });
+        uploadsSettled = turn.catch(() => {});
+        return turn;
     });
 }
 
