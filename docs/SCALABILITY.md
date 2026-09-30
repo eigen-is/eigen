@@ -109,6 +109,7 @@ machine, using Caddy as the only router so the application never hashes an owner
 | SSE connections    | Per-server                     | Each user connects to their home's server    |
 | Team membership    | Auth DB queries                | Shared auth DB handles this                  |
 | Backup jobs + restore mark | In-memory per server         | Home-local already; only the admin route's `getHome` becomes a relay call ([BACKUP.md](BACKUP.md)) |
+| Data epochs        | Read once per process (`lib/home/data-epoch.ts`), so no other process sees a rotation | The home's server owns its epoch; a stream or collab open elsewhere reads it through a `home-relay.ts` pull ([SSE.md](SSE.md#a-restore-reloads-every-tab-of-the-home)) |
 
 ### Home Locality Enforcement
 

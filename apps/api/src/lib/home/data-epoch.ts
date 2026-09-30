@@ -1,22 +1,39 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { getServerDataPath, SERVER_RUNTIME_FILES } from '../config/paths';
+import { LocalFilesystem } from '../core/local-filesystem';
 
 // A tab's epoch is the server's followed by its home's. A restart keeps both; ./eigen restore leaves the server's out and
 // a restore of one home rotates that home's, so every older tab of what was restored reloads.
 let serverEpoch: string | undefined;
 // Home id to epoch; a home that was never restored on its own has none.
 let homeEpochs: Map<string, string> | undefined;
+// One write at a time, each of the map as it stands by then: two restores finishing together must not rename the
+// older map over the newer one.
+let homeEpochsSaved: Promise<void> = Promise.resolve();
+
+const serverFs = new LocalFilesystem(getServerDataPath());
 
 function drawEpoch(): string {
     return randomBytes(16).toString('base64url');
 }
 
-function loadHomeEpochs(): Map<string, string> {
-    if (!homeEpochs) {
-        const file = getServerDataPath(SERVER_RUNTIME_FILES.homeEpochs);
-        homeEpochs = new Map(existsSync(file) ? Object.entries(JSON.parse(readFileSync(file, 'utf8'))) : []);
+// A file that does not parse reads as no restores yet: the tabs of a restored home reload once more, where a throw
+// here would fail every stream and collab open. The next rotation writes it whole again.
+function readHomeEpochs(file: string): [string, string][] {
+    if (!existsSync(file)) return [];
+    try {
+        const stored: unknown = JSON.parse(readFileSync(file, 'utf8'));
+        if (typeof stored !== 'object' || stored === null) throw new Error('not an object');
+        return Object.entries(stored).filter((entry): entry is [string, string] => typeof entry[1] === 'string');
+    } catch (error) {
+        console.error(`[data-epoch] ${file} does not parse, so every home starts without an epoch of its own:`, error);
+        return [];
     }
+}
+
+function loadHomeEpochs(): Map<string, string> {
+    homeEpochs ??= new Map(readHomeEpochs(getServerDataPath(SERVER_RUNTIME_FILES.homeEpochs)));
     return homeEpochs;
 }
 
@@ -32,8 +49,13 @@ export function getDataEpoch(ownerId: string): string {
     return serverEpoch + (loadHomeEpochs().get(ownerId) ?? '');
 }
 
-export function rotateHomeDataEpoch(ownerId: string): void {
+export async function rotateHomeDataEpoch(ownerId: string): Promise<void> {
     const epochs = loadHomeEpochs();
     epochs.set(ownerId, drawEpoch());
-    writeFileSync(getServerDataPath(SERVER_RUNTIME_FILES.homeEpochs), JSON.stringify(Object.fromEntries(epochs)));
+    // A write that failed is its own caller's error, not the next one's.
+    const save = homeEpochsSaved
+        .catch(() => {})
+        .then(() => serverFs.writeAtomic(SERVER_RUNTIME_FILES.homeEpochs, JSON.stringify(Object.fromEntries(epochs))));
+    homeEpochsSaved = save;
+    await save;
 }

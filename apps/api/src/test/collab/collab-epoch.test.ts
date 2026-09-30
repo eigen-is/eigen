@@ -97,7 +97,7 @@ describe('Collab data epoch', () => {
 
     test("a restore of another home leaves this home's epoch, so its tabs sync on", async () => {
         const before = getDataEpoch(ownerId);
-        rotateHomeDataEpoch(ctx.bob.user.id);
+        await rotateHomeDataEpoch(ctx.bob.user.id);
         expect(getDataEpoch(ownerId)).toBe(before);
         const opened = await open(`?epoch=${before}`);
         expect(opened.synced).toBe(true);
@@ -105,7 +105,7 @@ describe('Collab data epoch', () => {
 
     test('a restore of this home rotates its epoch, so a tab from before reloads', async () => {
         const before = getDataEpoch(ownerId);
-        rotateHomeDataEpoch(ownerId);
+        await rotateHomeDataEpoch(ownerId);
         expect(getDataEpoch(ownerId)).not.toBe(before);
         const stale = await open(`?epoch=${before}`);
         expect(stale.synced).toBe(false);

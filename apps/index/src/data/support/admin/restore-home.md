@@ -40,10 +40,10 @@ The account is unavailable for the length of the restore, which is usually secon
 
 - Anyone using that account gets a "Restore in progress" message. Requests fail until the restore finishes, then work again.
 - Nobody is signed out. Sessions stay as they are.
-- Every open Eigen tab of the account reloads itself once the restore is done, in every app, so it shows the restored content instead of what it was holding. This can take up to 15 seconds. For a team, that goes for the tabs of every member.
+- Every open Eigen tab of the account reloads itself once the restore is done, in every app, so it shows the restored content instead of what it was holding. This usually takes a few seconds, and can take up to a minute. For a team, that goes for the tabs of every member.
 - A tab that was offline during the restore reloads once, the next time it reconnects. That way it can't put old content back.
 - Other people's tabs don't reload, unless they have a document of this account open. That document reloads the same way.
-- If you restore your own account, the **Backup** section shows **Home restored** first, then your page reloads.
+- If you restore your own account, your page reloads too, and it may reload before the **Backup** section shows **Home restored**.
 - A mail client connected over IMAP keeps seeing the old mailbox until the restore finishes. Mail delivered or flagged in that window lands in the safety copy, not in the restored account. For a mail-heavy restore, either pause the mail client for the window or copy any missing messages out of the safety copy afterwards.
 
 ## Safety copies and undoing a restore

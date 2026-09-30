@@ -88,7 +88,7 @@ async function replaceHomeFolder(
             // socket on its next reconnect. Only once the new folder is whole, so no tab reloads onto the 503 of a
             // restore still running, and one that fails leaves the epoch alone with the home put back. Before the
             // completion note: a crash between the two leaves an extra reload, never a stale tab over the new home.
-            rotateHomeDataEpoch(ownerId);
+            await rotateHomeDataEpoch(ownerId);
             // The home folder is whole from here: everything after this only lets go of it. A crash
             // before this line leaves a half-written folder that only the next boot can judge, and
             // the absence of this note is what tells it so.

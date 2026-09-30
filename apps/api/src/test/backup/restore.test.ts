@@ -477,8 +477,8 @@ describe('Backup restoreHome', () => {
         expect(await closed).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: COLLAB_HOME_REPLACED_REASON });
     });
 
-    // A tab offline through the restore holds no socket to close; its reconnect names the epoch it loaded under.
-    test('draws a new data epoch for this home alone, so only its tabs that were offline reload', async () => {
+    // Every tab of this home reloads on the new epoch, connected or offline through the restore; no other home's does.
+    test('draws a new data epoch for this home alone, so only its tabs reload', async () => {
         const before = getDataEpoch(target.id);
         const other = getDataEpoch(ctx.alice.user.id);
         await restoreHome(artifact, target.id, `restore-epoch-${Date.now()}`);
@@ -906,6 +906,11 @@ describe('Backup restore of a team home', () => {
         artifact = await backup(ownerId, new Date());
     });
 
+    // Every test below restores this one artifact, so it goes once they are all done, whichever of them ran.
+    afterAll(() => {
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
     test('round-trips the team home, files and all', async () => {
         const token = ctx.alice.user.sessionToken;
         await driveUpload(
@@ -954,7 +959,6 @@ describe('Backup restore of a team home', () => {
             jest.useRealTimers();
             await member.close();
             await outsider.close();
-            rmSync(join(getBackupsDir(), artifact), { force: true });
         }
     });
 });
