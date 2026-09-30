@@ -1,155 +1,70 @@
 # Document Transform Workers
 
-> **TLDR**: Every CPU-heavy document transform — eigensheets/eigendoc/eigenslides/eigenvector previews and the vCard, message and calendar ones, HTML/PDF/XLSX/DOCX
-> exports, the xlsx/docx import and convert, and background search extraction — runs in a one-shot Bun Worker
-> behind one bounded runner (`apps/api/src/lib/document/transform/`). The main thread keeps auth/ACL, cache
-> coordination, storage I/O, media prep and the import commit; only transferred `ArrayBuffer`s and plain
-> metadata cross the boundary. Overload answers `503` — there is never a main-thread fallback.
+> **TLDR:** Every CPU-heavy document transform runs in a one-shot Bun Worker behind one bounded runner in `apps/api/src/lib/document/transform/`: the collab and `.vcf`/`.eml`/`.ics` previews, the HTML, PDF, XLSX and DOCX exports, the xlsx and docx import and convert, and the search extract. The main thread keeps access checks, cache coordination, storage I/O, media prep and the import commit. Only transferred `ArrayBuffer`s and plain data cross. Not obvious from the code: one Worker runs at a time because memory is the limit, a Worker never serves a second job, and overload answers 503 with no main-thread fallback.
 
-## Why
+## `async` does not leave the event loop
 
-`async` does not move work off Bun's event loop: awaiting a preview only suspends the caller, while Yjs
-reconstruction, formula recalc, HTML rendering, sanitization and ExcelJS/ZIP work still run on the request
-thread and pause every other API, WebSocket, SSE, mail and sync task. Before the move, a cold heavy-sheet
-preview stalled the event loop for 14.1s; through the Worker the worst delay is 9ms and the health route p95
-stays at 0.3ms. Image/video thumbnails were already off-thread (`lib/shared/thumbnail-worker.ts`) and stay
-separate.
+Awaiting a preview only suspends the caller. Yjs materialization, formula recalc, HTML rendering, sanitizing and ExcelJS or zip work still run on the request thread, and they stall every other API, WebSocket, SSE, mail and sync task. On the main thread a cold heavy-sheet preview stalled the event loop for 14.1 s. In the Worker the worst loop delay is 9 ms and the health route's p95 stays at 0.3 ms. Image and video thumbnails have their own Worker (`lib/shared/thumbnail-worker.ts`).
 
-## Architecture
+## Every transform takes one main-thread path
 
-```
-Main thread                                       One-shot Bun Worker
-  route auth / ACL                                  materializeYjsState(payload)
-  preview-cache lookup + in-flight dedupe           dispatch on request kind (dynamic imports)
-  capture compressed Yjs blobs (SELECT-only txn)    parse snapshot / replay ops / (export-only) recalc
-  media prep (URL map or export buffers)            render / sanitize / convert / serialize
-  runner admission                                  return bytes or text + warnings
-  cache write / response / import commit
-```
+`run-transform.ts` is the one seam. It checks admission, captures the source, applies the kind's limits, surfaces warnings and maps failures, so a new operation is a thin wrapper plus a pure converter in the Worker. `worker.ts` dispatches on a closed switch over the request union, so nothing in a message can pick a module or a path. It loads each format module lazily, so a doc preview never evaluates the sheet engine or ExcelJS.
 
-| File (`apps/api/src/lib/document/transform/`) | Role |
-|---|---|
-| `run-transform.ts`  | The one main-thread seam every transform goes through (`runTransformToText` / `runTransformToBytes` / `runFileTransformToText` / import variants): owns capture timing, per-operation deadline, admission, warning surfacing, failure mapping |
-| `runner.ts`         | Admission + Worker lifecycle only, no document logic; `TRANSFORM_LIMITS` lives here |
-| `worker.ts`         | Operation dispatch with lazy imports — a doc preview never evaluates the sheet engine or ExcelJS |
-| `protocol.ts`       | Closed discriminated request/response unions, transfer lists, result↔request pairing, result sizing. Two source shapes: a collab job carries the captured Yjs payload, a bytes job (the vCard, `.eml` and `.ics` previews, both imports) carries a transferred `ArrayBuffer`. A preview result is a string either way — a bytes preview carries its typed payload as JSON |
-| `collab-source.ts`  | Main-thread capture of the compressed Yjs payload (`readYjsStatePayload`) |
+A job carries one of two sources (`protocol.ts`). A collab job carries the compressed Yjs blobs `captureCollabSource` copies out of `data.db` in a SELECT-only transaction ([DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md#a-reader-takes-a-ydoc-never-a-mount)). A bytes job, an import or a `.vcf`, `.eml` or `.ics` preview, carries the file's bytes. A bytes preview returns its typed payload as a JSON string.
 
-Every operation follows the same layout: a Worker-pure module per type behind a thin main-thread entry.
+The callers and what they render are in [PREVIEWS.md](PREVIEWS.md), [EXPORT.md](EXPORT.md) and [SEARCH.md](SEARCH.md).
 
-| Operation | Main-thread entry | Worker-pure modules | Detail doc |
-|---|---|---|---|
-| Preview  | `preview/preview-document.ts` (collab), `preview/preview-cache.ts` (bytes) | `preview/eigen{doc,slides,sheets,vector}-render.ts`, `preview/{vcard,eml,ics}-preview.ts` | [PREVIEWS.md](PREVIEWS.md) |
-| Export   | `export/export-document.ts` (`runDocumentExport` + the format→envelope table) | `export/{doc,sheets,vector}/{render,transform}.ts`, `export/canvas/{render,transform}.ts` (both canvas types) | [EXPORT.md](EXPORT.md) |
-| Import / convert | `import/import-document.ts` | `import/{doc,sheets}/transform.ts` | [EXPORT.md](EXPORT.md), [SHEETS.md](SHEETS.md) |
-| Search extraction | `search/extract-text.ts` | `search/extract-render.ts` | [SEARCH.md](SEARCH.md) |
+## Only buffers and plain data cross the boundary
 
-**Boundary rules.** Workers receive transferred `ArrayBuffer`s (compressed Yjs blobs, upload bytes, previewed file bytes, media
-buffers) and clone-safe metadata — never a `Mount`, `ManagedDatabase`, `Y.Doc`, storage handle, callback or
-class instance. A module the Worker imports must never statically reach `preview/preview-cache.ts` (it would
-drag sharp and the sheet engine into every document Worker) — the reason `document/media.ts` (light, both
-sides) and `export/media.ts` (screen previews, main thread) are separate files. Inside the Worker graph,
-import `ApiError` from `core/errors`, never the core barrel: the barrel pulls auth/home-relay/ExifTool into
-the Worker bundle (measured: 10.3MB → 4.7MB when fixed). Purity is verified by bundling each Worker entry.
+The Worker receives transferred `ArrayBuffer`s (Yjs blobs, upload bytes, file bytes, media buffers) and clone-safe metadata. It never gets a `Mount`, a database, a `Y.Doc`, a storage handle, a callback or a class instance.
 
-The Yjs capture relies on one invariant: the snapshot flush deletes every update with `id <= lastUpdateId` in
-the same transaction that inserts the snapshot (`collab/collabDocument.ts`), so "snapshot + newer updates" is
-always the complete state. Corrupt blobs are skipped with a warning, matching live-read behavior.
+Errors come back as a small typed code plus an optional HTTP status, never a cloned `Error`. So an import's 400 and 413 survive the boundary, and a converter that fails to load is a 500, because a broken install is not a bad upload. The runner shape-checks every response (`isValidResponse`), so a half-valid one becomes a structured failure instead of a promise that never settles.
 
-## Admission and limits
+## The Worker graph stays light
 
-One process-wide runner: **one active Worker** (one ExcelJS/Yjs heap at a time — memory, not cores, is the
-limiting resource), a queue of 16 with foreground (user waits) and background (stale preview regeneration,
-search extraction) priorities. Per-kind limits live in `TRANSFORM_LIMITS` (`runner.ts`):
+A module the Worker imports must never statically reach `preview/preview-cache.ts`. That would drag sharp and the sheet engine into every Worker, and it is why `document/media.ts` (light, both sides) and `export/media.ts` (screen previews, main thread) are separate files.
 
-| Kind | Kill deadline | Admission cost |
-|---|---|---|
-| preview       | 30s  | 15s |
-| export        | 120s | 30s |
-| import        | 120s | 30s |
-| extract-text  | 30s  | 15s |
+Inside the Worker graph `ApiError` comes from `core/errors`, never the `core` barrel. The barrel pulls auth, the home relay and ExifTool into the Worker bundle: 10.3 MB against 4.7 MB. `buildfordocker` (`apps/api/package.json`) bundles each Worker entry, and that bundle is how purity is checked. Production runs `src/index.ts` directly, and ExcelJS, Turbodocx and mammoth stay external in `node_modules`.
 
-`TRANSFORM_LIMITS` is keyed by kind, not document type, so the three bytes previews run under the same `preview` row as the collab ones. The deadline bounds runaways; the admission cost is what a job is expected to cost the queue. Because these
-routes are synchronous, a queued request holds its HTTP connection open — foreground admission is therefore
-bounded by predicted wait (summed admission costs, max 120s), not queue length alone. Overflow rejects with a
-human-readable `503` ("The server is busy…" — `useExportDocument` shows the raw text). Background work may
-hold at most 8 of the 16 slots so mass reindexing cannot starve foreground admission, and dropped background
-jobs are safe: the `contentDirty` bit or a later preview request re-enqueues them. Admission is checked
-*before* expensive preparation (Yjs capture, export media prep, upload copies, the convert source read).
+## A capture is always the whole document
 
-Known consequence, accepted: under adversarially slow jobs the worst-case foreground connection hold is
-~8–10 min (costs under-predict; the per-job deadline still kills runaways — 503-not-hang holds).
+The snapshot flush deletes every update with `id <= lastUpdateId` in the same transaction that inserts the snapshot (`collab/collabDocument.ts`). So the newest snapshot plus the newer updates is the complete state, and the capture reads nothing else. A blob that fails to decode is skipped with a `corrupt-blobs-skipped` warning, as on a live load.
 
-## Worker lifecycle: one-shot, no warm pool
+## One Worker runs at a time
 
-Workers are terminated after every outcome — success, structured failure, deadline, crash, cancellation,
-shutdown (`gracefulShutdown` closes the runner before mount teardown). This is a **decision, not a default**
-(2026-08-04, measured):
+Memory is the limit, not cores: one ExcelJS or Yjs heap exists at a time. A Bun Worker isolates the event loop, not the address space, so a native out-of-memory still takes the API down. The sheet cell cap fires only after ExcelJS has loaded the workbook ([EXPORT.md](EXPORT.md#zip-guards-run-before-the-parser-inflates-anything)). So concurrency 1, the one-shot lifetime, the zip guards and the output byte guards are all load-bearing.
 
-- Worker spawn is 2–4ms; the real one-shot cost is module evaluation, 0.3–0.8s per job.
-- A terminated heavy Worker retains ~5–7MB RSS; a reused Worker stays flat — so churn has a real cost.
-- But a mixed-operation warm Worker showed a pathological sheets-preview → slides-preview interaction: a 127s
-  render and +10.6GB RSS (suspect: shared isomorphic-dompurify jsdom state). Unreachable with one-shot
-  Workers.
+## Admission is bounded by predicted wait
 
-Any future pooling discussion starts from that pathology. The test suite was tuned instead (route round-trips
-only where they pin contracts).
+The queue holds 16 jobs at two priorities. Foreground is a user waiting. Background is the search extract and a stale preview's regeneration. A queued request holds its HTTP connection open, so foreground admission is capped by predicted wait, the summed admission costs of the queued and active jobs (at most 120 s), not by queue length alone. Background work may hold at most 8 of the 16 slots, so a mass reindex can't starve users. A dropped background job is safe: the `contentDirty` bit or the next preview request enqueues it again.
 
-## Failure and security rules
+`TRANSFORM_LIMITS` (`runner.ts`) gives each kind a kill deadline and an admission cost. The deadline bounds a runaway. The cost is what a job is expected to take from the queue. It is keyed by kind, not document type, so the bytes previews run under the same `preview` row as the collab ones.
 
-- **Never a main-thread fallback** — after timeout, crash, overflow or module-load failure. A fallback would
-  reintroduce the server-wide freeze this layer removes.
-- Errors cross the boundary as small typed codes plus an optional HTTP status — never cloned `Error`
-  instances. Import `400`/`413` semantics survive the boundary; a converter *module-load* failure is `500`
-  (a broken install is not a bad upload). Worker responses are shape-validated at the trust boundary
-  (`isValidResponse` in `runner.ts`); a half-valid response becomes a structured failure, not a hung promise.
-- A recalc failure inside the Worker returns replayed values plus a `recalc-failed` warning — it never fails
-  a preview or export. Preview and extract reads never recalc at all; export is the only recalc'ing read
-  (SHEETS.md § The editor computes on write, the server only what nobody computed).
-- Sanitization happens inside the Worker: previews use DOMPurify with `FORCE_BODY` only; exports go through
-  `sanitizeExportHtml` (the call-scoped data-URI-only SSRF hook — see [EXPORT.md](EXPORT.md)).
-- Decompressed-size guards (`import/zip-size-guard.ts`) run before ExcelJS or mammoth materialize anything;
-  the sheet cell-count guard still only fires after load, which is a core reason concurrency stays at 1.
-- The import commit stays on the main thread: the write-permission recheck is the last await before the Yjs
-  transaction, and a Worker crash leaves source and target untouched. `/convert` deliberately takes no abort
-  signal — its result is a durable document and a page reload must not kill a minute-long conversion (it
-  surfaces via the drive SSE refresh); `/import` into an existing document keeps its signal.
-- Bun Workers isolate the event loop, not the address space — a native OOM can still take the API down.
-  One-shot lifetime, concurrency 1, the zip guards and the output byte guards are therefore all mandatory.
-- Job logs carry kind, type, format, sizes and timings — never document content, upload bytes or HTML.
+Admission is checked before the expensive preparation: the Yjs capture, export media, upload copies, the convert source read. A refused job pays for nothing. It gets a readable 503 ("The server is busy…"), which `useExportDocument` shows verbatim.
 
-## Build and deployment
+Costs under-predict a slow job. If every admitted job runs to its deadline, a foreground connection can wait 8 to 10 minutes, but it still ends in a result or an error, never a hang. A queued job holds its full payload rather than a closure that prepares it at start. That is bounded in practice, and the refactor waits for a trigger in [ROADMAP-POST-1.md](ROADMAP-POST-1.md).
 
-The Worker is an explicit build entry next to `src/index.ts` and the thumbnail worker (`buildfordocker` in
-`apps/api/package.json`). Large format modules (ExcelJS, Turbodocx, mammoth) load via dynamic import inside
-the Worker's operation switch and stay externalized in runtime `node_modules`. Production executes
-`src/index.ts` directly; `buildfordocker` remains the Worker-graph purity verification tool.
+## A Worker serves one job, then dies
 
-## Observability
+The runner terminates the Worker after every outcome: success, structured failure, deadline, crash, cancellation, shutdown. `gracefulShutdown` closes the runner before the mount teardown, so no result races it.
 
-The runner logs one line per job: kind/type/format, priority, queue depth and wait, main-thread capture and
-media-prep ms, startup/transform/total ms, input/output bytes, outcome (success, document error, timeout,
-crash, cancellation, overload) and warning codes. `apps/api/src/test/transform-benchmark.ts` measures
-end-to-end latency, event-loop delay, health-route latency and RSS on heavy fixtures (run from `apps/api`:
-`bun src/test/transform-benchmark.ts [--memory]`); gates: health p95 < 150ms, loop p99 < 100ms, no single
-delay > 250ms.
+The measurements behind the choice: a spawn costs 2 to 4 ms, and the real cost is module evaluation, 0.3 to 0.8 s per job. A terminated heavy Worker leaves 5 to 7 MB of RSS behind, where a reused one stays flat. But a warm Worker running mixed jobs turned a sheets preview followed by a slides preview into a 127 s render and 10.6 GB of extra RSS, suspected to be shared isomorphic-dompurify jsdom state. A one-shot Worker can't reach that state, and a warm pool has to rule it out first.
 
-## History
+## A failure never falls back to the main thread
 
-Built as the `transform-workers` program, shipped 2026-08-04 (phases: sheets preview → sheet export/import →
-doc/slides/docx → extraction + tuning, plus an external review round). Representative wins: cold heavy sheet
-preview 14.1s stall → 9ms worst delay; xlsx export worst loop delay 519ms → 3.4ms; 619ms module evaluation
-and 72MB RSS moved off the API process. Documents and snapshots stayed byte-identical through the move
-(goldens in `src/test/document/document-transform.test.ts`; runner behavior in `document-transform-runner.test.ts`;
-route contracts in the export/import route tests).
+Not after a timeout, a crash, an overload or a module that fails to load. A fallback would bring back the server-wide freeze this layer exists to remove.
 
-Post-ship amendments: preview/extract reads no longer recalc (2026-08-05, after a legacy never-computed
-workbook looped a ~39s recalc against the 30s deadline); the sheets snapshot moved to the v2 dictionary
-format (SHEETS.md § The snapshot is interned and written only through the codec).
+- A recalc failure returns the replayed values with a `recalc-failed` warning and never fails the job. Only an export recalcs ([SHEETS.md](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)).
+- Sanitizing runs inside the Worker. Every HTML preview and export body goes through `sanitizeExportHtml` ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-weasyprint-fetches), [PREVIEWS.md](PREVIEWS.md#no-preview-body-may-fetch-a-url-the-file-chose)). The `.eml` preview uses the mail reader's own DOMPurify config.
+- The import commit stays on the main thread ([EXPORT.md](EXPORT.md#an-import-writes-nothing-until-the-worker-succeeds)).
 
-Accepted drifts still standing:
+## The runner logs one line per job, overload included
 
-- Queued jobs retain their payloads rather than preparation closures — bounded in practice; the closure
-  refactor is parked on the [post-1.0 roadmap](ROADMAP-POST-1.md) with its trigger.
-- Preview conditional-format aggregate rules compute over the render window, not the full declared range
-  (PREVIEWS.md § An Eigen document previews a slice, off the event loop); the editor canvas is the fidelity reference.
+Each job logs its kind, type, format, priority, queue depth and wait, the main-thread capture and media-prep time, startup, transform and total time, input and output bytes, the outcome and its warning codes. The main-thread times are there because a fast Worker behind slow preparation is not a successful offload. A refused admission logs its reason and the queue state. No line carries document content, upload bytes or HTML.
+
+`apps/api/src/test/transform-benchmark.ts` measures latency, event-loop delay, health-route latency and RSS on heavy fixtures. It is not a test: run it from `apps/api` with `bun src/test/transform-benchmark.ts [--memory]`. Its gates are a health p95 under 150 ms, a loop p99 under 100 ms and no single delay over 250 ms. Output bytes are pinned by the goldens in `src/test/document/document-transform.test.ts`, and runner behaviour in `document-transform-runner.test.ts`.
+
+## See also
+
+- [DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md): the readers the Worker runs
+- [PREVIEWS.md](PREVIEWS.md), [EXPORT.md](EXPORT.md), [SEARCH.md](SEARCH.md): what each operation renders

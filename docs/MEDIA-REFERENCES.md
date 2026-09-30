@@ -1,107 +1,55 @@
-# Media References Inside Eigendocs
+# Media References
 
-> **TLDR**: All embedded file references (images, chats, attachments) in Yjs/SQLite state are stored as **file names**,
-> not pathIds or URLs. Names are unique per folder (enforced by `Mount.assertUniqueName()`). At render time, names are
-> resolved to pathIds via folder contents. This makes document copy trivial (no Yjs rewriting) and eliminates
-> `API_HOST` portability issues.
+> **TLDR:** An Eigen document refers to its embedded files (images, backgrounds, comment threads, chat attachments) by **file name**, never by path id or URL. Names are unique per folder, and the folders are fixed (`{doc}/media/`, `{doc}/chat/`, `{chat}/media/`), so a name resolves to a path id at render time through `MediaResolverProvider` (`packages/lib/src/core/drive/media-resolver.tsx`). A copied container therefore needs no rewriting, and no stored reference bakes in the API host. Not obvious from the code: a new upload renders from a `pending:` name before it lands, a container document attached to a chat or card is the one reference by id, and a download never goes through the preview URL the image renders from.
 
-## Why Names
+## A name survives a copy, a path id does not
 
-When a document is copied, every embedded file gets a new UUID but keeps its **name**. If Yjs stores names instead of
-UUIDs, references in the copy resolve correctly against the copy's own files. No rewriting needed.
+A copy gives every file a new id but keeps its name. A reference by name therefore resolves against the copy's own files, and a copy is a plain byte copy of the tree with no Yjs or SQLite rewriting ([STORAGE.md](STORAGE.md#copy-goes-anywhere-a-move-stays-in-its-mount)). A URL would also bake in the API host, which differs per deployment.
 
-Two guarantees make this safe:
+Two things keep it safe. `Mount.assertUniqueName` refuses a second live item with the same name in a folder, case-insensitively. And the folders are fixed: media in `{doc}/media/`, comment threads in `{doc}/chat/`, a chat's attachments in `{chat}/media/`. An upload that collides is renamed (`getUniqueFileName`, `apps/api/src/lib/drive/naming.ts`), so a caller always stores the name the upload returned, not the one it sent.
 
-1. **Names are unique per folder** — `Mount.assertUniqueName()` enforces case-insensitive uniqueness. Upload conflicts
-   are handled by `getUniqueFileName()` (`apps/api/src/lib/drive/naming.ts`), which appends ` (2)`, ` (3)`, … before
-   the extension (`photo.png` → `photo (2).png`). It is extension-aware, case-insensitive, and re-uses an existing
-   ` (n)` suffix as its starting counter instead of stacking a second one.
-2. **Folder structure is fixed** — media files are always in `{doc}/media/`, chats in `{doc}/chat/`, chat attachments
-   in `{chat}/media/`.
+## Where the names live
 
-## What's Stored Where
+| Document | Field | Names |
+|---|---|---|
+| eigendoc | `figure` node's `mediaName` | an image in `media/` |
+| eigensheets | a floating image's `mediaName` (`SheetImage`) | an image in `media/` |
+| eigenslides, eigenvector | `image` element's `mediaName` | an image in `media/` |
+| eigenslides | a frame's `background`, image variant only | an image in `media/` |
+| docs, sheets, slides, vector | `comments` card's `chatName` | a thread in `chat/` |
+| eigenstickies | `tasks` card's `chatName` | a thread in `chat/` |
+| eigenchat | a message's `attachments` | files in the room's `media/` |
 
-| App | Yjs/SQLite Field | Stores | Example |
-|-----|-----------------|--------|---------|
-| **eigendoc** | `figure.mediaName` | Image file name | `photo.png` |
-| **eigendoc** | `comments` card `.chatName` | Chat folder name | `comment-1710523456.eigenchat` |
-| **eigenslides / eigenvector** | `image` element `.mediaName` | Image file name | `photo.png` |
-| **eigenslides / eigenvector** | frame `.background` (image variant) | Background image name | `{ type: 'image', mediaName: 'bg.jpg', fit: 'cover' }` |
-| **eigenstickies** | `tasks` card `.chatName` | Chat folder name | `task-1710523456.eigenchat` |
-| **eigenchat** | `messages.attachments` | JSON array of file names | `["photo.png","doc.pdf"]` |
+The docs `figure` (`packages/lib/src/docs/eigendoc/nodes/figure.ts`) keeps `mediaName` as its only durable reference; `src` is filled in at render. A comment anchor is not a name: the docs `comment` mark and a canvas element's `commentCardIds` hold a card id, and the card holds the `chatName`. The infinite canvas' own `meta.background` is a color token and never names media.
 
-The eigendoc image node is `figure` (`packages/lib/src/docs/eigendoc/nodes/figure.ts`) — an inline
-atom whose `mediaName` attribute is the only durable reference; `src` is filled in at render time.
-A canvas frame background (one slide) is a `BackgroundFill` union (`packages/lib/src/types/background.ts`)
-of `solid` / `gradient` / `image`, and only the `image` variant carries a `mediaName`; the infinite
-canvas' own `meta.background` is a plain color token and never names media. Comment
-anchors are the exception to the name rule: the eigendoc `comment` mark stores a `cardId`, and the
-card itself (in the doc's Yjs `comments` map) carries the `chatName`.
+## A container document is attached by id
 
-## Resolution at Render Time
+A chat message's or a comment card's attachment (`ChatAttachment`) is either a name or an `AttachmentReference` (`packages/lib/src/types/drive-reference.ts`), which carries the owner, mount and id. A plain drive file is copied into `media/` and stored by name, because the container's ACL has to cover it for every member (`useChatRoom`, `useResolveCardAttachments`). A container document stays a reference to the original, so the thread opens the live document rather than a copy of it. A mail draft's linked documents are the same `AttachmentReference` ([MAIL.md](MAIL.md)).
 
-Names are resolved to pathIds (for API calls) or URLs (for `<img src>`) using `useFolderLookup`, which wraps
-`useFolderContent` with refetch-on-miss logic (triggers a single refetch per unknown name to handle the case where
-a collaborator uploads a file and Yjs propagates the name before the query cache updates).
+## A name resolves at render, and a miss refetches once
 
-**`MediaResolverProvider`** (`packages/lib/src/core/drive/media-resolver.tsx`) wraps editors and provides:
-- `resolveMediaUrl(name)` — returns preview URL or null (uses `getDrivePreviewUrl`)
-- `resolveMediaPath(name)` — returns DrivePath or undefined
-- `resolveChatId(name)` — returns pathId or null
-- `mediaFolderId` — the media folder's pathId (used by clipboard for `needsReUpload()` comparison)
-- `startUpload(file)` — returns `{ pendingName, promise }` and starts the upload
+`MediaResolverProvider` wraps the docs, sheets, slides, vector and stickies editors. It resolves a name to a preview URL (`resolveMediaUrl`), a path (`resolveMediaPath`) or a thread id (`resolveChatId`) through `useFolderLookup`, the folder listing plus a refetch on a miss. A collaborator's upload reaches this tab through Yjs before the listing does, so an unknown name triggers one refetch, and only one per name, so a name that never appears can't loop.
 
-Used by: eigendoc editor (wraps `TiptapEditor`), eigenslides editor, eigensheets editor
-(`apps/sheets/src/components/sheets/editor.tsx`), eigenstickies board.
+For a file a mutation just returned, use `resolveMediaUrlByPath`: the listing still predates that write, so the by-name lookup would miss. A chat resolves its attachments the same way, through `useAttachmentSubjects` on the room's `media/` folder.
 
-### The `pending:` optimistic-name protocol
+## A new upload renders from a `pending:` name
 
-`startUpload(file)` hands back a synthetic name — `pending:<uuid>`, recognized by
-`isPendingMediaName()` — and registers a local `URL.createObjectURL(file)` blob for it. The caller
-writes that name into Yjs immediately, so `resolveMediaUrl()` returns the blob URL and the image
-renders on the very next frame. This is how insert and paste feel instant.
+`startUpload(file)` returns a synthetic `pending:<uuid>` name (`isPendingMediaName`) and registers a local blob URL for it. The caller writes that name into Yjs at once, so the image renders on the next frame and insert and paste feel instant. When the upload settles, the caller swaps every node still holding the pending name to the real one: `swapFigureMediaName` in docs, the canvas' untracked element update, `replaceImageMediaName` in sheets. A failed upload settles to `null`, and the caller removes the node.
 
-When the upload settles, the caller swaps every node still holding the pending name over to the real
-file name (`swapFigureMediaName` in the docs editor, the canvas engine's untracked element swap, its equivalent in sheets); a failed
-upload resolves to `null` and the caller removes the node instead. The provider preloads the server
-preview URL (`probe.decode()`) before revoking the blob and defers the revoke by a macrotask, so the
-`<img src>` swap has no flash. Pending entries live in a ref, not state — the context value stays
-stable, so an upload does not re-render every image in the document.
+The provider decodes the server preview before it revokes the blob, and it revokes on the next macrotask, so the `<img>` swap doesn't flash. Pending entries live in a ref, not state, so the context value stays stable and an upload doesn't re-render every image in the document.
 
-A `pending:` name that outlives its tab (closed or reloaded mid-upload) is a zombie: nothing can
-resolve it any more. Sheets sweeps those on mount; the other surfaces do not yet.
+A tab closed mid-upload leaves its `pending:` name in the document, and no one can resolve it. Docs, sheets and the canvas sweep these on open with `useZombieMediaSweep`, which waits 60 s so an upload still in flight at open can settle first.
 
-### Downloading the original
+## A download bypasses the preview
 
-`resolveMediaUrl` serves `/preview`, which re-encodes a raster image (WebP, at most 2560 px), so a download never goes through it. Every embedded image's right-click menu carries the shared `DownloadImageMenuItem` (`packages/ui/src/components/context-menu/object-menu-items.tsx`): the host resolves the media name with `resolveMediaPath` (sheets: `hooks.resolveImagePath`) and the row calls `downloadDriveFile(path)` (`@workspace/lib/download`), the file's `/download` route with its original bytes and name. No path yet (a `pending:` upload, a deleted file) hides the row. Downloading is a read, so viewers get the menu too: the canvas object menu (vector, slides) shrinks to the row alone, sheets' floating images open their own menu instead of the cell menu under them, and a docs figure opens a menu of Download plus the comment rows ([COMMENTS.md](COMMENTS.md#a-docs-image-opens-its-own-menu-and-paints-its-own-mark)).
+`resolveMediaUrl` serves `/preview`, which re-encodes a raster image as WebP of at most 2560 px. So every embedded image's context menu carries `DownloadImageMenuItem` (`packages/ui/src/components/context-menu/object-menu-items.tsx`), which resolves the path and calls `downloadDriveFile` for the original bytes and name. A pending upload or a deleted file has no path, so the row hides. Downloading is a read, so viewers get it too: the canvas object menu shrinks to that row, a sheets image opens its own menu instead of the cell's, and a docs figure opens Download plus the comment rows ([COMMENTS.md](COMMENTS.md#a-docs-image-opens-its-own-menu-and-paints-its-own-mark)).
 
-For **chat attachments**, resolution happens differently: `ChatMessageList` receives `mediaFolderId` from `useChatRoom`,
-and `AttachmentChip` calls `useFolderContent` on that folder to resolve attachment names.
+## The clipboard carries ids, the document stores names
 
-## Clipboard
+The clipboard is transient, so its image item carries the source's path ids to find and download the file. On paste into another container the image re-uploads, and the document stores the name the upload returned ([CLIPBOARD.md](CLIPBOARD.md#a-pasted-image-re-uploads-as-the-pasting-user)).
 
-The clipboard is **transient** (not persisted in Yjs), so it keeps pathId-based source identifiers for re-upload
-detection and downloading:
+## See also
 
-```typescript
-type EigenClipboardImageItem = {
-    type: 'image';
-    mediaName: string;              // file name (stored in Yjs on paste)
-    sourcePathId: string;           // for downloading if re-upload needed
-    sourceParentId: string | null;  // for needsReUpload() comparison
-    sourceOwnerId: string;          // for constructing download URL
-    sourceMountId: string;          // for constructing download URL
-}
-```
-
-`needsReUpload()` compares `sourceParentId !== targetMediaFolderId`. On re-upload, the new file's **name** is stored
-in Yjs (may differ from original if there's a name conflict).
-
-## Document Copy
-
-With name-based references, document copy is straightforward:
-
-1. Deep copy the directory tree (recursive `createFile`/`createFolder`, copy file bytes)
-2. Done — no Yjs rewriting, no SQLite rewriting, no pathId mapping
-
-All internal references resolve correctly because they use names, not UUIDs.
+- [STORAGE.md](STORAGE.md): container layout and copy
+- [CLIPBOARD.md](CLIPBOARD.md): the image item and re-upload
+- [COMMENTS.md](COMMENTS.md) and [CHAT.md](CHAT.md): cards, threads and attachments

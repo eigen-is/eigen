@@ -1,111 +1,41 @@
 # Inline File Editing in Drive
 
-> **TLDR**: Native text files (markdown, JSON, YAML, XML, HTML, CSS, CSV, TypeScript, etc.) can be edited inline in the
-> Drive app via `/drive/edit/:ownerId/:mountId/:pathId`. Markdown gets a Tiptap WYSIWYG editor with source mode toggle.
-> All other text formats use CodeMirror 6. Saving is explicit (`Mod+S` or the Save button) — there is no
-> auto-save. Optimistic concurrency via `updatedAt` timestamps. Both editors host the shared `⌘F` bar.
+> **TLDR:** Drive edits plain text files in place at `/drive/edit/:ownerId/:mountId/:pathId`: markdown in a Tiptap WYSIWYG editor with a CodeMirror source mode, every other text format in CodeMirror 6. The server side is `apps/api/src/routes/editor.ts` over `apps/api/src/lib/drive/inline-edit.ts`, the client `apps/drive/src/components/editor/`. Not obvious from the code: saving is explicit with no auto-save, a save is guarded by the file's `updatedAt` rather than a lock, the client and the server decide editability from two different lists, and markdown frontmatter never reaches the WYSIWYG editor.
 
-## How It Works
+## A file opens read-only, and Edit needs write access
 
-1. User clicks a text file in Drive → `isInlineEditable(mimeType, name)` check
-2. Navigates to `/drive/edit/:ownerId/:mountId/:pathId` route
-3. File opens in **view mode** (read-only) with breadcrumb toolbar + "Edit" button
-4. "Edit" button shown only if user has write permission (checked via `useCheckPermissions`)
-5. Clicking "Edit" switches to **edit mode** with formatting toolbar + Cancel/Save buttons
-6. Save persists content via `PUT /editor/...` with concurrency check, then returns to view mode
-7. "Cancel" drops the buffer and returns to view mode — no confirmation
-8. Back arrow (←) leaves the editor for the parent folder; with unsaved changes it asks to confirm
-   the discard first
+Drive opens a file at the inline-edit route when `isInlineEditable(mimeType, name)` accepts it (`getDriveItemUrl`). The page starts in view mode, which renders the server's text preview, the same body the Drive preview shows. The Edit button shows only when `useCheckPermissions` reports write access. Edit mode mounts the editor on the content from `GET /editor/.../content`, and the heavy editors load lazily (`native-file-editor.tsx`).
 
-## Supported File Types
+## Two lists decide what is editable
 
-Markdown, plain text, web formats, the common programming languages, shell scripts, config files
-and diffs. The list itself lives in code, not here — `isInlineEditable()` in
-`packages/lib/src/types/drive.ts` is the source of truth (extension-based), alongside
-`INLINE_EDITABLE_MIMES` (MIME-based). Edit mode (`markdown` / `plaintext` / `code`) is determined
-by `getTextPreviewMode()` in `packages/lib/src/constants/preview.ts`.
+The client asks `isInlineEditable` (`packages/lib/src/types/drive.ts`): a MIME list plus the extension list it shares with the code preview. The server asks `getTextPreviewMode` (`packages/lib/src/constants/preview.ts`), which also picks the edit mode (`markdown`, `plaintext` or `code`) on both sides. The server refuses a file it has no mode for with a 400. It checks on save as well as on read, because otherwise a write collaborator could overwrite a binary, such as a container's `data.db`, with text.
 
-## API
+## A read refuses bytes it can't round-trip
 
-### GET `/editor/:ownerId/:mountId/:pathId/content`
+The read decodes with strict UTF-8 (`TextDecoder` with `fatal: true`) and answers 400 on invalid bytes. A lossy decode would replace them silently, and the next save would write the replacements back over the file. Read and save share one 5 MB cap (`MAX_INLINE_EDIT_SIZE`), so a save never produces a file the next open would refuse.
 
-Returns file content for editing. Uses `getTextPreviewMode()` to determine `editMode`. For markdown, extracts
-frontmatter separately. Content is decoded with strict UTF-8 validation (`TextDecoder('utf-8', { fatal: true })`).
+## Frontmatter stays out of the WYSIWYG editor
 
-```typescript
-{ editMode: 'markdown' | 'plaintext' | 'code', content: string, frontmatter: string | null, mimeType: string, updatedAt: Date }
-```
+For markdown the server splits a leading `---` YAML block off the body (`extractFrontmatter`) and returns it separately. The editor edits the body only, and the save reattaches the block unchanged. A markdown parser would read the fence as a rule or a heading and lose the YAML.
 
-Errors: 400 "File type not supported for inline editing" (unsupported type), 400 "File contains invalid UTF-8
-encoding" (binary/non-UTF-8 file), 404 (not found), 413 (>5MB).
+## A save is guarded by `updatedAt`, not a lock
 
-### PUT `/editor/:ownerId/:mountId/:pathId/content`
+The client sends the `updatedAt` it loaded as `expectedUpdatedAt`. When the file has changed since, the save writes nothing and answers `{ conflict: true }` with the current timestamp. `ConflictDialog` then offers Overwrite (the same save with `force`), Reload or Download your version. Before it writes, the route runs `enforceMountQuota` with the new size and the old one, so a save can also fail on quota. The route composes `prepareSaveContent` with `Drive.writeFileContent`, and access goes through `getSharedDrive`.
 
-Saves file content. Uses `expectedUpdatedAt` for optimistic concurrency.
+## Saving is explicit
 
-```typescript
-// Request
-{ content: string, frontmatter?: string, expectedUpdatedAt: string, force?: boolean }
+There is no auto-save: the file changes on disk only when the user saves. `use-editor-save.ts` owns the whole save story:
 
-// Response (success)
-{ conflict: false, updatedAt: string }
+- `Mod+S` saves and stays in edit mode. The toolbar's Save runs the same save, then returns to view mode.
+- A `beforeunload` guard warns when the buffer is dirty and the tab closes.
+- `confirmClose` gates both the Back arrow and Cancel behind a discard dialog when the buffer is dirty, and passes straight through when it is clean.
+- A conflict response opens `ConflictDialog`.
 
-// Response (conflict)
-{ conflict: true, currentUpdatedAt: string }
-```
+## Both editors host the find bar
 
-Before writing, the route runs `enforceMountQuota()` with the encoded buffer length and the file's
-old size — a save can fail on quota, not only on conflict.
+The markdown editor implements the `DocSearchController` contract with `useProseMirrorSearchController`, the controller the docs app uses, in WYSIWYG mode, and with `use-codemirror-search-controller.ts` in source mode. The code editor uses the CodeMirror one. See [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md).
 
-## Concurrency
+## See also
 
-- `updatedAt` is the concurrency token
-- On save, compare `expectedUpdatedAt` with current file's `updatedAt`
-- Mismatch returns conflict response (unless `force: true`)
-- ConflictDialog offers: Overwrite / Reload / Download your version
-
-## Editors
-
-**Markdown**: Tiptap WYSIWYG with source mode toggle (CodeMirror). Extensions: StarterKit, Markdown
-(tiptap-markdown), Typography, TaskList, TaskItem, Link, Image, CodeBlockLowlight, Table.
-
-**Code/Plaintext**: CodeMirror 6 with syntax highlighting for 14 languages, dark mode (oneDark), line wrapping,
-undo/redo via toolbar buttons.
-
-## Saving
-
-There is **no auto-save**. `use-editor-save.ts` owns the whole save story:
-
-- `Mod+S` saves; the toolbar Save button runs the same `doSave()`, then exits edit mode.
-- A `beforeunload` guard warns when the buffer is dirty and the tab is closing.
-- `confirmClose()` gates **leaving the editor** (the Back arrow) behind a discard-confirm dialog when
-  dirty, and passes straight through when not. The Cancel button does not go through it — Cancel is
-  an explicit discard.
-- A conflict response flips the state to `conflict` and opens `ConflictDialog`.
-
-## Find and Replace
-
-Both inline editors host the shared `⌘F` find/replace bar. The markdown editor implements the
-`DocSearchController` contract with `useProseMirrorSearchController` (the same controller the docs
-app uses) for WYSIWYG mode and a CodeMirror controller (`use-codemirror-search-controller.ts`) for
-source mode; the code editor uses the CodeMirror one. Both wrap their subtree in `DocSearchProvider`.
-See [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md).
-
-## Where the Code Lives
-
-**Backend.** Routes in `apps/api/src/routes/editor.ts` — thin, ACL through `getSharedDrive()`, quota
-through `enforceMountQuota()`, persistence through `Drive.writeFileContent()`. The editor logic
-itself is in `apps/api/src/lib/drive/inline-edit.ts`: `getEditableContent()` (read + UTF-8 validation
-+ frontmatter split), `prepareSaveContent()` (editability gate via `getTextPreviewMode` + conflict check
-+ reattach + size cap), `extractFrontmatter()` / `reattachFrontmatter()`, `MAX_INLINE_EDIT_SIZE`. There is
-no `saveEditableContent()` — the route composes `prepareSaveContent` with `Drive.writeFileContent`.
-
-**Shared hooks.** `packages/lib/src/core/editor/hooks/` — `use-file-content.ts` (GET query) and
-`use-file-save.ts` (PUT mutation + cache invalidation). `getTextPreviewMode()` in
-`packages/lib/src/constants/preview.ts` picks the edit mode on both sides.
-
-**Frontend.** The route is `apps/drive/src/routes/_auth.edit.$ownerId.$mountId.$pathId.tsx`;
-everything else sits in `apps/drive/src/components/editor/` — `native-file-editor.tsx` dispatches
-view/edit mode and lazy-loads the heavy editors, `markdown-editor.tsx` and `code-editor.tsx` are the
-two editors (each with its read-only viewer), plus the toolbars, `use-editor-save.ts` and
-`conflict-dialog.tsx`.
+- [PREVIEWS.md](PREVIEWS.md): the text preview view mode renders
+- [QUOTA.md](QUOTA.md): what `enforceMountQuota` counts
