@@ -22,7 +22,7 @@ import type { ParsedCard, VCardLine } from '../vcard/types';
 import type { Contacts } from './contacts';
 import * as schema from './schema';
 
-// Whole-file vCard transfer; import replays each card through the CardDAV PUT seam. See docs/CONTACTS.md § Import replays each card through the CardDAV PUT.
+// Whole-file vCard transfer; import replays each card through putCard, as a CardDAV PUT does. See docs/CONTACTS.md § Import replays each card through the CardDAV PUT.
 
 // X-EIGEN-ID carries the account's uuid, which no export may hand out.
 const isEigenName = (name: string) => name.startsWith('X-EIGEN-');

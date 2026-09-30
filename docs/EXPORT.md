@@ -100,11 +100,11 @@ The Worker runs `recalcSheets` and encodes the snapshot as computed, so no later
 
 ## Contacts and calendar export splice stored bytes
 
-`POST /contacts/:ownerId/export` concatenates the stored vCards and `POST /calendar/:ownerId/export` splices the stored VCALENDAR lines. There is no renderer, Worker or sanitizer, because the stored bytes are already the format. See [CONTACTS.md](CONTACTS.md#import-replays-each-card-through-the-carddav-put) and [ICALENDAR.md](ICALENDAR.md#export-splices-the-stored-lines).
+`POST /contacts/:ownerId/export` concatenates the stored vCards and `POST /calendar/:ownerId/export` splices the stored VCALENDAR lines. There is no renderer, Worker or sanitizer, because the stored bytes are already the format. See [CONTACTS.md](CONTACTS.md#import-replays-each-card-through-the-carddav-put) and [CALENDAR.md](CALENDAR.md#export-splices-the-stored-lines).
 
 ## See also
 
 - [SHEETS.md](SHEETS.md): the sheets HTML and the xlsx round-trip drifts
 - [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md): the runner, its limits and the Worker boundary
-- [CANVAS.md](CANVAS.md) and [CANVAS-ARROWS.md](CANVAS-ARROWS.md): the scene and the arrow label
+- [CANVAS.md](CANVAS.md): the scene and the arrow label
 - [PREVIEWS.md](PREVIEWS.md): the previews that share these renderers

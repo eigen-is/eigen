@@ -8,7 +8,7 @@ Every route runs `authenticateBasic` (an app password, then the primary-password
 
 A client finds the server at `/.well-known/caldav`, which the Caddy edge redirects to `/dav/`. The Integrations page also lists one address per calendar, because a client such as Thunderbird subscribes per collection and never revisits the home for a calendar made later. How to connect a device is the help-center article [connect/calendar-client](../apps/index/src/data/support/connect/calendar-client.md).
 
-OPTIONS and the `Basic realm="Eigen DAV"` challenge live in `app.ts`, one header for the whole `/dav` tree. `MKCALENDAR` creates a calendar at the client's chosen id and answers 405 when it is taken. `MKCOL` creates nothing. Deleting the default calendar is a 403.
+OPTIONS lives in `app.ts` and the `Basic realm="Eigen DAV"` challenge in `lib/core/errors.ts`, one header for the whole `/dav` tree. `MKCALENDAR` creates a calendar at the client's chosen id and answers 405 when it is taken. `MKCOL` creates nothing. Deleting the default calendar is a 403.
 
 ## Eigen names what it creates, and keeps a client's name as written
 
@@ -28,7 +28,7 @@ A PUT often stores other bytes than it received. The store re-stamps the Eigen l
 
 The body is bounded at `EVENT_MAX_BYTES` before it is buffered, so a hostile PUT can't park up to the server's 1 GB body cap on the heap. The collection advertises the same number as `C:max-resource-size`. A UID another resource of the calendar holds is a 409 naming that resource's href. A body that won't parse, holds two UIDs, or holds no VEVENT is a 403 with the RFC 4791 precondition that broke. `dav/write-result.ts` is the one table from store result to HTTP status, shared with CardDAV.
 
-**A copy of somebody else's event takes only its alarms.** When the stored resource carries `X-EIGEN-ORGANIZER-EVENT`, the PUT keeps the stored component and adopts only the incoming `VALARM`s, matched on UID plus recurrence key. The rule reads the server's stamp, not the `ORGANIZER` address. Apple Calendar and Thunderbird write the account's own address as `ORGANIZER` on every event they create with guests, so the address alone proves nothing ([CALENDAR-INVITATIONS.md](CALENDAR-INVITATIONS.md#an-attendee-may-re-alarm-a-copy-and-nothing-more)).
+**A copy of somebody else's event takes only its alarms.** When the stored resource carries `X-EIGEN-ORGANIZER-EVENT`, the PUT keeps the stored component and adopts only the incoming `VALARM`s, matched on UID plus recurrence key. The rule reads the server's stamp, not the `ORGANIZER` address. Apple Calendar and Thunderbird write the account's own address as `ORGANIZER` on every event they create with guests, so the address alone proves nothing ([CALENDAR.md](CALENDAR.md#an-attendee-may-re-alarm-a-copy-and-nothing-more)).
 
 A PUT fans nothing out: the guests of an event a device created get no invitation until the owner edits it in the web app ([ROADMAP.md](ROADMAP.md)).
 
@@ -60,7 +60,6 @@ Under `apps/api/src/test/`: `caldav/caldav.test.ts` for the protocol, `caldav/ca
 
 ## See also
 
-- [CALENDAR.md](CALENDAR.md): the store every write lands in
-- [ICALENDAR.md](ICALENDAR.md): how the bytes are read and written
-- [CONTACTS.md](CONTACTS.md): the CardDAV twin
+- [CALENDAR.md](CALENDAR.md): the store every write lands in, and how the bytes are read and written
+- [CARDDAV.md](CARDDAV.md): the CardDAV twin
 - [WEBDAV.md](WEBDAV.md): the drive's DAV surface

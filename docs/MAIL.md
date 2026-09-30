@@ -99,7 +99,7 @@ The preview routes feed Drive's bytes-in renderers, so the quick look draws a ma
 
 ## Mail only arrives from the local MTA
 
-`POST /mail/deliver/:to` is unauthenticated but `requireLocalhost`, for Postfix. It appends the bytes to the INBOX and scans them for iMIP ([CALENDAR-INVITATIONS.md § Inbound iMIP](CALENDAR-INVITATIONS.md#inbound-imip-acts-only-on-a-sender-our-own-mta-verified)). Mail to `postmaster`, `abuse` or `noreply` (`isRoleAddress`) goes to every org admin, so DMARC reports and bounces reach a human. No account and no guest can claim those addresses.
+`POST /mail/deliver/:to` is unauthenticated but `requireLocalhost`, for Postfix. It appends the bytes to the INBOX and scans them for iMIP ([CALENDAR.md § Inbound iMIP](CALENDAR.md#inbound-imip-acts-only-on-a-sender-our-own-mta-verified)). Mail to `postmaster`, `abuse` or `noreply` (`isRoleAddress`) goes to every org admin, so DMARC reports and bounces reach a human. No account and no guest can claim those addresses.
 
 An imported `.eml` is not an arrival. It lands unread with `arrival: false`, so no notification shows a stranger's name for the user's own action. It never runs iMIP: the file has no DKIM verdict this server recorded, so an invitation inside it can't touch the calendar.
 

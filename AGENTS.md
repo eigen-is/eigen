@@ -41,7 +41,7 @@ File locations and patterns per concept (backend + frontend tables, package boun
 - Comments: [COMMENTS.md](docs/COMMENTS.md)
 - Mail: [MAIL.md](docs/MAIL.md), [IMAP.md](docs/IMAP.md)
 - Chat: [CHAT.md](docs/CHAT.md)
-- Calendar: [CALENDAR.md](docs/CALENDAR.md), [CALDAV.md](docs/CALDAV.md), [ICALENDAR.md](docs/ICALENDAR.md); invitations and iMIP: [CALENDAR-INVITATIONS.md](docs/CALENDAR-INVITATIONS.md)
+- Calendar, iCalendar, invitations and iMIP: [CALENDAR.md](docs/CALENDAR.md); CalDAV: [CALDAV.md](docs/CALDAV.md)
 - Contacts: [CONTACTS.md](docs/CONTACTS.md); CardDAV: [CARDDAV.md](docs/CARDDAV.md)
 - WebDAV: [WEBDAV.md](docs/WEBDAV.md)
 - Search: [SEARCH.md](docs/SEARCH.md); in-document find bar: [IN_DOCUMENT_SEARCH.md](docs/IN_DOCUMENT_SEARCH.md)
