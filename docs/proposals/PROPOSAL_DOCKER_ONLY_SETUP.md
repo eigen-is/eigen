@@ -135,7 +135,7 @@ Compose minimums are per file: the base stack needs the 2.20+ the guide states, 
 
 Ports 80 and 443 belong to DSM's own web services ([Synology's port list](https://kb.synology.com/en-global/DSM/tutorial/What_network_ports_are_used_by_Synology_services)). That is why the preset reuses DSM's reverse proxy instead of running edge Caddy, and why the installer never stops Synology services or edits DSM-managed webserver configuration.
 
-Publish measured runtime memory and peak build memory separately. The guide's "2 GB+ RAM" is a VPS figure for running the stack, not a promise that a NAS can compile it, which is the strongest argument for prebuilt images.
+Runtime memory is measured: about 200 MB idle and 850 MB at peak during exports, so 2 GB minimum and 4 GB recommended ([requirements](../../apps/index/src/data/support/self-hosting/requirements.md)). That is for running the stack, not a promise that a NAS can compile it, which is the strongest argument for prebuilt images.
 
 ## Updates and recovery
 
