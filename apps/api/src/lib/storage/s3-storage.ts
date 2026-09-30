@@ -112,7 +112,7 @@ export async function hardenS3Bucket(config: S3Config, noncurrentDays: number): 
 // Only a 200 counts: a refusal, a redirect or no answer at all says nothing about anyone reading it.
 async function isPubliclyReadable(config: S3Config, key: string): Promise<boolean> {
     try {
-        const url = `${s3Endpoint(config)}/${config.bucket}/${key.split('/').map(encodeURIComponent).join('/')}`;
+        const url = `${s3Endpoint(config)}/${[config.bucket, ...key.split('/')].map(encodeURIComponent).join('/')}`;
         const res = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(5000) });
         await res.body?.cancel();
         return res.status === 200;
@@ -221,6 +221,26 @@ async function checkS3Lifecycle(config: S3Config): Promise<S3LifecycleState> {
         return noncurrentDays === null ? 'none' : { noncurrentDays };
     } catch {
         return 'unknown';
+    }
+}
+
+// Whether an enabled lifecycle rule over `keyPrefix` aborts incomplete multipart uploads, which clears the parts
+// of an upload cut off before Bun could abort it. A configuration that does not read counts as none.
+export async function abortsIncompleteUploads(config: S3Config, keyPrefix: string): Promise<boolean> {
+    try {
+        const res = await signedS3Request(config, { method: 'GET', query: 'lifecycle' });
+        if (!res.ok) return false;
+        const rules = (await res.text()).split('</Rule>').filter((chunk) => chunk.includes('<Rule>'));
+        return rules.some((rule) => {
+            const prefix = rule.match(/<Prefix>\s*(.*?)\s*<\/Prefix>/)?.[1] ?? '';
+            return (
+                rule.includes('<AbortIncompleteMultipartUpload>') &&
+                /<Status>\s*Enabled\s*<\/Status>/.test(rule) &&
+                escapeXml(keyPrefix).startsWith(prefix)
+            );
+        });
+    } catch {
+        return false;
     }
 }
 

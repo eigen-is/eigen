@@ -61,6 +61,7 @@ import { FAILURES_IN_MESSAGE, verifyArchiveTransport, verifyFolder } from './ver
 
 const HOME_DELETED = 'deleted during the backup';
 const INTERRUPTED = 'interrupted by a restart';
+const UPLOAD_STOPPED = 'Eigen stopped before the upload finished';
 
 export type ServerBackupOptions = {
     level: BackupLevel;
@@ -328,7 +329,10 @@ async function pruneLocalArchives(keep: number): Promise<void> {
     if (unread.length > 0) {
         console.warn(`[backup] retention skips archives without a readable record: ${unread.join(', ')}`);
     }
+    // An archive a job still reads, as an upload does, stays until the next round.
+    const busy = new Set(listBackupJobs().flatMap((job) => (job.state === 'running' ? [job.artifact] : [])));
     for (const name of pruneServerArchives(archives, keep)) {
+        if (busy.has(name)) continue;
         fs.rmSync(path.join(dir, name), { force: true });
         fs.rmSync(serverSidecarPath(path.join(dir, name)), { force: true });
     }
@@ -394,33 +398,61 @@ async function runServerBackup(
         await writeServerSidecar(archivePath, sidecar);
         // Retention that throws must not replace the job's own outcome.
         await pruneLocalArchives(options.keep).catch(console.error);
-    }
-    // A pre-update archive exists for ./eigen rollback on this box.
-    if (getServerSettings().backups.upload.enabled && options.reason !== 'pre-update') {
-        onProgress('upload', 0, 1);
-        const { state, error } = await uploadAndRecord(archivePath, sidecar);
-        job.upload = { state, error };
+        // An archive that verified goes even when a home failed: the owner heard of the home, and the rest of the
+        // server is worth its copy off the box. A pre-update archive exists for ./eigen rollback on this box.
+        const uploads = getServerSettings().backups.upload.enabled && options.reason !== 'pre-update';
+        if (uploads && sidecar.verify?.status === 'verified') {
+            job.uploadJobId = startUploadJob(archivePath, job.startedBy).id;
+        }
     }
     return name;
 }
 
-// Uploads an archive that ended done and records how it went beside it. A failure is never the archive's,
-// which stays good here: the owner hears of it, and the record says so for the list and ./eigen backup.
-async function uploadAndRecord(archivePath: string, sidecar: ServerArchiveSidecar): Promise<ServerArchiveUpload> {
+// Uploads take turns: two at once share one uplink and gain nothing.
+let uploadsSettled: Promise<unknown> = Promise.resolve();
+
+function inUploadTurn<T>(run: () => Promise<T>): Promise<T> {
+    const turn = uploadsSettled.then(run);
+    uploadsSettled = turn.catch(() => {});
+    return turn;
+}
+
+// An archive's upload is a job of its own that holds no slot, so a backup never waits for the bucket. A failure
+// is never the archive's, which stays good here: the owner hears of it, and the record says so for the list and
+// ./eigen status. Shutdown aborts it, and the next Upload sends it whole.
+function startUploadJob(archivePath: string, startedBy: string | undefined): BackupJob {
+    const name = path.basename(archivePath);
+    const ownerId = orgOwnerId(getPublicConfig().orgId);
+    return startBackupJob('upload', ownerId, startedBy, (job, onProgress, signal) => {
+        job.artifact = name;
+        return inUploadTurn(async () => {
+            signal.throwIfAborted();
+            onProgress('upload', 0, 1);
+            const upload = await uploadAndRecord(archivePath, signal);
+            if (upload.error) throw new Error(upload.error);
+            return name;
+        });
+    });
+}
+
+async function uploadAndRecord(archivePath: string, signal: AbortSignal): Promise<ServerArchiveUpload> {
     const { s3, keep } = getServerSettings().backups.upload;
     const name = path.basename(archivePath);
+    let upload: ServerArchiveUpload;
     try {
-        sidecar.upload = { state: 'done', at: new Date(), key: await uploadServerArchive(archivePath, s3, keep) };
+        upload = { state: 'done', at: new Date(), key: await uploadServerArchive(archivePath, s3, keep, signal) };
     } catch (error) {
-        sidecar.upload = { state: 'failed', at: new Date(), key: backupKey(s3, name), error: describeError(error) };
-        alertOwner(`upload-${name}`, `${name}: ${sidecar.upload.error}`, 'Server backup not uploaded');
+        const reason = signal.aborted ? UPLOAD_STOPPED : describeError(error);
+        upload = { state: 'failed', at: new Date(), key: backupKey(s3, name), error: reason };
+        alertOwner(`upload-${name}`, `${name}: ${reason}`, 'Server backup not uploaded');
     }
-    await writeServerSidecar(archivePath, sidecar);
-    return sidecar.upload;
+    const sidecar = await readServerSidecar(archivePath).catch(() => null);
+    if (sidecar) await writeServerSidecar(archivePath, { ...sidecar, upload });
+    return upload;
 }
 
 // The owner's Upload, for an archive whose upload failed or that predates the destination. Only one that
-// ended done goes, and never a pre-update one. It runs in the org's slot, so never beside a server backup.
+// verified goes, and never a pre-update one.
 export async function startArchiveUpload(name: string, startedBy: string): Promise<BackupJob> {
     const parsed = parseServerArchiveName(name);
     if (!parsed) throw new ApiError(400, 'Not a server backup name');
@@ -429,16 +461,8 @@ export async function startArchiveUpload(name: string, startedBy: string): Promi
     const archivePath = path.join(backupsDirPath(), name);
     const sidecar = await readServerSidecar(archivePath);
     if (!sidecar || !fs.existsSync(archivePath)) throw new ApiError(404, 'Archive not found');
-    if (sidecar.state !== 'done') throw new ApiError(409, `${name} did not finish, so it is not uploaded`);
-    const ownerId = orgOwnerId(getPublicConfig().orgId);
-    return startBackupJob('upload', ownerId, startedBy, async (job, onProgress) => {
-        job.artifact = name;
-        onProgress('upload', 0, 1);
-        const { state, error } = await uploadAndRecord(archivePath, sidecar);
-        job.upload = { state, error };
-        if (error) throw new Error(error);
-        return name;
-    });
+    if (sidecar.verify?.status !== 'verified') throw new ApiError(409, `${name} did not verify, so it is not uploaded`);
+    return startUploadJob(archivePath, startedBy);
 }
 
 // Starts the whole-server backup and resolves once it is under way. One runs at a time, in the org's

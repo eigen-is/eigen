@@ -11,7 +11,7 @@ import { member as memberSchema, organization as organizationSchema, team as tea
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getDataRoot } from '../../lib/config/paths';
 import { getMailDomain, getOrgName, getServerConfig } from '../../lib/config/server-config';
-import { updateServerSettings } from '../../lib/config/server-settings';
+import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import type { ControlStatus } from '../../lib/config/server-status';
 import * as mailer from '../../lib/core/mailer';
 import { LocalStorage } from '../../lib/storage/local-storage';
@@ -140,39 +140,53 @@ describe('owner-only settings', () => {
             expect(res.status).toBe(403);
         });
 
-        test("the destination's secret reaches the owner and no admin", async () => {
+        test("the destination's secret reaches nobody, the owner included, nor a save's answer", async () => {
             await updateServerSettings({ backups: { upload: { s3: destination } } });
-            const forAdmin = await assertJson<ServerSettings>(
-                await authedRequest(admin.sessionToken, '/settings/server'),
+            for (const user of [admin, ctx.alice.user]) {
+                const settings = await assertJson<ServerSettings>(
+                    await authedRequest(user.sessionToken, '/settings/server'),
+                );
+                expect(settings.backups.upload.s3).toEqual({ ...destination, secretAccessKey: '' });
+            }
+            const saved = await assertJson<ServerSettingsSaved>(
+                await putBackups(ctx.alice.user.sessionToken, { upload: { s3: destination } }),
             );
-            expect(forAdmin.backups.upload.s3).toEqual({ ...destination, secretAccessKey: '' });
-            const forOwner = await assertJson<ServerSettings>(
-                await authedRequest(ctx.alice.user.sessionToken, '/settings/server'),
-            );
-            expect(forOwner.backups.upload.s3).toEqual(destination);
+            expect(saved.backups.upload.s3.secretAccessKey).toBe('');
+            expect(getServerSettings().backups.upload.s3).toEqual(destination);
         });
 
-        test('a blank secret, as an admin reads it, keeps the stored one', async () => {
+        test('a blank secret keeps the stored one while the key, endpoint and bucket stay', async () => {
             await updateServerSettings({ backups: { upload: { s3: destination } } });
             const saved = await assertJson<ServerSettingsSaved>(
                 await putBackups(ctx.alice.user.sessionToken, {
                     upload: { s3: { ...destination, prefix: 'weekly', secretAccessKey: '' }, keep: 12 },
                 }),
             );
-            expect(saved.backups.upload.s3).toEqual({ ...destination, prefix: 'weekly' });
             expect(saved.backups.upload.keep).toBe(12);
+            expect(getServerSettings().backups.upload.s3).toEqual({ ...destination, prefix: 'weekly' });
         });
 
-        test('a blank secret beside another key id is refused, and nothing is saved', async () => {
+        test('a blank secret beside another key id, endpoint or bucket is refused, and nothing is saved', async () => {
             await updateServerSettings({ backups: { upload: { s3: destination } } });
+            for (const changed of [
+                { accessKeyId: 'another-key' },
+                { endpoint: 'https://s3.elsewhere.example' },
+                { bucket: 'another-bucket' },
+            ]) {
+                const res = await putBackups(ctx.alice.user.sessionToken, {
+                    upload: { s3: { ...destination, ...changed, secretAccessKey: '' } },
+                });
+                expect(res.status).toBe(400);
+            }
+            expect(getServerSettings().backups.upload.s3).toEqual(destination);
+        });
+
+        test('a bucket name S3 does not allow is refused, even with uploads off', async () => {
             const res = await putBackups(ctx.alice.user.sessionToken, {
-                upload: { s3: { ...destination, accessKeyId: 'another-key', secretAccessKey: '' } },
+                upload: { s3: { ...destination, bucket: 'Eigen_Backups' } },
             });
             expect(res.status).toBe(400);
-            const settings = await assertJson<ServerSettings>(
-                await authedRequest(ctx.alice.user.sessionToken, '/settings/server'),
-            );
-            expect(settings.backups.upload.s3).toEqual(destination);
+            expect(await res.text()).toContain('bucket name');
         });
 
         describe('turned on', () => {
@@ -181,7 +195,7 @@ describe('owner-only settings', () => {
 
             beforeAll(async () => {
                 fake = new FakeS3Server(new LocalStorage(mkdtempSync(join(TEST_DATA_DIR, 'settings-bucket-'))));
-                bucket = { ...(await fake.start()), bucket: 'eigen-backups', prefix: '' };
+                bucket = { ...(await fake.start()), bucket: 'eigen-backups', prefix: '', accessKeyId: 'backup-key-id' };
             });
 
             beforeEach(async () => {
@@ -199,8 +213,14 @@ describe('owner-only settings', () => {
                 const first = await assertJson<ServerSettingsSaved>(
                     await putBackups(ctx.alice.user.sessionToken, { upload: { enabled: true, s3: bucket } }),
                 );
-                expect(first.backups.upload).toEqual({ enabled: true, s3: bucket, keep: 30 });
+                expect(first.backups.upload).toEqual({
+                    enabled: true,
+                    s3: { ...bucket, secretAccessKey: '' },
+                    keep: 30,
+                });
+                expect(getServerSettings().backups.upload.s3).toEqual(bucket);
                 expect(first.notice).toBe(BACKUP_DESTINATION_NOTICE);
+                expect(first.warning).toContain('AbortIncompleteMultipartUpload');
                 const again = await assertJson<ServerSettingsSaved>(
                     await putBackups(ctx.alice.user.sessionToken, { upload: { keep: 20 } }),
                 );
@@ -209,7 +229,9 @@ describe('owner-only settings', () => {
             });
 
             test('a data bucket and a public one are refused, and nothing is saved', async () => {
-                await updateServerSettings({ defaults: { mount: { s3Config: { ...bucket, prefix: 'drives' } } } });
+                await updateServerSettings({
+                    defaults: { mount: { s3Config: { ...bucket, prefix: 'drives', accessKeyId: 'data-key' } } },
+                });
                 const dataBucket = await putBackups(ctx.alice.user.sessionToken, {
                     upload: { enabled: true, s3: { ...bucket, prefix: 'backups' } },
                 });

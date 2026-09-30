@@ -57,9 +57,10 @@ export function enumerateHomes(usersDbPath: string): { homes: ServerHome[]; orph
     }
 }
 
-// Every home folder's mounts, safety copies included, read off its settings.json so no home boots.
-export function listHomeMounts(): { folder: string; mounts: BackupMountSettings[] }[] {
-    const homes: { folder: string; mounts: BackupMountSettings[] }[] = [];
+// Every home folder's mounts, safety copies included, read off its settings.json so no home boots. `mounts` is
+// null when the file does not read.
+export function listHomeMounts(): { folder: string; mounts: BackupMountSettings[] | null }[] {
+    const homes: { folder: string; mounts: BackupMountSettings[] | null }[] = [];
     for (const dirName of [USER_HOMES_DIR, TEAM_HOMES_DIR]) {
         const dir = path.join(getDataRoot(), dirName);
         if (!fs.existsSync(dir)) continue;
@@ -67,8 +68,8 @@ export function listHomeMounts(): { folder: string; mounts: BackupMountSettings[
             if (!entry.isDirectory()) continue;
             const settingsPath = path.join(dir, entry.name, PATHS.SETTINGS);
             if (!fs.existsSync(settingsPath)) continue;
-            const mounts = parseHomeMountSettings(fs.readFileSync(settingsPath, 'utf8'));
-            homes.push({ folder: entry.name, mounts: Object.values(mounts ?? {}) });
+            const mounts = readHomeMounts(settingsPath);
+            homes.push({ folder: entry.name, mounts: mounts && Object.values(mounts) });
         }
     }
     return homes;
@@ -77,6 +78,14 @@ export function listHomeMounts(): { folder: string; mounts: BackupMountSettings[
 // Whether some home keeps a drive in a bucket: Full + S3 is offered only then. A safety copy is no home.
 export function hasS3Mounts(): boolean {
     return listHomeMounts().some(
-        ({ folder, mounts }) => !parseSafetyCopyName(folder) && mounts.some((mount) => mount.storageType === 's3'),
+        ({ folder, mounts }) => !parseSafetyCopyName(folder) && mounts?.some((mount) => mount.storageType === 's3'),
     );
+}
+
+function readHomeMounts(settingsPath: string): ReturnType<typeof parseHomeMountSettings> {
+    try {
+        return parseHomeMountSettings(fs.readFileSync(settingsPath, 'utf8'));
+    } catch {
+        return null;
+    }
 }

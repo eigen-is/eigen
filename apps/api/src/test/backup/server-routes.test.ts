@@ -94,6 +94,10 @@ describe('Server backup routes', () => {
             expect((await api.admin['server-backup'].post({ level: 'light' })).status).toBe(403);
             expect((await api.admin['server-backup'].archives.get()).status).toBe(403);
             expect((await api.admin['server-backup'].archives({ name }).delete()).status).toBe(403);
+            expect((await api.admin['server-backup'].archives({ name }).upload.post()).status).toBe(403);
+            expect((await api.admin['server-backup'].destination.check.post({ bucket: 'eigen-backups' })).status).toBe(
+                403,
+            );
         }
         expect(serverRecords().sort()).toEqual([name, `${name}.json`]);
     });

@@ -23,21 +23,30 @@ const BACKUP_JOB_RETENTION_MS = 60 * 60 * 1000;
 // Progress is a stream, the poke is not: a home with thousands of files would otherwise put one SSE
 // frame per file on the admin's channel. State changes always emit.
 const PROGRESS_POKE_MS = 500;
-// How long shutdown waits for a backup or a verify. A restore is waited out however long it takes:
-// killed between the move-aside and the install, it leaves the user with no home folder at all.
+// How long shutdown waits for a backup, a verify or an aborted upload. A restore is waited out however long it
+// takes: killed between the move-aside and the install, it leaves the user with no home folder at all.
 const SHUTDOWN_JOB_BUDGET_MS = 30_000;
 
 const jobs = new Map<string, BackupJob>();
 // Owners whose one-per-home slot is held by work that is not a job of that home: a safety-copy
 // delete, or the server backup while it captures the home. `released` is what a waiter awaits.
 const heldSlots = new Map<string, { holder: string; released: Promise<void> }>();
-// The same jobs while they run, with the promise to wait on. Kept apart from the map above, which
-// is serialized to the admin pane.
-const inFlight = new Map<string, { kind: BackupJob['kind']; ownerId: string; settled: Promise<void> }>();
+// The same jobs while they run, with the promise to wait on and the controller shutdown aborts an upload
+// with. Kept apart from the map above, which is serialized to the admin pane.
+const inFlight = new Map<
+    string,
+    { kind: BackupJob['kind']; ownerId: string; settled: Promise<void>; abort: AbortController }
+>();
 
 // A server backup and an archive's upload are the owner's alone (D11): they name a server archive.
 export function isServerJob(kind: BackupJob['kind']): boolean {
     return kind === 'server-backup' || kind === 'upload';
+}
+
+// An upload reads a finished archive and touches no home, so it holds no slot: an hour of it must not keep
+// ./eigen update's pre-update backup waiting. Uploads wait for each other on their own (server-job.ts).
+function holdsSlot(kind: BackupJob['kind']): boolean {
+    return kind !== 'upload';
 }
 
 function dropExpiredJobs(): void {
@@ -68,7 +77,7 @@ function requireHomeSlotFree(ownerId: string, starting?: BackupJob['kind']): voi
     const held = heldSlots.get(ownerId);
     if (held) throw new ApiError(409, `A ${held.holder} of this home is running`);
     for (const running of jobs.values()) {
-        if (running.ownerId === ownerId && running.state === 'running') {
+        if (running.ownerId === ownerId && running.state === 'running' && holdsSlot(running.kind)) {
             const shown = !isServerJob(running.kind) || (starting && isServerJob(starting));
             const named = running.artifact && shown ? `: ${running.artifact}` : '';
             throw new ApiError(409, `A ${running.kind} of this home is already running${named}`);
@@ -81,7 +90,7 @@ function slotBusy(ownerId: string): Promise<void> | null {
     const held = heldSlots.get(ownerId);
     if (held) return held.released;
     for (const running of inFlight.values()) {
-        if (running.ownerId === ownerId) return running.settled;
+        if (running.ownerId === ownerId && holdsSlot(running.kind)) return running.settled;
     }
     return null;
 }
@@ -123,14 +132,14 @@ export function waitForHomeSlot(ownerId: string, holder: string): Promise<() => 
 }
 
 // Runs `run` in the background and hands the caller the job to report back. Every run resolves to
-// the artifact it worked on, so a finished job names one whatever its kind.
+// the artifact it worked on, so a finished job names one whatever its kind. `signal` aborts at shutdown.
 export function startBackupJob(
     kind: BackupJob['kind'],
     ownerId: string,
     startedBy: string | undefined,
-    run: (job: BackupJob, onProgress: SnapshotProgress) => Promise<string>,
+    run: (job: BackupJob, onProgress: SnapshotProgress, signal: AbortSignal) => Promise<string>,
 ): BackupJob {
-    requireHomeSlotFree(ownerId, kind);
+    if (holdsSlot(kind)) requireHomeSlotFree(ownerId, kind);
 
     const job: BackupJob = {
         id: randomUUID(),
@@ -152,7 +161,8 @@ export function startBackupJob(
         poke(job);
     };
 
-    const settled = run(job, onProgress)
+    const abort = new AbortController();
+    const settled = run(job, onProgress, abort.signal)
         .then((artifact) => {
             job.state = 'done';
             job.artifact = artifact;
@@ -166,7 +176,7 @@ export function startBackupJob(
             inFlight.delete(job.id);
             poke(job);
         });
-    inFlight.set(job.id, { kind, ownerId, settled });
+    inFlight.set(job.id, { kind, ownerId, settled, abort });
 
     return job;
 }
@@ -174,10 +184,12 @@ export function startBackupJob(
 // Shutdown: a running snapshot reads databases the home teardown is about to close, and a restore
 // killed halfway leaves a home folder that only the boot-time recovery can put back. Restores are
 // waited out in full; a backup or verify gets a budget and is then left to die with the process
-// (its staging folder goes in the next boot's wipe).
+// (its staging folder goes in the next boot's wipe). An upload may take hours, so it is aborted,
+// which aborts its multipart upload, and gets the same budget to record that it did not finish.
 export async function drainBackupJobs(): Promise<void> {
     const running = [...inFlight.values()];
     if (running.length === 0) return;
+    for (const entry of running) if (entry.kind === 'upload') entry.abort.abort();
     const restores = running.filter((entry) => entry.kind === 'restore').map((entry) => entry.settled);
     const rest = running.filter((entry) => entry.kind !== 'restore').map((entry) => entry.settled);
     console.log(`[backup] waiting for ${running.length} running job(s) before shutdown`);

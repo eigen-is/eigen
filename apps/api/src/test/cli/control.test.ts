@@ -503,6 +503,7 @@ describe('the server backup on the control socket', () => {
                 scheduleEnabled: false,
                 newest: null,
                 scheduledFailure: null,
+                scheduledNotUploaded: null,
                 newestGoodFullAt: null,
             });
         });
@@ -522,8 +523,26 @@ describe('the server backup on the control socket', () => {
                 scheduleEnabled: false,
                 newest: { name, createdAt: '2026-09-02T02:00:00.000Z', state: 'failed', bytes: null, error: 'no room' },
                 scheduledFailure: { name, createdAt: '2026-09-02T02:00:00.000Z', error: 'no room' },
+                scheduledNotUploaded: null,
                 newestGoodFullAt: '2026-09-01T02:00:00.000Z',
             });
+        });
+
+        test('names the newest scheduled archive that saved but did not reach the bucket', async () => {
+            const at = '2026-09-03T02:00:00.000Z';
+            const upload = { state: 'failed', at, key: 'nightly/x.tar', error: 'bucket refused' };
+            const archivePath = writeRecord('scheduled', 'full', at, { state: 'done', upload });
+            writeFileSync(archivePath, 'archive bytes');
+            const name = archivePath.slice(archivePath.lastIndexOf('/') + 1);
+            const { backup } = await getStatus();
+            expect(backup.scheduledFailure).toBeNull();
+            expect(backup.scheduledNotUploaded).toEqual({ name, createdAt: at, error: 'bucket refused' });
+
+            writeRecord('scheduled', 'full', at, {
+                state: 'done',
+                upload: { ...upload, state: 'done', error: undefined },
+            });
+            expect((await getStatus()).backup.scheduledNotUploaded).toBeNull();
         });
     });
 

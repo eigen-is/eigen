@@ -39,6 +39,16 @@ import {
 // `ne(user.role, 'guest')` alone excludes NULL-role orphans in SQLite, so OR in isNull.
 const nonGuestUsers = () => or(isNull(user.role), ne(user.role, 'guest'));
 
+// The backup bucket's secret reaches no browser, the owner's included: a copy there is one more to lose, and a
+// blank one sent back keeps it (withSavedSecret).
+function withoutBackupSecret(settings: ServerSettings): ServerSettings {
+    const { upload } = settings.backups;
+    return {
+        ...settings,
+        backups: { ...settings.backups, upload: { ...upload, s3: { ...upload.s3, secretAccessKey: '' } } },
+    };
+}
+
 export const settingsRouter = new Elysia({ name: 'settings' })
     .use(betterAuth)
 
@@ -46,19 +56,14 @@ export const settingsRouter = new Elysia({ name: 'settings' })
         '/settings/server',
         async ({ user }): Promise<ServerSettings> => {
             await requireAdmin(user.id);
-            const settings = getServerSettings();
-            // The secrets are the owner's, as on /settings/s3config; an admin's team mount form takes the rest.
+            const settings = withoutBackupSecret(getServerSettings());
+            // The mount secret is the owner's, as on /settings/s3config; an admin's team mount form takes the rest.
             if ((await getOrgRole(user.id)) === 'owner') return settings;
             const { s3Config } = settings.defaults.mount;
             const mount = s3Config
                 ? { ...settings.defaults.mount, s3Config: { ...s3Config, secretAccessKey: '' } }
                 : settings.defaults.mount;
-            const { upload } = settings.backups;
-            return {
-                ...settings,
-                defaults: { mount },
-                backups: { ...settings.backups, upload: { ...upload, s3: { ...upload.s3, secretAccessKey: '' } } },
-            };
+            return { ...settings, defaults: { mount } };
         },
         { auth: true },
     )
@@ -78,7 +83,11 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             const backups = destination && { ...body.backups, upload: destination.upload };
             await updateServerSettings({ ...body, ...(mail && { mail }), ...(backups && { backups }) });
             // The bucket's keys are inside the archives in it: the owner hears once to keep them elsewhere.
-            return { ...getServerSettings(), ...(destination?.changed && { notice: BACKUP_DESTINATION_NOTICE }) };
+            return {
+                ...withoutBackupSecret(getServerSettings()),
+                ...(destination?.changed && { notice: BACKUP_DESTINATION_NOTICE }),
+                ...(destination?.warning && { warning: destination.warning }),
+            };
         },
         {
             body: t.Object({

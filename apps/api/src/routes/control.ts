@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import type { BackupJob } from '@workspace/lib/types/backup';
 import { BACKUP_LEVELS, ON_DEMAND_BACKUP_REASONS } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
-import { getBackupJob } from '../lib/backup/jobs';
+import { getBackupJob, isServerJob } from '../lib/backup/jobs';
 import { backupsDirPath } from '../lib/backup/paths';
 import { startServerBackup } from '../lib/backup/server-job';
 import { getControlSocketPath } from '../lib/config/paths';
@@ -15,15 +15,15 @@ import { createSetupLink, type SetupLink } from '../lib/setup/setup-token';
 import { type ResetPasswordResult, resetUserPassword } from '../lib/user/reset-password';
 
 // What ./eigen backup follows: plain JSON with no dates, since the CLI reads it without Eden's reviver.
-export type ControlBackupJob = Pick<BackupJob, 'id' | 'state' | 'progress' | 'artifact' | 'error' | 'upload'> & {
+export type ControlBackupJob = Pick<BackupJob, 'id' | 'state' | 'progress' | 'artifact' | 'error' | 'uploadJobId'> & {
     bytes: number | null;
 };
 
 // `bytes` is null until the archive is renamed into place.
-function toControlJob({ id, state, progress, artifact, error, upload }: BackupJob): ControlBackupJob {
+function toControlJob({ id, state, progress, artifact, error, uploadJobId }: BackupJob): ControlBackupJob {
     const archivePath = artifact && path.join(backupsDirPath(), artifact);
     const bytes = archivePath ? (fs.statSync(archivePath, { throwIfNoEntry: false })?.size ?? null) : null;
-    return { id, state, progress, artifact, error, upload, bytes };
+    return { id, state, progress, artifact, error, uploadJobId, bytes };
 }
 
 // The CLI's online commands, on the Unix socket `docker compose exec` reaches as the API's user; never the web.
@@ -56,7 +56,7 @@ export const controlRouter = new Elysia({ name: 'control' })
     )
     .get('/backup/jobs/:id', ({ params }): ControlBackupJob => {
         const job = getBackupJob(params.id);
-        if (job?.kind !== 'server-backup') throw new ApiError(404, 'Job not found');
+        if (!job || !isServerJob(job.kind)) throw new ApiError(404, 'Job not found');
         return toControlJob(job);
     });
 

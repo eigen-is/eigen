@@ -34,6 +34,8 @@ export type ControlStatus = {
         } | null;
         // The newest scheduled attempt, when it failed.
         scheduledFailure: { name: string; createdAt: string; error: string | null } | null;
+        // The newest scheduled attempt, when its archive is here but its last upload failed.
+        scheduledNotUploaded: { name: string; createdAt: string; error: string | null } | null;
         newestGoodFullAt: string | null;
     };
 };
@@ -60,6 +62,14 @@ async function getBackupStatus(): Promise<ControlStatus['backup']> {
                       name: scheduled.name,
                       createdAt: scheduled.createdAt.toISOString(),
                       error: scheduled.record.error ?? null,
+                  }
+                : null,
+        scheduledNotUploaded:
+            scheduled?.record?.upload?.state === 'failed'
+                ? {
+                      name: scheduled.name,
+                      createdAt: scheduled.createdAt.toISOString(),
+                      error: scheduled.record.upload.error ?? null,
                   }
                 : null,
         newestGoodFullAt: goodFull?.createdAt.toISOString() ?? null,

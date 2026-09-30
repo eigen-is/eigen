@@ -50,6 +50,8 @@ export type S3LifecycleState = 'none' | 'foreign' | 'unknown' | { noncurrentDays
 export type S3CheckResult = {
     ok: boolean;
     message: string;
+    // Something the bucket lacks that does not stop it from working.
+    warning?: string;
     versioning?: S3VersioningState;
     lifecycle?: S3LifecycleState;
 };
@@ -132,8 +134,9 @@ export type ServerSettings = {
     };
 };
 
-// What a save answers: the settings, and a notice the owner must read once about what they just saved.
-export type ServerSettingsSaved = ServerSettings & { notice?: string };
+// What a save answers: the settings, a notice the owner must read once about what they just saved, and
+// what the backup bucket's check warned of.
+export type ServerSettingsSaved = ServerSettings & { notice?: string; warning?: string };
 
 export type MountResponse = {
     id: string;

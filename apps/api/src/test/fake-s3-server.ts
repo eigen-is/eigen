@@ -5,11 +5,13 @@ import type { StorageBackend } from '../lib/storage';
 import { DUMMY_S3 } from './fault-storage-helpers';
 
 // A local S3 for the real S3Storage: faults on the lazy S3File's HEAD, GET and DELETE, which FaultStorage never sees.
-// It lists what went in through it, takes multipart uploads, and refuses an unsigned request unless `publicRead`.
+// It lists what went in through it, takes multipart uploads, answers its `lifecycle`, and refuses an unsigned
+// request unless `publicRead`.
 
 // stall-body: headers and half the body, then silence; cut: half, then close; fail-get: a 500 on GET only;
-// fail-put: a 500 on PUT only, every part of a multipart upload included; deny: a 403 AccessDenied;
-// no-bucket: a 404 NoSuchBucket. HEAD and DELETE honor only stall, fail, deny and no-bucket; PUT only fail-put.
+// fail-put: a 500 on PUT only, every part of a multipart upload included; slow-put: each PUT and part answered
+// half a second late; short-head: a HEAD one byte short; deny: a 403 AccessDenied; no-bucket: a 404 NoSuchBucket.
+// HEAD and DELETE honor only stall, fail, deny, no-bucket and short-head; PUT only fail-put and slow-put.
 export type S3Fault =
     | 'stall'
     | 'stall-body'
@@ -18,8 +20,12 @@ export type S3Fault =
     | 'fail'
     | 'fail-get'
     | 'fail-put'
+    | 'slow-put'
+    | 'short-head'
     | 'deny'
     | 'no-bucket';
+
+const SLOW_PUT_MS = 500;
 
 export class FakeS3Server {
     // Keyed by object key.
@@ -29,6 +35,8 @@ export class FakeS3Server {
     abandoned = 0;
     // Answer a GET without a signature, as a bucket anyone may read does.
     publicRead = false;
+    // The bucket's lifecycle configuration as a GET ?lifecycle answers it; null is none.
+    lifecycle: string | null = null;
     // Multipart uploads begun and neither completed nor aborted, by upload id.
     readonly openUploads = new Map<string, { key: string; parts: Map<number, Buffer> }>();
     abortedUploads = 0;
@@ -105,6 +113,12 @@ export class FakeS3Server {
             reply(socket, method, '403 Forbidden', 'AccessDenied');
             return;
         }
+        if (method === 'GET' && url.searchParams.has('lifecycle')) {
+            if (this.lifecycle === null) reply(socket, method, '404 Not Found', 'NoSuchLifecycleConfiguration');
+            else replyXml(socket, this.lifecycle);
+            return;
+        }
+        if (method === 'PUT' && fault === 'slow-put') await Bun.sleep(SLOW_PUT_MS);
         const uploadId = url.searchParams.get('uploadId');
         if (method === 'POST' && url.searchParams.has('uploads')) {
             const id = `upload-${this.nextUploadId++}`;
@@ -174,7 +188,8 @@ export class FakeS3Server {
             return;
         }
         if (method === 'HEAD') {
-            socket.write(`HTTP/1.1 200 OK\r\nContent-Length: ${size}\r\nETag: "e"\r\n\r\n`);
+            const told = fault === 'short-head' ? size - 1 : size;
+            socket.write(`HTTP/1.1 200 OK\r\nContent-Length: ${told}\r\nETag: "e"\r\n\r\n`);
             return;
         }
         if (fault === 'empty') {
