@@ -892,7 +892,6 @@ rather than inlining `queryClient.invalidateQueries`.
 
 | Name | Import from | File |
 |------|-------------|------|
-| `canUploadServerArchive` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-server-backup.ts |
 | `handleAdminSSEvent` | `@workspace/lib/admin` | packages/lib/src/core/admin/sse-handlers.ts |
 | `ADMIN_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `api` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -1339,6 +1338,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BACKUP_REASONS` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `BACKUP_STAMP_PATTERN` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `buildBackupStamp` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `canUploadServerArchive` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `EMAIL_FIND_REGEX` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `FAILED_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `incompleteReason` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |

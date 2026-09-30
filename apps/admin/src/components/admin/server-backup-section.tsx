@@ -1,5 +1,4 @@
 import {
-    canUploadServerArchive,
     useCheckBackupDestination,
     useDeleteServerArchive,
     useServerArchives,
@@ -13,7 +12,7 @@ import { formatFileSize } from '@workspace/lib/format';
 import type { BackupLevel, BackupReason, ServerArchive } from '@workspace/lib/types/backup';
 import type { ServerSettings, ServerSettingsSaved } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
-import { BACKUP_LEVELS } from '@workspace/lib/validation';
+import { BACKUP_LEVELS, canUploadServerArchive } from '@workspace/lib/validation';
 import { DeleteDialog, ErrorState, LoadingState, SettingsSection, TooltipButton } from '@workspace/ui';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Badge } from '@workspace/ui/components/badge';
@@ -236,7 +235,7 @@ export function ServerBackupSection({
                         <ServerArchiveRow
                             key={archive.name}
                             archive={archive}
-                            uploadSaved={uploadSaved}
+                            uploadable={canUploadServerArchive(archive, { uploadEnabled: uploadSaved, jobs })}
                             onUpload={() => uploadArchive.mutate(archive.name)}
                             onDelete={() => {
                                 setDeleting(archive.name);
@@ -268,12 +267,12 @@ export function ServerBackupSection({
 
 type ServerArchiveRowProps = {
     archive: ServerArchive;
-    uploadSaved: boolean;
+    uploadable: boolean;
     onUpload: () => void;
     onDelete: () => void;
 };
 
-function ServerArchiveRow({ archive, uploadSaved, onUpload, onDelete }: ServerArchiveRowProps) {
+function ServerArchiveRow({ archive, uploadable, onUpload, onDelete }: ServerArchiveRowProps) {
     const { record } = archive;
     const failedHomes = record?.manifest?.homes.filter((home) => home.failed) ?? [];
     const detail = [
@@ -289,12 +288,12 @@ function ServerArchiveRow({ archive, uploadSaved, onUpload, onDelete }: ServerAr
             badges={
                 <>
                     <StateBadge archive={archive} />
-                    <UploadBadge archive={archive} uploadSaved={uploadSaved} />
+                    <UploadBadge archive={archive} uploadable={uploadable} />
                 </>
             }
             actions={
                 <>
-                    {uploadSaved && canUploadServerArchive(archive) && (
+                    {uploadable && (
                         <TooltipButton
                             icon={CloudUpload}
                             tooltipText="Upload to the bucket"
@@ -345,11 +344,10 @@ function StateBadge({ archive: { record } }: { archive: ServerArchive }) {
     return record.verify ? <VerifyBadge verify={record.verify} /> : null;
 }
 
-function UploadBadge({ archive, uploadSaved }: { archive: ServerArchive; uploadSaved: boolean }) {
+function UploadBadge({ archive, uploadable }: { archive: ServerArchive; uploadable: boolean }) {
     const upload = archive.record?.upload;
-    if (archive.reason === 'pre-update' || archive.record?.state !== 'done') return null;
     if (upload?.state === 'done') return <Badge variant="secondary">Uploaded</Badge>;
     if (upload?.state === 'running') return <Badge variant="outline">Uploading</Badge>;
     if (upload?.state === 'failed') return <Badge variant="destructive">Not uploaded</Badge>;
-    return uploadSaved ? <Badge variant="outline">Not uploaded</Badge> : null;
+    return uploadable ? <Badge variant="outline">Not uploaded</Badge> : null;
 }

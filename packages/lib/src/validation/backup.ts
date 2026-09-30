@@ -1,9 +1,11 @@
 import type {
     BackupEntry,
+    BackupJob,
     BackupLevel,
     BackupManifest,
     BackupReason,
     BackupVerifyRecord,
+    ServerArchive,
     ServerArchiveManifest,
     ServerArchiveSidecar,
     ServerArchiveUpload,
@@ -292,9 +294,7 @@ export function parseBackupManifest(text: string): BackupManifest | null {
 
 // Why an archive cannot restore a home on its own, or null when it can. A Light member of a
 // whole-server archive holds no files and no mail; a mount marked metadata-only keeps its bodies in
-// its bucket (an s3 mount at Full). Phrased to follow the archive's name. It trusts the manifest: a
-// manifest stripped of these fields over missing bodies still verifies, because verify has to let a
-// body be missing (a delete can race the backup).
+// its bucket (an s3 mount at Full). Phrased to follow the archive's name.
 export function incompleteReason(manifest: Pick<BackupManifest, 'level' | 'mounts'>): string | null {
     if (manifest.level === 'light') {
         return 'is a light backup: it holds no files and no mail, so it cannot restore a home on its own';
@@ -338,7 +338,7 @@ export function parseBackupSidecar(text: string): { manifest: BackupManifest; ve
     return verify ? { manifest: value.manifest, verify } : null;
 }
 
-const JOB_STATES: readonly ServerArchiveSidecar['state'][] = ['running', 'done', 'failed'];
+const JOB_STATES: readonly BackupJob['state'][] = ['running', 'done', 'failed'];
 
 // The record beside a whole-server archive. Null means "not one this build wrote".
 export function parseServerArchiveSidecar(text: string): ServerArchiveSidecar | null {
@@ -379,11 +379,9 @@ export function parseServerArchiveSidecar(text: string): ServerArchiveSidecar | 
     return sidecar;
 }
 
-const UPLOAD_STATES: readonly ServerArchiveUpload['state'][] = ['running', 'done', 'failed'];
-
 function parseUploadRecord(value: unknown): ServerArchiveUpload | null {
     if (typeof value !== 'object' || value === null) return null;
-    const state = 'state' in value ? UPLOAD_STATES.find((candidate) => candidate === value.state) : undefined;
+    const state = 'state' in value ? JOB_STATES.find((candidate) => candidate === value.state) : undefined;
     const at = 'at' in value ? reviveDate(value.at) : undefined;
     if (!state || !at || !('key' in value) || typeof value.key !== 'string') return null;
     const upload: ServerArchiveUpload = { state, at, key: value.key };
@@ -392,6 +390,20 @@ function parseUploadRecord(value: unknown): ServerArchiveUpload | null {
         upload.error = value.error;
     }
     return upload;
+}
+
+// The Upload route's rule: a verified archive, not a pre-update one (that stays on this server for ./eigen rollback),
+// with no job still writing or uploading it, while a backup bucket is set. One the bucket holds already goes again.
+export function canUploadServerArchive(
+    { name, reason, record }: Pick<ServerArchive, 'name' | 'reason' | 'record'>,
+    { uploadEnabled, jobs }: { uploadEnabled: boolean; jobs: readonly Pick<BackupJob, 'state' | 'artifact'>[] },
+): boolean {
+    return (
+        uploadEnabled &&
+        reason !== 'pre-update' &&
+        record?.verify?.status === 'verified' &&
+        !jobs.some((job) => job.state === 'running' && job.artifact === name)
+    );
 }
 
 // `auth.json`: one array of rows per users3.db table. The columns are better-auth's and change with

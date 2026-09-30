@@ -101,7 +101,7 @@ A backup of the whole server: every user and team, and the server's own database
 
 With **Upload to a backup bucket** on, the same S3 fields appear as for the storage type, with **Test Connection**. The test refuses a bucket or an access key that Eigen keeps files with, and a bucket anyone can read. It warns when no rule cleans up uploads that were cut off halfway. The **Secret Access Key** is never shown again: leave it empty to keep the saved one. Once you save a new bucket, a notice asks you to write its details down somewhere other than this server.
 
-Below the settings, **Back up now** makes a backup at the level you pick: **Full**, **Light**, or **Full + S3** when a drive is in an S3 bucket. The section shows its progress while it runs. Each backup in the list shows its date, level, why it was made (**Scheduled**, **Manual**, or **Before an update**), its size, and whether it verified and reached the bucket. A user or team that failed is listed under **Not in this backup**. Hover over a row for **Upload to the bucket**, when a good backup is not in the bucket yet, and **Delete**.
+Below the settings, **Back up now** makes a backup at the level you pick: **Full**, **Light**, or **Full + S3** when a drive is in an S3 bucket. The section shows its progress while it runs. Each backup in the list shows its date, level, why it was made (**Scheduled**, **Manual**, or **Before an update**), its size, and whether it verified and reached the bucket. A user or team that failed is listed under **Not in this backup**. Hover over a row for **Upload to the bucket**, which sends a good backup again even if the bucket has it, and **Delete**.
 
 There is no download: a backup leaves the server by the bucket, or by a copy you make on the server, like `scp`.
 

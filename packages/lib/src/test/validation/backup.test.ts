@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import type { BackupManifest, ServerArchiveManifest, ServerArchiveSidecar } from '../../types/backup';
+import type {
+    BackupJob,
+    BackupManifest,
+    ServerArchive,
+    ServerArchiveManifest,
+    ServerArchiveSidecar,
+} from '../../types/backup';
 import {
+    canUploadServerArchive,
     incompleteReason,
     parseServerArchiveManifest,
     parseServerArchiveName,
@@ -171,5 +178,55 @@ describe('parseServerArchiveManifest', () => {
                 expect(parseServerArchiveSidecar(broken)).toBeNull();
             }
         });
+    });
+});
+
+describe('canUploadServerArchive', () => {
+    const name = 'server-scheduled-full-20260930-020000.tar';
+    const archive = (
+        reason: ServerArchive['reason'],
+        record: Partial<ServerArchiveSidecar> | null,
+    ): Pick<ServerArchive, 'name' | 'reason' | 'record'> => ({
+        name,
+        reason,
+        record: record && {
+            state: 'done',
+            startedAt: new Date('2026-09-30T02:00:00Z'),
+            verify: { status: 'verified', failures: [] },
+            ...record,
+        },
+    });
+    const uploaded = (state: 'running' | 'done' | 'failed') => ({
+        upload: { state, at: new Date(), key: `k/${name}` },
+    });
+    const job = (state: BackupJob['state'], artifact: string) => ({ state, artifact });
+    const up = (jobs: ReturnType<typeof job>[]) => ({ uploadEnabled: true, jobs });
+
+    test('offers a verified archive, uploaded before or not, as the Upload route accepts it', () => {
+        expect(canUploadServerArchive(archive('scheduled', {}), up([]))).toBe(true);
+        expect(canUploadServerArchive(archive('manual', uploaded('failed')), up([]))).toBe(true);
+        expect(canUploadServerArchive(archive('scheduled', uploaded('done')), up([]))).toBe(true);
+        expect(canUploadServerArchive(archive('scheduled', {}), up([job('done', name), job('running', 'other')]))).toBe(
+            true,
+        );
+    });
+
+    test('never offers one a job is still writing or uploading', () => {
+        expect(canUploadServerArchive(archive('scheduled', uploaded('running')), up([job('running', name)]))).toBe(
+            false,
+        );
+    });
+
+    test('never offers one while no backup bucket is set', () => {
+        expect(canUploadServerArchive(archive('scheduled', {}), { uploadEnabled: false, jobs: [] })).toBe(false);
+    });
+
+    test('never offers a pre-update archive, one that did not verify, or one without a record', () => {
+        expect(canUploadServerArchive(archive('pre-update', {}), up([]))).toBe(false);
+        expect(
+            canUploadServerArchive(archive('manual', { verify: { status: 'failed', failures: ['x'] } }), up([])),
+        ).toBe(false);
+        expect(canUploadServerArchive(archive('manual', { state: 'failed', verify: undefined }), up([]))).toBe(false);
+        expect(canUploadServerArchive(archive('manual', null), up([]))).toBe(false);
     });
 });

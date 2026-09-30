@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { serverBackupApi } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
-import type { BackupLevel, ServerArchive, ServerArchiveList } from '@workspace/lib/types/backup';
+import type { BackupLevel, ServerArchiveList } from '@workspace/lib/types/backup';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { orgOwnerId } from '@workspace/lib/types/owner';
 import type { S3CheckResult } from '@workspace/lib/types/settings';
@@ -16,15 +16,6 @@ import { useBackupJobs } from './use-backup';
 function useServerOwnerId(): string {
     const { data: config } = usePublicConfig();
     return config ? orgOwnerId(config.orgId) : '';
-}
-
-// The Upload route's own rule: a verified archive the bucket does not hold yet. A pre-update archive stays on
-// this server for ./eigen rollback.
-export function canUploadServerArchive({ reason, record }: ServerArchive): boolean {
-    const upload = record?.upload?.state;
-    return (
-        reason !== 'pre-update' && record?.verify?.status === 'verified' && upload !== 'done' && upload !== 'running'
-    );
 }
 
 export function useServerArchives() {
