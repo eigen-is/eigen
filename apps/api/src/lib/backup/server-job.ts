@@ -74,6 +74,7 @@ export type ServerBackupOptions = {
     signal?: AbortSignal;
 };
 
+// Indented by two: ./eigen waits out a running backup by its top-level "state" line.
 async function writeServerSidecar(archivePath: string, sidecar: ServerArchiveSidecar): Promise<void> {
     const tempPath = getBackupTempPath(SERVER_SIDECAR_SUFFIX);
     try {

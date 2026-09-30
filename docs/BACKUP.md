@@ -158,7 +158,7 @@ The job:
 7. Reads the finished tar back and checks every member against the manifest's sha256.
 8. Writes the sidecar, prunes, and starts the upload.
 
-Shutdown gives a running backup 30 s. Its staging goes in the next boot's wipe, and the boot marks its `running` sidecar failed, "interrupted by a restart".
+Shutdown gives a running backup 30 s. Its staging goes in the next boot's wipe, and the boot marks its `running` sidecar failed, "interrupted by a restart". So `./eigen restore`, `./eigen rollback` and `./eigen update` wait for a running server backup to end before they stop Eigen, by its `running` sidecar in `backups/`.
 
 ## A server archive is a plain tar of home archives, manifest last
 
@@ -255,7 +255,7 @@ Every trashed file of every restored mount is re-dated to the restore, whatever 
 
 ## A restore refuses what root must not swap in
 
-The stage refuses an archive that is damaged, one from a newer Eigen, one from a release install on a local build or the other way around (one pins images, the other builds its own), `--s3-from-archive` on an archive without S3 files, and an archive the data disk has no room to stage. The launcher refuses an archive path with a colon, which Docker cannot mount.
+The stage refuses an archive that is damaged, one from a newer Eigen, one from a release install on a local build or the other way around (one pins images, the other builds its own), `--s3-from-archive` on an archive without S3 files, and an archive the data disk has no room to stage. The launcher refuses an archive path with a colon, which Docker cannot mount, and an archive uid 1000 cannot read, such as a copy root left 0600, with the `chown` that fixes it.
 
 The swap runs as root on files the API's user wrote, so it refuses a staged tree with a link, a device or a setuid or setgid file, and drops fifos and sockets. It needs `data/`, `data/.restoring/` and every home on the install folder's disk, not a link or another mount, because it only renames.
 

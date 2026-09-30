@@ -7,9 +7,10 @@
 # api image that is not here, the files an unfinished update left, the backup an update makes on the running API before
 # it writes anything and hands over, typed on a terminal too, update --no-backup with Eigen stopped, the retry of an
 # update from Eigen 0.3.0 and the handover from it whose own image saves the snapshot, what setup
-# downloads with and without pins, backup on the running API, restore's stage and swap and what each failure leaves,
-# a swap that was cut off and finished first, a restore on a new machine from the launcher alone, what rollback runs
-# or prints, a lock without a pid, the group and mode every start gives .env.production first but on Docker Desktop,
+# downloads with and without pins and the build it records, backup on the running API, restore's stage and swap and
+# what each failure leaves, an archive uid 1000 cannot read, a running server backup waited out before the stop, a swap
+# that was cut off and finished first, with no .env.production too, a restore on a new machine from the launcher
+# alone, what rollback runs or prints, a lock without a pid, the group and mode every start gives .env.production first but on Docker Desktop,
 # and what status passes the CLI about backups/, the files of an unfinished update and the newest build of main, and
 # its folder; setup in a folder that holds the launcher alone, with the registry or the build .env.production names,
 # and the installer script apps/index/public/install on this host, as a file and on stdin, for setup and restore.
@@ -528,6 +529,12 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: setup does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
+    if [ "$(cat "$FIX/channel/.eigen/bundle" 2>&1)" = ghcr.io/eigen-is/eigen/api@sha256:aaa ]; then
+        ok "$SHELL_NAME: setup records the build its files are of, for a swap cut off before any update"
+    else
+        fail "$SHELL_NAME: setup's .eigen/bundle: '$(cat "$FIX/channel/.eigen/bundle" 2>&1)'"
+    fi
+    rm -f "$FIX/channel/.eigen/bundle"
     STUB_IMAGE=1 launch release setup
     if printf '%s\n' "$CALLS" | grep -q '^pull ghcr.io/eigen-is/eigen/api:0.2.99$' &&
         printf '%s\n' "$ERR" | grep -q 'api:0.2.99 has no registry digest'; then
@@ -780,6 +787,21 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: a restore does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
+    # The stop would kill a server backup that runs, so it waits for its record to end; an upload's state is no backup.
+    mkdir -p "$FIX/local/backups"
+    record="$FIX/local/backups/server-scheduled-full-20260101-020000.tar.json"
+    printf '{\n  "state": "running",\n  "startedAt": "2026-01-01T02:00:00.000Z"\n}\n' >"$record"
+    printf '{\n  "state": "done",\n  "upload": {\n    "state": "running"\n  }\n}\n' >"$FIX/local/backups/server-manual-full-20260101-010000.tar.json"
+    (sleep 3; rm -f "$record") &
+    launch local restore "$ARCHIVE" --yes
+    wait
+    rm -r "$FIX/local/backups"
+    if [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$OUT" | grep -o -e 'The server backup ended' -e 'Eigen stopped' | tr '\n' '|')" = 'The server backup ended|Eigen stopped|' ] &&
+        printf '%s\n' "$(steps)" | grep -q '|stop|restore --swap'; then
+        ok "$SHELL_NAME: a restore waits for the server backup that runs to end before it stops Eigen"
+    else
+        fail "$SHELL_NAME: a restore during a server backup: exit $CODE, '$OUT', steps '$(steps)'"
+    fi
     STUB_FAIL=compose-run launch local restore "$ARCHIVE" --yes
     if [ "$CODE" = 1 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|rm data/.restoring|" ] &&
         [ ! -e "$FIX/local/.eigen/lock" ]; then
@@ -867,6 +889,18 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: stop after a swap cut off: exit $CODE, steps '$(steps)', '$ERR'"
     fi
+    # Cut off between its two renames of .env.production, a swap leaves none: still an install, whose swap goes on.
+    rm "$FIX/release/.env.production"
+    : >"$FIX/release/.eigen/restore-swap"
+    echo ghcr.io/eigen-is/eigen/api@sha256:bbb >"$FIX/release/.eigen/bundle"
+    STUB_CHECKED=EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api@sha256:bbb launch release restart
+    rm "$FIX/release/.eigen/bundle"
+    if [ "$CODE" = 0 ] && [ "$(steps)" = 'restore --swap (ghcr.io/eigen-is/eigen/api@sha256:bbb)|share|up|share|up|' ]; then
+        ok "$SHELL_NAME: a swap cut off with no .env.production is finished, not sent to setup"
+    else
+        fail "$SHELL_NAME: a swap cut off with no .env.production: exit $CODE, steps '$(steps)', '$ERR'"
+    fi
+    reset_release
 
     STUB_CHECKED=EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:local launch release restore "$ARCHIVE" --yes
     if [ "$CODE" = 0 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|share|up|" ]; then
@@ -953,6 +987,30 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     launch release restore "$FIX/with:colon/$ARCHIVE" --yes
     expect_error 1 "■  Docker cannot mount $FIX/with:colon/$ARCHIVE, whose path has a colon." "a restore of an archive whose path has a colon"
     if printf '%s\n' "$CALLS" | grep -Eq '^run | run '; then fail "$SHELL_NAME: that refusal ran something: $(steps)"; fi
+    # The stage reads the archive as uid 1000, so a copy root left 0600 is refused before anything runs, on a new
+    # machine too. As uid 1000 this user reads it.
+    if [ "$(id -u)" != 1000 ]; then
+        mkdir -p "$FIX/private"
+        : >"$FIX/private/$ARCHIVE"
+        chmod 600 "$FIX/private/$ARCHIVE" "$FIX/release/backups/$ARCHIVE"
+        unread=''
+        for where in "release $FIX/private/$ARCHIVE $FIX/private/$ARCHIVE" \
+            "release $ARCHIVE backups/$ARCHIVE" "alone $FIX/private/$ARCHIVE $FIX/private/$ARCHIVE"; do
+            read -r folder arg file <<<"$where"
+            alone
+            launch "$folder" restore "$arg" --yes
+            if [ "$CODE" != 1 ] || ! printf '%s\n' "$ERR" | grep -q "sudo chown 1000:1000 $file" ||
+                printf '%s\n' "$CALLS" | grep -Eq '^(run|pull) | run '; then
+                unread="$unread $arg: exit $CODE, '$ERR', steps '$(steps)';"
+            fi
+        done
+        chmod 644 "$FIX/release/backups/$ARCHIVE"
+        if [ -z "$unread" ]; then
+            ok "$SHELL_NAME: an archive uid 1000 cannot read is refused with the chown that fixes it, before anything runs"
+        else
+            fail "$SHELL_NAME: an archive uid 1000 cannot read:$unread"
+        fi
+    fi
 
     echo server-pre-update-light-20260101-000000.tar >"$FIX/release/.eigen/last-update"
     STUB_CHECKED=$checked launch release rollback --yes
