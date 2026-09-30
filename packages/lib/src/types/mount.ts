@@ -11,7 +11,6 @@ export type S3Config = {
 
 export const EMPTY_S3: S3Config = { endpoint: '', bucket: '', prefix: '', accessKeyId: '', secretAccessKey: '' };
 
-// `secretSaved`: the form's blank secret stands for one the server keeps (keepsSavedSecret).
 export function isS3ConfigValid(config: S3Config, secretSaved = false): boolean {
     return !!(config.endpoint && config.bucket && config.accessKeyId && (config.secretAccessKey || secretSaved));
 }

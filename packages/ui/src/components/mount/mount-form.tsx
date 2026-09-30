@@ -1,6 +1,6 @@
 import { STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
-import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
+import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
 import { useState } from 'react';
 import { Button } from '../button';

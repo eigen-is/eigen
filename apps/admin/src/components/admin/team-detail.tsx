@@ -14,9 +14,9 @@ import {
     useUpdateTeamSettings,
     useUploadTeamAvatar,
 } from '@workspace/lib/team';
-import { teamOwnerId } from '@workspace/lib/types';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import { type MountSettings, mapStorageType } from '@workspace/lib/types/settings';
 import { AvatarEditor, DeleteDialog, EmptyState, SettingsSection, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';

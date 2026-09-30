@@ -6,12 +6,13 @@ import {
     useSendTestMail,
     useServerS3Config,
     useServerSettings,
+    useServerStatus,
     useUpdateOrgName,
     useUpdateServerS3Config,
     useUpdateServerSettings,
 } from '@workspace/lib/settings';
-import { EMPTY_S3, isS3ConfigValid, keepsSavedSecret } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
+import { EMPTY_S3, isS3ConfigValid, keepsSavedSecret } from '@workspace/lib/types/mount';
 import type {
     LandingLink,
     ServerSettings,
@@ -46,6 +47,7 @@ export function ServerSettingsPage() {
     const mailEnabled = useMailEnabled();
     const updateOrgName = useUpdateOrgName(config?.orgId);
     const sendTestMail = useSendTestMail();
+    const { data: status } = useServerStatus();
 
     const [draft, setDraft] = useState<DeepPartial<ServerSettings>>({});
     const [dirty, setDirty] = useState(false);
@@ -126,12 +128,14 @@ export function ServerSettingsPage() {
     const saving = updateSettings.isPending || updateS3Config.isPending || updateOrgName.isPending;
     // The test mail goes out from the saved sender, so an unsaved one would test the wrong thing.
     const senderDirty = draft.mail !== undefined || orgNameDraft !== null;
+    // Without mailboxes, mail goes out through the relay setup named, if any. Unknown until the status loads.
+    const relayHost = status?.relayHost;
+    const mailOff = !mailEnabled && relayHost === null;
     const senderAddressInvalid = current.mail.senderAddress !== '' && !validateEmailAddress(current.mail.senderAddress);
     const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
     const handleS3Harden = (config: S3Config, noncurrentDays: number) =>
         s3Harden.mutateAsync({ ...config, noncurrentDays });
     const savedDestination = settings.backups.upload.s3;
-    // The server holds a secret once a key is saved; the form's blank one keeps it for the same destination.
     const backupSecretSaved =
         savedDestination.accessKeyId !== '' && keepsSavedSecret(current.backups.upload.s3, savedDestination);
 
@@ -143,8 +147,9 @@ export function ServerSettingsPage() {
             const saved = await updateSettings.mutateAsync(
                 draft.landing ? { ...draft, landing: { links: normalizeLinks(draft.landing.links ?? []) } } : draft,
             );
-            // Said once: a new backup bucket's keys are the one thing to keep off this server.
-            if (saved.notice || saved.warning) setBackupNotice({ notice: saved.notice, warning: saved.warning });
+            // Said once, for a new backup bucket: its keys are the one thing to keep off this server. Every save that
+            // touches the upload checks the bucket again, so its warning comes with the notice; Test shows it too.
+            if (saved.notice) setBackupNotice({ notice: saved.notice, warning: saved.warning });
         }
         handleReset();
     };
@@ -210,7 +215,7 @@ export function ServerSettingsPage() {
                         )}
                     </div>
                 </div>
-                {!mailEnabled && (
+                {relayHost && (
                     <SwitchRow
                         label="Relay sends as users"
                         description={`Your relay allows sending from any address at ${config.mailDomain}. Off, mail on a user's behalf goes out as 'Name via ${orgName}' from the sender address.`}
@@ -218,19 +223,25 @@ export function ServerSettingsPage() {
                         onChange={(relaySendsAsUsers) => updateMail({ relaySendsAsUsers })}
                     />
                 )}
-                <div className="flex items-center gap-3">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => sendTestMail.mutate()}
-                        disabled={sendTestMail.isPending || senderDirty}
-                    >
-                        {sendTestMail.isPending ? 'Sending...' : 'Send test mail'}
-                    </Button>
+                {mailOff ? (
                     <p className="text-xs text-muted-foreground">
-                        {senderDirty ? 'Save first: the test uses the saved sender.' : 'Sends one mail to you.'}
+                        Mail is off: this server hosts no mailboxes and has no relay, so it sends no email.
                     </p>
-                </div>
+                ) : (
+                    <div className="flex items-center gap-3">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => sendTestMail.mutate()}
+                            disabled={sendTestMail.isPending || senderDirty}
+                        >
+                            {sendTestMail.isPending ? 'Sending...' : 'Send test mail'}
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                            {senderDirty ? 'Save first: the test uses the saved sender.' : 'Sends one mail to you.'}
+                        </p>
+                    </div>
+                )}
             </SettingsSection>
 
             <Separator />
@@ -318,7 +329,7 @@ export function ServerSettingsPage() {
                 <div className="space-y-3">
                     <SwitchRow
                         label="Email guests when added to share"
-                        description="Guests have no in-app channel — without email they have no way to know."
+                        description="Guests have no in-app channel, so without email they have no way to know."
                         checked={current.notifications.email.guestOnAclAdd}
                         onChange={(v) => updateEmailFlag('guestOnAclAdd', v)}
                     />

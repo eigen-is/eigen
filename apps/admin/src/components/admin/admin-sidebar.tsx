@@ -1,7 +1,7 @@
 import { useCreateTeam } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
-import { teamOwnerId } from '@workspace/lib/types';
 import type { OrgTeam } from '@workspace/lib/types/admin';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import { SidebarBody, SidebarItem, SidebarSection, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';

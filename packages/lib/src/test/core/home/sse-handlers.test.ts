@@ -48,20 +48,24 @@ describe('handleHomeSSEvent', () => {
         expect(reload).toHaveBeenCalledTimes(1);
     });
 
-    // An editor tab reloads when the restore closes its collab socket, while the home still answers 503. Its stream
-    // connects only once the restore is done, and the first epoch it hears is already the new one.
-    test('a page reloaded while the restore ran reloads once more when it hears the new epoch', async () => {
-        (await loadPage())({ user_a: 'server-1' });
-
-        const unchanged = await loadPage();
-        unchanged({ user_a: 'server-1' });
-        expect(reload).not.toHaveBeenCalled();
-
-        const midRestore = await loadPage();
-        midRestore({ user_a: 'server-1home-a' });
+    test('the page a reload brings up does not reload again', async () => {
+        const announce = await loadPage();
+        announce({ user_a: 'server-1' });
+        announce({ user_a: 'server-1home-a' });
         expect(reload).toHaveBeenCalledTimes(1);
 
-        // The page that reload brings up holds the new epoch already.
+        (await loadPage())({ user_a: 'server-1home-a' });
+        expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    // An editor tab reloads when its collab socket names an epoch the restore replaced, before its event stream
+    // announces the new one. The page it brings up must take that new epoch as the one it loaded under.
+    test('a page reloaded by the collab socket takes the first epoch it hears', async () => {
+        (await loadPage())({ user_a: 'server-1' });
+        const { reloadReplacedHome } = await import('../../../core/home/reload-replaced-home');
+        reloadReplacedHome();
+        expect(reload).toHaveBeenCalledTimes(1);
+
         (await loadPage())({ user_a: 'server-1home-a' });
         expect(reload).toHaveBeenCalledTimes(1);
     });

@@ -63,3 +63,6 @@ export type LicensePackage = { name: string; version: string; license: string; u
 // Projects eigen ports or forks code from without depending on them, so the dependency walk
 // cannot find them. Hardcoded in build-licenses.ts; `note` says what was taken.
 export type LicenseVendored = { name: string; license: string; url: string; note: string };
+
+// The fonts packages/ui bundles. Each folder under packages/ui/src/assets/fonts holds its OFL.txt.
+export type LicenseFont = { name: string; license: string; url: string };

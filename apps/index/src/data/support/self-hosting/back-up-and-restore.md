@@ -123,7 +123,7 @@ tar -xOf backups/server-scheduled-full-<date>-<time>.tar homes/home-<id>-<date>-
 sudo chown 1000:1000 backups/home-<id>-<date>-<time>.tar.zst
 ```
 
-It shows up under **Backup** on that user's or team's page, as **Not verified**. See [Restore a user or team](/support/admin/restore-home). A Light backup's copy holds no files, and a Full backup's copy of someone with a drive in an S3 bucket holds no files of that drive, so neither restores on its own. The row says why.
+It shows up under **Backup** on that user's or team's page, as **Not verified**, and offers **Restore** once an admin clicks **Verify**. See [Restore a user or team](/support/admin/restore-home). A Light backup's copy holds no files, and a Full backup's copy of someone with a drive in an S3 bucket holds no files of that drive, so neither restores on its own. The row says why.
 
 ## Back up one user or team
 

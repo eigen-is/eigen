@@ -1,3 +1,4 @@
+import { wasToasted } from '@workspace/lib/api-error';
 import { Button } from '../../button';
 import { Separator } from '../../separator';
 import { LeaveGuard } from './leave-guard';
@@ -6,13 +7,21 @@ type SettingsFooterProps = {
     dirty: boolean;
     saving: boolean;
     disabled?: boolean;
-    onSave: () => void;
+    onSave: () => void | Promise<void>;
     onReset: () => void;
 };
 
 // Save and Reset for a settings page's draft; hidden until something changed.
 export function SettingsFooter({ dirty, saving, disabled = false, onSave, onReset }: SettingsFooterProps) {
     if (!dirty) return null;
+    // A save that failed was toasted by its mutation hook, and the draft stays for another try.
+    const handleSave = async () => {
+        try {
+            await onSave();
+        } catch (error) {
+            if (!wasToasted(error)) throw error;
+        }
+    };
     return (
         <>
             <LeaveGuard
@@ -25,7 +34,7 @@ export function SettingsFooter({ dirty, saving, disabled = false, onSave, onRese
                 <Button variant="outline" onClick={onReset}>
                     Reset
                 </Button>
-                <Button onClick={onSave} disabled={saving || disabled}>
+                <Button onClick={handleSave} disabled={saving || disabled}>
                     {saving ? 'Saving...' : 'Save'}
                 </Button>
             </div>

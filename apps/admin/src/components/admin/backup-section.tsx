@@ -10,7 +10,6 @@ import {
     useVerifyBackup,
 } from '@workspace/lib/admin';
 import { getBackupArtifactUrl } from '@workspace/lib/api';
-import { formatDateTime } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import type { BackupArtifact, BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { BACKUP_ARTIFACT_EXTENSION, incompleteReason } from '@workspace/lib/validation';
@@ -23,7 +22,7 @@ import { BackupArtifactRow, VerifyBadge, VerifyFailures } from './backup-artifac
 import { BackupJobStatus } from './backup-job-status';
 
 const SAFETY_COPY_LABEL: Record<BackupSafetyCopy['kind'], string> = {
-    'pre-restore': 'The home before a restore',
+    'pre-restore': 'The account before a restore',
     'failed-restore': 'A restore that did not finish',
 };
 
@@ -38,9 +37,9 @@ type BackupConfirm =
 
 const CONFIRM_COPY: Record<BackupConfirm['kind'], { title: string; description: string; action: string }> = {
     'restore-artifact': {
-        title: 'Restore this home',
+        title: 'Restore this account',
         description:
-            'This replaces every file, mail and database of the home with the archive. The home is unavailable while the restore runs, every open page of it reloads, and the state it is in now is kept beside it as a safety copy. Restore the home of',
+            'This replaces every file, mail and database of the account with the archive. The account is unavailable while the restore runs, every open page of it reloads, and the state it is in now is kept beside it as a safety copy. Restore the account of',
         action: 'Restore',
     },
     'delete-artifact': {
@@ -51,13 +50,13 @@ const CONFIRM_COPY: Record<BackupConfirm['kind'], { title: string; description: 
     'restore-copy': {
         title: 'Restore this safety copy',
         description:
-            "The home goes back to the state this copy holds, and the state it is in now becomes a new safety copy beside it. Drive files on a remote mount are restored from the copy's own bucket objects. Restore the copy",
+            "The account goes back to the state this copy holds, and the state it is in now becomes a new safety copy beside it. Drive files on a remote mount are restored from the copy's own bucket objects. Restore the copy",
         action: 'Restore',
     },
     'delete-copy': {
         title: 'Delete safety copy',
         description:
-            'A safety copy is the only record of the home as it was at that moment, and on a remote mount its own bucket objects are deleted with it. Permanently delete',
+            'A safety copy is the only record of the account as it was at that moment, and on a remote mount its own bucket objects are deleted with it. Permanently delete',
         action: 'Delete',
     },
 };
@@ -145,8 +144,8 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
                 <Alert variant="warning">
                     <AlertTriangle className="h-4 w-4" />
                     <AlertDescription>
-                        An archive holds everything in this home — files, mail, calendars and the stored storage
-                        credentials. It is a secret; keep it somewhere safe.
+                        An archive holds everything in this account: files, mail, calendars and the stored storage
+                        credentials. It is a secret, so keep it somewhere safe.
                     </AlertDescription>
                 </Alert>
             )}
@@ -154,12 +153,14 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
             {latest && latest.id !== dismissedJobId && (
                 <BackupJobStatus job={latest} onDismiss={() => setDismissedJobId(latest.id)} />
             )}
-            {jobsFailed && <p className="text-xs text-destructive">Could not load the jobs running for this home.</p>}
+            {jobsFailed && (
+                <p className="text-xs text-destructive">Could not load the jobs running for this account.</p>
+            )}
 
             {isLoading ? (
                 <LoadingState />
             ) : isError || !data ? (
-                <ErrorState message="Could not load the backups of this home." />
+                <ErrorState message="Could not load the backups of this account." />
             ) : rowCount === 0 ? (
                 <p className="text-sm text-muted-foreground">No backups yet.</p>
             ) : (
@@ -225,6 +226,8 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
     // A Light or metadata-only member of a whole-server archive: restoreHome refuses it, so the
     // row says why instead of offering it.
     const incomplete = artifact.manifest && incompleteReason(artifact.manifest);
+    // Without a manifest (an archive copied in by hand) nothing is known of what it holds. A verify writes one.
+    const restorable = artifact.manifest !== null && artifact.verify.status !== 'failed' && !incomplete;
     return (
         <BackupArtifactRow
             createdAt={artifact.createdAt}
@@ -245,9 +248,8 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
                         disabled={busy}
                         onClick={onVerify}
                     />
-                    {/* An archive that failed its verify or is not a complete home is not offered for
-                        restore — the lines below say why. */}
-                    {artifact.verify.status !== 'failed' && !incomplete && (
+                    {/* The lines below say why an archive is not offered. */}
+                    {restorable && (
                         <TooltipButton
                             icon={RotateCcw}
                             tooltipText="Restore"
@@ -266,6 +268,11 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
                 </>
             }
         >
+            {!artifact.manifest && (
+                <p className="text-xs text-muted-foreground pl-7">
+                    Verify first: nothing is known about this archive until then.
+                </p>
+            )}
             {incomplete && <p className="text-xs text-muted-foreground pl-7">This archive {incomplete}.</p>}
             {skipped.map((mount) => (
                 <p key={mount.id} className="text-xs text-muted-foreground pl-7 truncate">
@@ -285,38 +292,35 @@ type SafetyCopyRowProps = {
 };
 
 function SafetyCopyRow({ copy, busy, onRestore, onDelete }: SafetyCopyRowProps) {
+    // Measuring a whole home stops after a cap, so the number is a floor.
+    const size = `${copy.truncated ? 'at least ' : ''}${formatFileSize(copy.bytes)}`;
     return (
-        <div className="group flex items-center gap-3 p-3 border rounded-lg">
-            <RotateCcw className="h-4 w-4 text-muted-foreground shrink-0" />
-            <div className="flex-1 min-w-0">
-                <div className="text-sm truncate">{formatDateTime(copy.createdAt)}</div>
-                <div className="text-xs text-muted-foreground truncate">
-                    {/* Measuring a whole home stops after a cap, so the number is a floor. Saying so
-                        beats showing 52 MB for a 284 MB copy. */}
-                    {SAFETY_COPY_LABEL[copy.kind]} · {copy.truncated ? 'at least ' : ''}
-                    {formatFileSize(copy.bytes)}
-                </div>
-            </div>
-            <div className="flex items-center invisible group-hover:visible pointer-coarse:visible">
-                {/* Only a pre-restore copy is a home this can put back; a failed-restore folder is a
-                    half-written one, which the route refuses. */}
-                {copy.kind === 'pre-restore' && (
+        <BackupArtifactRow
+            icon={RotateCcw}
+            createdAt={copy.createdAt}
+            detail={`${SAFETY_COPY_LABEL[copy.kind]} · ${size}`}
+            actions={
+                <>
+                    {/* Only a pre-restore copy is a home this can put back; a failed-restore folder is a
+                        half-written one, which the route refuses. */}
+                    {copy.kind === 'pre-restore' && (
+                        <TooltipButton
+                            icon={RotateCcw}
+                            tooltipText="Restore this copy"
+                            className="h-7 w-7"
+                            disabled={busy}
+                            onClick={onRestore}
+                        />
+                    )}
                     <TooltipButton
-                        icon={RotateCcw}
-                        tooltipText="Restore this copy"
+                        icon={Trash2}
+                        tooltipText="Delete safety copy"
                         className="h-7 w-7"
                         disabled={busy}
-                        onClick={onRestore}
+                        onClick={onDelete}
                     />
-                )}
-                <TooltipButton
-                    icon={Trash2}
-                    tooltipText="Delete safety copy"
-                    className="h-7 w-7"
-                    disabled={busy}
-                    onClick={onDelete}
-                />
-            </div>
-        </div>
+                </>
+            }
+        />
     );
 }

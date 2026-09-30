@@ -9,6 +9,7 @@ export {
     BACKUP_REASONS,
     BACKUP_STAMP_PATTERN,
     buildBackupStamp,
+    canUploadServerArchive,
     FAILED_RESTORE_SUFFIX,
     incompleteReason,
     ON_DEMAND_BACKUP_REASONS,

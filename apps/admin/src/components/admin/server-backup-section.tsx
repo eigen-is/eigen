@@ -1,5 +1,4 @@
 import {
-    canUploadServerArchive,
     useCheckBackupDestination,
     useDeleteServerArchive,
     useServerArchives,
@@ -7,13 +6,13 @@ import {
     useStartServerBackup,
     useUploadServerArchive,
 } from '@workspace/lib/admin';
-import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
+import { BACKUP_KEEP_MAX, BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatTime } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import type { BackupLevel, BackupReason, ServerArchive } from '@workspace/lib/types/backup';
 import type { ServerSettings, ServerSettingsSaved } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
-import { BACKUP_LEVELS } from '@workspace/lib/validation';
+import { BACKUP_LEVELS, canUploadServerArchive } from '@workspace/lib/validation';
 import { DeleteDialog, ErrorState, LoadingState, SettingsSection, TooltipButton } from '@workspace/ui';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Badge } from '@workspace/ui/components/badge';
@@ -50,7 +49,6 @@ function scheduleHours(): { hourUtc: number; label: string }[] {
 type ServerBackupSectionProps = {
     value: Backups;
     onChange: (patch: DeepPartial<Backups>) => void;
-    // A blank secret in the form keeps the one the server holds for this destination.
     secretSaved: boolean;
     // Upload as saved, which is what the Upload route goes by.
     uploadSaved: boolean;
@@ -121,19 +119,11 @@ export function ServerBackupSection({
                             </SelectContent>
                         </Select>
                     </div>
-                    <div className="space-y-1.5">
-                        <Label>Nightly backups to keep</Label>
-                        <Input
-                            type="number"
-                            min={1}
-                            max={365}
-                            value={schedule.keep}
-                            onChange={(e) => {
-                                const keep = e.target.valueAsNumber;
-                                if (Number.isInteger(keep) && keep >= 1) onChange({ schedule: { keep } });
-                            }}
-                        />
-                    </div>
+                    <KeepInput
+                        label="Nightly backups to keep"
+                        value={schedule.keep}
+                        onChange={(keep) => onChange({ schedule: { keep } })}
+                    />
                 </div>
             )}
             {schedule.enabled && hasS3Mounts && (
@@ -159,19 +149,11 @@ export function ServerBackupSection({
                         onCheck={(config) => checkDestination.mutateAsync(config)}
                         secretSaved={secretSaved}
                     />
-                    <div className="space-y-1.5">
-                        <Label>Backups to keep in the bucket</Label>
-                        <Input
-                            type="number"
-                            min={1}
-                            max={365}
-                            value={upload.keep}
-                            onChange={(e) => {
-                                const keep = e.target.valueAsNumber;
-                                if (Number.isInteger(keep) && keep >= 1) onChange({ upload: { keep } });
-                            }}
-                        />
-                    </div>
+                    <KeepInput
+                        label="Backups to keep in the bucket"
+                        value={upload.keep}
+                        onChange={(keep) => onChange({ upload: { keep } })}
+                    />
                 </>
             )}
             {saveNotice && (
@@ -236,7 +218,7 @@ export function ServerBackupSection({
                         <ServerArchiveRow
                             key={archive.name}
                             archive={archive}
-                            uploadSaved={uploadSaved}
+                            uploadable={canUploadServerArchive(archive, { uploadEnabled: uploadSaved, jobs })}
                             onUpload={() => uploadArchive.mutate(archive.name)}
                             onDelete={() => {
                                 setDeleting(archive.name);
@@ -266,14 +248,33 @@ export function ServerBackupSection({
     );
 }
 
+// A count the route takes from 1 to BACKUP_KEEP_MAX, clamped as it is typed.
+function KeepInput({ label, value, onChange }: { label: string; value: number; onChange: (keep: number) => void }) {
+    return (
+        <div className="space-y-1.5">
+            <Label>{label}</Label>
+            <Input
+                type="number"
+                min={1}
+                max={BACKUP_KEEP_MAX}
+                value={value}
+                onChange={(e) => {
+                    const keep = e.target.valueAsNumber;
+                    if (Number.isInteger(keep)) onChange(Math.min(Math.max(keep, 1), BACKUP_KEEP_MAX));
+                }}
+            />
+        </div>
+    );
+}
+
 type ServerArchiveRowProps = {
     archive: ServerArchive;
-    uploadSaved: boolean;
+    uploadable: boolean;
     onUpload: () => void;
     onDelete: () => void;
 };
 
-function ServerArchiveRow({ archive, uploadSaved, onUpload, onDelete }: ServerArchiveRowProps) {
+function ServerArchiveRow({ archive, uploadable, onUpload, onDelete }: ServerArchiveRowProps) {
     const { record } = archive;
     const failedHomes = record?.manifest?.homes.filter((home) => home.failed) ?? [];
     const detail = [
@@ -289,12 +290,12 @@ function ServerArchiveRow({ archive, uploadSaved, onUpload, onDelete }: ServerAr
             badges={
                 <>
                     <StateBadge archive={archive} />
-                    <UploadBadge archive={archive} uploadSaved={uploadSaved} />
+                    <UploadBadge archive={archive} uploadable={uploadable} />
                 </>
             }
             actions={
                 <>
-                    {uploadSaved && canUploadServerArchive(archive) && (
+                    {uploadable && (
                         <TooltipButton
                             icon={CloudUpload}
                             tooltipText="Upload to the bucket"
@@ -345,11 +346,10 @@ function StateBadge({ archive: { record } }: { archive: ServerArchive }) {
     return record.verify ? <VerifyBadge verify={record.verify} /> : null;
 }
 
-function UploadBadge({ archive, uploadSaved }: { archive: ServerArchive; uploadSaved: boolean }) {
+function UploadBadge({ archive, uploadable }: { archive: ServerArchive; uploadable: boolean }) {
     const upload = archive.record?.upload;
-    if (archive.reason === 'pre-update' || archive.record?.state !== 'done') return null;
     if (upload?.state === 'done') return <Badge variant="secondary">Uploaded</Badge>;
     if (upload?.state === 'running') return <Badge variant="outline">Uploading</Badge>;
     if (upload?.state === 'failed') return <Badge variant="destructive">Not uploaded</Badge>;
-    return uploadSaved ? <Badge variant="outline">Not uploaded</Badge> : null;
+    return uploadable ? <Badge variant="outline">Not uploaded</Badge> : null;
 }

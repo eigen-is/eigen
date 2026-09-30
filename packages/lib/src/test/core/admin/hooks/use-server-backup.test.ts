@@ -1,10 +1,9 @@
 import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
-import type { BackupJob, ServerArchive, ServerArchiveSidecar } from '@workspace/lib/types/backup';
+import type { BackupJob } from '@workspace/lib/types/backup';
 import { orgOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { backupKeys, invalidateServerBackup, serverBackupKeys } from '../../../../core/admin/hooks/keys';
-import { canUploadServerArchive } from '../../../../core/admin/hooks/use-server-backup';
 import { handleAdminSSEvent } from '../../../../core/admin/sse-handlers';
 import { publicKeys } from '../../../../core/public/hooks/keys';
 import { installHappyDom } from '../../../happy-dom';
@@ -35,8 +34,9 @@ afterAll(() => {
     mock.module('../../../../core/auth/auth-context', () => realAuthContextModule);
 });
 
-const ORG_ID = 'o1';
+const ORG_ID = 'o'.repeat(32);
 const SERVER_OWNER = orgOwnerId(ORG_ID);
+const USER_OWNER = 'u'.repeat(32);
 const NAME = 'server-scheduled-full-20260930-020000.tar';
 
 function trackingClient(): { queryClient: QueryClient; invalidated: readonly unknown[][] } {
@@ -69,45 +69,6 @@ async function renderHook<T>(use: () => T, queryClient: QueryClient): Promise<{ 
     return { latest: seen.latest as T, unmount: () => root.unmount() };
 }
 
-function archive(reason: ServerArchive['reason'], record: Partial<ServerArchiveSidecar> | null): ServerArchive {
-    return {
-        name: NAME,
-        level: 'full',
-        reason,
-        createdAt: new Date('2026-09-30T02:00:00Z'),
-        bytes: 1024,
-        record: record && {
-            state: 'done',
-            startedAt: new Date('2026-09-30T02:00:00Z'),
-            verify: { status: 'verified', failures: [] },
-            ...record,
-        },
-    };
-}
-
-const uploaded = (state: 'running' | 'done' | 'failed') => ({ upload: { state, at: new Date(), key: `k/${NAME}` } });
-
-describe('canUploadServerArchive', () => {
-    test('offers a verified archive the bucket does not hold, as the Upload route accepts it', () => {
-        expect(canUploadServerArchive(archive('scheduled', {}))).toBe(true);
-        expect(canUploadServerArchive(archive('manual', uploaded('failed')))).toBe(true);
-    });
-
-    test('never offers one already up or on its way', () => {
-        expect(canUploadServerArchive(archive('scheduled', uploaded('done')))).toBe(false);
-        expect(canUploadServerArchive(archive('scheduled', uploaded('running')))).toBe(false);
-    });
-
-    test('never offers a pre-update archive, one that did not verify, or one without a record', () => {
-        expect(canUploadServerArchive(archive('pre-update', {}))).toBe(false);
-        expect(canUploadServerArchive(archive('manual', { verify: { status: 'failed', failures: ['x'] } }))).toBe(
-            false,
-        );
-        expect(canUploadServerArchive(archive('manual', { state: 'failed', verify: undefined }))).toBe(false);
-        expect(canUploadServerArchive(archive('manual', null))).toBe(false);
-    });
-});
-
 describe('invalidateServerBackup', () => {
     test('refetches the archive list and the org jobs', () => {
         const { queryClient, invalidated } = trackingClient();
@@ -119,7 +80,8 @@ describe('invalidateServerBackup', () => {
 });
 
 describe('handleAdminSSEvent', () => {
-    test("a server job's poke refetches the org jobs the section lists", () => {
+    // An upload rewrites its archive's record while it runs, and the list shows the record.
+    test("a server job's poke refetches the org jobs and the archive list", () => {
         const { queryClient, invalidated } = trackingClient();
 
         handleAdminSSEvent(
@@ -128,6 +90,16 @@ describe('handleAdminSSEvent', () => {
         );
 
         expect(invalidated).toContainEqual([...backupKeys.jobs(SERVER_OWNER)]);
+        expect(invalidated).toContainEqual([...serverBackupKeys.archives()]);
+    });
+
+    test("a home job's poke leaves the server archive list alone", () => {
+        const { queryClient, invalidated } = trackingClient();
+
+        handleAdminSSEvent({ type: SSEventType.BACKUP_JOB_UPDATED, jobId: 'job-2', ownerId: USER_OWNER }, queryClient);
+
+        expect(invalidated).toContainEqual([...backupKeys.jobs(USER_OWNER)]);
+        expect(invalidated).not.toContainEqual([...serverBackupKeys.archives()]);
     });
 });
 

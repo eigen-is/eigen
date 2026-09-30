@@ -40,9 +40,9 @@ The sender of the notifications, codes and invitations Eigen sends.
 
 Leave a field empty to use the default. A default name follows the organization name when you rename it.
 
-On a server without mailboxes, a **Relay sends as users** switch appears. Turn it on if your mail relay allows sending from any address on your mail domain. Mail someone causes, like a share notification, then comes from their own address. Off, it comes from the sender address with their name, for example "Ada via Acme", and replies go to them.
+On a server without mailboxes that sends through a relay, a **Relay sends as users** switch appears. Turn it on if your mail relay allows sending from any address on your mail domain. Mail someone causes, like a share notification, then comes from their own address. Off, it comes from the sender address with their name, for example "Ada via Acme", and replies go to them.
 
-**Send test mail** sends one email from you to you, the same way a share notification goes out. If it fails, Eigen shows the relay's answer. Save your changes first: the test uses the saved sender.
+**Send test mail** sends one email from you to you, the same way a share notification goes out. If it fails, Eigen shows the relay's answer. Save your changes first: the test uses the saved sender. A server with no mailboxes and no relay sends no email, so the section says mail is off instead.
 
 ## Storage quotas
 
@@ -94,14 +94,14 @@ A backup of the whole server: every user and team, and the server's own database
 |---|---|---|
 | **Back up every night** | A Full backup once a day, at the time below. Turned on after that time, the first one starts within a few minutes. | Off |
 | **Time** | When the nightly backup starts. The list shows your own time with UTC beside it. | 02:00 UTC |
-| **Nightly backups to keep** | How many good nightly backups stay on the server. A night that failed never pushes out the last good one. | 7 |
+| **Nightly backups to keep** | How many good nightly backups stay on the server, up to 365. A night that failed never pushes out the last good one. | 7 |
 | **Include files in S3 buckets** | Only there when nightly backups are on and a user or team keeps a drive in an S3 bucket. On, the nightly backup copies every file of those drives. Off, it holds their file list and the bucket keeps the files. | Off |
 | **Upload to a backup bucket** | Sends each backup that checks out to a private S3 bucket that holds nothing else of Eigen. Backups made before an update stay on this server. | Off |
-| **Backups to keep in the bucket** | How many nightly backups the bucket keeps. It always keeps the newest one that holds every user and team, and backups made by hand stay. | 30 |
+| **Backups to keep in the bucket** | How many nightly backups the bucket keeps, up to 365. It always keeps the newest one that holds every user and team, and backups made by hand stay. | 30 |
 
-With **Upload to a backup bucket** on, the same S3 fields appear as for the storage type, with **Test Connection**. The test refuses a bucket or an access key that Eigen keeps files with, and a bucket anyone can read. It warns when no rule cleans up uploads that were cut off halfway. The **Secret Access Key** is never shown again: leave it empty to keep the saved one. Once you save a new bucket, a notice asks you to write its details down somewhere other than this server.
+With **Upload to a backup bucket** on, the same S3 fields appear as for the storage type, with **Test Connection**. The test refuses a bucket or an access key that Eigen keeps files with, and a bucket anyone can read. It warns when no rule cleans up uploads that were cut off halfway. The **Secret Access Key** is never shown again: leave it empty to keep the saved one. Once you save a new bucket, a notice asks you to write its details down somewhere other than this server, with any warning from the test.
 
-Below the settings, **Back up now** makes a backup at the level you pick: **Full**, **Light**, or **Full + S3** when a drive is in an S3 bucket. The section shows its progress while it runs. Each backup in the list shows its date, level, why it was made (**Scheduled**, **Manual**, or **Before an update**), its size, and whether it verified and reached the bucket. A user or team that failed is listed under **Not in this backup**. Hover over a row for **Upload to the bucket**, when a good backup is not in the bucket yet, and **Delete**.
+Below the settings, **Back up now** makes a backup at the level you pick: **Full**, **Light**, or **Full + S3** when a drive is in an S3 bucket. The section shows its progress while it runs. Each backup in the list shows its date, level, why it was made (**Scheduled**, **Manual**, or **Before an update**), its size, and whether it verified and reached the bucket. A user or team that failed is listed under **Not in this backup**. Hover over a row for **Upload to the bucket**, which sends a good backup again even if the bucket has it, and **Delete**.
 
 There is no download: a backup leaves the server by the bucket, or by a copy you make on the server, like `scp`.
 

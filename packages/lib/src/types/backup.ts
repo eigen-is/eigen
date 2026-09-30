@@ -90,7 +90,7 @@ export type BackupVerifyRecord = {
 // The last upload of an archive to the backup bucket. `key` is the object's, prefix and server folder included.
 // `running` with no job behind it is an upload a restart cut off.
 export type ServerArchiveUpload = {
-    state: 'running' | 'done' | 'failed';
+    state: BackupJob['state'];
     at: Date;
     key: string;
     error?: string;

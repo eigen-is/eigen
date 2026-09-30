@@ -1,4 +1,4 @@
-import { BACKUP_DESTINATION_NOTICE } from '@workspace/lib/constants/backup';
+import { BACKUP_DESTINATION_NOTICE, BACKUP_KEEP_MAX } from '@workspace/lib/constants/backup';
 import type { AdminUser, AdminUserRow } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type {
@@ -178,14 +178,14 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                                 enabled: t.Optional(t.Boolean()),
                                 hourUtc: t.Optional(t.Integer({ minimum: 0, maximum: 23 })),
                                 withS3: t.Optional(t.Boolean()),
-                                keep: t.Optional(t.Integer({ minimum: 1, maximum: 365 })),
+                                keep: t.Optional(t.Integer({ minimum: 1, maximum: BACKUP_KEEP_MAX })),
                             }),
                         ),
                         upload: t.Optional(
                             t.Object({
                                 enabled: t.Optional(t.Boolean()),
                                 s3: t.Optional(s3DestinationBody),
-                                keep: t.Optional(t.Integer({ minimum: 1, maximum: 365 })),
+                                keep: t.Optional(t.Integer({ minimum: 1, maximum: BACKUP_KEEP_MAX })),
                             }),
                         ),
                     }),

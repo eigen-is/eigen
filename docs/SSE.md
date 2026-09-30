@@ -24,7 +24,7 @@ A domain handler never toasts. `NotificationCenter.persist()` writes the notific
 
 ## A backup job's event is only a nudge
 
-`backup:job-updated` carries the job's id and its home's `ownerId`, nothing else. The job map in the API is the truth, and the admin pane refetches its job and artifact lists. A home job's event goes to every admin, so a second admin watching the same pane follows along; a server backup's goes to the owner alone, who alone may see it ([BACKUP.md](BACKUP.md)).
+`backup:job-updated` carries the job's id and its home's `ownerId`, nothing else. The job map in the API is the truth, and the admin pane refetches its job and artifact lists. An event for the org's `ownerId` refetches the server archive list, whose rows show the record a running upload rewrites. A home job's event goes to every admin, so a second admin watching the same pane follows along; a server backup's goes to the owner alone, who alone may see it ([BACKUP.md](BACKUP.md)).
 
 ## A restore reloads every tab of the home
 
@@ -32,9 +32,9 @@ A restore puts other data under every open tab of the home, and each tab's cache
 
 Every stream sends `home:data-epochs` when it opens and after every keepalive: the epoch of the user's own home and of each of their teams. `handleHomeSSEvent` (`packages/lib/src/core/home/sse-handlers.ts`) reloads through `reloadReplacedHome` when an epoch it holds changes. A home it has not heard of is new to it (a team joined), not replaced. One announcement covers every case with no push across homes: a tab connected through the restore hears it within 15 s of the end, and a tab that was offline, or any tab after a whole-server restore, hears it on reconnect.
 
-## The epochs a tab holds outlive its reload
+## A reload for a restore starts the epochs over
 
-A tab keeps its epochs in sessionStorage, which outlives a reload. An editor tab reloads the moment a restore closes its collab socket, while the restore still runs, and the page that comes back may connect its stream only after the restore. It still holds the epoch from before, so it sees the change and reloads once more, onto the restored home. The new epoch is stored before each reload, so no page reloads twice for one restore, and Stay on the leave prompt ends the asking.
+A tab keeps its epochs in sessionStorage, so the next page it loads still holds them. `reloadReplacedHome` drops them before it reloads. An editor tab reloads when its collab socket names an epoch the restore replaced, which can come before its stream announces the new one, and the page that comes back takes the first epochs it hears as its own. So no page reloads twice for one restore. Stay on the leave prompt ends the asking, because the tab already holds the epoch it asked for.
 
 ## The owner and the team reload, a user with a share does not
 
