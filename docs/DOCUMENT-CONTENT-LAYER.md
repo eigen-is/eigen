@@ -57,7 +57,7 @@ itself takes a resolved `Mount`/`DrivePath` pair and assumes the caller already 
 ## Sheets — snapshot + ops replay
 
 Fortune-sheet stores its state as `Y.Map('state').snapshot` (the encoded last-flushed
-workbook — SHEETS.md § Snapshot format v2; legacy docs hold plain `Sheet[]` JSON) plus
+workbook — SHEETS.md § The snapshot is interned and written only through the codec; legacy docs hold plain `Sheet[]` JSON) plus
 `Y.Array('ops')` (op batches since the last flush). Live editors push ops onto
 the array and observe it for remote ops; on `beforeunload` they flush a fresh snapshot via
 `encodeSheetsSnapshot` and clear the ops array (see
@@ -79,7 +79,7 @@ After replay, `readSheetsFromDoc` can run a **gated server-side recalc**: `sheet
 (formula cells but no `calcChain`) decides whether to hand the sheets to `recalcSheets()`. Only the
 export read opts in — preview and search extract pass `{ recalc: false }` and serve replayed values
 as-is, because a legacy never-computed workbook costs an unbounded recalc (~39s measured), past
-their 30s Worker deadline (SHEETS.md § Server-side recalc). This is why an xlsx import that was
+their 30s Worker deadline (SHEETS-FORMULAS.md § The editor computes on write, the server only what nobody computed). This is why an xlsx import that was
 never opened in an editor still exports with values (the import persists computed values with
 `computed: true`, which makes the decoder seed a `calcChain`, so post-import docs never fire the
 gate anywhere). A live-edited doc already persists
@@ -155,7 +155,7 @@ Export has a matching dispatcher: `lib/export/export-document.ts` owns the whole
 
 ## See also
 
-- [SHEETS.md](SHEETS.md) — sheet snapshot + ops invariants, headless formula engine
+- [SHEETS.md](SHEETS.md) — sheet snapshot + ops invariants; [SHEETS-FORMULAS.md](SHEETS-FORMULAS.md) — headless formula engine
 - [EXPORT.md](EXPORT.md) — eigen → docx/xlsx/pdf pipeline that consumes the readers
 - [SEARCH.md](SEARCH.md) — the drive content index built on `extract-text.ts`
 - [STORAGE.md](STORAGE.md) — Mount, `data.db` layout, `loadYjsState()`

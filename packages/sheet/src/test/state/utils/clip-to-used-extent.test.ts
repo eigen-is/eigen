@@ -40,7 +40,7 @@ const wholeRow = (row: number): Selection => ({
 
 describe('clipToUsedExtent detects whole-axis from the header-select flags, not the extent', () => {
     // Regression: a hand-dragged range that happens to span the full axis has no flag, so it must
-    // be applied exactly as selected — never clipped to the used extent. docs/SHEETS.md promises it.
+    // be applied exactly as selected — never clipped to the used extent. docs/SHEETS-CELL-GLYPHS.md promises it.
     test('a dragged full-height selection on a small sheet is not clipped', () => {
         const ctx = sheet(4, 2, {});
         const dragged: Selection = { row: [0, 499], column: [1, 3], row_focus: 0, column_focus: 1 };

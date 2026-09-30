@@ -492,6 +492,7 @@ export function groupValuesRefresh(ctx: Context): void {
 
     for (const item of ctx.groupValuesRefreshData) {
         const idx = getSheetIndex(snapshot, item.id);
+        // A deleted sheet's formula-map entries linger until the next rebuild; this skip makes them harmless.
         if (idx == null) continue;
 
         const before = snapshot.sheets[idx].data?.[item.r]?.[item.c];

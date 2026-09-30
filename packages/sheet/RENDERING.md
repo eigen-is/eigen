@@ -186,7 +186,7 @@ pass, so freeze-region pinning and clipping match the cells underneath (not Reac
 
 The upstream built-in comment system (NotationBoxes + `state/modules/comment.ts`) was fully
 removed. Comments now anchor to cells via `commentCardIds?: string[]` on `Cell` and use
-the shared Eigen comment infrastructure — see [`docs/SHEETS.md` § Comments](../../docs/SHEETS.md#comments)
+the shared Eigen comment infrastructure — see [`docs/SHEETS.md`](../../docs/SHEETS.md#comments-are-eigen-comment-cards)
 and [`docs/COMMENTS.md`](../../docs/COMMENTS.md).
 
 ### 9. Hyperlink Editor (React DOM)
