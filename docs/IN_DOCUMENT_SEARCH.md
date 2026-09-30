@@ -1,177 +1,70 @@
 # In-Document Search
 
-> **TLDR**: One shared `⌘F` find bar over seven surfaces — the five eigendoc editors (docs, sheets,
-> slides, stickies, vector) and both Drive inline editors (markdown, code). Each implements a small
-> `DocSearchController` over its own live state; `DocSearchProvider` owns the session, the keybinds
-> and the floating `FindReplaceBar`. Everything but slides, stickies and vector also replaces (`⌥⌘F`).
+> **TLDR:** One `⌘F` find bar serves seven surfaces: the five Eigen editors (docs, sheets, slides, stickies, drawings) and Drive's markdown and code editors. Each surface implements a `DocSearchController` over its own live state (the contract is `packages/lib/src/types/doc-search.ts`), and `DocSearchProvider` (`packages/ui/src/components/search/`) owns the session, the keys and the floating `FindReplaceBar`. A match is plain data revealed by id, so the same controller also feeds the palette's `doc:` scope and the `?q=` deep link. Docs, sheets and the Drive editors also replace; slides, stickies and drawings only search. Finding which file holds a term is [SEARCH.md](SEARCH.md).
 
-Matches are **plain serializable data** (`id` + `label` + `context`) revealed by id, never closures —
-so the same controller also feeds the command palette `doc:` scope and the `?q=` deep link. Comment
-threads on a board are searched server-side through a separate `DocCommentSearch` capability backed
-by `comments.db`'s `comments_fts`. Core contract in `packages/lib/src/types/doc-search.ts`; the bar
-and the shared controllers in `packages/ui/src/components/search/`.
+## A match is plain data, resolvable from its id alone
 
-This is **finding a location inside the document you already have open**. Finding *which* document
-contains a term (drive-wide body search) is a different system — see [SEARCH.md](SEARCH.md).
+A `DocSearchMatch` is an `id`, a `label` (the matched text or card title) and an optional `context` ("Sheet1 · B12", "Slide 3"). The id describes itself: `from:to` in docs, `sheetId:r:c` in sheets, the card or element id elsewhere. `reveal` resolves it from the string and never from a cached last search, because the palette and an open bar session interleave calls on the same controller. The comments in `doc-search.ts` spell out every rule of the contract.
 
-## The Controller Contract
+## search is pure, and painting is a separate call
 
-Each surface implements `DocSearchController` once over its live state (the ProseMirror tree, the
-workbook, the Y.Doc board, the CodeMirror view). It is the single notion of "a match" shared by the
-find bar, the palette `doc:` scope, and the `?q=` landing.
+`search` never touches the document. `highlightAll` paints and `reveal` scrolls, so the palette can call `search` and then `reveal` with no paint in between. `highlightAll` is only a hint: docs paints from its own installed `prosemirror-search` query and ignores the array.
 
-```typescript
-type DocSearchOptions = { matchCase: boolean; wholeWord: boolean; regex: boolean };
+## reveal tolerates stale ids and never moves focus
 
-type DocSearchMatch = {
-    id: string;        // self-describing — resolvable from the string alone
-                       //   (`${from}:${to}`, `${sheetId}:${r}:${c}`, a card id)
-    label: string;     // the matched text or card title
-    context?: string;  // where it is: "To do" / "Sheet1 · B12" / "Slide 3"
-};
+Under collaboration a match can vanish between search and reveal, so `reveal` validates, clamps or does nothing, and never throws. It must not move focus while the bar is open, or `Enter` and `⌘G` would stop stepping. It centers the match so the bar can't cover it.
 
-type DocSearchController = {
-    search(query: string, opts: DocSearchOptions): DocSearchMatch[];  // PURE — no side effects
-    highlightAll(matches: DocSearchMatch[]): void;                    // paint all; [] clears
-    reveal(matchId: string): void;                                    // scroll-to + flash
+## Replace returns the fresh match list
 
-    // replace — docs, sheets, the Drive inline editors; slides/stickies leave these unset
-    canReplace?: boolean;
-    replace?(matchId, query, replacement, opts, preserveCase): DocSearchMatch[];
-    replaceAll?(query, replacement, opts, preserveCase): { replaced: number; matches: DocSearchMatch[] };
-};
-```
+`replace` and `replaceAll` make the edit and return the post-edit matches, which the provider adopts. It never re-runs `search` after an edit, because sheets' React context is one render behind at that point. The query is passed on every call rather than read from a cached term, for the same interleaving reason as the id. `preserveCase` is its own argument, applied by `applyPreserveCase` (`packages/lib/src/doc-search/`). Replacement text is literal everywhere: no `$1` or `$&` expansion.
 
-Rules baked into the contract:
+A surface sets `canReplace` from its write access. A read-only document gets search only, and `⌥⌘F` opens plain search there.
 
-- **`search` is pure** — it never touches the document. Painting and scrolling are separate calls, so
-  the palette can call `search()` and then `reveal(id)` with no `highlightAll()` in between.
-- **Match ids are self-describing.** `reveal` resolves an id from the string alone, never via a cached
-  last-search lookup — the palette and an open bar session interleave calls on the same controller.
-- **`highlightAll` is a paint hint.** Some surfaces ignore its array: docs paints from its own installed
-  `prosemirror-search` query rather than these ids. The asymmetry is intended.
-- **`reveal` tolerates stale ids** (validate / clamp / no-op, never throw) and **must not move focus**
-  while a bar session is open — that would break `Enter` / `⌘G` stepping. It centers the match so the
-  bar can't cover it.
-- **Replace returns the fresh post-edit match list**, which the provider *adopts* — it never re-runs
-  `search()` after an edit (a React context is one render behind then). The query is explicit on every
-  replace method; `preserveCase` is a separate arg. Replacement strings are **literal** on every
-  surface — no `$1` / `$&` expansion.
+## The provider owns the session and the keys
 
-## The Find Bar
+A surface wraps its editor in `DocSearchProvider` and passes its controller. `⌘F` opens the bar or refocuses it, `⌥⌘F` opens it in replace mode (`Ctrl+H` works too off macOS, where `⌘H` hides the app), `⌘G` and `⇧⌘G` step, and `Esc` closes. `⌘G` with the bar closed and a query kept reopens it without focusing the input. Every key is off while a dialog is open, because the bar would open unseen behind it. The query debounces 150 ms.
 
-`DocSearchProvider` (`packages/ui/.../components/search/doc-search-provider.tsx`) owns the find session
-and renders the floating `FindReplaceBar`. A surface wraps its editor subtree in the provider and
-passes its `controller`.
+`⌘Z` and `⇧⌘Z` inside the bar's inputs go to the surface's own undo (`onUndo`, `onRedo`), so a replace is undoable without leaving the bar. `barClassName` moves the bar clear of a surface's chrome, and `onOpenChange` lets slides fit the bar into its layered `Escape` (present, edit, bar, deselect). Toolbar buttons and Edit-menu items read `useOptionalDocSearchBar()`, so a read-only surface hides "Find and replace".
 
-- **Keybinds:** `⌘F` open (or re-focus + select when already open), `⌘G` / `⇧⌘G` next / previous match,
-  `Esc` close, `⌥⌘F` open in replace mode (falls back to plain search when the surface is read-only).
-- **Debounce:** 150 ms on the query before re-searching.
-- **Live under collaboration:** the provider re-runs the open session's search whenever the controller
-  identity changes, so the *n of m* count stays live while a collaborator types. The active match is
-  tracked by index and reveal is best-effort — under remote edits it may drift to a different
-  occurrence.
-- **Undo/redo routing:** `⌘Z` / `⇧⌘Z` inside the bar's inputs route to the surface's own undo (passed as
-  `onUndo`/`onRedo`), so a Replace stays undoable without leaving the bar.
-- **Placement:** the bar floats top-right of the wrapped subtree; a surface passes `barClassName` offsets
-  to clear its own chrome. `onOpenChange` lets a surface with a layered `Escape` (slides:
-  present → edit → bar → deselect) defer its default action to the bar-close.
-- **Chrome entry points:** the null-safe `useOptionalDocSearchBar()` exposes
-  `open()` / `openReplace()` / `canReplace` to toolbar buttons (`find-in-document-button.tsx`, the `⌕`
-  cluster) and Edit-menu items — so read-only surfaces hide "Find and replace".
+## The count stays live while collaborators type
 
-## Match Highlighting
+A surface republishes its controller when its document changes, and the provider re-runs the open search so *n of m* stays current. The rerun is throttled, not debounced: slides and stickies republish on every Yjs transaction, and a steady stream of remote edits would reset a debounce forever. The rerun clamps the active index and does not reveal, so a remote edit never yanks the scroll. Because the active match is an index, a remote edit can shift it to another occurrence.
 
-Highlight visuals are single-sourced in `packages/ui/src/styles/globals.css`, so every surface looks
-the same:
+## Every surface paints with the same classes
 
-| Class | Role |
-|---|---|
-| `.eigen-search-match`, `.eigen-search-match-active` | inline text-run highlight (docs, sheets, slides) |
-| `.eigen-search-ring`, `.eigen-search-ring-active` | object-outline highlight (stickies cards) |
-| `.eigen-search-flash` | one-shot reveal pulse (the `eigen-search-ring-flash` keyframe) |
+The highlight classes live in `packages/ui/src/styles/globals.css`, so a match looks the same everywhere. Text runs get `.eigen-search-match`; objects (stickies cards, canvas elements, slide thumbnails) get `.eigen-search-ring`; each has an `-active` variant, and `.eigen-search-flash` is the one-shot reveal pulse.
 
-## Per-Surface Controllers
+## Each surface searches its own model
 
-| Surface | Controller | Strategy | Replace |
-|---|---|---|---|
-| Docs | `useProseMirrorSearchController` (`packages/ui/.../components/search/prosemirror-search-controller.ts`) | ProseMirror walk; paints via `prosemirror-search` decorations; `reveal` sets a text selection + scrolls | ✓ |
-| Sheets | `apps/sheets/src/components/sheets/hooks/use-search-controller.ts` | adapter over `packages/sheet` `collectMatches`, iterating **all tabs**; `reveal` reuses scroll-and-select | ✓ |
-| Stickies | `apps/stickies/src/components/stickies/hooks/use-stickies-doc-search.ts` | Y.Doc scan of `tasks` / `columns`; `reveal` scrolls to + flashes the card | — |
-| Slides, Vector | `packages/ui/src/components/vector/hooks/use-canvas-doc-search.ts` | `searchScene` over every element kind's `searchText` (rich text plain-texted, arrow labels), frame then z-order; match ids ARE element ids, and `reveal` hands the host the element so it can select it; the vector app also calls the canvas handle's `centerOn(el)`, which pans the match to the container center at the current zoom (a comment-card reveal takes the same path). Slides passes a `contextOf` that labels each match with its slide ("Slide 3"), reveals by activating that element's frame first, and rings the rail thumbnails that hold a match | — |
-| Drive markdown editor | `useProseMirrorSearchController` + `use-codemirror-search-controller.ts` (`apps/drive/src/components/editor/`) | the shared PM controller in WYSIWYG mode, the CodeMirror one in source mode | ✓ |
-| Drive code editor | `apps/drive/src/components/editor/use-codemirror-search-controller.ts` | `buildSearchRegex` over the plain CodeMirror doc; `reveal` selects + scrolls the range | ✓ |
+- Docs, and Drive's markdown editor in WYSIWYG mode, share `useProseMirrorSearchController` (`packages/ui/src/components/search/`). It lives in `packages/ui` because two apps use it.
+- Drive's code editor, and the markdown editor in source mode, use `useCodeMirrorSearchController` (`apps/drive/src/components/editor/`), which matches with `buildSearchRegex`.
+- Sheets adapts the engine's `collectMatches` (`packages/sheet`), which scans every visible tab in display order with one match per cell. The adapter is `apps/sheets/src/components/sheets/hooks/use-search-controller.ts`.
+- Stickies scans the column titles and the visible cards only, because a card the board's filter hides has no element for `reveal` to scroll to. `reveal` scrolls to the card and flashes it.
+- Slides and drawings share `useCanvasDocSearch` (`packages/ui/src/components/vector/hooks/`). It lives with the canvas engine because any canvas host mounts it.
 
-The ProseMirror controller lives in `packages/ui` precisely because two apps need it — the docs
-eigendoc editor and Drive's inline markdown editor share one implementation. Both PM and CodeMirror
-controllers take a `canWrite` flag that becomes `canReplace`, so a read-only file gets search only.
+## A canvas match is an element, and the host reveals it
 
-Slides, stickies and vector leave the replace members unset and stay search-only; no v1 caller changes shape. The canvas controller lives in `packages/ui` with the engine, not in an app, because the engine is what any canvas host mounts.
+`searchScene` walks each element kind's `searchText` frame by frame, then in z-order inside a frame. The search index uses the same order, so the two agree on what a canvas says. A match id is the element id, and `reveal` hands the host the element, because what revealing means differs per host. The drawing app selects it and pans it to the center at the current zoom. Slides labels each match with its slide through `contextOf`, activates that slide, and rings the rail thumbnail of every slide that holds a match, because most hits sit on slides the canvas is not showing.
 
-## The `?q=` Deep Link
+## A ?q= link opens the bar with focus in the document
 
-A `?q=` term on any eigendoc route opens the bar pre-filled, highlights all matches, and reveals the
-first — with **focus staying in the document** (the bar input is not focused on this path).
-`useLatchedDocSearchTerm(q)` (`packages/ui/src/hooks/use-eigen-doc-editor-route.ts`) latches the term
-once and strips `q` from the URL. This is the shape a palette drive/mail hit uses to carry its query
-into the opened document (mail highlights the message body instead of a find bar).
+A `?q=` term on an editor route opens the bar pre-filled, paints all matches and reveals the first, with focus left in the document. `useLatchedDocSearchTerm` (`packages/ui/src/hooks/use-latched-doc-search-term.ts`) latches the term once and strips it from the URL. It latches because the editor mounts the provider only after collab sync, and a strip timed to that mount would race it and wipe the term first. A palette file hit carries its query into an editor this way. A mail hit carries `?q=` too, and the mail app highlights the message body instead.
 
-## Command Palette Integration (`doc:` scope)
+## The palette reads the same controller
 
-`DocSearchProvider` publishes its controller to the palette via `usePaletteDocSearch` — it becomes
-`ctx.docSearch`, present only while an eigendoc is open. The `doc:` scope's provider
-(`packages/lib/src/core/command-palette/providers/doc-search.ts`) maps `controller.search(q)` to
-`doc-hit` results under an **In Document** section (capped at 6, excluded from Top-Hit candidates so a
-matched fragment can't hijack `Enter` from a typed file name). The palette searches with the bar's
-default options (all-false) so its counts stay truthful; the option toggles live on the bar.
+`DocSearchProvider` publishes its controller through `usePaletteDocSearch` as `ctx.docSearch`, present only while an editor is open. The provider in `packages/lib/src/core/command-palette/providers/doc-search.ts` lists up to 6 hits under **In Document**. A hit never becomes the Top Hit, because its title is the matched text and would take `Enter` from a typed file name. The palette searches with every option off, the bar's defaults, so its count matches the bar's.
 
-`Enter` on a doc hit calls `ctx.docSearchSession.revealFromPalette(q, matchId)` — the provider's
-published `DocSearchSession` capability. It adopts the palette's query into the live find session,
-paints all matches, and reveals the clicked one (*n of m* at its index), leaving focus in the
-document. (Earlier it revealed in place; the bar-handoff replaced that on 2026-07-06.)
+Choosing a hit calls `revealFromPalette` on the published `DocSearchSession`. It adopts the palette's query into the bar, paints all matches and reveals the chosen one at its index, with focus left in the document.
 
-## Comment-Thread Search (server-backed)
+## Comment threads are searched on the server
 
-Card comment threads are embedded `.eigenchat` containers the client never bulk-loads, so they are
-searched server-side through a **separate capability**, `DocCommentSearch` (`ctx.docCommentSearch`),
-published alongside the controller by docs and stickies.
+A comment thread is an embedded chat the client never loads in bulk. So docs and stickies publish a second capability, `DocCommentSearch` (`ctx.docCommentSearch`), backed by `CommentIndex.searchComments` (`apps/api/src/lib/chat/comment-index.ts`) at `GET /collab/:ownerId/:mountId/:pathId/comments/search`. It ranks over `comments_fts`, which holds the newest part of each thread ([COMMENTS.md](COMMENTS.md#search-reads-a-recomputed-tail-of-each-thread)). A match id is the thread's `chatName`.
 
-```typescript
-type DocCommentSearch = {
-    docKey: string;                                   // `${ownerId}:${mountId}:${pathId}` of the OPEN doc
-    search(query: string): Promise<DocCommentMatch[]>;
-    reveal(matchId: string): void;                    // open the card / thread; tolerates stale ids
-} | null;
-
-type DocCommentMatch = { id: string; label: string; context?: string };  // id = the thread's chatName
-```
-
-- **Index:** `comments.db` v3 (`apps/api/src/lib/chat/comment-db-config.ts`) adds a `recentText` column
-  (the newest ~8 KB of each thread, recomputed on every comment write) and a `comments_fts`
-  external-content FTS5 table over it, with the standard 3 triggers + backfill.
-- **Query:** `CommentIndex.searchComments(q)` (`apps/api/src/lib/chat/comment-index.ts`) runs
-  `comments_fts MATCH … ORDER BY bm25()` with a `snippet()`, exposed at
-  `GET /collab/:ownerId/:mountId/:pathId/comments/search` (`apps/api/src/routes/collab.ts`).
-- **Palette:** `providers/doc-comment-search.ts` wraps the capability in TanStack Query (keyed by
-  `docKey`, since a shared doc's owner can differ from `ctx.ownerId`) and renders `doc-comment-hit`
-  results under an **In Comments** section — `doc:` scope only, never the global blend. The app pairs
-  the document-bound `{ docKey, search }` with its own `reveal` (stickies: chatName → cardId → open the
-  card; docs: open the comments panel + scroll).
-
-Standalone chat history (an `.eigenchat` file opened on its own) is **not** covered here — a per-room
-`messages_fts` over full chat history is future work, tracked in [SEARCH.md](SEARCH.md).
-
-## Shared Utilities
-
-`packages/lib/src/doc-search/` holds the DOM-free helpers every controller reuses:
-
-- `build-search-regex.ts` — `buildSearchRegex(query, opts)` builds the matcher from
-  `matchCase` / `wholeWord` / `regex`.
-- `preserve-case.ts` — `applyPreserveCase(...)` reapplies the source token's case to a literal
-  replacement (a replace-only concern `search()` never reads).
+The palette caches the call in TanStack Query keyed by `docKey`, the open document's `ownerId:mountId:pathId`, because on a shared document that owner differs from `ctx.ownerId`. Hits show under **In Comments** in the `doc:` scope only, never in the unscoped palette. Each app pairs the shared `useDocCommentSearchHalf` with its own `reveal`: stickies maps the chat name to its card and opens it, docs opens the comments panel and scrolls to the thread.
 
 ## See also
 
-- [INLINE-EDITING.md](INLINE-EDITING.md) — the Drive markdown / code editors that host the bar
-- [SEARCH.md](SEARCH.md) — drive-wide and mail content search (finding *which* document)
-- [COMMENTS.md](COMMENTS.md) — comment cards and threads behind `DocCommentSearch`
+- [SEARCH.md](SEARCH.md): which file contains a term, across mail and Drive
+- [COMMENTS.md](COMMENTS.md): the cards and threads behind `DocCommentSearch`
+- [INLINE-EDITING.md](INLINE-EDITING.md): the Drive markdown and code editors that host the bar
+- [CANVAS.md](CANVAS.md): the element kinds and their `searchText`

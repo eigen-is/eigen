@@ -1,163 +1,52 @@
 # Document Content Layer
 
-> **TLDR:** Thin per-type module under `apps/api/src/lib/document/` — a media-free reader over a
-> materialized `Y.Doc` and (where it exists) one writer per Eigen container type. The `*FromDoc`
-> readers are what the document-transform Worker calls for export, preview, import round-trips and
-> search extraction; nothing reads a persisted collab document on the main thread anymore — callers
-> capture compressed blobs (`captureCollabSource`) and the Worker materializes them. Writers do direct
-> Yjs mutations. Stickies and chat have light Mount-side readers here too (`stickies.ts`, `chat.ts`),
-> search-only and main-thread: stickies materializes its small Y.Doc directly, chat reads relational
-> SQLite rows. **Sheet and Doc writers are unsafe against live editors:** they snapshot-replace + clear
-> pending ops, so any unflushed client edit is lost.
+> **TLDR:** `apps/api/src/lib/document/` holds a reader for every Eigen container type and a writer for docs and sheets. The `*FromDoc` readers take a materialized `Y.Doc` and touch no Mount, so export, preview, import and the search extract all run them inside the document-transform Worker. Stickies and chat keep light main-thread readers that only search uses. **The writers replace, they don't merge**: an import into a document someone is editing discards their pending work, and nothing checks for an open session first.
 
-## Module surface
+## A reader takes a Y.Doc, never a Mount
 
-```
-apps/api/src/lib/document/
-  doc.ts      # readEigendocFromDoc(ydoc) → JSONContent
-              #   + writeEigendocToYjs(doc, json, schema)
-              #   + writeEigendocUpdateToYjs(doc, update) — commits a prepared Yjs update
-  sheets.ts   # readSheetsFromDoc(ydoc) → { sheets, recalcError }
-              #   + writeSheetsToYjs(doc, sheets)
-              #   + writeSheetsSnapshotToYjs(doc, snapshotJson) — commits already-serialized JSON
-  stickies.ts # readStickiesContent(mount, path) → { tasks, columns } — main thread, search only
-  chat.ts     # readChatContent(mount, path, capBytes) → string — main thread, search only
-  media.ts    # listDocumentMedia / buildPreviewUrlMap (main thread) + toDataUriMap (Worker side)
-  collab-types.ts  # COLLAB_DOCUMENT_TYPES — drive MIME → transform documentType (one map)
-
-# Both canvas types read through packages/lib instead: readVectorFromDoc(ydoc) → VectorScene
-# (packages/lib/src/vector/read-vector.ts, imported over the React-free ./vector subpath), because
-# the engine's reader is shared FE/BE and is the scene's trust boundary. See CANVAS.md.
-```
-
-| Type | Y.Doc reader | Reader returns | Writer |
+| Type | Reader | Returns | Writer |
 |---|---|---|---|
-| `.eigendoc` | `readEigendocFromDoc` | `JSONContent` | `writeEigendocToYjs` / `writeEigendocUpdateToYjs` |
-| `.eigensheets` | `readSheetsFromDoc` | `{ sheets, recalcError }` (replayed — see below) | `writeSheetsToYjs` / `writeSheetsSnapshotToYjs` |
-| `.eigenslides` / `.eigenvector` | `readVectorFromDoc` (`packages/lib/src/vector/read-vector.ts`) | `VectorScene` — `{ elements, frames, meta }` | – |
-| `.eigenstickies` | `readStickiesContent` (Mount-side, main thread) | `{ tasks, columns }` — card + column text | – |
-| `.eigenchat` | `readChatContent` (Mount-side, main thread) | `string` — newest messages, capped at `capBytes` | – |
+| `.eigendoc` | `readEigendocFromDoc` (`doc.ts`) | ProseMirror `JSONContent` | `writeEigendocUpdateToYjs`, `writeEigendocToYjs` |
+| `.eigensheets` | `readSheetsFromDoc` (`sheets.ts`) | `{ sheets, recalcError }` | `writeSheetsSnapshotToYjs` |
+| `.eigenslides`, `.eigenvector` | `readVectorFromDoc` (`packages/lib/src/vector/read-vector.ts`) | `VectorScene` | none |
+| `.eigenstickies` | `readStickiesContent` (`stickies.ts`, main thread) | card and column text | none |
+| `.eigenchat` | `readChatContent` (`chat.ts`, main thread) | the newest messages as text | none |
 
-The `*FromDoc` readers take an already-materialized `Y.Doc` and touch no Mount. There is no Mount-side
-read path anymore (the `read*Content` readers were deleted in Phase 4): whoever needs a persisted
-document goes `mount.getChildByName(path.id, 'data.db')` → `mount.openDatabase(COLLAB_DB_CONFIG, …)` →
-`readYjsStatePayload()` (`captureCollabSource`, a short blob copy) and hands the payload to the
-document-transform Worker, which runs `materializeYjsState` → the `*FromDoc` reader. Media, where a
-result needs it, is prepared on the main thread via `listDocumentMedia`. The managed DB is **not**
-closed after capture — a live collab session may share the instance; `Mount.closeAllDatabases` handles
-cleanup on shutdown. Tests use the same pipeline through the `readPersistedDoc` fixture.
+The Worker has no Mount, so a `*FromDoc` reader works on the `Y.Doc` it is handed. The caller captures the compressed Yjs blobs on the main thread (`captureCollabSource`), and the Worker materializes them and runs the reader ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). No transform reads a persisted collab document on the main thread. Tests read through the same pipeline with the `readPersistedDoc` fixture. `COLLAB_DOCUMENT_TYPES` (`collab-types.ts`) maps a drive mime to the Worker's document type, and preview and search both dispatch off it.
 
-Chat is the exception: its `data.db` is relational, not a Yjs log. `readChatContent` keyset-walks
-the newest messages a page at a time (the same `createdAt` index `getMessages` uses) and stops as
-soon as the accumulated text reaches `capBytes` — no Yjs, no full scan.
+## The canvas reader lives in packages/lib
 
-ACL is enforced upstream by callers (`getSharedDrive(ownerId, user)` in routes); the module
-itself takes a resolved `Mount`/`DrivePath` pair and assumes the caller already checked.
+`readVectorFromDoc` serves both canvas types and reaches the API over the React-free `./vector` subpath. The editor and the server share it because it is the scene's trust boundary ([CANVAS.md](CANVAS.md#the-reader-is-the-trust-boundary)). Slides and drawings have no writer, so a canvas can't be imported.
 
-## Sheets — snapshot + ops replay
+## Capture leaves the database open
 
-Fortune-sheet stores its state as `Y.Map('state').snapshot` (the encoded last-flushed
-workbook — SHEETS.md § The snapshot is interned and written only through the codec; legacy docs hold plain `Sheet[]` JSON) plus
-`Y.Array('ops')` (op batches since the last flush). Live editors push ops onto
-the array and observe it for remote ops; on `beforeunload` they flush a fresh snapshot via
-`encodeSheetsSnapshot` and clear the ops array (see
-`apps/sheets/src/components/sheets/hooks/use-sheet.ts`).
+Capture opens the container's `data.db` through `mount.openDatabase` and does not close it, because a live collab session may share that instance. `Mount.closeAllDatabases` closes it at teardown. The stickies and chat readers open theirs the same way.
 
-`readSheetsFromDoc` decodes the snapshot (`decodeSheetsSnapshot` — v1 arrays pass
-through untouched), replays pending op batches via `replaySheetsOps()`, and materializes each
-sheet's dense `data` matrix for the renderers (re-exported from `@workspace/sheet/engine`) — single source of
-truth, also used by the FE on initial load. The replay path uses `opToPatchOnSheets()`
-(`packages/lib/src/sheets/yjs-ops.ts`), kept in `@workspace/lib` so server-side replay doesn't
-pull in the sheet package's DOM-coupled state barrel.
+## The caller checks access
 
-A doc with pending ops but no snapshot (browser killed before the first flush) replays from
-`createDefaultSheets()` (engine) — the same base the editor seeded its grid from — on both FE
-and BE. An op batch that cannot apply is rolled back and skipped with a warning rather than
-failing the whole read; the doc stays loadable with everything else applied.
+The layer takes a resolved Mount and `DrivePath` and assumes the caller already checked access. Routes do that through `getSharedDrive(ownerId, user)`.
 
-After replay, `readSheetsFromDoc` can run a **gated server-side recalc**: `sheetsNeedRecalc()`
-(formula cells but no `calcChain`) decides whether to hand the sheets to `recalcSheets()`. Only the
-export read opts in — preview and search extract pass `{ recalc: false }` and serve replayed values
-as-is, because a legacy never-computed workbook costs an unbounded recalc (~39s measured), past
-their 30s Worker deadline (SHEETS.md § The editor computes on write, the server only what nobody computed). This is why an xlsx import that was
-never opened in an editor still exports with values (the import persists computed values with
-`computed: true`, which makes the decoder seed a `calcChain`, so post-import docs never fire the
-gate anywhere). A live-edited doc already persists
-fresh `v`/`m` through its ops, so it pays nothing. A recalc that throws falls back to the replayed
-values — an export must never 500 because recalc hiccuped.
+## Stickies and chat read on the main thread
 
-## Writers are unsafe against live editors
+These two serve only the search extract, and both are cheap. `readStickiesContent` materializes the board's small Y.Doc directly. Chat's `data.db` is relational, not a Yjs log, so `readChatContent` walks the newest messages a page at a time on the same `createdAt` index `getMessages` uses, and stops when the text reaches `capBytes`. The cap is a parameter because the extract indexes about 100 KB per file ([SEARCH.md](SEARCH.md#documents-are-extracted-by-the-readers-export-and-preview-use)).
 
-`writeSheetsSnapshotToYjs` — which `writeSheetsToYjs(doc, sheets, { computed })` composes
-after `encodeSheetsSnapshot`, and which the xlsx import path calls directly with the Worker's
-already-encoded snapshot —
-does:
+## The sheets reader replays ops and recalcs only for export
 
-```typescript
-doc.transact(() => {
-    doc.getMap('state').set('snapshot', snapshotJson); // wholesale replace
-    doc.getArray('ops').delete(0, ops.length);         // wipes pending edits
-});
-```
+`readSheetsFromDoc` decodes `state.snapshot`, replays the pending op batches through the engine's `replaySheetsOps`, and materializes each sheet's dense `data` matrix, which the renderers and the cross-sheet resolver read. The editor replays the same way, and the op rules are in [SHEETS.md](SHEETS.md#an-edit-is-an-op-in-a-yarray). A document with ops but no snapshot replays from `createDefaultSheets`, the base the editor recorded those ops against.
 
-`writeEigendocUpdateToYjs` takes the same shape: clears the existing `Y.XmlFragment('default')`,
-then `Y.applyUpdate` with a prepared update — the docx import path calls it directly with the
-Worker's update, and `writeEigendocToYjs(doc, json, schema)` composes it after encoding a fresh
-`prosemirrorJSONToYDoc` temp doc.
+Only the export read recalcs, and only a workbook with formulas and no `calcChain`. Preview and the search extract pass `{ recalc: false }`, because a legacy uncomputed workbook can outlast their 30 s Worker deadline ([SHEETS.md](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)). A recalc that throws falls back to the replayed values and reports `recalcError`, so an export never fails on it.
 
-If a live client has unflushed ops in `Y.Array('ops')` (sheets) or local typing not yet
-synced (doc) when one of these writers fires, the client's work is lost — CRDT can't merge a
-JSON-stringified snapshot or a fragment delete + apply-state. The two callers
-(`importIntoDocument` and `convertToDocument` in `lib/import/import-document.ts`) assume the
-target is not currently being edited:
+## The writers replace, they don't merge
 
-- `convertToDocument` — creates a fresh path then writes. **Safe.** No editors yet.
-- `importIntoDocument` — writes into an existing eigendoc / eigensheets path. **Unsafe** if the
-  path is open in any browser tab.
+`writeSheetsSnapshotToYjs` sets `state.snapshot` and clears `ops` in one transaction. `writeEigendocUpdateToYjs` clears the `default` fragment and applies a prepared Yjs update; clearing first is what makes an import a replacement ([EXPORT.md](EXPORT.md#a-docx-import-replaces-the-document)). `writeEigendocToYjs` builds that update from ProseMirror JSON. The import path hands both writers what the Worker produced, so the main thread never parses it ([EXPORT.md](EXPORT.md#an-import-writes-nothing-until-the-worker-succeeds)).
 
-The fix shape (deferred): replace `writeSheetsToYjs` with op-push primitives that go through
-`Y.Array('ops').push([ops])` so live observers replay them like a remote user's edit. Build
-high-level ops (`buildSetCellRangeOp`, etc.) on top. For docs, replace fragment-delete +
-apply-state with y-prosemirror's diff/transform path. Until then, the import UX should warn
-when the target file has active editors — and ideally the route should refuse the write while a
-collab session holds the document open. No such liveness check exists on `Drive` today.
-
-## Callers
-
-| Surface | Files |
-|---|---|
-| Export (HTML/PDF/DOCX/XLSX) | Worker: `lib/export/{doc,sheets,canvas,vector}/transform.ts` (calls the `*FromDoc` readers); main thread: `lib/export/export-document.ts` |
-| Preview generation | Worker: `lib/preview/eigen{doc,sheets,slides,vector}-render.ts` (calls the `*FromDoc` readers); main thread: `lib/preview/preview-document.ts` |
-| Search extraction | Worker: `lib/search/extract-render.ts` (the `extract-text` op, calls the `*FromDoc` readers); main thread: `lib/search/extract-text.ts` — mime dispatch plus the stickies/chat/plain-file arms (`readStickiesContent` / `readChatContent` from this layer) |
-| Import dispatcher | `lib/import/import-document.ts` (calls writers) |
-| Pure converters | `lib/import/{doc/{from-docx,transform}.ts, sheets/{from-xlsx,transform}.ts}` |
-
-`extract-text.ts` is the layer's broadest consumer: it dispatches on mime and calls every reader,
-so the body text the drive search index stores can't drift from what export and preview render.
-It caps each document at ~100 KB — the reason `readChatContent` takes an explicit byte cap.
-
-The pure converters in `lib/import/{doc,sheets}/` are buffer ⇆ native-content (`Buffer →
-Sheet[]`, `Buffer → JSONContent + images`); the dispatcher wires them to the writers. Both run
-off-thread: `sheets/transform.ts` composes parse + recalc + snapshot serialization and
-`doc/transform.ts` composes parse + ProseMirror-to-Yjs conversion inside the document-transform
-Worker, and the dispatcher only commits the returned snapshot JSON / Yjs update and writes the
-extracted docx media (see [EXPORT.md § An import writes nothing until the Worker succeeds](EXPORT.md#an-import-writes-nothing-until-the-worker-succeeds)).
-Export has a matching dispatcher: `lib/export/export-document.ts` owns the whole main-thread side —
-`(mime, format)` dispatch, the format→envelope table and media prep — while the per-type
-`export/<type>/transform.ts` modules call the readers inside the Worker.
-
-## Pending work
-
-- **Op-push primitive for sheets writes** (replaces snapshot-replace) — unblocks safe XLSX
-  import into open documents and any future scripting / batch tools.
-- **Live-safe doc writer** — same idea via y-prosemirror.
-- **No canvas writer** — slides / vector import and round-trip are not yet supported.
+Both write into the live `CollabDocument`, so the change persists and reaches connected editors like any edit, and a sheet editor remounts on the new snapshot. But nothing merges. The sheet ops a peer made since the last flush are cleared with the rest, and a peer's unsynced typing inside a deleted paragraph has nowhere to land. `convertToDocument` writes into a document it has just created, so no one can be editing it. `importIntoDocument` writes into an existing one, and `Drive` has no check for an open session. The live-safe writers are open work in [ROADMAP.md](ROADMAP.md).
 
 ## See also
 
-- [SHEETS.md](SHEETS.md) — sheet snapshot + ops invariants and the headless formula engine
-- [EXPORT.md](EXPORT.md) — eigen → docx/xlsx/pdf pipeline that consumes the readers
-- [SEARCH.md](SEARCH.md) — the drive content index built on `extract-text.ts`
-- [STORAGE.md](STORAGE.md) — Mount, `data.db` layout, `loadYjsState()`
-- `packages/lib/src/sheets/yjs-ops.ts` — `opToPatchOnSheets` helper
-- `apps/api/src/test/document/document-sheets.test.ts` — round-trip tests for the sheets module
+- [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md): capture, the Worker and every caller of the readers
+- [SHEETS.md](SHEETS.md): the snapshot codec, op replay and recalc
+- [EXPORT.md](EXPORT.md): export and the import that calls the writers
+- [SEARCH.md](SEARCH.md): the content index built from the readers
+- [COLLAB.md](COLLAB.md): the live `CollabDocument` the writers mutate
+- `apps/api/src/test/document/`: round-trip tests for the readers and writers

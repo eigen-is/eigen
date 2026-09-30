@@ -15,7 +15,7 @@
 | # | Item                                        | Effort | Blocked on                                    |
 |---|---------------------------------------------|--------|-----------------------------------------------|
 | 1 | Sub-action sheet (`→`)                      | S      | — buildable now                               |
-| 2 | `event:` / `chat:` result kinds + prefixes  | S      | SEARCH.md § Remaining (no backend yet)        |
+| 2 | `event:` / `chat:` result kinds + prefixes  | S      | ROADMAP.md search rows (no backend yet)       |
 | 3 | Per-user recents                            | S      | PROPOSAL_HOME_RECENTS (still a proposal)      |
 | 4 | Content-aware input (paste / drop / image URLs) | M  | — global-helper half buildable now            |
 | 5 | Smart-parser growth (datetime, math, units) | M      | telemetry showing demand                      |
@@ -55,7 +55,7 @@ follow.
 
 ## 2. `event:` / `chat:` result kinds + prefixes
 
-Blocked: calendar and chat indexing sit in [SEARCH.md](../SEARCH.md) § Remaining (calendar
+Blocked: calendar and chat indexing sit in [ROADMAP.md](../ROADMAP.md) (calendar
 `events_fts`, per-room `messages_fts`), still deferred there — there is no backend to consume.
 Once either lands, the palette work mirrors the file kind:
 
