@@ -18,6 +18,7 @@ import { createMountConfig } from '../../lib/mount';
 import * as mountHelpers from '../../lib/mount/helpers';
 import type { Mount } from '../../lib/mount/mount';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
+import { deleteUserCompletely } from '../../lib/user/delete-user';
 import {
     createHomeFaultMount,
     type FaultStorage,
@@ -413,9 +414,14 @@ describe('Backup of an enabled mount the drive could not open', () => {
         const reopened = await getHome(owner.id);
         expect(reopened.drive.getMounts().map((mount) => mount.id)).not.toContain('broken');
 
-        for (const level of ['light', 'full'] as const) {
-            const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-modes-broken-'));
-            await expect(snapshotHome(reopened, target, { level })).rejects.toThrow('broken');
+        try {
+            for (const level of ['light', 'full'] as const) {
+                const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-modes-broken-'));
+                await expect(snapshotHome(reopened, target, { level })).rejects.toThrow('broken');
+            }
+        } finally {
+            // Every whole-server backup after this file would fail on this home.
+            await deleteUserCompletely(owner.id, null);
         }
     });
 });
