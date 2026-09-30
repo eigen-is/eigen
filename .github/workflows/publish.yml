@@ -2,6 +2,7 @@ name: Publish
 
 # A version tag publishes that release; a push to main publishes :main, the channel an install can follow. A release
 # whose CHANGELOG lists breaking changes fails the gate; run this workflow on its tag with breaking: true to publish it.
+# Nothing else publishes: a run on another branch or tag fails in meta.
 on:
   push:
     branches: [main]
@@ -26,7 +27,8 @@ env:
   REGISTRY: ghcr.io/eigen-is/eigen
 
 jobs:
-  # The launcher reads the version from the image label, the API from package.json: on a tag they must agree.
+  # Only main and a v* tag publish, whatever started the run. The launcher reads the version from the image label, the
+  # API from package.json: on a tag they must agree.
   meta:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -42,17 +44,24 @@ jobs:
 
       - id: meta
         run: |
-          if [ "$GITHUB_REF_TYPE" = branch ]; then
-            version=$(jq -r .version package.json)
-            channel=main target=main
-          else
-            version=${GITHUB_REF_NAME#v}
-            if [ "$(jq -r .version package.json)" != "$version" ]; then
-              echo "::error::$GITHUB_REF_NAME does not match package.json $(jq -r .version package.json)"
+          case $GITHUB_REF in
+            refs/heads/main)
+              version=$(jq -r .version package.json)
+              channel=main target=main
+              ;;
+            refs/tags/v*)
+              version=${GITHUB_REF_NAME#v}
+              if [ "$(jq -r .version package.json)" != "$version" ]; then
+                echo "::error::$GITHUB_REF_NAME does not match package.json $(jq -r .version package.json)"
+                exit 1
+              fi
+              channel='' target=$version
+              ;;
+            *)
+              echo "::error::$GITHUB_REF publishes nothing: only main and v* tags do"
               exit 1
-            fi
-            channel='' target=$version
-          fi
+              ;;
+          esac
           {
             echo "version=$version"
             echo "channel=$channel"
