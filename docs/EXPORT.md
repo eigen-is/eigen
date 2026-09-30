@@ -50,7 +50,7 @@ Previews pass the same function the exact set of their own preview URLs ([PREVIE
 
 `readSheetsFromDoc` recalcs a workbook nobody computed, so an imported xlsx nobody opened still exports values. Export is the only read that does ([SHEETS-FORMULAS.md](SHEETS-FORMULAS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)). A recalc failure exports the replayed values with a `recalc-failed` warning. A legacy workbook whose recalc outlasts the 120 s deadline fails the export, an accepted residual.
 
-`to-xlsx.ts` reverses the importer with the same library. A merge's border perimeter is folded onto its master by `mergedBorderSides`, because ExcelJS keeps one style across a merge. Webpage links pass `resolveWebLink`, the editor's gate. Internal links are written in Excel's own `location` form. Floating images are dropped, an open [ROADMAP](ROADMAP.md) row. The class-styled HTML and the round-trip drifts: [SHEETS-EXPORT.md](SHEETS-EXPORT.md).
+`to-xlsx.ts` reverses the importer with the same library. A merge's border perimeter is folded onto its master by `mergedBorderSides`, because ExcelJS keeps one style across a merge. Webpage links pass `resolveWebLink`, the editor's gate. Internal links are written in Excel's own `location` form. Floating images are dropped, an open [ROADMAP](ROADMAP.md) row. The class-styled HTML and the round-trip drifts: [SHEETS.md](SHEETS.md).
 
 ## Canvas pages are the boxes the live canvas draws
 
@@ -90,8 +90,8 @@ The upload bound limits compressed bytes, while ExcelJS and mammoth inflate the 
 
 The Worker runs `recalcSheets` and encodes the snapshot as computed, so no later read recalcs it. A recalc failure stores the parsed values uncomputed with a warning, and the first export recalcs them. The importer keeps three rules:
 
-- Every cell type `t` is paired with a format `fa`, `'General'` when Excel reports none. Without one, date serials show as numbers.
-- A formula keeps its leading `=`, the form a sheet stores; the xlsx writer strips it.
+- `ct.fa` is always paired with `ct.t`, `'General'` when Excel reports no number format. Without an `fa`, date serials and percents render as raw numbers.
+- A formula cell's `f` keeps its leading `=` (`=SUM(A1:A3)`), the form a sheet stores; the xlsx writer strips it.
 - Internal links in `location` form are read from the raw worksheet XML, because ExcelJS drops them on read.
 
 ## A docx import replaces the document
@@ -104,7 +104,7 @@ The Worker runs `recalcSheets` and encodes the snapshot as computed, so no later
 
 ## See also
 
-- [SHEETS-EXPORT.md](SHEETS-EXPORT.md): the sheets HTML and the xlsx round-trip drifts
+- [SHEETS.md](SHEETS.md): the sheets HTML and the xlsx round-trip drifts
 - [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md): the runner, its limits and the Worker boundary
 - [CANVAS.md](CANVAS.md) and [CANVAS-ARROWS.md](CANVAS-ARROWS.md): the scene and the arrow label
 - [PREVIEWS.md](PREVIEWS.md): the previews that share these renderers
