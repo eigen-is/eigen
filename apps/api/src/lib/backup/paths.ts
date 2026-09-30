@@ -186,6 +186,8 @@ export function freeArtifactName(ownerId: string, at: Date): string {
 // and last verify; a server archive's is its job's record, which a refused attempt leaves with no archive.
 export const SIDECAR_SUFFIX = '.manifest.json';
 export const SERVER_SIDECAR_SUFFIX = '.json';
+// Beside a partial archive in the bucket, which may outlive this box's record of it.
+export const BUCKET_PARTIAL_SUFFIX = '.partial';
 
 export function sidecarPath(artifactPath: string): string {
     return `${artifactPath}${SIDECAR_SUFFIX}`;

@@ -6,6 +6,7 @@ import { getS3Config, getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { abortsIncompleteUploads, checkS3Connection, S3Storage } from '../storage/s3-storage';
 import { listHomeMounts } from './enumerate-homes';
+import { BUCKET_PARTIAL_SUFFIX } from './paths';
 import { pruneBucketArchives } from './retention';
 
 // S3 and Bun take parts of 5 MiB to 5 GiB, at most 10,000 of them. Two in flight hold 10 MiB up to a 50 GB
@@ -144,14 +145,14 @@ function untilAborted<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
     return Promise.race([work, aborted.promise]).finally(() => signal.removeEventListener('abort', stop));
 }
 
-// How many scheduled archives the bucket keeps, and the ones this box knows lack a home.
-export type RemoteRetention = { keep: number; partial?: ReadonlySet<string> };
+// How many scheduled archives the bucket keeps, and whether this one lacks a home.
+export type RemoteRetention = { keep: number; partial?: boolean };
 
 // Only scheduled archives, and only by name: a manual one is the owner's, a pre-update one never left its box,
 // and a key the grammar does not read is not an archive. An archive uploaded late may be one the keep would
 // drop: it is not deleted as it lands, and this round deletes nothing.
-async function pruneRemoteArchives(bucket: S3Storage, uploaded: string, retention: RemoteRetention): Promise<void> {
-    const doomed = pruneBucketArchives(await bucket.list(), retention.partial ?? new Set(), retention.keep);
+async function pruneRemoteArchives(bucket: S3Storage, uploaded: string, keep: number): Promise<void> {
+    const doomed = pruneBucketArchives(await bucket.list(), keep);
     if (doomed.includes(uploaded)) return;
     for (const name of doomed) await bucket.delete(name);
 }
@@ -170,6 +171,8 @@ export async function uploadServerArchive(
     const name = path.basename(archivePath);
     const bytes = Bun.file(archivePath).size;
     const bucket = serverBucket(destination);
+    // Before the archive, so the bucket never holds a partial one it would count as complete.
+    if (retention.partial) await bucket.write(`${name}${BUCKET_PARTIAL_SUFFIX}`, new Uint8Array());
     const write = bucket.read(name).write(new Response(sealArchive(archivePath, signal)), multipartOptions(bytes));
     await untilAborted(write, signal);
     const stored = await bucket.size(name);
@@ -180,6 +183,6 @@ export async function uploadServerArchive(
         throw new Error(`The bucket holds ${stored} bytes of ${name}, not ${bytes}`);
     }
     // Pruning that fails must not turn an upload that worked into one that did not.
-    await pruneRemoteArchives(bucket, name, retention).catch(console.error);
+    await pruneRemoteArchives(bucket, name, retention.keep).catch(console.error);
     return bucket.getKey(name);
 }

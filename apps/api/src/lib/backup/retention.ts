@@ -1,4 +1,5 @@
 import { parseServerArchiveName } from '@workspace/lib/validation';
+import { BUCKET_PARTIAL_SUFFIX } from './paths';
 
 // What `./eigen rollback` restores, and the one before it.
 const PRE_UPDATE_KEEP = 2;
@@ -37,18 +38,27 @@ export function pruneServerArchives(
     return [...scheduled, ...preUpdate].filter((archive) => !kept.has(archive)).map((archive) => archive.name);
 }
 
-// The bucket's scheduled archives to delete, by name. A partial one, whose manifest names a home that failed,
-// counts toward `keep` like any other, but the newest complete one stays whatever came after it: only it
-// restores every home. An archive `partial` does not name counts as complete.
-export function pruneBucketArchives(names: string[], partial: ReadonlySet<string>, keep: number): string[] {
+// The bucket's scheduled archives to delete, by name, with their partial markers. A partial one, whose manifest
+// names a home that failed, counts toward `keep` like any other, but the newest complete one stays whatever came
+// after it: only it restores every home. A marker whose archive never landed goes too.
+export function pruneBucketArchives(names: string[], keep: number): string[] {
+    const listed = new Set(names);
     const scheduled = names.flatMap((name) => {
         const parsed = parseServerArchiveName(name);
         return parsed?.reason === 'scheduled' ? [{ name, at: parsed.at }] : [];
     });
     scheduled.sort((a, b) => b.at.getTime() - a.at.getTime());
-    const newestComplete = scheduled.find((archive) => !partial.has(archive.name));
-    return scheduled
-        .slice(keep)
-        .filter((archive) => archive !== newestComplete)
-        .map((archive) => archive.name);
+    const newestComplete = scheduled.find((archive) => !listed.has(`${archive.name}${BUCKET_PARTIAL_SUFFIX}`));
+    const doomed = new Set(
+        scheduled
+            .slice(keep)
+            .filter((archive) => archive !== newestComplete)
+            .map((archive) => archive.name),
+    );
+    const markers = names.filter((name) => {
+        if (!name.endsWith(BUCKET_PARTIAL_SUFFIX)) return false;
+        const archive = name.slice(0, -BUCKET_PARTIAL_SUFFIX.length);
+        return doomed.has(archive) || !listed.has(archive);
+    });
+    return [...doomed, ...markers];
 }

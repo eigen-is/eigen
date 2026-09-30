@@ -4,7 +4,12 @@ import { basename, join } from 'node:path';
 import type { BackupJob, BackupReason } from '@workspace/lib/types/backup';
 import { EMPTY_S3, type S3Config } from '@workspace/lib/types/mount';
 import { drainBackupJobs, getBackupJob } from '../../lib/backup/jobs';
-import { buildServerArchiveName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
+import {
+    BUCKET_PARTIAL_SUFFIX,
+    buildServerArchiveName,
+    getBackupsDir,
+    serverSidecarPath,
+} from '../../lib/backup/paths';
 import { readServerSidecar, startServerBackup } from '../../lib/backup/server-job';
 import * as upload from '../../lib/backup/upload';
 import { backupKey, checkBackupDestination, multipartOptions, uploadServerArchive } from '../../lib/backup/upload';
@@ -267,10 +272,13 @@ describe('Upload of server archives', () => {
         for (const name of [night('02'), night('03'), night('04'), night('05')]) {
             await mine.write(name, new TextEncoder().encode(name));
         }
+        // The bucket's own markers say which are partial: this box may have pruned their records long ago.
+        for (const name of [night('04'), night('05')])
+            await mine.write(`${name}${BUCKET_PARTIAL_SUFFIX}`, new Uint8Array());
         const newest = basename(writeArchive('scheduled', '2026-09-01T02:00:00.000Z', 'most homes', 'failed'));
-        const partial = new Set([night('04'), night('05'), newest]);
-        await uploadServerArchive(join(getBackupsDir(), newest), bucket, { keep: 2, partial });
-        expect((await mine.list()).sort()).toEqual([night('03'), night('05'), newest].sort());
+        await uploadServerArchive(join(getBackupsDir(), newest), bucket, { keep: 2, partial: true });
+        const marked = [night('05'), newest].map((name) => `${name}${BUCKET_PARTIAL_SUFFIX}`);
+        expect((await mine.list()).sort()).toEqual([night('03'), night('05'), newest, ...marked].sort());
     });
 
     describe('the destination check', () => {
@@ -580,17 +588,20 @@ describe('Upload of server archives', () => {
             JOB_TIMEOUT_MS,
         );
 
-        test('the bucket keeps the newest archive this box records as complete past partial ones', async () => {
+        test('an upload marks a partial archive in the bucket, which keeps the newest complete one past it', async () => {
             await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 1 } } });
             const mine = new S3Storage({ ...bucket, prefix: `nightly/${getDomain()}` });
-            const complete = basename(writeArchive('scheduled', '2026-08-03T02:00:00.000Z', 'every home'));
-            const partial = basename(writeArchive('scheduled', '2026-08-04T02:00:00.000Z', 'most homes', 'failed'));
-            for (const name of [complete, partial]) await mine.write(name, new TextEncoder().encode(name));
+            // Uploaded before, and pruned here since: only the bucket knows which of them is partial.
+            const complete = buildServerArchiveName('scheduled', 'full', new Date('2026-08-03T02:00:00Z'));
+            const partial = buildServerArchiveName('scheduled', 'full', new Date('2026-08-04T02:00:00Z'));
+            for (const name of [complete, partial, `${partial}${BUCKET_PARTIAL_SUFFIX}`]) {
+                await mine.write(name, new TextEncoder().encode(name));
+            }
             const newest = basename(writeArchive('scheduled', '2026-08-05T02:00:00.000Z', 'most homes', 'failed'));
 
             const { data } = await ctx.alice.api.admin['server-backup'].archives({ name: newest }).upload.post();
             expect((await waitForJob(data!.jobId)).state).toBe('done');
-            expect((await mine.list()).sort()).toEqual([complete, newest].sort());
+            expect((await mine.list()).sort()).toEqual([complete, newest, `${newest}${BUCKET_PARTIAL_SUFFIX}`].sort());
         });
 
         test('shutdown aborts an upload under way, and leaves no parts in the bucket', async () => {

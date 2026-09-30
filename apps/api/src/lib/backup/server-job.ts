@@ -483,16 +483,6 @@ async function recordUpload(archivePath: string, upload: ServerArchiveUpload): P
     if (sidecar) await writeServerSidecar(archivePath, { ...sidecar, upload });
 }
 
-// The archives here whose manifest names a home that failed: the bucket keeps a complete one past them.
-async function partialArchives(): Promise<Set<string>> {
-    const archives = await listServerArchives();
-    return new Set(
-        archives.flatMap((archive) =>
-            archive.record?.manifest?.homes.some((home) => home.failed) ? [archive.name] : [],
-        ),
-    );
-}
-
 // A restart before the upload ends leaves its record running, which the next boot marks failed.
 async function uploadAndRecord(archivePath: string, signal: AbortSignal): Promise<ServerArchiveUpload> {
     const { s3, keep } = getServerSettings().backups.upload;
@@ -502,7 +492,8 @@ async function uploadAndRecord(archivePath: string, signal: AbortSignal): Promis
     let upload: ServerArchiveUpload;
     try {
         signal.throwIfAborted();
-        const retention = { keep, partial: await partialArchives() };
+        const record = await readServerSidecar(archivePath).catch(() => null);
+        const retention = { keep, partial: record?.manifest?.homes.some((home) => home.failed) };
         upload = { state: 'done', at: new Date(), key: await uploadServerArchive(archivePath, s3, retention, signal) };
     } catch (error) {
         const reason = signal.aborted ? UPLOAD_STOPPED : describeError(error);

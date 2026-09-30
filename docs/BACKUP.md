@@ -219,7 +219,7 @@ The backup bucket's secret reaches no browser, the owner's included, and a blank
 
 ## The bucket keeps its own count, and always the newest complete archive
 
-After a successful upload, `pruneBucketArchives` (`apps/api/src/lib/backup/retention.ts`) lists the server's folder and deletes scheduled archives past `upload.keep`, by name. An archive whose manifest names a failed home counts toward `keep`, but the newest complete archive stays whatever came after it, because only it restores every home. Manual archives and names the grammar does not read are never deleted. An archive uploaded late that the count would drop is left, and that round deletes nothing. Pruning never runs after a failed upload.
+After a successful upload, `pruneBucketArchives` (`apps/api/src/lib/backup/retention.ts`) lists the server's folder and deletes scheduled archives past `upload.keep`, by name. An archive whose manifest names a failed home counts toward `keep`, but the newest complete archive stays whatever came after it, because only it restores every home. The upload of such an archive first writes an empty `{name}.partial` beside it, since this box's record of the archive goes with local retention long before the bucket's copy does; the marker goes with its archive. Manual archives and names the grammar does not read are never deleted. An archive uploaded late that the count would drop is left, and that round deletes nothing. Pruning never runs after a failed upload.
 
 ## No server archive leaves the box through a browser
 

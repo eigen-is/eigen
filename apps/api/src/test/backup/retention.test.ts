@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { BackupReason } from '@workspace/lib/types/backup';
-import { buildServerArchiveName } from '../../lib/backup/paths';
+import { BUCKET_PARTIAL_SUFFIX, buildServerArchiveName } from '../../lib/backup/paths';
 import { pruneBucketArchives, pruneServerArchives } from '../../lib/backup/retention';
 
 // One archive a night at 02:00 UTC, `night` days after 1 September.
@@ -84,10 +84,21 @@ describe('Server archive retention', () => {
 
     test('the bucket counts a partial archive toward keep, but keeps the newest complete one past it', () => {
         const nights = [1, 2, 3, 4, 5].map((night) => archive('scheduled', night).name);
-        const partial = new Set([nights[3], nights[4]]);
-        expect(pruneBucketArchives(nights, partial, 2).sort()).toEqual([nights[0], nights[1]].sort());
-        expect(pruneBucketArchives(nights, new Set(nights), 2).sort()).toEqual(nights.slice(0, 3).sort());
+        const marked = (names: string[]) => names.map((name) => `${name}${BUCKET_PARTIAL_SUFFIX}`);
+        const partial = marked([nights[3], nights[4]]);
+        expect(pruneBucketArchives([...nights, ...partial], 2).sort()).toEqual([nights[0], nights[1]].sort());
+        const doomed = nights.slice(0, 3);
+        expect(pruneBucketArchives([...nights, ...marked(nights)], 2).sort()).toEqual(
+            [...doomed, ...marked(doomed)].sort(),
+        );
         const others = [archive('manual', 0).name, archive('pre-update', 0).name, 'notes.txt'];
-        expect(pruneBucketArchives([...others, ...nights], new Set(), 1).sort()).toEqual(nights.slice(0, 4).sort());
+        expect(pruneBucketArchives([...others, ...nights], 1).sort()).toEqual(nights.slice(0, 4).sort());
+    });
+
+    test('the bucket drops a partial marker whose archive never landed', () => {
+        const night = archive('scheduled', 1).name;
+        expect(pruneBucketArchives([`${night}${BUCKET_PARTIAL_SUFFIX}`], 2)).toEqual([
+            `${night}${BUCKET_PARTIAL_SUFFIX}`,
+        ]);
     });
 });
