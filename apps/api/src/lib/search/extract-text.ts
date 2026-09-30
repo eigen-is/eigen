@@ -65,7 +65,7 @@ export async function extractText(mount: Mount, path: DrivePath): Promise<string
 
 // A .vcf indexes by the contacts it holds: its raw body is mostly base64 photo, and a name folded across
 // physical lines isn't there to be matched. The cards come from the same Worker job the preview runs
-// (PREVIEW-PAYLOADS.md), so they carry that job's ceilings — a file over the import ceiling, and a file the
+// (PREVIEWS.md), so they carry that job's ceilings — a file over the import ceiling, and a file the
 // decoder refuses, index as nothing rather than staying dirty for every later drain.
 async function extractVCardText(mount: Mount, path: DrivePath): Promise<string> {
     if (path.size > VCARD_MAX_BYTES) return '';

@@ -1,6 +1,6 @@
-# File Previews
+# File Previews and File Actions
 
-> **TLDR:** The API renders previews of Drive files and mail parts for the quick-look overlay and the drive hero, in `apps/api/src/lib/preview/`. Four things are not obvious: every cached preview is keyed by the file's version and a renderer format tag; the JSON previews serve the previous version while the current one regenerates; an Eigen document previews a small slice inside the one-shot transform Worker, never on the event loop; and no preview body may fetch a URL the file chose. The `.vcf`, `.eml` and `.ics` quick looks have [PREVIEW-PAYLOADS.md](PREVIEW-PAYLOADS.md), the overlay and its actions [FILE-ACTIONS.md](FILE-ACTIONS.md).
+> **TLDR:** The API renders previews of Drive files and mail parts in `apps/api/src/lib/preview/`. Every surface that shows a file acts on it through one `FileSubject`, one registry of actions (`FILE_ACTIONS`) and one runner; the quick-look overlay is one more host of those rows. Not obvious: a cached preview is keyed by the file's version and a format tag you bump on every change of shape; a new version serves the old body while it regenerates; an Eigen document previews a slice inside the transform Worker; no preview may fetch a URL the file chose; and the host mounts the runner's dialogs, because a menu unmounts on close.
 
 ## Each kind of file gets one kind of preview
 
@@ -18,7 +18,7 @@ The server renders every body, so the frontend stays a plain container and every
 
 Every preview is a file in `mount.previewsDir`, named `{pathId}-{updatedAt}.{format}.json` (images: `.screen.webp` or `.screen.svg`). A new version writes a new file rather than overwriting the old one, which is what lets a versioned URL be cached for long. After each write, `pruneOldVersions` deletes the path's other versions fire-and-forget. A sweep at `mount.init()` removes anything older than seven days, for paths written once and never again.
 
-The format tag (`TEXT_FORMAT` and its siblings in `preview-cache.ts`) names the shape of the renderer's output. **Bump it whenever the generated HTML changes shape.** A bump makes every cached body a miss even though `updatedAt` did not move.
+The format tag (`TEXT_FORMAT` and its siblings in `preview-cache.ts`) names the shape of the renderer's output. **Bump it whenever the output changes shape.** A bump makes every cached body a miss even though `updatedAt` did not move. A cached typed payload is JSON this process wrote, and reading it back is a typed assignment nothing checks, so a payload type change without a bump makes a restored `previewsDir` serve the old shape. Bump `EML_FORMAT` on every DOMPurify upgrade too: a cached message is HTML the previous sanitizer filtered.
 
 Every write goes through a dot-prefixed temp file and a rename (`writeCacheFile`). A read deletes a cache file it cannot parse, so a reader that caught a half-written file would delete the regeneration that just landed.
 
@@ -40,7 +40,7 @@ Generations are shared per cache name, the first one and the background one alik
 
 ## Loose bytes preview as what their name says
 
-`getTextPreview` decides on the **container type**, never the mime. A collab container renders from its Yjs document. Everything else renders from its bytes through `getBytesTextPreviewMode`, because a mime is the uploader's or the sender's word. A plain file wearing an Eigen mime must not be drawn inside an A4 page or a slide frame it does not hold.
+`getTextPreview` decides on the **container type**, never the mime. A collab container renders from its Yjs document. Everything else is loose bytes, a plain file whatever its mime, and renders from its bytes through `getBytesTextPreviewMode`, because a mime is the uploader's or the sender's word. A plain file wearing an Eigen mime must not be drawn inside an A4 page or a slide frame it does not hold.
 
 Loose bytes render in one of three modes. Markdown goes through markdown-it with raw HTML off. Code goes through lowlight. Plain text becomes `<p>` paragraphs, not `<pre>`, because `eigen-prose` paints every `<pre>` as a dark code block and a `.txt` should read like prose.
 
@@ -59,13 +59,13 @@ A preview is a glance, so each type stops at its natural unit and leaves the exp
 | eigenvector | 500 elements in reading order, one page |
 | eigensheets | first sheet, 200 rows × 50 columns, 10,000 cells |
 
-A sheets preview never recalculates. It renders stored values, because a never-computed legacy workbook can cost more than the deadline. The sheet window also bounds declared spans: one merge or conditional-format range can name millions of cells, so both clip to the window.
+A sheets preview never recalculates. It renders stored values, because a never-computed legacy workbook can cost more than the deadline. The sheet window also bounds declared spans: one merge or conditional-format range can name millions of cells, so both clip to the window. So an aggregate rule (data bars, color scales, top-N, duplicates) takes its extremes over the window, not over the range it declares.
 
 The caps count units, and one enormous block passes all of them. So `applyPreviewByteGuard` replaces any body over 8 MB with the truncation marker, never with a sliced string. The marker is inline-styled because a preview body is embedded without a `<head>`.
 
 ## No preview body may fetch a URL the file chose
 
-A body renders as live DOM in the viewer's browser. A collaborator's `<img src=https://…>` or `url(https://…)` would tell a third party who opened the folder. So every HTML body passes `sanitizeExportHtml`, which keeps only `data:` URIs and the media URLs the main thread prepared (`allowedRefs`). Markdown takes the same pass. A canvas body is filtered twice: each rich-text box through `sanitizeSceneHtml` before the compositor runs, then the assembled page, so the compositor's own media hrefs and gradient refs survive.
+A body renders as live DOM in the viewer's browser. A collaborator's `<img src=https://…>` or `url(https://…)` would tell a third party who opened the folder. So every HTML body passes `sanitizeExportHtml`, which keeps only `data:` URIs and the media URLs the main thread prepared (`allowedRefs`). Markdown takes the same pass. A canvas body is filtered twice: each rich-text box through `sanitizeSceneHtml` before the compositor (the server renderer that turns a scene into HTML, [EXPORT.md](EXPORT.md)) runs, then the assembled page, so the compositor's own media hrefs and gradient refs survive.
 
 An SVG is served as its own bytes under the sandbox CSP, not rasterised. An `eigen-media:` image inside it is inlined as a `data:` URI first (`svg-media-inline.ts`), because an SVG shown in an `<img>` never fetches a reference.
 
@@ -73,11 +73,53 @@ An SVG is served as its own bytes under the sandbox CSP, not rasterised. An `eig
 
 `generateImagePreview` (`apps/api/src/lib/shared/thumbnails.ts`) runs in a Worker and makes both the 512 px thumbnail and the 2560 px screen preview. It tries sharp, then `heic-convert` for HEIC, then the JPEG exiftool finds embedded in a RAW, PSD or AI file. `isExiftoolCandidate` gates it.
 
-A video thumbnail is a frame ffmpeg takes at one second, or at zero for a shorter clip, resized like an image. ffprobe adds width, height and duration to the file's details. Without ffmpeg the upload still succeeds, just without a thumbnail.
+A video thumbnail is a frame ffmpeg takes at one second, retried at zero when that fails, resized like an image. ffprobe adds width, height and duration to the file's details. Without ffmpeg the upload still succeeds, just without a thumbnail.
 
 ## A mail part previews through the same renderers
 
-The mail preview routes (`routes/mail.ts`) end in the bytes-in entry points beside the cached ones: `getBytesTextPreview` and its three typed siblings. A part has no version stamp to key a cache on, so nothing is cached server-side. `answerMailPart` builds the ETag from the message and the format tag, stamped only on a produced body. A part decodes with the charset its sender declared. Why the routes sit two segments past the part index is in [MAIL.md](MAIL.md).
+The mail preview routes (`routes/mail.ts`) end in the bytes-in entry points beside the cached ones: `getBytesTextPreview` and its three typed siblings. A part has no version stamp to key a cache on, so nothing is cached server-side. `answerMailPart` builds the ETag from the message and the format tag, stamped only on a produced body. A part decodes with the charset its sender declared. Only an inline forwarded `message/rfc822` is flattened into its parent; a non-inline one is a part of its own, which the `.eml` route previews. Why the routes sit two segments past the part index is in [MAIL.md](MAIL.md).
+
+## A `.vcf`, an `.eml` and an `.ics` preview as what they hold
+
+A `.vcf` is mostly base64 photo, an `.ics` is folded property lines, and an `.eml` is headers, boundaries and base64. None of them reads well as text. So `getBytesTextPreviewMode` answers `null` for all three, and `getPreviewMode` gives each its own mode before it reaches the text rule. That also keeps each path at one cached artifact, which matters because `pruneOldVersions` is not format-scoped. The builders live in `preview/{vcard,eml,ics}-preview.ts` and run in the transform Worker.
+
+| Format | Mode and predicate | Ceiling | Payload | Cache tag |
+|---|---|---|---|---|
+| `.vcf` | `vcard`, `isVCardFile` | `VCARD_MAX_BYTES` | `VCardPreview` | `VCARD_FORMAT` |
+| `.eml` | `eml`, `isEmlFile` | `EML_MAX_BYTES` | `EmlPreview` | `EML_FORMAT` |
+| `.ics` | `ics`, `isIcsFile` | `ICS_MAX_BYTES` | `IcsPreview` | `ICS_FORMAT` |
+
+Each format has a Drive route (`/drive/…/file/:pathId/<format>-preview`) and a mail-part route (`/mail/…/attachment/:index/preview/<format>`). One guard runs first: a 400 for a file that isn't the format, a 413 past the ceiling. Drive checks the row before it reads the bytes. A file the parser throws on is a 422, "Could not read this file", never a crash or an empty success. The ceiling is the import's, because the preview parses the whole file the way an import does. Drive caches the payload through the same `getOrCacheText` the text preview uses.
+
+Search follows the same split. A `.vcf` indexes the names in its cards and an `.ics` its raw body, but an `.eml` is not content-indexed under any mime ([SEARCH.md](SEARCH.md)).
+
+## The typed payloads share one client path
+
+The client reads all six routes through `plainApi` (`packages/lib/src/core/api.ts`). Eden's default reviver would turn a bare `YYYY-MM-DD` birthday, an ISO `date` or an all-day `start` into a `Date` the type does not admit. `PreviewPane` (`packages/ui/src/components/drive/preview-pane.tsx`) is the box all three draw into, with the too-large, loading and unreadable states they share. A query that is still disabled, because the owner is unknown until auth settles, shows the loader and not an error.
+
+`dropped` means the same in all three payloads: what the parser could not read. What a payload merely does not list is `total - dropped - listed`, which the surface derives. The counted lines under the cards, "and N more" and "N could not be read", come from `remainingLine` and `unreadableLine` in `packages/lib/src/core/transfer.ts`.
+
+## The `.eml` payload is where a message is made safe
+
+The mail parser bounds neither the size of a body nor its references, so the builder does both.
+
+**Size.** `EML_PREVIEW_MAX_HTML_BYTES` (2 MiB) is measured on the sanitizer's input, not its output. A 12 MiB `text/html` part costs 4.4 GB of RSS inside `DOMPurify.sanitize`, which the Worker would pay before an output bound applied. A body over the ceiling is measured again without its inlined `data:` images, since one `cid:` named 200 times is 200 copies. Only a body still over it becomes `null`, so a heavier message never shows less than a lighter one.
+
+**References.** The preview makes no network request when it renders. The rule is an allowlist inside DOMPurify's own DOM, because a regex over serialized HTML would void the sanitizer's output guarantee. On top of the reader's config it forbids `svg`, `math`, media, `picture` and form controls. It removes every URL attribute that is not an inline raster image, since an SVG or HTML `data:` URI is a document of its own. Links keep only `http:`, `https:` and `mailto:`, and open in a new tab.
+
+**CSS** is refused on a token, never on a well-formed `url()` pair. A CSS escape spells `url(` invisibly to a regex (`u\72l(`), and an unterminated `url(` still fetches. The check also reads the text a viewer's color-scheme deletion would leave: removing `@media (prefers-color-scheme: dark){}` from `ur@media …{}l(https://…)` rejoins a `url(`. The hooks are added and removed around one synchronous call, because DOMPurify's hooks are global. `apps/api/src/test/preview/eml-preview.test.ts` is the hostile corpus that pins all of it.
+
+## An `.ics` preview lists masters only
+
+The builder runs the one parser, `parseIcs` ([CALENDAR.md](CALENDAR.md)), on a strict UTF-8 decode. It lists **masters only**: an override and the cancelled row an EXDATE becomes are parts of a series the master's `rrule` already describes. An override whose master the file lacks attaches to nothing a card can show, so it counts as dropped. So does an event dated outside the years 1 to 9999, which `toISOString` would spell as an invalid date.
+
+Nothing in the payload is relative to now, because it is cached per file version. `start` and `end` are strings: an instant, or a bare date with the exclusive end the calendar stores for an all-day event. The quick look and the drive hero (the preview at the top of Drive's detail column, `drive-preview.tsx`) turn them into `Date`s where they draw them.
+
+The payload copies named event fields (`previewEvent`), so an ATTACH, a URL or a directory reference in the file never reaches a card. An organizer or attendee is listed only as a plain address. A CAL-ADDRESS is a URI, and the card writes a `mailto:` link from it, so `javascript:…` or an address with a `?` is left out. `EventDetailCard` is the same card the calendar's detail dialog renders, so a file's event reads like a stored one.
+
+## A `.vcf` preview never fetches a photo
+
+The build decodes strict UTF-8 and parses no more cards than an import accepts. A card the parser refuses is counted, not fatal. The first 200 cards are listed. An inline `PHOTO` becomes a `data:` URI; a `PHOTO;VALUE=uri` is dropped rather than fetched, so the file can't make a viewer's browser call a URL it chose.
 
 ## The client draws the body as live DOM
 
@@ -87,9 +129,68 @@ Two bodies bring their own box. A deck and a drawing are compositor pages compos
 
 Drive's inline editor shows the same body read-only and loads Tiptap or CodeMirror only on Edit (`apps/drive/src/components/editor/native-file-editor.tsx`).
 
+## A message body is never rewritten as text
+
+`MessageView` (`packages/ui/src/components/mail/message-view.tsx`) draws the header and body for the mail reader and the `.eml` quick look alike, so a saved message reads as the message it was. Unlike the other bodies, it goes into `ShadowContent`'s closed shadow root. It drops the color-scheme rules that disagree with its canvas through the CSSOM, once the sheet is parsed, and never over the text: a text deletion could splice the halves around it into the `url(` the server refused. Search highlights are wrapped on the parsed tree too.
+
+## A file subject stores identity, everything else is derived
+
+Every surface that shows a file (a Drive listing, the mail reader, a chat or card attachment) acts on it through a `FileSubject` (`packages/lib/src/types/file-subject.ts`). It is a `DrivePath` or a mail part reference (`{ ownerId, messageId, index }` plus the part's name, type and size), and holds nothing that follows from that identity. `subjectInfo(subject)` derives the rest in one place: the key siblings are matched on, the name, the mime, the size, and the embed, download and thumbnail URLs. So no surface composes a route by hand, and no fact is stored twice where it could disagree.
+
+`subjectFromPath` and `subjectFromMailAttachment` in `packages/lib/src/core/file-subject.ts` are the only builders. A mail subject carries the **raw** part index the mail routes address, calendar parts included, so a reader that hides those parts still names the right one. `importSourceOf` answers where an import reads the bytes: a Drive file is copied server-side, anything else is fetched from its download URL.
+
+Two flags come from the surface that holds the file:
+
+- `readOnly`: the viewer can't write where the file sits, such as a watched feed. The convert rows write the new document beside the source, so they drop out. The surface sets it from its own `DriveCapabilities.canWrite` ([LAYOUT.md](LAYOUT.md)).
+- `attachment`: the file belongs to a message or a container, not to a Drive location. Its siblings are a set, which is what draws the overlay's "Save all (n)". And a chat or card attachment's Drive copy sits in a hidden media folder, so a convert saves to a folder the user picks first.
+
+## A file-action row never asks which surface draws it
+
+`FILE_ACTIONS` (`packages/lib/src/core/file-actions.ts`) lists what can be done with a file: Quick preview, Download, Save to Drive, the two converts and the three imports. Each row's `applies` reads the derived facts, and for a few rows the identity behind them. `fileActionsFor(subject, exclude?)` derives the facts once for the whole list. A new row shows up in every menu and in the overlay footer without editing one.
+
+Save to Drive declines a Drive file that isn't an attachment, because Drive's own "Copy to…" does that. An import row declines a file over its import ceiling, because the route would answer 413.
+
+`useFileActions` (`packages/ui/src/components/file-actions/use-file-actions.ts`) is the one place that knows who is asking. An import route refuses a guest while `applies` is handed only the file, so rows flagged `guestDenied` drop out for a guest there. Rows flagged `mailOnly` drop out on a server without hosted mail.
+
+## The host mounts the runner's dialogs
+
+`useFileActionRunner(subject, siblings?, exclude?)` performs a row. `FileActionMenuItems` draws the rows as menu items and takes the runner rather than building one. A menu's content unmounts when it closes, so the picker a row opens must live above it: the host renders `runner.dialogs` once. The rows come from `runner.subject`, so a host can't pair one menu with another's subject.
+
+The subject may be `null` for a host whose subject is state, like the right-clicked chip. What a picker acts on is snapshotted when the row runs, because the menu that drew the row is closed by the time the picker is confirmed.
+
+A convert on an attachment opens the Save to Drive picker first, titled with the row's label and confirmed with **Save and convert**. `useConvertDocument` then runs on each file the save created. Import to Calendar opens a target picker before it imports ([CALENDAR.md](CALENDAR.md)). The overlay disables its footer while `runner.isPending`, and its focus trap stands down while `runner.isDialogOpen`.
+
+## Save to Drive copies on the server
+
+`SaveToDrivePicker` (`packages/ui/src/components/drive/save-to-drive-picker.tsx`) is the one "where does this go" dialog. A Drive subject is copied server-side, so its bytes never travel through the browser. A mail subject is written from the message the server still holds, in one call for every part. "Download instead" falls back to browser downloads, staggered because a browser drops the later downloads of a burst fired in one tick.
+
+Siblings come from one surface, so a batch is all Drive items or all mail parts, and the first subject picks the branch. The picker renders above the overlay through `DialogContent`'s `abovePreview` prop.
+
+## The overlay picks its mode from the subject
+
+`PreviewProvider` stores the subject and its siblings and portals `FilePreview` (`packages/ui/src/components/drive/file-preview.tsx`) to `<body>`. `openPreview(subject, siblings?)` takes the siblings the arrow keys page through. A Drive listing passes its folder without the `attachment` flag, so the overlay never offers to copy a folder onto itself.
+
+`getPreviewMode(subject)` runs the text gate above on the client. An image needs a mount to be resized, so only a Drive image uses `/preview`. A mail image shows its original bytes, which makes it an image only for a mime in `BROWSER_IMAGE_MIMES`. A HEIC part gets the file card rather than a broken box.
+
+`ProgressiveImage` stacks the 512 px thumbnail under the screen preview so the image shows at once. The box takes its ratio from the Drive row. A mail part has no stored size, so the box measures the image once it loads and then hugs it, and a click beside it reaches the backdrop that closes the overlay. The component is keyed on the preview URL, so a sibling never inherits the previous image's size.
+
+## The overlay's keys stand down for a layer above it
+
+Escape closes, all four arrow keys page, and Space closes the way it opened, like Finder's Quick Look. The keys listen on the document, so they must yield to a layer open above the overlay.
+
+Every layer portals to `<body>` in the order it opened, so later in the document is higher in the stack. `useDialogOpen(overlayRef)` (`packages/ui/src/hooks/use-dialog-open.ts`) asks whether a `role="dialog"` after the overlay is open. A stickies card dialog the overlay was opened from sits before it, so it doesn't count.
+
+Presence is not enough for the keydown in hand. A layer dismisses itself on the capture phase of the same keydown the overlay hears on the bubble, so by then the layer is gone. So a keydown whose target sits inside a dialog, menu or listbox after the overlay belongs to that layer. A `DialogContent` under an open preview ignores Escape, which is the overlay's to close.
+
+Space yields when focus is on a control inside the overlay, where it presses that control. The overlay registers it with `preventDefault: false`, because the hotkey library prevents the default before the callback runs.
+
+## One hook wires every attachment chip to the menu
+
+`useAttachmentChipMenu` (`packages/ui/src/components/attachment/use-attachment-chip-menu.ts`) connects the chips in the mail reader, chat and the card dialog to the singleton context menu. It handles right-click and touch long-press, and reads the chip under the pointer at pointer-down, because a long-press reports only where it started. A right-click on a plain link or a text selection is left to the browser's own menu. The host draws the menu's content: `FileActionMenuItems`, plus its own rows in chat ([CHAT.md](CHAT.md)).
+
 ## See also
 
-- [PREVIEW-PAYLOADS.md](PREVIEW-PAYLOADS.md): the `.vcf`, `.eml` and `.ics` quick looks
-- [FILE-ACTIONS.md](FILE-ACTIONS.md): the overlay, `FileSubject` and the file-action registry
 - [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md): the Worker, its admission and its benchmark
 - [EXPORT.md](EXPORT.md): the full-document renderers the previews share
+- [LAYOUT.md](LAYOUT.md): Drive's item menu, capabilities and the overlay's z-index
+- [MAIL.md](MAIL.md), [CALENDAR.md](CALENDAR.md), [CONTACTS.md](CONTACTS.md): the parsers and the imports

@@ -240,7 +240,7 @@ export function useTextPreview(
     });
 }
 
-// GET VCARD PREVIEW — the contact cards a .vcf holds, parsed server-side (PREVIEW-PAYLOADS.md). The quick look
+// GET VCARD PREVIEW — the contact cards a .vcf holds, parsed server-side (PREVIEWS.md). The quick look
 // and the drive hero read the same query. `updatedAt` is in the key, so a new version is a new entry and
 // the cards never go stale; the query stays off a file the import ceiling would refuse anyway.
 export function useVCardPreview(ownerId: string, mountId: string, pathId: string, updatedAt: Date, size: number) {
@@ -261,7 +261,7 @@ export function useVCardPreview(ownerId: string, mountId: string, pathId: string
     });
 }
 
-// GET EML PREVIEW — the message a .eml holds, parsed and sanitized server-side (PREVIEW-PAYLOADS.md). Keyed by
+// GET EML PREVIEW — the message a .eml holds, parsed and sanitized server-side (PREVIEWS.md). Keyed by
 // `updatedAt` like the cards above, so a new version is a new entry; the route itself answers
 // `private, no-cache`, so a browser that already holds a body revalidates it.
 export function useEmlPreview(ownerId: string, mountId: string, pathId: string, updatedAt: Date, size: number) {
@@ -280,7 +280,7 @@ export function useEmlPreview(ownerId: string, mountId: string, pathId: string, 
     });
 }
 
-// GET ICS PREVIEW — the events an .ics holds, parsed server-side (PREVIEW-PAYLOADS.md). Keyed by `updatedAt`
+// GET ICS PREVIEW — the events an .ics holds, parsed server-side (PREVIEWS.md). Keyed by `updatedAt`
 // like the two above, so a new version is a new entry.
 export function useIcsPreview(ownerId: string, mountId: string, pathId: string, updatedAt: Date, size: number) {
     return useQuery({
