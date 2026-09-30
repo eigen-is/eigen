@@ -102,6 +102,29 @@ function pendingStagingName(metadataPath: string, storageKey: string): string | 
     }
 }
 
+// A Full snapshot during which `gone` is deleted just before its copy starts: the capture goes on
+// and the archive holds no entry and no file for it.
+async function snapshotWhileVanishing(
+    gone: string,
+    archived: string,
+): Promise<{ manifest: BackupManifest; folder: string }> {
+    const capture = captureModule.captureFile;
+    const spy = spyOn(captureModule, 'captureFile').mockImplementation(async (source, destPath, relPath) => {
+        if (relPath === archived) rmSync(gone);
+        return capture(source, destPath, relPath);
+    });
+    try {
+        const snapshotted = await snapshot('full');
+        expect(spy.mock.calls.some(([, , relPath]) => relPath === archived)).toBe(true);
+        expect(entryPaths(snapshotted.manifest)).not.toContain(archived);
+        expect(existsSync(join(snapshotted.folder, archived))).toBe(false);
+        return snapshotted;
+    } finally {
+        spy.mockRestore();
+        rmSync(gone, { force: true });
+    }
+}
+
 beforeAll(async () => {
     const ctx = await getTestContext();
     user = await createTestUser('backup-modes@test.eigen.is', 'testpassword123', 'Backup Modes');
@@ -248,24 +271,45 @@ describe('Backup capture modes', () => {
     test('a staged upload gone between the listing and its copy is left out, not a failure', async () => {
         const gone = join(s3Mount.stagingDir, 'superseded.tmp');
         await Bun.write(gone, 'superseded by a newer copy');
-        const capture = captureModule.captureFile;
-        const spy = spyOn(captureModule, 'captureFile').mockImplementation(async (source, destPath, relPath) => {
-            if (relPath.endsWith('/superseded.tmp')) rmSync(gone);
-            return capture(source, destPath, relPath);
-        });
-        try {
-            const { manifest, folder } = await snapshot('full');
-            const staged = `home/mounts/${S3_MOUNT_ID}/staging/superseded.tmp`;
-            expect(spy.mock.calls.some(([, , relPath]) => relPath === staged)).toBe(true);
-            expect(entryPaths(manifest)).not.toContain(staged);
-            expect(existsSync(join(folder, staged))).toBe(false);
-            // The upload that is still waiting is copied all the same.
-            expect(mountEntries(manifest, S3_MOUNT_ID).some((p) => p.includes('/staging/'))).toBe(true);
-            expect((await verifyFolder(folder)).status).toBe('verified');
-        } finally {
-            spy.mockRestore();
-            rmSync(gone, { force: true });
-        }
+        const { manifest, folder } = await snapshotWhileVanishing(
+            gone,
+            `home/mounts/${S3_MOUNT_ID}/staging/superseded.tmp`,
+        );
+        // The upload that is still waiting is copied all the same.
+        expect(mountEntries(manifest, S3_MOUNT_ID).some((p) => p.includes('/staging/'))).toBe(true);
+        expect((await verifyFolder(folder)).status).toBe('verified');
+    });
+
+    // A mail client's first look moves a message from new/ to cur/, so one can go mid-capture.
+    test('a Maildir message moved between the listing and its copy is left out, not a failure', async () => {
+        const gone = join(home.homeDir, 'eigen.mail/Maildir/new/1-vanishing.eigen');
+        await Bun.write(gone, 'Subject: Moved\r\n\r\nbody');
+        const { manifest, folder } = await snapshotWhileVanishing(gone, `${MAILDIR}/new/1-vanishing.eigen`);
+        expect(entryPaths(manifest).some((p) => p.startsWith(`${MAILDIR}/`))).toBe(true);
+        expect((await verifyFolder(folder)).status).toBe('verified');
+    });
+
+    // Deleting a file for good deletes its thumbnail (Mount.deletePath), so one can go mid-capture.
+    test('a thumbnail deleted between the listing and its copy is left out, not a failure', async () => {
+        const root = await assertJson<DrivePath>(
+            await authedRequest(user.sessionToken, `/drive/${user.id}/${defaultMountId}/root`),
+        );
+        const note = await driveUpload<DrivePath>(
+            user.sessionToken,
+            user.id,
+            defaultMountId,
+            root.id,
+            new File(['a note'], 'vanishing.txt', { type: 'text/plain' }),
+        );
+        const mount = home.drive.getMounts().find((candidate) => candidate.id === defaultMountId)!;
+        const gone = join(mount.thumbsDir, `${note.id}.webp`);
+        await Bun.write(gone, TEST_PNG_BYTES);
+        const { manifest, folder } = await snapshotWhileVanishing(
+            gone,
+            `home/mounts/${defaultMountId}/thumbs/${note.id}.webp`,
+        );
+        expect(mountEntries(manifest, defaultMountId).some((p) => p.includes('/thumbs/'))).toBe(true);
+        expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
     test('an edit made a second before a Full snapshot is in its staged uploads', async () => {

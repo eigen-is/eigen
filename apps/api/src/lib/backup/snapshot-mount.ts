@@ -15,7 +15,7 @@ import { paths } from '../mount/schema';
 import { errnoOf, isMissingObjectCause } from '../storage';
 import { stageManagedDbCopy } from '../versioning/snapshot';
 import { VERSIONS_FOLDER_NAME } from '../versioning/versions-folder';
-import { captureFile, captureWrittenFile } from './capture';
+import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
 import type { SnapshotProgress } from './snapshot-home';
 
 // The columns every reader of a mount's paths table wants, spelled once: snapshotMountData selects
@@ -337,15 +337,11 @@ export async function snapshotMountStaging(mount: Mount, targetDir: string, relP
             // supersedes it (UploadQueue.enqueueStaged), so one can vanish mid-copy. It is left out:
             // the archived pending row then names a missing file, which reconcile drops, and a
             // restore of this level takes the bucket as it is.
-            const destPath = path.join(targetDir, entry.name);
             const source = Bun.file(path.join(mount.stagingDir, entry.name));
-            const captured = await captureFile(source, destPath, `${relPrefix}/${entry.name}`).catch(
-                (error: unknown) => {
-                    // A local file's ENOENT arrives as the cause of a storage error (consumeStream).
-                    if (!isMissingObjectCause(error)) throw error;
-                    fs.rmSync(destPath, { force: true });
-                    return null;
-                },
+            const captured = await captureUnlessGone(
+                source,
+                path.join(targetDir, entry.name),
+                `${relPrefix}/${entry.name}`,
             );
             if (captured) entries.push(captured);
         }
@@ -369,11 +365,13 @@ export async function snapshotMountThumbs(
     for (const entry of fs.readdirSync(thumbsDir, { withFileTypes: true })) {
         if (!entry.isFile() || !pathIds.has(path.parse(entry.name).name)) continue;
         const source = Bun.file(path.join(thumbsDir, entry.name));
-        // A thumbnail regenerated (and briefly unlinked) mid-walk is out of the archive either way;
-        // losing the whole snapshot over one is not.
-        if (await source.exists()) {
-            entries.push(await captureFile(source, path.join(targetDir, entry.name), `${relPrefix}/${entry.name}`));
-        }
+        // Deleting a file for good deletes its thumbnail (Mount.deletePath), so one can go mid-copy.
+        const captured = await captureUnlessGone(
+            source,
+            path.join(targetDir, entry.name),
+            `${relPrefix}/${entry.name}`,
+        );
+        if (captured) entries.push(captured);
     }
     return entries;
 }

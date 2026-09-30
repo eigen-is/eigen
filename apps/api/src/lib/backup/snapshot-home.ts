@@ -19,7 +19,7 @@ import { NOTIFICATION_CENTER_DB_CONFIG } from '../notification-center/db-config'
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
 import { readAuthRows } from './auth-tables';
-import { captureFile, captureWrittenFile } from './capture';
+import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
 import { describeError } from './errors';
 import {
     ARCHIVE_AUTH_FILE,
@@ -249,11 +249,13 @@ export async function snapshotHome(
     for (const rel of tree.dirs) fs.mkdirSync(path.join(folder, ARCHIVE_HOME_DIR, rel), { recursive: true });
     for (const [index, rel] of tree.files.entries()) {
         const source = Bun.file(path.join(home.homeDir, rel));
-        // A file can vanish between the listing and the read — a Maildir new/→cur/ move, a card
-        // rewrite. It is out of the archive either way; losing the whole snapshot over it is not.
-        if (await source.exists()) {
-            entries.push(await captureFile(source, path.join(folder, ARCHIVE_HOME_DIR, rel), archiveHomePath(rel)));
-        }
+        // A mail client's first look moves a Maildir message from new/ to cur/, so one can go mid-copy.
+        const captured = await captureUnlessGone(
+            source,
+            path.join(folder, ARCHIVE_HOME_DIR, rel),
+            archiveHomePath(rel),
+        );
+        if (captured) entries.push(captured);
         report('home files', index + 1, tree.files.length);
     }
 
