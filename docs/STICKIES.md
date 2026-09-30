@@ -26,7 +26,7 @@ A card is on the board when some column's `taskIds` lists it. That set is also w
 
 ## A concurrent merge can leave a card in two columns, or none
 
-Two peers moving the same card at once can leave it in two columns' `taskIds`, or in none. `normalizeBoard` repairs that with the shared `normalizeParentChildRefs` (`packages/lib/src/core/collab/normalize-refs.ts`). It runs on the first sync and inside the transaction of every drag that moves a card or a column. A card in several columns keeps the last one. A card in no column joins the first.
+Two peers moving the same card at once can leave it in two columns' `taskIds`, or in none. `normalizeBoard` repairs that with the shared `normalizeParentChildRefs` (`packages/lib/src/core/collab/normalize-refs.ts`). It runs on the first sync and inside the transaction of every drop on a target that is not an Alt duplicate, a drop that moves nothing included. A card in several columns keeps the last one. A card in no column joins the first.
 
 **First and last come from `columnOrder`, not from Y.Map key order.** Key order is each peer's local integration order, so peers would disagree and could delete each other's survivor. A column missing from `columnOrder` ranks before every listed one, so it never receives a re-homed card: the board doesn't render it. Only when `columnOrder` lists no existing column does the repair fall back to key order. `packages/lib/src/test/core/collab/normalize-refs.test.ts` pins these cases.
 
