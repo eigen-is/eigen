@@ -27,7 +27,7 @@ import { buildBackupStamp, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation'
 import { copyArchiveMember } from '../lib/backup/archive';
 import { MAILDIR_ROOT } from '../lib/backup/archive-layout';
 import { describeError } from '../lib/backup/errors';
-import { backupsDirPath, SERVER_ARCHIVE_ENV_MEMBER } from '../lib/backup/paths';
+import { backupsDirPath, SERVER_ARCHIVE_ENV_MEMBER, STAGING_DIR } from '../lib/backup/paths';
 import {
     homeDirUnder,
     type NotReplayed,
@@ -52,7 +52,7 @@ import {
 import { API_IMAGE_KEY, PIN_KEYS } from '../lib/config/release';
 import { PATHS } from '../lib/core/constants';
 import { readEnvFile } from './env-file';
-import { DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
+import { BACKUPS, DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
 import { createUi, glyphLine, type Ui } from './ui';
 
 // Two runs, as the launcher makes them. --stage runs as the API's user in its container while Eigen runs, on the
@@ -513,6 +513,8 @@ function runSwap(ui: Ui, swap: RestoreSwap): void {
         chmodSync(ENV_PATH, 0o600);
     }
     rmSync(swap.leftover, { recursive: true, force: true });
+    // A per-home restore's notes in there name homes of the data/ that went aside: the boot must not act on them.
+    rmSync(join(BACKUPS, STAGING_DIR), { recursive: true, force: true });
     rmSync(SWAP_MARKER);
     // An aside that keeps nothing goes: a new machine's empty data/, and the .env.production the archive's replaced
     // there. Only once the marker is gone: a rerun would find the restored ones with no aside and move them again.

@@ -12,7 +12,7 @@ import {
     symlinkSync,
     writeFileSync,
 } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupJob, BackupLevel, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -1073,6 +1073,19 @@ describe('restore --stage and --swap', () => {
                 other.close();
             }
             expect((await swap(dir)).code).toBe(0);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a swap clears backups/.staging, whose per-home restore notes describe the data/ that went aside',
+        async () => {
+            const dir = install();
+            const note = join(dir, 'backups/.staging/job/restoring.json');
+            mkdirSync(dirname(note), { recursive: true });
+            writeFileSync(note, '{}');
+            await stageAndSwap(dir, basename(fullArchive));
+            expect(existsSync(join(dir, 'backups/.staging'))).toBe(false);
         },
         JOB_TIMEOUT_MS,
     );

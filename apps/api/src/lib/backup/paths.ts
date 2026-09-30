@@ -33,10 +33,11 @@ export function getBackupsDir(): string {
     return dir;
 }
 
-// Every job's scratch space lives under one folder, wiped at boot: `.staging` is spelled here and
-// nowhere else.
+// Every job's scratch space lives under one folder in the backups folder, wiped at boot.
+export const STAGING_DIR = '.staging';
+
 export function getStagingRoot(): string {
-    return path.join(backupsDirPath(), '.staging');
+    return path.join(backupsDirPath(), STAGING_DIR);
 }
 
 export function getBackupStagingDir(jobId: string): string {
