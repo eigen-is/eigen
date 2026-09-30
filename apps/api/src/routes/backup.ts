@@ -4,6 +4,7 @@ import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib
 import { BACKUP_OWNER_ID, parseBackupArtifactName } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { deleteArtifact, landUpload, listArtifacts, resolveArtifact } from '../lib/backup/artifacts';
+import { requireBackableHome } from '../lib/backup/home-dir';
 import {
     getBackupJob,
     listBackupJobs,
@@ -12,7 +13,7 @@ import {
     startBackupJob,
     withBackupJobSlot,
 } from '../lib/backup/jobs';
-import { type BackableOwner, requireBackableHome } from '../lib/backup/paths';
+import type { BackableOwner } from '../lib/backup/paths';
 import { restoreHome, restoreSafetyCopy } from '../lib/backup/restore';
 import { deleteSafetyCopy, listSafetyCopies, resolveSafetyCopy } from '../lib/backup/safety-copy';
 import type { SnapshotProgress } from '../lib/backup/snapshot-home';

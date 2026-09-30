@@ -1,15 +1,16 @@
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BackupVerifyRecord } from '@workspace/lib/types/backup';
+import type { BackupVerifyRecord, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { isCollabType } from '@workspace/lib/types/drive';
 import { parseBackupManifest, parseServerArchiveManifest } from '@workspace/lib/validation';
 import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { SERVER_DATABASES } from '../config/paths';
-import { PATHS } from '../core';
-import { hashFile } from '../storage';
+import { PATHS } from '../core/constants';
+import { hashFile } from '../storage/deadline';
 import { type ArchiveMember, readArchiveMember, readArchiveMembers } from './archive';
+import { checkArchivedPathRows, HOME_DATABASE_PATHS, listManagedDatabases, readMountPathRows } from './archive-layout';
 import { describeError } from './errors';
 import {
     ARCHIVE_HOME_DIR,
@@ -19,8 +20,7 @@ import {
     archiveServerPath,
     resolveInside,
 } from './paths';
-import { HOME_DATABASE_PATHS, type SnapshotProgress } from './snapshot-home';
-import { checkArchivedPathRows, listManagedDatabases, readMountPathRows } from './snapshot-mount';
+import type { SnapshotProgress } from './snapshot-home';
 
 // Stage 3 samples rather than decodes everything: the ten heaviest documents plus ten of the rest.
 const SAMPLE_LARGEST = 10;
@@ -219,35 +219,48 @@ export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): 
     return { status: failures.length === 0 ? 'verified' : 'failed', checkedAt, failures };
 }
 
+// A whole-server archive as one read finds it: every member hashed, the manifest it closes with,
+// and the transport verdict. The manifest is null unless it parses; the members are what the read
+// got through before it failed.
+export type ReadServerArchive = {
+    verify: BackupVerifyRecord;
+    members: ArchiveMember[];
+    manifest: ServerArchiveManifest | null;
+};
+
 // The transport check of a whole-server archive: its last member is the manifest, and every other
 // member is there with the bytes and sha256 the manifest names. No member is unpacked; each one
 // verifies on its own when it is extracted.
-export async function verifyArchiveTransport(archivePath: string): Promise<BackupVerifyRecord> {
+export async function readServerArchive(archivePath: string): Promise<ReadServerArchive> {
     const checkedAt = new Date();
+    const failed = (
+        failures: string[],
+        members: ArchiveMember[] = [],
+        manifest: ServerArchiveManifest | null = null,
+    ) => ({
+        verify: { status: 'failed' as const, checkedAt, failures },
+        members,
+        manifest,
+    });
     let members: ArchiveMember[];
     try {
         members = await readArchiveMembers(archivePath);
     } catch (error) {
         // A cut-off or foreign tar is a verdict on the archive, not an error of the check.
-        return { status: 'failed', checkedAt, failures: [describeError(error)] };
+        return failed([describeError(error)]);
     }
     const last = members.at(-1);
-    if (last?.name !== ARCHIVE_MANIFEST_FILE) {
-        return { status: 'failed', checkedAt, failures: [`${ARCHIVE_MANIFEST_FILE} is not the last member`] };
-    }
+    if (last?.name !== ARCHIVE_MANIFEST_FILE)
+        return failed([`${ARCHIVE_MANIFEST_FILE} is not the last member`], members);
     let text: string;
     try {
         text = new TextDecoder().decode(await readArchiveMember(last));
     } catch (error) {
-        return { status: 'failed', checkedAt, failures: [describeError(error)] };
+        return failed([describeError(error)], members);
     }
     const manifest = parseServerArchiveManifest(text);
     if (!manifest) {
-        return {
-            status: 'failed',
-            checkedAt,
-            failures: [`${ARCHIVE_MANIFEST_FILE} is not a version 1 server archive manifest`],
-        };
+        return failed([`${ARCHIVE_MANIFEST_FILE} is not a version 1 server archive manifest`], members);
     }
 
     // A reader takes one of two same-named members and the manifest cannot say which, so their bytes do not matter.
@@ -259,7 +272,7 @@ export async function verifyArchiveTransport(archivePath: string): Promise<Backu
     }
     if (duplicates.size > 0) {
         const failures = [...duplicates].map((name) => `${name}: appears more than once in the archive`);
-        return { status: 'failed', checkedAt, failures };
+        return failed(failures, members, manifest);
     }
 
     const failures: string[] = [];
@@ -275,5 +288,10 @@ export async function verifyArchiveTransport(archivePath: string): Promise<Backu
         }
     }
     for (const extra of present.keys()) failures.push(`${extra}: not in the manifest`);
-    return { status: failures.length === 0 ? 'verified' : 'failed', checkedAt, failures };
+    const status = failures.length === 0 ? 'verified' : 'failed';
+    return { verify: { status, checkedAt, failures }, members, manifest };
+}
+
+export async function verifyArchiveTransport(archivePath: string): Promise<BackupVerifyRecord> {
+    return (await readServerArchive(archivePath)).verify;
 }

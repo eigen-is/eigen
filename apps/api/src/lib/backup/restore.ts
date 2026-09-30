@@ -9,23 +9,21 @@ import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-ho
 import { getTeam } from '../team/team';
 import { getUserById } from '../user/user';
 import { extractArtifact, readUnpackedHome } from './archive';
+import { resolveHomeDir } from './home-dir';
+import { restoreAuthRows, restoreAvatar, restoreShares } from './materialize';
 import {
     checkRestoredDatabases,
     containerDatabasesIn,
     materializeMount,
     movePath,
-    restoreAuthRows,
-    restoreAvatar,
-    restoreShares,
     type VersionedDatabase,
-} from './materialize';
+} from './materialize-mount';
 import {
     ARCHIVE_HOME_DIR,
     buildSafetyCopyName,
     freeSafetyCopyStamp,
     getBackupStagingDir,
     getBackupsDir,
-    resolveHomeDir,
     wipeBackupStagingDir,
 } from './paths';
 import { markRestoreComplete, writeRestoringMarker } from './recovery';

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { materializeMount } from '../../lib/backup/materialize';
+import { materializeMount } from '../../lib/backup/materialize-mount';
 import { ApiError } from '../../lib/core';
 import { TEST_DATA_DIR } from '../setup';
 

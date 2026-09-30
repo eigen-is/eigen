@@ -11,8 +11,8 @@ import {
     type ContentExtractor,
     ContentReindexQueue,
 } from '../../lib/mount/content-reindex-queue';
-import { buildStorageKey } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
+import { buildStorageKey } from '../../lib/mount/names';
 import { paths } from '../../lib/mount/schema';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';

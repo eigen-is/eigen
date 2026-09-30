@@ -6,8 +6,9 @@ import type { BackupSafetyCopy } from '@workspace/lib/types/backup';
 import { parseHomeMountSettings } from '@workspace/lib/validation';
 import { ApiError, PATHS } from '../core';
 import { createMountStorage } from '../mount/helpers';
-import { parseSafetyCopyName, resolveHomeDir, resolveMountDir } from './paths';
-import { flatStorageKey } from './snapshot-mount';
+import { flatStorageKey } from './archive-layout';
+import { resolveHomeDir } from './home-dir';
+import { parseSafetyCopyName, resolveMountDir } from './paths';
 
 // The folders a restore leaves beside a home, and what deleting one means when the home's bytes are
 // in a bucket rather than in the folder. Nothing here ever runs automatically: an admin lists these

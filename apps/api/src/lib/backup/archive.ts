@@ -12,7 +12,7 @@ import type {
     ServerArchiveManifest,
 } from '@workspace/lib/types/backup';
 import { parseBackupManifest, parseBackupSidecar } from '@workspace/lib/validation';
-import { ApiError } from '../core';
+import { ApiError } from '../core/errors';
 import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath, SIDECAR_SUFFIX, sidecarPath } from './paths';
 import type { SnapshotProgress } from './snapshot-home';
 
@@ -335,6 +335,9 @@ function paxPath(records: Uint8Array): string | null {
     return null;
 }
 
+// Hard link, symlink, character and block device, fifo.
+const LINKS_AND_DEVICES = new Set(['1', '2', '3', '4', '6']);
+
 // An artifact is a file somebody uploaded, so the paths inside it are untrusted input.
 function checkedEntryPath(name: string): string {
     if (name === '' || name.startsWith('/') || name.split('/').includes('..')) {
@@ -419,7 +422,10 @@ async function* tarEntries(bytes: AsyncIterable<Uint8Array>): AsyncGenerator<Tar
             const name = headerField(header, 0, NAME_FIELD);
             const entryPath = checkedEntryPath(givenName ?? (prefix === '' ? name : `${prefix}/${name}`));
             givenName = null;
-            // Nothing else (a symlink, a hard link, a device) is something a home folder holds.
+            // No archive this server writes holds a link or a device, and one could point a restore anywhere.
+            if (LINKS_AND_DEVICES.has(typeflag)) {
+                throw new Error(`backup archive: refusing tar entry "${entryPath}", a link or a device`);
+            }
             if (typeflag === '' || typeflag === '0' || typeflag === '5') {
                 const mode = headerNumber(header, 100, 8);
                 yield { path: entryPath, typeflag, mode, size, offset: position, body: body() };
@@ -487,6 +493,9 @@ export async function copyArchiveMember(member: ArchiveMember, destPath: string)
     }
 }
 
+// No setuid, setgid or sticky bit: root swaps what a restore unpacked into data/.
+const PERMISSION_BITS = 0o777;
+
 export async function extractArtifact(source: ArtifactSource, targetDir: string): Promise<void> {
     const existed = fs.existsSync(targetDir);
     fs.mkdirSync(targetDir, { recursive: true });
@@ -499,7 +508,10 @@ export async function extractArtifact(source: ArtifactSource, targetDir: string)
             }
             // A foreign archive may name a file before the directory entry it sits in.
             fs.mkdirSync(path.dirname(target), { recursive: true });
-            await pipeline(Readable.from(entry.body), fs.createWriteStream(target, { mode: entry.mode }));
+            await pipeline(
+                Readable.from(entry.body),
+                fs.createWriteStream(target, { mode: entry.mode & PERMISSION_BITS }),
+            );
         }
     } catch (error) {
         // Half an unpacked archive is worse than none — nothing downstream can tell the two apart.

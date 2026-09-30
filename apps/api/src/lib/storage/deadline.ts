@@ -1,4 +1,4 @@
-import { ApiError } from '../core';
+import { ApiError } from '../core/errors';
 import type { StorageFile } from './types';
 
 // Eigen's own bound on an S3 metadata call and on a storage read that stops delivering bytes: Bun's

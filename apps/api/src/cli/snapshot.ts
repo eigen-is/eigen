@@ -28,14 +28,14 @@ import {
     parseHomeMountSettings,
 } from '@workspace/lib/validation';
 import type { Subprocess } from 'bun';
-import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
 import { SERVER_DIR, SERVER_RUNTIME_FILES } from '../lib/config/paths';
 import { PIN_KEYS } from '../lib/config/release';
 import { PATHS } from '../lib/core/constants';
 import { isEnoent } from '../lib/core/local-filesystem';
 import { readEnvFile } from './env-file';
 import { DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
-import { createUi, glyphLine, type Ui } from './ui';
+import { lockData, SUSPECTS } from './restore';
+import { createUi, glyphLine } from './ui';
 import { notesSince } from './update-check';
 
 // Both commands run as root in a container on the install folder (-w /install), so data/ keeps its mixed owners.
@@ -98,29 +98,10 @@ is kept aside.
 
   --yes   Do not ask`;
 
-// What refusal() looks at; not a setgid folder, which a setgid install folder hands down to every folder in it.
-const SUSPECTS = '-type b -o -type c -o -type p -o -type s -o -type f ( -perm -4000 -o -perm -2000 ) -o -type l';
-
 // The snapshots among these file names, newest first by the time in the name, of both kinds and pre-update ones too.
 export function newestSnapshots(names: string[]): string[] {
     const stamp = (name: string) => SNAPSHOT_NAME.exec(name)?.groups?.['stamp'] ?? '';
     return names.filter((name) => SNAPSHOT_NAME.test(name)).sort((a, b) => stamp(b).localeCompare(stamp(a)));
-}
-
-// Held until exit, like the API holds it while it runs: neither reads or replaces data/ while the other does.
-let dataLock: Database | null = null;
-
-function lockData(ui: Ui, command: string): void {
-    const file = join(DATA, SERVER_DIR, DATA_LOCK_FILE);
-    // Root must not make one the API could not open; without one, no API ever ran on this data/.
-    if (!existsSync(file)) return;
-    dataLock = lockDataDir(file);
-    if (!dataLock) {
-        ui.fail(
-            'data/ is in use by Eigen or by another backup or restore.',
-            `Wait for it to finish, then run ./eigen ${command} again.`,
-        );
-    }
 }
 
 // Why root must not swap the copy in, or null; drops the fifos and sockets the API can make. Dovecot makes hard links.
