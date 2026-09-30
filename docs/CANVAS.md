@@ -1,6 +1,6 @@
 # Canvas Engine
 
-> **TLDR:** One engine draws every free-canvas document. `packages/lib/src/vector/` is the React-free half (element model, kind registry, reader, layers, SVG) and `packages/ui/src/components/vector/` is the host, `CanvasEditor`. The drawing app mounts it on the infinite canvas, the deck app in frame mode ([SLIDES.md](SLIDES.md)). Not obvious from the code: a kind is one registry entry and nothing switches on a shape's type, the reader validates every stored field, the live canvas and the server share one layer per element, and one discrete op is one undo step. Arrows: [CANVAS-ARROWS.md](CANVAS-ARROWS.md).
+> **TLDR:** One engine draws every free-canvas document. `packages/lib/src/vector/` is the React-free half (element model, kind registry, reader, layers, SVG) and `packages/ui/src/components/vector/` is the host, `CanvasEditor`. Drawings mount it on the infinite canvas, decks in frame mode ([SLIDES.md](SLIDES.md)). Not obvious from the code: a kind is one registry entry and nothing switches on a shape's type, the reader validates every stored field, the live canvas and the server share one layer per element, one discrete op is one undo step, and an arrow's binding lives on the arrow alone and re-glues in the shape's own transaction.
 
 ## Every stored field is a scalar
 
@@ -38,13 +38,55 @@ Adding a kind: add it to `VectorElementType`, write its file, add one line to `E
 
 ## One layer per element, on the canvas and on the server
 
-`elementLayer` (`scene-layers.ts`) is the one answer to where an element goes and what it draws: a box, an opacity and the kind's `render` output. `layerInnerHtml` turns that into the markup that both the live canvas and the server compositor mount ([EXPORT.md](EXPORT.md#the-canvas-compositor)), so the two cannot drift. `sceneToSvg` is the standalone SVG for a download and the clipboard. It is DOM-free, so the Worker runs it.
+`elementLayer` (`scene-layers.ts`) is the one answer to where an element goes and what it draws: a box, an opacity and the kind's `render` output. `layerInnerHtml` turns that into the markup that both the live canvas and the server compositor mount ([EXPORT.md](EXPORT.md#canvas-pages-are-the-boxes-the-live-canvas-draws)), so the two cannot drift. `sceneToSvg` is the standalone SVG for a download and the clipboard. It is DOM-free, so the Worker runs it.
 
 The live layer is positioned with `transform: translate() rotate()`, never `left`/`top`, because the browser snaps a box origin to whole pixels but not a transform. `ElementLayer`'s memo compares the scalar fields, so pan and drag never rerun rough path generation. An elbow arrow also depends on its two bound shapes, so the memo compares those two rather than routing, which costs 50x more.
 
 Rich text carries the class `eigen-canvas-text` everywhere, backed by `packages/ui/src/styles/canvas-text.css`, because list markers and link underlines are out of reach of an inline style. `html` arrives verbatim from any peer or a forged paste, so `ElementLayer` and the paste path both run `sanitizeToLightEditorHtml`.
 
 Gradients carry nine stops sampled in OKLab (`packages/lib/src/background/gradient.ts`), because browsers and WeasyPrint blend two stops in sRGB, through a muddy gray.
+
+## A binding is stored on the arrow only
+
+An arrow is the one kind that depends on other elements. Its math lives in `packages/lib/src/vector/` (`geometry.ts`, `outline.ts`, `elbow-route.ts`, `elbow-pins.ts`), its handles in `packages/ui/src/components/vector/tools/`.
+
+An arrow end binds by storing the target's id and a `fixedPoint`, the anchor as a proportion of the target's width and height. The end follows a move, resize or rotate of the target by construction. Which kinds an arrow may bind to is the `bindable` capability: the three closed shapes, rich text and images.
+
+There is no stored reverse index. `arrowsBoundTo` derives "which arrows dock on this shape" in memory, so there is no second write to keep consistent. A binding to a missing or unbindable shape is dropped on read and never written ([above](#the-reader-is-the-trust-boundary)).
+
+After any element patch, `useCanvasDoc` runs `followBindings` for the affected arrows and writes the new geometry inside the same transaction. So a nudge, an align or a paste-move re-glues for free, in one undo step and one broadcast. A shape and its arrow moved together return null and write nothing. This runs on every gesture, so it materializes only the arrows and the shapes they dock on, never the whole scene.
+
+An arrow dragged alone detaches once it moves 10 screen px (`ARROW_UNBIND_SCREEN`). Dragged with its shape, it stays bound.
+
+## An arrow docks on the outline the user sees
+
+`outline.ts` is the one definition of a shape's edge. The renderer draws it and the docking math intersects it, so a bound arrow meets a rounded rectangle exactly on the drawn curve. A rounded shape is a core polygon grown by a disc of the corner radius; docking grows the disc by the binding gap. Rectangles and diamonds share the routine and differ only in the core.
+
+`corners` sets the radius. `round` is the largest radius that keeps the silhouette: a pill for a rectangle, the inscribed circle for a diamond. `straight` is radius 0 and takes the sharp offset path instead of the round model, which would round its corners slightly. That jump between the two is deliberate.
+
+## Both ends aim through each other's anchor
+
+A bound end docks along the segment from its adjacent vertex, as in Excalidraw. On a two-point arrow that vertex is the other end, which may be moving in the same pass. So when both ends are bound, each aims through the other's anchor, the one point of it that holds still. Moving one shape re-docks both ends onto the line between the anchors in one pass.
+
+When the two docks come within 10 units, both ends sit on their anchors instead of drawing a backwards arrow. The guard measures to the other end's dock, not its anchor, because the anchors stay far apart while the docks cross when shapes touch.
+
+A docked end is rounded to stored precision before the box is derived, so a settled arrow re-solves to itself bit for bit and `followBindings` writes nothing. A curved arrow docks where its drawn curve crosses the outline, not its chord. `geometry.test.ts` pins that curve to roughjs's control points. An elbow end resolves from its `fixedPoint` alone, so it never switches sides when the other end moves.
+
+## An elbow route is derived until a segment is pinned
+
+The panel's arrow type (sharp, curved, elbow) is derived from two stored fields, `roundness` and `elbow`, by `arrowShapeOf`, so the two cannot drift.
+
+An unpinned elbow arrow stores the flag, its two endpoints and the bindings. `elbowRoute` derives the orthogonal route on every read, with A* around the bound shapes, as a port of Excalidraw. It falls back to a plain L and never throws, so an arrow always draws. `arrowRoute` is the one gate every path reads (canvas, hit test, bounds, label, export), so none can quietly draw an elbow arrow straight. The route lives in the unrotated frame, so an elbow arrow's angle is always 0.
+
+Dragging a segment pins it (`fixedSegments`, `elbow-pins.ts`). From then on the stored `points` are the route and the router never runs on that arrow again. Dragging an end segment inserts an L-jog so the pinned segment turns interior while the endpoint stays put. `startIsSpecial`/`endIsSpecial` mark such jogs so the next move removes them and corners never pile up.
+
+## Lines trade the transform box for point handles
+
+A selected line or arrow shows a dot per vertex and a translucent dot between each pair (`tools/point-handles.tsx`). Dragging a middle dot inserts a vertex, and the insert and the drag are one sealed write. A two-point line shows only these dots, no transform box. An elbow arrow keeps only its two endpoint dots, with no middle dots, and adds segment-pin dots (`tools/elbow-pin-handles.tsx`), because its bends are not the user's vertices until pinned.
+
+## The label cuts a hole in the shaft
+
+An arrow label is plain text whose `labelWidth` the client measures; its height follows from the line count. It sits at the polyline's middle, and the shaft is masked under it so nothing shows through the text. It is a `<mask>`, not an even-odd clip, because WeasyPrint ignores `clip-rule` ([EXPORT.md](EXPORT.md#weasyprint-dictates-how-a-layer-references-its-paint)).
 
 ## The live viewport is a ref
 
@@ -100,9 +142,8 @@ Every panel row is a `PropertyRow` over the shared controls in `packages/ui/src/
 
 ## See also
 
-- [CANVAS-ARROWS.md](CANVAS-ARROWS.md): bindings, docking, elbow routing
 - [SLIDES.md](SLIDES.md): the deck shell
 - [CLIPBOARD.md](CLIPBOARD.md): the elements item, paste placement, the SVG flavor
 - [COMMENTS.md](COMMENTS.md) and [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md): comments and ⌘F on a canvas
-- [EXPORT.md](EXPORT.md) and [PREVIEWS.md](PREVIEWS.md): the server compositor
+- [EXPORT.md](EXPORT.md) and [PREVIEWS.md](PREVIEWS.md): the server compositor, and how it draws the same arrow
 - [COLLAB.md](COLLAB.md): `useCollabDoc` and the loading gate
