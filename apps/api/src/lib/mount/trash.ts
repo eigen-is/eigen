@@ -3,8 +3,9 @@ import { and, desc, eq, isNotNull, isNull, type SQL, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { getUniqueFileName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';
-import { buildStorageKey, isReservedName, rethrowDuplicateActiveName } from './helpers';
+import { rethrowDuplicateActiveName } from './helpers';
 import type { Mount } from './mount';
+import { buildStorageKey, isReservedName } from './names';
 import { paths } from './schema';
 
 // Soft delete over the mount's paths table: trash re-parents to the root with

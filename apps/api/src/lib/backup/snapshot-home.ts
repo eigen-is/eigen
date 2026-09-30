@@ -5,19 +5,15 @@ import type { MountConfig } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_FORMAT_VERSION } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
-import { CALENDAR_DB_CONFIG } from '../calendar/db-config';
 import { getAvatarsDir } from '../config/paths';
 import { getPublicConfig } from '../config/server-config';
-import { CONTACTS_DB_CONFIG } from '../contacts/db-config';
 import { type DatabaseConfig, PATHS, type SchemaType } from '../core';
-import { SHARED_DB_CONFIG } from '../drive/db-config';
 import type { Home } from '../home';
-import { MAIL_DB_CONFIG } from '../mail/db-config';
 import { createMountConfig, Mount } from '../mount';
 import { MOUNT_DB_CONFIG } from '../mount/db-config';
-import { NOTIFICATION_CENTER_DB_CONFIG } from '../notification-center/db-config';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
+import { HOME_DATABASE_PATHS, HOME_DATABASES, MAILDIR_ROOT } from './archive-layout';
 import { readAuthRows } from './auth-tables';
 import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
 import { describeError } from './errors';
@@ -36,16 +32,6 @@ import { flushOpenDocumentDbs, snapshotMountData, snapshotMountStaging, snapshot
 
 export type SnapshotProgress = (step: string, done: number, total: number) => void;
 
-// Home-level databases outside the mounts. Absent files are skipped: a team home has no mail,
-// contacts or notifications, and opening one through getLocalDatabase would create it empty.
-export const HOME_DATABASES: [DatabaseConfig<SchemaType>, string][] = [
-    [SHARED_DB_CONFIG, PATHS.DRIVE.SHARED_DB],
-    [MAIL_DB_CONFIG, PATHS.MAIL.DB],
-    [CONTACTS_DB_CONFIG, PATHS.CONTACTS.DB],
-    [CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB],
-    [NOTIFICATION_CENTER_DB_CONFIG, PATHS.NOTIFICATIONS.DB],
-];
-
 // `mounts/` is walked from its paths tables instead (snapshotMountData). Matched on the path from
 // the home root, never on the folder name: a folder deeper in the home that happens to be called
 // `mounts` is somebody's own and belongs in the archive.
@@ -54,7 +40,6 @@ const SKIPPED_HOME_DIRS = new Set<string>([PATHS.DRIVE.ROOT]);
 
 // The other skip, which has no fixed path: every mailbox in the Maildir has a `tmp/` delivery spool
 // beside its `cur/` and `new/`, holding half-written deliveries only.
-export const MAILDIR_ROOT = `${PATHS.MAIL.ROOT}/${PATHS.MAIL.MAILDIR}`;
 
 function isSkippedHomeDir(rel: string, level: BackupLevel): boolean {
     if (SKIPPED_HOME_DIRS.has(rel)) return true;
@@ -62,10 +47,6 @@ function isSkippedHomeDir(rel: string, level: BackupLevel): boolean {
     if (level === 'light' && rel === MAILDIR_ROOT) return true;
     return path.basename(rel) === PATHS.MAIL.TMP && rel.startsWith(`${MAILDIR_ROOT}/`);
 }
-
-// Home-relative paths of the databases above; verify reads them back to know which archived .db
-// files are Eigen's own.
-export const HOME_DATABASE_PATHS = new Set(HOME_DATABASES.map(([, relPath]) => relPath));
 
 // Databases are captured with VACUUM INTO through the live handle, never as a file copy, and their
 // journals belong to the running server.

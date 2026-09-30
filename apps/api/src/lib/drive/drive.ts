@@ -46,7 +46,7 @@ import { composeCollaboratorsEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
-import { validateName } from '../mount/helpers';
+import { validateName } from '../mount/names';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
 import { type StorageFile, writeTempWithHash } from '../storage';

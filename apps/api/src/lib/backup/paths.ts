@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupLevel, BackupReason, BackupSafetyCopy } from '@workspace/lib/types/backup';
-import { type ParsedOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
+import type { ParsedOwnerId } from '@workspace/lib/types/owner';
 import {
     BACKUP_ARTIFACT_EXTENSION,
     BACKUP_HOME_PREFIX,
@@ -14,9 +14,9 @@ import {
     SERVER_ARCHIVE_EXTENSION,
     SERVER_ARCHIVE_PREFIX,
 } from '@workspace/lib/validation';
-import { getDataRoot, getTeamDataPath, getUserHomePath, SERVER_DIR } from '../config/paths';
-import { ApiError, PATHS } from '../core';
-import { getUserById } from '../user/user';
+import { getDataRoot, SERVER_DIR } from '../config/paths';
+import { PATHS } from '../core/constants';
+import { ApiError } from '../core/errors';
 
 // Where backup artifacts live. Outside `data/` on purpose, so one wipe of the data directory can never
 // take the backups with it. In the container it is the `./backups` bind mount, named by EIGEN_BACKUPS_DIR.
@@ -251,22 +251,4 @@ export function requireBackableOwner(owner: ParsedOwnerId): asserts owner is Bac
     if (owner.type !== 'user' && owner.type !== 'team') {
         throw new ApiError(400, `Not a user or team home (${owner.type})`);
     }
-}
-
-// The owner an ownerId names, once it is one a backup can be of. The guest refusal needs the user
-// row, which is why this is the async half of requireBackableOwner; the routes and the folder
-// resolver both go through it, so the refusal is spelled once.
-export async function requireBackableHome(ownerId: string): Promise<BackableOwner> {
-    const owner = parseOwnerId(ownerId);
-    requireBackableOwner(owner);
-    if (owner.type === 'user' && (await getUserById(owner.id))?.role === 'guest') {
-        throw new ApiError(400, 'Guest homes are not backed up');
-    }
-    return owner;
-}
-
-// Where this owner's home folder lives.
-export async function resolveHomeDir(ownerId: string): Promise<string> {
-    const owner = await requireBackableHome(ownerId);
-    return owner.type === 'team' ? getTeamDataPath(owner.id) : getUserHomePath(owner.id);
 }

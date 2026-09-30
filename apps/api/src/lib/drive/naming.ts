@@ -1,4 +1,4 @@
-import { MAX_NAME_BYTES } from '../mount/helpers';
+import { MAX_NAME_BYTES } from '../mount/names';
 
 export function getUniqueFileName(name: string, usedNames: Set<string>): string {
     // A leading dot is a dotfile, not an extension (matches buildStorageKey / the v7 dedup split).

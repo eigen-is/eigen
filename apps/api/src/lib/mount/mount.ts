@@ -38,15 +38,12 @@ import type { DocumentDbSlot } from './document-db';
 import * as documentDb from './document-db';
 import {
     ancestorIds,
-    buildStorageKey,
     buildUploadDestinationKey,
-    CONTROL_CHARS,
     createMountStorage,
     docContainerDescendantIds,
-    isReservedName,
     rethrowDuplicateActiveName,
-    validateName,
 } from './helpers';
+import { buildStorageKey, CONTROL_CHARS, isReservedName, validateName } from './names';
 import type * as schema from './schema';
 import { paths } from './schema';
 import * as searchIndex from './search-index';
