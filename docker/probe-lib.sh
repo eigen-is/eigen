@@ -194,7 +194,8 @@ EOF
 
 # in_cli_container [--stdin] [--user uid:gid] <command…>: runs in $INSTALL inside the no-Bun docker:cli image, with
 # the Docker socket, and the scratch folder at its own path so the bind mounts Compose creates resolve on the host. The
-# EIGEN_*_IMAGE variables and COMPOSE_PROFILES pass through when set.
+# EIGEN_*_IMAGE variables and COMPOSE_PROFILES pass through when set, and BUN_VERSION, which the Compose view of a local
+# build needs as the launcher sets it.
 # --stdin passes this script's stdin through, for a piped answer; without it the command reads nothing.
 in_cli_container() {
     local user=() stdin=()
@@ -208,7 +209,7 @@ in_cli_container() {
     fi
     docker run --rm ${stdin[@]+"${stdin[@]}"} --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
         -v /var/run/docker.sock:/var/run/docker.sock -v "$SCRATCH:$SCRATCH" -w "$INSTALL" ${IMAGE_FLAGS[@]+"${IMAGE_FLAGS[@]}"} \
-        -e NO_COLOR=1 -e HARNESS_PRUNE_LOG="$PRUNE_LOG" ${COMPOSE_PROFILES:+-e COMPOSE_PROFILES} \
+        -e NO_COLOR=1 -e HARNESS_PRUNE_LOG="$PRUNE_LOG" -e BUN_VERSION ${COMPOSE_PROFILES:+-e COMPOSE_PROFILES} \
         ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
 }
 
