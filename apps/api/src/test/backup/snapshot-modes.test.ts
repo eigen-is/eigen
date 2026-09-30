@@ -398,6 +398,25 @@ describe('Backup capture modes of a disabled mount', () => {
     });
 });
 
+describe('Backup of an enabled mount being added', () => {
+    // Adding a mount writes settings.json before the drive creates the folder: a capture in between must not fail.
+    test('a mount in settings with no folder yet is skipped, not a failure', async () => {
+        await getTestContext();
+        const owner = await createTestUser('backup-modes-adding@test.eigen.is', 'testpassword123', 'Modes Adding');
+        const ownerHome = await getHome(owner.id);
+        await ownerHome.settings.set({
+            mounts: { adding: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Adding' } },
+        });
+        expect(existsSync(join(ownerHome.homeDir, 'mounts/adding'))).toBe(false);
+
+        for (const level of ['light', 'full'] as const) {
+            const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-modes-adding-'));
+            const manifest = await snapshotHome(ownerHome, target, { level });
+            expect(manifest.mounts.map((mount) => mount.id)).not.toContain('adding');
+        }
+    });
+});
+
 describe('Backup of an enabled mount the drive could not open', () => {
     // The drive leaves out a mount whose init throws, and a capture that skipped it too would hold a home without
     // that mount's files, verify and pass: a restore would bring it back empty.

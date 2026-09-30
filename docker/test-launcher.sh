@@ -802,6 +802,18 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: a restore during a server backup: exit $CODE, '$OUT', steps '$(steps)'"
     fi
+    # A record whose end was never written, as on a full disk, stays running with no job behind it.
+    mkdir -p "$FIX/local/backups"
+    printf '{\n  "state": "running",\n  "startedAt": "2026-01-01T02:00:00.000Z"\n}\n' >"$record"
+    touch -t 202601010200 "$record"
+    launch local restore "$ARCHIVE" --yes
+    rm -r "$FIX/local/backups"
+    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q 'looks stale' &&
+        printf '%s\n' "$(steps)" | grep -q '|stop|restore --swap'; then
+        ok "$SHELL_NAME: a restore goes on past a server backup record that stayed running for over a day"
+    else
+        fail "$SHELL_NAME: a restore past a stale server backup record: exit $CODE, '$OUT', steps '$(steps)'"
+    fi
     STUB_FAIL=compose-run launch local restore "$ARCHIVE" --yes
     if [ "$CODE" = 1 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|rm data/.restoring|" ] &&
         [ ! -e "$FIX/local/.eigen/lock" ]; then

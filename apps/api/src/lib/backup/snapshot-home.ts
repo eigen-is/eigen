@@ -193,8 +193,9 @@ export async function snapshotHome(
 
     for (const [index, [id, settings]] of unserved.entries()) {
         const relMetadata = `${PATHS.DRIVE.ROOT}/${id}/${PATHS.DRIVE.METADATA_DB}`;
-        // A disabled mount whose folder is gone (an entry nobody ever mounted) has nothing to carry.
-        if (!settings.enabled && !fs.existsSync(path.join(home.homeDir, relMetadata))) continue;
+        // A mount with no folder has nothing to carry: one nobody ever mounted, or one being added, whose settings
+        // are written before the drive creates its folder.
+        if (!fs.existsSync(path.join(home.homeDir, relMetadata))) continue;
         const config = createMountConfig(id, settings);
         // Where the archive stands before this mount: a mount that turns out to be unreadable is
         // taken back out again, entries and all, so the folder never holds bytes the manifest does
