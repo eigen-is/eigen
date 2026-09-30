@@ -548,9 +548,9 @@ fi
 ##############################################################################
 header "Probe 13 — OpenDKIM signs with the key the API can read"
 ##############################################################################
-# The server backup reads data/dkim as uid 1000, so the entrypoint gives the key group 1000 and mode 0640, and turns
-# OpenDKIM's RequireSafeKeys off, which refuses a group-readable key. defer_transports parks the probe's message in
-# the queue, where postcat shows whether the milter signed it. Needs no login.
+# The server backup reads data/dkim as uid 1000, so the entrypoint gives the key group 1000 and mode 0640, which
+# OpenDKIM's RequireSafeKeys takes because the image has a member-less group 1000. defer_transports parks the probe's
+# message in the queue, where postcat shows whether the milter signed it. Needs no login.
 dkim_headers() {
     dc exec -T -e SUBJECT="$1" postfix sh -c '
 for f in $(find /var/spool/postfix/incoming /var/spool/postfix/active /var/spool/postfix/deferred -type f); do
@@ -572,8 +572,8 @@ if should_run 13; then
         [ -n "$signed" ] && break
         sleep 1
     done
-    if [ "$dkim_modes" != "opendkim:1000 750 opendkim:1000 640 " ]; then
-        fail "data/dkim and its key are '$dkim_modes', expected opendkim:1000 with modes 750 and 640"
+    if [ "$dkim_modes" != "opendkim:1000 755 opendkim:1000 640 " ]; then
+        fail "data/dkim and its key are '$dkim_modes', expected opendkim:1000 with modes 755 and 640"
     elif ! printf '%s' "$api_key" | grep -q '^-----BEGIN .*PRIVATE KEY-----$'; then
         fail "eigen-api cannot read data/dkim/eigen.private: '$api_key'"
     elif [ -z "$signed" ]; then

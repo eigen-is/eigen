@@ -43,7 +43,8 @@ services:
       # it. The API creates the folder only when the first backup runs; Docker creates the mount point itself.
       - ./backups:/app/backups
       # For the server backup. ./eigen gives the file group 1000 and mode 0640 before every start. A single-file
-      # mount keeps the inode it started with, and every launcher path that rewrites the file restarts the API.
+      # mount keeps the inode it started with. Configure replaces the file only when a value changes, and env_file
+      # then changes this service's environment, so the next start recreates it on the new file.
       - ./.env.production:/app/install/.env.production:ro
     # Lets the API reach a relay on the host (SMTP_RELAY_HOST=host.docker.internal) when Eigen hosts no mail.
     extra_hosts:

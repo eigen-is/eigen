@@ -276,10 +276,12 @@ stack_up() {
 
 api_started() { docker inspect --format '{{.State.StartedAt}}' "$(dc ps -q eigen-api)"; }
 
-# check_env <operator uid:gid> <after what>: .env.production is the operator's, group 1000 and mode 640; eigen-api alone
-# mounts it, read-only, and reads what the operator's file says.
+# check_env <operator uid:gid> <after what>: .env.production is the operator's, group 1000 and mode 640, or as configure
+# wrote it on Docker Desktop, where ./eigen leaves it; eigen-api alone mounts it, read-only, and reads what the
+# operator's file says.
 check_env() {
     local want="${1%%:*}:1000 640" got mounts domain
+    if [ "$(docker info --format '{{.OperatingSystem}}')" = 'Docker Desktop' ]; then want="$1 600"; fi
     got=$(owner_mode "$INSTALL/.env.production")
     if [ "$got" = "$want" ]; then
         ok "$2: .env.production is $want"

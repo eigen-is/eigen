@@ -6,9 +6,9 @@
 # and on the main channel, the tags it refuses, a build whose images differ, a tag that moves during an update, a pinned
 # api image that is not here, the files an unfinished update left, which build's CLI the handed-over update saves the
 # snapshot with, what setup downloads with and without pins, what rollback names, a lock without a pid, the group and
-# mode every start gives .env.production first, and what status
-# passes the CLI about the snapshots, the files of an unfinished update and the newest build of main, and its folder; setup in a folder
-# that holds the launcher alone, with the registry or the build .env.production names, and the installer script
+# mode every start gives .env.production first but on Docker Desktop, and what status passes the CLI about the
+# snapshots, the files of an unfinished update and the newest build of main, and its folder; setup in a folder that
+# holds the launcher alone, with the registry or the build .env.production names, and the installer script
 # apps/index/public/install on this host, as a file and on stdin.
 #
 # Usage:  ./docker/test-launcher.sh
@@ -22,8 +22,8 @@ FIX=$(mktemp -d "${TMPDIR:-/tmp}/eigentest-launcher.XXXXXX")
 FIX=$(cd "$FIX" && pwd -P)
 trap 'rm -rf "$FIX"' EXIT
 
-# The stub logs every call to $STUB_LOG. STUB_INFO and STUB_COMPOSE answer info and compose version, empty for a
-# failure; STUB_FAIL names the compose subcommands and docker commands that fail; STUB_IMAGE=1 makes image inspect fail
+# The stub logs every call to $STUB_LOG. STUB_INFO (version, architecture, operating system) and STUB_COMPOSE answer
+# info and compose version, empty for a failure; STUB_FAIL names the compose subcommands and docker commands that fail; STUB_IMAGE=1 makes image inspect fail
 # on an image the launch has not pulled;
 # STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any api tag names;
 # STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a dovecot
@@ -39,7 +39,7 @@ printf '%s\n' "$*" >>"$STUB_LOG"
 fails() { case " ${STUB_FAIL:-} " in *" $1 "*) echo "stub: $1 fails" >&2; exit 1 ;; esac; }
 case $1 in
     info)
-        info=${STUB_INFO-27.3.1 x86_64}
+        info=${STUB_INFO-27.3.1 x86_64 Ubuntu 24.04.1 LTS}
         if [ -z "$info" ]; then exit 1; fi
         echo "$info"
         ;;
@@ -133,6 +133,7 @@ for name in $IMAGES; do
 done
 
 docker pull -q debian:bookworm-slim >/dev/null
+HOST_OS=$(docker info --format '{{.OperatingSystem}}')
 docker pull -q busybox >/dev/null
 PATH_IN=/stub:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
@@ -272,7 +273,7 @@ for SHELL_NAME in dash busybox host; do
     STUB_COMPOSE=2.24.3-desktop.1 launch local restart
     rm "$FIX/local/docker-compose.override.yml"
     expect_error 1 'it needs 2.24.4 or newer' "an override with !override and Compose 2.24.3"
-    STUB_INFO='27.3.1 aarch64' launch local restart
+    STUB_INFO='27.3.1 aarch64 Debian GNU/Linux 12 (bookworm)' launch local restart
     if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q '◇  Docker 27.3.1 on aarch64, Compose 2.29.1'; then
         ok "$SHELL_NAME: an aarch64 server goes through, its architecture named"
     else
@@ -292,6 +293,24 @@ for SHELL_NAME in dash busybox host; do
         ok "$SHELL_NAME: restart gives .env.production group 1000 and mode 0640, as root in a container, right before the start"
     else
         fail "$SHELL_NAME: restart does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    STUB_INFO='27.5.1 aarch64 Docker Desktop' launch release restart
+    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q '◇  Docker 27.5.1 on aarch64, Compose 2.29.1' &&
+        printf '%s\n' "$CALLS" | grep -q ' up -d --wait$' && ! printf '%s\n' "$CALLS" | grep -qF "$SHARE"; then
+        ok "$SHELL_NAME: on Docker Desktop, where uid 1000 reads the file already, restart leaves .env.production alone"
+    else
+        fail "$SHELL_NAME: restart on Docker Desktop: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    if [ "$(id -u)" = 0 ]; then
+        skip "$SHELL_NAME: root writes a .env.production of mode 0440"
+    elif [ "$SHELL_NAME" = dash ] && [ "$HOST_OS" = 'Docker Desktop' ]; then
+        # Its file sharing answers glibc's access() for a 0440 file with writable; the write itself fails.
+        skip "$SHELL_NAME: Docker Desktop tells dash that a .env.production of mode 0440 is writable"
+    else
+        chmod 0440 "$FIX/release/.env.production"
+        launch release restart
+        chmod 0644 "$FIX/release/.env.production"
+        expect_error 1 '■  .env.production is not writable by this user.' "a .env.production this user reads but cannot write"
     fi
     STUB_IMAGE=1 launch local restore --help
     expect_error 1 '■  Eigen is not built yet.' "restore --help in an unbuilt local build"
