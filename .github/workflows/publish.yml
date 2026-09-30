@@ -71,25 +71,9 @@ jobs:
             echo "bun-version=$(cat .bun-version)"
           } >>"$GITHUB_OUTPUT"
 
-  # The release gate on a clean runner: the previous published release updated to this one and rolled back, then
-  # update, rollback and a breaking release through a registry of its own. Only for a release; main's own checks run in
-  # check.yml.
-  gate:
-    needs: meta
-    if: github.ref_type == 'tag'
-    runs-on: ubuntu-latest
-    timeout-minutes: 75
-    steps:
-      - uses: actions/checkout@v4
-
-      - run: bash docker/test-release.sh
-        env:
-          ACCEPT_BREAKING: ${{ inputs.breaking && '1' || '' }}
-
   # Each platform builds on a runner of its own architecture, without QEMU.
   publish:
-    needs: [meta, gate]
-    if: ${{ !cancelled() && needs.meta.result == 'success' && (needs.gate.result == 'success' || needs.gate.result == 'skipped') }}
+    needs: meta
     name: publish ${{ matrix.image.name }} (${{ matrix.platform }})
     runs-on: ${{ matrix.platform == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     timeout-minutes: 30
@@ -119,6 +103,7 @@ jobs:
       # No provenance or SBOM: either makes a candidate an index of its own, and promote's index holds the two platform
       # images alone; the launcher pins that index's digest. An image ignores the build args it does not use. A
       # candidate, candidate-<version or main>-<platform>, is no version, latest or main, so the launcher refuses it.
+      # Its created annotation is this run's, which the gates wait for: a candidate of an earlier run is not this one.
       - uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.image.context }}
@@ -136,14 +121,50 @@ jobs:
             EIGEN_CHANNEL=${{ needs.meta.outputs.channel }}
             EIGEN_REGISTRY=${{ env.REGISTRY }}
           tags: ${{ env.REGISTRY }}/${{ matrix.image.name }}:candidate-${{ needs.meta.outputs.target }}-${{ matrix.platform }}
-          outputs: type=image,push=true,oci-mediatypes=true,annotation.org.opencontainers.image.version=${{ needs.meta.outputs.version }},annotation.org.opencontainers.image.revision=${{ needs.meta.outputs.commit }}
+          outputs: type=image,push=true,oci-mediatypes=true,annotation.org.opencontainers.image.version=${{ needs.meta.outputs.version }},annotation.org.opencontainers.image.revision=${{ needs.meta.outputs.commit }},annotation.org.opencontainers.image.created=${{ needs.meta.outputs.built-at }}
 
-  # Only once every candidate is built, so a failed build publishes no version. The version, or :main, is the index of
-  # an image's two candidates, which keep their annotations; :latest is a byte-for-byte copy of the version, digest and
-  # all. :latest last, and never for a prerelease or main.
-  promote:
+  # The release gate on a clean runner, beside the builds: the previous published release updated to this run's amd64
+  # candidates, the images promote publishes, and rolled back; then update, rollback and a breaking release through a
+  # registry of its own. It builds those releases while it waits for the candidates. Only for a release; main's own
+  # checks run in check.yml.
+  gate:
+    needs: meta
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: bash docker/test-release.sh
+        env:
+          ACCEPT_BREAKING: ${{ inputs.breaking && '1' || '' }}
+          CANDIDATE: candidate-${{ needs.meta.outputs.target }}-amd64
+          CANDIDATE_CREATED: ${{ needs.meta.outputs.built-at }}
+
+  # The arm64 candidates, installed with mail off on an arm64 runner, answer /eigen/health.
+  boot-arm64:
     needs: [meta, publish]
-    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - run: bash docker/test-boot.sh
+        env:
+          CANDIDATE: candidate-${{ needs.meta.outputs.target }}-arm64
+          CANDIDATE_CREATED: ${{ needs.meta.outputs.built-at }}
+
+  # Only once every candidate is built, and on a tag both gates passed on them, so a failed build or gate publishes no
+  # version. main has no gates. The version, or :main, is the index of an image's two candidates, which keep their
+  # annotations; :latest is a byte-for-byte copy of the version, digest and all. :latest last, and never for a
+  # prerelease or main.
+  promote:
+    needs: [meta, publish, gate, boot-arm64]
+    if: >-
+      ${{ !cancelled() && needs.publish.result == 'success' && (
+      (github.ref_type == 'tag' && needs.gate.result == 'success' && needs.boot-arm64.result == 'success') ||
+      (github.ref_type == 'branch' && needs.gate.result == 'skipped' && needs.boot-arm64.result == 'skipped')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

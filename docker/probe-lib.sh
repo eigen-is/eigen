@@ -488,6 +488,94 @@ harness_cleanup() {
     return "$code"
 }
 
+# The registry publish.yml pushes to: REGISTRY in ./eigen, before .env.production can name another.
+PUBLISHED_REGISTRY=$(sed -n 's/^REGISTRY=\([^$]*\)$/\1/p' "$REPO_ROOT/eigen")
+
+# published_get <image> <path>: $PUBLISHED_REGISTRY's /v2/<repo of that image>/<path>, with an anonymous pull token.
+published_get() {
+    local host=${PUBLISHED_REGISTRY%%/*} repo=${PUBLISHED_REGISTRY#*/}/$1 token
+    token=$(curl -fsS "https://$host/token?scope=repository:$repo:pull" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p') ||
+        return 1
+    curl -fsS -H "Authorization: Bearer $token" \
+        -H 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+        "https://$host/v2/$repo/$2"
+}
+
+# registry_init: after scratch_init, a registry:2 of this run on a free port, REGISTRY its eigen-is/eigen, and a trap
+# that removes what the run pushed and pulled, the registry and its volume, before harness_cleanup.
+registry_init() {
+    free_port REGISTRY_PORT
+    REGISTRY="localhost:$REGISTRY_PORT/eigen-is/eigen"
+    REGISTRY_VOLUME="eigentest-registry-$RUN"
+    # Those here before this run are left alone.
+    PUBLISHED_BEFORE=$(published_images)
+    # set +e: under set -e the (exit $code) of a failed run would end the trap before harness_cleanup.
+    trap 'code=$?; set +e; registry_cleanup; (exit $code); harness_cleanup' EXIT
+    docker volume create --label eigen.harness=1 "$REGISTRY_VOLUME" >/dev/null
+    docker run -d --name "eigentest-registry-$RUN" --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
+        -p "127.0.0.1:$REGISTRY_PORT:5000" -v "$REGISTRY_VOLUME:/var/lib/registry" registry:2 >/dev/null
+}
+
+# Every local image under $REGISTRY, by repository:tag or by ID.
+registry_images() {
+    docker image ls --all --format "{{.Repository}}:{{.Tag}} {{.ID}}" | awk -v repo="$REGISTRY/" 'index($1, repo) == 1'
+}
+
+# remove_registry_images: every local image under $REGISTRY, by ID, since a dangling one has no tag to name it by.
+remove_registry_images() {
+    local images
+    images=$(registry_images | awk '{ print $2 }' | sort -u)
+    if [ -n "$images" ]; then docker image rm -f $images >/dev/null 2>&1 || true; fi
+}
+
+# published_images: the IDs of the local images of $PUBLISHED_REGISTRY, one a line.
+published_images() {
+    local name
+    for name in $IMAGES; do docker image ls --all --format '{{.ID}}' "$PUBLISHED_REGISTRY/$name"; done | sort -u
+}
+
+# What this run pushed and pulled, the registry and its volume; harness_cleanup does the rest. The installs go first:
+# an image in use stays.
+registry_cleanup() {
+    local project pulled
+    if [ "${HARNESS_KEEP:-0}" = 1 ]; then return; fi
+    for project in $HARNESS_PROJECTS; do down_project "$project"; done
+    remove_registry_images
+    pulled=$(comm -13 <(printf '%s\n' "$PUBLISHED_BEFORE") <(published_images))
+    if [ -n "$pulled" ]; then docker image rm -f $pulled >/dev/null 2>&1 || true; fi
+    docker rm -f "eigentest-registry-$RUN" >/dev/null 2>&1 || true
+    docker volume rm "$REGISTRY_VOLUME" >/dev/null 2>&1 || true
+}
+
+# candidate_ready <candidate>: every image has that tag on $PUBLISHED_REGISTRY and, with CANDIDATE_CREATED set, the
+# annotation org.opencontainers.image.created publish.yml gives it in the run that stamped that time.
+candidate_ready() {
+    local name manifest
+    for name in $IMAGES; do
+        manifest=$(published_get "$name" "manifests/$1" 2>/dev/null) || return 1
+        if [ -n "${CANDIDATE_CREATED:-}" ] &&
+            ! printf '%s' "$manifest" | grep -q "\"org\.opencontainers\.image\.created\": *\"$CANDIDATE_CREATED\""; then
+            return 1
+        fi
+    done
+}
+
+# copy_candidate <candidate> <tag>: publish.yml's candidate images, the ones it promotes, in this run's registry under
+# <tag>, pulled and pushed as they are. They are built beside the harness, so it waits for them, 40 minutes at most: a
+# candidate of an earlier run of the same tag is not the one this run publishes.
+copy_candidate() {
+    local name waited=$SECONDS
+    until candidate_ready "$1"; do
+        if [ $((SECONDS - waited)) -ge 2400 ]; then return 1; fi
+        sleep 20
+    done
+    for name in $IMAGES; do
+        docker pull -q "$PUBLISHED_REGISTRY/$name:$1" >/dev/null
+        docker tag "$PUBLISHED_REGISTRY/$name:$1" "$REGISTRY/$name:$2"
+        docker push -q "$REGISTRY/$name:$2" >/dev/null 2>&1
+    done
+}
+
 # probe <what> <URL> <status> [body pattern]
 probe() {
     local desc="$1" url="$2" expected_code="$3" expected_pattern="${4:-}"
