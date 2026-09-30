@@ -184,7 +184,7 @@ A home whose capture or verify fails gets `failed` with the reason in the manife
 
 ## The schedule makes one attempt per UTC day
 
-`serverBackupTick` (`apps/api/src/lib/scheduler/jobs.ts`) runs every five minutes, never at boot, when the server is busiest. It starts a Full (Full + S3 with `withS3`) once the UTC hour reaches `hourUtc` and no scheduled archive or record carries today's UTC date. A failed or refused attempt leaves its record, so it counts: a bad night is one alert, not a retry every tick. A restart neither skips nor doubles a night. The settings live in `settings.json` under `backups.schedule` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)).
+`serverBackupTick` (`apps/api/src/lib/scheduler/jobs.ts`) runs every five minutes, never at boot, when the server is busiest. It starts a Full (Full + S3 with `withS3`) once the UTC hour reaches `hourUtc` and no scheduled archive or record carries today's UTC date. A failed or refused attempt leaves its record, so it counts: a bad night is one alert, not a retry every tick. A restart neither skips nor doubles a night. A tick within 15 minutes of a pre-update backup's end starts nothing: the update stops Eigen next, which would kill the Full or wait for it. The settings live in `settings.json` under `backups.schedule` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)).
 
 ## Retention keeps good scheduled archives and every manual one
 

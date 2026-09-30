@@ -143,6 +143,19 @@ describe('The nightly server backup tick', () => {
         expect(start).toHaveBeenCalledTimes(1);
     });
 
+    test('waits a while after a pre-update backup, whose update stops Eigen next and would kill the night', async () => {
+        const archivePath = join(
+            getBackupsDir(),
+            buildServerArchiveName('pre-update', 'light', new Date('2026-10-01T02:01:00Z')),
+        );
+        const record = { state: 'done', startedAt: '2026-10-01T02:01:00Z', finishedAt: '2026-10-01T02:03:00Z' };
+        writeFileSync(serverSidecarPath(archivePath), JSON.stringify(record));
+        await tickAt('2026-10-01T02:05:00Z');
+        expect(start).not.toHaveBeenCalled();
+        await tickAt('2026-10-01T02:20:00Z');
+        expect(start).toHaveBeenCalledTimes(1);
+    });
+
     test('the day is the UTC one: last night’s attempt just before midnight leaves tonight to run', async () => {
         await schedule({ hourUtc: 0 });
         writeAttempt('scheduled', 'full', new Date('2026-09-30T23:59:59Z'), 'done');
