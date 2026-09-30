@@ -1,141 +1,61 @@
 # Scalability
 
-> **TLDR**: Every user's data lives in one isolated Home, and every authenticated route carries `:ownerId` as its
-> second path segment — so a load balancer can hash on it and pin a Home to a server. Every cross-home interaction
-> already funnels through `apps/api/src/lib/home/home-relay.ts`, which is the one file sharding has to change.
-> Those three exist today; no sharding does. The concrete first step is
-> [PROPOSAL_SINGLE_MACHINE_CLUSTER.md](proposals/PROPOSAL_SINGLE_MACHINE_CLUSTER.md).
+> **TLDR:** Eigen runs as one API process, and no sharding exists. What exists is the shape sharding needs: every user's and team's data lives in one isolated Home, every authenticated route carries the Home's `ownerId` as its second path segment, so a router can pin a Home to one process, and every cross-home call goes through `apps/api/src/lib/home/home-relay.ts`, the one file sharding has to change. Not obvious from the code: the server-wide state (the auth database, the share registry, the backup job map, the data epochs) is what a second process cannot share yet, and a relay message in flight is lost on a crash. The first concrete step is [PROPOSAL_SINGLE_MACHINE_CLUSTER.md](proposals/PROPOSAL_SINGLE_MACHINE_CLUSTER.md).
 
-Multi-server scaling design for Eigen. The architecture is built around per-user data isolation (the Home
-singleton) and consistent routing by `ownerId`, which together make user-sharding a natural extension of
-the single-server model.
+## A Home holds all of one owner's data
 
-## What's Implemented Today
+Every user and every team has a Home with its own SQLite databases, file storage and event stream. No database mixes users' content. The only server-level databases are the three in `SERVER_DATABASES` (`apps/api/src/lib/config/paths.ts`): `users3.db` for auth, `eigen.db` for the share registry and `waitlist.db`. So a Home can live on any server without a schema change, and moving one is moving its folder.
 
-### Per-User Data Isolation
+## The ownerId is the routing key
 
-Every user has an isolated Home with its own SQLite databases, file storage, and SSE broadcast channel.
-There is no shared database for user content — the only server-level databases are `users3.db` (auth),
-`eigen.db` (share registry) and `waitlist.db` (waitlist entries + invite tokens, opened lazily on first use by
-`apps/api/src/lib/waitlist/waitlist.ts`). This isolation is the foundation for sharding: a user's Home can live on
-any server without schema changes.
+Every authenticated route has `:ownerId` as its second path segment (`/drive/:ownerId/…`, `/calendar/:ownerId/…`), which `scripts/check-standards.ts` enforces. A router can read it without parsing a body and send every request for one Home to the process that owns it. A collab socket carries the document owner's id, not the editor's, so an edit of someone else's document already routes to the right Home.
 
-### ownerId Routing Key
+Server-wide surfaces that act on no Home carry none, and `OWNER_ID_EXEMPT` lists them: setup, the settings, the waitlist, the public pages, and the per-home and whole-server backup routes. In a cluster they need a process of their own or a shared answer.
 
-Every authenticated route includes `:ownerId` as the second path segment (`/drive/:ownerId/...`,
-`/calendar/:ownerId/...`). A load balancer can extract `ownerId` and use consistent hashing to route all
-requests for one Home to the same server.
+## Every cross-home call goes through the relay
 
-### Home Relay Layer
+When one user's action touches another Home, it goes through `home-relay.ts`, in one of three shapes, all keyed by the target's `ownerId`:
 
-All cross-home interactions — where one user's action touches another user's Home — flow through a single
-relay module (`apps/api/src/lib/home/home-relay.ts`). This is the sharding seam.
+- **Pushes**: `sendToHome(targetUserId, message)` with a typed `HomeMessage` (ACL changes, calendar shares and invitations, RSVPs, SSE broadcasts, notifications), plus `push*` helpers for profile and team avatars. Fire and forget.
+- **Pulls**: one typed function per cross-home read, such as `pullSharedPaths`, `pullCalendars` and `pullDriveSearch`. `pullHomeSize` and `pullHomeBackupBytes` read a home's folder without booting it, and `pullHomeSnapshot` captures a home for a backup.
+- **Event writes**: `createEventAt`, `updateEventAt`, `deleteEventAt` and `moveEventAt`, which return a value and so are not pushes.
 
-The module holds three shapes, all keyed by the target's `ownerId`. Read the file for the current inventory —
-enumerating it here rots (it has grown to roughly a dozen pulls and a handful of pushes since this doc was
-written).
+Today each is a direct `getHome()` in the same process. Sharded, `sendToHome` routes or enqueues a message and a pull becomes a request to the owning process, and nothing outside the file changes. A `HomeMessage` is plain data for that reason.
 
-- **Pushes** — `sendToHome(targetUserId, message)` with a typed `HomeMessage` discriminated union (ACL changes,
-  calendar shares and invitations, RSVPs, SSE broadcasts, notifications), plus a couple of `push*` helpers for
-  profile and team avatars. Fire-and-forget: no return value
-- **Pulls** — one typed function per cross-home read (`pullSharedPaths`, `pullCalendars`, `pullEventsInRange`,
-  `pullDriveSearch`, team quota/mount lookups, …)
-- **Event mutations** — `createEventAt` / `updateEventAt` / `deleteEventAt` / `moveEventAt`. Writes with return values, so they
-  don't fit the fire-and-forget push shape
+## A receive method finishes the job on the target
 
-Today all three are direct in-process calls via `getHome()`. In a sharded deployment only `home-relay.ts`
-changes — `sendToHome()` routes to the correct server or enqueues a message, and pull/event functions become
-remote API calls.
+The Calendar and Drive `receive*` methods write the database, broadcast the SSE event and persist the notification themselves. One message therefore does a whole operation on the target Home, and a sharded relay never has to coordinate steps across processes.
 
-### Self-Contained Receive Methods
+## lib/ may not import getHome
 
-Calendar and Drive `receive*` methods handle DB writes, SSE broadcast, and notification persistence
-internally. This means a single `sendToHome()` message triggers a complete operation on the target — no
-multi-step coordination needed across servers.
+`scripts/check-home-imports.ts`, part of `bun run check`, fails on `getHome` anywhere in `apps/api/src/lib/` outside `lib/home/`. The per-domain `get-*.ts` resolvers are allowed by design, and a few older files are allowlisted pending a refactor. A route may resolve its own request's Home. Any other Home goes through the relay. Passing the `Home` down from the route would empty the allowlist and make a wrong lookup impossible to write ([ROADMAP.md](ROADMAP.md)).
 
-## Future: Multi-Server Architecture
+## Server-wide state is what a second process cannot share yet
 
-The first step is smaller than this: several API processes on one box, sharing the filesystem, routed by Caddy.
-That is worked out in [PROPOSAL_SINGLE_MACHINE_CLUSTER.md](proposals/PROPOSAL_SINGLE_MACHINE_CLUSTER.md) (also not
-implemented; tracked as one row in [ROADMAP-POST-1.md](ROADMAP-POST-1.md)). The picture below is the multi-machine end state.
+| Component | Today | Sharded |
+|---|---|---|
+| Auth | `data/server/users3.db` | One shared database |
+| Share registry | `data/server/eigen.db` | A shared database or a distributed registry |
+| Waitlist | `data/server/waitlist.db` | One row set, written from any process |
+| Yjs documents | In memory in the process that opened them | Editors connect to the owner's process |
+| SSE streams | In the process that serves the user | A user connects to their Home's process ([SSE.md](SSE.md)) |
+| Backup jobs and the restore mark | The in-memory job map and `markHomeRestoring`, per process | Home jobs run where the Home lives. The whole-server job reaches every Home through `pullHomeSnapshot`, which becomes a pull, and its slot and schedule tick need one owner ([BACKUP.md](BACKUP.md)) |
+| Data epochs | Read once per process (`apps/api/src/lib/home/data-epoch.ts`), so no other process sees a rotation | The Home's process owns its epoch, and a stream or collab open elsewhere reads it through a pull ([SSE.md](SSE.md#a-restore-reloads-every-tab-of-the-home)) |
 
-```
-                           +-------------------+
-                           |   LOAD BALANCER   |
-                           |  (route by        |
-                           |   ownerId)        |
-                           +--------+----------+
-                                    |
-              +---------------------+---------------------+
-              |                     |                     |
-              v                     v                     v
-+------------------+   +------------------+   +------------------+
-| API SERVER 1     |   | API SERVER 2     |   | API SERVER 3     |
-| (homes A, B, C)  |   | (homes D, E)     |   | (homes F, G, H)  |
-|                  |   |                  |   |                  |
-| WebSocket / Yjs  |   | WebSocket / Yjs  |   | WebSocket / Yjs  |
-| SQLite per user  |   | SQLite per user  |   | SQLite per user  |
-+------------------+   +------------------+   +------------------+
-```
+## The first step is several processes on one machine
 
-### What changes in `home-relay.ts`
+[PROPOSAL_SINGLE_MACHINE_CLUSTER.md](proposals/PROPOSAL_SINGLE_MACHINE_CLUSTER.md) runs several API processes on one box over one filesystem, with Caddy routing by `ownerId`, so the application never hashes an id itself. Its row in [ROADMAP-POST-1.md](ROADMAP-POST-1.md) says what exists and what triggers it. The instance lock keeps a second API off a data folder today ([DATABASE.md](DATABASE.md#one-api-process-owns-a-data-folder)), so the cluster replaces it with a per-home lock first.
 
-```typescript
-export async function sendToHome(targetUserId: string, message: HomeMessage): Promise<void> {
-    const shard = lookupShard(targetUserId);
-    if (shard.isLocal) {
-        // Same as today — direct in-process call
-        const home = await getHome(targetUserId);
-        // ... dispatch message
-    } else {
-        // Serialize HomeMessage (it's already plain data) and send
-        await shard.post(targetUserId, message);
-    }
-}
-```
+## A relay message in flight is lost on a crash
 
-Pull functions follow the same pattern — check shard locality, call locally or make an API request.
-[PROPOSAL_SINGLE_MACHINE_CLUSTER.md](proposals/PROPOSAL_SINGLE_MACHINE_CLUSTER.md) works this through concretely for one
-machine, using Caddy as the only router so the application never hashes an ownerId itself.
+`sendToHome` has no durable queue. The ACL fan-out is bounded and ordered per path (`apps/api/src/lib/drive/acl-propagation.ts`), but a delivery in flight when the process dies is gone. [PROPOSAL_HOME_RELAY_OUTBOX.md](proposals/PROPOSAL_HOME_RELAY_OUTBOX.md) turns each push into a row in a server-level outbox with one drain loop, FIFO per target, retries and replay on boot. In a sharded deployment that drain is the one place that learns about other processes.
 
-### Shared State That Needs Addressing
+## Multi-server questions without an answer yet
 
-| Component          | Current                        | Sharded approach                             |
-|--------------------|--------------------------------|----------------------------------------------|
-| Auth DB            | `data/server/users3.db`        | Shared database (PostgreSQL or replicated)   |
-| Share registry     | `data/server/eigen.db`         | Shared database or distributed registry      |
-| Waitlist           | `data/server/waitlist.db`      | Same treatment as the share registry — one row set for the whole deployment, written from any node |
-| Yjs documents      | In-memory per server           | Editors connect to document owner's server   |
-| SSE connections    | Per-server                     | Each user connects to their home's server    |
-| Team membership    | Auth DB queries                | Shared auth DB handles this                  |
-| Backup jobs + restore mark | In-memory per server         | Home-local already; only the admin route's `getHome` becomes a relay call ([BACKUP.md](BACKUP.md)) |
-| Data epochs        | Read once per process (`lib/home/data-epoch.ts`), so no other process sees a rotation | The home's server owns its epoch; a stream or collab open elsewhere reads it through a `home-relay.ts` pull ([SSE.md](SSE.md#a-restore-reloads-every-tab-of-the-home)) |
+- **Moving a Home between servers** means copying its folder and updating the shard map. `sendToHome` could queue messages for it meanwhile.
+- **Co-locating an organization**: members on one server keep shared calendars and team drives off the network.
 
-### Home Locality Enforcement
+## See also
 
-A lint rule (`scripts/check-home-imports.ts`, run by `bun run check`) blocks new `getHome` imports
-in `lib/` — only route files and `lib/home/` may import it. Existing lib files are allowlisted
-pending refactor.
-
-**Future refactor**: Change lib functions to receive `Home` as a parameter instead of calling
-`getHome` internally. Routes resolve `home` and pass it down. This eliminates convenience wrappers
-like `getDrive(user)`, `resolveCalendar(user, ownerId)` — routes just use `home.drive`,
-`home.calendar` directly. Makes wrong code structurally impossible rather than just flagged.
-
-### Delivery Guarantees
-
-Answered and scheduled, not open: [PROPOSAL_HOME_RELAY_OUTBOX.md](proposals/PROPOSAL_HOME_RELAY_OUTBOX.md) turns
-`sendToHome` into a durable row in a server-level outbox with a single drain loop, per-target FIFO, retry/backoff
-and replay on boot — and in the sharded future that drain step is the one place that learns about remote shards.
-The ACL fan-out is already bounded-async (`apps/api/src/lib/drive/acl-propagation.ts`: bounded concurrency,
-per-path FIFO), but in-flight deliveries are still lost on a crash. That window is what the outbox closes.
-
-### Open Design Questions
-
-- **Yjs collaboration across shards**: When user A edits user B's document, A's WebSocket connects to B's
-  server. The load balancer routes the document WebSocket by the *document owner's* ownerId, not the
-  editor's. This works naturally with the existing routing key.
-- **User migration**: Moving a user's Home between servers requires copying their data directory and
-  updating the shard map. During migration, `sendToHome` could queue messages until the new shard is ready.
-- **Organization co-location**: Large orgs benefit from having members on the same or neighboring servers
-  to minimize cross-shard communication for shared calendars and team drives.
+- [ARCHITECTURE.md](ARCHITECTURE.md): the pitfall that every route carries `:ownerId` and every cross-home call uses the relay
+- [PROPOSAL_FD_BUDGET.md](proposals/PROPOSAL_FD_BUDGET.md): what sets how many Homes one process can hold
