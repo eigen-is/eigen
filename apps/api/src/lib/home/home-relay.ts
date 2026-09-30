@@ -29,7 +29,7 @@ import { readMailTotalSize } from '../mail/maildir-store';
 import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, updateUser } from '../user';
-import { atHome, getHome, getHomeForBackup, getTeamHome } from './get-home';
+import { atHome, getHome, getHomeForBackup, getTeamHome, isHomeOpen } from './get-home';
 
 export type HomeMessage =
     | { type: 'drive:acl-change'; path: DrivePath; acl: DriveACL[] | null; actorEmail?: string; actorName?: string }
@@ -220,7 +220,7 @@ export async function pullHomeSnapshot(
     options: { level?: BackupLevel; onProgress?: SnapshotProgress },
 ): Promise<BackupManifest> {
     const startedAt = Date.now();
-    const wasLoaded = atHome(ownerId);
+    const wasLoaded = isHomeOpen(ownerId);
     const home = await getHomeForBackup(ownerId);
     try {
         return await snapshotHome(home, targetDir, options);

@@ -16,6 +16,12 @@ export function atHome(ownerId: string): boolean {
     return homeFactories.has(ownerId);
 }
 
+// Loaded and staying: a home tearing down is gone to whoever asks next.
+export function isHomeOpen(ownerId: string): boolean {
+    const home = homeFactories.get(ownerId)?.peek();
+    return !!home && !home.destructing;
+}
+
 // Resets the idle timer on an already-loaded home. peek() never triggers the factory,
 // so a keepalive tick pins a live home without resurrecting an evicted one.
 export function touchHomeIfLoaded(ownerId: string): void {
