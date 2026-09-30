@@ -349,3 +349,8 @@ export function getAuthDrizzleDb() {
     }
     return authDrizzleDb;
 }
+
+// The server backup's copy, through the handle the server writes with.
+export async function stageAuthDbCopy(destPath: string): Promise<void> {
+    getAuthDrizzleDb().$client.run('VACUUM INTO ?', [destPath]);
+}

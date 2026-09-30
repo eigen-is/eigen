@@ -211,60 +211,57 @@ export async function packFolder(dir: string, artifactPath: string, onProgress?:
 export type ArchiveWriter = {
     appendFile(name: string, sourcePath: string): Promise<void>;
     finish(manifest: Omit<ServerArchiveManifest, 'entries'>): Promise<ServerArchiveManifest>;
+    abort(): Promise<void>;
 };
 
 // A whole-server archive is a plain tar: its members are compressed already, and a plain tar can be
 // read member by member. Each member is hashed as it is copied in, and finish() closes the archive
 // with manifest.json listing them all, so the manifest is always the last member. The file is
-// written where the caller says; the caller writes to a temp name and renames it into place.
+// written where the caller says; the caller writes to a temp name and renames it into place, and
+// calls abort() in a finally, which takes back an archive finish() never closed.
 export async function createArchiveWriter(archivePath: string): Promise<ArchiveWriter> {
     const handle = await fsp.open(archivePath, 'w', SERVER_MEMBER_MODE);
     const entries: BackupEntry[] = [];
     let written = 0;
+    let closed = false;
     async function put(chunk: Uint8Array): Promise<void> {
         let offset = 0;
         while (offset < chunk.length) offset += (await handle.write(chunk, offset)).bytesWritten;
         written += chunk.length;
     }
-    // The caller discards a half-written archive; the open handle has to go with it.
-    async function closeOnError(run: () => Promise<void>): Promise<void> {
-        try {
-            await run();
-        } catch (error) {
-            await handle.close();
-            throw error;
-        }
-    }
     return {
         async appendFile(name, sourcePath) {
-            await closeOnError(async () => {
-                const { size, mtimeMs } = fs.statSync(sourcePath);
-                for (const chunk of headerChunks(name, size, Math.floor(mtimeMs / 1000), '0', SERVER_MEMBER_MODE)) {
-                    await put(chunk);
-                }
-                const hasher = new Bun.CryptoHasher('sha256');
-                for await (const chunk of fileChunks(name, sourcePath, size)) {
-                    hasher.update(chunk);
-                    await put(chunk);
-                }
-                await put(padding(size));
-                entries.push({ path: name, bytes: size, sha256: hasher.digest('hex') });
-            });
+            const { size, mtimeMs } = fs.statSync(sourcePath);
+            for (const chunk of headerChunks(name, size, Math.floor(mtimeMs / 1000), '0', SERVER_MEMBER_MODE)) {
+                await put(chunk);
+            }
+            const hasher = new Bun.CryptoHasher('sha256');
+            for await (const chunk of fileChunks(name, sourcePath, size)) {
+                hasher.update(chunk);
+                await put(chunk);
+            }
+            await put(padding(size));
+            entries.push({ path: name, bytes: size, sha256: hasher.digest('hex') });
         },
         async finish(fields) {
             const manifest: ServerArchiveManifest = { ...fields, entries };
             const body = ENCODER.encode(JSON.stringify(manifest, null, 2));
             const mtime = Math.floor(Date.now() / 1000);
-            await closeOnError(async () => {
-                for (const chunk of headerChunks(ARCHIVE_MANIFEST_FILE, body.length, mtime, '0', SERVER_MEMBER_MODE)) {
-                    await put(chunk);
-                }
-                await put(body);
-                await put(padding(body.length));
-                for (const chunk of archiveEnd(written)) await put(chunk);
-            });
+            for (const chunk of headerChunks(ARCHIVE_MANIFEST_FILE, body.length, mtime, '0', SERVER_MEMBER_MODE)) {
+                await put(chunk);
+            }
+            await put(body);
+            await put(padding(body.length));
+            for (const chunk of archiveEnd(written)) await put(chunk);
+            closed = true;
             await handle.close();
             return manifest;
+        },
+        async abort() {
+            if (closed) return;
+            closed = true;
+            await handle.close();
+            fs.rmSync(archivePath, { force: true });
         },
     };
 }
@@ -458,12 +455,31 @@ export async function readArchiveMembers(archivePath: string): Promise<ArchiveMe
     return members;
 }
 
-// A member's bytes in memory: the manifest, or a test's copy. A home member is streamed through
-// extractArtifact instead. Not a sliced BunFile: Bun.write of one writes the whole archive (1.4.2).
+// What readArchiveMember holds in memory at most: a manifest fits many times over, a home does not.
+export const MAX_MEMBER_READ_BYTES = 16 * 1024 * 1024;
+
+// A member's bytes in memory, for the manifest. A member that has to land on disk goes through
+// copyArchiveMember, and a home member is unpacked in place by extractArtifact.
 export async function readArchiveMember(member: ArchiveMember): Promise<Uint8Array> {
+    if (member.bytes > MAX_MEMBER_READ_BYTES) {
+        throw new Error(`backup archive: ${member.name} is ${member.bytes} bytes, too big to read into memory`);
+    }
     return Bun.file(member.archivePath)
         .slice(member.offset, member.offset + member.bytes)
         .bytes();
+}
+
+// Not Bun.write(dest, a sliced BunFile): Bun 1.4.2 ignores the slice there and writes the whole archive.
+export async function copyArchiveMember(member: ArchiveMember, destPath: string): Promise<void> {
+    // A read stream refuses an `end` before its `start`, which is what an empty member's range is.
+    if (member.bytes === 0) {
+        fs.writeFileSync(destPath, '');
+        return;
+    }
+    await pipeline(
+        fs.createReadStream(member.archivePath, { start: member.offset, end: member.offset + member.bytes - 1 }),
+        fs.createWriteStream(destPath),
+    );
 }
 
 export async function extractArtifact(source: ArtifactSource, targetDir: string): Promise<void> {

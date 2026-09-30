@@ -71,33 +71,31 @@ export const HOME_DATABASE_PATHS = new Set(HOME_DATABASES.map(([, relPath]) => r
 // journals belong to the running server.
 const DB_FILE = /\.db(-wal|-shm)?$/;
 
-// The home outside its mounts and its databases: every file to copy, and every directory to create
-// in the archive folder. Directories are listed because an empty one carries no file to imply it —
-// a Maildir `new/` nobody has delivered to, an empty mailbox — and the tar writer emits an entry per
-// directory in the staging folder. Without them a restored Maildir has no `new/` for
-// MaildirStore.watch to install its watcher on, and mail stops syncing in silence.
-type HomeTree = { files: string[]; dirs: string[] };
+// A folder as plain files: every file to copy, every directory to create in the archive folder, and
+// the databases found, which are not copied (the caller says what one found there means). Journals
+// are left out. Directories are listed because an empty one carries no file to imply it — a Maildir
+// `new/` nobody has delivered to, an empty mailbox — and the tar writer emits an entry per directory
+// in the staging folder. Without them a restored Maildir has no `new/` for MaildirStore.watch to
+// install its watcher on, and mail stops syncing in silence.
+export type FileTree = { files: string[]; dirs: string[]; databases: string[] };
 
-function listHomeTree(dir: string, relDir: string, level: BackupLevel, out: HomeTree): void {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
-        if (entry.isDirectory()) {
-            if (isSkippedHomeDir(rel, level)) continue;
-            out.dirs.push(rel);
-            listHomeTree(path.join(dir, entry.name), rel, level, out);
-            continue;
-        }
-        if (!entry.isFile()) continue;
-        if (DB_FILE.test(entry.name)) {
-            // A home database missing from HOME_DATABASES would be dropped from every archive in
-            // silence. Fail loudly instead, so a new subsystem's db is noticed the day it lands.
-            if (entry.name.endsWith('.db') && !HOME_DATABASE_PATHS.has(rel)) {
-                throw new Error(`snapshotHome: unlisted home database ${rel} — add it to HOME_DATABASES`);
+export function listFileTree(root: string, skipDir: (rel: string) => boolean = () => false): FileTree {
+    const tree: FileTree = { files: [], dirs: [], databases: [] };
+    const walk = (relDir: string): void => {
+        for (const entry of fs.readdirSync(path.join(root, relDir), { withFileTypes: true })) {
+            const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
+            if (entry.isDirectory()) {
+                if (skipDir(rel)) continue;
+                tree.dirs.push(rel);
+                walk(rel);
+            } else if (entry.isFile()) {
+                if (!DB_FILE.test(entry.name)) tree.files.push(rel);
+                else if (entry.name.endsWith('.db')) tree.databases.push(rel);
             }
-            continue;
         }
-        out.files.push(rel);
-    }
+    };
+    walk('');
+    return tree;
 }
 
 // Writes a storage-independent copy of one home into `{targetDir}/home-{ownerId}/` and returns the
@@ -244,8 +242,12 @@ export async function snapshotHome(
         report('mounts', mounts.length + index + 1, total);
     }
 
-    const tree: HomeTree = { files: [], dirs: [] };
-    listHomeTree(home.homeDir, '', level, tree);
+    // The home outside its mounts and its databases.
+    const tree = listFileTree(home.homeDir, (rel) => isSkippedHomeDir(rel, level));
+    // A home database missing from HOME_DATABASES would be dropped from every archive in silence.
+    // Fail loudly instead, so a new subsystem's db is noticed the day it lands.
+    const unlisted = tree.databases.find((rel) => !HOME_DATABASE_PATHS.has(rel));
+    if (unlisted) throw new Error(`snapshotHome: unlisted home database ${unlisted} — add it to HOME_DATABASES`);
     for (const rel of tree.dirs) fs.mkdirSync(path.join(folder, ARCHIVE_HOME_DIR, rel), { recursive: true });
     for (const [index, rel] of tree.files.entries()) {
         const source = Bun.file(path.join(home.homeDir, rel));

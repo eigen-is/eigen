@@ -235,7 +235,13 @@ export async function verifyArchiveTransport(archivePath: string): Promise<Backu
     if (last?.name !== ARCHIVE_MANIFEST_FILE) {
         return { status: 'failed', checkedAt, failures: [`${ARCHIVE_MANIFEST_FILE} is not the last member`] };
     }
-    const manifest = parseServerArchiveManifest(new TextDecoder().decode(await readArchiveMember(last)));
+    let text: string;
+    try {
+        text = new TextDecoder().decode(await readArchiveMember(last));
+    } catch (error) {
+        return { status: 'failed', checkedAt, failures: [describeError(error)] };
+    }
+    const manifest = parseServerArchiveManifest(text);
     if (!manifest) {
         return {
             status: 'failed',
@@ -244,8 +250,19 @@ export async function verifyArchiveTransport(archivePath: string): Promise<Backu
         };
     }
 
+    // A reader takes one of two same-named members and the manifest cannot say which, so their bytes do not matter.
+    const present = new Map<string, ArchiveMember>();
+    const duplicates = new Set<string>();
+    for (const member of members.slice(0, -1)) {
+        if (present.has(member.name)) duplicates.add(member.name);
+        present.set(member.name, member);
+    }
+    if (duplicates.size > 0) {
+        const failures = [...duplicates].map((name) => `${name}: appears more than once in the archive`);
+        return { status: 'failed', checkedAt, failures };
+    }
+
     const failures: string[] = [];
-    const present = new Map(members.slice(0, -1).map((member) => [member.name, member]));
     for (const entry of manifest.entries) {
         const member = present.get(entry.path);
         present.delete(entry.path);

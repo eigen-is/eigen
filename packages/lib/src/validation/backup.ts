@@ -7,6 +7,7 @@ import type {
     ServerArchiveManifest,
 } from '../types/backup';
 import type { MountConfig, S3Config } from '../types/mount';
+import { parseOwnerId } from '../types/owner';
 
 // One grammar for the names in the backups folder, so the pane, the upload route and the artifact
 // list can never disagree about what an artifact is called.
@@ -197,6 +198,7 @@ function isServerArchiveHome(value: unknown): value is ServerArchiveManifest['ho
         typeof value.ownerId === 'string' &&
         'kind' in value &&
         (value.kind === 'user' || value.kind === 'team') &&
+        parseOwnerId(value.ownerId).type === value.kind &&
         'name' in value &&
         typeof value.name === 'string' &&
         (!('member' in value) || typeof value.member === 'string') &&
@@ -257,10 +259,13 @@ export function parseServerArchiveManifest(text: string): ServerArchiveManifest 
     } catch {
         return null;
     }
-    return isServerArchiveManifest(value) ? value : null;
+    if (!isServerArchiveManifest(value)) return null;
+    // A home's member is read by that name, so it has to be one the entries vouch for.
+    const members = new Set(value.entries.map((entry) => entry.path));
+    return value.homes.every((home) => home.member === undefined || members.has(home.member)) ? value : null;
 }
 
-// The one gate every manifest passes through.// The one gate every manifest passes through. Null means "not a version 1 Eigen backup manifest";
+// The one gate every manifest passes through. Null means "not a version 1 Eigen backup manifest";
 // the caller decides whether that is a failed verify or a rejected request.
 export function parseBackupManifest(text: string): BackupManifest | null {
     let value: unknown;

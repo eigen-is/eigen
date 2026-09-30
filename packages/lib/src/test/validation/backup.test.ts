@@ -63,6 +63,8 @@ describe('parseServerArchiveName', () => {
 });
 
 describe('parseServerArchiveManifest', () => {
+    const userId = 'u'.repeat(32);
+    const member = `homes/home-${userId}-20260930-020304.tar.zst`;
     const valid: ServerArchiveManifest = {
         formatVersion: 1,
         level: 'full',
@@ -70,10 +72,13 @@ describe('parseServerArchiveManifest', () => {
         createdAt: '2026-09-30T02:03:04.000Z',
         appVersion: '0.3.1',
         domain: 'example.org',
-        entries: [{ path: 'server.tar.zst', bytes: 10, sha256: 'a'.repeat(64) }],
+        entries: [
+            { path: 'server.tar.zst', bytes: 10, sha256: 'a'.repeat(64) },
+            { path: member, bytes: 20, sha256: 'b'.repeat(64) },
+        ],
         homes: [
-            { ownerId: 'u1', kind: 'user', name: 'U', member: 'homes/home-u1-20260930-020304.tar.zst', bytes: 5 },
-            { ownerId: 'team_t1', kind: 'team', name: 'T', failed: 'bucket unreadable' },
+            { ownerId: userId, kind: 'user', name: 'U', member, bytes: 5 },
+            { ownerId: `team_${'t'.repeat(32)}`, kind: 'team', name: 'T', failed: 'bucket unreadable' },
         ],
         orphans: ['home/gone'],
         envFile: true,
@@ -96,6 +101,18 @@ describe('parseServerArchiveManifest', () => {
             JSON.stringify({ ...valid, images: { EIGEN_VERSION: 3 } }),
         ]) {
             expect(parseServerArchiveManifest(broken)).toBeNull();
+        }
+    });
+
+    test('refuses a home whose ownerId is not an owner of its kind, or whose member is not an entry', () => {
+        const [user, team] = valid.homes;
+        for (const homes of [
+            [{ ...user, ownerId: '../etc' }],
+            [{ ...user, ownerId: team.ownerId }],
+            [{ ...team, ownerId: user.ownerId }],
+            [{ ...user, member: 'homes/elsewhere.tar.zst' }],
+        ]) {
+            expect(parseServerArchiveManifest(JSON.stringify({ ...valid, homes }))).toBeNull();
         }
     });
 });

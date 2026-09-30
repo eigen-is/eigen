@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
 import { orgOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_FORMAT_VERSION } from '@workspace/lib/validation';
-import { getAuthDrizzleDb } from '../auth/auth';
+import { stageAuthDbCopy } from '../auth/auth';
 import { getDataRoot, getServerDataPath, ORG_HOMES_DIR, SERVER_DATABASES, SERVER_FILES } from '../config/paths';
 import { getOrgName, getPublicConfig } from '../config/server-config';
 import { stageEigenDbCopy } from '../share/db';
@@ -17,7 +17,7 @@ import {
     SERVER_ARCHIVE_DKIM_DIR,
     SERVER_ARCHIVE_ENV_MEMBER,
 } from './paths';
-import type { SnapshotProgress } from './snapshot-home';
+import { listFileTree, type SnapshotProgress } from './snapshot-home';
 
 type ServerDatabase = (typeof SERVER_DATABASES)[keyof typeof SERVER_DATABASES];
 
@@ -25,28 +25,10 @@ type ServerDatabase = (typeof SERVER_DATABASES)[keyof typeof SERVER_DATABASES];
 // with, so the copy is one committed state. Keyed by file name: a database added to SERVER_DATABASES
 // does not compile until it is staged here.
 const STAGE_SERVER_DATABASE: Record<ServerDatabase, (destPath: string) => Promise<void>> = {
-    [SERVER_DATABASES.users]: async (destPath) => {
-        getAuthDrizzleDb().$client.run('VACUUM INTO ?', [destPath]);
-    },
+    [SERVER_DATABASES.users]: stageAuthDbCopy,
     [SERVER_DATABASES.shares]: stageEigenDbCopy,
     [SERVER_DATABASES.waitlist]: stageWaitlistDbCopy,
 };
-
-type FileTree = { files: string[]; dirs: string[] };
-
-// Every file and directory under `dir`, relative to it. Directories are listed so an empty one
-// survives the archive, as in a home.
-function listTree(dir: string, relDir: string, out: FileTree): void {
-    for (const entry of fs.readdirSync(path.join(dir, relDir), { withFileTypes: true })) {
-        const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
-        if (entry.isDirectory()) {
-            out.dirs.push(rel);
-            listTree(dir, rel, out);
-        } else if (entry.isFile()) {
-            out.files.push(rel);
-        }
-    }
-}
 
 // Writes the server's own data into `{targetDir}/server-{stamp}/`, laid out as in data/: `server/`
 // holds the databases and SERVER_FILES by name, so runtime files and strays stay out, and `org/` is
@@ -76,8 +58,11 @@ export async function snapshotServer(
 
     const copies: { source: string; rel: string }[] = [];
     const copyTree = (sourceDir: string, relDir: string): void => {
-        const tree: FileTree = { files: [], dirs: [] };
-        listTree(sourceDir, '', tree);
+        const tree = listFileTree(sourceDir);
+        // None of these folders holds a database (an org home has no drive to open one), and a file
+        // copy of a live one is torn: one there is a new subsystem this snapshot has to learn.
+        const [database] = tree.databases;
+        if (database) throw new Error(`snapshotServer: database ${relDir}/${database} in a folder copied as files`);
         for (const rel of tree.dirs) fs.mkdirSync(path.join(folder, relDir, rel), { recursive: true });
         for (const rel of tree.files) copies.push({ source: path.join(sourceDir, rel), rel: `${relDir}/${rel}` });
     };

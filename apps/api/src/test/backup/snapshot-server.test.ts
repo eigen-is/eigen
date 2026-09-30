@@ -21,6 +21,8 @@ import { getTestContext, TEST_DATA_DIR } from '../setup';
 // What setup leaves in data/server/ beside the allowlist, and an older server's auth database.
 const STRAY_FILES = ['users3.backup-20260101-000000.db', 'auth.db'];
 const ORG_PROBE = 'org-probe.txt';
+// A journal is the running server's, whatever folder it is in.
+const ORG_JOURNAL = 'org-probe.db-wal';
 const AVATAR_PROBE = 'snapshot-server-probe.webp';
 
 describe('Backup snapshotServer', () => {
@@ -37,6 +39,7 @@ describe('Backup snapshotServer', () => {
         for (const name of STRAY_FILES) writeFileSync(getServerDataPath(name), 'stray');
         mkdirSync(getOrgDataPath(orgId), { recursive: true });
         writeFileSync(join(getOrgDataPath(orgId), ORG_PROBE), 'org file');
+        writeFileSync(join(getOrgDataPath(orgId), ORG_JOURNAL), 'journal');
         writeFileSync(join(getAvatarsDir(), AVATAR_PROBE), 'avatar');
 
         const target = mkdtempSync(join(TEST_DATA_DIR, 'server-snapshot-'));
@@ -47,6 +50,7 @@ describe('Backup snapshotServer', () => {
     afterAll(() => {
         for (const name of STRAY_FILES) rmSync(getServerDataPath(name), { force: true });
         rmSync(join(getOrgDataPath(orgId), ORG_PROBE), { force: true });
+        rmSync(join(getOrgDataPath(orgId), ORG_JOURNAL), { force: true });
         rmSync(join(getAvatarsDir(), AVATAR_PROBE), { force: true });
     });
 
@@ -74,6 +78,20 @@ describe('Backup snapshotServer', () => {
         const rel = `org/${orgId}/${ORG_PROBE}`;
         expect(manifest.entries.map((e) => e.path)).toContain(rel);
         expect(readFileSync(join(folder, rel), 'utf8')).toBe('org file');
+        expect(manifest.entries.map((e) => e.path)).not.toContain(`org/${orgId}/${ORG_JOURNAL}`);
+        expect(existsSync(join(folder, 'org', orgId, ORG_JOURNAL))).toBe(false);
+    });
+
+    test('refuses a database in the org folder: an org home holds none, and a file copy of a live one is torn', async () => {
+        const stray = join(getOrgDataPath(orgId), 'stray.db');
+        writeFileSync(stray, 'not a database copy');
+        try {
+            const target = mkdtempSync(join(TEST_DATA_DIR, 'server-org-db-'));
+            await expect(snapshotServer(target, at)).rejects.toThrow(`org/${orgId}/stray.db`);
+            expect(existsSync(join(target, buildServerFolderName(at), 'org', orgId, 'stray.db'))).toBe(false);
+        } finally {
+            rmSync(stray, { force: true });
+        }
     });
 
     test('the three databases pass quick_check and the folder verifies', async () => {

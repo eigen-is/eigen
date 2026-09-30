@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import * as fs from 'node:fs';
 import {
     chmodSync,
     existsSync,
@@ -19,8 +20,10 @@ import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import {
+    copyArchiveMember,
     createArchiveWriter,
     extractArtifact,
+    MAX_MEMBER_READ_BYTES,
     packFolder,
     readArchiveMember,
     readArchiveMembers,
@@ -606,46 +609,52 @@ describe('Whole-server archive', () => {
         dir = mkdtempSync(join(TEST_DATA_DIR, 'server-archive-'));
         archivePath = join(dir, buildServerArchiveName('manual', 'full-s3', at));
         const writer = await createArchiveWriter(archivePath);
+        try {
+            const serverStaging = mkdtempSync(join(TEST_DATA_DIR, 'server-member-'));
+            await snapshotServer(serverStaging, at);
+            const serverArtifact = join(dir, SERVER_ARCHIVE_SERVER_MEMBER);
+            await packFolder(join(serverStaging, buildServerFolderName(at)), serverArtifact);
+            await writer.appendFile(SERVER_ARCHIVE_SERVER_MEMBER, serverArtifact);
 
-        const serverStaging = mkdtempSync(join(TEST_DATA_DIR, 'server-member-'));
-        await snapshotServer(serverStaging, at);
-        const serverArtifact = join(dir, SERVER_ARCHIVE_SERVER_MEMBER);
-        await packFolder(join(serverStaging, buildServerFolderName(at)), serverArtifact);
-        await writer.appendFile(SERVER_ARCHIVE_SERVER_MEMBER, serverArtifact);
+            const summaries: ServerArchiveManifest['homes'] = [];
+            for (const ownerId of [ctx.alice.user.id, teamOwnerId(teamId)]) {
+                const staging = mkdtempSync(join(TEST_DATA_DIR, 'home-member-'));
+                const home = await snapshotHome(await getHome(ownerId), staging);
+                const standalone = join(
+                    mkdtempSync(join(TEST_DATA_DIR, 'standalone-')),
+                    buildArtifactName(ownerId, at),
+                );
+                await packFolder(join(staging, buildHomeFolderName(ownerId)), standalone);
+                const member = buildHomeMemberName(ownerId, at);
+                await writer.appendFile(member, standalone);
+                homes.push({ ownerId, member, standalone });
+                const kind = home.kind === 'team' ? 'team' : 'user';
+                summaries.push({ ownerId, kind, name: home.name, member, bytes: home.counts.bytes });
+            }
 
-        const summaries: ServerArchiveManifest['homes'] = [];
-        for (const ownerId of [ctx.alice.user.id, teamOwnerId(teamId)]) {
-            const staging = mkdtempSync(join(TEST_DATA_DIR, 'home-member-'));
-            const home = await snapshotHome(await getHome(ownerId), staging);
-            const standalone = join(mkdtempSync(join(TEST_DATA_DIR, 'standalone-')), buildArtifactName(ownerId, at));
-            await packFolder(join(staging, buildHomeFolderName(ownerId)), standalone);
-            const member = buildHomeMemberName(ownerId, at);
-            await writer.appendFile(member, standalone);
-            homes.push({ ownerId, member, standalone });
-            const kind = home.kind === 'team' ? 'team' : 'user';
-            summaries.push({ ownerId, kind, name: home.name, member, bytes: home.counts.bytes });
+            const envFile = join(dir, 'env.production');
+            writeFileSync(envFile, 'DOMAIN=test.eigen.is\n');
+            const dkimDir = join(dir, 'dkim-source');
+            mkdirSync(dkimDir);
+            for (const name of DKIM_FILES) writeFileSync(join(dkimDir, name), `${name} bytes`);
+            const install = await appendInstallFiles(writer, { envFile, dkimDir });
+            expect(install).toEqual({ envFile: true, dkim: true });
+
+            manifest = await writer.finish({
+                formatVersion: 1,
+                level: 'full-s3',
+                reason: 'manual',
+                createdAt: at.toISOString(),
+                appVersion: 'test',
+                domain: 'test.eigen.is',
+                homes: summaries,
+                orphans: [],
+                ...install,
+                images: {},
+            });
+        } finally {
+            await writer.abort();
         }
-
-        const envFile = join(dir, 'env.production');
-        writeFileSync(envFile, 'DOMAIN=test.eigen.is\n');
-        const dkimDir = join(dir, 'dkim-source');
-        mkdirSync(dkimDir);
-        for (const name of DKIM_FILES) writeFileSync(join(dkimDir, name), `${name} bytes`);
-        const install = await appendInstallFiles(writer, { envFile, dkimDir });
-        expect(install).toEqual({ envFile: true, dkim: true });
-
-        manifest = await writer.finish({
-            formatVersion: 1,
-            level: 'full-s3',
-            reason: 'manual',
-            createdAt: at.toISOString(),
-            appVersion: 'test',
-            domain: 'test.eigen.is',
-            homes: summaries,
-            orphans: [],
-            ...install,
-            images: {},
-        });
     }, PACK_TIMEOUT_MS);
 
     function memberNames(): string[] {
@@ -687,8 +696,9 @@ describe('Whole-server archive', () => {
             const members = await readArchiveMembers(archivePath);
             for (const home of homes) {
                 const member = members.find((m) => m.name === home.member)!;
-                const bytes = await readArchiveMember(member);
-                expect(Buffer.compare(bytes, await Bun.file(home.standalone).bytes())).toBe(0);
+                const copy = join(mkdtempSync(join(TEST_DATA_DIR, 'member-copy-')), basename(member.name));
+                await copyArchiveMember(member, copy);
+                expect(Buffer.compare(readFileSync(copy), readFileSync(home.standalone))).toBe(0);
 
                 const name = basename(member.name);
                 expect(parseBackupArtifactName(name)).toEqual({ ownerId: home.ownerId, at });
@@ -738,7 +748,7 @@ describe('Whole-server archive', () => {
             const { ownerId, member: memberName } = homes[1];
             const member = (await readArchiveMembers(archivePath)).find((m) => m.name === memberName)!;
             const name = basename(memberName);
-            writeFileSync(join(getBackupsDir(), name), await readArchiveMember(member));
+            await copyArchiveMember(member, join(getBackupsDir(), name));
             try {
                 expect((await listArtifacts(ownerId)).map((artifact) => artifact.name)).toContain(name);
                 await restoreHome(name, ownerId, `archive-member-restore-${Date.now()}`);
@@ -755,9 +765,13 @@ describe('Whole-server archive', () => {
         writeFileSync(envFile, 'SECRET=1\n');
         chmodSync(envFile, 0o000);
         const writer = await createArchiveWriter(small);
-        const install = await appendInstallFiles(writer, { envFile, dkimDir: join(dir, 'no-dkim') });
-        expect(install).toEqual({ envFile: false, dkim: false });
-        await writer.finish({ ...manifest, ...install });
+        try {
+            const install = await appendInstallFiles(writer, { envFile, dkimDir: join(dir, 'no-dkim') });
+            expect(install).toEqual({ envFile: false, dkim: false });
+            await writer.finish({ ...manifest, ...install });
+        } finally {
+            await writer.abort();
+        }
         expect((await readArchiveMembers(small)).map((member) => member.name)).toEqual(['manifest.json']);
     });
 
@@ -766,5 +780,103 @@ describe('Whole-server archive', () => {
         expect(listing.stderr.toString()).toBe('');
         expect(listing.success).toBe(true);
         expect(listing.stdout.toString().trim().split('\n')).toEqual(memberNames());
+    });
+});
+
+describe('Archive writer and reader', () => {
+    const fields: Omit<ServerArchiveManifest, 'entries'> = {
+        formatVersion: 1,
+        level: 'full',
+        reason: 'manual',
+        createdAt: new Date().toISOString(),
+        appVersion: 'test',
+        domain: 'test.eigen.is',
+        homes: [],
+        orphans: [],
+        envFile: false,
+        dkim: false,
+        images: {},
+    };
+    let dir: string;
+    // Goes first in every archive, so no member under test starts at offset 0.
+    let lead: string;
+
+    beforeAll(() => {
+        dir = mkdtempSync(join(TEST_DATA_DIR, 'archive-rw-'));
+        lead = join(dir, 'lead.txt');
+        writeFileSync(lead, 'lead member');
+    });
+
+    async function writeArchive(name: string, members: [string, string][]): Promise<string> {
+        const archivePath = join(dir, name);
+        const writer = await createArchiveWriter(archivePath);
+        try {
+            for (const [member, source] of members) await writer.appendFile(member, source);
+            await writer.finish(fields);
+        } finally {
+            await writer.abort();
+        }
+        return archivePath;
+    }
+
+    test('a member past the read cap is refused in memory and streamed out byte for byte', async () => {
+        const big = join(dir, 'big.bin');
+        const bytes = new Uint8Array(MAX_MEMBER_READ_BYTES + 1);
+        for (let i = 0; i < bytes.length; i += 4096) bytes[i] = (i / 4096) % 251;
+        writeFileSync(big, bytes);
+        const archivePath = await writeArchive('big.tar', [
+            ['lead.txt', lead],
+            ['big.bin', big],
+        ]);
+        const member = (await readArchiveMembers(archivePath)).find((m) => m.name === 'big.bin')!;
+        await expect(readArchiveMember(member)).rejects.toThrow('big.bin');
+
+        const dest = join(dir, 'big-copy.bin');
+        const readStream = spyOn(fs, 'createReadStream');
+        try {
+            await copyArchiveMember(member, dest);
+            expect(readStream).toHaveBeenCalledWith(archivePath, {
+                start: member.offset,
+                end: member.offset + member.bytes - 1,
+            });
+        } finally {
+            readStream.mockRestore();
+        }
+        expect(fs.statSync(dest).size).toBe(bytes.length);
+        expect(await sha256Of(dest)).toBe(await sha256Of(big));
+    });
+
+    test('an empty member copies out as an empty file', async () => {
+        const empty = join(dir, 'empty.txt');
+        writeFileSync(empty, '');
+        const archivePath = await writeArchive('empty.tar', [
+            ['lead.txt', lead],
+            ['empty.txt', empty],
+        ]);
+        const member = (await readArchiveMembers(archivePath)).find((m) => m.name === 'empty.txt')!;
+        const dest = join(dir, 'empty-copy.txt');
+        await copyArchiveMember(member, dest);
+        expect(fs.statSync(dest).size).toBe(0);
+    });
+
+    test('abort removes a half-written archive and leaves a finished one alone', async () => {
+        const partial = join(dir, 'partial.tar');
+        const writer = await createArchiveWriter(partial);
+        await writer.appendFile('lead.txt', lead);
+        await writer.abort();
+        expect(existsSync(partial)).toBe(false);
+
+        const finished = await writeArchive('finished.tar', [['lead.txt', lead]]);
+        expect((await readArchiveMembers(finished)).map((m) => m.name)).toEqual(['lead.txt', 'manifest.json']);
+    });
+
+    test('two members of one name fail the transport check', async () => {
+        const archivePath = await writeArchive('duplicate.tar', [
+            ['lead.txt', lead],
+            ['lead.txt', lead],
+        ]);
+        const record = await verifyArchiveTransport(archivePath);
+        expect(record.status).toBe('failed');
+        expect(record.failures).toEqual(['lead.txt: appears more than once in the archive']);
     });
 });
