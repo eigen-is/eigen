@@ -204,7 +204,8 @@ function isServerArchiveHome(value: unknown): value is ServerArchiveManifest['ho
         typeof value.name === 'string' &&
         (!('member' in value) || typeof value.member === 'string') &&
         (!('bytes' in value) || typeof value.bytes === 'number') &&
-        (!('failed' in value) || typeof value.failed === 'string')
+        (!('failed' in value) || typeof value.failed === 'string') &&
+        (!('skipped' in value) || typeof value.skipped === 'string')
     );
 }
 

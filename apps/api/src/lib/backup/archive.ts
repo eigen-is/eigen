@@ -13,7 +13,7 @@ import type {
 } from '@workspace/lib/types/backup';
 import { parseBackupManifest, parseBackupSidecar } from '@workspace/lib/validation';
 import { ApiError } from '../core';
-import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath } from './paths';
+import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath, SIDECAR_SUFFIX, sidecarPath } from './paths';
 import type { SnapshotProgress } from './snapshot-home';
 
 // An artifact is a plain POSIX tar (pax for long paths) piped through zstd, so `tar --zstd -xf`
@@ -29,13 +29,8 @@ const NAME_FIELD = 100;
 const MAX_OCTAL_SIZE = 0o77777777777;
 // tar's traditional blocking factor. `tar` reads a short archive fine, but every writer pads.
 const BLOCKING_FACTOR = 20 * BLOCK;
-const SIDECAR_SUFFIX = '.manifest.json';
 // A whole-server archive holds every secret of the server, so `tar -xf` hands its members to the user alone.
 const SERVER_MEMBER_MODE = 0o600;
-
-export function sidecarPath(artifactPath: string): string {
-    return `${artifactPath}${SIDECAR_SUFFIX}`;
-}
 
 const ENCODER = new TextEncoder();
 const DECODER = new TextDecoder();

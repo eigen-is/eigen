@@ -28,7 +28,7 @@ import { readMailTotalSize } from '../mail/maildir-store';
 import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, updateUser } from '../user';
-import { atHome, evictHome, getHome, getTeamHome } from './get-home';
+import { atHome, getHome, getTeamHome } from './get-home';
 
 export type HomeMessage =
     | { type: 'drive:acl-change'; path: DrivePath; acl: DriveACL[] | null; actorEmail?: string; actorName?: string }
@@ -205,9 +205,13 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
     };
 }
 
-// A backup captures a home through here, and boots it only for as long as the capture: a home it
-// found asleep is evicted as soon as it is written, so a nightly Full does not leave every Home
-// resident until its idle timer.
+// The idle a home a backup booted is left with: past the 15 s SSE and collab keepalives, so a user
+// who opened it meanwhile re-arms the full idle before it runs out.
+export const BACKUP_RELEASE_MS = 30_000;
+
+// A backup captures a home through here, and boots it only for about as long as the capture: a home
+// it found asleep gets the short release idle once it is written, so a nightly Full does not leave
+// every Home resident until its idle timer. Never an evict: a user may have opened it mid-capture.
 export async function pullHomeSnapshot(
     ownerId: string,
     targetDir: string,
@@ -218,7 +222,7 @@ export async function pullHomeSnapshot(
     try {
         return await snapshotHome(home, targetDir, options);
     } finally {
-        if (!wasLoaded) await evictHome(ownerId);
+        if (!wasLoaded) home.touch(BACKUP_RELEASE_MS);
     }
 }
 

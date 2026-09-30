@@ -58,7 +58,16 @@ export type ServerArchiveManifest = {
     appVersion: string;
     domain: string;
     entries: BackupEntry[];
-    homes: { ownerId: string; kind: 'user' | 'team'; name: string; member?: string; bytes?: number; failed?: string }[];
+    // A home has its member, or says why not: `failed` fails the job, `skipped` (deleted mid-run) does not.
+    homes: {
+        ownerId: string;
+        kind: 'user' | 'team';
+        name: string;
+        member?: string;
+        bytes?: number;
+        failed?: string;
+        skipped?: string;
+    }[];
     // Home folders with no row in users3.db, left out of the archive.
     orphans: string[];
     envFile: boolean;

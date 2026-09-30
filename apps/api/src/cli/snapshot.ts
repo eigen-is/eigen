@@ -30,10 +30,11 @@ import {
 import type { Subprocess } from 'bun';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
 import { SERVER_DIR, SERVER_RUNTIME_FILES } from '../lib/config/paths';
+import { PIN_KEYS } from '../lib/config/release';
 import { PATHS } from '../lib/core/constants';
 import { isEnoent } from '../lib/core/local-filesystem';
 import { readEnvFile } from './env-file';
-import { DATA, DECLINED, ENV_PATH, installOwner, ownAs, PIN_KEYS, VERSION, VERSION_PATTERN } from './install';
+import { DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
 import { createUi, glyphLine, type Ui } from './ui';
 import { notesSince } from './update-check';
 

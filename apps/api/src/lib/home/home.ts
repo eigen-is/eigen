@@ -111,7 +111,8 @@ export class Home {
         }
     }
 
-    public touch() {
+    // `idleMs` is for the backup that booted a home only to capture it; everything else re-arms the full idle.
+    public touch(idleMs = this.idleMs) {
         if (this._destructing) return this;
         if (this.timeout) {
             clearTimeout(this.timeout);
@@ -121,7 +122,7 @@ export class Home {
             this.destruct()
                 .catch((e) => console.error(`[Home] Destruct failed for ${this.user.id}:`, e))
                 .finally(() => this.cleanUp?.());
-        }, this.idleMs);
+        }, idleMs);
         return this;
     }
 

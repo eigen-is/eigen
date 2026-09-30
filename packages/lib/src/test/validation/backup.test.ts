@@ -84,6 +84,7 @@ describe('parseServerArchiveManifest', () => {
         homes: [
             { ownerId: userId, kind: 'user', name: 'U', member, bytes: 5 },
             { ownerId: `team_${'t'.repeat(32)}`, kind: 'team', name: 'T', failed: 'bucket unreadable' },
+            { ownerId: 'v'.repeat(32), kind: 'user', name: 'V', skipped: 'deleted during the backup' },
         ],
         orphans: ['home/gone'],
         envFile: true,
@@ -116,6 +117,7 @@ describe('parseServerArchiveManifest', () => {
             [{ ...user, ownerId: team.ownerId }],
             [{ ...team, ownerId: user.ownerId }],
             [{ ...user, member: 'homes/elsewhere.tar.zst' }],
+            [{ ...user, skipped: true }],
         ]) {
             expect(parseServerArchiveManifest(JSON.stringify({ ...valid, homes }))).toBeNull();
         }

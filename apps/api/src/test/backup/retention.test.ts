@@ -32,8 +32,19 @@ describe('Server archive retention', () => {
 
     test('a failed night never pushes out the last good archive', () => {
         const good = archive('scheduled', 1);
-        const failed = [2, 3, 4].map((night) => archive('scheduled', night, false));
-        expect(pruneServerArchives([good, ...failed], 1)).toEqual([]);
+        const failed = [2, 3].map((night) => archive('scheduled', night, false));
+        expect(pruneServerArchives([good, ...failed], 2)).toEqual([]);
+    });
+
+    test('failed archives newer than the newest good one are capped at keep, newest first', () => {
+        const good = archive('scheduled', 1);
+        const failed = [2, 3, 4, 5].map((night) => archive('scheduled', night, false));
+        expect(pruneServerArchives([good, ...failed], 2).sort()).toEqual(names(failed.slice(0, 2)));
+    });
+
+    test('with no good archive at all, the newest keep failed attempts stay and older ones go', () => {
+        const failed = [1, 2, 3, 4, 5].map((night) => archive('scheduled', night, false));
+        expect(pruneServerArchives(failed, 2).sort()).toEqual(names(failed.slice(0, 3)));
     });
 
     test('a failed archive older than the newest good one goes, and does not count against keep', () => {

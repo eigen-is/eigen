@@ -5,8 +5,9 @@ import { APP_URLS } from '@workspace/lib/constants/app-urls';
 import { DEFAULT_RELAY_PORT } from '@workspace/lib/constants/mail';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { SERVER_DIR, SERVER_FILES } from '../lib/config/paths';
+import { PIN_KEYS } from '../lib/config/release';
 import { readEnvFile, writeEnvFile } from './env-file';
-import { DATA, ENV_PATH, installOwner, ownAs, PIN_KEYS, ROOT } from './install';
+import { DATA, ENV_PATH, installOwner, ownAs, ROOT } from './install';
 import { createUi, type Ui } from './ui';
 
 export type ConfigureAnswers = {

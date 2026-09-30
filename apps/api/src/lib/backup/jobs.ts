@@ -61,7 +61,8 @@ function requireHomeSlotFree(ownerId: string): void {
     if (held) throw new ApiError(409, `A ${held.holder} of this home is running`);
     for (const running of jobs.values()) {
         if (running.ownerId === ownerId && running.state === 'running') {
-            throw new ApiError(409, `A ${running.kind} of this home is already running`);
+            const named = running.artifact ? `: ${running.artifact}` : '';
+            throw new ApiError(409, `A ${running.kind} of this home is already running${named}`);
         }
     }
 }

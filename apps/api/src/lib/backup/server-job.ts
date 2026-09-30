@@ -15,7 +15,6 @@ import {
     parseServerArchiveSidecar,
     SERVER_ARCHIVE_EXTENSION,
 } from '@workspace/lib/validation';
-import { PIN_KEYS } from '../../cli/install';
 import { getEnvFile } from '../config/env';
 import {
     DKIM_DIR,
@@ -25,6 +24,7 @@ import {
     SERVER_DATABASES,
     SERVER_FILES,
 } from '../config/paths';
+import { PIN_KEYS } from '../config/release';
 import { getPublicConfig } from '../config/server-config';
 import { ApiError } from '../core';
 import { pullHomeBackupBytes, pullHomeSnapshot, sendToHome } from '../home/home-relay';
@@ -32,9 +32,10 @@ import { getOrgOwner } from '../user';
 import { type ArchiveWriter, createArchiveWriter, packFolder } from './archive';
 import { enumerateHomes, type ServerHome } from './enumerate-homes';
 import { describeError } from './errors';
-import { listBackupJobs, startBackupJob, waitForHomeSlot } from './jobs';
+import { startBackupJob, waitForHomeSlot } from './jobs';
 import {
     archiveServerPath,
+    backupsDirPath,
     buildHomeFolderName,
     buildHomeMemberName,
     buildServerArchiveName,
@@ -52,6 +53,9 @@ import { pruneServerArchives } from './retention';
 import { type SnapshotProgress, treeBytes } from './snapshot-home';
 import { appendInstallFiles, snapshotServer } from './snapshot-server';
 import { FAILURES_IN_MESSAGE, verifyArchiveTransport, verifyFolder } from './verify';
+
+const HOME_DELETED = 'deleted during the backup';
+const INTERRUPTED = 'interrupted by a restart';
 
 export type ServerBackupOptions = {
     level: BackupLevel;
@@ -81,16 +85,23 @@ export async function readServerSidecar(archivePath: string): Promise<ServerArch
     return sidecar;
 }
 
+// What the server member stages at most: the databases and files of server/ it takes by name, and
+// the org folder. Runtime files and strays in server/ stay out of the archive, and out of this.
+function serverMemberBytes(): number {
+    const sources = [...Object.values(SERVER_DATABASES), ...Object.values(SERVER_FILES)].map((name) =>
+        getServerDataPath(name),
+    );
+    return [...sources, path.join(getDataRoot(), ORG_HOMES_DIR)].reduce((sum, source) => {
+        const stat = fs.statSync(source, { throwIfNoEntry: false });
+        return sum + (stat?.isDirectory() ? treeBytes(source) : (stat?.size ?? 0));
+    }, 0);
+}
+
 // Refuses a job the backups folder has no room for, before it writes anything. The bound is
 // uncompressed: every member as it will be appended, plus the one being staged and packed beside
 // it, which is at most twice the largest.
 async function requireRoom(level: BackupLevel, homes: ServerHome[]): Promise<void> {
-    const listed = new Set<string>([...Object.values(SERVER_DATABASES), ...Object.values(SERVER_FILES)]);
-    const orgDir = path.join(getDataRoot(), ORG_HOMES_DIR);
-    const sizes = [
-        treeBytes(getServerDataPath(), (rel) => !listed.has(rel.split('/')[0])) +
-            (fs.existsSync(orgDir) ? treeBytes(orgDir) : 0),
-    ];
+    const sizes = [serverMemberBytes()];
     for (const home of homes) sizes.push(await pullHomeBackupBytes(home.ownerId, level));
     const needed = 2 * Math.max(...sizes) + sizes.reduce((sum, bytes) => sum + bytes, 0);
     const { bavail, bsize } = fs.statfsSync(getBackupsDir());
@@ -111,8 +122,9 @@ async function appendPacked(writer: ArchiveWriter, member: string, packed: strin
 }
 
 // Step 5 of the job for one home. A home that fails is named in the manifest and the archive goes
-// on without it: one broken bucket must not leave every other home without a backup. A failed
-// append is the archive's failure, not the home's, and ends the job.
+// on without it: one broken bucket must not leave every other home without a backup. A home deleted
+// since the listing is skipped, which is no failure. A failed append is the archive's failure, not
+// the home's, and ends the job.
 async function appendHome(
     writer: ArchiveWriter,
     home: ServerHome,
@@ -134,6 +146,7 @@ async function appendHome(
         await packFolder(folder, packed);
         bytes = manifest.counts.bytes;
     } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return { ...home, skipped: HOME_DELETED };
         return { ...home, failed: describeError(error) };
     } finally {
         fs.rmSync(folder, { recursive: true, force: true });
@@ -207,7 +220,7 @@ async function writeServerArchive(
 }
 
 // Fire-and-forget like the poke: a relay that fails must not replace the failure the job records.
-function alertOwner(archiveName: string, error: string): void {
+function alertOwner(tag: string, error: string): void {
     getOrgOwner()
         .then((owner) =>
             owner
@@ -217,7 +230,7 @@ function alertOwner(archiveName: string, error: string): void {
                           type: 'admin-alert',
                           title: 'Server backup failed',
                           body: error,
-                          tag: `server-backup-${archiveName}`,
+                          tag: `server-backup-${tag}`,
                           coalesce: true,
                       },
                   })
@@ -226,25 +239,51 @@ function alertOwner(archiveName: string, error: string): void {
         .catch(() => {});
 }
 
-// Every server archive and sidecar-only record in the folder, judged by its sidecar: a scheduled
-// one counts as good only when its job ended done. An archive and its sidecar go together.
-async function pruneLocalArchives(keep: number): Promise<void> {
-    const dir = getBackupsDir();
+// Every server archive and sidecar-only record in the folder, keyed by its archive name.
+function listServerRecords(dir: string): string[] {
     const names = new Set<string>();
     for (const file of fs.readdirSync(dir)) {
         const name = file.endsWith(SERVER_SIDECAR_SUFFIX) ? file.slice(0, -SERVER_SIDECAR_SUFFIX.length) : file;
         if (parseServerArchiveName(name)) names.add(name);
     }
-    const archives = await Promise.all(
-        [...names].map(async (name) => {
-            const sidecar = await readServerSidecar(path.join(dir, name)).catch(() => null);
-            return { name, good: sidecar?.state === 'done' };
-        }),
-    );
+    return [...names];
+}
+
+// Retention over the folder, judged by each sidecar: a scheduled archive counts as good only when its
+// job ended done. An archive and its sidecar go together. One whose sidecar is missing or unreadable
+// is left alone: nothing is deleted on a record nobody can read.
+async function pruneLocalArchives(keep: number): Promise<void> {
+    const dir = getBackupsDir();
+    const archives: { name: string; good: boolean }[] = [];
+    const unread: string[] = [];
+    for (const name of listServerRecords(dir)) {
+        const sidecar = await readServerSidecar(path.join(dir, name)).catch(() => null);
+        if (sidecar) archives.push({ name, good: sidecar.state === 'done' });
+        else unread.push(name);
+    }
+    if (unread.length > 0) {
+        console.warn(`[backup] retention skips archives without a readable record: ${unread.join(', ')}`);
+    }
     for (const name of pruneServerArchives(archives, keep)) {
         fs.rmSync(path.join(dir, name), { force: true });
         fs.rmSync(serverSidecarPath(path.join(dir, name)), { force: true });
     }
+}
+
+// Boot: a job killed mid-run left its record running, and nothing will ever end it. It becomes a
+// failed attempt, for retention and the list alike, and the owner hears of it once.
+export async function recoverInterruptedServerBackups(): Promise<void> {
+    const dir = backupsDirPath();
+    if (!fs.existsSync(dir)) return;
+    const interrupted: string[] = [];
+    for (const name of listServerRecords(dir)) {
+        const archivePath = path.join(dir, name);
+        const sidecar = await readServerSidecar(archivePath).catch(() => null);
+        if (sidecar?.state !== 'running') continue;
+        await writeServerSidecar(archivePath, { ...sidecar, state: 'failed', error: INTERRUPTED });
+        interrupted.push(name);
+    }
+    if (interrupted.length > 0) alertOwner('interrupted', `${interrupted.join(', ')}: ${INTERRUPTED}`);
 }
 
 // The job, from its record to its retention. `admit` is called once the room check passes, so the
@@ -285,18 +324,16 @@ async function runServerBackup(
     } finally {
         sidecar.finishedAt = new Date();
         await writeServerSidecar(archivePath, sidecar);
-        await pruneLocalArchives(options.keep);
+        // Retention that throws must not replace the job's own outcome.
+        await pruneLocalArchives(options.keep).catch(console.error);
     }
 }
 
-// Starts the whole-server backup and resolves once it is under way. One runs at a time: a second
-// start is a 409 naming the archive being written. No room is a 507, and the attempt's record
-// stays, failed, like any other.
+// Starts the whole-server backup and resolves once it is under way. One runs at a time, in the org's
+// job slot: a second start is startBackupJob's 409, which names the archive being written. No room
+// is a 507, and the attempt's record stays, failed, like any other.
 export async function startServerBackup({ level, reason, keep, startedBy }: ServerBackupOptions): Promise<BackupJob> {
     const ownerId = orgOwnerId(getPublicConfig().orgId);
-    const running = listBackupJobs(ownerId).find((job) => job.state === 'running');
-    if (running) throw new ApiError(409, `A server backup is already running: ${running.artifact}`);
-
     const at = freeServerArchiveAt(reason, level, new Date());
     const archivePath = path.join(getBackupsDir(), buildServerArchiveName(reason, level, at));
     const admitted = Promise.withResolvers<void>();

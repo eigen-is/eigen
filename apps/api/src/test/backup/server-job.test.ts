@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupJob, BackupLevel, BackupReason, ServerArchiveManifest } from '@workspace/lib/types/backup';
@@ -9,12 +9,12 @@ import { enumerateHomes } from '../../lib/backup/enumerate-homes';
 import { getBackupJob, startBackupJob, withBackupJobSlot } from '../../lib/backup/jobs';
 import { buildServerArchiveName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
-import { readServerSidecar, startServerBackup } from '../../lib/backup/server-job';
+import { readServerSidecar, recoverInterruptedServerBackups, startServerBackup } from '../../lib/backup/server-job';
 import { verifyArchiveTransport } from '../../lib/backup/verify';
 import { getServerDataPath, SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
-import { atHome, evictHome, getHome } from '../../lib/home/get-home';
+import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
 import { createTeam, createTestUser, getTestContext, type TestContext } from '../setup';
 
@@ -122,29 +122,6 @@ describe('Server backup job', () => {
     );
 
     test(
-        'evicts a home it booted as soon as it is captured, and leaves an open one open',
-        async () => {
-            quietRelay();
-            await evictHome(sleeperId);
-            await getHome(ctx.bob.user.id);
-            const loadedWhileCapturing: string[] = [];
-            spies.push(
-                spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
-                    // The home captured before this one is already gone again.
-                    loadedWhileCapturing.push(...[sleeperId].filter((id) => id !== ownerId && atHome(id)));
-                    return pullHomeSnapshot(ownerId, dir, options);
-                }),
-            );
-            const { job } = await runJob();
-            expect(job.state).toBe('done');
-            expect(atHome(sleeperId)).toBe(false);
-            expect(loadedWhileCapturing).toEqual([]);
-            expect(atHome(ctx.bob.user.id)).toBe(true);
-        },
-        JOB_TIMEOUT_MS,
-    );
-
-    test(
         'waits for a per-home job on a home it reaches, holds that home while capturing it, and runs one at a time',
         async () => {
             quietRelay();
@@ -236,9 +213,69 @@ describe('Server backup job', () => {
             // Pokes run after the job settles; give them the same beat before counting alerts.
             await Bun.sleep(50);
             expect(alertsTo(relay, ctx.alice.user.id)).toHaveLength(1);
+            // The throw released the home's slot.
+            await withBackupJobSlot(broken, async () => {});
         },
         JOB_TIMEOUT_MS,
     );
+
+    test(
+        'a home deleted during the backup is skipped, without failing the job or alerting anyone',
+        async () => {
+            const relay = quietRelay();
+            const deleted = ctx.bob.user.id;
+            spies.push(
+                spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
+                    if (ownerId === deleted) throw new ApiError(404, 'User not found');
+                    return pullHomeSnapshot(ownerId, dir, options);
+                }),
+            );
+            const { job, archivePath } = await runJob();
+            expect(job.error).toBeUndefined();
+            expect(job.state).toBe('done');
+
+            const manifest = await readManifest(archivePath);
+            const skipped = manifest.homes.find((home) => home.ownerId === deleted);
+            expect(skipped?.skipped).toBe('deleted during the backup');
+            expect(skipped?.failed).toBeUndefined();
+            expect(skipped?.member).toBeUndefined();
+            expect((await readServerSidecar(archivePath))?.state).toBe('done');
+            await Bun.sleep(50);
+            expect(alertsTo(relay, ctx.alice.user.id)).toEqual([]);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test('marks a record a restart left running as failed at boot, and alerts the owner once', async () => {
+        const relay = quietRelay();
+        const dir = getBackupsDir();
+        const interrupted = [1, 2].map((day) =>
+            join(dir, buildServerArchiveName('scheduled', 'full', new Date(Date.UTC(2019, 0, day, 2)))),
+        );
+        for (const archivePath of interrupted) {
+            writeFileSync(serverSidecarPath(archivePath), JSON.stringify({ state: 'running', startedAt: new Date() }));
+        }
+        const done = join(dir, buildServerArchiveName('scheduled', 'full', new Date(Date.UTC(2019, 0, 3, 2))));
+        writeFileSync(serverSidecarPath(done), JSON.stringify({ state: 'done', startedAt: new Date() }));
+
+        await recoverInterruptedServerBackups();
+        for (const archivePath of interrupted) {
+            const sidecar = await readServerSidecar(archivePath);
+            expect(sidecar?.state).toBe('failed');
+            expect(sidecar?.error).toBe('interrupted by a restart');
+        }
+        const untouched = await readServerSidecar(done);
+        expect(untouched?.state).toBe('done');
+        expect(untouched?.error).toBeUndefined();
+        await Bun.sleep(50);
+        expect(alertsTo(relay, ctx.alice.user.id)).toHaveLength(1);
+
+        // Nothing left running: a second boot alerts no one.
+        await recoverInterruptedServerBackups();
+        await Bun.sleep(50);
+        expect(alertsTo(relay, ctx.alice.user.id)).toHaveLength(1);
+        for (const archivePath of [...interrupted, done]) rmSync(serverSidecarPath(archivePath), { force: true });
+    });
 
     test('refuses with 507 when the backups disk has no room, writes no archive and leaves a failed record', async () => {
         const relay = quietRelay();
@@ -279,6 +316,12 @@ describe('Server backup job', () => {
             record(refused, 'failed');
             const manual = [1, 2].map((day) => old('manual', day));
             for (const archivePath of manual) writeFileSync(archivePath, 'archive');
+            // Records retention cannot read: never a reason to delete an archive.
+            const unrecorded = old('scheduled', 5);
+            writeFileSync(unrecorded, 'archive');
+            const unreadable = old('scheduled', 6);
+            writeFileSync(unreadable, 'archive');
+            writeFileSync(serverSidecarPath(unreadable), '{"state": "half-written');
 
             const { job, archivePath } = await runJob({ reason: 'scheduled', keep: 2 });
             expect(job.state).toBe('done');
@@ -288,7 +331,12 @@ describe('Server backup job', () => {
                 expect(existsSync(pruned)).toBe(false);
                 expect(existsSync(serverSidecarPath(pruned))).toBe(false);
             }
-            for (const kept of manual) expect(existsSync(kept)).toBe(true);
+            for (const kept of [...manual, unrecorded, unreadable]) expect(existsSync(kept)).toBe(true);
+            expect(existsSync(serverSidecarPath(unreadable))).toBe(true);
+            for (const seeded of [unrecorded, unreadable]) {
+                rmSync(seeded, { force: true });
+                rmSync(serverSidecarPath(seeded), { force: true });
+            }
         },
         JOB_TIMEOUT_MS,
     );

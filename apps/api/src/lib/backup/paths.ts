@@ -180,8 +180,14 @@ export function freeArtifactName(ownerId: string, at: Date): string {
     return buildArtifactName(ownerId, free);
 }
 
-// `{archive}.json`: beside the archive, not inside it, so the list and retention never open one.
+// Beside the archive, so the list and retention never open one. A home artifact's caches its manifest
+// and last verify; a server archive's is its job's record, which a refused attempt leaves with no archive.
+export const SIDECAR_SUFFIX = '.manifest.json';
 export const SERVER_SIDECAR_SUFFIX = '.json';
+
+export function sidecarPath(artifactPath: string): string {
+    return `${artifactPath}${SIDECAR_SUFFIX}`;
+}
 
 export function serverSidecarPath(archivePath: string): string {
     return `${archivePath}${SERVER_SIDECAR_SUFFIX}`;
