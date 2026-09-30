@@ -180,7 +180,7 @@ The composer (`apps/mail/src/components/mail/email-draft.tsx` + its `hooks/use-d
 
 - The API counts SASL failures in a sliding 15-minute window, 10 per address and 50 per client IP. It knows the client IP because Dovecot's `checkpassword` helper passes it along.
 - Postfix caps AUTH attempts per client IP at `smtpd_client_auth_rate_limit = 20` per minute (a real client authenticates about once per message) and hangs up after `smtpd_hard_error_limit = 5` errors in one session. Port 25 keeps the default of 20, where a rejected recipient should not end the session.
-- fail2ban, opt-in host config in `docker/fail2ban/`, bans the IP at the firewall. It bans in the `DOCKER-USER` chain, because Docker's published ports never pass `INPUT`. The install is in [../docker/SETUP-GUIDE.md § Mail hardening](../docker/SETUP-GUIDE.md#mail-hardening).
+- fail2ban, opt-in host config in `docker/fail2ban/`, bans the IP at the firewall. It bans in the `DOCKER-USER` chain, because Docker's published ports never pass `INPUT`. The install is in the help center: [Host your mail on Eigen § Block password guessing](https://eigen.is/support/self-hosting/host-your-mail#block-password-guessing).
 
 The postfix and dovecot containers keep 10 log files of 50 MB where the others keep 3 of 10 MB, so a flood is still in the logs when someone looks.
 

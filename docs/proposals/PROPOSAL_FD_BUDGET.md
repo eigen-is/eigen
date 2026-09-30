@@ -117,7 +117,7 @@ notification would re-fire on every boot with no in-app action to take. Log only
 
 ### Deploy documentation
 
-- **`../../docker/SETUP-GUIDE.md`** — the install doc. Add a short note under *Alternative
+- **`../SELF-HOSTING.md`** — the install doc. Add a short note under *Alternative
   deployments*: anyone running the API outside the bundled compose (host process behind their
   own proxy, future systemd unit) must raise `nofile`, with the `LimitNOFILE=1048576` line.
   The Quick Start path needs nothing — compose pins it.
@@ -286,7 +286,7 @@ counting is Linux-only and the three points above cover the honest signal (D3).
 
 ## Phasing
 
-1. **S — ships immediately:** `checkFdBudget()` at boot + loud warning; `../../docker/SETUP-GUIDE.md`
+1. **S — ships immediately:** `checkFdBudget()` at boot + loud warning; `../SELF-HOSTING.md`
    note for non-compose deploys; the corrected
    fd figures in the `../../docker-compose.yml` comment (`../ROADMAP.md` is already corrected); log
    non-ENOENT `fs.watch` failures in `MaildirStore.watch`.

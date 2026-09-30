@@ -167,7 +167,7 @@ printf 'From: sender@example.com\nTo: you@eigen.localhost\nSubject: Test\n\nHell
     "http://localhost:8000/mail/deliver/you@eigen.localhost"
 ```
 
-Replace `you@eigen.localhost` with your address. To connect a mail or calendar client, follow the [setup guide](../docker/SETUP-GUIDE.md#7-connect-a-mail-or-calendar-client-optional) with `localhost` as the server and accept the certificate warning.
+Replace `you@eigen.localhost` with your address. To connect a mail or calendar client, follow [Set up Eigen Mail in a mail client](https://eigen.is/support/connect/mail-client) and [Set up Eigen Calendar in a calendar client](https://eigen.is/support/connect/calendar-client) with `localhost` as the server and accept the certificate warning.
 
 ## Finding your way around
 

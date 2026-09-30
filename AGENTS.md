@@ -49,6 +49,7 @@ File locations and patterns per concept (backend + frontend tables, package boun
 - Previews, export, off-thread transforms: [PREVIEWS.md](docs/PREVIEWS.md), [EXPORT.md](docs/EXPORT.md), [DOCUMENT-TRANSFORMS.md](docs/DOCUMENT-TRANSFORMS.md)
 - Uploads and S3 sync: [SYNC.md](docs/SYNC.md), [STREAMING_UPLOADS.md](docs/STREAMING_UPLOADS.md)
 - Backup and restore: [BACKUP.md](docs/BACKUP.md)
+- Self-hosting and `./eigen`: [SELF-HOSTING.md](docs/SELF-HOSTING.md); the operator's steps live in the help center's `self-hosting/` section
 - Server config, settings, quotas: [SERVER-SETTINGS.md](docs/SERVER-SETTINGS.md), [QUOTA.md](docs/QUOTA.md); demo instance: [DEMO_MODE.md](docs/DEMO_MODE.md)
 - Cross-home relay and sharding: [SCALABILITY.md](docs/SCALABILITY.md)
 - Layout, lists, keyboard, z-index, hover icons: [LAYOUT.md](docs/LAYOUT.md); mobile: [MOBILE.md](docs/MOBILE.md); typography: [TYPOGRAPHY.md](docs/TYPOGRAPHY.md); command palette: [the proposal](docs/proposals/PROPOSAL_COMMAND_PALETTE.md)
