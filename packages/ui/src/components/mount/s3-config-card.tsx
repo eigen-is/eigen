@@ -5,8 +5,8 @@ import {
     S3_NONCURRENT_DAYS_DEFAULT,
     S3_NONCURRENT_DAYS_MAX,
 } from '@workspace/lib/constants/s3';
-import { isS3ConfigValid } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
+import { isS3ConfigValid } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
 import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, CheckCircle2, Copy, Loader2, ShieldCheck, Wifi } from 'lucide-react';
@@ -25,7 +25,6 @@ type S3ConfigCardProps = {
     onHarden?: (config: S3Config, noncurrentDays: number) => Promise<S3HardenResult>;
     isEdit?: boolean;
     onCheckResult?: (result: S3CheckResult | null) => void;
-    // The server keeps a secret for this key, endpoint and bucket, so a blank field keeps it.
     secretSaved?: boolean;
 };
 
@@ -71,12 +70,6 @@ export function S3ConfigCard({
         } finally {
             setChecking(false);
         }
-    };
-
-    const handleHarden = async () => {
-        if (!onHarden) return;
-        // A refused request comes back as an ok:false result, so there is nothing to catch here.
-        setHarden(await onHarden(value, days));
     };
 
     // What the bucket says right now. Both fields are optional — a check that never got as far as the
@@ -191,40 +184,43 @@ export function S3ConfigCard({
                 />
             )}
 
-            <ConfirmDialog
-                open={confirming}
-                onOpenChange={setConfirming}
-                title={changingRetention ? 'Change retention' : 'Make this bucket safe for Eigen'}
-                description={
-                    <span className="block space-y-2">
-                        {!changingRetention && (
-                            <span className="block">
-                                Turns on bucket versioning, so overwrites and deletes can be recovered. Versioning
-                                applies to the whole bucket.
+            {onHarden && (
+                <ConfirmDialog
+                    open={confirming}
+                    onOpenChange={setConfirming}
+                    title={changingRetention ? 'Change retention' : 'Make this bucket safe for Eigen'}
+                    description={
+                        <span className="block space-y-2">
+                            {!changingRetention && (
+                                <span className="block">
+                                    Turns on bucket versioning, so overwrites and deletes can be recovered. Versioning
+                                    applies to the whole bucket.
+                                </span>
+                            )}
+                            <span className="flex items-center gap-2">
+                                Expire old versions after
+                                <Input
+                                    type="number"
+                                    min={1}
+                                    max={S3_NONCURRENT_DAYS_MAX}
+                                    step={1}
+                                    className="h-8 w-20"
+                                    value={days}
+                                    onChange={(e) => setDays(clampDays(e.target.valueAsNumber))}
+                                />
+                                days
                             </span>
-                        )}
-                        <span className="flex items-center gap-2">
-                            Expire old versions after
-                            <Input
-                                type="number"
-                                min={1}
-                                max={S3_NONCURRENT_DAYS_MAX}
-                                step={1}
-                                className="h-8 w-20"
-                                value={days}
-                                onChange={(e) => setDays(clampDays(e.target.valueAsNumber))}
-                            />
-                            days
+                            <span className="block">
+                                Eigen re-uploads whole files on every save, so an often-edited document makes a lot of
+                                versions. More days means more to recover from, and more storage used.
+                            </span>
                         </span>
-                        <span className="block">
-                            Eigen re-uploads whole files on every save, so an often-edited document makes a lot of
-                            versions. More days means more to recover from, and more storage used.
-                        </span>
-                    </span>
-                }
-                onConfirm={handleHarden}
-                confirmText={changingRetention ? 'Update' : 'Enable'}
-            />
+                    }
+                    // A refused request comes back as an ok:false result, so there is nothing to catch here.
+                    onConfirm={async () => setHarden(await onHarden(value, days))}
+                    confirmText={changingRetention ? 'Update' : 'Enable'}
+                />
+            )}
         </div>
     );
 }
