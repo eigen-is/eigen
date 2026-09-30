@@ -273,7 +273,7 @@ RELEASE_COMMIT=harness
 if [ -n "${CANDIDATE:-}" ]; then
     started=$SECONDS
     if ! copy_candidate "$CANDIDATE" "$RELEASE"; then
-        fail "no $CANDIDATE of this run on $PUBLISHED_REGISTRY after 40 minutes"
+        fail "no $CANDIDATE of this run on $PUBLISHED_REGISTRY: a publish job failed, or 40 minutes went by"
         header "Result"
         probe_summary
     fi

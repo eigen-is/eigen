@@ -589,13 +589,22 @@ candidate_ready() {
     done
 }
 
+# publish_failed: in a publish.yml run given GH_TOKEN, whether one of its publish jobs ended without success, so the
+# candidates it builds will not all come.
+publish_failed() {
+    if [ -z "${GH_TOKEN:-}" ] || [ -z "${GITHUB_RUN_ID:-}" ]; then return 1; fi
+    gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
+        --jq '.jobs[] | select(.name | startswith("publish ")) | .conclusion' 2>/dev/null |
+        grep -qx -e failure -e cancelled -e timed_out
+}
+
 # copy_candidate <candidate> <tag>: publish.yml's candidate images, the ones it promotes, in this run's registry under
-# <tag>, pulled and pushed as they are. They are built beside the harness, so it waits for them, 40 minutes at most: a
-# candidate of an earlier run of the same tag is not the one this run publishes.
+# <tag>, pulled and pushed as they are. They are built beside the harness, so it waits for them, 40 minutes at most,
+# and not at all once a build failed: a candidate of an earlier run of the same tag is not the one this run publishes.
 copy_candidate() {
     local name waited=$SECONDS
     until candidate_ready "$1"; do
-        if [ $((SECONDS - waited)) -ge 2400 ]; then return 1; fi
+        if [ $((SECONDS - waited)) -ge 2400 ] || publish_failed; then return 1; fi
         sleep 20
     done
     for name in $IMAGES; do
