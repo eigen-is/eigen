@@ -58,8 +58,8 @@ export async function snapshotServer(
     }
 
     const copies: { source: string; rel: string }[] = [];
-    const copyTree = async (sourceDir: string, relDir: string): Promise<void> => {
-        const tree = await listFileTree(sourceDir);
+    const copyTree = (sourceDir: string, relDir: string): void => {
+        const tree = listFileTree(sourceDir);
         // None of these folders holds a database (an org home has no drive to open one), and a file
         // copy of a live one is torn: one there is a new subsystem this snapshot has to learn.
         const [database] = tree.databases;
@@ -70,11 +70,11 @@ export async function snapshotServer(
     for (const name of Object.values(SERVER_FILES)) {
         const source = getServerDataPath(name);
         if (!fs.existsSync(source)) continue;
-        if (fs.statSync(source).isDirectory()) await copyTree(source, archiveServerPath(name));
+        if (fs.statSync(source).isDirectory()) copyTree(source, archiveServerPath(name));
         else copies.push({ source, rel: archiveServerPath(name) });
     }
     const orgDir = path.join(getDataRoot(), ORG_HOMES_DIR);
-    if (fs.existsSync(orgDir)) await copyTree(orgDir, ORG_HOMES_DIR);
+    if (fs.existsSync(orgDir)) copyTree(orgDir, ORG_HOMES_DIR);
     for (const [index, { source, rel }] of copies.entries()) {
         // An avatar replaced mid-capture is gone by the time it is copied.
         const captured = await captureUnlessGone(Bun.file(source), path.join(folder, rel), rel);

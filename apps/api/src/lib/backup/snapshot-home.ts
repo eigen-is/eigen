@@ -52,22 +52,24 @@ const JOURNAL_FILE = /\.db-(wal|shm)$/;
 // it, and without it a restored mailbox has nothing for MaildirStore.watch to watch, so mail stops syncing.
 type FileTree = { files: string[]; dirs: string[]; databases: string[] };
 
-export async function listFileTree(root: string, skipDir: (rel: string) => boolean = () => false): Promise<FileTree> {
+// Synchronous on purpose: the mail watcher moves a message from `new/` to `cur/` between two awaits, and a walk that
+// yielded could list `cur/` before the move and `new/` after it, missing the message.
+export function listFileTree(root: string, skipDir: (rel: string) => boolean = () => false): FileTree {
     const tree: FileTree = { files: [], dirs: [], databases: [] };
-    const walk = async (relDir: string): Promise<void> => {
-        for (const entry of await fsp.readdir(path.join(root, relDir), { withFileTypes: true })) {
+    const walk = (relDir: string): void => {
+        for (const entry of fs.readdirSync(path.join(root, relDir), { withFileTypes: true })) {
             const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
             if (entry.isDirectory()) {
                 if (skipDir(rel)) continue;
                 tree.dirs.push(rel);
-                await walk(rel);
+                walk(rel);
             } else if (entry.isFile()) {
                 if (!DB_FILE.test(entry.name)) tree.files.push(rel);
                 else if (entry.name.endsWith('.db')) tree.databases.push(rel);
             }
         }
     };
-    await walk('');
+    walk('');
     return tree;
 }
 
@@ -213,7 +215,7 @@ export async function snapshotHome(
     }
 
     // The home outside its mounts and its databases.
-    const tree = await listFileTree(home.homeDir, (rel) => isSkippedHomeDir(rel, level));
+    const tree = listFileTree(home.homeDir, (rel) => isSkippedHomeDir(rel, level));
     // A home database missing from HOME_DATABASES would be dropped from every archive in silence.
     const unlisted = tree.databases.find((rel) => !HOME_DATABASE_PATHS.has(rel));
     if (unlisted) throw new Error(`snapshotHome: unlisted home database ${unlisted} — add it to HOME_DATABASES`);
