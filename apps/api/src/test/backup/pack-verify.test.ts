@@ -469,6 +469,17 @@ describe('Backup pack and verify', () => {
         PACK_TIMEOUT_MS,
     );
 
+    test('a folder whose name holds a backslash packs and extracts under its own name', async () => {
+        const dir = mkdtempSync(join(TEST_DATA_DIR, 'backslash-'));
+        const mailbox = 'home/eigen.mail/Maildir/.Projects\\2026/cur';
+        mkdirSync(join(dir, 'home-x', mailbox), { recursive: true });
+        writeFileSync(join(dir, 'home-x', mailbox, '1.eml'), 'mail');
+        await packFolder(join(dir, 'home-x'), join(dir, 'x.tar.zst'));
+        await extractArtifact(join(dir, 'x.tar.zst'), join(dir, 'out'));
+        expect(readFileSync(join(dir, 'out/home-x', mailbox, '1.eml'), 'utf8')).toBe('mail');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
     test(
         'readArtifactManifest reads the manifest without a full extract',
         async () => {

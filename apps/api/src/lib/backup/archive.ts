@@ -150,10 +150,7 @@ function* archiveEnd(written: number): Generator<Uint8Array> {
 }
 
 async function* tarChunks(dir: string, rootName: string, onProgress?: SnapshotProgress): AsyncGenerator<Uint8Array> {
-    const relPaths: string[] = [];
-    for await (const rel of new Bun.Glob('**/*').scan({ cwd: dir, onlyFiles: false, dot: true })) {
-        relPaths.push(rel.replaceAll('\\', '/'));
-    }
+    const relPaths = await Array.fromAsync(new Bun.Glob('**/*').scan({ cwd: dir, onlyFiles: false, dot: true }));
     relPaths.sort();
 
     let written = 0;
