@@ -10,18 +10,13 @@ import { ApiError } from '../../lib/core/errors';
 import * as homeRelay from '../../lib/home/home-relay';
 import { collectSSE, getTestContext } from '../setup';
 
-// Progress is a stream, the poke is not: a home with thousands of files would otherwise put one SSE
-// frame per file on the admin's channel. The rate limit is per job, and the state a job ends in is
-// always emitted — the pane's whole story is "a job finished, refetch".
-const PROGRESS_POKE_MS = 500;
 // A poke resolves the admin list before it sends, so one that was just emitted reaches sendToHome a
 // query later rather than in the same tick.
 const POKE_SETTLE_MS = 50;
 
 type Poke = { jobId: string; ownerId: string };
 
-// Per recipient: the poke fans out to every admin, and the rate limit is about how often one admin's
-// channel is written.
+// Per recipient: the poke fans out to every admin.
 function pokesOf(calls: Parameters<typeof homeRelay.sendToHome>[], recipient: string): Poke[] {
     const pokes: Poke[] = [];
     for (const [target, message] of calls) {
@@ -33,24 +28,18 @@ function pokesOf(calls: Parameters<typeof homeRelay.sendToHome>[], recipient: st
 }
 
 describe('Backup job pokes', () => {
-    test('rate-limits progress to one poke per window and always emits the last state', async () => {
+    test('pokes when a job starts and when it ends, never on progress, which the panes poll for', async () => {
         const ctx = await getTestContext();
         const ownerId = `poke-owner-${Date.now()}`;
         const spy = spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined);
 
-        let pokesDuringRun = 0;
         let jobId = '';
         try {
             const job = startBackupJob('backup', ownerId, ctx.alice.user.id, async (started, onProgress) => {
                 jobId = started.id;
-                // Two bursts a window apart: one poke each at most, whatever the file count.
                 for (let i = 0; i < 200; i++) onProgress('mount files', i, 200);
-                await Bun.sleep(PROGRESS_POKE_MS + 100);
+                await Bun.sleep(600);
                 for (let i = 0; i < 200; i++) onProgress('pack', i, 200);
-                await Bun.sleep(POKE_SETTLE_MS);
-                // Sampled here, so the assertion below is about the poke the job's own completion
-                // sends and not about a progress one that happened to land last.
-                pokesDuringRun = pokesOf(spy.mock.calls, ctx.alice.user.id).length;
                 return 'artifact.tar.zst';
             });
             expect(job.state).toBe('running');
@@ -58,17 +47,15 @@ describe('Backup job pokes', () => {
             await Bun.sleep(POKE_SETTLE_MS);
 
             const pokes = pokesOf(spy.mock.calls, ctx.alice.user.id);
-            // One at the start, at most one per burst, one at the end.
-            expect(pokes.length).toBeGreaterThanOrEqual(2);
-            expect(pokes.length).toBeLessThanOrEqual(4);
-            // The last state always goes out, even though the burst before it was throttled away.
-            expect(pokes.length).toBe(pokesDuringRun + 1);
-            expect(pokes.every((poke) => poke.jobId === jobId && poke.ownerId === ownerId)).toBe(true);
+            expect(pokes).toEqual([
+                { jobId, ownerId },
+                { jobId, ownerId },
+            ]);
         } finally {
             spy.mockRestore();
         }
 
-        expect(getBackupJob(jobId)?.state).toBe('done');
+        expect(getBackupJob(jobId)?.progress).toEqual({ step: 'pack', done: 199, total: 200 });
     });
 
     test('pokes every admin, so a second one watching the same pane follows the job live', async () => {

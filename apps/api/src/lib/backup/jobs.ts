@@ -20,9 +20,6 @@ import { describeFailures, verifyFolder } from './verify';
 // A finished job stays this long so an admin who was away still sees the outcome. The artifact and
 // its sidecar are the durable record, so dropping the job loses nothing.
 const BACKUP_JOB_RETENTION_MS = 60 * 60 * 1000;
-// Progress is a stream, the poke is not: a home with thousands of files would otherwise put one SSE
-// frame per file on the admin's channel. State changes always emit.
-const PROGRESS_POKE_MS = 500;
 // How long shutdown waits for a backup, a verify or an aborted upload. A restore is waited out however long it
 // takes: killed between the move-aside and the install, it leaves the user with no home folder at all.
 const SHUTDOWN_JOB_BUDGET_MS = 30_000;
@@ -154,12 +151,9 @@ export function startBackupJob(
     jobs.set(job.id, job);
     poke(job);
 
-    let lastPoke = Date.now();
+    // Progress is no poke: the panes poll the job while it runs, and a poke makes them refetch every list.
     const onProgress: SnapshotProgress = (step, done, total) => {
         job.progress = { step, done, total };
-        if (Date.now() - lastPoke < PROGRESS_POKE_MS) return;
-        lastPoke = Date.now();
-        poke(job);
     };
 
     const abort = new AbortController();
