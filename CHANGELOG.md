@@ -5,18 +5,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
+Whole-server backup and restore. Eigen backs up the whole server every night while it runs, can keep a copy in a bucket of its own, and puts a backup back with `./eigen restore`, on the same machine or a new one. Close every open document before you update from 0.3.0: an edit that has not reached the server is lost, offline edits included.
+
 ### Added
 
-- **Nightly whole-server backup** — the owner turns it on in Settings → Backups: every user and team, the server's own databases and settings, `.env.production`, the DKIM key and the mail server's certificate, backed up at the hour you pick (in UTC) while Eigen runs, and the newest seven good ones kept (you set the count). **Back up now** makes one at any level, and backups made by hand stay until you delete them. A failed night notifies the owner and turns the Backup row of `./eigen status` red
+- **Nightly whole-server backup** — the owner turns it on in Settings → Backups: every user and team, the server's own databases and settings, `.env.production`, the DKIM key and the mail server's certificate, backed up at the hour you pick (in UTC) while Eigen runs, and the newest seven good ones kept (you set the count). **Back up now** makes one at any level, and backups made by hand stay until you delete them. A failed night notifies the owner and turns the Backup row of `./eigen status` red. Admins who are not the owner do not see the backup settings
 - **Backup bucket** — each backup that verifies uploads to a private S3 bucket of its own, which keeps its own count and always the newest complete backup. Eigen refuses a bucket or key it keeps files with, and a public bucket, and never shows the secret again. Keep the bucket's endpoint, name and keys somewhere other than the server: a new machine starts from them
+- **Whole-server restore** — `./eigen restore <backup>` unpacks and checks a whole-server backup while Eigen runs, then stops Eigen for the swap and starts it on the version the backup was made with. What it replaces is kept aside as `data.pre-restore-<date>-<time>`. A Light backup holds no files and no mail: its restore puts back the accounts, settings and databases, files added since drop out of Drive, and on drives that store files by name, files renamed, moved or trashed since do not open
 - **Restore on a new machine** — `curl -fsSL https://eigen.is/install | sh -s -- restore <backup>` sets Eigen up from a whole-server backup, with the version, settings and DKIM key it was made with, and no setup first
 - **One user or team from a server backup** — each server backup holds a per-home archive of every user and team under `homes/`. Copied into `backups/`, one restores from its Admin page
-- **Release gate** — before a release is published, the previous published release is updated to it and rolled back, with a seeded document, sheet, event, contact and chat message checked after each step. A release with breaking changes publishes only when it says so
+- **Self-hosting help** — the help center has a Self-hosting section: install, update, back up and restore, move to another server, host your mail, and troubleshooting
+- **Release gate** — before a release is published, the previous published release is updated to it and rolled back, with a seeded document, sheet, event, contact and chat message checked after each step. A release with breaking changes publishes only when it says so, and a release tag publishes only when this file has a section for its version
+- **Font licenses** — the bundled fonts (Inter, Source Serif 4, JetBrains Mono and Excalifont) ship with their OFL 1.1 license text, and the licenses page lists them
 
 ### Changed
 
-- **Whole-server backups (breaking)** — `./eigen backup` backs up the server into `backups/` while Eigen runs, Full by default, `--light` without files and mail, `--s3` with the files in S3 buckets, and exits 4 when the backup is good but did not reach the bucket. `./eigen restore` puts such a backup back, staged while Eigen runs and swapped in with a short stop. `./eigen update` backs up the running server first and refuses with Eigen stopped: a Light backup, or a Full one when a release since yours lists a breaking change or with `--full`. The two newest stay on the server and never go to the backup bucket. `--no-backup` skips the backup. Snapshots in `snapshots/` can no longer be restored by Eigen: after the update from 0.3.0, `./eigen rollback` prints the commands that go back
-- **One reload after the update** — after the update from 0.3.0, every open document reloads once when it reconnects. After a restore, every open tab of a restored user or team reloads once, whatever app it shows
+- **Whole-server backups (breaking)** — `./eigen backup` backs up the running server into `backups/` instead of `snapshots/`: Full by default, `--light` without files and mail, `--s3` with the files in S3 buckets. It needs Eigen running, so a cron job that stops Eigen before it backs up now fails: drop the stop. It exits 4 when the backup is good but did not reach the bucket. Eigen can no longer restore the snapshots in `snapshots/`
+- **Update and rollback** — `./eigen update` backs up the running server first and refuses with Eigen stopped: a Light backup, or a Full one when a release since yours lists a breaking change or with `--full`. `--no-backup` skips the backup. The two newest stay on the server and never go to the backup bucket. `./eigen rollback` puts that backup back with the version it names; after a Light one, files fare as after a Light restore, and mail stays as it is. After the update from 0.3.0, `./eigen rollback` prints the commands that go back to 0.3.0's snapshot
+- **Updating from 0.3.0** — close every open document first: every edit not yet on the server is lost, offline edits included. Open documents reload once when Eigen is back. A Drive, Mail, Calendar or Contacts tab keeps its old page until you reload it. `data/server/collab-epoch` and `data/server/collab-home-epochs.json` may be left over, and you can delete them
+- **One reload after a restore** — every open tab of a restored user or team reloads once, whatever app it shows
+- **`.env.production` permissions** — `.env.production` becomes readable by group 1000 (0640), so the API can put it in a backup. Docker Desktop is left as it is
+- **Mail containers** — Dovecot and Postfix start with a warning, instead of failing, when they cannot share the TLS key or the DKIM key with group 1000. A backup then leaves that key out
+- **Chat** — a guest can no longer invite people to a chat
+
+### Fixed
+
+- **Backups with trashed files** — a file in the Trash of a drive that stores files by name, the default, no longer fails a backup. A user or team backup that failed to verify for that reason passes after **Verify**
+- **WebDAV uploads** — a WebDAV upload that states its size is held to the max upload size
+- **Mail** — a send with no recipients is refused with "Add at least one recipient" instead of a server error
 
 ## [0.3.0] - 2026-09-25
 
