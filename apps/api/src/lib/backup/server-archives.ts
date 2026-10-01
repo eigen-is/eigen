@@ -10,8 +10,7 @@ import {
 import { API_IMAGE_KEY } from '../config/release';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
-import { sendToHome } from '../home/home-relay';
-import { getOrgOwner } from '../user';
+import { alertOwner } from '../user/alert-owner';
 import { writeRecord } from './archive';
 import { listBackupJobs, runningJobOn } from './jobs';
 import { backupsDirPath, SERVER_SIDECAR_SUFFIX, serverSidecarPath } from './paths';
@@ -32,26 +31,6 @@ export async function readServerSidecar(archivePath: string): Promise<ServerArch
         .text()
         .catch(() => null);
     return text === null ? null : parseServerArchiveSidecar(text);
-}
-
-// Fire-and-forget like the poke: a relay that fails must not replace the failure the job records.
-export function alertOwner(tag: string, error: string, title = 'Server backup failed'): void {
-    getOrgOwner()
-        .then((owner) =>
-            owner
-                ? sendToHome(owner.id, {
-                      type: 'notification',
-                      notification: {
-                          type: 'admin-alert',
-                          title,
-                          body: error,
-                          tag: `server-backup-${tag}`,
-                          coalesce: true,
-                      },
-                  })
-                : undefined,
-        )
-        .catch(() => {});
 }
 
 // Every server archive and refused attempt in the backups folder, once each, newest first.
@@ -200,8 +179,12 @@ export async function recoverInterruptedServerBackups(): Promise<void> {
             notUploaded.push(name);
         }
     }
-    if (interrupted.length > 0) alertOwner('interrupted', `${interrupted.join(', ')}: ${INTERRUPTED}`);
+    if (interrupted.length > 0) {
+        const body = `${interrupted.join(', ')}: ${INTERRUPTED}`;
+        alertOwner('Server backup failed', body, 'server-backup-interrupted').catch(() => {});
+    }
     if (notUploaded.length > 0) {
-        alertOwner('upload-interrupted', `${notUploaded.join(', ')}: ${INTERRUPTED}`, 'Server backup not uploaded');
+        const body = `${notUploaded.join(', ')}: ${INTERRUPTED}`;
+        alertOwner('Server backup not uploaded', body, 'server-backup-upload-interrupted').catch(() => {});
     }
 }

@@ -1,7 +1,8 @@
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
+import { alertOwner } from '../user/alert-owner';
 import { describeError } from './errors';
-import { alertOwner, hasScheduledAttemptOn } from './server-archives';
+import { hasScheduledAttemptOn } from './server-archives';
 import { startServerBackup } from './server-job';
 
 // The UTC day the owner last heard of a start that failed before it wrote its record.
@@ -22,7 +23,7 @@ export async function serverBackupTick(): Promise<void> {
         const refused = error instanceof ApiError && error.status === 409;
         if (!refused && alertedOn !== day && !hasScheduledAttemptOn(now)) {
             alertedOn = day;
-            alertOwner('schedule', describeError(error));
+            alertOwner('Server backup failed', describeError(error), 'server-backup-schedule').catch(() => {});
         }
         throw error;
     }

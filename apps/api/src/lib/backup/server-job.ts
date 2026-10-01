@@ -23,6 +23,7 @@ import { ApiError } from '../core';
 import { pullHomeBackupBytes, pullHomeSnapshot } from '../home/home-relay';
 import { getTeamExists } from '../team/team';
 import { getUserById } from '../user';
+import { alertOwner } from '../user/alert-owner';
 import { type ArchiveWriter, createArchiveWriter, packFolder } from './archive';
 import { enumerateHomes, type ServerHome } from './enumerate-homes';
 import { describeError } from './errors';
@@ -42,7 +43,7 @@ import {
     SERVER_ARCHIVE_SERVER_MEMBER,
     wipeBackupStagingDir,
 } from './paths';
-import { alertOwner, pruneLocalArchives, readServerSidecar, writeServerSidecar } from './server-archives';
+import { pruneLocalArchives, readServerSidecar, writeServerSidecar } from './server-archives';
 import { type SnapshotProgress, treeBytes } from './snapshot-home';
 import { appendInstallFiles, snapshotServer } from './snapshot-server';
 import { backupKey, uploadServerArchive } from './upload';
@@ -214,7 +215,7 @@ async function runServerBackup(
     } catch (error) {
         sidecar.state = 'failed';
         sidecar.error = describeError(error);
-        alertOwner(name, sidecar.error);
+        alertOwner('Server backup failed', sidecar.error, `server-backup-${name}`).catch(() => {});
         throw error;
     } finally {
         sidecar.finishedAt = new Date();
@@ -273,7 +274,7 @@ async function uploadAndRecord(archivePath: string, signal: AbortSignal): Promis
     } catch (error) {
         const reason = signal.aborted ? UPLOAD_STOPPED : describeError(error);
         upload = { state: 'failed', at: new Date(), key, error: reason };
-        alertOwner(`upload-${name}`, `${name}: ${reason}`, 'Server backup not uploaded');
+        alertOwner('Server backup not uploaded', `${name}: ${reason}`, `server-backup-upload-${name}`).catch(() => {});
     }
     await recordUpload(archivePath, upload);
     return upload;
