@@ -108,8 +108,10 @@ export async function snapshotMountData(
 
     const fileRows = rows.filter((row) => row.type === 'file');
     const entries: BackupEntry[] = [];
-    // The rows whose bytes are in the archive, and those with bytes on record that storage has no object for.
+    // The rows whose bytes are in the archive, how many of them were read from storage rather than a local copy,
+    // and the rows with bytes on record that storage has no object for.
     const held = new Set<string>();
+    let stored = 0;
     const lost: string[] = [];
     let databases = 0;
     for (const [index, row] of fileRows.entries()) {
@@ -135,13 +137,13 @@ export async function snapshotMountData(
             // A chat's version restore recreates its data.db under a new id: the archived row holds those bytes, as
             // it holds an overwrite's.
             let sourceId = row.id;
-            const copied = await mount
+            const source = await mount
                 .withPathLock(container.id, async () => {
-                    const source =
+                    const sourceRow =
                         (await mount.getPath(row.id)) ??
                         (row.parentId === container.id ? await mount.getChildByName(container.id, row.name) : null);
-                    if (!source) return false;
-                    sourceId = source.id;
+                    if (!sourceRow) return null;
+                    sourceId = sourceRow.id;
                     return stageManagedDbCopy(mount, sourceId, destPath, 'open-handle-first');
                 })
                 .catch(async (error: unknown) => {
@@ -149,12 +151,13 @@ export async function snapshotMountData(
                     if (await mount.getPath(sourceId))
                         rethrowStorageFailure(mount.id, await mount.getStorageKey(sourceId), error);
                     fs.rmSync(destPath, { force: true });
-                    return false;
+                    return null;
                 });
-            if (copied) {
+            if (source) {
                 normalizeArchiveDatabase(destPath);
                 entries.push(await captureWrittenFile(destPath, entryPath));
                 held.add(row.id);
+                if (source === 'stored') stored++;
                 databases++;
             } else {
                 const live = await mount.getPath(sourceId);
@@ -170,17 +173,23 @@ export async function snapshotMountData(
                     const storageKey = await mount.getStorageKey(row.id);
                     const fail = (error: unknown) => rethrowStorageFailure(mount.id, storageKey, error);
                     // Freshest first: the pending staged copy, then the stored object. Null for a row with no bytes on
-                    // record mirrors that absence.
+                    // record mirrors that absence. readKey asks pendingStagedCopy before its first await, so both
+                    // calls see the same staging.
+                    const fromStorage = !mount.pendingStagedCopy(storageKey);
                     const file = await mount.readKey(storageKey).catch(fail);
                     if (!file) {
                         if (live.size && !(await isGone())) recordLost(live.size, storageKey);
                         return null;
                     }
-                    return captureFile(file, destPath, entryPath, true).catch(async (error: unknown) => {
-                        if (!isMissingObjectCause(error) || !(await isGone())) fail(error);
-                        fs.rmSync(destPath, { force: true });
-                        return null;
-                    });
+                    const captured = await captureFile(file, destPath, entryPath, true).catch(
+                        async (error: unknown) => {
+                            if (!isMissingObjectCause(error) || !(await isGone())) fail(error);
+                            fs.rmSync(destPath, { force: true });
+                            return null;
+                        },
+                    );
+                    if (captured && fromStorage) stored++;
+                    return captured;
                 }),
             );
             if (entry) {
@@ -190,10 +199,11 @@ export async function snapshotMountData(
         }
         onProgress?.('mount files', index + 1, fileRows.length);
     }
-    // A store with holes is archived with them; one that holds no object at all is an outage that reads as missing
+    // A store with holes is archived with them; one that answered no read at all is an outage that reads as missing
     // objects: an unmounted disk or an unreadable folder answers exists() with false, a wrong bucket answers a HEAD 404.
-    if (lost.length > 0 && held.size === 0) {
-        throw new Error(`mount ${mount.id}: storage unreachable, it holds no object for any file with bytes on record`);
+    // A copy from an open handle, a crash temp or staging/ never asked the store, so it does not count.
+    if (lost.length > 0 && stored === 0) {
+        throw new Error(`mount ${mount.id}: storage unreachable, no file with bytes on record was read from it`);
     }
 
     // The archive lists no file it holds no bytes for: a row deleted for good since the copy leaves the archived

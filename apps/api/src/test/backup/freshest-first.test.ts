@@ -41,6 +41,7 @@ const FAILING_MOUNT_ID = 'backup-s3-failing';
 const FAILING_CONTAINER_MOUNT_ID = 'backup-s3-failing-container';
 const NO_BUCKET_MOUNT_ID = 'backup-s3-no-bucket';
 const NO_BUCKET_PLAIN_MOUNT_ID = 'backup-s3-no-bucket-plain';
+const NO_BUCKET_STAGED_MOUNT_ID = 'backup-s3-no-bucket-staged';
 const RACING_DELETE_MOUNT_ID = 'backup-s3-racing-delete';
 const VANISHING_OBJECT_MOUNT_ID = 'backup-s3-vanishing-object';
 const LOCAL_MOUNT_ID = 'backup-local';
@@ -406,6 +407,31 @@ describe('Backup freshest-first on an s3 mount', () => {
                 fake.faults.set(await mount.getStorageKey(fileId), 'no-bucket');
             }
             await expect(snapshotInto(home)).rejects.toThrow(`mount ${NO_BUCKET_PLAIN_MOUNT_ID}: storage unreachable`);
+        });
+    });
+
+    // Bytes still in staging never reached the bucket, so they cannot vouch for it.
+    test('a mount whose bucket answers NoSuchBucket fails as unreachable with uploads still in staging', async () => {
+        await withFakeS3Mount(NO_BUCKET_STAGED_MOUNT_ID, async (mount, fake) => {
+            const rootId = (await mount.getRootFolder())!.id;
+            const create = (name: string) =>
+                mount.createFile(rootId, name, 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
+            for (const name of ['a.png', 'b.png']) {
+                fake.faults.set(await mount.getStorageKey(await create(name)), 'no-bucket');
+            }
+            const { dataDbId } = await provisionDoc(mount);
+            const managed = await mount.createDatabase(MARKER_DB_CONFIG, dataDbId);
+            managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'staged' }).run();
+            const docKey = await mount.getStorageKey(dataDbId);
+            fake.faults.set(docKey, 'fail-put');
+            await mount.closeDatabase(dataDbId);
+            const fileKey = await mount.getStorageKey(await create('staged.png'));
+            fake.faults.set(fileKey, 'fail-put');
+            const stagingPath = mount.uploadQueue!.newStagingPath();
+            await Bun.write(stagingPath, TEST_PNG_BYTES);
+            mount.uploadQueue!.enqueueStaged(fileKey, stagingPath, false);
+            for (const key of [docKey, fileKey]) expect(mount.pendingStagedCopy(key)).not.toBeNull();
+            await expect(snapshotInto(home)).rejects.toThrow(`mount ${NO_BUCKET_STAGED_MOUNT_ID}: storage unreachable`);
         });
     });
 

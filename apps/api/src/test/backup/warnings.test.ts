@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { chmodSync, existsSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -17,6 +17,7 @@ import type { Mount } from '../../lib/mount/mount';
 import { paths } from '../../lib/mount/schema';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
+import { provisionDoc } from '../fault-storage-helpers';
 import {
     assertJson,
     authedRequest,
@@ -28,7 +29,7 @@ import {
     TEST_PNG_BYTES,
     type TestUser,
 } from '../setup';
-import { snapshotInto, waitForJob } from './backup-test-helpers';
+import { MARKER_DB_CONFIG, MARKER_SCHEMA, snapshotInto, waitForJob } from './backup-test-helpers';
 
 // A home with damaged rows or a lost file is archived with a cleaned table and warnings that name them, and an archive
 // of a store that holds no object at all fails the home: an empty store is an outage, not a store with holes.
@@ -273,6 +274,8 @@ describe('Backup of a home whose drive lost files', () => {
 });
 
 describe('Backup of a drive that holds no object at all', () => {
+    const BY_NAME_MOUNT_ID = 'backup-moved-aside-local';
+
     test('a drive whose every object is gone fails the home as unreachable', async () => {
         const { user, home, mountId, mount } = await newUser('all-lost');
         const root = await rootOf(user, mountId);
@@ -295,6 +298,33 @@ describe('Backup of a drive that holds no object at all', () => {
             await expect(snapshotInto(home)).rejects.toThrow(`mount ${mountId}: storage unreachable`);
         } finally {
             chmodSync(dataDir, 0o755);
+        }
+    });
+
+    // An open document is copied from its handle, which reads no storage, so it cannot vouch for the store.
+    test('a drive whose data folder is moved aside fails the home with a document open on it', async () => {
+        const { user, home, mountId } = await newUser('moved-aside');
+        const settings = await home.settings.set({
+            mounts: { [BY_NAME_MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'By name' } },
+        });
+        await home.drive.addMount(createMountConfig(BY_NAME_MOUNT_ID, settings.mounts![BY_NAME_MOUNT_ID]));
+        for (const id of [mountId, BY_NAME_MOUNT_ID]) {
+            const mount = findOrFail(home.drive.getMounts(), (m) => m.id === id);
+            const root = await rootOf(user, id);
+            for (const name of ['a.png', 'b.png']) await upload(user, id, root.id, name, TEST_PNG_BYTES);
+            const { dataDbId } = await provisionDoc(mount);
+            const managed = await mount.createDatabase(MARKER_DB_CONFIG, dataDbId);
+            managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'open' }).run();
+            expect(mount.documentDbs.get(dataDbId)?.db).toBeDefined();
+        }
+        for (const id of [mountId, BY_NAME_MOUNT_ID]) {
+            const dataDir = join(home.homeDir, PATHS.DRIVE.ROOT, id, PATHS.DRIVE.DATA_DIR);
+            renameSync(dataDir, `${dataDir}-aside`);
+            try {
+                await expect(snapshotInto(home)).rejects.toThrow(`mount ${id}: storage unreachable`);
+            } finally {
+                renameSync(`${dataDir}-aside`, dataDir);
+            }
         }
     });
 });
