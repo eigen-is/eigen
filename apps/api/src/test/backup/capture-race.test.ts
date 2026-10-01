@@ -110,6 +110,21 @@ async function captureDuring(user: TestUser, action: () => Promise<unknown>) {
     }
 }
 
+function backupJob(user: TestUser) {
+    return waitForJob(startBackupJob('backup', user.id, undefined, (s, p) => runHomeBackup(user.id, s, p)).id);
+}
+
+async function backupDuring(user: TestUser, action: () => Promise<unknown>) {
+    const race = duringCapture(action);
+    try {
+        const job = await backupJob(user);
+        await race.settled();
+        return job;
+    } finally {
+        race.restore();
+    }
+}
+
 // The archived rows' own paths: the archive holds a file's bytes where its archived row says it is.
 function archivedReports(folder: string): string[] {
     const data = join(folder, 'home/mounts', M, 'data');
@@ -159,20 +174,19 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
-    test('a file deleted for good during the capture is left out, its archived row with no bytes', async () => {
+    test('a file deleted for good during the capture is left out, row and bytes, and the restored home backs up', async () => {
         const user = await raceUser('local-fullnames');
         const { single } = await seed(user);
-        await driveDelete(user.sessionToken, user.id, M, `path/${single.id}`);
-        const { manifest, folder } = await captureDuring(user, () =>
-            driveDelete(user.sessionToken, user.id, M, `trash/${single.id}`),
-        );
-        expect(archivedRow(folder, single.id)?.name).toBe('zz-single.txt');
-        expect(manifest.entries.some((entry) => entry.path.includes(single.id))).toBe(false);
-        expect(archivedReports(folder)).toEqual(reportBodies);
-        expect((await verifyFolder(folder)).status).toBe('verified');
-    });
+        const t = user.sessionToken;
+        await driveDelete(t, user.id, M, `path/${single.id}`);
+        const job = await backupDuring(user, () => driveDelete(t, user.id, M, `trash/${single.id}`));
+        expect(job.state).toBe('done');
+        await restoreHome(job.artifact!, user.id, `race-${Date.now()}`);
+        expect(await driveGetList(t, user.id, M, 'trash')).toEqual([]);
+        expect((await backupJob(user)).state).toBe('done');
+    }, 120_000);
 
-    test('a trashed document deleted for good during the capture is left out', async () => {
+    test('a trashed document deleted for good during the capture is left out, row and bytes', async () => {
         const user = await raceUser('local-fullnames');
         const { root } = await seed(user);
         const { doc } = await seedDocument(user, root.id);
@@ -180,6 +194,7 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         const { manifest, folder } = await captureDuring(user, () =>
             driveDelete(user.sessionToken, user.id, M, `trash/${doc.id}`),
         );
+        expect(archivedRow(folder, doc.id)).toBeNull();
         expect(manifest.entries.some((entry) => entry.path.includes(doc.id))).toBe(false);
         expect(archivedReports(folder)).toEqual(reportBodies);
         expect((await verifyFolder(folder)).status).toBe('verified');
@@ -191,6 +206,7 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         const { version } = await seedDocument(user, root.id);
         const mount = await defaultMount(user);
         const { manifest, folder } = await captureDuring(user, () => mount.deletePath(version.id));
+        expect(archivedRow(folder, version.id)).toBeNull();
         expect(manifest.entries.some((entry) => entry.path.endsWith(`versions/${version.name}`))).toBe(false);
         expect(manifest.entries.some((entry) => entry.path.endsWith('Plan.eigendoc/data.db'))).toBe(true);
         expect((await verifyFolder(folder)).status).toBe('verified');
@@ -208,18 +224,9 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
     test('a folder moved during a backup job reads back after the restore', async () => {
         const user = await raceUser('local-fullnames');
         const { projects, archive } = await seed(user);
-        const race = duringCapture(() =>
+        const job = await backupDuring(user, () =>
             drivePut(user.sessionToken, user.id, M, `path/${projects.id}/move`, { targetParentId: archive.id }),
         );
-        let job: Awaited<ReturnType<typeof waitForJob>>;
-        try {
-            job = await waitForJob(
-                startBackupJob('backup', user.id, undefined, (s, p) => runHomeBackup(user.id, s, p)).id,
-            );
-            await race.settled();
-        } finally {
-            race.restore();
-        }
         expect(job.state).toBe('done');
         await restoreHome(job.artifact!, user.id, `race-${Date.now()}`);
         const t = user.sessionToken;
