@@ -42,7 +42,7 @@ The backup runs on the running server, so with Eigen stopped `./eigen update` re
 ./eigen rollback
 ```
 
-This goes back to the version before the last update. It puts back the backup the update made, the way [`./eigen restore`](/support/self-hosting/back-up-and-restore#put-a-backup-back) does, with the version that backup names, and starts Eigen. The data it replaces is kept aside, not deleted. Every open browser tab reloads once. It asks first: `./eigen rollback --yes` skips the question, for scripts.
+This goes back to the version before the last update. It puts back the backup the update made, the way [`./eigen restore`](/support/self-hosting/back-up-and-restore#put-a-backup-back) does, with the version that backup names, and starts Eigen. The data it replaces is kept aside, not deleted. Every open browser tab reloads once. It asks first: `./eigen rollback --yes` skips the question, for scripts. Like a restore, it needs `data/` as a plain folder inside the install folder, on the same disk, with room to unpack the backup.
 
 After a Full backup, a rollback puts back everything, files and mail included. A rollback goes back one update, not further.
 
@@ -53,6 +53,8 @@ After a Light backup, the usual kind, a rollback puts back the accounts, setting
 Close every open document before you update from 0.3.0. When Eigen comes back, an open document reloads, and every edit it had not sent to the server is lost, edits made while it was offline included. A Drive, Mail, Calendar, or Contacts tab opened on 0.3.0 does not reload by itself: it keeps the page it had until you reload it.
 
 After the update, two files of 0.3.0 may be left over: `data/server/collab-epoch` and `data/server/collab-home-epochs.json`. Eigen does not read them, so you can delete them.
+
+Does cron run `./eigen backup` for you? Check its line. The `--keep` option of 0.3.0 is gone: with it, `./eigen backup` stops with exit 2 and makes no backup. A stop before the backup has to go too, since the backup needs Eigen running. Backups made with `./eigen backup` stay until you delete them. To have Eigen keep a set number, turn on the nightly backup in **Settings → Backups** instead: it is off until the owner turns it on. See [Back up every night](/support/self-hosting/back-up-and-restore#back-up-every-night).
 
 Eigen 0.3.0 made its own kind of backup, a snapshot in `snapshots/`, and the update from 0.3.0 saves one the same way, with Eigen stopped. Only Eigen 0.3.0 can put it back. `./eigen rollback` then prints three commands instead: the first brings back the `eigen` command of 0.3.0, the second restores the snapshot with it, and the third clears what the newer version noted.
 
