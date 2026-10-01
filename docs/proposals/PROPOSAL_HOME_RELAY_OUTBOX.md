@@ -1,15 +1,8 @@
 # Proposal: Durable home-relay outbox
 
-> **Status — Proposal, written 2026-07-05, re-reviewed against main 2026-07-06, not started.**
-> The 2026-07-06 review re-verified every seam claim against post-unified-activity main (the
-> activity merge changed notification *rendering* — `details` payloads, `formatChatPreview` — not
-> the relay seams; the tag/coalesce facts below still hold) and confirmed no outbox code has
-> landed. Expands the P1 roadmap row
-> "Durable home-relay outbox" ([ROADMAP.md](../ROADMAP.md)) into a full design. Follow-on to the
-> 2026-07-04 async ACL fan-out (`../../apps/api/src/lib/drive/acl-propagation.ts`): that made one seam
-> non-blocking but in-memory; this makes every cross-home push durable, ordered, and bounded.
-> Deliberately the **third instance** of the house "durable rows + self-scheduled drain" pattern,
-> after `lib/mount/upload-queue.ts` and `lib/mount/content-reindex-queue.ts`.
+This proposal makes every push from one Home to another durable, ordered and bounded. A Home is the data folder of one user or team, and a cross-home push is how one user's action reaches another's data, such as a share landing in the recipient's list or a notification in their bell. The push becomes a row in a server-level outbox table, and one drain loop delivers the rows, retries them and survives a restart. The ACL fan-out (`../../apps/api/src/lib/drive/acl-propagation.ts`) already runs in the background, but in memory. The outbox is the third use of Eigen's "durable rows plus a self-scheduled drain" pattern, after `lib/mount/upload-queue.ts` and `lib/mount/content-reindex-queue.ts`.
+
+**Status:** not started; there is no outbox code. It expands the P1 row "Durable home-relay outbox" in [ROADMAP.md](../ROADMAP.md) into a full design. Written 2026-07-05 and checked against the code on 2026-07-06, when every seam claim and the tag and coalesce facts below still held.
 
 > **TLDR**: Cross-home pushes (`sendToHome` in `../../apps/api/src/lib/home/home-relay.ts`) currently
 > deliver by opening the recipient's Home inline. Five independent fan-out sites re-invented the

@@ -1,5 +1,9 @@
 # Proposal: rspamd sidecar — inbound spam filtering + mark-as-spam training
 
+This proposal adds a spam filter to Eigen's own mail server. Today every message that arrives from the internet lands in the inbox, and Report Spam only moves a message to Junk, which teaches nothing. The design adds rspamd, a spam filter that runs as its own container beside Postfix, scores what arrives on port 25, and learns from Report Spam and a new Not spam button.
+
+**Status:** not built: the compose file has no rspamd service. [ROADMAP.md](../ROADMAP.md) keeps its row, as the cheaper route to what [PROPOSAL_STALWART_MAIL.md](PROPOSAL_STALWART_MAIL.md) was meant to solve.
+
 > **TLDR**: Add `rspamd` (pinned image, plus its Redis backend) to the `mail` compose profile as
 > a Postfix milter with bounded fail-open timeouts, scanning **port 25 only** — authenticated
 > submission (465/587) and API-originated mail are exempt by construction. The verdict travels in

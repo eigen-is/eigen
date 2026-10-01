@@ -1,5 +1,9 @@
 # Proposal: Importing External Calendars
 
+This proposal lets a user bring a calendar from outside Eigen into Eigen's Calendar, either once from an `.ics` file or as a live, read-only subscription to a feed URL such as a holiday calendar or a conference schedule. The hard part, reading iCalendar with its repeats and time zones, already works for invitations and CalDAV, so a feed is mostly the same parser behind a different transport.
+
+**Status:** file import is built, and [CALENDAR.md § Import replays each series through putResource, as a device sync does](../CALENDAR.md#import-replays-each-series-through-putresource-as-a-device-sync-does) describes it; § File import below is the design it came from. Subscriptions are not built: the `subscription` column, the fetch policy, the refresh mechanism, the read-only rules and the subscribe dialog are all still to do, and [ROADMAP.md](../ROADMAP.md) keeps their row.
+
 > **TLDR**: Let users add external calendars in two flavors — a one-time `.ics` file import and a
 > live URL subscription (Google public calendars, holiday feeds, conference schedules, sports
 > calendars, etc.). Treat a subscription as a flavor of `Calendar`, not a separate entity: a row in
@@ -16,8 +20,6 @@
 > is made below: private-network feed URLs are **allowed by default** (self-hosted LAN feeds are
 > legitimate — see the MinIO-on-LAN precedent), with an admin server-setting to lock them out on
 > multi-tenant deployments. HTTP Basic auth and two-way CalDAV write-back are explicit non-goals.
-
-Status: **file import is built; subscriptions are a follow-up program.** § File import below describes what ships today ([CALENDAR.md](../CALENDAR.md) § Import replays each series through putResource, as a device sync does is its as-built reference). Everything else on this page — the `subscription` column, the fetch policy, the refresh mechanism, the read-only rules, the subscribe dialog — is unbuilt and is the follow-up.
 
 **Built on the storage model in [CALENDAR.md](../CALENDAR.md) § The stored bytes are the event, and every column is a projection.** One VCALENDAR per UID lives as the `ics` BLOB of its `resources` row, and the `events` rows beside it are a projection. Two consequences for the subscriptions half: the `subscription` column is an additive `ALTER TABLE` on the version-2 `calendars` shape (§ Migration), and a feed snapshot is N resource writes, each its own transaction, so a crash mid-snapshot leaves the resources already written and needs its own commit contract. The subscription model, the fetch policy and the read-only rules are unaffected.
 

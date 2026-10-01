@@ -1,5 +1,9 @@
 # Proposal: Mail that lives at an existing provider (IMAP backend)
 
+This proposal lets Eigen's Mail app work on a mailbox the user already has at another provider, instead of only on Eigen's own mail server.
+
+**Status:** not built. The seam it plugs into exists: `MailStore` (`apps/api/src/lib/mail/mail-store.ts`) has one implementation, `MaildirStore`, and there is no `ImapStore`. It depends on [PROPOSAL_SSO.md](PROPOSAL_SSO.md), which is not built either. [ROADMAP.md](../ROADMAP.md) keeps its row.
+
 > **TLDR**: Most people who try Eigen already have email somewhere — Microsoft 365, Google Workspace, Fastmail, Migadu, mailbox.org, their own dovecot. Today Eigen offers them one switch, `MAIL_ENABLED=0`, which drops the Mail app and all inbound calendar handling. This proposal adds a second `MailStore` implementation, **`ImapStore`**, so the Mail app becomes a client of the mailbox the user already has: the provider stays the MX, the source of truth and the spam filter; Eigen reads over IMAP, sends over the provider's SMTP submission, and keeps only a summary cache. Read state, flags and moves are the provider's, so Eigen and the user's other mail clients always agree. Authentication is **OAuth, reusing the token from SSO sign-in** (SASL XOAUTH2) — Eigen stores no mail password. IMAP is the one protocol every provider speaks, it needs no tenant admin rights and no publicly reachable host, and the storage seam it plugs into already exists. Cost: **1,200–1,500 LOC**, SSO first.
 
 ## Goals

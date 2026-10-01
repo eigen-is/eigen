@@ -1,5 +1,9 @@
 # Proposal: Optional Stalwart Mail Backend (JMAP)
 
+This proposal offers Stalwart, a mail server that speaks JMAP, as an opt-in replacement for Eigen's Postfix and Dovecot mail stack, behind the same mail routes.
+
+**Status:** not built. The `MailStore` interface it plugs into exists, with Maildir as its only implementation. [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps its row and notes the proposal's own advice: don't build it until a user asks for JMAP. The cheaper route to its spam and DMARC wins is [PROPOSAL_RSPAMD.md](PROPOSAL_RSPAMD.md).
+
 > **TLDR**: Add Stalwart Mail Server as an **opt-in alternative** to Eigen's current
 > Maildir+Dovecot+Postfix stack. Eigen's BE keeps the same `/mail/*` HTTP routes; behind them, a
 > small `MailStore` interface (shipped 2026-07-03) dispatches either to the existing `MaildirStore` class or to a new

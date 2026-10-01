@@ -1,6 +1,8 @@
 # Proposal: Bun-native APIs in place of npm packages
 
-> **Status: Proposal, written 2026-09-25 against Bun 1.4.2. Nothing here is built.** Eigen already uses Bun natively for most runtime work: `S3Client`, `bun:sqlite` (through `drizzle-orm/bun-sqlite`), `Bun.password`, `Bun.CryptoHasher`, `Bun.Glob`, `Bun.semver`, `Bun.spawn`, `Bun.zstd*Sync` and `bun:test`. This page lists the npm packages and `node:*` usage a Bun built-in could still replace, the ones it cannot, and the 1.4.x features worth using, so the next session starts from findings instead of a new survey.
+This page lists the npm packages and `node:*` uses a Bun built-in could still replace, the ones it cannot, and the Bun 1.4 features worth using. Each replacement removes a dependency Eigen has to audit and update. Eigen already uses Bun natively for most runtime work: `S3Client`, `bun:sqlite` (through `drizzle-orm/bun-sqlite`), `Bun.password`, `Bun.CryptoHasher`, `Bun.Glob`, `Bun.semver`, `Bun.spawn`, `Bun.zstd*Sync` and `bun:test`.
+
+**Status:** nothing here is built. It was written on 2026-09-25 against Bun 1.4.2, and [ROADMAP.md](../ROADMAP.md) keeps its row.
 
 ## What 1.4 added
 

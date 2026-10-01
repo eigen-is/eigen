@@ -1,16 +1,8 @@
 # Proposal: File-descriptor budget — graceful exhaustion
 
-> **Status — Proposal, written 2026-07-05, reconciled 2026-07-06 against the merged
-> storage-audit fixes (AUDIT_STORAGE.md) and 2026-08-04 against the 2026-07-14 home-lifecycle
-> changes (per-type idle windows, collab keepalive `touchHomeIfLoaded`, `peek()` seam) —
-> nothing of this proposal is built.** Every open Home costs ~30 file
-> descriptors (SQLite WAL triples + maildir watchers). A cross-home fan-out under a small
-> `ulimit -n` exhausts them and SQLite starts failing with `SQLITE_IOERR`, which today degrades
-> *silently* (skipped recipients, swallowed watcher errors). The compose deployment pins the
-> limit high since 2026-07-04; this proposal covers the rest: a startup check that warns loudly
-> on a small limit (phase 1, S), deploy documentation for non-compose installs (phase 1, S),
-> and an optional LRU cap on resident Homes with a retry-once valve in `ManagedDatabase.open`
-> (phase 2, M, gated on need). Smallest honest design — no resource-manager framework.
+This proposal keeps Eigen from failing silently when the process runs out of file descriptors. Every open Home, the data folder of one user or team, costs about 30 of them: three files per SQLite database in WAL mode, plus the mail folder watchers. A fan-out across many Homes under a small `ulimit -n` exhausts them, SQLite starts failing with `SQLITE_IOERR`, and that shows up only as skipped recipients and swallowed watcher errors. The compose deployment pins the limit high. This proposal covers the rest: a startup check that warns loudly on a small limit and deploy docs for installs without compose (phase 1, S), and an optional cap on resident Homes, least recently used first out, with one retry in `ManagedDatabase.open` (phase 2, M, only when needed). It stays small on purpose: no resource-manager framework.
+
+**Status:** nothing of it is built. Written 2026-07-05 and checked against the code on 2026-08-04, after the storage-audit fixes and the home-lifecycle changes (per-type idle windows, the collab keepalive `touchHomeIfLoaded`, `peek()`). [ROADMAP.md](../ROADMAP.md) keeps its row.
 
 ## Problem
 
