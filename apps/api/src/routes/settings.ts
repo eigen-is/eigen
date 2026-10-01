@@ -14,7 +14,7 @@ import { member, session, team, teamMember, user } from '../../auth-schema';
 import { getAuthDrizzleDb } from '../lib/auth/auth';
 import { resolveBackupUpload } from '../lib/backup/upload';
 import { getOrgName, getServerConfig } from '../lib/config/server-config';
-import { getS3Config, getServerSettings, updateServerSettings } from '../lib/config/server-settings';
+import { DEFAULT_BACKUPS, getS3Config, getServerSettings, updateServerSettings } from '../lib/config/server-settings';
 import { type ControlStatus, getServerStatus } from '../lib/config/server-status';
 import { ApiError } from '../lib/core';
 import { requireAdmin, requireOwner } from '../lib/core/access';
@@ -58,12 +58,13 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             await requireAdmin(user.id);
             const settings = withoutBackupSecret(getServerSettings());
             // The mount secret is the owner's, as on /settings/s3config; an admin's team mount form takes the rest.
+            // Backups are the owner's alone, like the archives they make.
             if ((await getOrgRole(user.id)) === 'owner') return settings;
             const { s3Config } = settings.defaults.mount;
             const mount = s3Config
                 ? { ...settings.defaults.mount, s3Config: { ...s3Config, secretAccessKey: '' } }
                 : settings.defaults.mount;
-            return { ...settings, defaults: { mount } };
+            return { ...settings, defaults: { mount }, backups: DEFAULT_BACKUPS };
         },
         { auth: true },
     )

@@ -7,6 +7,12 @@ import { getServerDataPath, SERVER_FILES } from './paths';
 
 export { mapStorageType } from '@workspace/lib/types/settings';
 
+// A server with no backup set up, and what an admin who is not the owner reads of the backup settings.
+export const DEFAULT_BACKUPS: ServerSettings['backups'] = {
+    schedule: { enabled: false, hourUtc: 2, withS3: false, keep: 7 },
+    upload: { enabled: false, s3: EMPTY_S3, keep: 30 },
+};
+
 const serverFs = new LocalFilesystem(getServerDataPath());
 const settingsStore = new JsonStore<ServerSettings>(serverFs, SERVER_FILES.settings, {
     quotas: {
@@ -55,10 +61,7 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, SERVER_FILES.setti
         senderAddress: '',
         relaySendsAsUsers: false,
     },
-    backups: {
-        schedule: { enabled: false, hourUtc: 2, withS3: false, keep: 7 },
-        upload: { enabled: false, s3: EMPTY_S3, keep: 30 },
-    },
+    backups: DEFAULT_BACKUPS,
 });
 
 let loaded = false;

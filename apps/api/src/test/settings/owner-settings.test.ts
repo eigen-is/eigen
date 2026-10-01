@@ -140,14 +140,28 @@ describe('owner-only settings', () => {
             expect(res.status).toBe(403);
         });
 
+        test('an admin reads neither the destination nor the schedule', async () => {
+            await updateServerSettings({
+                backups: { schedule: { enabled: true, hourUtc: 5 }, upload: { enabled: true, s3: destination } },
+            });
+            const settings = await assertJson<ServerSettings>(
+                await authedRequest(admin.sessionToken, '/settings/server'),
+            );
+            expect(settings.backups).toEqual({
+                schedule: { enabled: false, hourUtc: 2, withS3: false, keep: 7 },
+                upload: { enabled: false, s3: EMPTY_S3, keep: 30 },
+            });
+            await updateServerSettings({
+                backups: { schedule: { enabled: false, hourUtc: 2 }, upload: { enabled: false } },
+            });
+        });
+
         test("the destination's secret reaches nobody, the owner included, nor a save's answer", async () => {
             await updateServerSettings({ backups: { upload: { s3: destination } } });
-            for (const user of [admin, ctx.alice.user]) {
-                const settings = await assertJson<ServerSettings>(
-                    await authedRequest(user.sessionToken, '/settings/server'),
-                );
-                expect(settings.backups.upload.s3).toEqual({ ...destination, secretAccessKey: '' });
-            }
+            const settings = await assertJson<ServerSettings>(
+                await authedRequest(ctx.alice.user.sessionToken, '/settings/server'),
+            );
+            expect(settings.backups.upload.s3).toEqual({ ...destination, secretAccessKey: '' });
             const saved = await assertJson<ServerSettingsSaved>(
                 await putBackups(ctx.alice.user.sessionToken, { upload: { s3: destination } }),
             );
