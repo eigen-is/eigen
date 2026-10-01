@@ -118,5 +118,17 @@ fi
 echo "Starting queue monitor (tune with QUEUE_CHECK_INTERVAL, QUEUE_ALERT_THRESHOLD, QUEUE_ALERT_COOLDOWN)..."
 /usr/local/bin/queue-monitor.sh &
 
+# On a first boot without Caddy's certificate Dovecot makes one, and an smtpd started before it serves without TLS.
+waited=0
+until [ -f /certs/cert.pem ] && [ -f /certs/key.pem ]; do
+    if [ "$waited" = 0 ]; then echo "Waiting for the TLS certificate in /certs..."; fi
+    if [ "$waited" -ge 30 ]; then
+        echo "WARNING: no TLS certificate in /certs after 30 seconds; Postfix starts without TLS."
+        break
+    fi
+    sleep 1
+    waited=$((waited + 1))
+done
+
 echo "Starting Postfix..."
 exec postfix start-fg
