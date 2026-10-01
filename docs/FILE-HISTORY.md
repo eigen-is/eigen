@@ -2,9 +2,13 @@
 
 > **TLDR:** Every Drive path has a typed event log, and anyone who can read a path can watch it. Both live in the mount's `metadata.db` (`file_events`, `path_watchers`), owned by `FileHistory` (`apps/api/src/lib/drive/history.ts`). Not obvious from the code: an event with no actor is never recorded, and container internals never enter the timeline. A folder watch covers every descendant, including later ones, and read access is checked again at delivery. Mutations that rewrite the parent chain capture it before they run. Retention is a count per file, never an age.
 
+An event is one thing a person did to a file or folder: created, uploaded, edited, renamed, moved, shared, commented on, trashed or restored it. People read them in the Activity panel of every eigendoc editor and in the Drive details panel. A watch is a user's subscription to a path, and the Watched view lists them. Each later event on a watched path, or anywhere under a watched folder, becomes a row in the watcher's notification bell.
+
+The server records almost every event itself, as part of the change, and only the stickies card events come from the client ([§ Clients post only the stickies card events](#clients-post-only-the-stickies-card-events)). A watcher's notification travels through the home relay into that watcher's own notification center ([NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md), [SCALABILITY.md](SCALABILITY.md)), and an SSE event refreshes every open panel ([SSE.md](SSE.md)). The log is a feed for people, not an audit trail: it is capped per file ([§ Retention](#retention-is-a-count-per-file-never-an-age)).
+
 ## History lives in the mount's `metadata.db`
 
-`file_events` holds the timeline and `path_watchers` the subscriptions (`apps/api/src/lib/mount/schema.ts`). History is per mount, not per home or per server. The FK cascade cleans a path's events when the path is permanently deleted. The write lands in the same database as the `paths` row it describes, so it never crosses homes, which are the sharding unit ([SCALABILITY.md](SCALABILITY.md)). And it needs no extra database file.
+`file_events` holds the timeline and `path_watchers` the subscriptions (`apps/api/src/lib/mount/schema.ts`). History is per mount ([STORAGE.md § A mount is a paths table](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)), not per home or per server. The FK cascade cleans a path's events when the path is permanently deleted. The write lands in the same database as the `paths` row it describes, so it never crosses homes, which are the sharding unit ([SCALABILITY.md](SCALABILITY.md)). And it needs no extra database file.
 
 A row stores both `actorUserId` and `actorEmail`, so it renders without an auth-db join. The event types and their detail payloads are `FileEventDetailsMap` in `packages/lib/src/types/file-history.ts`. A stored type outside today's union reads back as `'edited'`.
 
@@ -50,7 +54,7 @@ A notification goes through `sendToHome` as type `file-event` with the tag `file
 
 ## The live refresh reaches every member, not only the owner
 
-A recorded event broadcasts `drive:file-history-updated` to the owner's home and to every effective member (`apps/api/src/lib/drive/sse-events.ts`). A plain `drive:*` event reaches only the owner's home, and a collaborator's open Activity panel must refresh too. The client invalidates its history queries on it. The surfaces are the Drive details panel, the Activity panel in every eigendoc editor and the Watched view.
+A recorded event broadcasts `drive:file-history-updated` to the owner's home and to every effective member (`apps/api/src/lib/drive/sse-events.ts`). A plain `drive:*` event reaches only the owner's home, and a collaborator's open Activity panel must refresh too. The client invalidates its history queries on it.
 
 ## Retention is a count per file, never an age
 
