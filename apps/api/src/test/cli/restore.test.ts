@@ -39,6 +39,7 @@ import { getServerConfig } from '../../lib/config/server-config';
 import { PATHS } from '../../lib/core/constants';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
+import { expectRealShape, type RealShapeHome, realShapeHome } from '../backup/backup-test-helpers';
 import {
     createHomeFaultMount,
     type FaultStorage,
@@ -397,6 +398,7 @@ let stagedUploadKey: string;
 let fullArchive: string;
 let lightArchive: string;
 let fullS3Archive: string;
+let realShape: RealShapeHome;
 
 beforeAll(async () => {
     ctx = await getTestContext();
@@ -404,6 +406,7 @@ beforeAll(async () => {
     for (const user of [ctx.alice.user, ctx.bob.user, ctx.charlie.user]) await getHome(user.id);
     teamOwner = teamOwnerId(await createTeam(ctx, getServerConfig()!.orgId, `Restore CLI Team ${Date.now()}`));
     await getHome(teamOwner);
+    realShape = await realShapeHome();
 
     const mounts = await assertJson<{ id: string }[]>(
         await authedRequest(alice.sessionToken, `/drive/${alice.id}/mounts`),
@@ -524,6 +527,19 @@ describe('restore --stage and --swap', () => {
             expect(existsSync(join(dir, aside, '.restoring'))).toBe(false);
             expect(existsSync(join(dir, '.eigen/restore-swap'))).toBe(false);
             expect(statSync(join(dir, '.env.production')).mode & 0o777).toBe(0o600);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a home that stores files by name comes back with every renamed, trashed and versioned item, Full and then Light',
+        async () => {
+            const dir = install();
+            const data = join(homeDirOf(dir, realShape.user.id), 'mounts', realShape.mountId, 'data');
+            await stageAndSwap(dir, basename(fullArchive));
+            expectRealShape(data, realShape);
+            await stageAndSwap(dir, basename(lightArchive));
+            expectRealShape(data, realShape);
         },
         JOB_TIMEOUT_MS,
     );

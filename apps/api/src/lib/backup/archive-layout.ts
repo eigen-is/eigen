@@ -9,7 +9,7 @@ import { PATHS } from '../core/constants';
 import type { DatabaseConfig, SchemaType } from '../core/managed-database';
 import { SHARED_DB_CONFIG } from '../drive/db-config';
 import { MAIL_DB_CONFIG } from '../mail/db-config';
-import { buildStorageKey, isUsableName } from '../mount/names';
+import { isUsableName, trashStorageKey } from '../mount/names';
 import { paths } from '../mount/schema';
 import { NOTIFICATION_CENTER_DB_CONFIG } from '../notification-center/db-config';
 import { VERSIONS_FOLDER_NAME } from '../versioning/versions-folder';
@@ -104,7 +104,7 @@ function* ancestors(row: MountPathRow, byId: Map<string, MountPathRow>): Generat
 // storage-independent: local-key and s3 mounts store flat keys, and restore re-derives whichever
 // shape the target mount needs.
 export function archivePath(row: MountPathRow, byId: Map<string, MountPathRow>): string {
-    const segment = (r: MountPathRow) => (r.trashedFrom ? `.trash/${buildStorageKey(r.id, r.name)}` : r.name);
+    const segment = (r: MountPathRow) => (r.trashedFrom ? trashStorageKey(r.id, r.name) : r.name);
     const segments = [segment(row)];
     for (const parent of ancestors(row, byId)) {
         if (parent.parentId === null) break; // the mount root contributes no segment
@@ -154,12 +154,9 @@ export function readMountPathRows(db: Database): MountPathRow[] {
     return db.query<MountPathRow, []>(`SELECT ${columns} FROM paths`).all();
 }
 
-// A live paths table can hold none of this: validateName wrote every `name`, `file` is a name or a
-// `{id}.{ext}` key, and an id is a UUID. An archived one arrived inside a file an admin uploaded,
-// and every path a restore builds is a join of those three columns — a `..` or a separator in any
-// of them moved bytes out of the mount (a flat-key mount stores under `file`, a trashed row under
-// its id, an s3 row under a key built from its id), or an arbitrary server file into it (the
-// archive tree IS the name chain). So the archive is refused whole, before a restore reads a row.
+// An archived paths table arrived inside a file an admin uploaded, and every path a restore builds is a join of id,
+// name and file: a `..` or a separator in one moves bytes out of the mount, so the archive is refused whole. The one
+// separator a live table holds is a trash root's `file` on a path-based mount, which must be exactly trashPath's key.
 export function checkArchivedPathRows(rows: MountPathRow[]): string[] {
     const byId = new Map(rows.map((row) => [row.id, row]));
     const failures: string[] = [];
@@ -167,7 +164,8 @@ export function checkArchivedPathRows(rows: MountPathRow[]): string[] {
         if (!isUsableName(row.id)) failures.push(`path row "${row.id}" has an unusable id`);
         if (!isUsableName(row.name)) failures.push(`path row ${row.id} has an unusable name "${row.name}"`);
         // Empty is how a flat-key mount spells a folder row (Mount.buildFileValue).
-        if (row.file !== '' && !isUsableName(row.file)) {
+        const trashKey = row.trashedFrom !== null && row.file === trashStorageKey(row.id, row.name);
+        if (row.file !== '' && !trashKey && !isUsableName(row.file)) {
             failures.push(`path row ${row.id} has an unusable file "${row.file}"`);
         }
         if (row.parentId !== null && !byId.has(row.parentId)) {

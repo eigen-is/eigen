@@ -5,7 +5,7 @@ import { getUniqueFileName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';
 import { rethrowDuplicateActiveName } from './helpers';
 import type { Mount } from './mount';
-import { buildStorageKey, isReservedName } from './names';
+import { isReservedName, trashStorageKey } from './names';
 import { paths } from './schema';
 
 // Soft delete over the mount's paths table: trash re-parents to the root with
@@ -30,7 +30,7 @@ export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath
             let trashKey: string | undefined;
             if (mount.isPathBased && mount.storage.rename) {
                 const oldKey = await mount.resolveStoragePath(pathId);
-                trashKey = `.trash/${buildStorageKey(pathId, item.name)}`;
+                trashKey = trashStorageKey(pathId, item.name);
                 await mount.storage.rename(oldKey, trashKey);
             }
 

@@ -19,6 +19,7 @@ import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
 import { createTeam, createTestUser, getTestContext, type TestContext } from '../setup';
+import { type RealShapeHome, realShapeHome } from './backup-test-helpers';
 
 // A server job snapshots, verifies and packs every home of the file's fixture for real.
 const JOB_TIMEOUT_MS = 120_000;
@@ -62,6 +63,7 @@ describe('Server backup job', () => {
     let ctx: TestContext;
     let sleeperId: string;
     let teamOwner: string;
+    let realShape: RealShapeHome;
     const spies: { mockRestore(): void }[] = [];
 
     beforeAll(async () => {
@@ -72,6 +74,7 @@ describe('Server backup job', () => {
         await getHome(sleeperId);
         teamOwner = teamOwnerId(await createTeam(ctx, getServerConfig()!.orgId, `Server Job Team ${Date.now()}`));
         await getHome(teamOwner);
+        realShape = await realShapeHome();
     });
 
     afterEach(() => {
@@ -118,6 +121,22 @@ describe('Server backup job', () => {
                 const name = basename(member.name);
                 await copyArchiveMember(member, join(getBackupsDir(), name));
                 await restoreHome(name, ownerId, `server-member-restore-${ownerId}`);
+            }
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a home that stores files by name, with renamed, trashed and versioned items, is in a Full and a Light archive',
+        async () => {
+            quietRelay();
+            for (const level of ['full', 'light'] as const) {
+                const { job, archivePath } = await runJob({ level });
+                expect(job.error).toBeUndefined();
+                expect(job.state).toBe('done');
+                const home = (await readManifest(archivePath)).homes.find((h) => h.ownerId === realShape.user.id);
+                expect(home?.failed).toBeUndefined();
+                expect(home?.member).toBeDefined();
             }
         },
         JOB_TIMEOUT_MS,
