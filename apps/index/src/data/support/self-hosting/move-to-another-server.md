@@ -17,7 +17,7 @@ In the install folder, run `./eigen backup`, without `--light`: a Light backup l
 
 The backup is `backups/server-manual-full-<date>-<time>.tar`.
 
-The old server is gone? Take last night's backup from your backup bucket instead, with the endpoint, bucket name, and keys you wrote down. The backups are in the folder `<prefix>/<your web address>/`, like `eigen/eigen.example.com/`. Take the newest `server-scheduled-…` backup that has no `.partial` file beside it: that one holds every user and team. With the AWS command line tool, for example:
+The old server is gone? Take last night's backup from your backup bucket instead, with the endpoint, bucket name, and keys you wrote down. The backups are in the folder `<prefix>/<your web address>/`, like `eigen/eigen.example.com/` (leave out `<prefix>/` if you set none). Take the newest `server-scheduled-…` backup that has no `.partial` file beside it: that one holds every user and team. With the AWS command line tool, for example:
 
 ```bash
 export AWS_ACCESS_KEY_ID=<access key id> AWS_SECRET_ACCESS_KEY=<secret access key>
@@ -25,7 +25,7 @@ aws s3 ls --endpoint-url <endpoint> s3://<bucket>/<prefix>/<your web address>/
 aws s3 cp --endpoint-url <endpoint> s3://<bucket>/<prefix>/<your web address>/server-scheduled-full-<date>-<time>.tar /root/
 ```
 
-Run this on the new server. Then follow step 2 without the `scp`.
+Run this on the new server. Then follow steps 2 and 3 without the `scp`, with the name of this backup in place of `server-manual-full-<date>-<time>.tar`.
 
 Also copy what a backup leaves out that you want to keep, like `docker-compose.override.yml` and the older backups in `backups/`. See [what a backup leaves out](/support/self-hosting/back-up-and-restore#what-a-backup-leaves-out).
 

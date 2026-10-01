@@ -39,7 +39,13 @@ sudo chown 1000:1000 <backup>
 
 **"A full backup needs up to …; the backups folder has … free".** A backup checks for room before it starts, and needs room for everything uncompressed while it works. Free space on the disk of `backups/`, or delete backups you no longer need in **Settings → Backups**, then try again. A restore checks the disk of `data/` the same way, and says "Staging <backup> needs up to …".
 
-**"The swap of <backup> stopped halfway and cannot go on".** A restore moves folders in place one by one, and something in the way stopped it. `.eigen/restore-swap` lists every move, and the message names where the old data went aside. Put `data/` right by hand from those two, then delete `.eigen/restore-swap`. Until you do, every `./eigen` command tries to finish the restore first.
+**"The swap of <backup> stopped halfway and cannot go on".** A restore moves folders in place one by one, and something in the way stopped it. `.eigen/restore-swap` lists every move, and the message names where the old data went aside. Put `data/` right by hand from those two, then delete `.eigen/restore-swap`. Until you do, every `./eigen` command other than `logs`, `reset-password`, and `help` tries to finish the restore first.
+
+**"data/ is in use by Eigen or by another restore".** Something still has `data/` open while the restore wants to swap it: another restore, or an Eigen that `./eigen` did not start. Wait for it to end, or stop it, then run `./eigen restore` again.
+
+**"… cannot be swapped in: … is in the way here".** A restore of a Light backup moves the files of the backup into the users' and teams' folders, and something in your `data/` sits where one of them goes. Move what the message names out of the way, then run `./eigen restore` again.
+
+**"… is on another disk than …".** A restore moves folders by renaming them, which works only within one disk. `data/`, `data/.restoring/`, and every user's and team's folder in `data/` must be on the disk of the install folder, not mounted from another one. Move them there, then run `./eigen restore` again.
 
 ## Eigen does not start: pool overlaps
 

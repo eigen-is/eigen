@@ -79,8 +79,8 @@ With Eigen stopped there is nothing to run the backup, so `./eigen backup` refus
 - The `backups/` folder itself.
 - `docker-compose.override.yml`, if you made one.
 - A way into the backup bucket. Its keys are inside the backups, which are in that bucket, so keep a copy of them yourself.
-- Guests' workspaces. After a restore, a guest keeps their account and starts with an empty workspace.
-- A user or team folder that no account owns. The backup names it, and after a restore of a Full backup it is only in `data.pre-restore-<date>-<time>`.
+- Guests' workspaces. After a restore of a Full backup, a guest keeps their account and starts with an empty workspace. A restore of a Light backup leaves guests' workspaces as they are.
+- A user or team folder that no account owns. The backup's record in `backups/`, the file with its name and `.json` at the end, lists it under `orphans`. After a restore of a Full backup it is only in `data.pre-restore-<date>-<time>`.
 
 ## Drives in an S3 bucket
 
@@ -116,7 +116,7 @@ A user or team that failed during the backup is not in it, and the question name
 
 Everyone is signed in as they were when the backup was made. Every open browser tab reloads once. After a restore, everything in the Trash stays there for the full **Trash Retention (days)** period, counted from the restore. `--yes` skips the question, for scripts.
 
-Restore refuses a backup of a newer Eigen than the one you run: update first, then restore. `data/` must be a plain folder inside the install folder, on the same disk, with room to unpack the backup. If a restore is cut off, the next `./eigen` command finishes it before it does anything else.
+Restore refuses a backup of a newer Eigen than the one you run: update first, then restore. `data/` must be a plain folder inside the install folder, on the same disk, with room to unpack the backup. If a restore is cut off, the next `./eigen` command other than `logs`, `reset-password`, and `help` finishes it before it does anything else.
 
 To restore on a new machine, see [Move Eigen to another server](/support/self-hosting/move-to-another-server).
 
@@ -140,12 +140,14 @@ To find out whether your backups work, restore one on a second machine while you
 - Every drive in an S3 bucket, with that bucket and its keys.
 - The nightly backup with its time, and the backup bucket with its folder `<prefix>/<your web address>/`.
 
-So do not leave it running. Five minutes after it starts, and every five minutes after that, it checks whether today's nightly backup is due. Once the time you set has passed today (UTC), it makes one, uploads it to the same folder as your server, and deletes the oldest nightly backups there by the same count, your server's too. And when a drive in an S3 bucket opens on the test server, it uploads the changes that were on their way when the backup was made into that bucket, and whatever changes in that drive changes the bucket.
+So do not leave it running. Five minutes after it starts, and every five minutes after that, it checks whether today's nightly backup is due. Once the time you set has passed today (UTC), it makes one, uploads it to the same folder as your server, and deletes the oldest nightly backups there by the same count, your server's too.
+
+**Do not sign in to the test server when a user or team keeps a drive in an S3 bucket**, not even through a hosts-file entry. The test server opens their workspace at their sign-in, or for a nightly backup. It then puts the changes that were on their way when the backup was made into that bucket, over what your server wrote since, and whatever changes in that drive changes the bucket.
 
 To try a restore safely:
 
-1. Restore the backup on the second machine as in steps 2 and 3 of [Move Eigen to another server](/support/self-hosting/move-to-another-server). Leave your server and your domain as they are.
-2. As soon as the restore says Eigen is running, and within five minutes, stop it:
+1. Restore the backup on the second machine as in steps 2 and 3 of [Move Eigen to another server](/support/self-hosting/move-to-another-server). Skip opening ports on the second machine: the test needs none. Leave your server and your domain as they are.
+2. As soon as the restore says Eigen is running, stop it:
 
    ```bash
    ./eigen stop
@@ -154,7 +156,7 @@ To try a restore safely:
 3. Read what the restore printed: how many users and teams the backup holds, any that are not in the backup, and whether it held `.env.production`, the key that signs your mail, and the mail server's certificate. Before it put anything in place, the restore checked every file and database of the backup, so a restore that got this far has a backup that works.
 4. Delete the second machine, or its install folder. Do not start Eigen on it again.
 
-Your web address still points at your server, so a browser opens that one, not the test.
+Your web address still points at your server, so a browser opens that one, not the test. The test needs no sign-in: what the restore printed is the result. When no user or team keeps a drive in an S3 bucket, signing in to the test server before step 2 is safe too, as long as you stop it within five minutes of its start, before its first nightly check.
 
 ## Restore one user or team from a server backup
 
@@ -163,7 +165,7 @@ Each server backup holds a backup of every user and team, under `homes/`. Copy o
 ```bash
 cd /opt/eigen
 tar -tf backups/server-scheduled-full-<date>-<time>.tar | grep homes/
-tar -xOf backups/server-scheduled-full-<date>-<time>.tar homes/home-<id>-<date>-<time>.tar.zst > backups/home-<id>-<date>-<time>.tar.zst
+sudo sh -c 'tar -xOf backups/server-scheduled-full-<date>-<time>.tar homes/home-<id>-<date>-<time>.tar.zst > backups/home-<id>-<date>-<time>.tar.zst'
 sudo chown 1000:1000 backups/home-<id>-<date>-<time>.tar.zst
 ```
 

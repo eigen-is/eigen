@@ -2,7 +2,7 @@
 
 > **TLDR:** Sheets is Eigen's spreadsheet: a workbook of tabs that several people edit at once, with formulas, number formats, validation and xlsx import and export. The grid, its state and the formula engine are `packages/sheet` (`@workspace/sheet`), our own fork of the open-source fortune-sheet, itself based on luckysheet. `apps/sheets/` is the app around it. A workbook is stored as a snapshot plus a log of edits.
 
-A workbook is a `.eigensheets` file. It holds one or more sheets, the tabs. A sheet is a grid of cells. A cell holds its value (`v`), the string the grid shows (`m`), its formula (`f`), its number format and its style. What belongs to a grid position rather than to the cell, such as borders, merges, row heights, validation rules and hyperlinks, sits in maps beside the grid, keyed `"r_c"` (row and column, counted from 0). The maps under a sheet's `config` (merges, borders, row and column sizes, hidden rows and columns) are its config collections. Conditional-format rules and floating images hang off the sheet too.
+A workbook is a `.eigensheets` file. It holds one or more sheets, the tabs. A sheet is a grid of cells. A cell holds its value (`v`), the string the grid shows (`m`), its formula (`f`), its number format and its style. What belongs to a grid position rather than to the cell, such as borders, merges, validation rules and hyperlinks, sits in maps beside the grid, keyed `"r_c"` (row and column, counted from 0). Row heights and column widths are keyed by the row or column index alone. The maps under a sheet's `config` (merges, borders, row and column sizes, hidden rows and columns) are its config collections. Conditional-format rules and floating images hang off the sheet too.
 
 In the browser the fork keeps the whole workbook as one plain object, the context, and changes it only through immer. An edit is a recipe, a function that changes a draft of the context, and immer reports the change as patches: small records of a path and a value.
 
@@ -114,7 +114,7 @@ The functions come from `@formulajs/formulajs`, behind a parser inherited from t
 The dependency graph has two limits:
 
 - A reference cycle never errors: the visited set in `getCalculationOrder` breaks the walk, and the cycle's cells evaluate in visit order.
-- `INDEX` produces references the dependency graph can't see statically. `isFunctionRange` special-cases it, together with `INDIRECT` and `OFFSET`; keep that logic when you touch the graph. formulajs 2.9.3 has no `INDIRECT` or `OFFSET`, so today both evaluate to `#NAME?`.
+- `INDEX` produces references the dependency graph can't see statically. `isFunctionRange` special-cases it, together with `INDIRECT` and `OFFSET`; keep that logic when you touch the graph. formulajs 2.9.3 has no `INDIRECT` or `OFFSET`, so both evaluate to `#NAME?`.
 
 ## The editor computes on write, the server only what nobody computed
 

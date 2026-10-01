@@ -47,7 +47,7 @@ Every Drive row lives in the mount's `paths` table (`apps/api/src/lib/mount/sche
 |---|---|
 | `local` | `data/` under the file's name path, so the tree on disk mirrors Drive |
 | `local-key` | `data/{id}.{ext}`, flat |
-| `s3` | `{prefix}/{id}.{ext}` in a bucket, written behind by the upload queue ([SYNC.md](SYNC.md)) |
+| `s3` | `{prefix}/{id}.{ext}` in a bucket: a plain file is PUT in its request, a container database is written behind by the upload queue ([SYNC.md](SYNC.md)) |
 
 An id key never moves, so on `local-key` and `s3` a rename, a move or a trash changes only the row. On `local` the same operations rename files and directories on disk. That difference drives the [tree lock](#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree) and the `.trash/` directory ([SOFT-DELETE.md](SOFT-DELETE.md#only-local-moves-bytes-into-trash)).
 

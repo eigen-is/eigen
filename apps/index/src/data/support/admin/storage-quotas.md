@@ -31,7 +31,7 @@ These limits apply to all users by default. A changed **Default Mount (MB)** app
 
 ## Set the default storage type for new users
 
-The **Storage Type** setting under **Defaults** on the same **Settings** page controls where new users' Drive files are written, from when their account is created. Changing this setting has no effect on existing users' files.
+The **Storage Type** setting under **Defaults** on the same **Settings** page controls where new users' Drive files are written. Eigen sets it the first time a new user's workspace opens, usually at their first sign-in. Changing it moves no one's files and reaches only users who have not signed in yet.
 
 1. In [Admin Settings](/admin/settings), scroll to **Defaults**.
 2. Open the **Storage Type** dropdown and choose one of the following:

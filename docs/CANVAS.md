@@ -4,7 +4,7 @@
 
 A drawing is a `.eigenvector` file and a deck is a `.eigenslides` file. Both are collab documents ([COLLAB.md](COLLAB.md)): the content is a Yjs document that every open editor holds a copy of, and the server relays and stores the changes. Both use the same three roots in it. `elements` holds one small map per element: its type, position, size, rotation, colors, and whatever that type needs, such as the points of a line or the HTML of a text box. `frames` holds the slides of a deck. A frame is one page of fixed size, and an element on a slide names its frame. Only a deck writes frames, so a drawing has none. `meta` holds the background.
 
-An element's type is called its kind. Each kind is one file that answers every question the engine has about it: its defaults, how to read and validate it, its bounds, whether a click hits it, and how to draw it. Rendering, bounds, hit testing and the panel never ask "is this a rectangle". They ask the kind. Adding a shape is adding a file.
+An element's type is called its kind. Each kind is one `defineKind` module that answers every question the engine has about it: its defaults, how to read and validate it, its bounds, whether a click hits it, and how to draw it. Rendering, bounds, hit testing and the panel never ask "is this a rectangle". They ask the kind. Adding a shape is adding that module, plus its name in `VectorElementType` and its entries in `ELEMENT_KINDS`, `TOOL_ORDER` and `ELEMENT_KIND_UI`.
 
 Nothing in a stored document is trusted. Any collaborator, or a forged paste, can write any value. So one function, the reader, turns the Yjs document into a clean scene and repairs what it finds, and everything else works from that scene. The server runs the same reader for previews, export and search.
 
@@ -14,7 +14,7 @@ Two more terms come back often. A host is the app that mounts `CanvasEditor` and
 
 The sections cover the stored fields, the reader, kinds, layers, arrows that stay attached to shapes (bindings), elbow arrows, the viewport, frame mode, undo, text editing, Escape and touch. Three things in them surprise people:
 
-- The reader's repairs live only in the scene it returns, until the next real write stores them ([§ The reader is the trust boundary](#the-reader-is-the-trust-boundary)).
+- The reader's repairs live only in the scene it returns. A repaired field is stored only when a later write sets that same field ([§ The reader is the trust boundary](#the-reader-is-the-trust-boundary)).
 - One discrete op, such as a delete or a panel change, is one undo step ([§ One discrete op is one undo step](#one-discrete-op-is-one-undo-step)).
 - An arrow's binding lives on the arrow alone and re-glues in the shape's own transaction ([§ A binding is stored on the arrow only](#a-binding-is-stored-on-the-arrow-only)).
 
@@ -32,7 +32,7 @@ A rich-text box's `html` is one scalar, so two people typing in one box resolve 
 
 ## The reader is the trust boundary
 
-`readVectorFromDoc` (`read-vector.ts`) turns a Y.Doc into a `VectorScene`. It needs only yjs, so the API Worker runs it too. Each kind's `read` validates its own fields: enums, clamps, string caps, color tokens. Then it repairs what a concurrent merge can leave: colliding fractional indices get fresh ones, an element whose `frameId` names no frame moves to the first frame, and a binding to a missing shape is dropped. The repair lives only in the returned scene; the next real write persists it. It can't sanitize rich-text `html`, which needs a DOM, so the layers that render it do ([§ One layer per element](#one-layer-per-element-on-the-canvas-and-on-the-server)).
+`readVectorFromDoc` (`read-vector.ts`) turns a Y.Doc into a `VectorScene`. It needs only yjs, so the API Worker runs it too. Each kind's `read` validates its own fields: enums, clamps, string caps, color tokens. Then it repairs what a concurrent merge can leave: colliding fractional indices get fresh ones, an element whose `frameId` names no frame moves to the first frame, and a binding to a missing shape is dropped. The repair lives only in the returned scene. Nothing writes it back: `updateElements` writes only the fields it is given, so a repaired field is stored only when a later write sets that same field. It can't sanitize rich-text `html`, which needs a DOM, so the layers that render it do ([§ One layer per element](#one-layer-per-element-on-the-canvas-and-on-the-server)).
 
 A pasted clipboard record goes through the same `readElementFromFields`, so a forged clipboard is exactly as safe as a hostile peer write.
 
@@ -44,7 +44,7 @@ Each kind is one `defineKind` file in `packages/lib/src/vector/kinds/`. Besides 
 
 **A `case 'rectangle'` in rendering, bounds, hit testing or the panel is a review finding.** `.type` is still read where behavior is truly per kind: the arrow and line family (`isLinearElement`), the rich-text sanitizer, the image's media name.
 
-Adding a kind: add it to `VectorElementType`, write its file, add one line to `ELEMENT_KINDS` and one `ELEMENT_KIND_UI` entry. Both registries are a `Record` over every type, so TypeScript rejects a half-added kind.
+Adding a kind: add it to `VectorElementType`, write its file, add one line to `ELEMENT_KINDS` and to `TOOL_ORDER`, and one `ELEMENT_KIND_UI` entry. Both registries are a `Record` over every type, so TypeScript rejects a half-added kind. `TOOL_ORDER` is a plain list, which TypeScript does not check for a missing kind.
 
 ## Capabilities are asked of the element
 
