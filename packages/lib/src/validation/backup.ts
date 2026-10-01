@@ -1,17 +1,25 @@
-import type {
-    BackupEntry,
-    BackupJob,
-    BackupLevel,
-    BackupManifest,
-    BackupReason,
-    BackupVerifyRecord,
-    ServerArchive,
-    ServerArchiveManifest,
-    ServerArchiveSidecar,
-    ServerArchiveUpload,
+import { STORAGE_TYPE_LABELS } from '../constants/mount';
+import {
+    BACKUP_JOB_STATES,
+    BACKUP_KINDS,
+    BACKUP_LEVELS,
+    BACKUP_REASONS,
+    BACKUP_VERIFY_STATUSES,
+    type BackupEntry,
+    type BackupJob,
+    type BackupLevel,
+    type BackupManifest,
+    type BackupReason,
+    type BackupVerifyRecord,
+    type ServerArchive,
+    type ServerArchiveManifest,
+    type ServerArchiveSidecar,
+    type ServerArchiveUpload,
 } from '../types/backup';
 import type { MountConfig, S3Config } from '../types/mount';
 import { parseOwnerId } from '../types/owner';
+
+export { BACKUP_LEVELS, BACKUP_REASONS };
 
 // One grammar for the names in the backups folder, so the pane, the upload route and the artifact
 // list can never disagree about what an artifact is called.
@@ -66,11 +74,6 @@ export function parseBackupArtifactName(name: string): { ownerId: string; at: Da
 // The only manifest version this build writes and reads.
 export const BACKUP_FORMAT_VERSION = 1;
 
-// The annotations are what keep these lists from drifting from the shared unions.
-const KINDS: readonly BackupManifest['kind'][] = ['user', 'team', 'server'];
-const STORAGE_TYPES: readonly MountConfig['storageType'][] = ['local', 'local-key', 's3'];
-export const BACKUP_LEVELS = ['light', 'full', 'full-s3'] as const satisfies readonly BackupLevel[];
-export const BACKUP_REASONS = ['scheduled', 'manual', 'pre-update'] as const satisfies readonly BackupReason[];
 // What ./eigen backup may start one for; only the schedule makes a scheduled archive.
 export const ON_DEMAND_BACKUP_REASONS = ['manual', 'pre-update'] as const satisfies readonly Exclude<
     BackupReason,
@@ -96,12 +99,33 @@ export function parseServerArchiveName(name: string): { reason: BackupReason; le
     return at ? { reason, level, at } : null;
 }
 
+// The server archives among `names`, read, newest first. Any other name is left out.
+export function parseServerArchiveNames(
+    names: Iterable<string>,
+): (Pick<ServerArchive, 'name' | 'reason' | 'level'> & { at: Date })[] {
+    return [...names]
+        .flatMap((name) => {
+            const parsed = parseServerArchiveName(name);
+            return parsed ? [{ name, ...parsed }] : [];
+        })
+        .sort((a, b) => b.at.getTime() - a.at.getTime());
+}
+
+// Undefined for text that is not JSON, which every check below refuses.
+function parseJson(text: string): unknown {
+    try {
+        return JSON.parse(text);
+    } catch {
+        return undefined;
+    }
+}
+
 function isKind(value: string): value is BackupManifest['kind'] {
-    return KINDS.some((kind) => kind === value);
+    return BACKUP_KINDS.some((kind) => kind === value);
 }
 
 function isStorageType(value: string): value is MountConfig['storageType'] {
-    return STORAGE_TYPES.some((type) => type === value);
+    return Object.hasOwn(STORAGE_TYPE_LABELS, value);
 }
 
 // An unknown level is refused rather than read as complete: a restore trusts this field to say so.
@@ -226,6 +250,12 @@ function isStringRecord(value: unknown): value is Record<string, string> {
     );
 }
 
+// A JSON object of strings, as the data-epoch maps are kept on the server and in a tab; null for anything else.
+export function parseStringRecord(text: string): Record<string, string> | null {
+    const value = parseJson(text);
+    return isStringRecord(value) ? value : null;
+}
+
 function isServerArchiveManifest(value: unknown): value is ServerArchiveManifest {
     return (
         typeof value === 'object' &&
@@ -265,13 +295,7 @@ function isServerArchiveManifest(value: unknown): value is ServerArchiveManifest
 // The outer manifest's gate, beside the per-home one below. Null means "not a version 1 manifest of
 // a whole-server archive".
 export function parseServerArchiveManifest(text: string): ServerArchiveManifest | null {
-    let value: unknown;
-    try {
-        value = JSON.parse(text);
-    } catch {
-        return null;
-    }
-    return checkServerArchiveManifest(value);
+    return checkServerArchiveManifest(parseJson(text));
 }
 
 function checkServerArchiveManifest(value: unknown): ServerArchiveManifest | null {
@@ -284,12 +308,7 @@ function checkServerArchiveManifest(value: unknown): ServerArchiveManifest | nul
 // The one gate every manifest passes through. Null means "not a version 1 Eigen backup manifest";
 // the caller decides whether that is a failed verify or a rejected request.
 export function parseBackupManifest(text: string): BackupManifest | null {
-    let value: unknown;
-    try {
-        value = JSON.parse(text);
-    } catch {
-        return null;
-    }
+    const value = parseJson(text);
     return isManifest(value) ? value : null;
 }
 
@@ -306,10 +325,6 @@ export function incompleteReason(manifest: Pick<BackupManifest, 'level' | 'mount
     return `holds only the metadata of mount ${ids}, not its files, so it cannot restore an account on its own`;
 }
 
-function isStatus(value: string): value is BackupVerifyRecord['status'] {
-    return value === 'unverified' || value === 'verified' || value === 'failed';
-}
-
 // A sidecar holds ISO strings; every reader of one wants the Date the API speaks.
 function reviveDate(value: unknown): Date | undefined {
     const stamp = typeof value === 'string' ? new Date(value) : null;
@@ -318,39 +333,27 @@ function reviveDate(value: unknown): Date | undefined {
 
 function parseVerifyRecord(verify: unknown): BackupVerifyRecord | null {
     if (typeof verify !== 'object' || verify === null) return null;
-    if (!('status' in verify) || typeof verify.status !== 'string' || !isStatus(verify.status)) return null;
-    if (!('failures' in verify) || !Array.isArray(verify.failures)) return null;
+    const status = 'status' in verify ? BACKUP_VERIFY_STATUSES.find((candidate) => candidate === verify.status) : null;
+    if (!status || !('failures' in verify) || !Array.isArray(verify.failures)) return null;
     if (verify.failures.some((failure) => typeof failure !== 'string')) return null;
     const checkedAt = 'checkedAt' in verify ? reviveDate(verify.checkedAt) : undefined;
-    return { status: verify.status, checkedAt, failures: verify.failures };
+    return { status, checkedAt, failures: verify.failures };
 }
 
 // The sidecar written next to an artifact: the same manifest plus the verify record.
 export function parseBackupSidecar(text: string): { manifest: BackupManifest; verify: BackupVerifyRecord } | null {
-    let value: unknown;
-    try {
-        value = JSON.parse(text);
-    } catch {
-        return null;
-    }
+    const value = parseJson(text);
     if (typeof value !== 'object' || value === null) return null;
     if (!('manifest' in value) || !isManifest(value.manifest)) return null;
     const verify = 'verify' in value ? parseVerifyRecord(value.verify) : null;
     return verify ? { manifest: value.manifest, verify } : null;
 }
 
-const JOB_STATES: readonly BackupJob['state'][] = ['running', 'done', 'failed'];
-
 // The record beside a whole-server archive. Null means "not one this build wrote".
 export function parseServerArchiveSidecar(text: string): ServerArchiveSidecar | null {
-    let value: unknown;
-    try {
-        value = JSON.parse(text);
-    } catch {
-        return null;
-    }
+    const value = parseJson(text);
     if (typeof value !== 'object' || value === null) return null;
-    const state = 'state' in value ? JOB_STATES.find((candidate) => candidate === value.state) : undefined;
+    const state = 'state' in value ? BACKUP_JOB_STATES.find((candidate) => candidate === value.state) : undefined;
     const startedAt = 'startedAt' in value ? reviveDate(value.startedAt) : undefined;
     if (!state || !startedAt) return null;
     const sidecar: ServerArchiveSidecar = { state, startedAt };
@@ -382,7 +385,7 @@ export function parseServerArchiveSidecar(text: string): ServerArchiveSidecar | 
 
 function parseUploadRecord(value: unknown): ServerArchiveUpload | null {
     if (typeof value !== 'object' || value === null) return null;
-    const state = 'state' in value ? JOB_STATES.find((candidate) => candidate === value.state) : undefined;
+    const state = 'state' in value ? BACKUP_JOB_STATES.find((candidate) => candidate === value.state) : undefined;
     const at = 'at' in value ? reviveDate(value.at) : undefined;
     if (!state || !at || !('key' in value) || typeof value.key !== 'string') return null;
     const upload: ServerArchiveUpload = { state, at, key: value.key };
@@ -410,12 +413,7 @@ export function canUploadServerArchive(
 // `auth.json`: one array of rows per users3.db table. The columns are better-auth's and change with
 // its version, so the check stops at "rows of a table" and Drizzle judges the columns on insert.
 export function parseBackupAuthRows(text: string): Record<string, Record<string, unknown>[]> | null {
-    let value: unknown;
-    try {
-        value = JSON.parse(text);
-    } catch {
-        return null;
-    }
+    const value = parseJson(text);
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
     const rows: Record<string, Record<string, unknown>[]> = {};
     for (const [key, table] of Object.entries(value)) {
@@ -430,12 +428,7 @@ export function parseBackupAuthRows(text: string): Record<string, Record<string,
 
 // `shares.json`: the restore keys these rows off the owner it is restoring, so only the target matters.
 export function parseBackupShares(text: string): { targetIdentifier: string }[] | null {
-    let value: unknown;
-    try {
-        value = JSON.parse(text);
-    } catch {
-        return null;
-    }
+    const value = parseJson(text);
     if (!Array.isArray(value)) return null;
     const shares: { targetIdentifier: string }[] = [];
     for (const row of value) {
@@ -466,12 +459,7 @@ function isS3Config(value: unknown): value is S3Config {
 export type BackupMountSettings = { storageType: MountConfig['storageType']; s3Config?: S3Config };
 
 export function parseHomeMountSettings(text: string): Record<string, BackupMountSettings> | null {
-    let value: unknown;
-    try {
-        value = JSON.parse(text);
-    } catch {
-        return null;
-    }
+    const value = parseJson(text);
     if (typeof value !== 'object' || value === null) return null;
     if (!('mounts' in value) || typeof value.mounts !== 'object' || value.mounts === null) return {};
     const mounts: Record<string, BackupMountSettings> = {};

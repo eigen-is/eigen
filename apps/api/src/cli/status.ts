@@ -2,7 +2,7 @@ import type { parseArgs } from 'node:util';
 import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
-import { parseServerArchiveName } from '@workspace/lib/validation';
+import { parseServerArchiveNames } from '@workspace/lib/validation';
 import type { ControlStatus } from '../lib/config/server-status';
 import { callControl } from './control-socket';
 import { VERSION, VERSION_PATTERN } from './install';
@@ -70,13 +70,7 @@ function backupRow({
 
 // Without the API, the newest archive in backups/ by the time in its name; whether it verified is in its record.
 function listedBackupRow(listing: string): Row {
-    const [newest] = listing
-        .split('\n')
-        .flatMap((name) => {
-            const parsed = parseServerArchiveName(name);
-            return parsed ? [{ name, ...parsed }] : [];
-        })
-        .sort((a, b) => b.at.getTime() - a.at.getTime());
+    const [newest] = parseServerArchiveNames(listing.split('\n'));
     if (!newest) return { level: 'warn', label: 'Backup', value: 'none yet; ./eigen backup makes one' };
     const value = `${newest.name}, ${BACKUP_LEVEL_NAMES[newest.level]}, ${formatTimeAgo(newest.at)}`;
     return { level: 'ok', label: 'Backup', value };

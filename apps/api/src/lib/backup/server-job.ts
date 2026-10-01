@@ -13,6 +13,7 @@ import { orgOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
 import {
     BACKUP_FORMAT_VERSION,
     parseServerArchiveName,
+    parseServerArchiveNames,
     parseServerArchiveSidecar,
     SERVER_ARCHIVE_EXTENSION,
 } from '@workspace/lib/validation';
@@ -239,26 +240,25 @@ export function alertOwner(tag: string, error: string, title = 'Server backup fa
         .catch(() => {});
 }
 
-type ServerRecord = { name: string; reason: BackupReason; level: BackupLevel; at: Date };
-
-// Every server archive and sidecar-only record in the folder, once each, by its archive name.
-function listServerRecords(dir: string): ServerRecord[] {
-    const records = new Map<string, ServerRecord>();
-    for (const file of fs.readdirSync(dir)) {
-        const name = file.endsWith(SERVER_SIDECAR_SUFFIX) ? file.slice(0, -SERVER_SIDECAR_SUFFIX.length) : file;
-        const parsed = parseServerArchiveName(name);
-        if (parsed) records.set(name, { name, ...parsed });
-    }
-    return [...records.values()];
-}
-
-// The owner's list, newest first, from names and sidecars alone. A missing folder is an empty one.
-export async function listServerArchives(): Promise<ServerArchive[]> {
+// Every server archive and sidecar-only record in the backups folder, once each, by its archive name, newest first.
+// A missing folder holds none.
+function listServerRecords() {
     const dir = backupsDirPath();
     if (!fs.existsSync(dir)) return [];
+    const names = new Set(
+        fs
+            .readdirSync(dir)
+            .map((file) =>
+                file.endsWith(SERVER_SIDECAR_SUFFIX) ? file.slice(0, -SERVER_SIDECAR_SUFFIX.length) : file,
+            ),
+    );
+    return parseServerArchiveNames(names).map((record) => ({ ...record, archivePath: path.join(dir, record.name) }));
+}
+
+// The owner's list, newest first, from names and sidecars alone.
+export async function listServerArchives(): Promise<ServerArchive[]> {
     const archives: ServerArchive[] = [];
-    for (const { name, level, reason, at } of listServerRecords(dir)) {
-        const archivePath = path.join(dir, name);
+    for (const { name, level, reason, at, archivePath } of listServerRecords()) {
         archives.push({
             name,
             level,
@@ -268,7 +268,7 @@ export async function listServerArchives(): Promise<ServerArchive[]> {
             record: await readServerSidecar(archivePath),
         });
     }
-    return archives.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return archives;
 }
 
 // What ./eigen backup follows over the control socket: plain JSON with no dates, since the CLI reads it
@@ -286,10 +286,8 @@ export function toControlJob({ id, state, progress, artifact, error, uploadJobId
 // The schedule's one question. A failed or refused attempt left its record, so it counts: a night
 // that fails is one alert, not a retry every tick.
 export function hasScheduledAttemptOn(day: Date): boolean {
-    const dir = backupsDirPath();
-    if (!fs.existsSync(dir)) return false;
     const date = day.toISOString().slice(0, 10);
-    return listServerRecords(dir).some(
+    return listServerRecords().some(
         ({ reason, at }) => reason === 'scheduled' && at.toISOString().slice(0, 10) === date,
     );
 }
@@ -325,14 +323,17 @@ export async function deleteServerArchive(name: string): Promise<void> {
 // done. An archive and its sidecar go together. One whose sidecar is missing or unreadable is left
 // alone: nothing is deleted on a record nobody can read.
 async function pruneLocalArchives(): Promise<void> {
-    const dir = getBackupsDir();
-    const archives: { name: string; good: boolean; build?: string }[] = [];
+    const archives: Parameters<typeof pruneServerArchives>[0] = [];
     const unread: string[] = [];
-    for (const { name } of listServerRecords(dir)) {
-        const sidecar = await readServerSidecar(path.join(dir, name));
+    for (const record of listServerRecords()) {
+        const sidecar = await readServerSidecar(record.archivePath);
         if (sidecar) {
-            archives.push({ name, good: sidecar.state === 'done', build: sidecar.manifest?.images[API_IMAGE_KEY] });
-        } else unread.push(name);
+            archives.push({
+                ...record,
+                good: sidecar.state === 'done',
+                build: sidecar.manifest?.images[API_IMAGE_KEY],
+            });
+        } else unread.push(record.name);
     }
     if (unread.length > 0) {
         console.warn(`[backup] retention skips archives without a readable record: ${unread.join(', ')}`);
@@ -341,8 +342,9 @@ async function pruneLocalArchives(): Promise<void> {
     const { keep } = getServerSettings().backups.schedule;
     for (const name of pruneServerArchives(archives, keep, process.env[API_IMAGE_KEY])) {
         if (runningJobOn(name)) continue;
-        fs.rmSync(path.join(dir, name), { force: true });
-        fs.rmSync(serverSidecarPath(path.join(dir, name)), { force: true });
+        const archivePath = path.join(backupsDirPath(), name);
+        fs.rmSync(archivePath, { force: true });
+        fs.rmSync(serverSidecarPath(archivePath), { force: true });
     }
 }
 
@@ -350,12 +352,9 @@ async function pruneLocalArchives(): Promise<void> {
 // failed attempt, for retention and the list alike, and an upload killed mid-run a failed upload, for the
 // list and ./eigen status. The owner hears of each once.
 export async function recoverInterruptedServerBackups(): Promise<void> {
-    const dir = backupsDirPath();
-    if (!fs.existsSync(dir)) return;
     const interrupted: string[] = [];
     const notUploaded: string[] = [];
-    for (const { name } of listServerRecords(dir)) {
-        const archivePath = path.join(dir, name);
+    for (const { name, archivePath } of listServerRecords()) {
         const sidecar = await readServerSidecar(archivePath);
         if (sidecar?.state === 'running') {
             await writeServerSidecar(archivePath, {

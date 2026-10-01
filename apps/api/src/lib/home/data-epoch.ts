@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { parseStringRecord } from '@workspace/lib/validation';
 import { getServerDataPath, SERVER_RUNTIME_FILES } from '../config/paths';
 import { LocalFilesystem } from '../core/local-filesystem';
 
@@ -20,20 +21,15 @@ function drawEpoch(): string {
 
 // A file that does not parse reads as no restores yet: the tabs of a restored home reload once more, where a throw
 // here would fail every stream and collab open. The next rotation writes it whole again.
-function readHomeEpochs(file: string): [string, string][] {
-    if (!existsSync(file)) return [];
-    try {
-        const stored: unknown = JSON.parse(readFileSync(file, 'utf8'));
-        if (typeof stored !== 'object' || stored === null) throw new Error('not an object');
-        return Object.entries(stored).filter((entry): entry is [string, string] => typeof entry[1] === 'string');
-    } catch (error) {
-        console.error(`[data-epoch] ${file} does not parse, so every home starts without an epoch of its own:`, error);
-        return [];
-    }
+function readHomeEpochs(file: string): Record<string, string> {
+    if (!existsSync(file)) return {};
+    const epochs = parseStringRecord(readFileSync(file, 'utf8'));
+    if (!epochs) console.error(`[data-epoch] ${file} does not parse, so every home starts without an epoch of its own`);
+    return epochs ?? {};
 }
 
 function loadHomeEpochs(): Map<string, string> {
-    homeEpochs ??= new Map(readHomeEpochs(getServerDataPath(SERVER_RUNTIME_FILES.homeEpochs)));
+    homeEpochs ??= new Map(Object.entries(readHomeEpochs(getServerDataPath(SERVER_RUNTIME_FILES.homeEpochs))));
     return homeEpochs;
 }
 
@@ -43,7 +39,8 @@ export function getDataEpoch(ownerId: string): string {
         if (existsSync(file)) serverEpoch = readFileSync(file, 'utf8');
         if (!serverEpoch) {
             serverEpoch = drawEpoch();
-            writeFileSync(file, serverEpoch);
+            // A write lost to a crash draws another epoch at the next start: every tab reloads once.
+            serverFs.writeAtomic(SERVER_RUNTIME_FILES.epoch, serverEpoch).catch(console.error);
         }
     }
     return serverEpoch + (loadHomeEpochs().get(ownerId) ?? '');

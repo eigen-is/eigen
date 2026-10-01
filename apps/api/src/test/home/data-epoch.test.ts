@@ -25,9 +25,8 @@ describe('Data epoch', () => {
     test('a torn epochs file reads as no restores yet, and the next rotation writes it whole again', async () => {
         writeFileSync(file, '{"user_a":"half');
         const { getDataEpoch, rotateHomeDataEpoch } = await startProcess();
-        const epoch = getDataEpoch('user_a');
-        const serverEpoch = readFileSync(getServerDataPath(SERVER_RUNTIME_FILES.epoch), 'utf8');
-        expect(epoch).toBe(serverEpoch);
+        const serverEpoch = getDataEpoch('a home never restored');
+        expect(getDataEpoch('user_a')).toBe(serverEpoch);
 
         await rotateHomeDataEpoch('user_a');
         expect(serverEpoch + JSON.parse(readFileSync(file, 'utf8')).user_a).toBe(getDataEpoch('user_a'));

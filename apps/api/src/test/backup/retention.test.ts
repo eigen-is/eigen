@@ -4,9 +4,9 @@ import { BUCKET_PARTIAL_SUFFIX, buildServerArchiveName } from '../../lib/backup/
 import { pruneBucketArchives, pruneServerArchives } from '../../lib/backup/retention';
 
 // One archive a night at 02:00 UTC, `night` days after 1 September.
-function archive(reason: BackupReason, night: number, good = true): { name: string; good: boolean; build?: string } {
+function archive(reason: BackupReason, night: number, good = true): Parameters<typeof pruneServerArchives>[0][number] {
     const at = new Date(Date.UTC(2026, 8, 1 + night, 2, 0, 0));
-    return { name: buildServerArchiveName(reason, 'full', at), good };
+    return { name: buildServerArchiveName(reason, 'full', at), reason, at, good };
 }
 
 function names(archives: { name: string }[]): string[] {
@@ -73,13 +73,6 @@ describe('Server archive retention', () => {
         const scheduled = [1, 2].map((night) => archive('scheduled', night));
         const others = [archive('manual', 3), archive('pre-update', 3)];
         expect(pruneServerArchives([...scheduled, ...others], 1)).toEqual([scheduled[0].name]);
-    });
-
-    test('a name the grammar does not parse is never pruned', () => {
-        const stray = { name: 'server-scheduled-full-latest.tar', good: false };
-        expect(pruneServerArchives([stray, archive('scheduled', 1), archive('scheduled', 2)], 1)).toEqual([
-            archive('scheduled', 1).name,
-        ]);
     });
 
     test('the bucket counts a partial archive toward keep, but keeps the newest complete one past it', () => {

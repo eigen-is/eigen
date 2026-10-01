@@ -23,7 +23,9 @@ export {
     parseHomeMountSettings,
     parseServerArchiveManifest,
     parseServerArchiveName,
+    parseServerArchiveNames,
     parseServerArchiveSidecar,
+    parseStringRecord,
     SERVER_ARCHIVE_EXTENSION,
     SERVER_ARCHIVE_PREFIX,
 } from './backup';

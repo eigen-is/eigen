@@ -11,11 +11,14 @@ export type BackupEntry = {
 // How much of a home a capture takes. `full-s3` is complete, what the per-home backup writes. `full`
 // leaves an s3 mount's objects to its bucket and keeps its metadata.db and staged uploads. `light`
 // keeps the databases and the home outside its mounts and mail: no file bodies, no Maildir.
-export type BackupLevel = 'light' | 'full' | 'full-s3';
+export const BACKUP_LEVELS = ['light', 'full', 'full-s3'] as const;
+export type BackupLevel = (typeof BACKUP_LEVELS)[number];
+
+export const BACKUP_KINDS = ['user', 'team', 'server'] as const;
 
 export type BackupManifest = {
     formatVersion: 1;
-    kind: 'user' | 'team' | 'server';
+    kind: (typeof BACKUP_KINDS)[number];
     ownerId: string;
     email?: string;
     name: string;
@@ -44,7 +47,8 @@ export type BackupManifest = {
 
 // Why a whole-server archive was made. It is part of the archive's name, so retention and the
 // schedule never open an archive to find out.
-export type BackupReason = 'scheduled' | 'manual' | 'pre-update';
+export const BACKUP_REASONS = ['scheduled', 'manual', 'pre-update'] as const;
+export type BackupReason = (typeof BACKUP_REASONS)[number];
 
 // The last member of a whole-server archive. `entries` lists every other member of the outer tar,
 // so the archive is checked member by member without unpacking one. A home whose capture failed
@@ -77,8 +81,10 @@ export type ServerArchiveManifest = {
     images: Record<string, string>;
 };
 
+export const BACKUP_VERIFY_STATUSES = ['unverified', 'verified', 'failed'] as const;
+
 export type BackupVerifyRecord = {
-    status: 'unverified' | 'verified' | 'failed';
+    status: (typeof BACKUP_VERIFY_STATUSES)[number];
     // A Date everywhere it is passed around: the sidecar on disk holds the ISO string (it is a file
     // format), and parseBackupSidecar revives it on the way back in.
     checkedAt?: Date;
@@ -127,6 +133,8 @@ export type ServerArchiveList = {
     hasS3Mounts: boolean;
 };
 
+export const BACKUP_JOB_STATES = ['running', 'done', 'failed'] as const;
+
 // A backup, verify or restore running on the server. The job map in the API is the truth; the
 // `backup:job-updated` SSE event only tells the admin's browser to refetch this. A server backup's
 // `ownerId` is the org's, and it names its archive from the start.
@@ -140,7 +148,7 @@ export type BackupJob = {
     startedBy?: string;
     // Why a server backup runs.
     reason?: BackupReason;
-    state: 'running' | 'done' | 'failed';
+    state: (typeof BACKUP_JOB_STATES)[number];
     progress: { step: string; done: number; total: number };
     // The artifact the job ended on, once it has one: what a backup wrote, what a verify judged,
     // what a restore came from. The admin pane names it in the line the finished job leaves.
