@@ -2,6 +2,8 @@
 
 > **TLDR:** Every Eigen database is SQLite through Drizzle, opened by `ManagedDatabase` (`apps/api/src/lib/core/managed-database.ts`), which owns versioned migrations, WAL mode, dirty tracking, the sync tick and the snapshot trigger. Each domain keeps its schema and migrations in its own `db-config.ts`. There are three kinds: server databases in `data/server/`, a Home's local databases, and container databases that live in Drive and sync through their mount. Not obvious from the code: an open refuses a schema newer than the binary, only contacts and calendar ask for `synchronous = FULL`, the `-wal` and `-shm` files are SQLite's to remove, and an instance lock keeps a second API off a data folder.
 
+Eigen has no central database of user content. Each user and team has a Home, its own data folder ([STORAGE.md](STORAGE.md#every-owners-data-lives-under-one-folder)), with small databases of its own: one per mount for the Drive tree, plus one for each domain it serves, such as mail, contacts and calendar. Each collab document and chat carries its databases inside its container, the Drive folder that is the document ([COLLAB.md](COLLAB.md)), so they go along when the document is copied or backed up. No database mixes two owners' content, and that keeps a Home movable ([SCALABILITY.md](SCALABILITY.md)) and a document portable. Read this doc before you add a table, a migration or a database.
+
 ## Databases come in three kinds
 
 | Kind | Files | Opened by | Leaves the disk |

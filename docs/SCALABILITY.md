@@ -2,6 +2,8 @@
 
 > **TLDR:** Eigen runs as one API process, and no sharding exists. What exists is the shape sharding needs: every user's and team's data lives in one isolated Home, every authenticated route carries the Home's `ownerId` as its second path segment, so a router can pin a Home to one process, and every cross-home call goes through `apps/api/src/lib/home/home-relay.ts`, the one file sharding has to change. Not obvious from the code: the server-wide state (the auth database, the share registry, the backup job map, the data epochs) is what a second process cannot share yet, and a relay message in flight is lost on a crash. The first concrete step is [PROPOSAL_SINGLE_MACHINE_CLUSTER.md](proposals/PROPOSAL_SINGLE_MACHINE_CLUSTER.md).
 
+Read this doc before you write a route or any code that reaches another owner's data, even with one process. Code that skips the `:ownerId` segment or the relay works fine on one process and breaks only once Homes live in different ones, which is why `bun run check` gates both rules ([§ The ownerId is the routing key](#the-ownerid-is-the-routing-key), [§ lib/ may not import getHome](#lib-may-not-import-gethome)).
+
 ## A Home holds all of one owner's data
 
 Every user and every team has a Home with its own SQLite databases, file storage and event stream. No database mixes users' content. The only server-level databases are the three in `SERVER_DATABASES` (`apps/api/src/lib/config/paths.ts`): `users3.db` for auth, `eigen.db` for the share registry and `waitlist.db`. So a Home can live on any server without a schema change, and moving one is moving its folder.
