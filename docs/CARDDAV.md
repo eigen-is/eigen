@@ -1,10 +1,14 @@
 # CardDAV
 
-> **TLDR:** CardDAV (RFC 6352) serves each user's one address book at `/dav/addressbooks/:ownerId/contacts/`. The protocol layer is `apps/api/src/lib/carddav/`, a near twin of `caldav/` that shares `lib/dav/`. The book is vCard 3.0 in storage and on the wire, so a 4.0 PUT is transcoded and gets no ETag back. Preconditions are checked inside the store's write lock, never in the handler. Apple treats a card as read-only unless the book advertises write privileges. The storage model is in [CONTACTS.md](CONTACTS.md).
+> **TLDR:** CardDAV is how a contacts app on a phone or a desktop syncs a user's one address book. Eigen serves it (RFC 6352) at `/dav/addressbooks/:ownerId/contacts/`. The protocol layer is `apps/api/src/lib/carddav/`, a near twin of `caldav/` that shares `lib/dav/`. The book is vCard 3.0 in storage and on the wire, so a 4.0 PUT is transcoded and gets no ETag back. Preconditions are checked inside the store's write lock, never in the handler. Apple treats a card as read-only unless the book advertises write privileges. The storage model is in [CONTACTS.md](CONTACTS.md).
+
+CardDAV is the address-book twin of CalDAV, and [CALDAV.md](CALDAV.md) explains the words both use: principal, collection, resource, ETag, ctag and sync token. A client such as Apple Contacts, Thunderbird or DAVx⁵ on Android signs in with an app password, finds the principal, and syncs one collection, the book. Each card is one resource, a `.vcf` file holding the vCard text that [CONTACTS.md](CONTACTS.md) stores byte for byte, so CardDAV has no storage of its own.
+
+The sections cover the routes and discovery, the privileges Apple needs, the 3.0 transcode, how a PUT is judged, sync and REPORTs. Two cases surprise people: a refused delete of the user's own card comes back on the next sync, and Apple's group cards are stored but never shown.
 
 ## One principal serves both CalDAV and CardDAV
 
-Every route authenticates with HTTP Basic, through the app-password check every protocol shares ([IMAP.md § Dovecot asks the API whether a password is right](IMAP.md#dovecot-asks-the-api-whether-a-password-is-right)). Each handler calls `resolveContacts` first, before it reads the body, so a stranger's request never costs a parse. The shape clients depend on:
+Every route authenticates with HTTP Basic through `verifyProtocolAuth`, the app-password check every protocol shares. It is described with Dovecot, its one caller from outside the API ([IMAP.md § Dovecot asks the API whether a password is right](IMAP.md#dovecot-asks-the-api-whether-a-password-is-right)). Each handler calls `resolveContacts` first, before it reads the body, so a stranger's request never costs a parse. The shape clients depend on:
 
 ```
 PROPFIND /dav/addressbooks/:ownerId/*               home, the book, or one card (Depth 0 or 1)
@@ -55,7 +59,7 @@ A REPORT body is capped at 1 MiB before it reaches the XML parser. The card data
 
 ## A refused self-delete lists the card again
 
-Deleting your own card is refused with 403. Thunderbird drops the card from its view before the request and ignores the 403. So the refusal also bumps the book `ctag` and re-stamps the card, leaving its bytes alone. The next `sync-collection` lists it as a changed row, and a client that dropped it downloads it again. Other clients pay one extra re-fetch.
+A user deleting their own card gets a 403. Thunderbird drops the card from its view before the request and ignores the 403. So the refusal also bumps the book `ctag` and re-stamps the card, leaving its bytes alone. The next `sync-collection` lists it as a changed row, and a client that dropped it downloads it again. Other clients pay one extra re-fetch.
 
 ## Group cards are stored but not shown
 

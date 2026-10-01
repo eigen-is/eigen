@@ -1,6 +1,12 @@
 # Contacts
 
-> **TLDR:** Contacts is one personal address book per user. The domain is `apps/api/src/lib/contacts/`, the vCard format is `apps/api/src/lib/vcard/`. A contact is its vCard bytes, stored as a BLOB in its `contacts.db` row, and every other column rebuilds from them. Label membership lives in each card's `CATEGORIES`, so a rename rewrites every member card. Every write, from the web app, a device or an import, goes through one function under one lock. The protocol side is [CARDDAV.md](CARDDAV.md).
+> **TLDR:** Contacts is one personal address book per user. A contact is kept as the vCard text that was written for it, byte for byte, and that text is the truth. The domain is `apps/api/src/lib/contacts/`, the vCard reading and writing is `apps/api/src/lib/vcard/` and the web app is `apps/contacts/`. Label membership lives in each card's `CATEGORIES`, so a rename rewrites every member card. Every write, from the web app, a device or an import, goes through one function under one lock. The protocol side is [CARDDAV.md](CARDDAV.md).
+
+Each user has exactly one book, and no team or guest has one. A card gets in and out in three ways. The web app talks to the REST routes in `apps/api/src/routes/contacts.ts`. A contacts app on a phone or a desktop syncs over CardDAV. And a whole `.vcf` file can be imported or exported. Mail compose, the share dialogs and chat also suggest people from the book (`useContactSuggestions`).
+
+The book is one database per user, `eigen.contacts/contacts.db` in their home folder, with the photos the web app serves in `eigen.contacts/avatars/`. A card is vCard text (RFC 6350, the `.vcf` format), stored as it was written so that nothing a device sent is lost. Listing and searching a book by parsing every card would be slow, so each write also fills columns with the names, the emails and the rest. Those columns are the projection: none of them is truth, because all of them can be computed again from the stored text. The calendar works the same way ([CALENDAR.md](CALENDAR.md)).
+
+The sections cover how a card is stored and written, the events a write sends, labels, photos, the book's size, import and export, the web app's writes, and the user's own card, the one that links the book to an Eigen account.
 
 ## A contact is its vCard bytes
 
@@ -68,9 +74,9 @@ A REST save is a full replacement, but `mergeVCard` (`vcard/serialize.ts`) diffs
 
 ## Your own card is linked by X-EIGEN-ID
 
-Init adds your own card and, once, the org owner's. The `ownerSeeded` latch stops a deleted owner card from coming back. Your card carries `X-EIGEN-ID` with your user id, and the server-owned `eigenId` column holds the link. At most one row holds it.
+Init adds the user's own card and, once, the org owner's. The `ownerSeeded` latch stops a deleted owner card from coming back. The user's card carries `X-EIGEN-ID` with their user id, and the server-owned `eigenId` column holds the link. At most one row holds it.
 
-An update keeps the row's link and writes `X-EIGEN-ID` back when a client strips it. A create claims the link only when no row holds it yet, by carrying your `X-EIGEN-ID`, or your email on a card with no `X-EIGEN-ID` at all. A foreign id never claims (`selfClaimRank`, `dav-store.ts`). Editing your own card renames you across the org and sets your avatar (`pushUserProfile`). Deleting it is refused: REST answers 400, CardDAV 403 ([CARDDAV.md](CARDDAV.md#a-refused-self-delete-lists-the-card-again)).
+An update keeps the row's link and writes `X-EIGEN-ID` back when a client strips it. A create claims the link only when no row holds it yet, by carrying the user's `X-EIGEN-ID`, or their email on a card with no `X-EIGEN-ID` at all. A foreign id never claims (`selfClaimRank`, `dav-store.ts`). Editing their own card renames the user across the org and sets their avatar (`pushUserProfile`). Deleting it is refused: REST answers 400, CardDAV 403 ([CARDDAV.md](CARDDAV.md#a-refused-self-delete-lists-the-card-again)).
 
 ## See also
 
