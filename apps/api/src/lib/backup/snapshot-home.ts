@@ -74,6 +74,23 @@ export function listFileTree(root: string, skipDir: (rel: string) => boolean = (
     return tree;
 }
 
+const MESSAGE_DIRS: readonly string[] = [PATHS.MAIL.CUR, PATHS.MAIL.NEW];
+
+// A mail client's first look moves a Maildir message from new/ to cur/ and a flag change renames it in cur/, so one
+// gone mid-copy is looked for in its mailbox by its unique name, the part before `:2,`.
+function renamedMessage(homeDir: string, rel: string): string | null {
+    const box = path.dirname(rel);
+    if (!rel.startsWith(`${MAILDIR_ROOT}/`) || !MESSAGE_DIRS.includes(path.basename(box))) return null;
+    const unique = path.basename(rel).split(':')[0];
+    for (const sub of MESSAGE_DIRS) {
+        const dir = path.join(path.dirname(box), sub);
+        const abs = path.join(homeDir, dir);
+        const name = fs.existsSync(abs) && fs.readdirSync(abs).find((found) => found.split(':')[0] === unique);
+        if (name) return `${dir}/${name}`;
+    }
+    return null;
+}
+
 // What a capture of the tree stages, at most: its files and databases as they sit on disk. The room check before a
 // server backup sizes every home with it while the server runs, so a file or folder gone since its listing counts
 // nothing. A folder's files are statted together, its subfolders walked one at a time to keep few handles open.
@@ -237,14 +254,20 @@ export async function snapshotHome(
     const unlisted = tree.databases.find((rel) => !HOME_DATABASE_PATHS.has(rel));
     if (unlisted) throw new Error(`snapshotHome: unlisted home database ${unlisted} — add it to HOME_DATABASES`);
     for (const rel of tree.dirs) fs.mkdirSync(path.join(folder, ARCHIVE_HOME_DIR, rel), { recursive: true });
-    for (const [index, rel] of tree.files.entries()) {
-        const source = Bun.file(path.join(home.homeDir, rel));
-        // A mail client's first look moves a Maildir message from new/ to cur/, so one can go mid-copy.
-        const captured = await captureUnlessGone(
-            source,
+    const taken = new Set(tree.files);
+    const capture = (rel: string) =>
+        captureUnlessGone(
+            Bun.file(path.join(home.homeDir, rel)),
             path.join(folder, ARCHIVE_HOME_DIR, rel),
             archiveHomePath(rel),
         );
+    for (const [index, rel] of tree.files.entries()) {
+        let captured = await capture(rel);
+        const renamed = captured ? null : renamedMessage(home.homeDir, rel);
+        if (renamed && !taken.has(renamed)) {
+            taken.add(renamed);
+            captured = await capture(renamed);
+        }
         if (captured) entries.push(captured);
         onProgress?.('home files', index + 1, tree.files.length);
     }

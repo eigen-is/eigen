@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -255,8 +255,31 @@ describe('Backup capture modes', () => {
         expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
-    // A mail client's first look moves a message from new/ to cur/, so one can go mid-capture.
-    test('a Maildir message moved between the listing and its copy is left out, not a failure', async () => {
+    // A mail client's first look moves a message from new/ to cur/, and a flag change renames it inside cur/.
+    test.each([
+        ['new/2-moving.eigen', 'cur/2-moving.eigen:2,S'],
+        ['cur/3-flagged.eigen:2,', 'cur/3-flagged.eigen:2,FS'],
+    ])('a Maildir message renamed from %s to %s mid-capture is taken under its new name', async (from, to) => {
+        const source = join(home.homeDir, MAILDIR_ROOT, from);
+        const target = join(home.homeDir, MAILDIR_ROOT, to);
+        await Bun.write(source, 'Subject: Renamed\r\n\r\nbody');
+        const capture = captureModule.captureFile;
+        const spy = spyOn(captureModule, 'captureFile').mockImplementation(async (bytes, destPath, relPath) => {
+            if (relPath === `${MAILDIR}/${from}`) renameSync(source, target);
+            return capture(bytes, destPath, relPath);
+        });
+        try {
+            const { manifest, folder } = await snapshotInto(home, 'full');
+            expect(entryPaths(manifest)).not.toContain(`${MAILDIR}/${from}`);
+            expect(readFileSync(join(folder, MAILDIR, to), 'utf8')).toBe('Subject: Renamed\r\n\r\nbody');
+            expect((await verifyFolder(folder)).status).toBe('verified');
+        } finally {
+            spy.mockRestore();
+            rmSync(target, { force: true });
+        }
+    });
+
+    test('a Maildir message gone between the listing and its copy is left out, not a failure', async () => {
         const gone = join(home.homeDir, 'eigen.mail/Maildir/new/1-vanishing.eigen');
         await Bun.write(gone, 'Subject: Moved\r\n\r\nbody');
         const { manifest, folder } = await snapshotWhileVanishing(gone, `${MAILDIR}/new/1-vanishing.eigen`);
