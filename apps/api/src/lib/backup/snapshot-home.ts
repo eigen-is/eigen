@@ -31,7 +31,13 @@ import {
     buildHomeFolderName,
     requireBackableOwner,
 } from './paths';
-import { flushOpenDocumentDbs, snapshotMountData, snapshotMountStaging, snapshotMountThumbs } from './snapshot-mount';
+import {
+    flushOpenDocumentDbs,
+    pruneUnreachableRows,
+    snapshotMountData,
+    snapshotMountStaging,
+    snapshotMountThumbs,
+} from './snapshot-mount';
 
 export type SnapshotProgress = (step: string, done: number, total: number) => void;
 
@@ -182,6 +188,7 @@ export async function snapshotHome(
         ([id]) => !mounts.some((mount) => mount.id === id),
     );
     const mountSummaries: BackupManifest['mounts'] = [];
+    const warnings: string[] = [];
 
     // One mount: its metadata.db, what the level takes of its files, and its summary. Full leaves an s3 mount's
     // objects to its bucket's versioning and takes its staged uploads; Light reads no storage, so it gets no Mount.
@@ -191,12 +198,16 @@ export async function snapshotHome(
         if (stagedOnly) await flushOpenDocumentDbs(mount);
         const relMetadata = `${PATHS.DRIVE.ROOT}/${config.id}/${PATHS.DRIVE.METADATA_DB}`;
         await stageDatabase(MOUNT_DB_CONFIG, relMetadata);
+        // Before the walk, which reads its rows from the copy, so nothing below meets a row it cannot place. Kept
+        // apart until the mount is whole: a disabled mount that fails later is skipped, warnings and all.
+        const pruned = pruneUnreachableRows(config.id, stagedPath(relMetadata));
+        const mountWarnings = pruned ? [pruned] : [];
         const mountEntries: BackupEntry[] = [];
         if (mount) {
             const relFiles = archiveMountPath(mount.id, stagedOnly ? PATHS.DRIVE.STAGING_DIR : PATHS.DRIVE.DATA_DIR);
             const relThumbs = archiveMountPath(mount.id, PATHS.DRIVE.THUMBS_DIR);
             const data = stagedOnly
-                ? await snapshotMountStaging(mount, path.join(folder, relFiles), relFiles)
+                ? await snapshotMountStaging(mount, stagedPath(relMetadata), path.join(folder, relFiles), relFiles)
                 : await snapshotMountData(
                       mount,
                       stagedPath(relMetadata),
@@ -211,10 +222,12 @@ export async function snapshotHome(
                 data.pathIds,
             );
             mountEntries.push(...data.entries, ...thumbs);
+            if (data.warning) mountWarnings.push(data.warning);
             databases += data.databases;
         }
         await recordDatabase(relMetadata);
         entries.push(...mountEntries);
+        warnings.push(...mountWarnings);
         mountSummaries.push({
             id: config.id,
             storageType: config.storageType,
@@ -340,6 +353,7 @@ export async function snapshotHome(
         level,
         mounts: mountSummaries,
         entries,
+        ...(warnings.length > 0 && { warnings }),
     };
     await Bun.write(path.join(folder, ARCHIVE_MANIFEST_FILE), JSON.stringify(manifest, null, 2));
     onProgress?.('done', 1, 1);

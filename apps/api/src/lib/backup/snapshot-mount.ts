@@ -2,14 +2,13 @@ import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupEntry } from '@workspace/lib/types/backup';
-import { eq } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { withDocumentDb } from '../mount/document-db';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { errnoOf, eventLoopTurn, isMissingObjectCause } from '../storage';
 import { stageManagedDbCopy } from '../versioning/snapshot';
-import { archivePath, managedDbContainer, readMountPathRows } from './archive-layout';
+import { archivePath, managedDbContainer, readMountPathRows, unreachableRows } from './archive-layout';
 import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
 import type { SnapshotProgress } from './snapshot-home';
 
@@ -55,8 +54,43 @@ function readArchivedRows(metadataPath: string) {
 }
 
 // One mount's data tree in an archive: the entries written, how many of them are Eigen's own
-// databases (a user's `notes.db` upload is a file), and the ids the thumbnails are keyed by.
-type MountSnapshot = { entries: BackupEntry[]; databases: number; pathIds: Set<string> };
+// databases (a user's `notes.db` upload is a file), the ids the thumbnails are keyed by, and what it lacks.
+type MountSnapshot = { entries: BackupEntry[]; databases: number; pathIds: Set<string>; warning?: string };
+
+// A handful of names tells the admin what is missing; the log names them all.
+const WARNING_NAMES = 5;
+
+function warningOf(mountId: string, what: string, names: string[]): string {
+    const more = names.length > WARNING_NAMES ? ` and ${names.length - WARNING_NAMES} more` : '';
+    return `mount ${mountId}: ${what}: ${names.slice(0, WARNING_NAMES).join(', ')}${more}`;
+}
+
+// A salvaged or hand-edited table can hold rows whose parent chain ends at a missing row or in a cycle. No path is
+// theirs, so the archive's copy drops them before anything reads it, as a live delete would, and the backup goes on
+// with a warning. A table whose root row is gone holds nothing that can be placed. The live table is never touched.
+export function pruneUnreachableRows(mountId: string, metadataPath: string): string | null {
+    const db = new Database(metadataPath, { readwrite: true, create: false });
+    try {
+        const rows = readMountPathRows(db);
+        const unreachable = unreachableRows(rows);
+        if (unreachable.length === 0) return null;
+        if (unreachable.length === rows.length) throw new Error(`mount ${mountId}: the table has no root row`);
+        db.run('PRAGMA foreign_keys = ON');
+        db.run('DELETE FROM paths WHERE id IN (SELECT value FROM json_each(?))', [
+            JSON.stringify(unreachable.map((row) => row.id)),
+        ]);
+        console.warn(
+            `[backup] mount ${mountId}: left out unreachable rows ${unreachable.map((row) => row.id).join(', ')}`,
+        );
+        return warningOf(
+            mountId,
+            "entries that do not reach the drive's root, left out",
+            unreachable.map((row) => row.name),
+        );
+    } finally {
+        db.close();
+    }
+}
 
 // Copy every file the archived `metadata.db` copy knows about into `targetDir`, at the path its row gives, from
 // wherever the live mount keeps it now: a rename, move or trash since the copy changes the key, not the archive path.
@@ -74,16 +108,22 @@ export async function snapshotMountData(
 
     const fileRows = rows.filter((row) => row.type === 'file');
     const entries: BackupEntry[] = [];
-    // The rows whose bytes are in the archive.
+    // The rows whose bytes are in the archive, and those with bytes on record that storage has no object for.
     const held = new Set<string>();
+    const lost: string[] = [];
     let databases = 0;
     for (const [index, row] of fileRows.entries()) {
         await eventLoopTurn();
         const relPath = archivePath(row, byId);
         const destPath = path.join(targetDir, relPath);
         const entryPath = `${relPrefix}/${relPath}`;
-        const lostObject = (size: number, storageKey: string) =>
-            new Error(`mount ${mount.id}: ${relPath} has ${size} bytes on record but no object at ${storageKey}`);
+        // The row stays, with no bytes, which a restore mirrors.
+        const recordLost = (size: number, storageKey: string) => {
+            lost.push(relPath);
+            console.warn(
+                `[backup] mount ${mount.id}: ${relPath} has ${size} bytes on record but no object at ${storageKey}`,
+            );
+        };
         // Deleted for good since the copy: there are no bytes to take, and its row leaves the archive after the walk.
         const isGone = async () => !(await mount.getPath(row.id));
 
@@ -118,7 +158,7 @@ export async function snapshotMountData(
                 databases++;
             } else {
                 const live = await mount.getPath(sourceId);
-                if (live?.size) throw lostObject(live.size, await mount.getStorageKey(sourceId));
+                if (live?.size) recordLost(live.size, await mount.getStorageKey(sourceId));
             }
         } else {
             // Path lock, then shared: an overwrite rewrites the file in place, so it and the copy wait for each other,
@@ -133,7 +173,7 @@ export async function snapshotMountData(
                     // record mirrors that absence.
                     const file = await mount.readKey(storageKey).catch(fail);
                     if (!file) {
-                        if (live.size && !(await isGone())) throw lostObject(live.size, storageKey);
+                        if (live.size && !(await isGone())) recordLost(live.size, storageKey);
                         return null;
                     }
                     return captureFile(file, destPath, entryPath, true).catch(async (error: unknown) => {
@@ -149,6 +189,11 @@ export async function snapshotMountData(
             }
         }
         onProgress?.('mount files', index + 1, fileRows.length);
+    }
+    // A store with holes is archived with them; one that holds no object at all is an outage that reads as missing
+    // objects: an unmounted disk or an unreadable folder answers exists() with false, a wrong bucket answers a HEAD 404.
+    if (lost.length > 0 && held.size === 0) {
+        throw new Error(`mount ${mount.id}: storage unreachable, it holds no object for any file with bytes on record`);
     }
 
     // The archive lists no file it holds no bytes for: a row deleted for good since the copy leaves the archived
@@ -189,7 +234,15 @@ export async function snapshotMountData(
         }
     }
     const left = gone.size > 0 ? readArchivedRows(metadataPath) : rows;
-    return { entries, databases, pathIds: new Set(left.filter((row) => row.type === 'file').map((row) => row.id)) };
+    return {
+        entries,
+        databases,
+        pathIds: new Set(left.filter((row) => row.type === 'file').map((row) => row.id)),
+        warning:
+            lost.length > 0
+                ? warningOf(mount.id, 'files with no object in storage, archived without their bytes', lost)
+                : undefined,
+    };
 }
 
 // A metadata-only capture of an s3 mount reads no object, so an open document's newest commits reach
@@ -205,9 +258,14 @@ export async function flushOpenDocumentDbs(mount: Mount): Promise<void> {
 
 // The rest of a metadata-only capture: staging/ as it stands, the bytes the bucket does not have yet,
 // under the names the pending rows of metadata.db give them. Nothing counts as a database: a staged
-// copy is a payload for the upload queue, not one this server opens. The ids are the file rows',
-// which the thumbnails are keyed by.
-export async function snapshotMountStaging(mount: Mount, targetDir: string, relPrefix: string): Promise<MountSnapshot> {
+// copy is a payload for the upload queue, not one this server opens. The ids are the file rows' of
+// the archived metadata.db, which the thumbnails are keyed by.
+export async function snapshotMountStaging(
+    mount: Mount,
+    metadataPath: string,
+    targetDir: string,
+    relPrefix: string,
+): Promise<MountSnapshot> {
     const entries: BackupEntry[] = [];
     if (fs.existsSync(mount.stagingDir)) {
         for (const entry of fs.readdirSync(mount.stagingDir, { withFileTypes: true })) {
@@ -225,7 +283,7 @@ export async function snapshotMountStaging(mount: Mount, targetDir: string, relP
             if (captured) entries.push(captured);
         }
     }
-    const rows = await mount.db.select({ id: paths.id }).from(paths).where(eq(paths.type, 'file')).all();
+    const rows = readArchivedRows(metadataPath).filter((row) => row.type === 'file');
     return { entries, databases: 0, pathIds: new Set(rows.map((row) => row.id)) };
 }
 

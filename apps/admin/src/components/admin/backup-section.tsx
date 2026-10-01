@@ -279,6 +279,12 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
                     Skipped mount {mount.id}: {mount.skipped}
                 </p>
             ))}
+            {/* Still restorable: what it lacks, the live home cannot serve either. */}
+            {artifact.manifest?.warnings?.map((warning) => (
+                <p key={warning} className="text-xs text-warning pl-7">
+                    {warning}
+                </p>
+            ))}
             <VerifyFailures verify={artifact.verify} />
         </BackupArtifactRow>
     );
