@@ -1,6 +1,14 @@
 # File Previews and File Actions
 
-> **TLDR:** The API renders previews of Drive files and mail parts in `apps/api/src/lib/preview/`. Every surface that shows a file acts on it through one `FileSubject`, one registry of actions (`FILE_ACTIONS`) and one runner; the quick-look overlay is one more host of those rows. Not obvious: a cached preview is keyed by the file's version and a format tag you bump on every change of shape; a new version serves the old body while it regenerates; an Eigen document previews a slice inside the transform Worker; no preview may fetch a URL the file chose; and the host mounts the runner's dialogs, because a menu unmounts on close.
+> **TLDR:** Two things live together: the previews the API renders of Drive files and mail parts (`apps/api/src/lib/preview/`), and the one set of actions every surface offers on a file, the quick-look overlay included (`packages/lib/src/core/file-actions.ts` and `packages/ui/src/components/file-actions/`). Not obvious: a cached preview is keyed by the file's version and a format tag you bump on every change of shape; a new version serves the old body while it regenerates; an Eigen document previews only a slice, inside the document-transform Worker; no preview may fetch a URL the file chose; and the surface that draws a menu mounts the action dialogs, because a menu unmounts on close.
+
+A preview is what a user sees of a file without opening it in its app: a tile in a Drive grid, the hero at the top of Drive's detail column, and the quick-look overlay that Space or Quick preview opens over a list. The server renders every preview and the browser only shows it, so every surface draws the same result. A Drive preview is cached in a folder of its mount and is never the truth: any of them can be thrown away and rendered again from the file.
+
+The same file shows up in many places: a Drive listing, the mail reader, a chat message, a stickies card. Each place offers the same actions on it, such as Quick preview, Download, Save to Drive, the converts and the imports. So a file is passed around as a file subject (`FileSubject`), which holds only what identifies it: a Drive path, or a mail message and the index of one of its parts. Everything else is derived from that. One registry, `FILE_ACTIONS`, lists the actions, and each one decides from the subject alone whether it applies. The file-action runner performs one, and the host, the surface that draws the menu, mounts the dialogs a row opens.
+
+Two more terms come back. A format tag names the shape of a renderer's output and is part of the cache key. A slice is the part of an Eigen document a preview renders: its first blocks, slides or rows.
+
+The sections run from the server to the screen: what each kind of file previews as, the cache and how a browser revalidates it, text and Eigen-document bodies, images, mail parts, the `.vcf`, `.eml` and `.ics` quick looks and how the client draws a body. Then file subjects, the action registry and its runner, Save to Drive, and the overlay and its keys.
 
 ## Each kind of file gets one kind of preview
 
@@ -34,7 +42,7 @@ The `/text-preview` URL carries `updatedAt` as a query parameter. Both the brows
 
 When the current version is a miss but an older one is cached, `getOrCacheText` serves the older body at once, marked `Cache-Control: no-store`, and regenerates the current one in the background. A failed regeneration leaves the old file in place, and a later request retries. Only an older body in the current format qualifies: a body from another format has another shape, and the client would lay it out wrong.
 
-Generations are shared per cache name, the first one and the background one alike. A folder of twenty tiles for one just-edited document triggers one render, not twenty. A first miss runs at foreground priority in the transform runner. A background regeneration may be dropped under load, which is safe because the next request enqueues it again.
+Generations are shared per cache name, the first one and the background one alike. A folder of twenty tiles for one just-edited document triggers one render, not twenty. A first miss runs at foreground priority in the document-transform runner ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). A background regeneration may be dropped under load, which is safe because the next request enqueues it again.
 
 `useTextPreview` has a 30 s `staleTime`. After it, the next window focus or remount fetches again and picks up the fresh body the server has written by then.
 
@@ -65,7 +73,7 @@ The caps count units, and one enormous block passes all of them. So `applyPrevie
 
 ## No preview body may fetch a URL the file chose
 
-A body renders as live DOM in the viewer's browser. A collaborator's `<img src=https://…>` or `url(https://…)` would tell a third party who opened the folder. So every HTML body passes `sanitizeExportHtml`, which keeps only `data:` URIs and the media URLs the main thread prepared (`allowedRefs`). Markdown takes the same pass. A canvas body is filtered twice: each rich-text box through `sanitizeSceneHtml` before the compositor (the server renderer that turns a scene into HTML, [EXPORT.md](EXPORT.md)) runs, then the assembled page, so the compositor's own media hrefs and gradient refs survive.
+A body renders as live DOM in the viewer's browser. A collaborator's `<img src=https://…>` or `url(https://…)` would tell a third party who opened the folder. So every Eigen-document body and every markdown body passes `sanitizeExportHtml`, which keeps only `data:` URIs and the media URLs the main thread prepared (`allowedRefs`). A code or plain-text body is HTML-escaped instead (`text-preview.ts`), so it holds no tag of the file's own. A canvas body is filtered twice: each rich-text box through `sanitizeSceneHtml` before the compositor (the server renderer that turns a scene into HTML, [EXPORT.md](EXPORT.md)) runs, then the assembled page, so the compositor's own media hrefs and gradient refs survive.
 
 An SVG is served as its own bytes under the sandbox CSP, not rasterised. An `eigen-media:` image inside it is inlined as a `data:` URI first (`svg-media-inline.ts`), because an SVG shown in an `<img>` never fetches a reference.
 
@@ -115,7 +123,7 @@ The mail parser bounds neither the size of a body nor its references, so the bui
 
 The builder runs the one parser, `parseIcs` ([CALENDAR.md](CALENDAR.md)), on a strict UTF-8 decode. It lists **masters only**: an override and the cancelled row an EXDATE becomes are parts of a series the master's `rrule` already describes. An override whose master the file lacks attaches to nothing a card can show, so it counts as dropped. So does an event dated outside the years 1 to 9999, which `toISOString` would spell as an invalid date.
 
-Nothing in the payload is relative to now, because it is cached per file version. `start` and `end` are strings: an instant, or a bare date with the exclusive end the calendar stores for an all-day event. The quick look and the drive hero (the preview at the top of Drive's detail column, `drive-preview.tsx`) turn them into `Date`s where they draw them.
+Nothing in the payload is relative to now, because it is cached per file version. `start` and `end` are strings: an instant, or a bare date with the exclusive end the calendar stores for an all-day event. The quick-look overlay and the drive hero (the preview at the top of Drive's detail column, `drive-preview.tsx`) turn them into `Date`s where they draw them.
 
 The payload copies named event fields (`previewEvent`), so an ATTACH, a URL or a directory reference in the file never reaches a card. An organizer or attendee is listed only as a plain address. A CAL-ADDRESS is a URI, and the card writes a `mailto:` link from it, so `javascript:…` or an address with a `?` is left out. `EventDetailCard` is the same card the calendar's detail dialog renders, so a file's event reads like a stored one.
 
@@ -156,7 +164,7 @@ Save to Drive declines a Drive file that isn't an attachment, because Drive's ow
 
 ## The host mounts the runner's dialogs
 
-`useFileActionRunner(subject, siblings?, exclude?)` performs a row. `FileActionMenuItems` draws the rows as menu items and takes the runner rather than building one. A menu's content unmounts when it closes, so the picker a row opens must live above it: the host renders `runner.dialogs` once. The rows come from `runner.subject`, so a host can't pair one menu with another's subject.
+`useFileActionRunner(subject, siblings?, exclude?)`, the file-action runner, performs a row. `FileActionMenuItems` draws the rows as menu items and takes the runner rather than building one. A menu's content unmounts when it closes, so the picker a row opens must live above it: the host renders `runner.dialogs` once. The rows come from `runner.subject`, so a host can't pair one menu with another's subject.
 
 The subject may be `null` for a host whose subject is state, like the right-clicked chip. What a picker acts on is snapshotted when the row runs, because the menu that drew the row is closed by the time the picker is confirmed.
 
