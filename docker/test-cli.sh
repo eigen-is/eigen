@@ -457,7 +457,7 @@ log "full $full_size bytes, light $light_size bytes: $(awk -v l="$light_size" -v
 # What is on disk is the files, what the listing shows is the drive's database.
 files() {
     { scratch_run ls "$INSTALL/data/home/$ADMIN_ID/mounts/default/data" 2>/dev/null || true; } |
-        grep -v -e '-wal$' -e '-shm$' | tr '\n' ' ' || true
+        grep -v -e '-wal$' -e '-shm$' || true
 }
 before=$(files)
 api POST "$FOLDER/$root_id/create/doc" '{"fileName":"Made after the light backup"}' >/dev/null
@@ -470,13 +470,12 @@ if [ "$CODE" = 0 ] && stack_up && ! printf '%s' "$listing" | grep -q '"Made afte
 else
     fail "the light restore: exit $CODE, listing $listing"
 fi
-after=$(files)
-kept=1
-for file in $before; do case " $after" in *" $file "*) ;; *) kept=0 ;; esac; done
-if [ "$kept" = 1 ] && [ "$(aside_count)" = $((aside + 1)) ]; then
+# Names hold spaces, so they compare line by line.
+lost=$(printf '%s\n' "$before" | grep -vxF -e "$(files)" || true)
+if [ -z "$lost" ] && [ "$(aside_count)" = $((aside + 1)) ]; then
     ok "and leaves the files on disk as they are, with what it replaced kept aside"
 else
-    fail "files after the light restore: '$after', before the document '$before'; kept aside $(aside_count), was $aside"
+    fail "files after the light restore: lost '$lost'; kept aside $(aside_count), was $aside"
 fi
 
 ##############################################################################
