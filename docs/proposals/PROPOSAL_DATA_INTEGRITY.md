@@ -2,7 +2,7 @@
 
 This proposal adds checks that find damaged data before a user does: a cheap validity check wherever new bytes replace good ones (a write seam), a paced background sweep for corruption, a check that a backup or version snapshot really decodes, and an alert when something is found. It is the design for the P0 row "Data integrity + verified backups" in [ROADMAP.md](../ROADMAP.md), effort M.
 
-**Status:** partly built. Seam F is built: `materializeYjsState` (the `replayYjsState` of the design below) returns `blobsSkipped` and `readYjsStateFromFile` throws `ApiError(422, 'Snapshot is corrupted…')`, so a restore from a snapshot with unreadable Yjs blobs aborts instead of silently degrading (`../../apps/api/src/lib/collab/yjs-loader.ts`). The Phase 1 regression test "restore from a corrupt snapshot fails 422 and leaves the live doc untouched" pins it (`../../apps/api/src/test/storage/versioning.test.ts`), and the skip count is the signal Phase 3's semantic verification builds on. Phase 5, the verified whole-server backup, is built as `eigen backup`, which [BACKUP.md](../BACKUP.md) describes.
+**Status:** partly built. Seam F is built: `materializeYjsState` returns `blobsSkipped` and `readYjsStateFromFile` throws `ApiError(422, 'Snapshot is corrupted…')`, so a restore from a snapshot with unreadable Yjs blobs aborts instead of silently degrading (`../../apps/api/src/lib/collab/yjs-loader.ts`). The Phase 1 regression test "restore from a corrupt snapshot fails 422 and leaves the live doc untouched" pins it (`../../apps/api/src/test/storage/versioning.test.ts`), and the skip count is the signal Phase 3's semantic verification builds on. Phase 5, the verified whole-server backup, is built as `eigen backup`, which [BACKUP.md](../BACKUP.md) describes.
 
 Still to build: there is no `lib/integrity/`, and the scheduler registers only `guest-cleanup` and the nightly server backup. Phase 1 is down to seams A, C, E and G, the post-ack size verify (B), and moving `isSqliteFile` into `lib/integrity/`. Phases 2 to 4 are untouched. The storage-audit fixes of 2026-07-06 overlap only as *reactive* guards (audit item 9 closed the failed-read half of seam E, see §1). Written 2026-07-05 and checked against the code on 2026-08-04.
 
@@ -97,7 +97,7 @@ What already exists, so the design extends rather than reinvents:
   snapshot into a mount temp (`writeTempWithHash`) *before* the delete, so a failed source read
   leaves `data.db` intact, but it still validates nothing about the bytes it stages;
   `restoreContainer` does Yjs surgery for collab types via `readYjsStateFromFile`. The Yjs path
-  decodes (an implicit probe) and — since seam F shipped — `replayYjsState`
+  decodes (an implicit probe) and — since seam F shipped — `materializeYjsState`
   (`lib/collab/yjs-loader.ts`) returns `blobsSkipped`, on which `readYjsStateFromFile` throws
   `ApiError(422)`: a snapshot that lost updates now fails the restore loudly instead of "restoring
   fine" as a half-empty doc.
@@ -146,7 +146,7 @@ good bytes**, and its cost is proportional to seam frequency.
 | **C. Local synchronous sync** | the non-queue branch of `onSync` in `document-db.ts` (path-based `local` mounts call `mount.uploadFromTemp` directly) | Partial temp copy overwriting the stored file | `isSqliteFile` on the live temp (`getTempPath(pathId)`) before the `uploadFromTemp` call. NOT inside `Mount.uploadFromTemp` itself — that is a general-purpose upload also used by `createFileFromTemp`/`writeFileFromTemp` for plain, non-SQLite user files | **Always** |
 | **D. Version snapshot creation** | `snapshotContainerDataDb` → `copyPath` / `stageDataDbSnapshot` | Archiving garbage — and retention then *pruning the good snapshots* to make room for it | `PRAGMA quick_check` on the new snapshot copy + semantic verify (§3), async off the container lock | Snapshots fire per `writesPerSnapshot` (100) — infrequent. **Always**, async |
 | **E. Restore replacement** | `replaceContainerDataDb` (chat path). Post-audit-item-9 the replacement is already staged via `writeTempWithHash` *before* the delete, which closes the failed-read half of this seam | A snapshot that *reads* fine but holds truncated/corrupt bytes replacing the live `data.db` | `isSqliteFile` + `quick_check` + expected tables present (`messages`) on the staged temp (`mount.getTempPath(tempId)`), after `writeTempWithHash` and before `closeDatabase`/`deletePath` run | Rare, user-triggered. **Always** |
-| **F. Restore decode (collab)** — **shipped 2026-07-13** (`16faf466`) | `restoreContainer` → `readYjsStateFromFile` | `replayYjsState` silently skipping corrupt blobs → restore "succeeds" into a half-empty doc | Surface the skip count from `replayYjsState`; a restore whose source skipped blobs fails loud (`ApiError(422)`) instead of silently degrading | **Always** |
+| **F. Restore decode (collab)** — **shipped 2026-07-13** (`16faf466`) | `restoreContainer` → `readYjsStateFromFile` | `materializeYjsState` silently skipping corrupt blobs → restore "succeeds" into a half-empty doc | Surface the skip count from `materializeYjsState`; a restore whose source skipped blobs fails loud (`ApiError(422)`) instead of silently degrading | **Always** |
 | **G. Container copy** | `Mount.copyPath` / `copyPathAcross` (container `data.db` children) | A truncated S3 GET on the bridge copy producing a corrupt duplicate | `isSqliteFile` on the copied `data.db` bytes; size vs source row as sanity | Rare. **Always** |
 | **H. Crash-temp adoption** | already guarded — `mustExist` + `isViableRecoveryTemp` | The 2026-06-08 class | No change; pin with tests (§ Testing) | — |
 
@@ -259,7 +259,7 @@ immutable archive). Steps:
 
 1. `isSqliteFile` + `PRAGMA quick_check`.
 2. **Collab types** (`doc/stickies/slides/sheets`): replay into a fresh `Y.Doc` via the yjs-loader
-   path, with `replayYjsState` extended to *return* its corrupted-blob skip count — a verification
+   path, with `materializeYjsState` extended to *return* its corrupted-blob skip count — a verification
    that ignores skipped blobs would pass a half-lost snapshot. Then force-type the declared roots
    from `EIGEN_DOC_TYPE_INFO[type].yjsRoots` (the `restoreYjsDoc` idiom — `instanceof` on
    `applyUpdate`-hydrated roots misclassifies; `_start != null` is the presence check) and measure
@@ -363,7 +363,7 @@ Each phase ships independently; the cheapest highest-value check goes first.
    quick_check over home DBs + metadata.db, the permanent orphaned-container scan, stuck
    `pending_uploads`, local presence/size, orphan-home detection; `integrity-state.json` dedup +
    org-owner notifications. Everything reads what already exists.
-3. **Semantic verification (M).** `verifySnapshotDb` + `replayYjsState` skip-count return +
+3. **Semantic verification (M).** `verifySnapshotDb` + `materializeYjsState` skip-count return +
    verify-at-snapshot-creation (seam D) + the sweep's paced deep tier with the
    `integrityCheckedAt` migration and per-destination HEAD budgets.
 4. **Reverse scan (S).** Optional `StorageBackend.list?()` (Bun `S3Client` listing + local readdir);

@@ -22,7 +22,7 @@ The backend builds each event in `apps/api/src/lib/[domain]/sse-events.ts` and e
 
 ## Toasts come only from the notification center
 
-A domain handler never toasts. `NotificationCenter.persist()` writes the notification to the user's `notifications.db` and broadcasts `notification:created`, which carries the toast text and the type and tag its **View** action resolves with `resolveNotificationLink`, the same link the bell uses. `notification:changed` carries nothing and tells the bell to refetch after a read or dismiss. So a toast always has a row in the bell behind it ([NOTIFICATIONS.md](NOTIFICATIONS.md), [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md)).
+A domain handler never toasts. The toast comes from `notification:created`, which the notification center broadcasts after it writes the row, so a toast always has a row in the bell behind it ([NOTIFICATION-CENTER.md § Notifications and domain events are separate broadcasts](NOTIFICATION-CENTER.md#notifications-and-domain-events-are-separate-broadcasts), [NOTIFICATIONS.md](NOTIFICATIONS.md)).
 
 ## A backup job's event is only a nudge
 

@@ -23,7 +23,7 @@ The 1.4 release post also says Bun is now written in Rust and that 1.4 is the fi
 
 | Bun API | Replaces | Where | Effort | Notes |
 |---|---|---|---|---|
-| `Bun.XML` (1.4.0) | `fast-xml-parser` | 5 backend files, e.g. `apps/api/src/lib/webdav/propfind.ts`, `apps/api/src/lib/carddav/xml-parser.ts` | M | Removes a backend dependency. Attributes come out as `@name` keys, and WebDAV/CardDAV lean on XML namespaces, so every parser and its tests change. Check namespace handling against the DAV test suites before starting. |
+| `Bun.XML` (1.4.0) | `fast-xml-parser` | 5 backend files, e.g. `apps/api/src/lib/dav/propfind.ts`, `apps/api/src/lib/carddav/xml-parser.ts` | M | Removes a backend dependency. Attributes come out as `@name` keys, and WebDAV/CardDAV lean on XML namespaces, so every parser and its tests change. Check namespace handling against the DAV test suites before starting. |
 | `Bun.markdown` (1.3.8) | `markdown-it` | `apps/api/src/lib/preview/text-preview.ts` | S | Its HTML output is not sanitized; route it through the existing DOMPurify path. The `apps/index` build (`scripts/lib/render-markdown.ts`) also uses `markdown-it-anchor` for heading ids, so that side needs its own heading-id pass or stays on markdown-it. |
 | `Bun.cron` (1.3.11) | the `setInterval` wrapper | `apps/api/src/lib/scheduler/scheduler.ts` | S | Only when a job needs a wall-clock schedule ("03:00 UTC daily"); the file's header already says so. Jobs never overlap, and there is a `tz` option. |
 | `Bun.YAML` | `gray-matter` | `apps/index/scripts/lib/frontmatter.ts` | S | Build tooling only: split the frontmatter block and parse it with `Bun.YAML`. |

@@ -5,7 +5,7 @@ type: troubleshooting
 tags: [drive, preview, permissions, access, troubleshooting]
 related: [drive/request-access, drive/preview-a-file, drive/use-the-trash]
 order: 210
-updated: 2026-09-20
+updated: 2026-10-01
 ---
 
 If clicking a file does nothing, shows an error, or gives you a "No preview available" message, one of a few
@@ -41,6 +41,10 @@ To work with the file:
 - Click **Open** in the footer of the preview to open it in the editor, if applicable.
 - Right-click the file (or click its **⋮** button) and choose **Download** to save it to your computer, then
   open it with a suitable application.
+
+## You see "This file is too large to preview."
+
+Drive shows a text or code file of more than 1 MB without its preview. If you can edit the file, click **Edit** to see and change its text. That works for files up to 5 MB. You can always download the file and open it on your computer.
 
 ## The file opens in the wrong place
 

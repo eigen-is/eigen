@@ -32,7 +32,7 @@ Team routes (`apps/api/src/routes/team.ts`) use two guards from `apps/api/src/li
 
 ## Every team route takes the prefixed team id
 
-Team routes take `:ownerId` in its `team_{teamId}` form, not the bare team id. Pass a bare id and `parseOwnerId` reads it as a *user* id, so a route that loads the team home (settings, mounts) fails on a missing user (or 400s on a malformed id). The members route and the two avatar routes only read the id after the prefix (`teamId()` in `apps/api/src/routes/team.ts`), so they answer a bare id too, with the same access check. Build the segment with `teamOwnerId(teamId)`. `useTeamMembers(teamId)` (`packages/lib/src/core/team/hooks/`) takes the raw id and wraps it itself.
+Team routes take `:ownerId` in its `team_{teamId}` form, not the bare team id. Every route parses it first (`teamId()` in `apps/api/src/routes/team.ts`) and answers 400 to an id that is not a team id, since `parseOwnerId` reads a bare id as a *user* id. Build the segment with `teamOwnerId(teamId)`. `useTeamMembers(teamId)` (`packages/lib/src/core/team/hooks/`) takes the raw id and wraps it itself.
 
 ## A team drive starts empty and its calendar starts off
 

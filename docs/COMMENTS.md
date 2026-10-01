@@ -61,7 +61,7 @@ Removing an attachment leaves its file in `media/` on purpose, like an inline im
 
 ## A thread's index row is seeded at creation and healed on write
 
-`Drive.create` seeds the row when a chat is created inside a container's `chat/` folder (`seedCommentRow`). A standalone chat has no container and gets no row. `ensureComment` is an upsert that fills `createdBy` only while it is null, so any writer may call it. Posting a message calls it, and so does an assignment, so a thread with no row heals on its first message or assignment. A status write does not call it. On a thread with no row, `setCommentStatus` updates nothing, yet it still records the resolved or reopened activity row and the route still sends the index event, so the resolve is lost while everyone is told it happened ([ROADMAP.md](ROADMAP.md)). The frontend treats a missing row as open and unassigned (`matchesCommentFilter`), so a card is usable before its row exists.
+`Drive.create` seeds the row when a chat is created inside a container's `chat/` folder (`seedCommentRow`). A standalone chat has no container and gets no row. `ensureComment` is an upsert that fills `createdBy` only while it is null, so any writer may call it. Posting a message, an assignment and a status write all call it, so a thread with no row heals on its first message, assignment, resolve or reopen. A resolve on such a thread creates the row before it writes the status, so the activity row and the index event never report a change the index lacks. The frontend treats a missing row as open and unassigned (`matchesCommentFilter`), so a card is usable before its row exists.
 
 A status or assignee write first checks that the name resolves to a real `.eigenchat` under the container's `chat/` folder (`assertCommentChatExists`), and answers 404 otherwise. Without it a writer could mint a row, an activity row and a dead-link notification for a thread that does not exist. Both writes need write access, through the `SharedDrive` wrappers of `Drive.setCommentStatus` and `Drive.assignComment`.
 
@@ -93,7 +93,7 @@ Adding a comment opens the form client-side; the server is touched only on Save.
 
 ## The pane hides the editor, never unmounts it
 
-`PanelColumn` is the comments and activity pane on every viewport: one `Column` with id `panel` whose toolbar carries the title, the filter and the close control. `useDocumentPanels` holds the open panel in one slot, so comments and activity are never both open. Mount the pane outside any `<ColumnLayout mobileColumn="…">`. A `Column` whose id does not match hides itself, so a wrapped pane never shows, silently.
+`PanelColumn` is the comments and activity pane on every viewport: one `Column` with id `panel` whose toolbar carries the title, the filter and the close control. `useDocumentPanels` holds the open panel in one slot, so comments and activity are never both open. A pane row shows the comment's anchor text, and the card's title when it has none; the card dialog shows the title. Mount the pane outside any `<ColumnLayout mobileColumn="…">`. A `Column` whose id does not match hides itself, so a wrapped pane never shows, silently.
 
 Below the breakpoint the pane takes the whole screen. Docs, sheets and the canvas hide the editor with a `hidden` wrapper instead of unmounting it, so node views, thumbnails, scroll position, selection and undo history survive a pane visit. Two things follow:
 

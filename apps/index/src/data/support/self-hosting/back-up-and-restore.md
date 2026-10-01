@@ -100,7 +100,7 @@ In the install folder, name a backup in `backups/`, or give the path of one:
 
 `./eigen restore` then does three things:
 
-1. It checks the backup while Eigen keeps running. It shows what the backup holds, like its level, its date, and any user or team that is not in it, and asks whether to go on. Then it unpacks it, still while Eigen runs.
+1. It checks the backup while Eigen keeps running. It shows what the backup holds, like its level, its date, and any user or team that is not in it, and asks whether to go on. For a Light backup it also says what happens to the files changed since. Then it unpacks it, still while Eigen runs.
 2. It stops Eigen, moves the current `data/` and `.env.production` aside as `data.pre-restore-<date>-<time>` and `.env.production.pre-restore-<date>-<time>`, and puts the backup in their place.
 3. It starts Eigen again, on the version that made the backup.
 
@@ -122,7 +122,7 @@ To restore on a new machine, see [Move Eigen to another server](/support/self-ho
 
 ### A Light backup leaves the files where they are
 
-A Light backup holds no files and no mail. Its restore puts back the accounts, the settings, `.env.production`, and every database, and leaves the files and the mail on disk as they are now. Drive then lists what it held at the time of the backup:
+A Light backup holds no files and no mail. Its restore puts back the accounts, the settings, `.env.production`, and every database. The files and the mail stay on disk as they are now, but Drive lists only what it held at the time of the backup:
 
 - Files and documents made since the backup no longer show in Drive. Their content stays on disk.
 - On drives that store files by their names, the default **Local (Full names)**, a file renamed, moved, or put in the Trash since shows at its old place and does not open. Its content is under the new name, or in the trash folder.

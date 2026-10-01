@@ -34,7 +34,7 @@ The tag also carries the ids the link is built from, so each producer's tag deci
 | `file-event` | `FileHistory.notifyWatchers` | `file-event:{ownerId}:{mountId}:{pathId}`; burst events tag the parent folder ([FILE-HISTORY.md](FILE-HISTORY.md#notifications-coalesce-per-file-and-bursts-per-folder)) |
 | `admin-alert` | backup verify (`lib/backup/jobs.ts`), whole-server backup (`alertOwner`, `lib/backup/server-job.ts`), mail queue (`routes/internal.ts`) | `backup-verify-{ownerId}`, `server-backup-{reason}`, `mail-queue-backlog` |
 
-An unshare carries no tag, because the reader has lost access and there is nothing to link to.
+An unshare carries no tag, because the reader has lost access and there is nothing to link to. For the same reason `isClickableNotification` leaves both unshare types out, so their rows are not links.
 
 ## A coalesced persist skips the toast, not the row
 

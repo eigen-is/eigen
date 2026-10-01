@@ -86,11 +86,11 @@ A home archive holds every file and mail, the password hash, app passwords, API 
 
 **Create backup** in the Backup section of a user or team in the admin app starts a job. It captures the home into staging, verifies the folder, packs it into `home-<ownerId>-<date>-<time>.tar.zst` and writes a sidecar beside it with the manifest and the verify result. A home archive that does not verify is kept, with its failures and no Restore button, and the admin who started it gets a notification.
 
-A second job on a home while one runs gets a 409, so a backup never reads a folder a restore is writing. Job state lives in memory (`apps/api/src/lib/backup/jobs.ts`) and a finished job drops after an hour. The home archives and their sidecars are the durable record, so a restart loses nothing but the progress line. The `backup:job-updated` SSE event only tells the pane to refetch ([SSE.md § A backup job's event is only a nudge](SSE.md#a-backup-jobs-event-is-only-a-nudge)). The pane polls as well, because an admin restoring their own home gets no event while that home is offline.
+A second job on a home while one runs gets a 409, so a backup never reads a folder a restore is writing. Job state lives in memory (`apps/api/src/lib/backup/jobs.ts`) and a finished job drops after an hour. The home archives and their sidecars are the durable record, so a restart loses nothing but the progress line. A job sends `backup:job-updated` when it starts and when it ends, and the event only tells the pane to refetch ([SSE.md § A backup job's event is only a nudge](SSE.md#a-backup-jobs-event-is-only-a-nudge)). Progress has no event: the pane polls every 2 s while a job runs, which also covers an admin restoring their own home, who gets no event while that home is offline.
 
 There is no read-only window. Capturing a container's `data.db` takes that container's path lock, so a sync or close of that one document waits for one copy. Typing is not affected.
 
-A backup reaches a home through `pullHomeSnapshot` (`apps/api/src/lib/home/home-relay.ts`), and `lib/backup/` never imports `getHome`. A home the backup had to boot gets a 30 s idle (`BACKUP_RELEASE_MS`) once it is captured, so a nightly Full does not keep every home resident. It is never evicted: a user may have opened it meanwhile, and a home a request reached after the capture started keeps its normal idle.
+A backup reaches a home through `pullHomeSnapshot` (`apps/api/src/lib/home/home-relay.ts`), and `lib/backup/` never imports `getHome`. While a capture runs it touches the home once a minute, so a capture that outlasts the idle window keeps its databases open. A home the backup had to boot gets a 30 s idle (`BACKUP_RELEASE_MS`) once it is captured, so a nightly Full does not keep every home resident. It is never evicted: a user may have opened it meanwhile, and a home a request reached after the capture started keeps its normal idle.
 
 ## Verify runs in three stages
 
@@ -165,7 +165,7 @@ A home archive is a POSIX tar (pax headers for long names, empty folders include
 
 Before a per-home restore moves the home aside, it writes `restoring.json` in its staging folder, and `restore-complete.json` beside it once the install is whole. The next boot (`apps/api/src/lib/backup/recovery.ts`) reads them before the staging wipe:
 
-- Marker without the completion note: the process died in the install. The half-written folder is parked as `<id>.failed-restore-<date>-<time>` and the pre-restore copy goes back. This is the window an OOM kill lands in. It is long whenever the install copies instead of renaming (`movePath` in `apps/api/src/lib/backup/materialize-mount.ts`): always on Docker, where `data/` and `backups/` are two bind mounts and a rename between them fails, and wherever the backups folder is on another disk.
+- Marker without the completion note: the process died in the install. The half-written folder is parked as `<id>.failed-restore-<date>-<time>` and the pre-restore copy goes back. This is the window an OOM kill lands in. It is long whenever the install copies instead of renaming (`movePathAsync` in `apps/api/src/lib/backup/materialize-mount.ts`, which falls back to a copy on `EXDEV` without blocking other requests): always on Docker, where `data/` and `backups/` are two bind mounts and a rename between them fails, and wherever the backups folder is on another disk.
 - Both notes: the restore finished, and both folders stay.
 
 A marker lost to a torn write does nothing, and the home sits complete in its pre-restore copy, to rename back by hand.
@@ -181,7 +181,7 @@ Every restored database is checked against the schema this build supports, and o
 The job:
 
 1. Writes the sidecar `<archive>.json` as `running` under the archive's final name, so even a refused attempt leaves a dated record.
-2. Refuses with 507 unless the backups folder has room: twice the largest member plus the sum of all of them, uncompressed.
+2. Refuses with 507 unless the backups folder has room: twice the largest member plus the sum of all of them, uncompressed. A home it cannot size counts as zero, so one broken home does not refuse every other home's backup.
 3. Captures the server member, verifies it and packs `server.tar.zst`.
 4. Lists the homes from the `users3.db` it just captured, so accounts and homes are one moment: every non-guest user and team with a folder. A folder with no row is named in `orphans` and left out.
 5. Captures each home at the archive's level, verifies it, packs it and appends it. It waits for the home's slot rather than failing a night on an admin's click, and while it holds the slot a per-home job on that home gets the 409.
@@ -203,7 +203,7 @@ server-<reason>-<level>-<date>-<time>.tar
 └── manifest.json                                 last
 ```
 
-`<reason>` is `scheduled`, `manual` or `pre-update`, and `<level>` is `light`, `full` or `full-s3`. The outer tar is not compressed: its members already are, and a plain tar reads member by member without unpacking. Reason and level are in the name (`parseServerArchiveName` in `packages/lib/src/validation/backup.ts`), so retention and the schedule never open an archive. The manifest (`ServerArchiveManifest` in `packages/lib/src/types/backup.ts`) lists every member with its sha256, each home with its member or why it has none, the orphans, whether `.env.production`, the DKIM key and the TLS certificate are in it, and the images the install pinned. A manifest without a `certs` field holds no certificate.
+`<reason>` is `scheduled`, `manual` or `pre-update`, and `<level>` is `light`, `full` or `full-s3`. The outer tar is not compressed: its members already are, and a plain tar reads member by member without unpacking. Reason and level are in the name (`parseServerArchiveName` in `packages/lib/src/validation/backup.ts`), so retention and the schedule never open an archive. The manifest (`ServerArchiveManifest` in `packages/lib/src/types/backup.ts`) lists every member with its sha256, each home with its member or why it has none, the orphans, whether `.env.production`, the DKIM key and the TLS certificate are in it, and the images the install pinned.
 
 The server member holds `users3.db`, `eigen.db` and `waitlist.db`, each through `VACUUM INTO` on the server's own handle, and the files `SERVER_FILES` names (`apps/api/src/lib/config/paths.ts`). The runtime files in `SERVER_RUNTIME_FILES` are never captured: the instance lock, the control socket, the setup token and the two data-epoch files. Leaving the epoch out is what reloads every tab after a whole-server restore.
 
@@ -215,7 +215,7 @@ A home whose capture or verify fails gets `failed` with the reason in the manife
 
 ## The schedule makes one attempt per UTC day
 
-`serverBackupTick` (`apps/api/src/lib/scheduler/jobs.ts`) runs every five minutes. It never runs at boot, when the server is busiest. It starts a Full (Full + S3 with `withS3`) once the UTC hour reaches `hourUtc` and no scheduled archive or record in `backups/` carries today's UTC date. A failed or refused attempt leaves its record, so it counts: a bad night is one alert, not a retry every tick. A restart before the night's attempt skips nothing, since the first tick after the boot starts it. A restart during the attempt ends it failed, "interrupted by a restart", and that was the night's attempt. A tick within 15 minutes of a pre-update backup's end starts nothing: the update stops Eigen next, which would kill the Full or wait for it. The settings live in `settings.json` under `backups.schedule` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)).
+`serverBackupTick` (`apps/api/src/lib/scheduler/jobs.ts`) runs every five minutes. It never runs at boot, when the server is busiest. It starts a Full (Full + S3 with `withS3`) once the UTC hour reaches `hourUtc` and no scheduled archive or record in `backups/` carries today's UTC date. A failed or refused attempt leaves its record, so it counts: a bad night is one alert, not a retry every tick. A restart before the night's attempt skips nothing, since the first tick after the boot starts it. A restart during the attempt ends it failed, "interrupted by a restart", and that was the night's attempt. The settings live in `settings.json` under `backups.schedule` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)).
 
 ## Retention keeps good scheduled archives and every manual one
 
@@ -248,7 +248,7 @@ A verified scheduled or manual archive goes to the backup bucket as an upload jo
 
 It warns, without refusing, when no lifecycle rule aborts incomplete multipart uploads under the server's folder, since the parts of an upload cut off halfway stay and cost money.
 
-The backup bucket's secret reaches no browser, the owner's included, and a blank secret in a save or a **Test Connection** keeps the stored one unless the endpoint, bucket or access key changed. The endpoint, bucket and keys live only in `settings.json`, which is inside the archives in that bucket. So a save that changes the destination answers with a one-time notice (`BACKUP_DESTINATION_NOTICE` in `packages/lib/src/constants/backup.ts`) to keep them somewhere off the server. A restore on a new machine starts from them.
+The backup bucket's secret reaches no browser, the owner's included. An admin who is not the owner reads the backup settings at their defaults, so neither the destination nor the schedule reaches them. A blank secret in a save or a **Test Connection** keeps the stored one unless the endpoint, bucket or access key changed. The endpoint, bucket and keys live only in `settings.json`, which is inside the archives in that bucket. So a save that changes the destination answers with a one-time notice (`BACKUP_DESTINATION_NOTICE` in `packages/lib/src/constants/backup.ts`) to keep them somewhere off the server. A restore on a new machine starts from them.
 
 ## The bucket keeps its own count, and always the newest complete archive
 
@@ -293,7 +293,7 @@ Nothing is deleted from disk, and the newer databases are in `data.pre-restore-<
 
 ## An s3 mount keeps its bucket as it is
 
-By default an `s3` mount comes back on its bucket as it stands: `metadata.db` as archived, which names keys, not object versions. A file edited since reads its new bytes, and a file deleted since reads as gone, which is what the bucket's versioning is for. The pending uploads in the archive are replayed, except those the live mount no longer has a row for, since it already uploaded, replaced or canceled them and a replay would put older bytes on the key. The stage prints how many it left out, and how many had no bytes in the archive. On a machine the mount never ran on there is no live row to compare, so every pending upload is replayed into the bucket.
+By default an `s3` mount comes back on its bucket as it stands: `metadata.db` as archived, which names keys, not object versions. A file edited since reads its new bytes, and a file deleted since reads as gone, which is what the bucket's versioning is for. The pending uploads in the archive are replayed, except those the live mount no longer has a row for, since it already uploaded, replaced or canceled them and a replay would put older bytes on the key. The stage prints how many it left out, and how many had no bytes in the archive. On a machine the mount never ran on there is no live row to compare, so every pending upload is replayed into the bucket. A live `metadata.db` that does not read counts the same: every pending upload is replayed, with a warning that names the file.
 
 `--s3-from-archive` uploads a Full + S3 archive's objects under fresh keys instead, as a per-home restore does. It is for a damaged bucket. The default avoids doubling an intact one.
 

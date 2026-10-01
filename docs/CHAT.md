@@ -24,6 +24,8 @@ Authorship (`authorEmail`) and the whisper target (`whisperTo`) are emails. A ch
 
 A user who can read the room is in it: `read` shows the messages and `write` posts, edits and deletes. The `:chatId` routes go through `getSharedDrive()`, and the write routes also check `canWrite`. Edit and delete additionally require that the caller wrote the message, and answer 404 otherwise.
 
+The access dialog opens from the toolbar's Share button, which only a writer sees. A personal chat also opens it from the share summary on the left of the toolbar (`DriveShareSummary`). A team chat shows the team's avatar there instead, so a read-only member of a team chat has no way into the dialog, on any viewport.
+
 `/invite` and `POST .../invite` put the new entry on the outermost container document for an embedded chat, because that is where inheritance reads it ([ACL.md § Chat Invite Bubbling](ACL.md#chat-invite-bubbling)).
 
 ## A chat inside a document is a comment thread

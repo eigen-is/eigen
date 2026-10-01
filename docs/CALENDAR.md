@@ -138,7 +138,7 @@ A share grants `free-busy` (time blocks only), `read` or `write`. When shares ch
 
 A `TeamHome` starts with `{ calendar: { enabled: false } }`, and its `calendar` getter throws 404 until an admin enables it from the Admin app. Members get the team calendar in their `shared_calendars` at `read` on each `GET /calendar/:ownerId/shared`. A share on the team calendar upgrades them. While it is disabled, that sync removes the stale entries.
 
-Two access rules guard a team home's calendars in `routes/calendar.ts`. Creating, changing and deleting one takes a team admin, because the admin sets a team calendar's shares. Any member may list them. Every event route takes the calendar share instead (`checkCalendarAccess`), so a member's `write` share is event-level. A non-team `ownerId` must be the caller's own.
+Two access rules guard a team home's calendars in `routes/calendar.ts`. Creating, changing and deleting one takes an org admin or the owner (`requireTeamAdmin`, since teams have no roles), because the admin sets a team calendar's shares. Any member may list them. Every event route takes the calendar share instead (`checkCalendarAccess`), so a member's `write` share is event-level. A non-team `ownerId` must be the caller's own.
 
 REST bounds are never tighter than what a PUT may store. The ids Eigen mints cap at 512 characters, and every field a client spells caps at `EVENT_MAX_BYTES`, or an event a CalDAV client stored would be uneditable in the web app.
 

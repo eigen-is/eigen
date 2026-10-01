@@ -50,7 +50,7 @@ When the current version is a miss but an older one is cached, `getOrCacheText` 
 
 Generations are shared per cache name, the first one and the background one alike. A folder of twenty tiles for one just-edited document triggers one render, not twenty. A first miss runs at foreground priority in the document-transform runner ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). A background regeneration may be dropped under load, which is safe because the next request enqueues it again.
 
-`useTextPreview` has a 30 s `staleTime`. After it, the next window focus or remount fetches again and picks up the fresh body the server has written by then.
+`useTextPreview` and the three typed quick-look hooks (`useVCardPreview`, `useEmlPreview`, `useIcsPreview`) have a 30 s `staleTime`. After it, the next window focus or remount fetches again and picks up the fresh body the server has written by then.
 
 ## Loose bytes preview as what their name says
 

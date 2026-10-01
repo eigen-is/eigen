@@ -42,7 +42,7 @@ A mount's `storageType` never changes after it is made, since its bytes live in 
 
 The two meet in `getUploadMaxSize`, which returns `min(per-file cap, what is left of the mount)` and throws 507 up front when nothing is left, so a full mount is refused before any bytes move. A streamed Drive upload hands that number to `streamFilesToTemp` (`apps/api/src/lib/drive/streaming.ts`) as the ceiling per file, and a file that runs past it mid-transfer is a 413, whichever of the two was smaller.
 
-Every other route that brings a whole file into a mount takes the same number and answers 413 above it: a Drive copy and a conversion check the source's size, an import into a document bounds the body it reads (`apps/api/src/routes/drive.ts`), and saving mail attachments to Drive checks each attachment (`apps/api/src/lib/mail/mail.ts`). WebDAV `PUT` is the exception: it meets only the quota pre-check ([WEBDAV.md](WEBDAV.md#put-stages-the-body-before-the-row)).
+Every other route that brings a whole file into a mount takes the same number and answers 413 above it: a Drive copy and a conversion check the source's size, an import into a document bounds the body it reads (`apps/api/src/routes/drive.ts`), and saving mail attachments to Drive checks each attachment (`apps/api/src/lib/mail/mail.ts`). WebDAV `PUT` checks the per-file cap and the quota against the `Content-Length` the client sends, before any bytes move, so a chunked PUT that sends none meets neither ([WEBDAV.md](WEBDAV.md#put-stages-the-body-before-the-row)).
 
 ## A write that knows its size is checked on the projection
 

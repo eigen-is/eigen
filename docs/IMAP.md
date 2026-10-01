@@ -57,7 +57,7 @@ eigen.mail/Maildir/        INBOX: cur/ new/ tmp/, plus subscriptions
   .Clients.Acme/           nesting is the `.` delimiter, not a nested directory
 ```
 
-Eigen creates the standard six (`STANDARD_MAILBOXES`) when it first creates the Maildir, and writes `subscriptions` once then, listing the five beside the inbox. Any other folder normally comes from Dovecot, which makes one for any client that asks, and Eigen lists it under the name Dovecot gave it. A folder made through the API's create route gets its directories and marker, but no `subscriptions` line. A message sits in exactly one folder. Folder membership is the only organization mail has, and there are no labels.
+Eigen creates the standard six (`STANDARD_MAILBOXES`) when it first creates the Maildir, and writes `subscriptions` once then, listing the five beside the inbox. Any other folder comes from Dovecot, which makes one for any client that asks, and Eigen lists it under the name Dovecot gave it. Eigen has no route that creates a folder. A message sits in exactly one folder. Folder membership is the only organization mail has, and there are no labels.
 
 ## A mailbox name is refused only for what breaks a path
 
