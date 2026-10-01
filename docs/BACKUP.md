@@ -1,10 +1,26 @@
 # Backup & Restore
 
-> **TLDR:** Eigen backs up one user or team, or the whole server, both from the running API through one function, `snapshotHome`, in `apps/api/src/lib/backup/`. An admin backs up one home (a user or a team) from the admin pane into a verified `.tar.zst` home archive, and restores it with the home offline for the length of the restore. The owner backs up the whole server from Settings, on a schedule or on demand, or with `./eigen backup`: one plain tar, the server archive, holding a home archive per home plus the server's own databases, `.env.production`, the DKIM key and the mail server's TLS certificate, optionally uploaded to a bucket of its own. `./eigen restore` (`apps/api/src/cli/restore.ts` and the `eigen` launcher) puts a server archive back with Eigen stopped, on this machine or a new one with no setup first. Not obvious from the code: nothing a restore replaces is ever deleted, a home archive taken out of a server archive (a member) restores on its own only when its manifest says it is complete, a Light restore puts each drive's database back over the files of today, so what was created or renamed since drops out of Drive, the backup bucket's keys live only inside the archives in that bucket, and archives are not encrypted.
+> **TLDR:** Eigen backs up one user or team, or the whole server, into archive files beside the data folder, and puts them back. Every backup runs as a job inside the running API, and every archive is verified after it is written. The engine is `apps/api/src/lib/backup/`. The whole-server restore is `./eigen restore`: `apps/api/src/cli/restore.ts` and the `eigen` launcher.
+
+There are two kinds of backup. A home archive is one home, the data folder of one user or one team ([STORAGE.md](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)): its databases, its files, its mail, and for a user the account rows. It is a `.tar.zst`. A server archive is the whole server in one plain `.tar`. Each file in it is a member: a home archive per home, the server member with the server's own databases, and `.env.production`, the DKIM key and the mail server's TLS certificate. A home member is an ordinary home archive, so one home can be taken out of a server archive and put back through the per-home restore.
+
+An admin backs up and restores one home from the Backup section of a user or team in the admin app. The owner backs up the whole server with **Back up now** in Settings, on a daily schedule, or with `./eigen backup`, and `./eigen update` makes one before it installs a new version. All of them are jobs of one engine in the API, and all of them capture a home through one function, `snapshotHome`, so there is one spelling of what a home is. The engine lives in the API for two reasons. It copies each database through the server's own open handle, so users keep working while it runs. And a backup and a restore of one home must take turns, which only the process that runs both can enforce.
+
+A backup has one of three levels. Full + S3 takes everything, including every file of an `s3` mount, a drive storage that keeps its files in a bucket ([STORAGE.md](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)). Full takes everything but those `s3` objects. Light takes the databases, settings and accounts, and no file bodies or mail.
+
+A per-home restore also runs in the API. That home is offline for the length of the restore, and the rest of the server keeps working. A whole-server restore cannot run inside the server it replaces, so `./eigen restore` does it from the command line in two steps: it stages the archive into `data/.restoring/` and verifies it while Eigen still runs, then stops Eigen and swaps the staged tree in with renames. This works on the same machine or on a new one with no setup first. No restore deletes what it replaces: whatever it replaces is set aside next to the live data ([Safety copies are never deleted automatically](#safety-copies-are-never-deleted-automatically)).
+
+Archives live in `backups/`, beside `data/` and outside it. An admin can download a home archive from the admin app and upload one there. A server archive never leaves through a browser: it goes out by scp, or to a backup bucket of its own that no mount may share. Archives are not encrypted, so an archive is as secret as `data/` ([An archive is as secret as data/ itself](#an-archive-is-as-secret-as-data-itself)). A backup holds only what the API can read: caches, Caddy's folder, the Compose override and the Postfix queue stay out ([An archive holds what the API can read](#an-archive-holds-what-the-api-can-read)).
+
+The sections run in this order: what a home archive takes and leaves out, the per-home job, its verify and its restore, then the server backup with its schedule, retention and upload, then `./eigen restore` and the backup an update makes. Three things in them surprise people:
+
+- A home member restores on its own only when its manifest says it is complete, so a Light member never does ([A restore refuses a member that is not a whole home](#a-restore-refuses-a-member-that-is-not-a-whole-home)).
+- A Light restore puts each drive's database back over the files of today, so a file created or renamed since drops out of Drive ([A Full restore swaps data/ whole, a Light one merges](#a-full-restore-swaps-data-whole-a-light-one-merges)).
+- The backup bucket's keys live only inside the archives in that bucket, so the owner keeps a copy off the server ([Upload goes to a bucket of its own](#upload-goes-to-a-bucket-of-its-own)).
 
 ## One primitive captures a home, at one of three levels
 
-`snapshotHome` (`apps/api/src/lib/backup/snapshot-home.ts`) writes a storage-independent copy of one home into a folder: a manifest, the `home/` tree one for one with the home directory, and for a user `auth.json`, `shares.json` and `avatar/`. The per-home backup and the whole-server backup both go through it, so there is one spelling of what a home is.
+`snapshotHome` (`apps/api/src/lib/backup/snapshot-home.ts`) writes a storage-independent copy of one home into a folder: a manifest, the `home/` tree one for one with the home directory, and for a user `auth.json`, `shares.json` and `avatar/`.
 
 | Level | Name in the UI and CLI | Takes | Leaves out |
 |---|---|---|---|
@@ -176,8 +192,6 @@ The job:
 Shutdown gives a running backup 30 s. Its staging goes in the next boot's wipe, and the boot marks its `running` sidecar failed, "interrupted by a restart". So `./eigen restore`, `./eigen rollback` and `./eigen update` wait for a running server backup to end before they stop Eigen, by its `running` sidecar in `backups/`. A sidecar that has said `running` for over a day lost its final write, say on a full disk: the launcher names it as stale and goes on.
 
 ## A server archive is a plain tar of home archives, manifest last
-
-Each file in the server archive is a member: the server member, one home archive per home, and the install files beside them.
 
 ```
 server-<reason>-<level>-<date>-<time>.tar
