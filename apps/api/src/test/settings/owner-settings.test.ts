@@ -1,7 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { BACKUP_DESTINATION_NOTICE } from '@workspace/lib/constants/backup';
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import { EMPTY_S3, type S3Config } from '@workspace/lib/types/mount';
 import type { ServerSettings, ServerSettingsSaved } from '@workspace/lib/types/settings';
@@ -9,6 +8,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
 import { member as memberSchema, organization as organizationSchema, team as teamSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
+import { BACKUP_DESTINATION_NOTICE } from '../../lib/backup/upload';
 import { getDataRoot } from '../../lib/config/paths';
 import { getMailDomain, getOrgName, getServerConfig } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';

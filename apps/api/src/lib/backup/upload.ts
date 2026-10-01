@@ -24,6 +24,12 @@ const DATA_KEY =
     'This access key also opens a bucket that holds Eigen data. Backups need a key of their own, so one leaked key cannot reach both.';
 const NO_ABORT_RULE =
     "No lifecycle rule on this bucket aborts an incomplete multipart upload. Add one with AbortIncompleteMultipartUpload after 1 day, so the parts of an upload cut off halfway don't stay and cost money.";
+// Said once, when the owner saves a backup bucket: the archives in it are not encrypted, and its keys
+// are inside them, so a restore on a new machine starts from a copy kept elsewhere.
+export const BACKUP_DESTINATION_NOTICE =
+    "Write down this bucket's endpoint, name and keys, and keep them somewhere other than this server. " +
+    'A restore on a new machine starts from them: the only other copy is inside the backups. ' +
+    'The backups are not encrypted, so keep the bucket private and its keys scoped to it.';
 
 type BackupUpload = ServerSettings['backups']['upload'];
 
@@ -70,8 +76,17 @@ export async function checkBackupDestination(config: S3Config): Promise<S3CheckR
     return aborts ? result : { ...result, warning: NO_ABORT_RULE };
 }
 
-// A destination as the owner sends it, over the saved one. A field left out keeps its saved value, a blank secret
+// The backup bucket's secret reaches no browser, the owner's included: a copy there is one more to lose. So a
+// destination as the owner sends it lies over the saved one: a field left out keeps its saved value, a blank secret
 // the saved one where keepsSavedSecret allows it.
+export function withoutBackupSecret(settings: ServerSettings): ServerSettings {
+    const { upload } = settings.backups;
+    return {
+        ...settings,
+        backups: { ...settings.backups, upload: { ...upload, s3: { ...upload.s3, secretAccessKey: '' } } },
+    };
+}
+
 export function withSavedSecret(s3: Partial<S3Config>): S3Config {
     const saved = getServerSettings().backups.upload.s3;
     const next = { ...saved, ...s3 };
@@ -82,13 +97,13 @@ export function withSavedSecret(s3: Partial<S3Config>): S3Config {
     return { ...next, secretAccessKey: saved.secretAccessKey };
 }
 
-// The upload settings a save would store, checked when they are on. `changed` says the destination is new,
-// which the owner must hear about once; `warning` is what its check found lacking.
+// The upload settings a save would store, checked when they are on. `notice` is what the owner must hear once,
+// when the destination is new; `warning` is what its check found lacking.
 export async function resolveBackupUpload(update: {
     enabled?: boolean;
     s3?: Partial<S3Config>;
     keep?: number;
-}): Promise<{ upload: BackupUpload; changed: boolean; warning?: string }> {
+}): Promise<{ upload: BackupUpload; notice?: string; warning?: string }> {
     const saved = getServerSettings().backups.upload;
     const upload = { ...saved, ...update, s3: update.s3 ? withSavedSecret(update.s3) : saved.s3 };
     if (upload.s3.bucket && !BUCKET_NAME.test(upload.s3.bucket)) throw new ApiError(400, BAD_BUCKET_NAME);
@@ -98,7 +113,8 @@ export async function resolveBackupUpload(update: {
         if (!check.ok) throw new ApiError(400, `The backup bucket was refused: ${check.message}`);
         warning = check.warning;
     }
-    return { upload, changed: isS3ConfigValid(upload.s3) && !Bun.deepEquals(upload.s3, saved.s3), warning };
+    const changed = isS3ConfigValid(upload.s3) && !Bun.deepEquals(upload.s3, saved.s3);
+    return { upload, notice: changed ? BACKUP_DESTINATION_NOTICE : undefined, warning };
 }
 
 export function backupKey(destination: S3Config, name: string): string {

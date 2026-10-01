@@ -1,4 +1,4 @@
-import { BACKUP_DESTINATION_NOTICE, BACKUP_KEEP_MAX } from '@workspace/lib/constants/backup';
+import { BACKUP_KEEP_MAX } from '@workspace/lib/constants/backup';
 import type { AdminUser, AdminUserRow } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type {
@@ -12,7 +12,7 @@ import { eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, session, team, teamMember, user } from '../../auth-schema';
 import { getAuthDrizzleDb } from '../lib/auth/auth';
-import { resolveBackupUpload } from '../lib/backup/upload';
+import { resolveBackupUpload, withoutBackupSecret } from '../lib/backup/upload';
 import { getOrgName, getServerConfig } from '../lib/config/server-config';
 import { DEFAULT_BACKUPS, getS3Config, getServerSettings, updateServerSettings } from '../lib/config/server-settings';
 import { type ControlStatus, getServerStatus } from '../lib/config/server-status';
@@ -38,16 +38,6 @@ import {
 // Who appears on the admin Users page: everyone except guests, orphans included.
 // `ne(user.role, 'guest')` alone excludes NULL-role orphans in SQLite, so OR in isNull.
 const nonGuestUsers = () => or(isNull(user.role), ne(user.role, 'guest'));
-
-// The backup bucket's secret reaches no browser, the owner's included: a copy there is one more to lose, and a
-// blank one sent back keeps it (withSavedSecret).
-function withoutBackupSecret(settings: ServerSettings): ServerSettings {
-    const { upload } = settings.backups;
-    return {
-        ...settings,
-        backups: { ...settings.backups, upload: { ...upload, s3: { ...upload.s3, secretAccessKey: '' } } },
-    };
-}
 
 export const settingsRouter = new Elysia({ name: 'settings' })
     .use(betterAuth)
@@ -86,7 +76,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             // The bucket's keys are inside the archives in it: the owner hears once to keep them elsewhere.
             return {
                 ...withoutBackupSecret(getServerSettings()),
-                ...(destination?.changed && { notice: BACKUP_DESTINATION_NOTICE }),
+                ...(destination?.notice && { notice: destination.notice }),
                 ...(destination?.warning && { warning: destination.warning }),
             };
         },
