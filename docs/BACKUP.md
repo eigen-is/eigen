@@ -36,7 +36,7 @@ The manifest records the level in `level`, and every mount whose bodies are not 
 
 - Every database, copied with `VACUUM INTO` through the running server's own handle, never as a file copy of a live WAL database: the drive's `shared.db`, each mount's `metadata.db`, `calendar.db`, and for a user `mail.db`, `contacts.db` and `notifications.db`. A database under the home that `HOME_DATABASES` (`apps/api/src/lib/backup/archive-layout.ts`) does not list fails the backup, so a new subsystem's database is noticed the day it lands.
 - Every mount the home declares, disabled ones too. What happens to a mount or file the backup cannot read: [An unreadable enabled mount or a lost file fails the backup](#an-unreadable-enabled-mount-or-a-lost-file-fails-the-backup).
-- Every file the drive knows about, by the path it would have on a `local` mount, on all three backends. The capture reads a mount's rows from the archived copy of its `metadata.db` and fetches each file by id from wherever the mount keeps it now. On a `local` mount, whose keys are names, it reads under the mount's shared tree lock, so no rename moves the bytes mid-read. Each file is in the archive at the path its archived row gives, which is the path a restore puts it at. A restore re-derives whatever keys the target mount needs, so an archive never depends on a bucket, its credentials or the storage type staying the same.
+- Every file the drive knows about, by the path it would have on a `local` mount, on all three backends. The capture reads a mount's rows from the archived copy of its `metadata.db` and fetches each file by id from wherever the mount keeps it now. It copies each file under that file's path lock ([STORAGE.md](STORAGE.md#writes-to-one-row-serialize-on-its-path-lock)), so an overwrite and the copy wait for each other and the archive holds the whole old file or the whole new one. On a `local` mount, whose keys are names, it also holds the mount's shared tree lock, so no rename moves the bytes mid-read. Each file is in the archive at the path its archived row gives, which is the path a restore puts it at. A restore re-derives whatever keys the target mount needs, so an archive never depends on a bucket, its credentials or the storage type staying the same.
 - Every container's `data.db` and `comments.db`, freshest first: an open document's live handle, then a crash temp in `tmp/`, then a pending staged upload, then the stored object. A backup taken during an S3 outage holds the newest local bytes.
 - Version history and trash (`versions/` and `.trash/`). Version history is the only copy of an old file state, and trash is data the user can still restore.
 - Thumbnails. A thumbnail is made once, at upload, and never again, so it is not derived data.
@@ -46,6 +46,26 @@ The manifest records the level in `level`, and every mount whose bodies are not 
 - For a user, `auth.json` (their `user`, `account`, `apikey`, `two_factor`, `member` and `team_member` rows), `shares.json` (the share-registry rows they granted) and their avatar.
 
 Each database copy is one committed state. The archive as a whole is not one instant: a mail that arrives during the backup may or may not be in it, and a file created after its mount's database copy is not. That is the standard guarantee for a backup of a running system, and it is why users keep working during one.
+
+The capture gives the event loop a turn between two files and every 2 MB inside a drive file, so the API keeps answering other requests during a backup. A few steps run in one go: one `VACUUM INTO`, so a large `mail.db` or `metadata.db` is the longest pause; the raw copy of a closed document's database; and one file outside the drives, such as a mail message. Outside the backup, a Drive copy holds the API for the length of its file ([ROADMAP.md](ROADMAP.md)).
+
+## Rows come from the database copy, bytes from the live mount
+
+A mount's capture copies its `metadata.db` first, and every row in the archive comes from that copy. The bytes of each file are read later, when the walk reaches it. What a change during the backup does depends on where it lands against those two moments:
+
+| During the backup | The archive |
+|---|---|
+| A file is renamed, moved or trashed | Holds it, at the path its archived row gives |
+| A file is created after its drive's database was copied | Does not hold it |
+| A file or a version is deleted for good | Holds neither its row nor its bytes, since the archive lists no file it holds no bytes for. A folder above it that was deleted with it goes too, unless it holds something the archive took, which then comes back in it |
+| A file is overwritten before the backup reads it | Holds the new content, with the size and date of the old row until the next save |
+| An upload over a file is in flight when the backup reaches it | Holds the whole new file: the backup waits for the upload |
+| A document is edited | Holds its database as it was at its own copy, one committed state that verify checks |
+| An image is added to a document after the database copy | Holds the reference without the image |
+| A chat's version is restored | Holds the chat as restored. If the restore lands in the few milliseconds while the drive's database is copied, the archive has no database for that chat, and it restores empty. Its messages are in its version history ([ROADMAP.md](ROADMAP.md)) |
+| A mail message is renamed by a flag change or a delivery | Holds it under its new name. A message moved to another mailbox can be missing |
+| A drive is added or removed | `settings.json` is captured after the drives, so one may list a drive the other lacks |
+| The user or team is deleted | That home's backup fails with an error. A server backup names the home `skipped` |
 
 ## An unreadable enabled mount or a lost file fails the backup
 
@@ -58,9 +78,7 @@ An archive that misses files the home should be serving is not a backup, so a ba
 | A disabled mount whose storage cannot be read | Skips it with the reason in the manifest, and a restore leaves it disabled and absent | Its bucket is often unreachable because it was turned off |
 | An enabled mount whose storage fails, or that the drive could not open | Fails, naming the mount and the error code | The home serves its files |
 | A file whose row records bytes and whose object is gone | Fails | The home lists the file |
-| A file with no bytes on record | Leaves it out | There is nothing to take |
-| A file renamed, moved or trashed during the backup | Takes it from where it is now, at the path its archived row gives | The archived `metadata.db` is what a restore reads |
-| A file deleted for good during the backup | Keeps its archived row and has no bytes | There is nothing to take, and verify and restore allow a missing body |
+| A file with no bytes on record | Keeps its row | There is nothing to take |
 
 ## A home archive leaves out caches, sessions and other homes
 
@@ -90,7 +108,9 @@ A home archive holds every file and mail, the password hash, app passwords, API 
 
 A second job on a home while one runs gets a 409, so a backup never reads a folder a restore is writing. Job state lives in memory (`apps/api/src/lib/backup/jobs.ts`) and a finished job drops after an hour. The home archives and their sidecars are the durable record, so a restart loses nothing but the progress line. A job sends `backup:job-updated` when it starts and when it ends, and the event only tells the pane to refetch ([SSE.md § A backup job's event is only a nudge](SSE.md#a-backup-jobs-event-is-only-a-nudge)). Progress has no event: the pane polls every 2 s while a job runs, which also covers an admin restoring their own home, who gets no event while that home is offline.
 
-There is no read-only window. Capturing a container's `data.db` takes that container's path lock, so a sync or close of that one document waits for one copy. Typing is not affected.
+There is no read-only window. Capturing a container's `data.db` takes that container's path lock, so a sync or close of that one document waits for one copy. Typing is not affected. Capturing a plain file takes that file's path lock, so an overwrite or a trash of that one file waits for its copy.
+
+On a `local` mount the copy of a file also holds the shared tree lock, and that lock serves requests in arrival order. So a rename, move, trash or folder delete anywhere on that drive that arrives while one file is being copied waits for that file. Every later write on that drive waits behind it: a save, an upload, a document opening or syncing. For an ordinary file that is milliseconds. For a file of several gigabytes it is the length of its copy ([ROADMAP.md](ROADMAP.md)). A `local-key` or `s3` mount has no tree lock, so there only that one file waits.
 
 A backup reaches a home through `pullHomeSnapshot` (`apps/api/src/lib/home/home-relay.ts`), and `lib/backup/` never imports `getHome`. While a capture runs it touches the home once a minute, so a capture that outlasts the idle window keeps its databases open. A home the backup had to boot gets a 30 s idle (`BACKUP_RELEASE_MS`) once it is captured, so a nightly Full does not keep every home resident. It is never evicted: a user may have opened it meanwhile, and a home a request reached after the capture started keeps its normal idle.
 
@@ -123,7 +143,7 @@ A failure after step 4 parks the half-written folder as `<id>.failed-restore-<da
 
 `incompleteReason` (`packages/lib/src/validation/backup.ts`) reads the manifest: a Light member holds no files and no mail, and a mount with `contents: 'metadata'` holds no file bodies. `restoreHome` refuses such an archive right after it reads the manifest, before the verify and before the home goes aside, where a refusal would already have cost the user their open pages. The admin pane shows why on the row and offers no Restore.
 
-So a Full + S3 member restores any home, a Full member a home without `s3` mounts, and a Light member none. The refusal trusts the manifest. A manifest edited to drop `level` and `contents` still verifies, because verify must allow a missing body (a delete can race the backup). Such an archive restores files with no bytes.
+So a Full + S3 member restores any home, a Full member a home without `s3` mounts, and a Light member none. The refusal trusts the manifest. A manifest edited to drop `level` and `contents` still verifies, because verify checks the files the manifest lists and not that each row has its file. In a complete archive only a row with no bytes on record has no file. Such an archive restores files with no bytes ([ROADMAP.md](ROADMAP.md)).
 
 ## A restore never grants privilege
 

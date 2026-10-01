@@ -55,7 +55,7 @@ An id key never moves, so on `local-key` and `s3` a rename, a move or a trash ch
 
 ## Writes to one row serialize on its path lock
 
-A write to an existing row runs under `Mount.withPathLock(pathId)`: an overwrite, a rename or move, a trash or restore, a version snapshot on the container, the chat restore. A create takes no lock. The partial unique index on `(parentId, LOWER(name))` over untrashed rows closes the race between two creates of one name, and the loser gets a 409. On `local` both creates write the same name path before either row lands, so the surviving row can hold the loser's bytes ([ROADMAP.md](ROADMAP.md)).
+A write to an existing row runs under `Mount.withPathLock(pathId)`: an overwrite, a rename or move, a trash or restore, a version snapshot on the container, the chat restore. A backup holds a file's path lock while it copies the file, because `LocalStorage.write` rewrites a local file in place, so a read beside an overwrite would end short ([BACKUP.md](BACKUP.md#a-home-archive-holds-every-database-file-and-auth-row)). A create takes no lock. The partial unique index on `(parentId, LOWER(name))` over untrashed rows closes the race between two creates of one name, and the loser gets a 409. On `local` both creates write the same name path before either row lands, so the surviving row can hold the loser's bytes ([ROADMAP.md](ROADMAP.md)).
 
 ## On `local` a key is a name path, so renames lock the whole tree
 
@@ -64,13 +64,15 @@ A write to an existing row runs under `Mount.withPathLock(pathId)`: an overwrite
 - **Shared:** every write whose key comes from the paths table, from the key resolution through the storage call and the row write, so the row and the bytes agree. That covers file writes and creates, folder creates, a file delete and a managed database's sync.
 - **Exclusive:** every storage rename of a file or a directory and every directory removal: rename and move, trash, restore and folder delete.
 
-Waiters are served in arrival order. A rename queued behind a stream of saves runs after the saves in flight and before the saves that arrive after it. The lock order is path lock, then document-db slot, then tree lock. A tree-lock holder takes no further lock, because a shared region inside a shared region deadlocks once an exclusive is queued. Reads take no lock: a read racing a move answers a transient 404, a document-db open a 503. `apps/api/src/test/storage/overwrite-ancestor-move.test.ts` pins the races.
+Waiters are served in arrival order. A rename queued behind a stream of saves runs after the saves in flight and before the saves that arrive after it. The lock order is path lock, then document-db slot, then tree lock. A tree-lock holder takes no further lock, because a shared region inside a shared region deadlocks once an exclusive is queued. Most reads take no lock, and one that races a move answers a transient 404, a document-db open a 503. A Drive copy and the download of a document or a version into a temp file read under the shared tree lock. A backup's copy of a file holds the shared tree lock and the file's path lock. `apps/api/src/test/storage/overwrite-ancestor-move.test.ts` pins the races.
 
 ## Every storage read has a 30 s idle deadline
 
 Bun's `S3Client` takes no timeout and no signal, and gives up on a silent request only after about 360 s. Eigen's own bound is `STORAGE_TIMEOUT_MS` (30 s, `apps/api/src/lib/storage/deadline.ts`). `S3Storage` races `exists`, `size` and `delete` against it. A timed-out `exists` or `size` answers 503, a timed-out `delete` returns `false` like any failed delete.
 
 Every storage read the server consumes itself runs through `streamStorageFile`, the storage form of the one stream loop `consumeStream`. A read that delivers no byte for 30 s is cancelled with a 503.
+
+On a warm local file `consumeStream` never gives up the event loop, so a read that does not hold the file's path lock ends before an overwrite that arrives during it can start. That matters because a local write goes into the same file, not into a temp file renamed over it, so a reader of a live file and an overwrite must not interleave. The cost is that such a read holds the API for its length ([ROADMAP.md](ROADMAP.md)). Only the backup passes `yields`, which gives a turn every 2 MB: it holds the path lock of each drive file it copies, and nothing rewrites its own staged copies.
 
 Most reads also pass the mount's `downloads` signal. `closeAllDatabases` and `Drive.destruct` abort it first, so no teardown waits on a stalled download or extraction read. Copy and version snapshots read without it, because a close-time snapshot runs after that abort.
 
