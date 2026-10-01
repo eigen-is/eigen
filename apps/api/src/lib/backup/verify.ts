@@ -239,7 +239,7 @@ export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): 
 // A whole-server archive as one read finds it: every member hashed, the manifest it closes with,
 // and the transport verdict. The manifest is null unless it parses; the members are what the read
 // got through before it failed.
-export type ReadServerArchive = {
+type ReadServerArchive = {
     verify: BackupVerifyRecord;
     members: ArchiveMember[];
     manifest: ServerArchiveManifest | null;

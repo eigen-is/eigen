@@ -144,7 +144,7 @@ export function buildArtifactName(ownerId: string, at: Date): string {
 
 // The layout of a whole-server archive beside its manifest.json: one per-home artifact per home, the
 // server folder packed like a home, and the install files the API may be unable to read.
-export const SERVER_ARCHIVE_HOMES_DIR = 'homes';
+const SERVER_ARCHIVE_HOMES_DIR = 'homes';
 export const SERVER_ARCHIVE_SERVER_MEMBER = 'server.tar.zst';
 export const SERVER_ARCHIVE_ENV_MEMBER = '.env.production';
 
@@ -194,7 +194,7 @@ export function freeArtifactName(ownerId: string, at: Date): string {
 
 // Beside the archive, so the list and retention never open one. A home artifact's caches its manifest
 // and last verify; a server archive's is its job's record, which a refused attempt leaves with no archive.
-export const SIDECAR_SUFFIX = '.manifest.json';
+const SIDECAR_SUFFIX = '.manifest.json';
 export const SERVER_SIDECAR_SUFFIX = '.json';
 // Beside a partial archive in the bucket, which may outlive this box's record of it.
 export const BUCKET_PARTIAL_SUFFIX = '.partial';

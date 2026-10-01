@@ -57,7 +57,7 @@ const HOME_DELETED = 'deleted during the backup';
 const INTERRUPTED = 'interrupted by a restart';
 const UPLOAD_STOPPED = 'Eigen stopped before the upload finished';
 
-export type ServerBackupOptions = {
+type ServerBackupOptions = {
     level: BackupLevel;
     reason: BackupReason;
     startedBy?: string;

@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { parseArgs } from 'node:util';
 import { DECLINED, ROOT, VERSION, VERSION_PATTERN } from './install';
 import { createUi, glyphLine, wrap } from './ui';
 
@@ -59,11 +60,14 @@ export function notesSince(from: string): ReleaseNote[] {
     return releaseNotes(readFileSync(CHANGELOG, 'utf8'), from, VERSION);
 }
 
-export async function updateCheck(flags: {
-    from?: string;
-    'accept-breaking'?: boolean;
-    level?: boolean;
-}): Promise<void> {
+// A breaking release may convert what a Light backup leaves out, so only a Full one could bring it back.
+export function hasBreaking(notes: ReleaseNote[]): boolean {
+    return notes.some(({ breaking }) => breaking.length > 0);
+}
+
+export async function updateCheck(
+    flags: ReturnType<typeof parseArgs<{ options: typeof UPDATE_CHECK_OPTIONS }>>['values'],
+): Promise<void> {
     const ui = await createUi(false);
     const from = flags.from ?? '';
     if (!VERSION_PATTERN.test(from)) ui.fail('--from takes a version, like 0.2.0.', 'Run it through ./eigen update.');
@@ -75,9 +79,8 @@ export async function updateCheck(flags: {
     }
 
     const notes = notesSince(from);
-    // A breaking release may convert what a light backup leaves out, so only a full one could bring it back.
     if (flags.level) {
-        console.log(`level=${notes.some(({ breaking }) => breaking.length) ? 'full' : 'light'}`);
+        console.log(`level=${hasBreaking(notes) ? 'full' : 'light'}`);
         return;
     }
     for (const { version, intro, breaking } of notes) {
@@ -88,7 +91,7 @@ export async function updateCheck(flags: {
             console.log([glyphLine('warn', first), ...rest.map((line) => glyphLine('bar', line))].join('\n'));
         }
     }
-    if (flags['accept-breaking'] || !notes.some(({ breaking }) => breaking.length)) return;
+    if (flags['accept-breaking'] || !hasBreaking(notes)) return;
 
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
         ui.fail(

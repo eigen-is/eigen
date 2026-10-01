@@ -1,5 +1,5 @@
 import type { parseArgs } from 'node:util';
-import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants';
+import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import { parseServerArchiveNames } from '@workspace/lib/validation';

@@ -63,7 +63,7 @@ async function isStillAt(mount: Mount, pathId: string, storageKey: string): Prom
 
 // One mount's data tree in an archive: the entries written, how many of them are Eigen's own
 // databases (a user's `notes.db` upload is a file), and the ids the thumbnails are keyed by.
-export type MountSnapshot = { entries: BackupEntry[]; databases: number; pathIds: Set<string> };
+type MountSnapshot = { entries: BackupEntry[]; databases: number; pathIds: Set<string> };
 
 // Copy every file the mount's paths table knows about into `targetDir`. Walking the table rather
 // than the filesystem is what keeps `tmp/` and `staging/` out and `.trash/` + `versions/` in, on

@@ -23,7 +23,6 @@ import {
     copyArchiveMember,
     createArchiveWriter,
     extractArtifact,
-    MAX_MEMBER_READ_BYTES,
     packFolder,
     readArchiveMember,
     readArchiveMembers,
@@ -501,12 +500,12 @@ describe('Backup pack and verify', () => {
     });
 
     test(
-        'a sidecar that is not one is an error, an artifact that is not one too',
+        'a sidecar that is not one reads as none, and an artifact that is not one is an error',
         async () => {
             const dir = mkdtempSync(join(TEST_DATA_DIR, 'bad-sidecar-'));
             const fake = join(dir, buildArtifactName(ownerId, new Date()));
             writeFileSync(`${fake}.manifest.json`, '{"manifest": {"formatVersion": 2}, "verify": {}}');
-            await expect(readSidecar(fake)).rejects.toThrow('is not a backup manifest sidecar');
+            expect(await readSidecar(fake)).toBeNull();
 
             const folder = join(dir, buildHomeFolderName('bogus'));
             mkdirSync(folder, { recursive: true });
@@ -814,6 +813,8 @@ describe('Whole-server archive', () => {
 });
 
 describe('Archive writer and reader', () => {
+    // What readArchiveMember holds in memory at most.
+    const READ_CAP = 16 * 1024 * 1024;
     const fields: Omit<ServerArchiveManifest, 'entries'> = {
         formatVersion: 1,
         level: 'full',
@@ -864,7 +865,7 @@ describe('Archive writer and reader', () => {
 
     test('a member past the read cap is refused in memory and streamed out byte for byte', async () => {
         const big = join(dir, 'big.bin');
-        const bytes = new Uint8Array(MAX_MEMBER_READ_BYTES + 1);
+        const bytes = new Uint8Array(READ_CAP + 1);
         for (let i = 0; i < bytes.length; i += 4096) bytes[i] = (i / 4096) % 251;
         writeFileSync(big, bytes);
         const archivePath = await writeArchive('big.tar', [
@@ -952,7 +953,7 @@ describe('Archive writer and reader', () => {
 
     test('a last member named manifest.json past the read cap fails the transport check', async () => {
         const big = join(dir, 'big-manifest.json');
-        writeFileSync(big, new Uint8Array(MAX_MEMBER_READ_BYTES + 1));
+        writeFileSync(big, new Uint8Array(READ_CAP + 1));
         // finish() would put the real manifest after it, so the archive is taken before it closes.
         const building = join(dir, 'big-manifest-building.tar');
         const archivePath = join(dir, 'big-manifest.tar');

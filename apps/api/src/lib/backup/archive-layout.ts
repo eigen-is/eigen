@@ -55,11 +55,11 @@ export const MOUNT_PATH_COLUMNS = {
     trashedFrom: paths.trashedFrom,
 };
 
-export type MountPathRow = Pick<typeof paths.$inferSelect, keyof typeof MOUNT_PATH_COLUMNS>;
+type MountPathRow = Pick<typeof paths.$inferSelect, keyof typeof MOUNT_PATH_COLUMNS>;
 
 // The databases a mount owns inside an archive: a container's data.db/comments.db and the versions/
 // snapshots of one, each with the container type behind it.
-export type ManagedArchiveDatabase = {
+type ManagedArchiveDatabase = {
     // Relative to the mount's data/ folder in the archive.
     path: string;
     // The container's own data.db — the one a Yjs decode can be run on. False for comments.db and

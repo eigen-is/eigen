@@ -54,7 +54,7 @@ const JOURNAL_FILE = /\.db-(wal|shm)$/;
 // `new/` nobody has delivered to, an empty mailbox — and the tar writer emits an entry per directory
 // in the staging folder. Without them a restored Maildir has no `new/` for MaildirStore.watch to
 // install its watcher on, and mail stops syncing in silence.
-export type FileTree = { files: string[]; dirs: string[]; databases: string[] };
+type FileTree = { files: string[]; dirs: string[]; databases: string[] };
 
 export async function listFileTree(root: string, skipDir: (rel: string) => boolean = () => false): Promise<FileTree> {
     const tree: FileTree = { files: [], dirs: [], databases: [] };

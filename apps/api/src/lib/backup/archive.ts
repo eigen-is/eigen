@@ -263,7 +263,7 @@ export type ArchiveMember = { archivePath: string; name: string; offset: number;
 
 // Where an artifact's compressed bytes are read from: a file of its own, or a member of a
 // whole-server archive, read in place.
-export type ArtifactSource = string | ArchiveMember;
+type ArtifactSource = string | ArchiveMember;
 
 // The artifact's bytes, decompressed. The two streams are wired by hand rather than through
 // `pipeline`, because a read that stops at the entry it wanted ends as an AbortError there.
@@ -465,7 +465,7 @@ export async function readArchiveMembers(archivePath: string): Promise<ArchiveMe
 }
 
 // What readArchiveMember holds in memory at most: a manifest fits many times over, a home does not.
-export const MAX_MEMBER_READ_BYTES = 16 * 1024 * 1024;
+const MAX_MEMBER_READ_BYTES = 16 * 1024 * 1024;
 
 // A member's bytes in memory, for the manifest. A member that has to land on disk goes through
 // copyArchiveMember, and a home member is unpacked in place by extractArtifact.
@@ -583,15 +583,13 @@ export async function writeSidecar(
     await writeRecord(sidecarPath(artifactPath), { manifest, verify });
 }
 
-// Null when there is no sidecar at all — an artifact copied in by hand has none, and the caller
-// shows it as unverified until a verify job writes one. A file that is there but is not a sidecar
-// is an error instead: treating it as absent would hide a half-written one behind a plausible screen.
+// Null when there is none, or none that reads, as for a server archive's record: an artifact copied in by hand has
+// none, and the list shows it as unverified until a verify job writes one.
 export async function readSidecar(
     artifactPath: string,
 ): Promise<{ manifest: BackupManifest; verify: BackupVerifyRecord } | null> {
-    const filePath = sidecarPath(artifactPath);
-    if (!fs.existsSync(filePath)) return null;
-    const sidecar = parseBackupSidecar(await Bun.file(filePath).text());
-    if (!sidecar) throw new ApiError(400, `${path.basename(filePath)} is not a backup manifest sidecar`);
-    return sidecar;
+    const text = await Bun.file(sidecarPath(artifactPath))
+        .text()
+        .catch(() => null);
+    return text === null ? null : parseBackupSidecar(text);
 }
