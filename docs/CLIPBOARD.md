@@ -1,12 +1,12 @@
 # Clipboard
 
-> **TLDR:** Rich copy and paste between Eigen apps. One typed JSON payload (`EigenClipboardData`, `packages/lib/src/types/clipboard.ts`) rides the `application/eigen-clipboard` MIME type and, as a fallback, a marker span in `text/html`; the readers and writers live in `packages/lib/src/core/clipboard/`. Any web page can forge the payload, so the reader validates every item. Width and height are mandatory, because consumers place with no fallback. An image travels as a reference the pasting user must be allowed to read. A canvas cut deletes only what the copy carried.
+> **TLDR:** Rich copy and paste between Eigen apps: a shape, an image or styled text copied in one app keeps its size and style when pasted into another. One typed JSON payload (`EigenClipboardData`, `packages/lib/src/types/clipboard.ts`) rides the `application/eigen-clipboard` MIME type and, as a fallback, a marker span: a hidden `<span>` in the copied `text/html` that carries the same JSON; the readers and writers live in `packages/lib/src/core/clipboard/`. Any web page can forge the payload, so the reader validates every item. Width and height are mandatory, because consumers place with no fallback. An image travels as a reference the pasting user must be allowed to read. A canvas cut deletes only what the copy carried.
 
 ## One payload rides two channels
 
 `writeEigenClipboard` runs inside a native `copy` event. It sets the JSON on `application/eigen-clipboard`, and writes it again URI-encoded into `<span data-eigen-clipboard="…">` on `text/html`, with the caller's HTML after the span and its plain text on `text/plain`. `readEigenClipboard` reads the custom type first and falls back to the marker, because a custom type does not survive every clipboard and `text/html` does.
 
-A menu row has no `ClipboardEvent`, so it uses `writeEigenClipboardAsync` and `readEigenClipboardAsync`. `navigator.clipboard.write` cannot set an arbitrary custom type, so the async pair uses the marker only. Whether that loses anything is the open Copy-Paste Phase 0 row in [ROADMAP.md](ROADMAP.md).
+A menu row has no `ClipboardEvent`, so it uses `writeEigenClipboardAsync` and `readEigenClipboardAsync`. `navigator.clipboard.write` cannot set an arbitrary custom type, so the async pair uses the marker only. What a menu copy loses against a ⌘C copy is unmeasured, an open row in [ROADMAP.md](ROADMAP.md) (Copy-Paste Phase 0).
 
 The async writer takes its HTML as a promise. The write must start inside the user gesture, or Safari and Firefox reject it once a media fetch outlives the activation window. A rejected HTML promise still writes the marker and the plain text.
 
@@ -34,7 +34,7 @@ A text item with no content is valid but useless. No Eigen app writes one, but a
 
 ## A copy never writes two flavors one consumer would both accept
 
-Two flavors a single consumer reads would paste twice. So a pure image copy writes the payload and no `text/plain`. The pair at risk is `text/plain` beside `image/png`. No producer writes a PNG today, but a new one must not ride beside `text/plain`.
+Two flavors a single consumer reads would paste twice. So a pure image copy writes the payload and no `text/plain`. The pair at risk is `text/plain` beside `image/png`. No producer writes a PNG. One that does must not write `text/plain` beside it.
 
 ## A pasted image re-uploads as the pasting user
 
