@@ -472,24 +472,74 @@ describe('a capture of a local mount shares the event loop', () => {
 });
 
 describe('a chat whose version is restored during the backup', () => {
+    // A chat with v1 in its saved version and v2 after it, and the call that restores the version.
+    async function seedChat(user: TestUser) {
+        const t = user.sessionToken;
+        const { root } = await seed(user);
+        const chat = await drivePost(t, user.id, M, `folder/${root.id}/create/chat`, { fileName: 'Talk' });
+        await chatPost(t, user.id, M, `${chat.id}/messages`, { content: 'v1' });
+        const saved = await assertJson<DrivePath>(
+            await authedRequest(t, `/drive/${user.id}/${M}/file/${chat.id}/versions/save`, { method: 'POST' }),
+        );
+        await chatPost(t, user.id, M, `${chat.id}/messages`, { content: 'v2' });
+        const restoreVersion = () =>
+            authedRequest(t, `/drive/${user.id}/${M}/file/${chat.id}/versions/${saved.name}/restore`, {
+                method: 'POST',
+            });
+        return { chat, restoreVersion };
+    }
+
     for (const storageType of ['local-fullnames', 'local-id'] as const) {
         test(`reopens with its messages after a restore, on ${storageType}`, async () => {
             const user = await raceUser(storageType);
             const t = user.sessionToken;
-            const { root } = await seed(user);
-            const chat = await drivePost(t, user.id, M, `folder/${root.id}/create/chat`, { fileName: 'Talk' });
-            await chatPost(t, user.id, M, `${chat.id}/messages`, { content: 'v1' });
-            const saved = await assertJson<DrivePath>(
-                await authedRequest(t, `/drive/${user.id}/${M}/file/${chat.id}/versions/save`, { method: 'POST' }),
-            );
-            await chatPost(t, user.id, M, `${chat.id}/messages`, { content: 'v2' });
-            const job = await backupDuring(user, () =>
-                authedRequest(t, `/drive/${user.id}/${M}/file/${chat.id}/versions/${saved.name}/restore`, {
-                    method: 'POST',
-                }),
-            );
+            const { chat, restoreVersion } = await seedChat(user);
+            const job = await backupDuring(user, restoreVersion);
             expect(job.state).toBe('done');
             await restoreHome(job.artifact!, user.id, `race-${Date.now()}`);
+            const res = await authedRequest(t, `/chat/${user.id}/${M}/${chat.id}/messages`);
+            expect(res.status).toBe(200);
+            const messages = await assertJson<{ content: string }[]>(res);
+            expect(messages.map((message) => message.content)).toContain('v1');
+        }, 120_000);
+
+        // Fails until the ROADMAP row "A chat version restored at the instant of a backup's database copy" is done.
+        test.failing(`reopens with its messages when its restore straddles the metadata.db copy, on ${storageType}`, async () => {
+            const user = await raceUser(storageType);
+            const t = user.sessionToken;
+            const { chat, restoreVersion } = await seedChat(user);
+            // The backup starts after the restore deleted data.db and before it creates the new one, which waits for
+            // the capture's first plain read: metadata.db is staged by then, with neither row.
+            const firstRead = Promise.withResolvers<void>();
+            let job: ReturnType<typeof backupJob> | undefined;
+            const readKey = Mount.prototype.readKey;
+            // The restore's own read of the version comes before the job, and is not the capture's.
+            const read = spyOn(Mount.prototype, 'readKey').mockImplementation(function (this: Mount, key: string) {
+                if (job) firstRead.resolve();
+                return readKey.call(this, key);
+            });
+            const createFileFromTemp = Mount.prototype.createFileFromTemp;
+            const create = spyOn(Mount.prototype, 'createFileFromTemp').mockImplementation(async function (
+                this: Mount,
+                parentId: string,
+                name: string,
+                ...rest: [string, number, string, string]
+            ) {
+                if (parentId === chat.id && name === 'data.db' && !job) {
+                    job = backupJob(user);
+                    await firstRead.promise;
+                }
+                return createFileFromTemp.call(this, parentId, name, ...rest);
+            });
+            try {
+                expect((await restoreVersion()).status).toBe(200);
+            } finally {
+                create.mockRestore();
+                read.mockRestore();
+            }
+            const done = await job;
+            expect(done?.state).toBe('done');
+            await restoreHome(done!.artifact!, user.id, `race-${Date.now()}`);
             const res = await authedRequest(t, `/chat/${user.id}/${M}/${chat.id}/messages`);
             expect(res.status).toBe(200);
             const messages = await assertJson<{ content: string }[]>(res);
