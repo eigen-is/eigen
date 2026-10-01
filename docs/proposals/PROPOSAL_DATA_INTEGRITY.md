@@ -12,8 +12,9 @@
 > That skip-count return is also Phase 3's prerequisite, so §3's semantic verification now builds on
 > an existing signal.
 >
-> **Still to build:** there is no `lib/integrity/`, the scheduler still registers only
-> `guest-cleanup`, and `eigen backup` is the offline stop-and-tar snapshot (crash-consistent, but still unverified). Phase 1 is reduced to
+> **Still to build:** there is no `lib/integrity/`, and the scheduler registers only `guest-cleanup`
+> and the nightly server backup. `eigen backup` is the verified whole-server backup of
+> [BACKUP.md](../BACKUP.md), which is what Phase 5 asked for. Phase 1 is reduced to
 > seams A/C/E/G, the post-ack size verify (B), and moving `isSqliteFile` into `lib/integrity/`.
 > Phases 2–5 are untouched — every one remains to build. The 2026-07-06 storage-audit fixes overlap
 > only as *reactive* guards (notably audit item 9, which closed the failed-read half of seam E —
@@ -26,8 +27,8 @@
 > bytes replace good bytes, (2) a paced background sweep that finds corruption and metadata↔storage
 > drift before a user does, (3) semantic verification of backups — CRDT bytes aren't
 > byte-comparable, so "the backup works" means "it decodes into a Y.Doc with the declared roots
-> populated" — applied to version snapshots and to `eigen backup` (already crash-consistent
-> via its offline stop-and-tar, but unverified), and (4) boring alerting through the existing notification center. No new
+> populated" — applied to version snapshots (the whole-server backup verifies its own archives,
+> [BACKUP.md](../BACKUP.md)), and (4) boring alerting through the existing notification center. No new
 > subsystem; every piece extends a named existing pattern.
 
 ## Problem
@@ -286,7 +287,7 @@ immutable archive). Steps:
 |---|---|
 | Collab `data.db` snapshot | Decodes with `skippedBlobs === 0`; every declared root present; roots non-empty when the live doc's roots are non-empty (live measured from the open `CollabDocument` if cached, else a decode of the current `data.db`). Exact-count equality is deliberately NOT required — the snapshot is older than live by design |
 | Chat `data.db` snapshot | `quick_check` clean; tables present; message count sane vs live (≤ live modulo deletions — flagged only at zero-vs-nonzero) |
-| `metadata.db`, `mail.db`, home DBs | No in-app snapshot artifact exists (versioning is per-container only); their only backup is the whole-server tar, made safe + verified in Phase 5 (D7). Live verification = the sweep's `quick_check` + the seam guards + (mail) the maildir presence check (sweep check 5) |
+| `metadata.db`, `mail.db`, home DBs | No in-app snapshot artifact exists (versioning is per-container only); their backup is the whole-server or per-home archive, which runs `quick_check` on every database it holds ([BACKUP.md](../BACKUP.md)). Live verification = the sweep's `quick_check` + the seam guards + (mail) the maildir presence check (sweep check 5) |
 | Plain files | `size` matches row; sampled re-hash vs `paths.hash` (populated for plain files; managed rows excluded — their hash is stale by design) |
 
 **When verification runs:** (a) at snapshot creation (seam D) — fire-and-forget with `.catch` off
@@ -357,7 +358,7 @@ scoped, and regenerable from a full sweep.
 - **D6 — Reverse scan (stray objects)?** Needs `StorageBackend.list?()`. *Recommendation:* defer to
   the last phase; local mounts get the readdir version in the cheap tier for free, S3 listing lands
   with the optional interface method when the loss-direction checks are proven.
-- **D7 — Safe whole-server backup: keep it an offline stop-and-tar, or drive it from the API?** `./eigen backup` is an offline stop-and-tar snapshot (crash-consistent via `-wal`/`-shm` capture), so there is no live-tar problem; only the verify gap remains, and per §3 the home DBs have no other backup artifact. Superseded: [PROPOSAL_BACKUP_RESTORE.md](PROPOSAL_BACKUP_RESTORE.md) settled the direction (API-driven, scheduled, verified, per-home), so the copy-then-tar sketch below does not apply.
+- **D7 — Safe whole-server backup: keep it an offline stop-and-tar, or drive it from the API?** Settled by [PROPOSAL_BACKUP_RESTORE.md](PROPOSAL_BACKUP_RESTORE.md) and built: the whole-server backup runs in the API, nightly or on demand, and verifies every archive ([BACKUP.md](../BACKUP.md)), so the copy-then-tar sketch below does not apply.
 - **D8 — Alert on semantic shrink of a live doc between sweeps?** *Recommendation:* no. Users
   legitimately delete content; version history + bucket versioning are the recovery net for that.
   Only decode/validity failures alert — alarm fatigue kills alerting systems faster than missed
@@ -381,10 +382,9 @@ Each phase ships independently; the cheapest highest-value check goes first.
    `integrityCheckedAt` migration and per-destination HEAD budgets.
 4. **Reverse scan (S).** Optional `StorageBackend.list?()` (Bun `S3Client` listing + local readdir);
    stray-object findings routed through the same alert state.
-5. **Verified whole-server backup (S–M).** ⚠️ Reviewer-driven scope addition (accepted by push,
-   2026-07-05) — **requires an explicit go from the owner before implementation starts.** Add a verify pass on top of `eigen backup`'s already crash-consistent archive: per-DB `VACUUM INTO` a staging dir, tar the staging dir, then a post-backup verify pass
-   (`quickCheck` on every copied DB, sampled `verifySnapshotDb` over containers) — the home DBs'
-   only backup artifact becomes a verified one (D7). Superseded by [PROPOSAL_BACKUP_RESTORE.md](PROPOSAL_BACKUP_RESTORE.md).
+5. **Verified whole-server backup (S–M).** Built by [PROPOSAL_BACKUP_RESTORE.md](PROPOSAL_BACKUP_RESTORE.md)
+   phase ③: every archive is verified (sizes and sha256, `quick_check` on every database, a decode of
+   sampled collab documents), see [BACKUP.md § Verify runs in three stages](../BACKUP.md#verify-runs-in-three-stages).
 
 ## Testing
 
