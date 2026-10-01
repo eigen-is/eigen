@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { SearchResponse } from '@workspace/lib/types/search';
+import { seedMaildirFolder } from '../mail-test-helpers';
 import { app, assertJson, authedRequest, getTestContext } from '../setup';
 
 const isWindows = process.platform === 'win32';
@@ -68,12 +69,9 @@ describe.skipIf(isWindows)('Mail pagination', () => {
         ownerId = ctx.charlie.user.id;
         box = `Pagination-${Date.now()}`;
 
-        const createRes = await authedRequest(token, `/mail/${ownerId}/mailbox`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mailbox: box }),
-        });
-        expect(createRes.status).toBe(200);
+        // Boots the home first: a Maildir that already exists gets no standard folders.
+        expect((await authedRequest(token, `/home/${ownerId}/size`)).status).toBe(200);
+        seedMaildirFolder(ownerId, box);
 
         const base = Date.UTC(2021, 0, 1, 0, 0, 0);
         for (let i = 0; i < TOTAL; i++) {

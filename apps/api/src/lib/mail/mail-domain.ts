@@ -118,14 +118,6 @@ export class Mail {
         return this.store.mailboxesList();
     }
 
-    async mailboxCreate(mailbox: string): Promise<void> {
-        return this.store.mailboxCreate(canonicalMailbox(mailbox));
-    }
-
-    async mailboxExists(mailbox: string): Promise<MaildirMailbox | false> {
-        return this.store.mailboxExists(canonicalMailbox(mailbox));
-    }
-
     async mailboxDeliver(message: Buffer): Promise<string> {
         const uniqueId = await this.store.append('', message);
 
