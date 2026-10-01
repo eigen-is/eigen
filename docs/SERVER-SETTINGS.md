@@ -2,6 +2,8 @@
 
 > **TLDR:** A server keeps two JSON files in `data/server/`. `settings.json` holds the runtime settings the owner edits in the Admin app (`apps/api/src/lib/config/server-settings.ts`). `config.json` is the identity file (`server-config.ts`): the auth secret and what setup recorded. Neither holds the web address, whether this server hosts mail, or the relay outbound mail goes through: those are environment. Not obvious from the code: the mail domain is recorded once and a boot on another one exits, a settings file that does not parse stops the boot instead of being overwritten, S3 becomes the default only while a saved config connects, and one sender rule in `buildMailOptions()` decides whether mail goes out as the person or "via" the organization.
 
+Server settings decide how the server behaves for everyone: the storage budgets, where a new drive keeps its files, whether any address may ask for a guest sign-in code, which events also send an email, who a system mail is from, and the nightly backup. Each domain reads them where it acts, and admins read them for their own pages. They sit in three places by how much a change costs. The environment is the shape of the deployment, which `./eigen setup` writes ([SELF-HOSTING.md](SELF-HOSTING.md)). `config.json` is fixed once setup completes, apart from the organization's name. `settings.json` is what the owner may change at any time. Both files are kept by `JsonStore`, the same store behind every home's own settings.
+
 ## config.json is identity, settings.json is runtime
 
 |  | `config.json` | `settings.json` |
