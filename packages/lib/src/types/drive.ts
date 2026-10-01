@@ -1,3 +1,5 @@
+import type { BytesTextPreviewMode } from '../constants/preview';
+
 export type DriveACL = {
     id: string;
     read: boolean;
@@ -473,7 +475,7 @@ export type InviteResult = {
 };
 
 export type FileEditorContent = {
-    editMode: string;
+    editMode: BytesTextPreviewMode;
     content: string;
     frontmatter: string | null;
     mimeType: string;
