@@ -1,6 +1,6 @@
 # File Previews and File Actions
 
-> **TLDR:** Two things live together: the previews the API renders of Drive files and mail parts (`apps/api/src/lib/preview/`), and the one set of actions every surface offers on a file, the quick-look overlay included (`packages/lib/src/core/file-actions.ts` and `packages/ui/src/components/file-actions/`). Not obvious: a cached preview is keyed by the file's version and a format tag you bump on every change of shape; a new version serves the old body while it regenerates; an Eigen document previews only a slice, inside the document-transform Worker; no preview may fetch a URL the file chose; and the surface that draws a menu mounts the action dialogs, because a menu unmounts on close.
+> **TLDR:** Two things live together: the previews the API renders of Drive files and mail parts, and the one set of actions every surface offers on a file, the quick-look overlay included. The previews are `apps/api/src/lib/preview/`, and the actions are `packages/lib/src/core/file-actions.ts` and `packages/ui/src/components/file-actions/`.
 
 A preview is what a user sees of a file without opening it in its app: a tile in a Drive grid, the hero at the top of Drive's detail column, and the quick-look overlay that Space or Quick preview opens over a list. The server renders every preview and the browser only shows it, so every surface draws the same result. A Drive preview is cached in a folder of its mount and is never the truth: it can be thrown away and rendered again from the file.
 
@@ -8,7 +8,13 @@ The same file shows up in many places: a Drive listing, the mail reader, a chat 
 
 Two more terms come back. A format tag names the shape of a renderer's output and is part of the cache key. A slice is the part of an Eigen document a preview renders: its first blocks, slides or rows.
 
-The sections run from the server to the screen: what each kind of file previews as, the cache and how a browser revalidates it, text and Eigen-document bodies, images, mail parts, the `.vcf`, `.eml` and `.ics` quick looks and how the client draws a body. Then file subjects, the action registry and its runner, Save to Drive, and the overlay and its keys.
+The sections run from the server to the screen: what each kind of file previews as, the cache and how a browser revalidates it, text and Eigen-document bodies, images, mail parts, the `.vcf`, `.eml` and `.ics` quick looks and how the client draws a body. Then file subjects, the action registry and its runner, Save to Drive, and the overlay and its keys. Five things in them surprise people:
+
+- A cached preview is keyed by the file's version and a format tag, and the tag is bumped on every change to the output's shape ([§ The cache key](#the-cache-key-is-the-file-version-and-the-format-tag)).
+- A new version serves the old body while it regenerates ([§ A new version serves the old body](#a-new-version-serves-the-old-body-while-it-regenerates)).
+- An Eigen document previews only a slice, rendered in the document-transform Worker, a one-shot Worker that keeps the render off the API's event loop ([§ An Eigen document previews a slice](#an-eigen-document-previews-a-slice-off-the-event-loop), [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)).
+- No preview may fetch a URL the file chose ([§ No preview body may fetch a URL](#no-preview-body-may-fetch-a-url-the-file-chose)).
+- The host mounts the action dialogs, because a menu unmounts when it closes ([§ The host mounts the runner's dialogs](#the-host-mounts-the-runners-dialogs)).
 
 ## Each kind of file gets one kind of preview
 

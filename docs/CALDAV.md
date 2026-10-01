@@ -1,12 +1,16 @@
 # CalDAV
 
-> **TLDR:** CalDAV is how a calendar app on a phone or a desktop, such as Apple Calendar or Thunderbird, syncs a user's Eigen calendars. `apps/api/src/lib/caldav/` serves it (RFC 4791) at `/dav/calendars/:ownerId/`, and it is the protocol layer only: the calendar store under it decides every write ([CALENDAR.md](CALENDAR.md)), and `apps/api/src/lib/dav/` holds what it shares with CardDAV. Not obvious from the code: a GET returns the stored bytes verbatim, and a PUT answers an ETag only when it kept the client's own bytes. A copy of somebody else's event takes only its alarms from a PUT. Every filter Eigen can't apply is answered with a superset, never a refusal.
+> **TLDR:** CalDAV is how a calendar app on a phone or a desktop, such as Apple Calendar or Thunderbird, syncs a user's Eigen calendars. `apps/api/src/lib/caldav/` serves it (RFC 4791) at `/dav/calendars/:ownerId/`, and it is the protocol layer only: the calendar store under it decides every write ([CALENDAR.md](CALENDAR.md)), and `apps/api/src/lib/dav/` holds what it shares with CardDAV.
 
 CalDAV is WebDAV applied to calendars: HTTP with a few extra methods, such as PROPFIND to read properties and REPORT to query. A client signs in with HTTP Basic, normally with an app password the user makes for it on the Integrations page. It first finds the principal, the URL that stands for the account (`/dav/principals/:ownerId/`). The principal names the calendar home, and the home lists one collection per calendar. Inside a collection each event series is one resource, an `.ics` file the client reads with GET and writes with PUT. That resource is the stored text [CALENDAR.md](CALENDAR.md) describes, so CalDAV has no storage of its own: it answers from the store's rows.
 
 Three words carry the sync. An ETag is a fingerprint of a resource's bytes. A client sends it back in `If-Match`, so its write fails rather than overwrite a change it has not seen. A ctag is a counter on a collection that moves on every change, so a client learns in one request whether anything changed. A sync token names a point in a collection's history, and a `sync-collection` REPORT answers with what changed since then.
 
-The sections go from connecting to syncing: who can reach which calendar, how a resource is named, what GET and PUT answer, how a PUT is judged, then PROPFIND, the queries, the sync token and the size bound on a REPORT. The case that surprises most is a linked copy, the event an invitation puts in an attendee's own calendar ([CALENDAR.md](CALENDAR.md)): a device can change only its alarms ([§ A PUT is judged inside the write lock](#a-put-is-judged-inside-the-write-lock)).
+The sections go from connecting to syncing: who can reach which calendar, how a resource is named, what GET and PUT answer, how a PUT is judged, then PROPFIND, the queries, the sync token and the size bound on a REPORT. Three things in them surprise people:
+
+- A GET returns the stored bytes as they are, and a PUT answers with an ETag only when it kept the client's own bytes ([§ GET serves the stored bytes](#get-serves-the-stored-bytes-and-put-answers-an-etag-only-for-bytes-it-kept)).
+- On a linked copy, the event an invitation puts in an attendee's own calendar ([CALENDAR.md](CALENDAR.md)), a device can change only its alarms ([§ A PUT is judged inside the write lock](#a-put-is-judged-inside-the-write-lock)).
+- A query filter Eigen can't apply is answered with too many results, never a refusal, so no client misses an event ([§ A time-range query over-reports](#a-time-range-query-over-reports-rather-than-lose-an-occurrence)).
 
 ## CalDAV serves the owner's own calendars
 

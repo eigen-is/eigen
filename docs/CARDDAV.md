@@ -1,10 +1,16 @@
 # CardDAV
 
-> **TLDR:** CardDAV is how a contacts app on a phone or a desktop syncs a user's one address book. Eigen serves it (RFC 6352) at `/dav/addressbooks/:ownerId/contacts/`. The protocol layer is `apps/api/src/lib/carddav/`, a near twin of `caldav/` that shares `lib/dav/`. The book is vCard 3.0 in storage and on the wire, so a 4.0 PUT is transcoded and gets no ETag back. Preconditions are checked inside the store's write lock, never in the handler. Apple treats a card as read-only unless the book advertises write privileges. The storage model is in [CONTACTS.md](CONTACTS.md).
+> **TLDR:** CardDAV is how a contacts app on a phone or a desktop syncs a user's one address book. Eigen serves it (RFC 6352) at `/dav/addressbooks/:ownerId/contacts/`. The protocol layer is `apps/api/src/lib/carddav/`, a near twin of `caldav/` that shares `lib/dav/`. The book is vCard 3.0 in storage and on the wire. The storage model is in [CONTACTS.md](CONTACTS.md).
 
 CardDAV is the address-book twin of CalDAV, and [CALDAV.md](CALDAV.md) explains the words both use: principal, collection, resource, ETag, ctag and sync token. A client such as Apple Contacts, Thunderbird or DAVx⁵ on Android signs in with an app password, finds the principal, and syncs one collection, the book. Each card is one resource, a `.vcf` file holding the vCard text that [CONTACTS.md](CONTACTS.md) stores byte for byte, so CardDAV has no storage of its own.
 
-The sections cover the routes and discovery, the privileges Apple needs, the 3.0 transcode, how a PUT is judged, sync and REPORTs. Two cases surprise people: a refused delete of the user's own card comes back on the next sync, and Apple's group cards are stored but never shown.
+The sections cover the routes and discovery, the privileges Apple needs, the 3.0 transcode, how a PUT is judged, sync and REPORTs. Five things in them surprise people:
+
+- Apple treats every card as read-only unless the book says the user may write it ([§ Apple needs write privileges](#apple-needs-write-privileges-on-the-book)).
+- A vCard 4.0 PUT is rewritten to 3.0 before it is stored, so its answer carries no ETag ([§ The book is vCard 3.0](#the-book-is-vcard-30-so-a-40-put-is-transcoded)).
+- `If-Match` and `If-None-Match` are checked inside the store's write lock, never in the handler ([§ A PUT parses before the lock](#a-put-parses-before-the-lock-and-decides-inside-it)).
+- A refused delete of the user's own card comes back on the next sync ([§ A refused self-delete](#a-refused-self-delete-lists-the-card-again)).
+- Apple's group cards are stored but never shown ([§ Group cards](#group-cards-are-stored-but-not-shown)).
 
 ## One principal serves both CalDAV and CardDAV
 
