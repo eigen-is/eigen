@@ -226,7 +226,7 @@ describe('Server backup routes', () => {
         expect(serverRecords()).toEqual([]);
     });
 
-    test('delete refuses a name outside the grammar, one that is not there, and one being written', async () => {
+    test('delete refuses a name outside the grammar and one that is not there', async () => {
         const at = new Date('2026-09-05T02:00:00Z');
         for (const name of [buildArtifactName(ctx.alice.user.id, at), 'server-manual-full-..tar', 'x']) {
             const res = await ctx.alice.api.admin['server-backup'].archives({ name }).delete();
@@ -234,12 +234,15 @@ describe('Server backup routes', () => {
         }
         const missing = buildServerArchiveName('manual', 'full', at);
         expect((await ctx.alice.api.admin['server-backup'].archives({ name: missing }).delete()).status).toBe(404);
+    });
 
-        const running = buildServerArchiveName('scheduled', 'full', at);
-        writeRecord(running, { state: 'running', startedAt: at.toISOString() }, 'half an archive');
-        const res = await ctx.alice.api.admin['server-backup'].archives({ name: running }).delete();
-        expect(res.status).toBe(409);
-        expect(serverRecords().sort()).toEqual([running, `${running}.json`]);
+    test('delete takes a record left running by a job whose final write failed', async () => {
+        const at = new Date('2026-09-05T02:00:00Z');
+        const stuck = buildServerArchiveName('scheduled', 'full', at);
+        writeRecord(stuck, { state: 'running', startedAt: at.toISOString() }, 'half an archive');
+        const { error } = await ctx.alice.api.admin['server-backup'].archives({ name: stuck }).delete();
+        expect(error).toBeNull();
+        expect(serverRecords()).toEqual([]);
     });
 
     test(

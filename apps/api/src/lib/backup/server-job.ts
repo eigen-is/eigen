@@ -313,14 +313,13 @@ export async function hasRecentPreUpdateBackup(now: Date): Promise<boolean> {
 
 // An archive and its record go together, and a refused attempt's record alone. One still being
 // written is refused: its job would write the record back when it ends. The job map says so
-// whatever the record reads.
+// whatever the record reads: a record left running with no job behind it lost its final write.
 export async function deleteServerArchive(name: string): Promise<void> {
     if (!parseServerArchiveName(name)) throw new ApiError(400, 'Not a server backup name');
     const archivePath = path.join(backupsDirPath(), name);
     const recordPath = serverSidecarPath(archivePath);
     if (!fs.existsSync(archivePath) && !fs.existsSync(recordPath)) throw new ApiError(404, 'Archive not found');
-    const record = await readServerSidecar(archivePath);
-    if (runningJobOn(name) || record?.state === 'running') throw new ApiError(409, `${name} is still being written`);
+    if (runningJobOn(name)) throw new ApiError(409, `${name} is still being written`);
     fs.rmSync(archivePath, { force: true });
     fs.rmSync(recordPath, { force: true });
 }
