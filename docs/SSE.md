@@ -1,6 +1,6 @@
 # Server-Sent Events (SSE)
 
-> **TLDR:** Every signed-in tab holds one event stream of its user's own Home (`apps/api/src/lib/home/sse-stream.ts`, served by `apps/api/src/routes/sse.ts`), and `useSSE` (`packages/lib/src/core/sse/hooks/use-sse.ts`) hands each event to the domain handlers, which invalidate the TanStack Query cache. Not obvious from the code: an event carries only what invalidation needs, toasts come only from the notification center's event, the keepalive re-subscribes the stream to a Home that was evicted and rebuilt, and every stream announces the data epoch of the user's homes, which reloads a tab after a restore.
+> **TLDR:** The server tells open pages that data changed through an event stream. Every signed-in tab holds one, the stream of its user's own Home (`apps/api/src/lib/home/sse-stream.ts`, served by `apps/api/src/routes/sse.ts`), and `useSSE` (`packages/lib/src/core/sse/hooks/use-sse.ts`) hands each event to the domain handlers, which invalidate the TanStack Query cache so the page refetches. Not obvious from the code: an event carries only what invalidation needs, toasts come only from the notification center's event, the keepalive re-subscribes the stream to a Home that was evicted and rebuilt, and every stream announces the data epoch of the user's homes, an id that changes only when a restore replaces a home's data, so a tab reloads after a restore.
 
 ## A stream belongs to one user's own Home
 
