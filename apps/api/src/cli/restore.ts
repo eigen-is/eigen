@@ -491,7 +491,7 @@ async function swap(): Promise<void> {
     if (existsSync(SWAP_MARKER)) {
         lockData(ui);
         const marked = readRecord<RestoreSwap>(SWAP_MARKER);
-        if (!marked) {
+        if (!Array.isArray(marked?.renames)) {
             return ui.fail(
                 `${SWAP_MARKER} does not read as a swap.`,
                 `Put data/ right by hand, then delete ${SWAP_MARKER}.`,
