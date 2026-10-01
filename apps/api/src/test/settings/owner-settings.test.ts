@@ -16,6 +16,7 @@ import * as mailer from '../../lib/core/mailer';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 import { FakeS3Server } from '../fake-s3-server';
+import { CLEARED_S3 } from '../fault-storage-helpers';
 import { assertJson, authedRequest, createTestUser, getTestContext, type TestUser } from '../setup';
 import { TEST_DATA_DIR } from '../test-env';
 
@@ -100,7 +101,7 @@ describe('owner-only settings', () => {
             await updateServerSettings({
                 backups: {
                     schedule: { enabled: false, hourUtc: 2, withS3: false, keep: 7 },
-                    upload: { enabled: false, s3: { ...EMPTY_S3, region: undefined }, keep: 30 },
+                    upload: { enabled: false, s3: CLEARED_S3, keep: 30 },
                 },
             });
         });
@@ -225,7 +226,7 @@ describe('owner-only settings', () => {
             beforeEach(async () => {
                 await updateServerSettings({
                     defaults: { mount: { s3Config: undefined } },
-                    backups: { upload: { enabled: false, s3: { ...EMPTY_S3, region: undefined }, keep: 30 } },
+                    backups: { upload: { enabled: false, s3: CLEARED_S3, keep: 30 } },
                 });
             });
 

@@ -13,6 +13,7 @@ import { orgOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
 import {
     BACKUP_FORMAT_VERSION,
     canUploadServerArchive,
+    isCompleteArchive,
     parseServerArchiveName,
     SERVER_ARCHIVE_EXTENSION,
 } from '@workspace/lib/validation';
@@ -112,6 +113,7 @@ async function appendHome(
     const member = buildHomeMemberName(home.ownerId, at);
     const packed = path.join(staging, path.basename(member));
     let bytes: number;
+    let warnings: string[] | undefined;
     try {
         // Held for the capture only: meanwhile a per-home backup or restore of this home gets the
         // 409, as the server job waited out theirs.
@@ -120,6 +122,7 @@ async function appendHome(
         requireVerified(await verifyFolder(folder, onProgress), member);
         await packFolder(folder, packed);
         bytes = manifest.counts.bytes;
+        warnings = manifest.warnings;
     } catch (error) {
         // A delete mid-capture throws whatever the torn-down home throws: the row says whether it is gone.
         const id = parseOwnerId(home.ownerId).id;
@@ -129,7 +132,7 @@ async function appendHome(
         await fsp.rm(folder, { recursive: true, force: true });
     }
     await appendPacked(writer, member, packed);
-    return { ...home, member, bytes };
+    return { ...home, member, bytes, ...(warnings && { warnings }) };
 }
 
 // Into a temp file renamed into place once the manifest closes it, so nothing is left behind on a throw.
@@ -189,7 +192,8 @@ async function writeServerArchive(
 }
 
 // The job, from its record to its retention. `admit` is called once the room check passes, so the
-// caller can answer a refusal with its 507. A home that failed keeps the archive and fails the job.
+// caller can answer a refusal with its 507. A home that failed keeps the archive and fails the job. One backed up
+// with warnings is in the archive, so the job is done, and ./eigen update goes on: the owner hears of it apart.
 async function runServerBackup(
     job: BackupJob,
     archivePath: string,
@@ -213,6 +217,14 @@ async function runServerBackup(
             throw new Error(`${failed.length} of ${sidecar.manifest.homes.length} homes failed: ${named}`);
         }
         sidecar.state = 'done';
+        const warned = sidecar.manifest.homes.flatMap((home) =>
+            home.warnings?.length ? [`${home.name} (${home.warnings.join('; ')})`] : [],
+        );
+        if (warned.length > 0) {
+            job.warnings = warned;
+            const body = `${warned.length} of ${sidecar.manifest.homes.length} homes have warnings: ${warned.join('; ')}`;
+            alertOwner('Server backup has warnings', body, `server-backup-warnings-${name}`).catch(() => {});
+        }
     } catch (error) {
         sidecar.state = 'failed';
         sidecar.error = describeError(error);
@@ -269,7 +281,7 @@ async function uploadAndRecord(archivePath: string, signal: AbortSignal): Promis
     try {
         signal.throwIfAborted();
         const record = await readServerSidecar(archivePath);
-        const retention = { keep, partial: record?.manifest?.homes.some((home) => home.failed) };
+        const retention = { keep, partial: !isCompleteArchive(record?.manifest) };
         await uploadServerArchive(archivePath, s3, retention, signal);
         upload = { state: 'done', at: new Date(), key };
     } catch (error) {
@@ -339,12 +351,23 @@ export async function startServerBackup({
 
 // What ./eigen backup follows over the control socket: plain JSON with no dates, since the CLI reads it
 // without Eden's reviver. `bytes` is null until the archive is renamed into place.
-export type ControlBackupJob = Pick<BackupJob, 'id' | 'state' | 'progress' | 'artifact' | 'error' | 'uploadJobId'> & {
+export type ControlBackupJob = Pick<
+    BackupJob,
+    'id' | 'state' | 'progress' | 'artifact' | 'error' | 'uploadJobId' | 'warnings'
+> & {
     bytes: number | null;
 };
 
-export function toControlJob({ id, state, progress, artifact, error, uploadJobId }: BackupJob): ControlBackupJob {
+export function toControlJob({
+    id,
+    state,
+    progress,
+    artifact,
+    error,
+    uploadJobId,
+    warnings,
+}: BackupJob): ControlBackupJob {
     const archivePath = artifact && path.join(backupsDirPath(), artifact);
     const bytes = archivePath ? (fs.statSync(archivePath, { throwIfNoEntry: false })?.size ?? null) : null;
-    return { id, state, progress, artifact, error, uploadJobId, bytes };
+    return { id, state, progress, artifact, error, uploadJobId, warnings, bytes };
 }

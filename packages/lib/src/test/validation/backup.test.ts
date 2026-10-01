@@ -9,6 +9,8 @@ import type {
 import {
     canUploadServerArchive,
     incompleteReason,
+    isCompleteArchive,
+    parseBackupManifest,
     parseServerArchiveManifest,
     parseServerArchiveName,
     parseServerArchiveSidecar,
@@ -46,6 +48,37 @@ describe('incompleteReason', () => {
         expect(incompleteReason({ level: 'full', mounts })).toBe(
             'holds only the metadata of mount bucket, other, not its files, so it cannot restore an account on its own',
         );
+    });
+});
+
+describe('parseBackupManifest', () => {
+    const valid: BackupManifest = {
+        formatVersion: 1,
+        kind: 'user',
+        ownerId: 'u'.repeat(32),
+        name: 'U',
+        createdAt: '2026-09-30T02:03:04.000Z',
+        appVersion: '0.3.1',
+        server: { domain: 'example.org', orgId: 'org' },
+        counts: { databases: 1, files: 0, bytes: 10 },
+        level: 'full',
+        mounts: [mount('drive', 'local')],
+        entries: [{ path: 'home/mounts/drive/metadata.db', bytes: 10, sha256: 'a'.repeat(64) }],
+    };
+
+    test('reads the warnings of a home backed up with them, and a manifest written before them', () => {
+        const warned = {
+            ...valid,
+            warnings: ['mount drive: files with no object in storage, archived without their bytes: a.png'],
+        };
+        expect(parseBackupManifest(JSON.stringify(warned))).toEqual(warned);
+        expect(parseBackupManifest(JSON.stringify(valid))).toEqual(valid);
+    });
+
+    test('refuses warnings that are not a list of strings', () => {
+        for (const warnings of ['a.png', [3], [null], {}]) {
+            expect(parseBackupManifest(JSON.stringify({ ...valid, warnings }))).toBeNull();
+        }
     });
 });
 
@@ -102,6 +135,18 @@ describe('parseServerArchiveManifest', () => {
 
     test('round-trips a valid manifest', () => {
         expect(parseServerArchiveManifest(JSON.stringify(valid))).toEqual(valid);
+        const [user, ...rest] = valid.homes;
+        const warned = { ...valid, homes: [{ ...user, warnings: ['mount drive: a.png'] }, ...rest] };
+        expect(parseServerArchiveManifest(JSON.stringify(warned))).toEqual(warned);
+    });
+
+    test('an archive is complete only when no home failed and none was backed up with warnings', () => {
+        const [user, team, deleted] = valid.homes;
+        expect(isCompleteArchive({ homes: [user, deleted] })).toBe(true);
+        expect(isCompleteArchive({ homes: [user, team] })).toBe(false);
+        expect(isCompleteArchive({ homes: [{ ...user, warnings: ['mount drive: a.png'] }, deleted] })).toBe(false);
+        expect(isCompleteArchive({ homes: [{ ...user, warnings: [] }, deleted] })).toBe(true);
+        expect(isCompleteArchive(undefined)).toBe(false);
     });
 
     test('refuses a manifest that does not say whether it holds the TLS certificate', () => {
@@ -132,6 +177,8 @@ describe('parseServerArchiveManifest', () => {
             [{ ...team, ownerId: user.ownerId }],
             [{ ...user, member: 'homes/elsewhere.tar.zst' }],
             [{ ...user, skipped: true }],
+            [{ ...user, warnings: 'a.png' }],
+            [{ ...user, warnings: [3] }],
         ]) {
             expect(parseServerArchiveManifest(JSON.stringify({ ...valid, homes }))).toBeNull();
         }

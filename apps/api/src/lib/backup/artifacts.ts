@@ -46,6 +46,7 @@ export async function listArtifacts(ownerId: string): Promise<BackupArtifact[]> 
                       counts: manifest.counts,
                       level: manifest.level,
                       mounts: manifest.mounts,
+                      warnings: manifest.warnings,
                   }
                 : null,
             verify: sidecar?.verify ?? { status: 'unverified', failures: [] },

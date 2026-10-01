@@ -153,9 +153,27 @@ export function readMountPathRows(db: Database): MountPathRow[] {
     return db.query<MountPathRow, []>(`SELECT ${columns} FROM paths`).all();
 }
 
+// Where a row's parent chain ends when it does not end at a root row: at a parent the table does not hold, or in a
+// cycle, where `ancestors` stops in silence. Null for a row that reaches the root.
+function brokenChain(row: MountPathRow, byId: Map<string, MountPathRow>): string | null {
+    let top = row;
+    for (const parent of ancestors(row, byId)) top = parent;
+    if (top.parentId === null) return null;
+    return byId.has(top.parentId)
+        ? 'sits in a parent cycle'
+        : `reaches a parent (${top.parentId}) the table does not hold`;
+}
+
+// The rows no path builder can place: the capture leaves them out of an archive, verify refuses an archive with one.
+export function unreachableRows(rows: MountPathRow[]): MountPathRow[] {
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return rows.filter((row) => brokenChain(row, byId) !== null);
+}
+
 // An archived paths table arrived inside a file an admin uploaded, and every path a restore builds is a join of id,
 // name and file: a `..` or a separator in one moves bytes out of the mount, so the archive is refused whole. The one
 // separator a live table holds is a trash root's `file` on a path-based mount, which must be exactly trashPath's key.
+// A tree that does not end at the root describes no archive.
 export function checkArchivedPathRows(rows: MountPathRow[]): string[] {
     const byId = new Map(rows.map((row) => [row.id, row]));
     const failures: string[] = [];
@@ -167,20 +185,8 @@ export function checkArchivedPathRows(rows: MountPathRow[]): string[] {
         if (row.file !== '' && !trashKey && !isUsableName(row.file)) {
             failures.push(`path row ${row.id} has an unusable file "${row.file}"`);
         }
-        if (row.parentId !== null && !byId.has(row.parentId)) {
-            failures.push(`path row ${row.id} names a parent (${row.parentId}) the table does not hold`);
-            continue;
-        }
-        // Both path builders walk this chain, and `ancestors` stops on a cycle rather than reporting
-        // one: a tree that does not terminate at the root describes no archive.
-        const seen = new Set<string>([row.id]);
-        for (let current = row.parentId; current !== null; current = byId.get(current)?.parentId ?? null) {
-            if (seen.has(current)) {
-                failures.push(`path row ${row.id} sits in a parent cycle`);
-                break;
-            }
-            seen.add(current);
-        }
+        const broken = brokenChain(row, byId);
+        if (broken) failures.push(`path row ${row.id} ${broken}`);
     }
     return failures;
 }

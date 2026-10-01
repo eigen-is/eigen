@@ -1,7 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { EMPTY_S3 } from '@workspace/lib/types/mount';
 import { eq } from 'drizzle-orm';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { account as accountSchema, user as userSchema } from '../../../auth-schema';
@@ -17,9 +16,15 @@ import type { ControlStatus } from '../../lib/config/server-status';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
 import { controlRouter, startControlSocket } from '../../routes/control';
-import { holdCaptures, removeServerRecords, serverRecords, writeServerRecord } from '../backup/backup-test-helpers';
+import {
+    holdCaptures,
+    removeServerRecords,
+    serverManifestOf,
+    serverRecords,
+    writeServerRecord,
+} from '../backup/backup-test-helpers';
 import * as cli from '../cli-test-helpers';
-import { DUMMY_S3 } from '../fault-storage-helpers';
+import { CLEARED_S3, DUMMY_S3 } from '../fault-storage-helpers';
 import { createTestUser, ensureServer, getTestContext, hasSession, signsIn, TEST_DATA_DIR } from '../setup';
 
 const FIXTURE_CERT = join(import.meta.dir, '../fixtures/control/expires-2036.crt');
@@ -471,15 +476,15 @@ describe('the server backup on the control socket', () => {
                 newest: null,
                 scheduledFailure: null,
                 scheduledNotUploaded: null,
+                warned: null,
                 newestGoodFullAt: null,
             });
         });
 
         test('names the newest record, the failed scheduled attempt and the newest Full that verified', async () => {
-            writeFileSync(
-                writeRecord('scheduled', 'full', '2026-09-01T02:00:00.000Z', { state: 'done' }),
-                'archive bytes',
-            );
+            const goodAt = '2026-09-01T02:00:00.000Z';
+            const manifest = serverManifestOf('scheduled', goodAt, 'complete');
+            writeFileSync(writeRecord('scheduled', 'full', goodAt, { state: 'done', manifest }), 'archive bytes');
             writeFileSync(writeRecord('manual', 'light', '2026-09-01T12:00:00.000Z', { state: 'done' }), 'light bytes');
             const failed = writeRecord('scheduled', 'full', '2026-09-02T02:00:00.000Z', {
                 state: 'failed',
@@ -491,8 +496,19 @@ describe('the server backup on the control socket', () => {
                 newest: { name, createdAt: '2026-09-02T02:00:00.000Z', state: 'failed', bytes: null, error: 'no room' },
                 scheduledFailure: { name, createdAt: '2026-09-02T02:00:00.000Z', error: 'no room' },
                 scheduledNotUploaded: null,
+                warned: null,
                 newestGoodFullAt: '2026-09-01T02:00:00.000Z',
             });
+        });
+
+        test('names the newest archive backed up with warnings, which is no good Full', async () => {
+            const at = '2026-09-04T02:00:00.000Z';
+            const manifest = serverManifestOf('scheduled', at, 'warned');
+            const archivePath = writeRecord('scheduled', 'full', at, { state: 'done', manifest });
+            const name = archivePath.slice(archivePath.lastIndexOf('/') + 1);
+            const { backup } = await getStatus();
+            expect(backup.warned).toEqual({ name, createdAt: at, error: 'alice' });
+            expect(backup.newestGoodFullAt).toBeNull();
         });
 
         test('names the newest scheduled archive that saved but did not reach the bucket', async () => {
@@ -538,6 +554,30 @@ describe('the server backup on the control socket', () => {
             JOB_TIMEOUT_MS,
         );
 
+        test(
+            'a backup with a home backed up with warnings names them and exits 0, so the update after it goes on',
+            async () => {
+                const pull = homeRelay.pullHomeSnapshot;
+                const warned = spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (...args) => ({
+                    ...(await pull(...args)),
+                    warnings: ['mount default: files with no object in storage, archived without their bytes: a.png'],
+                }));
+                const { stdout, stderr, code } = await runCli([
+                    'backup',
+                    '--level',
+                    'light',
+                    '--reason',
+                    'pre-update',
+                ]).finally(() => warned.mockRestore());
+                expect(code).toBe(0);
+                expect(stdout).toMatch(/\narchive=server-pre-update-light-\d{8}-\d{6}\.tar\n$/);
+                expect(stderr).toMatch(
+                    /^▲ {2}Backed up with warnings: .+ \(mount default: files with no object in storage, archived without their bytes: a\.png\)$/m,
+                );
+            },
+            JOB_TIMEOUT_MS,
+        );
+
         test('a level or reason it does not take is a usage error', async () => {
             for (const args of [
                 ['--level', 'all'],
@@ -563,7 +603,7 @@ describe('the server backup on the control socket', () => {
                     expect(archive).toBeDefined();
                     expect(existsSync(join(getBackupsDir(), archive!))).toBe(true);
                 } finally {
-                    await updateServerSettings({ backups: { upload: { enabled: false, s3: EMPTY_S3 } } });
+                    await updateServerSettings({ backups: { upload: { enabled: false, s3: CLEARED_S3 } } });
                 }
             },
             JOB_TIMEOUT_MS,

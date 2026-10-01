@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { expect, spyOn } from 'bun:test';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { BackupJob, BackupLevel, BackupManifest } from '@workspace/lib/types/backup';
+import type { BackupJob, BackupLevel, BackupManifest, BackupReason } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SERVER_ARCHIVE_PREFIX } from '@workspace/lib/validation';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
@@ -10,6 +10,7 @@ import { getBackupJob } from '../../lib/backup/jobs';
 import { buildHomeFolderName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { readServerArchive } from '../../lib/backup/verify';
+import { getDomain } from '../../lib/config/server-config';
 import { getStorageType, updateServerSettings } from '../../lib/config/server-settings';
 import { type DatabaseConfig, PATHS } from '../../lib/core';
 import type { Home } from '../../lib/home';
@@ -50,6 +51,31 @@ export function writeServerRecord(name: string, record: object, archive?: string
     if (archive !== undefined) writeFileSync(archivePath, archive);
     writeFileSync(serverSidecarPath(archivePath), JSON.stringify(record));
     return archivePath;
+}
+
+// The manifest of a server archive of one home, as a job writes it: whole, with the home failed, or with warnings.
+export function serverManifestOf(reason: BackupReason, at: string, outcome: 'complete' | 'failed' | 'warned') {
+    const home = { ownerId: 'a'.repeat(32), kind: 'user', name: 'alice' };
+    const outcomes = {
+        complete: home,
+        failed: { ...home, failed: 'bucket unreachable' },
+        warned: { ...home, member: 'homes/alice.tar.zst', warnings: ['mount default: a.png'] },
+    };
+    return {
+        formatVersion: 1,
+        level: 'full',
+        reason,
+        createdAt: at,
+        appVersion: 'test',
+        domain: getDomain(),
+        entries: outcome === 'warned' ? [{ path: 'homes/alice.tar.zst', bytes: 1, sha256: 'a'.repeat(64) }] : [],
+        homes: [outcomes[outcome]],
+        orphans: [],
+        envFile: true,
+        dkim: true,
+        certs: true,
+        images: {},
+    };
 }
 
 // The manifest and members of a server archive that reads.

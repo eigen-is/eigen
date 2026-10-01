@@ -134,8 +134,9 @@ async function snapshotDataDbToVersionStaged(
     return created;
 }
 
-// Produce a local copy of a managed container db's current bytes at destPath, freshest source first.
-// False when there is nothing left to copy: no live handle, no viable crash temp (backup order only),
+// Produce a local copy of a managed container db's current bytes at destPath, freshest source first,
+// and say where it came from: only a copy of the stored object shows the store answers.
+// Null when there is nothing left to copy: no live handle, no viable crash temp (backup order only),
 // nothing staged, and a GET that answers the object missing. The container was deleted or a versions/
 // snapshot pruned since the caller read the paths table, or the data.db object is gone, which the
 // version snapshot answers with a 410.
@@ -148,7 +149,7 @@ export async function stageManagedDbCopy(
     pathId: string,
     destPath: string,
     order: 'staged-first' | 'open-handle-first',
-): Promise<boolean> {
+): Promise<'local' | 'stored' | null> {
     // 'staged-first' never reads the crash temp: it runs inside a close that holds the slot, mid-teardown of that temp.
     if (order === 'open-handle-first') {
         const staged = await withDocumentDb(mount, pathId, async (slot) => {
@@ -176,7 +177,7 @@ export async function stageManagedDbCopy(
             }
             return true;
         });
-        if (staged) return true;
+        if (staged) return 'local';
     }
     // Shared, after the slot: an ancestor's rename on a by-name mount would move the object between its key and the read.
     return mount.withTreeShared(async () => {
@@ -186,23 +187,23 @@ export async function stageManagedDbCopy(
         const pendingStaging = mount.pendingStagedCopy(storageKey);
         if (pendingStaging) {
             fs.copyFileSync(pendingStaging, destPath);
-            return true;
+            return 'local';
         }
         // Nothing pending: a live VACUUM INTO if the doc is open, else the storage object — which is
         // current because every upload acked.
         const cached = mount.documentDbs.get(pathId)?.db;
         if (cached) {
             cached.stageCopy(destPath);
-            return true;
+            return 'local';
         }
-        // A GET, not a HEAD: a HEAD answers a missing bucket as a missing key, and false here is terminal.
+        // A GET, not a HEAD: a HEAD answers a missing bucket as a missing key, and null here is terminal.
         try {
             await writeTempWithHash(destPath, mount.storage.read(storageKey));
-            return true;
+            return 'stored';
         } catch (error) {
             if (!isMissingObjectCause(error)) throw error;
             fs.rmSync(destPath, { force: true });
-            return false;
+            return null;
         }
     });
 }

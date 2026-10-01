@@ -1122,6 +1122,8 @@ update_get() {
         if [ -z "$saved" ]; then
             die "The backup named no archive." "Eigen $current runs on as it was. Run ./eigen update again; $LOG shows what the backup said."
         fi
+        # A home backed up with warnings is in it without what they name, and the step's line alone hides that.
+        sed -n 's/^▲  //p' "$LOG" | while IFS= read -r line; do say "$YELLOW" '▲' "$line"; done
         # What changes from here to the stop is not in it: the operator is told until when it holds.
         say "$GRAY" '│' "backups/$saved, made until $(date -u +%H:%M:%S) UTC"
         handover="--saved $saved"

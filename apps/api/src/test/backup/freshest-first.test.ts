@@ -40,6 +40,8 @@ const STALLED_MOUNT_ID = 'backup-s3-stalled';
 const FAILING_MOUNT_ID = 'backup-s3-failing';
 const FAILING_CONTAINER_MOUNT_ID = 'backup-s3-failing-container';
 const NO_BUCKET_MOUNT_ID = 'backup-s3-no-bucket';
+const NO_BUCKET_PLAIN_MOUNT_ID = 'backup-s3-no-bucket-plain';
+const NO_BUCKET_STAGED_MOUNT_ID = 'backup-s3-no-bucket-staged';
 const RACING_DELETE_MOUNT_ID = 'backup-s3-racing-delete';
 const VANISHING_OBJECT_MOUNT_ID = 'backup-s3-vanishing-object';
 const LOCAL_MOUNT_ID = 'backup-local';
@@ -368,24 +370,69 @@ describe('Backup freshest-first on an s3 mount', () => {
         },
     );
 
-    test('a plain file whose object is gone from the bucket fails the backup', async () => {
+    test('a plain file whose object is gone from the bucket is archived without it, and named', async () => {
         const rootId = (await staleMount.getRootFolder())!.id;
-        const fileId = await staleMount.createFile(
-            rootId,
-            'lost.png',
-            'image/png',
-            TEST_PNG_BYTES.byteLength,
-            TEST_PNG_BYTES,
-        );
-        const storageKey = await staleMount.getStorageKey(fileId);
+        const create = (name: string) =>
+            staleMount.createFile(rootId, name, 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
+        const fileId = await create('lost.png');
+        const keptId = await create('beside.png');
         try {
-            await staleFault.inner.delete(storageKey);
-            await expect(snapshotInto(home)).rejects.toThrow(
-                `mount ${STALE_MOUNT_ID}: lost.png has ${TEST_PNG_BYTES.byteLength} bytes on record but no object at ${storageKey}`,
+            await staleFault.inner.delete(await staleMount.getStorageKey(fileId));
+            const { manifest } = await snapshotInto(home);
+            const prefix = `home/mounts/${STALE_MOUNT_ID}/data`;
+            const paths = manifest.entries.map((e) => e.path);
+            expect(paths).toContain(`${prefix}/beside.png`);
+            expect(paths).not.toContain(`${prefix}/lost.png`);
+            expect(manifest.warnings).toContain(
+                `mount ${STALE_MOUNT_ID}: files with no object in storage, archived without their bytes: lost.png`,
             );
         } finally {
             await staleMount.deletePath(fileId);
+            await staleMount.deletePath(keptId);
         }
+    });
+
+    // A HEAD answers a missing bucket as a missing key, so a renamed bucket reads as every object gone.
+    test('a mount whose bucket answers NoSuchBucket for every object fails as unreachable', async () => {
+        await withFakeS3Mount(NO_BUCKET_PLAIN_MOUNT_ID, async (mount, fake) => {
+            const rootId = (await mount.getRootFolder())!.id;
+            for (const name of ['a.png', 'b.png']) {
+                const fileId = await mount.createFile(
+                    rootId,
+                    name,
+                    'image/png',
+                    TEST_PNG_BYTES.byteLength,
+                    TEST_PNG_BYTES,
+                );
+                fake.faults.set(await mount.getStorageKey(fileId), 'no-bucket');
+            }
+            await expect(snapshotInto(home)).rejects.toThrow(`mount ${NO_BUCKET_PLAIN_MOUNT_ID}: storage unreachable`);
+        });
+    });
+
+    // Bytes still in staging never reached the bucket, so they cannot vouch for it.
+    test('a mount whose bucket answers NoSuchBucket fails as unreachable with uploads still in staging', async () => {
+        await withFakeS3Mount(NO_BUCKET_STAGED_MOUNT_ID, async (mount, fake) => {
+            const rootId = (await mount.getRootFolder())!.id;
+            const create = (name: string) =>
+                mount.createFile(rootId, name, 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
+            for (const name of ['a.png', 'b.png']) {
+                fake.faults.set(await mount.getStorageKey(await create(name)), 'no-bucket');
+            }
+            const { dataDbId } = await provisionDoc(mount);
+            const managed = await mount.createDatabase(MARKER_DB_CONFIG, dataDbId);
+            managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'staged' }).run();
+            const docKey = await mount.getStorageKey(dataDbId);
+            fake.faults.set(docKey, 'fail-put');
+            await mount.closeDatabase(dataDbId);
+            const fileKey = await mount.getStorageKey(await create('staged.png'));
+            fake.faults.set(fileKey, 'fail-put');
+            const stagingPath = mount.uploadQueue!.newStagingPath();
+            await Bun.write(stagingPath, TEST_PNG_BYTES);
+            mount.uploadQueue!.enqueueStaged(fileKey, stagingPath, false);
+            for (const key of [docKey, fileKey]) expect(mount.pendingStagedCopy(key)).not.toBeNull();
+            await expect(snapshotInto(home)).rejects.toThrow(`mount ${NO_BUCKET_STAGED_MOUNT_ID}: storage unreachable`);
+        });
     });
 
     test('a file with no object passes when it has no bytes on record or is deleted mid-walk', async () => {

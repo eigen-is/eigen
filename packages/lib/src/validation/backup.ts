@@ -167,6 +167,10 @@ function isMountSummary(value: unknown): value is BackupManifest['mounts'][numbe
     );
 }
 
+function isStringList(value: unknown): value is string[] {
+    return Array.isArray(value) && value.every((item) => typeof item === 'string');
+}
+
 function isServer(value: unknown): value is BackupManifest['server'] {
     return (
         typeof value === 'object' &&
@@ -218,7 +222,8 @@ function isManifest(value: unknown): value is BackupManifest {
         Array.isArray(value.entries) &&
         value.entries.every(isEntry) &&
         (!('email' in value) || value.email === undefined || typeof value.email === 'string') &&
-        (!('level' in value) || isLevel(value.level))
+        (!('level' in value) || isLevel(value.level)) &&
+        (!('warnings' in value) || isStringList(value.warnings))
     );
 }
 
@@ -236,7 +241,8 @@ function isServerArchiveHome(value: unknown): value is ServerArchiveManifest['ho
         (!('member' in value) || typeof value.member === 'string') &&
         (!('bytes' in value) || typeof value.bytes === 'number') &&
         (!('failed' in value) || typeof value.failed === 'string') &&
-        (!('skipped' in value) || typeof value.skipped === 'string')
+        (!('skipped' in value) || typeof value.skipped === 'string') &&
+        (!('warnings' in value) || isStringList(value.warnings))
     );
 }
 
@@ -278,8 +284,7 @@ function isServerArchiveManifest(value: unknown): value is ServerArchiveManifest
         Array.isArray(value.homes) &&
         value.homes.every(isServerArchiveHome) &&
         'orphans' in value &&
-        Array.isArray(value.orphans) &&
-        value.orphans.every((orphan) => typeof orphan === 'string') &&
+        isStringList(value.orphans) &&
         'envFile' in value &&
         typeof value.envFile === 'boolean' &&
         'dkim' in value &&
@@ -289,6 +294,13 @@ function isServerArchiveManifest(value: unknown): value is ServerArchiveManifest
         'images' in value &&
         isStringRecord(value.images)
     );
+}
+
+// Whether an archive restores every home it lists whole: none failed and none was backed up with warnings. Only such
+// an archive counts as good for local retention, the bucket's and ./eigen status, so warned nights never push out the
+// last complete one. A record without a manifest has none.
+export function isCompleteArchive(manifest: Pick<ServerArchiveManifest, 'homes'> | undefined): boolean {
+    return manifest?.homes.every((home) => !home.failed && !home.warnings?.length) ?? false;
 }
 
 // The outer manifest's gate, beside the per-home one below. Null means "not a version 1 manifest of

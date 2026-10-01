@@ -35,7 +35,7 @@ The manifest records the level in `level`, and every mount whose bodies are not 
 ## A home archive holds every database, file and auth row
 
 - Every database, copied with `VACUUM INTO` through the running server's own handle, never as a file copy of a live WAL database: the drive's `shared.db`, each mount's `metadata.db`, `calendar.db`, and for a user `mail.db`, `contacts.db` and `notifications.db`. A database under the home that `HOME_DATABASES` (`apps/api/src/lib/backup/archive-layout.ts`) does not list fails the backup, so a new subsystem's database is noticed the day it lands.
-- Every mount the home declares, disabled ones too. What happens to a mount or file the backup cannot read: [An unreadable enabled mount or a lost file fails the backup](#an-unreadable-enabled-mount-or-a-lost-file-fails-the-backup).
+- Every mount the home declares, disabled ones too. What happens to a mount or file the backup cannot read: [An unreadable mount fails the backup, a lost file or a stray row is a warning](#an-unreadable-mount-fails-the-backup-a-lost-file-or-a-stray-row-is-a-warning).
 - Every file the drive knows about, by the path it would have on a `local` mount, on all three backends. The capture reads a mount's rows from the archived copy of its `metadata.db` and fetches each file by id from wherever the mount keeps it now. It copies each file under that file's path lock ([STORAGE.md](STORAGE.md#writes-to-one-row-serialize-on-its-path-lock)), so an overwrite and the copy wait for each other and the archive holds the whole old file or the whole new one. On a `local` mount, whose keys are names, it also holds the mount's shared tree lock, so no rename moves the bytes mid-read. Each file is in the archive at the path its archived row gives, which is the path a restore puts it at. A restore re-derives whatever keys the target mount needs, so an archive never depends on a bucket, its credentials or the storage type staying the same.
 - Every container's `data.db` and `comments.db`, freshest first: an open document's live handle, then a crash temp in `tmp/`, then a pending staged upload, then the stored object. A backup taken during an S3 outage holds the newest local bytes.
 - Version history and trash (`versions/` and `.trash/`). Version history is the only copy of an old file state, and trash is data the user can still restore.
@@ -67,9 +67,9 @@ A mount's capture copies its `metadata.db` first, and every row in the archive c
 | A drive is added or removed | `settings.json` is captured after the drives, so one may list a drive the other lacks |
 | The user or team is deleted | That home's backup fails with an error. A server backup names the home `skipped` |
 
-## An unreadable enabled mount or a lost file fails the backup
+## An unreadable mount fails the backup, a lost file or a stray row is a warning
 
-An archive that misses files the home should be serving is not a backup, so a backup fails rather than leave them out. What it cannot read and nobody can use is left out.
+A backup of a home with a few holes is better than none, so a lost file or a row nothing can place becomes a warning and the home is still archived. What would let an outage pass as holes fails the home instead. What it cannot read and nobody can use is left out.
 
 | Case | The backup | Why |
 |---|---|---|
@@ -77,8 +77,13 @@ An archive that misses files the home should be serving is not a backup, so a ba
 | A mount with no folder yet | Leaves it out | Adding a mount writes `settings.json` before the drive creates the folder |
 | A disabled mount whose storage cannot be read | Skips it with the reason in the manifest, and a restore leaves it disabled and absent | Its bucket is often unreachable because it was turned off |
 | An enabled mount whose storage fails, or that the drive could not open | Fails, naming the mount and the error code | The home serves its files |
-| A file whose row records bytes and whose object is gone | Fails | The home lists the file |
+| A file whose row records bytes and whose object is gone | Keeps the row without bytes and names the file in a warning. A restore mirrors the absence | The live home cannot serve it either |
+| A mount with a lost file and no file whose bytes were read from storage | Fails, "storage unreachable" | An empty store is an outage, not a store with holes: an unmounted disk or a folder the API cannot read answers every lookup as missing, and so does a renamed bucket or a wrong prefix, since a HEAD answers it as a missing key. Bytes copied from an open document, a crash temp or an upload still in `staging/` are not read from the store, so they do not count. A mount whose only file is lost fails too |
+| A row whose parent chain ends at a missing row or in a cycle | Deletes it from the archive's copy of `metadata.db` before the walk, as a live delete would, and names it in a warning. Its bytes and thumbnail stay out; the live table is not touched | No path is its own. Only a salvaged database or a hand edit with foreign keys off makes one |
+| A `metadata.db` whose root row is gone | Fails | Nothing in it can be placed |
 | A file with no bytes on record | Keeps its row | There is nothing to take |
+
+The warnings are in the home manifest's `warnings`, one line per mount and kind with up to five names, and the log names every one. A home archive with warnings verifies and restores: it is complete in every other respect. Its row in the admin pane lists them. It is not a complete archive for retention and the status, though ([A home that fails is named, and the archive goes on](#a-home-that-fails-is-named-and-the-archive-goes-on)). Verify stays strict: an uploaded archive with a row that does not reach the root is refused. A Full backup of an `s3` mount reads no object, so it cannot see a lost one.
 
 ## A home archive leaves out caches, sessions and other homes
 
@@ -104,7 +109,7 @@ A home archive holds every file and mail, the password hash, app passwords, API 
 
 ## One job per home at a time, and the user keeps working
 
-**Create backup** in the Backup section of a user or team in the admin app starts a job. It captures the home into staging, verifies the folder, packs it into `home-<ownerId>-<date>-<time>.tar.zst` and writes a sidecar beside it with the manifest and the verify result. A home archive that does not verify is kept, with its failures and no Restore button, and the admin who started it gets a notification.
+**Create backup** in the Backup section of a user or team in the admin app starts a job. It captures the home into staging, verifies the folder, packs it into `home-<ownerId>-<date>-<time>.tar.zst` and writes a sidecar beside it with the manifest and the verify result. A home archive that does not verify is kept, with its failures and no Restore button, and the admin who started it gets a notification. One with warnings verifies, and its row lists them.
 
 A second job on a home while one runs gets a 409, so a backup never reads a folder a restore is writing. Job state lives in memory (`apps/api/src/lib/backup/jobs.ts`) and a finished job drops after an hour. The home archives and their sidecars are the durable record, so a restart loses nothing but the progress line. A job sends `backup:job-updated` when it starts and when it ends, and the event only tells the pane to refetch ([SSE.md § A backup job's event is only a nudge](SSE.md#a-backup-jobs-event-is-only-a-nudge)). Progress has no event: the pane polls every 2 s while a job runs, which also covers an admin restoring their own home, who gets no event while that home is offline.
 
@@ -143,7 +148,7 @@ A failure after step 4 parks the half-written folder as `<id>.failed-restore-<da
 
 `incompleteReason` (`packages/lib/src/validation/backup.ts`) reads the manifest: a Light member holds no files and no mail, and a mount with `contents: 'metadata'` holds no file bodies. `restoreHome` refuses such an archive right after it reads the manifest, before the verify and before the home goes aside, where a refusal would already have cost the user their open pages. The admin pane shows why on the row and offers no Restore.
 
-So a Full + S3 member restores any home, a Full member a home without `s3` mounts, and a Light member none. The refusal trusts the manifest. A manifest edited to drop `level` and `contents` still verifies, because verify checks the files the manifest lists and not that each row has its file. In a complete archive only a row with no bytes on record has no file. Such an archive restores files with no bytes ([ROADMAP.md](ROADMAP.md)).
+So a Full + S3 member restores any home, a Full member a home without `s3` mounts, and a Light member none. The refusal trusts the manifest. A manifest edited to drop `level` and `contents` still verifies, because verify checks the files the manifest lists and not that each row has its file. In an archive without warnings only a row with no bytes on record has no file. Such an archive restores files with no bytes ([ROADMAP.md](ROADMAP.md)).
 
 ## A restore never grants privilege
 
@@ -235,6 +240,8 @@ The API reads `.env.production` through a read-only mount at `EIGEN_ENV_FILE`, a
 
 A home whose capture or verify fails gets `failed` with the reason in the manifest, and the loop carries on: one broken bucket must not leave every other home without a backup. The job then ends failed, naming the homes, and the owner is alerted. The archive is kept, verified and uploaded all the same. A home deleted during the run is `skipped`, which is no failure.
 
+A home backed up with warnings has its member, and its entry carries the member's `warnings`. The job ends done, so `./eigen backup` exits 0 and `./eigen update` goes on, and the owner gets an alert of its own. The job's `warnings` name each such home, which `./eigen backup` prints as `▲` lines and `./eigen update` repeats from its log, since its step line alone hides them. Such an archive is not complete: `isCompleteArchive` (`packages/lib/src/validation/backup.ts`) is false when any home failed or has warnings, and it is the one test local retention, the bucket's partial marker and the status row use. So warned nights never push out the last complete archive.
+
 ## The schedule makes one attempt per UTC day
 
 `serverBackupTick` (`apps/api/src/lib/backup/schedule.ts`) runs every five minutes. It never runs at boot, when the server is busiest. It starts a Full (Full + S3 with `withS3`) once the UTC hour reaches `hourUtc` and no scheduled archive or record in `backups/` carries today's UTC date. A failed or refused attempt leaves its record, so it counts: a bad night is one alert, not a retry every tick. A restart before the night's attempt skips nothing, since the first tick after the boot starts it. A restart during the attempt ends it failed, "interrupted by a restart", and that was the night's attempt. The settings live in `settings.json` under `backups.schedule` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)).
@@ -245,17 +252,17 @@ A home whose capture or verify fails gets `failed` with the reason in the manife
 
 | Reason | Kept |
 |---|---|
-| scheduled | The newest `keep` whose job ended done, plus up to `keep` failed ones newer than the newest good one |
+| scheduled | The newest `keep` good ones, whose job ended done on a complete archive, plus up to `keep` others newer than the newest good one: failed, or backed up with warnings |
 | pre-update | The same rule with a `keep` of two, plus the newest good one made by another build than the one running |
 | manual | All of them; the owner deletes them |
 
 That last pre-update archive is the one `./eigen rollback` restores. `.eigen/last-update` names it, and the API cannot read that file. An update that failed after its backup leaves a newer archive, which must not push it out.
 
-A failed night never pushes out the last good archive, and nights that keep failing don't pile up. An archive without a readable sidecar is never deleted, and neither is one a running job still reads. A name the grammar does not read is never touched.
+A failed or warned night never pushes out the last good archive, and nights that keep failing don't pile up. An archive without a readable sidecar is never deleted, and neither is one a running job still reads. A name the grammar does not read is never touched.
 
 ## Failures reach the owner
 
-Every failure of a server backup or its upload sends an `admin-alert` to `getOrgOwner()` through `alertOwner` (`apps/api/src/lib/user/alert-owner.ts`), tagged per archive so repeats coalesce. `./eigen status` shows a Backup row from `ControlStatus.backup`, built by `getServerBackupStatus` in `apps/api/src/lib/backup/server-archives.ts`: red while the newest scheduled attempt failed, yellow while it is not in the bucket or while the schedule is on and no Full verified in two days. With Eigen stopped the row reads the names in `backups/`.
+Every failure of a server backup or its upload sends an `admin-alert` to `getOrgOwner()` through `alertOwner` (`apps/api/src/lib/user/alert-owner.ts`), tagged per archive so repeats coalesce, and so does a backup with warnings, under a tag of its own. `./eigen status` shows a Backup row from `ControlStatus.backup`, built by `getServerBackupStatus` in `apps/api/src/lib/backup/server-archives.ts`: red while the newest scheduled attempt failed; yellow while its archive is not in the bucket; yellow, "backed up with warnings" and the homes, while the newest scheduled archive or the newest archive has warnings; yellow while the schedule is on and no complete Full verified in two days. Each reads only when the one before it does not apply. With Eigen stopped the row reads the names in `backups/`.
 
 ## Upload goes to a bucket of its own
 
@@ -276,7 +283,7 @@ The backup bucket's secret reaches no browser, the owner's included. An admin wh
 
 After a successful upload, `pruneBucketArchives` (`apps/api/src/lib/backup/retention.ts`) lists the server's folder and deletes scheduled archives past `upload.keep`, by name.
 
-- An archive whose manifest names a failed home counts toward `keep`, but the newest complete archive stays whatever came after it, because only it restores every home.
+- An archive whose manifest names a failed home or one with warnings counts toward `keep`, but the newest complete archive stays whatever came after it, because only it restores every home whole.
 - The upload of such an archive first writes an empty `<name>.partial` beside it, since this server's record of the archive goes with local retention long before the bucket's copy does. The marker goes with its archive.
 - Manual archives and names the grammar does not read are never deleted.
 - An archive uploaded late that the count would drop is left, and that round deletes nothing.

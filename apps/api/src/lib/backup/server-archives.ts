@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import type { ServerArchive, ServerArchiveSidecar, ServerArchiveUpload } from '@workspace/lib/types/backup';
 import {
     canUploadServerArchive,
+    isCompleteArchive,
     parseServerArchiveName,
     parseServerArchiveNames,
     parseServerArchiveSidecar,
@@ -79,14 +80,22 @@ export type ServerBackupStatus = {
     // The newest scheduled attempt, when its archive is here but not in the bucket: its last upload failed, or
     // the owner could upload it and no upload was tried, as when a restart cut in between.
     scheduledNotUploaded: ArchiveLine | null;
+    // The newest scheduled archive or the newest archive, when it was backed up with warnings; `error` names the homes.
+    warned: ArchiveLine | null;
     newestGoodFullAt: string | null;
 };
+
+// A job that ended done on an archive that restores every home whole.
+function isGood(record: ServerArchiveSidecar | null): boolean {
+    return record?.state === 'done' && isCompleteArchive(record.manifest);
+}
 
 export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
     const archives = await listServerArchives();
     const [newest] = archives;
     const scheduled = archives.find((archive) => archive.reason === 'scheduled');
-    const goodFull = archives.find((archive) => archive.level !== 'light' && archive.record?.state === 'done');
+    const goodFull = archives.find((archive) => archive.level !== 'light' && isGood(archive.record));
+    const warned = [scheduled, newest].find((archive) => archive?.record?.state === 'done' && !isGood(archive.record));
     const { schedule, upload } = getServerSettings().backups;
     const notUploaded =
         scheduled &&
@@ -100,6 +109,15 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
             : null,
         scheduledFailure: scheduled?.record?.state === 'failed' ? line(scheduled, scheduled.record.error) : null,
         scheduledNotUploaded: notUploaded ? line(scheduled, scheduled.record?.upload?.error) : null,
+        warned: warned
+            ? line(
+                  warned,
+                  warned.record?.manifest?.homes
+                      .filter((home) => home.warnings?.length)
+                      .map((home) => home.name)
+                      .join(', '),
+              )
+            : null,
         newestGoodFullAt: goodFull?.createdAt.toISOString() ?? null,
     };
 }
@@ -122,7 +140,7 @@ export async function deleteServerArchive(name: string): Promise<void> {
     fs.rmSync(recordPath, { force: true });
 }
 
-// Retention by each sidecar: an archive is good only when its job ended done.
+// Retention by each sidecar: an archive is good only when its job ended done and no home in it has warnings.
 export async function pruneLocalArchives(): Promise<void> {
     const archives: RetainedArchive[] = [];
     const unread: string[] = [];
@@ -131,7 +149,7 @@ export async function pruneLocalArchives(): Promise<void> {
         if (sidecar) {
             archives.push({
                 ...record,
-                good: sidecar.state === 'done',
+                good: isGood(sidecar),
                 build: sidecar.manifest?.images[API_IMAGE_KEY],
             });
         } else unread.push(record.name);

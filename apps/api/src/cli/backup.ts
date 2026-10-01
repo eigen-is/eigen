@@ -104,6 +104,11 @@ export async function backup(flags: BackupFlags): Promise<void> {
         console.error(glyphLine('warn', `Not uploaded: ${uploaded.error}`));
         console.error(glyphLine('bar', 'Upload it again from the Backups section in Settings.'));
     }
+    if (saved.warnings) {
+        for (const home of saved.warnings) console.error(glyphLine('warn', `Backed up with warnings: ${home}`));
+        console.error(glyphLine('bar', 'They are in the archive without what the warnings name.'));
+        console.error(glyphLine('bar', 'Run ./eigen logs eigen-api to see every file.'));
+    }
     ui.outro(`Saved ${saved.artifact}: ${BACKUP_LEVEL_NAMES[level]}, ${formatFileSize(saved.bytes ?? 0)}.`);
     console.log(`archive=${saved.artifact}`);
     if (uploaded?.state === 'failed') process.exit(NOT_UPLOADED);
