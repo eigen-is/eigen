@@ -1,6 +1,10 @@
 # WebDAV
 
-> **TLDR:** `apps/api/src/lib/webdav/` serves each drive mount as a WebDAV share (RFC 4918, Class 1 and 2) at `/webdav/<ownerId>/<mountId>/`, over HTTP Basic with the same app passwords as IMAP, CalDAV and CardDAV. Every handler goes through `SharedDrive`, so a WebDAV client gets exactly the permissions the REST API gives. Not obvious from the code: nothing above a mount answers, an Eigen document shows as a plain folder that is read-only inside, locks live in memory only, and the ETag is the content hash because Finder loops on an unstable one. CalDAV and CardDAV are a separate service under `/dav/` ([CALDAV.md](CALDAV.md), [CARDDAV.md](CARDDAV.md)).
+> **TLDR:** WebDAV lets a computer open a Drive mount as a network folder. Each mount is one WebDAV share (RFC 4918, Class 1 and 2) at `/webdav/<ownerId>/<mountId>/`, over HTTP Basic with the same app passwords as IMAP, CalDAV and CardDAV. Every handler goes through `SharedDrive`, so a WebDAV client gets exactly the permissions the REST API gives. The code is `apps/api/src/lib/webdav/`. Not obvious from the code: nothing above a mount answers, an Eigen document shows as a plain folder that is read-only inside, locks live in memory only, and the ETag is the content hash because Finder loops on an unstable one. CalDAV and CardDAV are a separate service under `/dav/` ([CALDAV.md](CALDAV.md), [CARDDAV.md](CARDDAV.md)).
+
+People mount a drive in Finder or Windows Explorer, sync it with rclone or Mountain Duck, or save straight from Word and Excel. The Integrations page (`apps/space/src/routes/_auth.services.tsx`) lists one URL per mount the user can reach and makes the app passwords. A mount is one drive of a Home: a table of paths over one storage backend ([STORAGE.md § A mount is a paths table](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)).
+
+The one idea is that WebDAV is a thin protocol layer over Drive. Files, folders, sharing, trash and quota all come from Drive ([ACL.md](ACL.md), [SOFT-DELETE.md](SOFT-DELETE.md), [QUOTA.md](QUOTA.md)), so a WebDAV `DELETE` goes to the trash like a delete in the Drive app. WebDAV's own state is only its locks and the properties a client stores on a file.
 
 ## A mount is one share and nothing above it answers
 
