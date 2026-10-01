@@ -1,6 +1,6 @@
 # Quotas
 
-> **TLDR:** Every user has two budgets: home data (mail, contacts and calendar bytes together) and each Drive mount. `apps/api/src/lib/config/quota.ts` resolves the limits and `enforcement.ts` holds every check, without cache or reservation. Not obvious from the code: a team override only raises a limit, and a mount write takes the overrides of the user writing, not the mount's owner. A user's default mount cap is stamped at first sign-in, so changing the server default after that moves no existing user. A full home-data budget still lets its owner shrink, delete and make small edits. A 507 means a full bucket, but a streamed upload that outgrows what is left is cut with a 413.
+> **TLDR:** Every user has two budgets: home data (mail, contacts and calendar bytes together) and each Drive mount. `apps/api/src/lib/config/quota.ts` resolves the limits and `enforcement.ts` holds every check, without cache or reservation. Not obvious from the code: a team override only raises a limit, and a mount write takes the overrides of the user writing, not the mount's owner. A user's default mount cap is stamped at first sign-in, so changing the server default after that moves no existing user. A full home-data budget still lets its owner shrink, delete and make small edits. A 507 means a full budget, but a streamed upload that outgrows what is left is cut with a 413.
 
 ## Two budgets, because they grow differently
 
@@ -9,7 +9,7 @@
 | Home data | Mail, contacts and calendar of one Home, together | `quotas.mailAndContactsMaxMB` |
 | Drive mount | One mount; each mount has its own | `quotas.defaultMountMaxSizeMB` |
 
-An email-heavy user is not blocked from uploading files, and a file-heavy user can still receive mail. Every code symbol says `homeData`, `HomeSizeResponse.homeData` included. Only the persisted settings, the server's and a team's override, keep the name `mailAndContactsMaxMB`, because an admin's stored quotas cannot be rebuilt after a rename. The settings themselves are in [SERVER-SETTINGS.md](SERVER-SETTINGS.md).
+An email-heavy user is not blocked from uploading files, and a file-heavy user can still receive mail. Every code symbol says `homeData`, `HomeSizeResponse.homeData` included. Only the persisted settings, the server's and a team's override, keep the name `mailAndContactsMaxMB`, because stored quotas cannot be rebuilt after a rename. The settings themselves are in [SERVER-SETTINGS.md](SERVER-SETTINGS.md).
 
 ## Teams can only raise a limit
 
@@ -32,13 +32,13 @@ A user's `default` mount is written into their settings at the first `UserHome.i
 
 A mount's `storageType` never changes after it is made, since its bytes live in that backend: `updateMount` does not accept it. A mount is enabled or disabled, never deleted, so its data is kept.
 
-## 507 is a full bucket, 413 a file too large
+## 507 is a full budget, 413 a file too large
 
-`enforcement.ts` answers 507 `Insufficient Storage` when a bucket is full or a projected write would overfill it. It answers 413 when one file is larger than it may be. The per-file cap is `quotas.maxUploadSizeMB` (`enforceMaxUploadSize`).
+`enforcement.ts` answers 507 `Insufficient Storage` when a budget is full or a projected write would overfill it. It answers 413 when one file is larger than it may be. The per-file cap is `quotas.maxUploadSizeMB` (`enforceMaxUploadSize`).
 
 The two meet in `getUploadMaxSize`, which returns `min(per-file cap, what is left of the mount)` and throws 507 up front when nothing is left, so a full mount is refused before any bytes move. A streamed Drive upload hands that number to `streamFilesToTemp` (`apps/api/src/lib/drive/streaming.ts`) as the ceiling per file, and a file that runs past it mid-transfer is a 413, whichever of the two was smaller.
 
-Every other route that brings a whole file into a mount takes the same number and answers 413 above it: a Drive copy and a conversion check the source's size, an import into a document bounds the body it reads (`apps/api/src/routes/drive.ts`), and saving mail attachments to Drive checks each attachment (`apps/api/src/lib/mail/mail.ts`).
+Every other route that brings a whole file into a mount takes the same number and answers 413 above it: a Drive copy and a conversion check the source's size, an import into a document bounds the body it reads (`apps/api/src/routes/drive.ts`), and saving mail attachments to Drive checks each attachment (`apps/api/src/lib/mail/mail.ts`). WebDAV `PUT` is the exception: it meets only the quota pre-check ([WEBDAV.md](WEBDAV.md#put-stages-the-body-before-the-row)).
 
 ## A write that knows its size is checked on the projection
 
@@ -52,7 +52,7 @@ A contact card, an imported `.eml` and a calendar resource are all written throu
 
 - A rewrite that does not grow (`addBytes <= creditBytes`) is never refused, however far over the budget the Home is. Shrinking and cleaning up must always work.
 - A rewrite that grows by at most `HOME_DATA_EDIT_GRACE_BYTES` (1 KiB) passes while the Home stays within `HOME_DATA_EDIT_HEADROOM_BYTES` (1 MiB) over its budget. A title fix, an RSVP or a cancelled occurrence lands at a full budget, on REST and CalDAV alike, and all such edits together overshoot by at most the headroom.
-- Past the headroom those edits answer 507 too. An admin who lowers the budget therefore freezes a Home's growth, while its owner can still shrink and delete.
+- Past the headroom those edits answer 507 too. Lowering a budget, the owner's server default or an admin's team override, therefore freezes a Home's growth, while its owner can still shrink and delete.
 - A create, and a rewrite that grows by more than the grace, are checked on the plain projection.
 - A delete is metered by nothing. Neither is a move between calendars, which re-points one row.
 
@@ -83,7 +83,7 @@ The admin Users page sizes homes nobody has loaded, through `pullHomeSize` ([SER
 
 ## Over quota keeps the data and refuses growth
 
-When an admin lowers a quota below what a user has, or the user leaves the team that raised it, nothing is deleted. New writes answer 507 until the user deletes enough. The usage bar (`packages/ui/src/components/home/usage.tsx`) clamps at full and turns red above 85%.
+When the owner lowers a server quota or an admin a team override below what a user has, or the user leaves the team that raised it, nothing is deleted. New writes answer 507 until the user deletes enough. The usage bar (`packages/ui/src/components/home/usage.tsx`) clamps at full and turns red above 85%.
 
 The limits are soft. Every check reads usage and writes after, with no reservation, so concurrent uploads, several files in one request and chunked WebDAV `PUT`s can each pass and together overshoot. That is by design: the overage is small, and the next write sees it.
 
