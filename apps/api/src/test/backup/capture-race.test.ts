@@ -19,6 +19,7 @@ import {
     drivePut,
     driveUpload,
     ensureServer,
+    findOrFail,
     type TestUser,
 } from '../setup';
 import { snapshotInto, waitForJob } from './backup-test-helpers';
@@ -47,7 +48,23 @@ async function seed(user: TestUser) {
         await driveUpload(t, user.id, M, projects.id, new File([`report ${i}`], `report-${i}.txt`));
     const single = await driveUpload(t, user.id, M, root.id, new File(['single'], 'zz-single.txt'));
     const archive = await drivePost(t, user.id, M, `folder/${root.id}`, { folderName: 'Archive' });
-    return { projects, single, archive };
+    return { root, projects, single, archive };
+}
+
+// A document with one saved version, created after seed's files so the capture reaches it after its first plain read.
+async function seedDocument(user: TestUser, rootId: string) {
+    const t = user.sessionToken;
+    const doc = await drivePost(t, user.id, M, `folder/${rootId}/create/doc`, { fileName: 'Plan' });
+    const saved = await authedRequest(t, `/drive/${user.id}/${M}/file/${doc.id}/versions/save`, { method: 'POST' });
+    expect(saved.status).toBe(200);
+    const [version] = await assertJson<DrivePath[]>(
+        await authedRequest(t, `/drive/${user.id}/${M}/file/${doc.id}/versions`),
+    );
+    return { doc, version };
+}
+
+async function defaultMount(user: TestUser): Promise<Mount> {
+    return findOrFail((await getHome(user.id)).drive.getMounts(), (mount) => mount.id === M);
 }
 
 // The user's action starts right before the capture reads its first plain file and runs to its end, or until it
@@ -152,6 +169,30 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         expect(archivedRow(folder, single.id)?.name).toBe('zz-single.txt');
         expect(manifest.entries.some((entry) => entry.path.includes(single.id))).toBe(false);
         expect(archivedReports(folder)).toEqual(reportBodies);
+        expect((await verifyFolder(folder)).status).toBe('verified');
+    });
+
+    test('a trashed document deleted for good during the capture is left out', async () => {
+        const user = await raceUser('local-fullnames');
+        const { root } = await seed(user);
+        const { doc } = await seedDocument(user, root.id);
+        await driveDelete(user.sessionToken, user.id, M, `path/${doc.id}`);
+        const { manifest, folder } = await captureDuring(user, () =>
+            driveDelete(user.sessionToken, user.id, M, `trash/${doc.id}`),
+        );
+        expect(manifest.entries.some((entry) => entry.path.includes(doc.id))).toBe(false);
+        expect(archivedReports(folder)).toEqual(reportBodies);
+        expect((await verifyFolder(folder)).status).toBe('verified');
+    });
+
+    test('a version pruned during the capture is left out', async () => {
+        const user = await raceUser('local-fullnames');
+        const { root } = await seed(user);
+        const { version } = await seedDocument(user, root.id);
+        const mount = await defaultMount(user);
+        const { manifest, folder } = await captureDuring(user, () => mount.deletePath(version.id));
+        expect(manifest.entries.some((entry) => entry.path.endsWith(`versions/${version.name}`))).toBe(false);
+        expect(manifest.entries.some((entry) => entry.path.endsWith('Plan.eigendoc/data.db'))).toBe(true);
         expect((await verifyFolder(folder)).status).toBe('verified');
     });
 

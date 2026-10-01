@@ -81,17 +81,25 @@ export async function snapshotMountData(
         const entryPath = `${relPrefix}/${relPath}`;
         const lostObject = (size: number, storageKey: string) =>
             new Error(`mount ${mount.id}: ${relPath} has ${size} bytes on record but no object at ${storageKey}`);
+        // Deleted for good since the copy: its archived row keeps no bytes, as verify and restore allow.
+        const isGone = async () => !(await mount.getPath(row.id));
 
         const container = managedDbContainer(row, byId);
         if (container) {
             fs.mkdirSync(path.dirname(destPath), { recursive: true });
             // A blocking lock: a raw read of the live main file would drop every commit still in the WAL. False is
-            // no bytes anywhere.
+            // no bytes anywhere. A gone row is never read: on a by-name mount its key resolves to the data/ folder.
             const copied = await mount
-                .withPathLock(container.id, () => stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'))
-                .catch(async (error: unknown) =>
-                    rethrowStorageFailure(mount.id, await mount.getStorageKey(row.id), error),
-                );
+                .withPathLock(
+                    container.id,
+                    async () => !(await isGone()) && stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'),
+                )
+                .catch(async (error: unknown) => {
+                    // Empty trash takes no path lock, so a row can still go between the check and the read.
+                    if (!(await isGone())) rethrowStorageFailure(mount.id, await mount.getStorageKey(row.id), error);
+                    fs.rmSync(destPath, { force: true });
+                    return false;
+                });
             if (copied) {
                 normalizeArchiveDatabase(destPath);
                 entries.push(await captureWrittenFile(destPath, entryPath));
@@ -103,8 +111,6 @@ export async function snapshotMountData(
         } else {
             // Shared, as the mount's own key-derived reads: no rename moves the bytes between the key and the copy.
             const entry = await mount.withTreeShared(async () => {
-                // Deleted for good since the copy: its archived row keeps no bytes, as verify and restore allow.
-                const isGone = async () => !(await mount.getPath(row.id));
                 const live = await mount.getPath(row.id);
                 if (!live) return null;
                 const storageKey = await mount.getStorageKey(row.id);
