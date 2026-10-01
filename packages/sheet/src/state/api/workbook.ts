@@ -1,11 +1,6 @@
 import { isNumber, sortBy } from 'es-toolkit/compat';
 import type { Context, Sheet } from '..';
-import {
-    addSheet as addSheetInternal,
-    changeSheet,
-    deleteSheet as deleteSheetInternal,
-    updateSheet as updateSheetInternal,
-} from '../modules';
+import { addSheet as addSheetInternal, changeSheet, deleteSheet as deleteSheetInternal } from '../modules';
 import type { Settings } from '../settings';
 import { type CommonOptions, getSheet } from './common';
 import { invalidParams } from './errors';
@@ -24,10 +19,6 @@ export function addSheet(
 export function deleteSheet(ctx: Context, options: CommonOptions = {}) {
     const sheet = getSheet(ctx, options);
     deleteSheetInternal(ctx, sheet.id!);
-}
-
-export function updateSheet(ctx: Context, data: Sheet[]) {
-    updateSheetInternal(ctx, data);
 }
 
 export function activateSheet(ctx: Context, options: CommonOptions = {}) {
