@@ -20,7 +20,7 @@ Drive mutations take an optional `user`. Without one, nothing is recorded, so in
 
 ## Chain-rewriting mutations record their own events
 
-Some mutations change the parent chain that the fan-out walks, or recurse through the mount. They record and fan out inline, and each broadcasts the live refresh itself:
+The fan-out finds the watchers to notify by walking up the parent chain from the changed path ([§ A watch covers the subtree](#a-watch-covers-the-subtree-and-never-grants-access)). Some mutations change that chain, or recurse through the mount. They record and fan out inline, and each broadcasts the live refresh itself:
 
 - Move captures the old breadcrumb before `updatePath`, and fans out over both chains, so watchers of the source folder still qualify.
 - Trash captures the old breadcrumb and the old effective members before `trashPath` re-parents the item to the root and strips its shares. After the trash neither resolves.
