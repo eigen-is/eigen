@@ -1,10 +1,18 @@
 # Slides
 
-> **TLDR:** A deck is a canvas document in frame mode. `apps/slides/src/components/slides/` is a thin shell over the engine's `CanvasEditor` ([CANVAS.md](CANVAS.md)): the slide rail, present mode, the slide background panel and the counter. A slide is one 16:9 frame in the `.eigenslides` container's `frames` map. Everything else (elements, tools, keymap, clipboard, rich text, comments, ⌘F, previews, export) is the engine's. Not obvious from the code: the first writer seeds an empty deck under fixed ids, a reorder rewrites one key, and a background reaches other slides only through an explicit Apply.
+> **TLDR:** A deck is a set of slides that people edit together and then present. Underneath, it is a canvas document whose pages are fixed 16:9 frames, drawn by the canvas engine ([CANVAS.md](CANVAS.md)). `apps/slides/src/components/slides/` is a thin shell over the engine's `CanvasEditor`: it adds the slide rail, present mode, the slide background panel and the slide counter.
+
+A deck is a `.eigenslides` file. Each slide is a frame: one page of the canvas, stored in the `frames` map of the deck's Yjs document. Every element on the deck sits on one frame and stores its position relative to it. The shell mounts the canvas in frame mode, which shows only the active slide, fitted to the screen. Everything else (elements, tools, keymap, clipboard, rich text, comments, ⌘F, previews, export) is the engine's.
+
+So the shell adds only what the engine has no word for: a deck as an ordered list of slides. Three things in it surprise people:
+
+- The first writer to open an empty deck seeds it, under fixed ids ([§ The first writer seeds an empty deck](#the-first-writer-seeds-an-empty-deck)).
+- A reorder rewrites one key ([§ A reorder rewrites one key](#a-reorder-rewrites-one-key)).
+- A background reaches other slides only through an explicit Apply ([§ A background reaches other slides only through Apply](#a-background-reaches-other-slides-only-through-apply)).
 
 ## A slide is a frame, and the shell adds only the deck's words
 
-A slide is a `VectorFrame` (`packages/lib/src/vector/frames.ts`): an id, a fractional `index`, a name and a serialized `BackgroundFill`. Its size is a constant, and its elements carry its `frameId` with coordinates relative to the frame ([CANVAS.md](CANVAS.md#every-stored-field-is-a-scalar)). Every element kind works on a slide. `SLIDES_STYLE_DEFAULTS` (flat, solid, Inter) decides only how a new element looks.
+A slide is a `VectorFrame` (`packages/lib/src/vector/frames.ts`): an id, a fractional `index`, a name and a serialized `BackgroundFill`. Its size is a constant, and its elements carry its `frameId` ([CANVAS.md](CANVAS.md#every-stored-field-is-a-scalar)). Every element kind works on a slide. `SLIDES_STYLE_DEFAULTS` (flat, solid, Inter) decides only how a new element looks.
 
 The shell mounts `CanvasEditor` with `viewport="frame"`, so the slide always fits its space, with no zoom and no free pan ([CANVAS.md](CANVAS.md#frame-mode-always-shows-the-whole-page)). It fills the shared `CanvasToolbar`'s two host slots: `insertItems` with New slide and `centerItems` with Present. The engine has no notion of slides, so the slide menu (New slide above or below, Duplicate, Delete) lives in the shell. It opens from a rail thumbnail and from a right-click on empty canvas (`onEmptyContextMenu`). The last slide can't be deleted. A phone gets the deck view-only, with no rail ([MOBILE.md](MOBILE.md)).
 
@@ -20,7 +28,7 @@ The rail (`slide-panel.tsx`) is a dnd-kit sortable list of `FrameThumbnail`s. A 
 
 ## The active slide survives its own deletion
 
-`useActiveFrame` (`packages/ui/src/components/vector/hooks/`) keeps the current slide while it exists. When it vanishes, through an undo of its add or a peer's delete, the slide now at its position takes over, clamped to the ends. So the user lands on a neighbour, never on nothing. The hook also gives the counter its index and the phone swipe its step.
+`useActiveFrame` (`packages/ui/src/components/vector/hooks/`) keeps the current slide while it exists. When it vanishes, through an undo of its add or a peer's delete, the slide now at its position takes over, clamped to the ends. So the user lands on a neighbor, never on nothing. The hook also gives the counter its index and the phone swipe its step.
 
 ## Revealing an element goes to its slide first
 
