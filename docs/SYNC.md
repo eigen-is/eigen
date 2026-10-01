@@ -72,7 +72,7 @@ A pending staged copy holds bytes newer than the stored object, so every read on
 
 ## Version snapshots are queued too
 
-On an `s3` mount a version snapshot takes its bytes from the freshest local copy and enqueues its own upload (§3, `apps/api/src/lib/versioning/snapshot.ts`). So a close-time snapshot never blocks on the bucket. It copies a pending staged copy with no await between the existence check and the copy, so a concurrent enqueue cannot unlink it mid-read. How versions are kept is in [STORAGE.md](STORAGE.md#version-snapshots-live-inside-the-container).
+On an `s3` mount a version snapshot takes its bytes from the freshest local copy and enqueues its own upload on the mount's upload queue (`apps/api/src/lib/versioning/snapshot.ts`). So a close-time snapshot never blocks on the bucket. It copies a pending staged copy with no await between the existence check and the copy, so a concurrent enqueue cannot unlink it mid-read. How versions are kept is in [STORAGE.md](STORAGE.md#version-snapshots-live-inside-the-container).
 
 ## A cancel beats a PUT in flight
 
