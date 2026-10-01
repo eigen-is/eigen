@@ -277,6 +277,9 @@ stack_up() {
 
 api_started() { docker inspect --format '{{.State.StartedAt}}' "$(dc ps -q eigen-api)"; }
 
+# The api image the install runs, by ID.
+api_image() { docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)"; }
+
 # check_env <operator uid:gid> <after what>: .env.production is the operator's, group 1000 and mode 640, or as configure
 # wrote it on Docker Desktop, where ./eigen leaves it; eigen-api alone mounts it, read-only, and reads what the
 # operator's file says.
@@ -378,7 +381,7 @@ collab_tab() {
     cookie=$(awk -F'\t' 'NF >= 7 && ($1 !~ /^#/ || $1 ~ /^#HttpOnly_/) { printf "%s=%s; ", $6, $7 }' "$JAR")
     docker run --rm --network "container:$(dc ps -q "$1")" --entrypoint bun -e COOKIE="$cookie" -e KEPT="$4" \
         -e EDIT="$5" -e URL="$2/eigen/ws/collab/$ADMIN_ID/default/$3" \
-        "$(docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)")" -e '
+        "$(api_image)" -e '
             const Y = require("yjs");
             const encoding = require("lib0/encoding");
             const decoding = require("lib0/decoding");

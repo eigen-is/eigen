@@ -234,9 +234,6 @@ build_main() {
 # image_label <image> <version or revision>: that org.opencontainers.image label of a local image.
 image_label() { docker image inspect --format "{{index .Config.Labels \"org.opencontainers.image.$2\"}}" "$1"; }
 
-# The api image the install runs, by ID.
-api_image() { docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)"; }
-
 # What backups/ holds.
 backups() { scratch_run ls "$INSTALL/backups"; }
 
@@ -441,14 +438,12 @@ PINS_BEFORE=$(pins)
 header "./eigen update to :latest"
 ##############################################################################
 # A Full backup that runs when the update starts, slow with a file of noise in the home: the update's own backup
-# waits it out instead of failing. Its Light backup holds the file too, so the rollback brings it back. Its
-# record's mtime says when it ended.
+# waits it out instead of failing. Its Light backup holds the file too, so the rollback brings it back.
 BALLAST="$INSTALL/data/home/$ADMIN_ID/ballast.bin"
 scratch_run sh -c 'head -c 1000000000 /dev/urandom >"$1" && chown 1000:1000 "$1"' sh "$BALLAST"
 (
     eigen backup
     printf '%s\n' "$OUT" >"$SCRATCH/running-backup.log"
-    scratch_run stat -c %Y "$INSTALL/backups/$(saved_archive).json" >"$SCRATCH/running-backup.ended" 2>/dev/null || :
     exit "$CODE"
 ) &
 running=$!
@@ -468,7 +463,6 @@ done
 ) 2>/dev/null &
 watching=$!
 started=$SECONDS
-since=$(date +%s)
 eigen update
 show
 backed_up=0
@@ -484,20 +478,13 @@ else
 fi
 saved=$(scratch_run cat "$INSTALL/.eigen/last-update" 2>/dev/null || true)
 manual=$(sed -n 's/^archive=//p' "$SCRATCH/running-backup.log")
-# A miss is the product's only if the update asked while the backup still ran: when its backup command started, with
-# five seconds for the CLI to reach the API, against when the running one ended.
-ended=$(cat "$SCRATCH/running-backup.ended" 2>/dev/null || true)
-asked=$(docker events --since "$since" --until "$(date +%s)" --filter "container=$PROJECT-eigen-api-1" \
-    --format '{{.Time}} {{.Action}}' | awk '/exec_start: .* backup .*--reason pre-update/ { print $1; exit }' || true)
 if [ "$backed_up" != 0 ] || [ -z "$manual" ] || [[ $saved != server-pre-update-light-*.tar ]] ||
     ! says "Saved before the update: backups/$saved"; then
     fail "the backups around the update: the running one exited $backed_up as '$manual', the update's is '$saved'"
 elif [ -e "$SCRATCH/update-waited" ]; then
     ok "the update waited for the backup that ran, $manual, then made $saved on the running API"
-elif [ -n "$asked" ] && [ -n "$ended" ] && [ "$asked" -ge $((ended - 5)) ]; then
-    skip "harness timing: the backup ended before the update asked, or too close to tell (ended at $ended, asked at $asked), so the wait went untested"
 else
-    fail "the update asked for its backup at '$asked', before $manual ended at '$ended', and was not seen waiting for it"
+    fail "the update was not seen waiting for the backup that ran, $manual"
 fi
 check_running "$NEW"
 after=$(unpinned)
@@ -813,7 +800,7 @@ for domain in localhost eigen2.localhost; do
     run_setup "$SCRATCH/setup-$domain.log" "${SETUP_FLAGS[@]}" --domain "$domain"
     if stack_up; then ok "a fresh install of $NEW for $domain runs"; else fail "the fresh install for $domain is not up"; fi
     PINS+=("$(env_of EIGEN_API_IMAGE)")
-    RUNS+=("$(docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)")")
+    RUNS+=("$(api_image)")
     PORTS+=("$PORT_HTTPS")
 done
 n=0
