@@ -22,6 +22,8 @@ Only admins can do this. The **Backup** section lives inside a user's or a team'
 
 The backup runs in the background, so you can keep working. While it runs, the section shows **Creating backup** with the current step and its progress. When it finishes, you see **Backup created** with the name of the new archive, and the archive appears in the list below.
 
+Only a rename or move on a drive, and the saves and uploads on that drive after it, can wait while the backup copies one very large file there.
+
 The backup stops if a file Eigen has on record is gone from its disk or bucket, for example because someone deleted it outside Eigen. The section then shows **Creating backup failed** and names the file. The same goes for a document whose data is gone. Only an empty file, or one deleted while the backup runs, is left out.
 
 Each archive is one file named `home-<id>-<date>-<time>.tar.zst`. Its row shows the date and size, and a badge:
