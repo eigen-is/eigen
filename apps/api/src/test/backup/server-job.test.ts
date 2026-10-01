@@ -21,6 +21,7 @@ import { deleteUserCompletely } from '../../lib/user/delete-user';
 import { createTeam, createTestUser, getTestContext, type TestContext } from '../setup';
 import {
     alertTitlesTo,
+    expectRealShapeServed,
     type RealShapeHome,
     readServerManifest,
     realShapeHome,
@@ -94,7 +95,7 @@ describe('Server backup job', () => {
             expect(alertTitlesTo(relay, ctx.alice.user.id)).toEqual([]);
 
             // A member copied into the backups folder is an ordinary artifact of its home.
-            for (const ownerId of [sleeperId, teamOwner]) {
+            for (const ownerId of [sleeperId, teamOwner, realShape.user.id]) {
                 const member = members.find(
                     (m) => m.name === manifest.homes.find((h) => h.ownerId === ownerId)?.member,
                 )!;
@@ -102,6 +103,7 @@ describe('Server backup job', () => {
                 await copyArchiveMember(member, join(getBackupsDir(), name));
                 await restoreHome(name, ownerId, `server-member-restore-${ownerId}`);
             }
+            await expectRealShapeServed(realShape);
         },
         JOB_TIMEOUT_MS,
     );

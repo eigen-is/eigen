@@ -130,6 +130,8 @@ export type RealShapeHome = {
     files: Record<string, string>;
     // Storage keys of the databases a restore must put back.
     databases: string[];
+    // The renamed file, the trashed file and the versioned document, for reads through the API.
+    ids: { renamed: string; trashed: string; versioned: string };
 };
 
 const MOUNT_ID = 'default';
@@ -198,8 +200,9 @@ export async function realShapeHome(): Promise<RealShapeHome> {
             [`.trash/${trashedFolder.id}/child.txt`]: 'child bytes',
         },
         databases: [`.trash/${trashedDoc.id}.eigendoc/data.db`, `Versioned.eigendoc/versions/${version}`],
+        ids: { renamed: renamed.id, trashed: trashedFile.id, versioned: versioned.id },
     };
-    // The keys are the live mount's own, so the fixture is the shape trashPath and renamePath write today.
+    // Against the live mount's disk, so the fixture cannot encode the capture's own assumption.
     expectRealShape(data, shape);
     return shape;
 }
@@ -208,4 +211,15 @@ export async function realShapeHome(): Promise<RealShapeHome> {
 export function expectRealShape(data: string, shape: RealShapeHome): void {
     for (const [key, body] of Object.entries(shape.files)) expect(readFileSync(join(data, key), 'utf8')).toBe(body);
     for (const key of shape.databases) expect(existsSync(join(data, key))).toBe(true);
+}
+
+// The restored fixture as its user meets it: the renamed file downloads, the trashed one restores and downloads, and
+// the document lists its version.
+export async function expectRealShapeServed({ user, mountId, ids }: RealShapeHome): Promise<void> {
+    const drive = (path: string, init?: RequestInit) =>
+        authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/${path}`, init);
+    expect(await (await drive(`file/${ids.renamed}/download`)).text()).toBe('renamed bytes');
+    expect((await drive(`trash/${ids.trashed}/restore`, { method: 'POST' })).status).toBe(200);
+    expect(await (await drive(`file/${ids.trashed}/download`)).text()).toBe('trashed bytes');
+    expect(await assertJson<unknown[]>(await drive(`file/${ids.versioned}/versions`))).toHaveLength(1);
 }

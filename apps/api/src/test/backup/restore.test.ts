@@ -53,7 +53,7 @@ import {
     TEST_PNG_BYTES,
     type TestUser,
 } from '../setup';
-import { expectRealShape, realShapeHome, waitForJob } from './backup-test-helpers';
+import { expectRealShape, expectRealShapeServed, realShapeHome, waitForJob } from './backup-test-helpers';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -1343,6 +1343,7 @@ describe('Backup round trip of a home that stores files by name', () => {
         expectRealShape(join(TEST_DATA_DIR, 'home', user.id, 'mounts', mountId, 'data'), shape);
         const trash = await driveGetList(user.sessionToken, user.id, mountId, 'trash');
         expect(trash.map((item) => item.name).sort()).toEqual(['Old', 'Trashed Doc.eigendoc', 'trashed.txt']);
+        await expectRealShapeServed(shape);
     });
 
     test('the home moves in through a copy when the backups folder is another disk than data/', async () => {
