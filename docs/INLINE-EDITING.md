@@ -2,6 +2,8 @@
 
 > **TLDR:** Drive edits plain text files in place at `/drive/edit/:ownerId/:mountId/:pathId`: markdown in a Tiptap WYSIWYG editor with a CodeMirror source mode, every other text format in CodeMirror 6. The server side is `apps/api/src/routes/editor.ts` over `apps/api/src/lib/drive/inline-edit.ts`, the client `apps/drive/src/components/editor/`. Not obvious from the code: saving is explicit with no auto-save, a save is guarded by the file's `updatedAt` rather than a lock, the client and the server decide editability from two different lists, and markdown frontmatter never reaches the WYSIWYG editor.
 
+A plain file is not an Eigen document. It has no Yjs document behind it ([COLLAB.md](COLLAB.md)), so two people editing it at once don't see each other's changes. The editor loads the whole file and writes the whole file back on save. The file lives in a mount like any upload ([STORAGE.md](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)), the Drive ACL decides who may edit it ([ACL.md](ACL.md)), and a save counts against the mount's quota ([QUOTA.md](QUOTA.md)).
+
 ## A file opens read-only, and Edit needs write access
 
 Drive opens a file at the inline-edit route when `isInlineEditable(mimeType, name)` accepts it (`getDriveItemUrl`). The page starts in view mode, which renders the server's text preview, the same body the Drive preview shows. The Edit button shows only when `useCheckPermissions` reports write access and `GET /editor/.../content` has answered. Edit mode mounts the editor on that content, and the heavy editors load lazily (`native-file-editor.tsx`).
