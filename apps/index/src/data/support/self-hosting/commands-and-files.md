@@ -22,7 +22,7 @@ Everything you do with Eigen on the server goes through `./eigen` in the install
 | `./eigen stop` | Stops Eigen. `./eigen restart` starts it again. |
 | `./eigen update` | Installs a new release. See [Update Eigen](/support/self-hosting/update). |
 | `./eigen rollback` | Goes back to the version before the last update |
-| `./eigen backup` | Backs up the whole server into `backups/` while Eigen runs. Its exit code tells a cron job whether the backup verified and reached the bucket. See [Back up now](/support/self-hosting/back-up-and-restore#back-up-now). |
+| `./eigen backup` | Backs up the whole server into `backups/` while Eigen runs. Its exit code tells a script whether the backup verified and reached the bucket. Eigen keeps these backups until you delete them; for a backup every night, turn on the nightly backup instead. See [Back up now](/support/self-hosting/back-up-and-restore#back-up-now). |
 | `./eigen restore <backup>` | Puts a whole-server backup back, on this server or a new one |
 | `./eigen reset-password <email>` | Sets a new password for an account. See [Reset a password from the server](/support/self-hosting/reset-a-password). |
 

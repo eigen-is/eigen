@@ -65,7 +65,7 @@ It prints each step, then the name and size of the backup. Pick what goes in:
 | **Full + S3** | `./eigen backup --s3` | Everything, the files in S3 buckets too |
 | **Light** | `./eigen backup --light` | The accounts, settings, and databases: no files and no mail |
 
-`--wait` waits for a backup that is running to end, instead of refusing. `./eigen backup` exits with 0 when the backup verified, 1 when it failed, 2 on a wrong argument, and 4 when it verified but did not reach the bucket, so a cron job can tell them apart.
+`--wait` waits for a backup that is running to end, instead of refusing. `./eigen backup` exits with 0 when the backup verified, 1 when it failed, 2 on a wrong argument, and 4 when it verified but did not reach the bucket, so a script can tell them apart. For a backup every night, use [Back up every night](#back-up-every-night) rather than cron: Eigen keeps the newest of those and deletes the rest, but keeps every backup `./eigen backup` makes.
 
 Backups land in `backups/` in the install folder, named `server-<why>-<level>-<date>-<time>.tar`, where `<why>` is `scheduled`, `manual`, or `pre-update`. Eigen checks that the folder has room before it starts. Backups you make by hand are never deleted by Eigen: delete them in **Settings → Backups** when you no longer need them. Treat a backup like `.env.production`: it holds everything.
 
