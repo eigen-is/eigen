@@ -635,6 +635,32 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
+        'the stage names the homes not in the archive and those in it with warnings',
+        async () => {
+            const dir = install();
+            const failed = { ownerId: 'f'.repeat(32), kind: 'user' as const, name: 'Gone', failed: 'disk full' };
+            const warned = await craft(fullArchive, {
+                manifest: (m) => ({
+                    ...m,
+                    homes: [
+                        ...m.homes.map((home) =>
+                            home.ownerId === alice.id ? { ...home, warnings: ['mount x: a.png', 'mount y: b'] } : home,
+                        ),
+                        failed,
+                    ],
+                }),
+            });
+            const name = (await readServerManifest(fullArchive)).manifest.homes.find(
+                (home) => home.ownerId === alice.id,
+            )!.name;
+            const staged = await stage(dir, warned);
+            expect(staged.code).toBe(0);
+            expect(staged.stdout).toContain(`; not in it: Gone (disk full); with warnings: ${name} (mount x: a.png)`);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
         'an archive of a newer Eigen is refused before anything moves',
         async () => {
             const dir = install();

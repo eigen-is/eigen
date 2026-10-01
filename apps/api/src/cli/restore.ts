@@ -289,10 +289,13 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
     }
 
     const homes = manifest.homes.filter((home) => home.member);
-    const failed = manifest.homes.filter((home) => home.failed);
+    const failed = manifest.homes.flatMap((home) => (home.failed ? [`${home.name} (${home.failed})`] : []));
+    const warned = manifest.homes.flatMap((home) =>
+        home.warnings?.length ? [`${home.name} (${home.warnings[0]})`] : [],
+    );
     const lines = [
         `A ${manifest.level} archive of Eigen ${manifest.appVersion} for ${manifest.domain}, made on ${formatDate(manifest.createdAt)}, ${formatTimeAgo(manifest.createdAt)}`,
-        `${homes.length} homes${failed.length ? `; not in it: ${failed.map((home) => `${home.name} (${home.failed})`).join(', ')}` : ''}`,
+        `${homes.length} homes${failed.length ? `; not in it: ${failed.join(', ')}` : ''}${warned.length ? `; with warnings: ${warned.join(', ')}` : ''}`,
         envMember ? `${ENV_PATH} from the archive` : `No ${ENV_PATH}: the one here stays`,
         manifest.dkim ? 'The DKIM key from the archive' : 'No DKIM key: the one here stays, or mail needs new DNS',
         manifest.certs

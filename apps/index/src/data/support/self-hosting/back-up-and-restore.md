@@ -100,7 +100,7 @@ In the install folder, name a backup in `backups/`, or give the path of one:
 
 `./eigen restore` then does three things:
 
-1. It checks the backup while Eigen keeps running. It shows what the backup holds, like its level, its date, and any user or team that is not in it, and asks whether to go on. For a Light backup it also says what happens to the files changed since. Then it unpacks it, still while Eigen runs.
+1. It checks the backup while Eigen keeps running. It shows what the backup holds, like its level, its date, and any user or team that is not in it or has warnings, and asks whether to go on. For a Light backup it also says what happens to the files changed since. Then it unpacks it, still while Eigen runs.
 2. It stops Eigen, moves the current `data/` and `.env.production` aside as `data.pre-restore-<date>-<time>` and `.env.production.pre-restore-<date>-<time>`, and puts the backup in their place.
 3. It starts Eigen again, on the version that made the backup.
 
@@ -112,7 +112,7 @@ sudo rm -rf data.pre-restore-<date>-<time> .env.production.pre-restore-<date>-<t
 
 The question also says whether the backup holds `.env.production`, the key that signs your mail, and the mail server's certificate. A backup made in the ten minutes after that certificate was renewed can miss it, and one of a server without hosted mail has neither. What a backup does not hold, the restore keeps as the server has it.
 
-A user or team that failed during the backup is not in it, and the question names them. One with warnings is in it, without the files the warning named. After a restore of a Full backup, their data is in `data.pre-restore-<date>-<time>` only.
+A user or team that failed during the backup is not in it, and the question names them. After a restore of a Full backup, their data is in `data.pre-restore-<date>-<time>` only. One with warnings is in it, without the files the warning named, and the question names it with its first warning.
 
 Everyone is signed in as they were when the backup was made. Every open browser tab reloads once. After a restore, everything in the Trash stays there for the full **Trash Retention (days)** period, counted from the restore. `--yes` skips the question, for scripts.
 
