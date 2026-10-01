@@ -1,10 +1,10 @@
 # Activity Rows
 
-> **TLDR:** The notification bell, Drive's *Recent activity* panel and the editors' *Activity* panel render every row with one `ActivityRow` (`packages/ui/src/components/activity-row.tsx`) and phrase it with one layer: `describeFileEvent` for file events, `describeNotification` for notifications. Not obvious from the code: a notification's title and body are phrased on the server and stored, but chat-derived bodies are stored raw and rendered at display time; anything that depends on the viewer ("You", a start time) is formatted on the client; and a click always opens in the same tab. The pipeline behind the bell is [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md).
+> **TLDR:** An activity row is one line of "who did what": a notification in the topbar bell, or a file event, one entry of a file's history ([FILE-HISTORY.md](FILE-HISTORY.md)), in Drive's ***Recent activity*** panel or an editor's **Activity** panel. All three render every row with one `ActivityRow` (`packages/ui/src/components/activity-row.tsx`) and phrase it with one layer, the functions that turn a stored event into words: `describeFileEvent` for file events, `describeNotification` for notifications. Not obvious from the code: a notification's title and body are phrased on the server and stored, but chat-derived bodies are stored raw and rendered at display time; anything that depends on the viewer ("You", a start time) is formatted on the client; and a click always opens in the same tab. The pipeline behind the bell is [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md).
 
 ## Three surfaces render one row
 
-The topbar bell, the Drive details panel's *Recent activity* and the *Activity* side panel of the document editors (`ActivityPanel`, toggled from `DocumentShareCluster` in each editor's toolbar) all show the same row. One anatomy and one phrasing layer mean a file event reads the same as a notification, a watch notification reads the same as the panel row it came from, and a phrasing fix lands everywhere at once.
+The topbar bell, the Drive details panel's **Recent activity** and the **Activity** side panel of the document editors (`ActivityPanel`, toggled from `DocumentShareCluster` in each editor's toolbar) all show the same row. One anatomy and one phrasing layer mean a file event reads the same as a notification, a watch notification reads the same as the panel row it came from, and a phrasing fix lands everywhere at once.
 
 ## A row is an action, a primary line and an optional secondary line
 
@@ -45,7 +45,7 @@ An `acl-changed` row's secondary line lists the added and removed principals. An
 
 ## A click opens in the same tab
 
-Every row is navigation, so a plain click opens its target in the same tab: the bell, both panels and the toast's View action. Drive's *Recent activity* rows are real `<a href>`s, so Cmd-click or middle-click still opens a new tab there. The bell can't use an anchor. The product-wide rule, and why the bell can't be a link, is in [LAYOUT.md § Buttons navigate here, links in content open a new tab](LAYOUT.md#buttons-navigate-here-links-in-content-open-a-new-tab).
+Every row is navigation, so a plain click opens its target in the same tab: the bell, both panels and the toast's **View** action. Drive's **Recent activity** rows are real `<a href>`s, so Cmd-click or middle-click still opens a new tab there. The bell can't use an anchor. The product-wide rule, and why the bell can't be a link, is in [LAYOUT.md § Buttons navigate here, links in content open a new tab](LAYOUT.md#buttons-navigate-here-links-in-content-open-a-new-tab).
 
 The targets live in two functions: `resolveNotificationLink` (`packages/lib/src/core/notification/resolve-link.ts`) for notifications and `resolveEventUrl` (`packages/ui/src/components/drive/activity-event-list.tsx`) for panel rows. The rules they share:
 
@@ -58,11 +58,11 @@ A panel row resolves its target from the event alone, without fetching the item,
 
 ## A Drive listing link needs read access to the parent
 
-The listing links (`?sharePathId=`, `?pid=`) open the item's parent folder, which a viewer granted only the item can't read. The link builders don't test for that. The listing route answers the authoritative 403 and redirects a `?pid=` link to the item itself (`getDriveShareUrl`), which keeps *Request access* for a viewer who can't read the item either.
+The listing links (`?sharePathId=`, `?pid=`) open the item's parent folder, which a viewer granted only the item can't read. The link builders don't test for that. The listing route answers the authoritative 403 and redirects a `?pid=` link to the item itself (`getDriveShareUrl`), which keeps **Request access** for a viewer who can't read the item either.
 
 ## In an editor, only card and comment rows are clickable
 
-`ActivityPanel` passes `ActivityEventList` an `onOpenCard` and the editor's comment cards. A row that references a card or a comment thread opens it in place, resolving a `chatName` to its card. Every other row would only reopen the document you are in, so it stays inert. Drive's *Recent activity* mounts `ActivityEventList` without `onOpenCard`, so its rows keep their URLs.
+`ActivityPanel` passes `ActivityEventList` an `onOpenCard` and the editor's comment cards. A row that references a card or a comment thread opens it in place, resolving a `chatName` to its card. Every other row would only reopen the document you are in, so it stays inert. Drive's **Recent activity** mounts `ActivityEventList` without `onOpenCard`, so its rows keep their URLs.
 
 ## An old row degrades, never breaks
 
