@@ -375,10 +375,9 @@ describe('HTML-table paste — merges, borders, row height', () => {
     });
 });
 
-// Audit 2026-09-06 finding #3: the branch used to assign OS clipboard HTML to a live
-// <div> (document.createElement('div').innerHTML = txtdata). A live element loads <img>
-// and fires its onerror even while detached, so a crafted clipboard runs script on the
-// Eigen origin. The fix parses into an inert DOMParser document instead.
+// OS clipboard HTML assigned to a live <div> loads <img> and fires its onerror even while
+// detached, so a crafted clipboard would run script on the Eigen origin. The paste parses
+// into an inert DOMParser document instead.
 describe('HTML-table paste — inert parsing (no live image load)', () => {
     it('parses clipboard HTML into an inert document, never a live <div>, so an <img onerror> cannot fire', () => {
         const ctx = makeCtx();

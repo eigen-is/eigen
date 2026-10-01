@@ -18,8 +18,8 @@ const rootCache = new Map<string, ReactDOM.Root>();
 //   it away. The first client render MUST match that markup — for the index
 //   site that is guaranteed by AuthProvider rendering children (signed-out)
 //   on the first client render; the session resolves afterwards and swaps the
-//   UI. Using `createRoot` here would discard the server HTML and (in the
-//   incident) left the page dead.
+//   UI. Using `createRoot` here would discard the server HTML and leave the
+//   page dead.
 // - SPA page (empty container, e.g. drive/mail/…): `createRoot`.
 //
 // Container emptiness is decided with `hasChildNodes()`: every app's

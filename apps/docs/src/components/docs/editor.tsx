@@ -134,11 +134,9 @@ function figureClipboardBox(editor: Editor, pos: number, storedWidth: unknown): 
     return { width, height: (width * DEFAULT_IMAGE_BOX.height) / DEFAULT_IMAGE_BOX.width };
 }
 
-// Docs historically stored the textStyle `fontFamily` attr as a full CSS stack; the canon is now
-// the EIGEN_FONTS name (matching slides/vector). New writes store the name, but stored collab docs
-// hydrate through y-prosemirror without ever running parseHTML, so this one-shot pass collapses any
-// recognized stack to its name on editable load — killing the dual representation. renderHTML maps
-// the name back to the same stack, so rendered output is unchanged. Kept out of the undo history.
+// The textStyle `fontFamily` attr is an EIGEN_FONTS name, but a stored doc may hold a full CSS stack and
+// y-prosemirror hydrates without parseHTML, so this pass collapses a known stack to its name on editable
+// load. renderHTML maps the name back to the same stack. Kept out of the undo history.
 function normalizeFontFamilyMarks(editor: Editor) {
     const markType = editor.schema.marks.textStyle;
     if (!markType) return;
@@ -193,9 +191,7 @@ export const CollaborativeEditor = ({
     initialChatName?: string;
     initialSearchTerm?: string;
 }) => {
-    // Shared collab lifecycle. This also fixes the long-standing leak where docs created its Y.Doc
-    // via useMemo and never destroyed it (only the provider was torn down); the hook destroys the
-    // doc on unmount / pathId switch. No UndoManager — y-prosemirror's history plugin owns undo.
+    // No UndoManager: y-prosemirror's history plugin owns undo.
     const {
         doc: yDoc,
         provider,
@@ -398,29 +394,21 @@ const TiptapEditor = ({
                         Consolas: getFontFamily('JetBrains Mono'),
                         'Comic Sans MS': getFontFamily('Excalifont'),
                     };
-                    doc.querySelectorAll('[style]').forEach((el) => {
-                        const htmlEl = el as HTMLElement;
-                        const ff = htmlEl.style.fontFamily.replace(/['"]/g, '').trim();
-                        const mapped = fontMap[ff];
-                        if (mapped) {
-                            htmlEl.style.fontFamily = mapped;
-                        } else {
-                            htmlEl.style.fontFamily = '';
-                        }
+                    doc.querySelectorAll<HTMLElement>('[style]').forEach((el) => {
+                        const ff = el.style.fontFamily.replace(/['"]/g, '').trim();
+                        el.style.fontFamily = fontMap[ff] ?? '';
                     });
 
-                    doc.querySelectorAll('img, table').forEach((el) => {
-                        const htmlEl = el as HTMLElement;
-
+                    doc.querySelectorAll<HTMLElement>('img, table').forEach((el) => {
                         const attrWidth = el.getAttribute('width');
-                        const styleWidth = htmlEl.style.width;
+                        const styleWidth = el.style.width;
                         let w = 0;
                         if (attrWidth) w = parseInt(attrWidth, 10) || 0;
                         if (!w && styleWidth?.endsWith('px')) w = parseInt(styleWidth, 10) || 0;
 
                         if (w > maxWidth) {
                             el.setAttribute('width', String(Math.round(maxWidth)));
-                            htmlEl.style.width = `${Math.round(maxWidth)}px`;
+                            el.style.width = `${Math.round(maxWidth)}px`;
                         }
                     });
 
@@ -460,18 +448,9 @@ const TiptapEditor = ({
                     }
 
                     if (paste.eigen) {
-                        // Image payloads MUST take the eigen path (the cross-mount re-upload seam). A
-                        // text-only payload is consumed directly only when text/html is marker-only —
-                        // which is what a canvas text copy writes, and PM fallthrough there would paste
-                        // nothing. A rich-HTML producer (sheets tables) is left to PM so its <table>
-                        // parses as a real docs table. A canvas TEXT-ONLY copy reaches this rung at all
-                        // only because the producer omits the svg flavor for it (see CLIPBOARD.md);
-                        // anything with a shape or an image lands as a figure at the svg rung above.
-                        //
-                        // Claimed only when there is an item this editor can actually place, the way
-                        // sheets' rung guards: a big canvas selection can ride as its `elements` item
-                        // alone (the svg flavor is capped), and preventDefault on that would make ⌘V a
-                        // dead key.
+                        // Images take this path for the cross-mount re-upload; text only when text/html
+                        // is marker-only (a canvas text copy), so a sheets table still parses in PM. Claimed
+                        // only with an item this editor can place, or ⌘V on a bare `elements` item is dead.
                         const hasImage = paste.eigen.items.some((i) => i.type === 'image');
                         const hasText = paste.eigen.items.some(
                             (i) => i.type === 'text' && clipboardTextItemHasContent(i),
@@ -587,17 +566,11 @@ const TiptapEditor = ({
         }
     };
 
-    // A text item (from the canvas, or a sheets cell range) lands as a single paragraph at the caret.
-    // Docs models fontFamily (name, per the fontFamily value canon — getFontName tolerates a name or a
-    // legacy stack) and color as textStyle attrs, textAlign as a block attr, and the three the canvas
-    // carries as whole-box styling as real marks: bold, italic, underline/strike. The rest of the
-    // typography superset drops gracefully (docs has no fontSize, letter-spacing or line-height control
-    // by design). `text` is plain on the wire; htmlToPlainText guards against a non-conforming payload —
-    // item-level typography is the best-effort fidelity the wire block carries.
+    // A text item lands as one paragraph at the caret, with the typography docs models; it has no
+    // fontSize, letter-spacing or line-height. htmlToPlainText guards against a non-conforming payload.
     const insertEigenTextItem = (item: EigenClipboardTextItem) => {
         if (!editorRef.current) return;
         const text = htmlToPlainText(item.text);
-        // Empty carriers (an empty canvas text box, a forged payload) must not land as blank paragraphs.
         if (!text.trim()) return;
         const typo = item.typography;
         const textStyleAttrs: Record<string, string> = {};
@@ -657,11 +630,8 @@ const TiptapEditor = ({
 
             if (items.length > 0) {
                 const text = editor.state.doc.textBetween(from, to, '\n').trim();
-                // PM's own clipboard serialization emits the selection as rich HTML — figures via the
-                // FigureNode renderHTML (<figure><img data-media-name…>), text with its typography marks
-                // — so docs→slides/sheets keeps typography and docs→anywhere keeps readable content. The
-                // helper prepends the eigen marker span (marker first). Pure-text selections never reach
-                // here (items.length === 0): PM's native copy already carries full rich HTML.
+                // PM's own serialization keeps figures and typography as rich HTML for every other host;
+                // the helper puts the eigen marker before it.
                 const { dom } = editor.view.serializeForClipboard(editor.state.selection.content());
                 e.preventDefault();
                 writeEigenClipboard(e, { version: 1, items }, text || undefined, dom.innerHTML);

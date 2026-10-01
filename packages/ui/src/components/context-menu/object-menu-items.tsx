@@ -40,7 +40,7 @@ export function ArrangeMenuItems({ onApply }: { onApply: (op: ZOp) => void }) {
 }
 
 // Clipboard group: Copy / Cut / Paste. Each row appears only when its callback is supplied, so a host
-// with only synchronous copy (slides today) and one with the full set (vector) compose the same
+// with only synchronous copy (slides) and one with the full set (vector) compose the same
 // builder. Labels + order are the single source so the apps' menus read identically.
 export function ClipboardMenuItems({
     onCopy,

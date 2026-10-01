@@ -684,7 +684,7 @@ swap_archive() {
 }
 
 # after_swap <the api image before the swap>: a release install runs the Compose files of the images the archive
-# pins; a local build runs today's, which may need keys an older archive lacks. The last update's backup is no way back
+# pins; a local build runs its own, which may need keys an older archive lacks. The last update's backup is no way back
 # from the data swapped in.
 after_swap() {
     rm -f .eigen/last-update

@@ -11,8 +11,7 @@ import {
 type Shortcut = { keys: string[]; label: string };
 type ShortcutGroup = { title: string; shortcuts: Shortcut[] };
 
-// The displayed reference, grouped as in Gmail. Kept adjacent in intent to useMailShortcuts —
-// a Phase 3/5 key is a one-line addition here (and its binding there).
+// The displayed reference, grouped as in Gmail. A key added to useMailShortcuts gets its line here.
 const SHORTCUT_GROUPS: ShortcutGroup[] = [
     {
         title: 'Navigation',

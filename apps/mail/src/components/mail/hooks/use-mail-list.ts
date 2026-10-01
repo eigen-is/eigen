@@ -16,9 +16,8 @@ type UseMailListReturn = {
 };
 
 // Single source of truth for the thread-list's ordered data, selection, and
-// keyboard cursor. Owned by MailRoute so the list AND (Phase 2) useMailShortcuts
-// act on the same rows. Lifted out of EmailList; behavior matches the shared
-// useKeyboardListNavigation it replaces for mail.
+// keyboard cursor. Owned by MailRoute so the list and useMailShortcuts act on
+// the same rows.
 export function useMailList({ emails, activeId }: UseMailListOptions): UseMailListReturn {
     // Date-desc sort over the loaded window / search results (hundreds of rows, not the whole
     // mailbox). Search is now server-side (see the route); the client filter is gone. Stable sort
@@ -62,7 +61,7 @@ export function useMailList({ emails, activeId }: UseMailListOptions): UseMailLi
         }
     }, [activeId, orderedEmails]);
 
-    // setCursorById lets Phase 3 slide the cursor to a neighbor computed BEFORE a mutation
-    // removes the acted row — id tracking lands it correctly once the list updates.
+    // setCursorById slides the cursor to a neighbor computed BEFORE a mutation removes the
+    // acted row — id tracking lands it correctly once the list updates.
     return { orderedEmails, selection, cursorIndex, setCursorIndex, setCursorById: setCursorId };
 }

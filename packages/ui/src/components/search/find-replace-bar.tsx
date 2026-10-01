@@ -35,7 +35,7 @@ export type FindReplaceBarProps = {
     onNext: () => void;
     onPrev: () => void;
     onClose: () => void;
-    // v1.5 replace row — rendered only when `mode === 'replace'` AND the surface `canReplace`.
+    // The replace row — rendered only when `mode === 'replace'` AND the surface `canReplace`.
     mode: 'search' | 'replace';
     replacement: string;
     preserveCase: boolean;
