@@ -46,8 +46,15 @@ export function withStorageDeadline<T>(request: Promise<T>): Promise<T> {
 
 const YIELD_EVERY_BYTES = 2 * 1024 * 1024;
 
+// The empty second immediate keeps the loop awake: inside `expect().rejects`, which waits on its promise
+// synchronously, Bun otherwise sleeps until the next timer before it runs what the first one resolved.
 export function eventLoopTurn(): Promise<void> {
-    return new Promise((resolve) => setImmediate(resolve));
+    return new Promise((resolve) =>
+        setImmediate(() => {
+            resolve();
+            setImmediate(() => {});
+        }),
+    );
 }
 
 // The one storage stream loop: pulls chunk by chunk and reports the total, past maxBytes a 413. With
