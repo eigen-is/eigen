@@ -70,6 +70,7 @@ export async function consumeStream(
     if (signal?.aborted) stop();
     let size = 0;
     try {
+        // Never yields to the event loop: readers and in-place writers of a local file rely on a copy not interleaving.
         while (true) {
             timer?.refresh();
             // A read pending when cancel() runs resolves done rather than throwing, hence the flag.

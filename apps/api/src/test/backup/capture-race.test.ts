@@ -263,6 +263,44 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
+    test('a large file overwritten in place during its copy is archived whole', async () => {
+        const user = await raceUser('local-fullnames');
+        const { root } = await seed(user);
+        const size = 8 * 1024 * 1024;
+        const big = await driveUpload(
+            user.sessionToken,
+            user.id,
+            M,
+            root.id,
+            new File([new Uint8Array(size)], 'big.bin'),
+        );
+        const mount = await defaultMount(user);
+        const bigKey = await mount.getStorageKey(big.id);
+        // The overwrite starts on the next turn of the event loop, so it lands only if the copy gives the loop up.
+        const readKey = Mount.prototype.readKey;
+        let overwritten: Promise<unknown> | undefined;
+        const read = spyOn(Mount.prototype, 'readKey').mockImplementation(async function (this: Mount, key: string) {
+            if (key === bigKey && !overwritten) {
+                const { promise, resolve } = Promise.withResolvers<unknown>();
+                overwritten = promise;
+                setImmediate(() => resolve(mount.writeFile(big.id, new Uint8Array(size).fill(1))));
+            }
+            return readKey.call(this, key);
+        });
+        let result: Awaited<ReturnType<typeof snapshotInto>>;
+        try {
+            result = await snapshotInto(await getHome(user.id), 'full');
+            await overwritten;
+        } finally {
+            read.mockRestore();
+        }
+        const archived = readFileSync(join(result.folder, 'home/mounts', M, 'data/big.bin'));
+        expect(archived.byteLength).toBe(size);
+        expect(new Set(archived).size).toBe(1);
+        const entry = findOrFail(result.manifest.entries, (e) => e.path.endsWith('/data/big.bin'));
+        expect(entry.bytes).toBe(archived.byteLength);
+    });
+
     test('a flat-key mount, whose keys a rename does not change, is captured as before', async () => {
         const user = await raceUser('local-id');
         const { projects } = await seed(user);
