@@ -2,6 +2,8 @@
 
 How to run Eigen on your own server. The step-by-step guide lives in the help center, in the [Self-hosting](https://eigen.is/support/self-hosting/get-started) section. This page is the quick start and the technical reference that goes with the code.
 
+An install is one folder, `/opt/eigen` in the quick start, that holds the `eigen` launcher, `.env.production`, `data/` and `backups/`. Eigen runs from it as Docker Compose services, on release images pinned by digest. One container, `eigen-api`, runs the API on port 8000 over the data in `data/`. In front of it a web server serves the apps' files and passes the rest on: the bundled Caddy, which also gets the HTTPS certificate, or `eigen-static` behind a web server of your own. Hosted mail adds Postfix, Dovecot and the Unbound resolver ([MAIL.md](MAIL.md)). The operator drives all of it through `./eigen` rather than Docker Compose: the launcher writes `.env.production`, pins the images and adds the override file to every Compose command ([The commands](#the-commands)).
+
 ## Requirements
 
 - A Linux server, amd64 or arm64, with 2 GB of RAM, 4 GB recommended
