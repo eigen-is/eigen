@@ -60,7 +60,7 @@ export interface MailStore {
     search(opts: MailSearchOptions): EmailSummary[];
 
     mailboxesList(): Promise<MaildirMailbox[]>;
-    mailboxExists(mailbox: string): Promise<MaildirMailbox | false>;
+    mailboxExists(mailbox: string): Promise<boolean>;
     listMessages(
         mailbox: string,
         opts: { limit: number; before?: { date: Date; id: string } },
