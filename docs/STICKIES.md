@@ -7,7 +7,7 @@
 Every change goes into the Yjs doc first. Observers then rebuild the React state (`hooks/use-board.ts` for columns, the shared comment hooks for cards), so a local edit and a peer's edit take the same path to the screen. Peers sync through the shared `useCollabDoc` ([COLLAB.md](COLLAB.md)). The doc has three roots:
 
 ```
-Y.Map            "tasks"        cardId → Y.Map (the shared CommentCard shape)
+Y.Map            "tasks"        cardId → Y.Map { id, title, description, color?, chatName?, creator?, createdAt?, attachments? }
 Y.Map            "columns"      columnId → Y.Map { id, title, taskIds: Y.Array<string>, creator, createdAt }
 Y.Array<string>  "columnOrder"  ordered column ids
 ```
@@ -16,7 +16,13 @@ The undo manager tracks all three roots. So a card and its column reference undo
 
 ## Stickies data stays readable in every shape that shipped
 
-Real boards live on eigen.is, so stickies are the exception to the pre-1.0 format policy in [ROADMAP.md](ROADMAP.md): the readers keep handling every stickies shape that ever shipped. They default a field an older board lacks rather than assume it. A column without `createdAt` reads as 0, a column without `taskIds` reads as empty, and the add-card dialog creates the list before it inserts. The root name `tasks` stays for the same reason, although its entries are cards.
+Real boards live on eigen.is, so stickies are the exception to the pre-1.0 format policy in [ROADMAP.md](ROADMAP.md): the readers keep handling every stickies shape that ever shipped. They default a field an older board lacks rather than assume it. The root name `tasks` stays for the same reason, although its entries are cards.
+
+What a reader tolerates is the contract:
+
+- A card is read by `readCards` (`packages/lib/src/core/comments/hooks/use-comment-cards.ts`). `title` and `description` default to '', and the description is sanitized. `color`, `chatName`, `creator`, `createdAt` and `attachments` are optional, and a value of the wrong type reads as absent. An `attachments` list drops its null and number elements.
+- A column is read in `hooks/use-board.ts`. A missing `title` or `creator` reads as '', a missing `createdAt` as 0, and a missing `taskIds` as an empty list. The add-card dialog creates the list before it inserts.
+- A card's id and a column's id are their keys in `tasks` and `columns`. The stored `id` field is written but never read.
 
 ## A card is a shared CommentCard
 
