@@ -119,7 +119,7 @@ A failure after step 4 parks the half-written folder as `<id>.failed-restore-<da
 
 ## A restore refuses a member that is not a whole home
 
-`incompleteReason` (`packages/lib/src/validation/backup.ts`) reads the manifest: a Light member holds no files and no mail, and a mount with `contents: 'metadata'` holds no file bodies. `restoreHome` refuses such an archive right after it reads the manifest, before the verify and before the home goes aside, where a refusal would already have cost the user their open pages. `materializeMount` refuses a metadata-only mount a second time, where the harm would be. The admin pane shows why on the row and offers no Restore.
+`incompleteReason` (`packages/lib/src/validation/backup.ts`) reads the manifest: a Light member holds no files and no mail, and a mount with `contents: 'metadata'` holds no file bodies. `restoreHome` refuses such an archive right after it reads the manifest, before the verify and before the home goes aside, where a refusal would already have cost the user their open pages. The admin pane shows why on the row and offers no Restore.
 
 So a Full + S3 member restores any home, a Full member a home without `s3` mounts, and a Light member none. The refusal trusts the manifest. A manifest edited to drop `level` and `contents` still verifies, because verify must allow a missing body (a delete can race the backup). Such an archive restores files with no bytes.
 
@@ -215,7 +215,7 @@ A home whose capture or verify fails gets `failed` with the reason in the manife
 
 ## The schedule makes one attempt per UTC day
 
-`serverBackupTick` (`apps/api/src/lib/scheduler/jobs.ts`) runs every five minutes. It never runs at boot, when the server is busiest. It starts a Full (Full + S3 with `withS3`) once the UTC hour reaches `hourUtc` and no scheduled archive or record in `backups/` carries today's UTC date. A failed or refused attempt leaves its record, so it counts: a bad night is one alert, not a retry every tick. A restart before the night's attempt skips nothing, since the first tick after the boot starts it. A restart during the attempt ends it failed, "interrupted by a restart", and that was the night's attempt. The settings live in `settings.json` under `backups.schedule` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)).
+`serverBackupTick` (`apps/api/src/lib/backup/schedule.ts`) runs every five minutes. It never runs at boot, when the server is busiest. It starts a Full (Full + S3 with `withS3`) once the UTC hour reaches `hourUtc` and no scheduled archive or record in `backups/` carries today's UTC date. A failed or refused attempt leaves its record, so it counts: a bad night is one alert, not a retry every tick. A restart before the night's attempt skips nothing, since the first tick after the boot starts it. A restart during the attempt ends it failed, "interrupted by a restart", and that was the night's attempt. The settings live in `settings.json` under `backups.schedule` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)).
 
 ## Retention keeps good scheduled archives and every manual one
 
@@ -233,7 +233,7 @@ A failed night never pushes out the last good archive, and nights that keep fail
 
 ## Failures reach the owner
 
-Every failure of a server backup or its upload sends an `admin-alert` to `getOrgOwner()`, tagged per archive so repeats coalesce. `./eigen status` shows a Backup row from `ControlStatus.backup` (`apps/api/src/lib/config/server-status.ts`): red while the newest scheduled attempt failed, yellow while it is not in the bucket or while the schedule is on and no Full verified in two days. With Eigen stopped the row reads the names in `backups/`.
+Every failure of a server backup or its upload sends an `admin-alert` to `getOrgOwner()` through `alertOwner`, tagged per archive so repeats coalesce. `./eigen status` shows a Backup row from `ControlStatus.backup`, built by `getServerBackupStatus` in `apps/api/src/lib/backup/server-archives.ts`: red while the newest scheduled attempt failed, yellow while it is not in the bucket or while the schedule is on and no Full verified in two days. With Eigen stopped the row reads the names in `backups/`.
 
 ## Upload goes to a bucket of its own
 
@@ -248,7 +248,7 @@ A verified scheduled or manual archive goes to the backup bucket as an upload jo
 
 It warns, without refusing, when no lifecycle rule aborts incomplete multipart uploads under the server's folder, since the parts of an upload cut off halfway stay and cost money.
 
-The backup bucket's secret reaches no browser, the owner's included. An admin who is not the owner reads the backup settings at their defaults, so neither the destination nor the schedule reaches them. A blank secret in a save or a **Test Connection** keeps the stored one unless the endpoint, bucket or access key changed. The endpoint, bucket and keys live only in `settings.json`, which is inside the archives in that bucket. So a save that changes the destination answers with a one-time notice (`BACKUP_DESTINATION_NOTICE` in `packages/lib/src/constants/backup.ts`) to keep them somewhere off the server. A restore on a new machine starts from them.
+The backup bucket's secret reaches no browser, the owner's included. An admin who is not the owner reads the backup settings at their defaults, so neither the destination nor the schedule reaches them. A blank secret in a save or a **Test Connection** keeps the stored one unless the endpoint, bucket or access key changed. The endpoint, bucket and keys live only in `settings.json`, which is inside the archives in that bucket. So a save that changes the destination answers with a one-time notice (`BACKUP_DESTINATION_NOTICE` in `apps/api/src/lib/backup/upload.ts`, beside `withoutBackupSecret` and `withSavedSecret`) to keep them somewhere off the server. A restore on a new machine starts from them.
 
 ## The bucket keeps its own count, and always the newest complete archive
 
