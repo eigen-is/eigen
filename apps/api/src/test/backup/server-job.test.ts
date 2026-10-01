@@ -366,6 +366,25 @@ describe('Server backup job', () => {
     });
 
     test(
+        'a home the room check cannot size is left to its capture, and the job goes on',
+        async () => {
+            quietRelay();
+            const unsized = ctx.bob.user.id;
+            const sized = homeRelay.pullHomeBackupBytes;
+            spies.push(
+                spyOn(homeRelay, 'pullHomeBackupBytes').mockImplementation((ownerId, level) =>
+                    ownerId === unsized ? Promise.reject(new Error('ENOENT: renamed mid-walk')) : sized(ownerId, level),
+                ),
+            );
+            const { job, archivePath } = await runJob();
+            expect(job.error).toBeUndefined();
+            expect(job.state).toBe('done');
+            expect((await readManifest(archivePath)).homes.find((h) => h.ownerId === unsized)?.member).toBeDefined();
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
         'sizes only what the server member takes: a stray file in server/ does not count against the room',
         async () => {
             quietRelay();

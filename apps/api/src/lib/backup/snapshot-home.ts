@@ -8,7 +8,7 @@ import { BACKUP_FORMAT_VERSION } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
 import { getAvatarsDir } from '../config/paths';
 import { getPublicConfig } from '../config/server-config';
-import { type DatabaseConfig, PATHS, type SchemaType } from '../core';
+import { type DatabaseConfig, isEnoent, PATHS, type SchemaType } from '../core';
 import type { Home } from '../home';
 import { createMountConfig, Mount } from '../mount';
 import { MOUNT_DB_CONFIG } from '../mount/db-config';
@@ -75,23 +75,30 @@ export function listFileTree(root: string, skipDir: (rel: string) => boolean = (
     return tree;
 }
 
-// What a capture of the tree stages, at most: its files and databases as they sit on disk. The room
-// check before a server backup sizes every home with it, so it walks without blocking the server; a
-// file gone since the listing counts nothing.
+// What a capture of the tree stages, at most: its files and databases as they sit on disk. The room check before a
+// server backup sizes every home with it while the server runs, so a file or folder gone since its listing counts
+// nothing. A folder's files are statted together, its subfolders walked one at a time to keep few handles open.
 export async function treeBytes(root: string, skipDir: (rel: string) => boolean = () => false): Promise<number> {
-    let bytes = 0;
-    const walk = async (relDir: string): Promise<void> => {
-        for (const entry of await fsp.readdir(path.join(root, relDir), { withFileTypes: true })) {
-            const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
-            if (entry.isDirectory()) {
-                if (!skipDir(rel)) await walk(rel);
-            } else if (entry.isFile() && !JOURNAL_FILE.test(entry.name)) {
-                bytes += (await fsp.stat(path.join(root, rel)).catch(() => undefined))?.size ?? 0;
-            }
+    const gone =
+        <T>(value: T) =>
+        (error: unknown): T => {
+            if (isEnoent(error)) return value;
+            throw error;
+        };
+    const walk = async (relDir: string): Promise<number> => {
+        const entries = await fsp.readdir(path.join(root, relDir), { withFileTypes: true }).catch(gone([]));
+        const rel = (name: string) => (relDir ? `${relDir}/${name}` : name);
+        const files = entries.filter((entry) => entry.isFile() && !JOURNAL_FILE.test(entry.name));
+        const sizes = await Promise.all(
+            files.map((entry) => fsp.stat(path.join(root, rel(entry.name))).then((stat) => stat.size, gone(0))),
+        );
+        let bytes = sizes.reduce((sum, size) => sum + size, 0);
+        for (const entry of entries) {
+            if (entry.isDirectory() && !skipDir(rel(entry.name))) bytes += await walk(rel(entry.name));
         }
+        return bytes;
     };
-    await walk('');
-    return bytes;
+    return walk('');
 }
 
 // Writes a storage-independent copy of one home into `{targetDir}/home-{ownerId}/` and returns the

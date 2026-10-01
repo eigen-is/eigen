@@ -102,10 +102,10 @@ async function serverMemberBytes(): Promise<number> {
 
 // Refuses a job the backups folder has no room for, before it writes anything. The bound is
 // uncompressed: every member as it will be appended, plus the one being staged and packed beside
-// it, which is at most twice the largest.
+// it, which is at most twice the largest. A home that cannot be sized is its capture's to judge.
 async function requireRoom(level: BackupLevel, homes: ServerHome[]): Promise<void> {
     const sizes = [await serverMemberBytes()];
-    for (const home of homes) sizes.push(await pullHomeBackupBytes(home.ownerId, level));
+    for (const home of homes) sizes.push(await pullHomeBackupBytes(home.ownerId, level).catch(() => 0));
     const needed = 2 * Math.max(...sizes) + sizes.reduce((sum, bytes) => sum + bytes, 0);
     const shortfall = roomShortfall(`A ${level} backup`, needed, getBackupsDir(), 'the backups folder');
     if (shortfall) throw new ApiError(507, shortfall);
