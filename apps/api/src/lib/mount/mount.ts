@@ -1167,7 +1167,7 @@ export class Mount {
         return this.uploadQueue?.drain(opts) ?? Promise.resolve();
     }
 
-    // Queue depth (observability, §9): how many uploads are awaiting an ack on this mount.
+    // Queue depth (observability): how many uploads are awaiting an ack on this mount.
     get pendingUploadCount(): number {
         return this.uploadQueue?.pendingCount ?? 0;
     }

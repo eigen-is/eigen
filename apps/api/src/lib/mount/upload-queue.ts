@@ -98,7 +98,7 @@ export class UploadQueue {
         return row ? this.resolveStagingPath(row.stagingPath) : null;
     }
 
-    // Queue depth (observability, §9).
+    // Queue depth (observability).
     get pendingCount(): number {
         const row = this.db.select({ c: count() }).from(pendingUploads).get();
         return row?.c ?? 0;

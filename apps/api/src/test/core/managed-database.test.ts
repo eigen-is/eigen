@@ -377,7 +377,7 @@ describe('ManagedDatabase close releases the file (no zombie close)', () => {
 
 describe('ManagedDatabase dirty tracking', () => {
     test('markDirty() forces the next sync even when nothing changed since the last one', async () => {
-        // Phase 1a: crash recovery reuses a temp whose total_changes() reset to 0, so the
+        // Crash recovery reuses a temp whose total_changes() reset to 0, so the
         // DB looks clean. markDirty() guarantees the unsynced bytes are re-synced instead
         // of being silently dropped by the close-time cleanupTemp.
         let syncs = 0;

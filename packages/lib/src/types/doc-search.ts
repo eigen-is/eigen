@@ -71,7 +71,7 @@ export type DocSearchSession = {
     revealFromPalette(query: string, matchId: string): void;
 };
 
-// Phase 2 — async, server-backed comment-thread search (palette `doc:` scope only). id = the
+// Async, server-backed comment-thread search (palette `doc:` scope only). id = the
 // thread's chatName; the client resolves chatName → cardId itself, so there is no cardId field —
 // nothing populates it server-side (no placeholder fields).
 export type DocCommentMatch = {

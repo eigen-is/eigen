@@ -1670,7 +1670,7 @@ describe('Managed-db open vs create', () => {
     });
 
     // A close whose final sync FAILED must not cleanupTemp: the temp is the only copy holding
-    // the unsynced tail, and a surviving temp is the Phase 1a unclean-shutdown marker the next
+    // the unsynced tail, and a surviving temp is the unclean-shutdown marker the next
     // open adopts + re-syncs. Deleting it would silently serve stale storage bytes on reopen.
     test('close() with a failing final sync rejects but leaves the crash-recovery temp', async () => {
         const config = createTestMountConfig('test-failed-close', 'local');

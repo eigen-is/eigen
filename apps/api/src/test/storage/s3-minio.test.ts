@@ -348,7 +348,7 @@ describe.skipIf(!live)('Mount (s3 storage, MinIO)', () => {
         expect(await mount.storage.exists(storageKey)).toBe(false);
     });
 
-    // Managed data.db writes go through the write-behind queue (docs/SYNC.md Phase 1b). Pin its
+    // Managed data.db writes go through the write-behind queue (docs/SYNC.md). Pin its
     // basic ack against a real S3: close enqueues, drain awaits the PUT, the object lands.
     test('write-behind queue acks a managed data.db flush', async () => {
         const containerId = await mount.createFolder(rootId, 'QueueDoc', 'doc');

@@ -1,4 +1,4 @@
-// Process-global coordination for the write-behind upload pipeline (Phase 1b).
+// Process-global coordination for the write-behind upload pipeline.
 //
 // Everything here is genuinely process-level and holds NO per-user/per-mount data: a concurrency
 // limiter keyed by S3 destination, the backoff function, and the shutdown deadline. The durable

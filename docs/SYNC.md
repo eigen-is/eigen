@@ -32,7 +32,7 @@ A queue exists only when `buildUploadDestinationKey` (`apps/api/src/lib/mount/he
 
 ## Code comments cite seven numbered invariants
 
-Comments and tests name these by number ("invariant 7"). Some cite four more labels: Phase 1a is the crash-temp recovery, Phase 1b the write-behind pipeline, §3 staging and version snapshots, and §9 the queue-depth count (`pendingCount`).
+Comments and tests name these by number ("invariant 7").
 
 1. The payload is a frozen `VACUUM INTO` staged copy, captured at enqueue, never the live temp. The row's `paths.size` is stat'd from that staged copy too (`syncDocumentDbSize`), so it matches the object that range requests and WebDAV HEAD are served against. On `local` and `local-key` the live file is the object, and the size comes from it.
 2. Staged copies live in the per-mount `staging/` folder, which the startup `tmp/` sweep never touches. A staged copy lives until its PUT acks.

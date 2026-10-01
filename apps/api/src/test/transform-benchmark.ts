@@ -1,7 +1,7 @@
-// Responsiveness benchmark for document transforms (proposal Phase 0 baseline and
-// the Phase 1 gate). Seeds a heavy document of each collab type — eigensheets,
-// eigendoc, eigenslides — then measures a cold preview, a cache-hit preview and a
-// download export while probing the event loop, the /health route, and RSS.
+// Responsiveness benchmark for document transforms. Seeds a heavy document of each
+// collab type — eigensheets, eigendoc, eigenslides — then measures a cold preview, a
+// cache-hit preview and a download export while probing the event loop, the /health
+// route, and RSS.
 //
 // Run from apps/api:
 //   bun src/test/transform-benchmark.ts [--rows 1500] [--cols 40]

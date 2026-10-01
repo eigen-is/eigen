@@ -92,7 +92,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             `),
         },
         {
-            // Write-behind upload queue (Phase 1b). Additive; never touches existing rows.
+            // Write-behind upload queue. Additive; never touches existing rows.
             version: 4,
             up: (db) =>
                 db.exec(`
@@ -107,7 +107,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             `),
         },
         {
-            // File history + watch (Phase 1). Additive; never touches existing rows.
+            // File history + watch. Additive; never touches existing rows.
             version: 5,
             up: (db) =>
                 db.exec(`
@@ -134,7 +134,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             `),
         },
         {
-            // Drive-wide content index (Phase 2). Additive + regenerable: a sibling
+            // Drive-wide content index. Additive + regenerable: a sibling
             // paths_content_fts over a dedicated path_content table keeps large body text
             // off the hot `paths` row. The dirty bit + sweep populate it; the AFTER DELETE
             // ON paths trigger clears the content row. The 5 container type values are the

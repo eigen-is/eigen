@@ -21,8 +21,7 @@ import {
 } from '../fixtures/heavy-sheets';
 import { authedRequest, driveGet, drivePost, getTestContext, NO_MEDIA } from '../setup';
 
-// Golden output assertions for the eigensheets preview pipeline (proposal Phase 0:
-// pin the rendered contract BEFORE the Yjs loader / renderer refactor). The hash at
+// Golden output assertions for the eigensheets preview pipeline. The hash at
 // the bottom pins the exact sanitized body for the deterministic golden fixture —
 // it may only change for an intentional renderer/budget change, never as refactor
 // fallout.
@@ -296,9 +295,8 @@ describe('eigensheets preview (heavy fixture)', () => {
         const preview = (await res.json()) as TextPreview;
         expect(preview.mode).toBe('eigensheets');
 
-        // Phase 1 budget contract (intentional change from the Phase 0 baseline,
-        // which rendered the whole 600×45 grid): at most 200 rows × 50 columns /
-        // 10k cells from the top-left, valid HTML, marker appended.
+        // Budget contract: at most 200 rows × 50 columns / 10k cells from the top-left,
+        // valid HTML, marker appended.
         const { body } = preview;
         expect(body).not.toContain(HEAVY_FAR_CORNER);
         expect(body).toContain('Preview truncated');

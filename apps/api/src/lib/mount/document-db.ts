@@ -11,7 +11,7 @@ import { markContainerContentDirty } from './search-index';
 
 // Managed document-DB lifecycle: the cached working copies behind every container's
 // data.db/comments.db — open/create, the onOpen/onSync/onClose callbacks (crash
-// recovery Phase 1a, write-behind staging Phase 1b — see docs/SYNC.md), and teardown.
+// recovery, write-behind staging — see docs/SYNC.md), and teardown.
 
 export type DocumentDbSlot = {
     db: ManagedDatabase<SchemaType> | null; // the live instance while open; null while a build or a close is in flight
@@ -120,10 +120,10 @@ async function buildDocumentDb<S extends SchemaType>(
         : undefined;
 
     // Set when onOpen reuses a temp that survived an unclean shutdown — those bytes
-    // never synced, so the DB must be force-dirtied after open (Phase 1a, below).
+    // never synced, so the DB must be force-dirtied after open (crash recovery, below).
     let recoveredFromCrash = false;
 
-    // Captured by onSync to VACUUM INTO-stage the live DB (Phase 1b).
+    // Captured by onSync to VACUUM INTO-stage the live DB.
     const managed = new ManagedDatabase(
         config,
         localPath,
@@ -201,7 +201,7 @@ async function buildDocumentDb<S extends SchemaType>(
                   onClose: async (syncFailed) => {
                       if (!mount.uploadQueue) await syncDocumentDbSize(mount, pathId, localPath);
                       // A failed final sync means the temp is the only copy holding the tail —
-                      // leave it as the Phase 1a unclean-shutdown marker (adopted + re-synced
+                      // leave it as the unclean-shutdown marker (adopted + re-synced
                       // on the next open), never delete it.
                       if (!syncFailed) await mount.cleanupTemp(pathId);
                   },
@@ -222,7 +222,7 @@ async function buildDocumentDb<S extends SchemaType>(
 
     await managed.open();
 
-    // Phase 1a (crash-recovery durability): a surviving temp means a prior process
+    // Crash recovery: a surviving temp means a prior process
     // died before its writes synced. The fresh connection's total_changes() reset to
     // 0, so the DB looks clean and the close-time cleanupTemp would silently drop
     // those bytes (the most plausible cause of the 2026-05-30 chat loss). Force the

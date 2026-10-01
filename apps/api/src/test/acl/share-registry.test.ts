@@ -600,7 +600,7 @@ describe('Share Registry', () => {
                 const { getEntriesForTarget } = await import('../../lib/share/registry');
                 expect(await getEntriesForTarget(guestEmail)).toContain(teamOwner);
 
-                // request-otp admits the closed-signup guest solely on the registry entry — Phase 2 payoff.
+                // request-otp admits the closed-signup guest solely on the registry entry.
                 spy.mockClear();
                 const otpRes = await ctx.app.handle(
                     new Request('http://localhost/guest-auth/request-otp', {

@@ -81,8 +81,8 @@ async function takeSnapshot(
     // the existing one rather than failing on the duplicate name.
     const existing = await mount.getChildByName(versions.id, snapshotName);
     if (existing) return existing;
-    // isRemote sources the version from the freshest LOCAL bytes and ENQUEUES its upload
-    // (§3), so a close-time snapshot never blocks on the backend — copyPath would instead
+    // isRemote sources the version from the freshest LOCAL bytes and ENQUEUES its upload,
+    // so a close-time snapshot never blocks on the backend — copyPath would instead
     // write the new version to storage synchronously. Local backends are synchronously
     // current, so they keep the direct copyPath.
     const copy = mount.isRemote
@@ -187,7 +187,7 @@ export async function stageManagedDbCopy(
         return true;
     }
     // Nothing pending: a live VACUUM INTO if the doc is open, else the storage object — which is
-    // current because every upload acked (§3).
+    // current because every upload acked.
     const cached = mount.documentDbs.get(pathId)?.db;
     if (cached) {
         cached.stageCopy(destPath);
