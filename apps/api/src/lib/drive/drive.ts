@@ -382,6 +382,7 @@ export default class Drive {
         // 404 an unknown thread: a status write must not record an event for a nonexistent chatName.
         await assertCommentChatExists(this, mountId, pathId, chatName);
         const index = await getCommentIndex(this, mountId, pathId);
+        await index.ensureComment(chatName);
         const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
         if (card) await index.setTitle(chatName, card);
         if (status === 'resolved') {
