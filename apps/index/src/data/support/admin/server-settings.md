@@ -5,10 +5,10 @@ type: reference
 tags: [admin, settings, quotas, storage, notifications, mail, backup]
 related: [admin/get-started, admin/storage-quotas, self-hosting/back-up-and-restore]
 order: 80
-updated: 2026-09-30
+updated: 2026-10-01
 ---
 
-The **Settings** page in Admin lets the server owner rename the organization, check on the server, set the sender of Eigen's own mail, control storage limits and how new users' files are stored, back up the whole server, choose which events trigger email notifications, and add buttons to the landing page. Only the server owner sees this page in the sidebar.
+The **Settings** page in Admin is where the server owner sets up the organization, mail, storage, backups, and notifications. Only the owner sees it in the sidebar.
 
 To open it, sign in to Eigen as the owner and go to [Admin](/admin), then click **Settings** in the sidebar.
 
@@ -46,7 +46,7 @@ On a server without mailboxes that sends through a relay, a **Relay sends as use
 
 ## Storage quotas
 
-These four limits apply by default to every user. You can also set quota overrides per team from the Teams panel in Admin; when a user belongs to multiple teams, the most permissive limit wins.
+These four limits apply by default to every user. A changed **Default Mount (MB)** reaches drives created after the change: a user's existing drive keeps the limit it was created with. You can also set quota overrides per team from the Teams panel in Admin; when a user belongs to multiple teams, the most permissive limit wins.
 
 | Field | What it controls | Default |
 |---|---|---|
@@ -96,18 +96,24 @@ A backup of the whole server: every user and team, and the server's own database
 | **Time** | When the nightly backup starts. The list shows your own time with UTC beside it. | 02:00 UTC |
 | **Nightly backups to keep** | How many good nightly backups stay on the server, up to 365. A night that failed never pushes out the last good one. | 7 |
 | **Include files in S3 buckets** | Only there when nightly backups are on and a user or team keeps a drive in an S3 bucket. On, the nightly backup copies every file of those drives. Off, it holds their file list and the bucket keeps the files. | Off |
-| **Upload to a backup bucket** | Sends each backup that checks out to a private S3 bucket that holds nothing else of Eigen. Backups made before an update stay on this server. | Off |
+| **Upload to a backup bucket** | Sends each backup that verified to a private S3 bucket that holds nothing else of Eigen. Backups made before an update stay on this server. | Off |
 | **Backups to keep in the bucket** | How many nightly backups the bucket keeps, up to 365. It always keeps the newest one that holds every user and team, and backups made by hand stay. | 30 |
 
 With **Upload to a backup bucket** on, the same S3 fields appear as for the storage type, with **Test Connection**. The test refuses a bucket or an access key that Eigen keeps files with, and a bucket anyone can read. It warns when no rule cleans up uploads that were cut off halfway. The **Secret Access Key** is never shown again: leave it empty to keep the saved one. Once you save a new bucket, a notice asks you to write its details down somewhere other than this server, with any warning from the test.
 
-Below the settings, **Back up now** makes a backup at the level you pick: **Full**, **Light**, or **Full + S3** when a drive is in an S3 bucket. The section shows its progress while it runs. Each backup in the list shows its date, level, why it was made (**Scheduled**, **Manual**, or **Before an update**), its size, and whether it verified and reached the bucket. A user or team that failed is listed under **Not in this backup**. Hover over a row for **Upload to the bucket**, which sends a good backup again even if the bucket has it, and **Delete**.
+Below the settings, **Back up now** makes a backup at the level you pick: **Full**, **Light**, or **Full + S3** when a drive is in an S3 bucket. The section shows its progress while it runs. Each backup in the list shows:
+
+- Its date, level, and why it was made: **Scheduled**, **Manual**, or **Before an update**.
+- Its size, and whether it verified and reached the bucket.
+- Under **Not in this backup**, any user or team that failed.
+
+Hover over a row for **Upload to the bucket**, which sends a good backup again even if the bucket has it, and **Delete**.
 
 There is no download: a backup leaves the server by the bucket, or by a copy you make on the server, like `scp`.
 
 ## Email notifications
 
-These toggles control whether Eigen sends an email for each type of event, in addition to the in-app notification that always fires.
+These toggles control whether Eigen sends an email for each type of event. A user with an account gets the in-app notification either way.
 
 | Toggle | What triggers the email |
 |---|---|

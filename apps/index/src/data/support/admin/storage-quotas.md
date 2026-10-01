@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, quotas, storage, settings]
 related: [admin/server-settings, admin/teams]
 order: 60
-updated: 2026-09-30
+updated: 2026-10-01
 ---
 
 Storage quotas control how much space each user and team can use. You set server-wide defaults on the [**Settings**](/admin/settings) page, and you can raise those defaults for specific teams without changing the server-wide values. Only the server owner can access the **Settings** page.
@@ -31,7 +31,7 @@ These limits apply to all users by default. A changed **Default Mount (MB)** app
 
 ## Set the default storage type for new users
 
-The **Storage Type** setting under **Defaults** on the same **Settings** page controls where new users' Drive files are written the first time they sign in. Changing this setting has no effect on existing users' files.
+The **Storage Type** setting under **Defaults** on the same **Settings** page controls where new users' Drive files are written, from when their account is created. Changing this setting has no effect on existing users' files.
 
 1. In [Admin Settings](/admin/settings), scroll to **Defaults**.
 2. Open the **Storage Type** dropdown and choose one of the following:
@@ -43,7 +43,7 @@ The **Storage Type** setting under **Defaults** on the same **Settings** page co
 
 ## Override quotas for a team
 
-You can raise both limits above the server default for everyone in a specific team. This lets you give certain groups more space without changing the server-wide defaults for everyone else.
+You can raise the **Mail, Contacts & Calendar (MB)** and **Default Mount (MB)** limits above the server default for everyone in a specific team. This lets you give certain groups more space without changing the server-wide defaults for everyone else.
 
 1. Open [Admin](/admin) and click the team's name in the sidebar.
 2. Click **Edit** at the top of the detail panel.

@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/back-up-home, admin/restore-home]
 order: 92
-updated: 2026-09-30
+updated: 2026-10-01
 ---
 
 A backup made from the **Backup** section in Admin is a single archive of one user or one team. This page lists what goes into that archive, what stays out, how Eigen checks it, and where the panel's limits are. To make or restore a backup, see [Back up a user or team](/support/admin/back-up-home) and [Restore a user or team](/support/admin/restore-home).
@@ -42,7 +42,7 @@ A team backup is the same shape as a user backup, minus the parts a team has no 
 |---|---|
 | Format | `.tar.zst`, a compressed tar archive you can open with standard tools (`tar --zstd`) |
 | Name | `home-<id>-<date>-<time>.tar.zst`, for example `home-a1b2c3-20260911-140322.tar.zst` |
-| Where it lands | The server's backups folder: `EIGEN_BACKUPS_DIR` if set, otherwise `backups/` next to the data directory |
+| Where it lands | The server's backups folder, `backups/` in the install folder |
 
 Files stored in an S3 bucket are downloaded and written into the archive, so a restore never depends on the bucket, its credentials, or the storage type staying the same.
 
@@ -76,7 +76,6 @@ Click **Verify** on any archive to run the checks again and update its badge.
 |---|---|
 | Scheduling | None for one user or team. The nightly backup of the whole server holds every user and team. |
 | Clean-up | None. Archives of one user or team and safety copies stay until you delete them. |
-| Whole server | The panel backs up one user or team, not the whole server. |
 | Concurrent jobs | One at a time per user or team. A second request is refused while one runs, and while the whole-server backup copies that user or team. |
 | Restore target | An archive restores only to the same user or team it came from. |
 | Upload size | About 1 GB through **Upload backup**. For a larger archive, copy the file into the backups folder by hand. |
@@ -85,4 +84,4 @@ Click **Verify** on any archive to run the checks again and update its badge.
 
 The panel covers one user or team at a time. The owner backs up the whole server in [Settings](/support/admin/server-settings#backups), every night or by hand, or with `./eigen backup` on the server. It runs while Eigen runs, holds the server's own databases and settings as well, is checked the same way, and can go to a backup bucket off the server. See [Back up and restore the whole server](/support/self-hosting/back-up-and-restore).
 
-A whole-server backup holds an archive of every user and team. Copied into the backups folder, one lists in that user's or team's **Backup** section like any other archive. A copy out of a **Light** backup holds no files and no mail, and one out of a **Full** backup holds no files of a drive in an S3 bucket. Neither restores on its own: the row says why and offers no **Restore**.
+A whole-server backup holds an archive of every user and team. Copied into the backups folder, one lists in that user's or team's **Backup** section like any other archive. An archive out of a **Light** backup holds no files and no mail, and one out of a **Full** backup holds no files of a drive in an S3 bucket. Neither restores on its own: the row says why and offers no **Restore**.
