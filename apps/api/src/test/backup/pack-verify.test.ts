@@ -841,6 +841,18 @@ describe('Archive writer and reader', () => {
         return archivePath;
     }
 
+    test('a pax or GNU long-name header past 64 KiB is refused before it is read into memory', async () => {
+        for (const typeflag of ['x', 'g', 'L']) {
+            const size = 64 * 1024 + 1;
+            const header = Buffer.alloc(512);
+            header.write(`${size.toString(8).padStart(11, '0')}\0`, 124);
+            header.write(typeflag, 156);
+            const archivePath = join(dir, `long-header-${typeflag}.tar`);
+            writeFileSync(archivePath, Buffer.concat([header, Buffer.alloc(Math.ceil(size / 512) * 512 + 1024)]));
+            await expect(readArchiveMembers(archivePath)).rejects.toThrow('header');
+        }
+    });
+
     test('a member past the read cap is refused in memory and streamed out byte for byte', async () => {
         const big = join(dir, 'big.bin');
         const bytes = new Uint8Array(MAX_MEMBER_READ_BYTES + 1);

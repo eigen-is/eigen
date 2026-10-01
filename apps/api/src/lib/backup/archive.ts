@@ -332,6 +332,9 @@ function paxPath(records: Uint8Array): string | null {
     return null;
 }
 
+// One path record fits many times over; the size is the untrusted archive's own word.
+const MAX_LONG_HEADER_BYTES = 64 * 1024;
+
 // Hard link, symlink, character and block device, fifo.
 const LINKS_AND_DEVICES = new Set(['1', '2', '3', '4', '6']);
 
@@ -408,6 +411,9 @@ async function* tarEntries(bytes: AsyncIterable<Uint8Array>): AsyncGenerator<Tar
             // (what the writer above emits) or GNU's long-name block. A global header names nothing,
             // and taking its truncated name for the next entry's would write the wrong path.
             if (typeflag === 'x' || typeflag === 'g' || typeflag === 'L') {
+                if (size > MAX_LONG_HEADER_BYTES) {
+                    throw new Error(`backup archive: refusing a ${size}-byte extended header`);
+                }
                 const extra = await collect(body());
                 if (typeflag === 'x') givenName = paxPath(extra);
                 if (typeflag === 'L') givenName = headerField(extra, 0, extra.length);
