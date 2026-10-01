@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
@@ -13,6 +13,7 @@ import {
     assertJson,
     authedRequest,
     chatPost,
+    countLoopTurns,
     createTestUser,
     driveDelete,
     driveGetList,
@@ -366,25 +367,179 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
     }, 120_000);
 });
 
+describe('a file whose stream overwrite is in flight when the capture reaches it', () => {
+    for (const storageType of ['local-fullnames', 'local-id'] as const) {
+        test(`is archived whole, on ${storageType}`, async () => {
+            const user = await raceUser(storageType);
+            const { root } = await seed(user);
+            const size = 8 * 1024 * 1024;
+            const big = await driveUpload(
+                user.sessionToken,
+                user.id,
+                M,
+                root.id,
+                new File([new Uint8Array(size)], 'big.bin'),
+            );
+            const home = await getHome(user.id);
+            const mount = await defaultMount(user);
+            const bigKey = await mount.getStorageKey(big.id);
+            const frozen = Promise.withResolvers<void>();
+            const release = Promise.withResolvers<void>();
+            // Frozen where Bun.write's thread is part-way: half of the new bytes over the file.
+            const write = mount.storage.write.bind(mount.storage);
+            const writeSpy = spyOn(mount.storage, 'write').mockImplementation(async (key, data) => {
+                if (key === bigKey) {
+                    writeFileSync(mount.storage.getPath!(key), Buffer.alloc(size / 2, 1));
+                    frozen.resolve();
+                    await release.promise;
+                }
+                return write(key, data);
+            });
+            const overwrite = home.drive.writeFileContent(M, big.id, new Blob([new Uint8Array(size).fill(1)]).stream());
+            await frozen.promise;
+            // The capture's own request for the file's lock lets the overwrite finish.
+            const withPathLock = Mount.prototype.withPathLock;
+            const lock = spyOn(Mount.prototype, 'withPathLock').mockImplementation(function <T>(
+                this: Mount,
+                pathId: string,
+                fn: () => Promise<T>,
+            ) {
+                if (pathId === big.id) release.resolve();
+                return withPathLock.bind(this)(pathId, fn);
+            });
+            let result: Awaited<ReturnType<typeof snapshotInto>>;
+            try {
+                result = await snapshotInto(home, 'full');
+            } finally {
+                release.resolve();
+                await overwrite;
+                lock.mockRestore();
+                writeSpy.mockRestore();
+            }
+            const archived = readFileSync(join(result.folder, 'home/mounts', M, 'data/big.bin'));
+            expect(archived.byteLength).toBe(size);
+            expect(new Set(archived).size).toBe(1);
+            const entry = findOrFail(result.manifest.entries, (e) => e.path.endsWith('/data/big.bin'));
+            expect(entry.bytes).toBe(size);
+            expect((await verifyFolder(result.folder)).status).toBe('verified');
+        });
+    }
+});
+
+describe('a capture of a local mount shares the event loop', () => {
+    test('the event loop turns during the copy of a large file and between files', async () => {
+        const user = await raceUser('local-fullnames');
+        const { root } = await seed(user);
+        const big = await driveUpload(
+            user.sessionToken,
+            user.id,
+            M,
+            root.id,
+            new File([new Uint8Array(16 * 1024 * 1024)], 'big.bin'),
+        );
+        const turns = countLoopTurns();
+        let turnsDuringBig = 0;
+        const withPathLock = Mount.prototype.withPathLock;
+        const lock = spyOn(Mount.prototype, 'withPathLock').mockImplementation(async function <T>(
+            this: Mount,
+            pathId: string,
+            fn: () => Promise<T>,
+        ) {
+            const before = turns.read();
+            try {
+                return await withPathLock.bind(this)(pathId, fn);
+            } finally {
+                if (pathId === big.id) turnsDuringBig = turns.read() - before;
+            }
+        });
+        const samples: number[] = [];
+        const readKey = Mount.prototype.readKey;
+        const read = spyOn(Mount.prototype, 'readKey').mockImplementation(function (this: Mount, key: string) {
+            samples.push(turns.read());
+            return readKey.call(this, key);
+        });
+        try {
+            await snapshotInto(await getHome(user.id), 'full');
+        } finally {
+            turns.stop();
+            read.mockRestore();
+            lock.mockRestore();
+        }
+        expect(turnsDuringBig).toBeGreaterThanOrEqual(7);
+        expect(samples.length).toBe(REPORTS.length + 2);
+        expect(samples.slice(1).every((sample, i) => sample > samples[i])).toBe(true);
+    });
+});
+
 describe('a chat whose version is restored during the backup', () => {
+    // A chat with v1 in its saved version and v2 after it, and the call that restores the version.
+    async function seedChat(user: TestUser) {
+        const t = user.sessionToken;
+        const { root } = await seed(user);
+        const chat = await drivePost(t, user.id, M, `folder/${root.id}/create/chat`, { fileName: 'Talk' });
+        await chatPost(t, user.id, M, `${chat.id}/messages`, { content: 'v1' });
+        const saved = await assertJson<DrivePath>(
+            await authedRequest(t, `/drive/${user.id}/${M}/file/${chat.id}/versions/save`, { method: 'POST' }),
+        );
+        await chatPost(t, user.id, M, `${chat.id}/messages`, { content: 'v2' });
+        const restoreVersion = () =>
+            authedRequest(t, `/drive/${user.id}/${M}/file/${chat.id}/versions/${saved.name}/restore`, {
+                method: 'POST',
+            });
+        return { chat, restoreVersion };
+    }
+
     for (const storageType of ['local-fullnames', 'local-id'] as const) {
         test(`reopens with its messages after a restore, on ${storageType}`, async () => {
             const user = await raceUser(storageType);
             const t = user.sessionToken;
-            const { root } = await seed(user);
-            const chat = await drivePost(t, user.id, M, `folder/${root.id}/create/chat`, { fileName: 'Talk' });
-            await chatPost(t, user.id, M, `${chat.id}/messages`, { content: 'v1' });
-            const saved = await assertJson<DrivePath>(
-                await authedRequest(t, `/drive/${user.id}/${M}/file/${chat.id}/versions/save`, { method: 'POST' }),
-            );
-            await chatPost(t, user.id, M, `${chat.id}/messages`, { content: 'v2' });
-            const job = await backupDuring(user, () =>
-                authedRequest(t, `/drive/${user.id}/${M}/file/${chat.id}/versions/${saved.name}/restore`, {
-                    method: 'POST',
-                }),
-            );
+            const { chat, restoreVersion } = await seedChat(user);
+            const job = await backupDuring(user, restoreVersion);
             expect(job.state).toBe('done');
             await restoreHome(job.artifact!, user.id, `race-${Date.now()}`);
+            const res = await authedRequest(t, `/chat/${user.id}/${M}/${chat.id}/messages`);
+            expect(res.status).toBe(200);
+            const messages = await assertJson<{ content: string }[]>(res);
+            expect(messages.map((message) => message.content)).toContain('v1');
+        }, 120_000);
+
+        // Fails until the ROADMAP row "A chat version restored at the instant of a backup's database copy" is done.
+        test.failing(`reopens with its messages when its restore straddles the metadata.db copy, on ${storageType}`, async () => {
+            const user = await raceUser(storageType);
+            const t = user.sessionToken;
+            const { chat, restoreVersion } = await seedChat(user);
+            // The backup starts after the restore deleted data.db and before it creates the new one, which waits for
+            // the capture's first plain read: metadata.db is staged by then, with neither row.
+            const firstRead = Promise.withResolvers<void>();
+            let job: ReturnType<typeof backupJob> | undefined;
+            const readKey = Mount.prototype.readKey;
+            // The restore's own read of the version comes before the job, and is not the capture's.
+            const read = spyOn(Mount.prototype, 'readKey').mockImplementation(function (this: Mount, key: string) {
+                if (job) firstRead.resolve();
+                return readKey.call(this, key);
+            });
+            const createFileFromTemp = Mount.prototype.createFileFromTemp;
+            const create = spyOn(Mount.prototype, 'createFileFromTemp').mockImplementation(async function (
+                this: Mount,
+                parentId: string,
+                name: string,
+                ...rest: [string, number, string, string]
+            ) {
+                if (parentId === chat.id && name === 'data.db' && !job) {
+                    job = backupJob(user);
+                    await firstRead.promise;
+                }
+                return createFileFromTemp.call(this, parentId, name, ...rest);
+            });
+            try {
+                expect((await restoreVersion()).status).toBe(200);
+            } finally {
+                create.mockRestore();
+                read.mockRestore();
+            }
+            const done = await job;
+            expect(done?.state).toBe('done');
+            await restoreHome(done!.artifact!, user.id, `race-${Date.now()}`);
             const res = await authedRequest(t, `/chat/${user.id}/${M}/${chat.id}/messages`);
             expect(res.status).toBe(200);
             const messages = await assertJson<{ content: string }[]>(res);
