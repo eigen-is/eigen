@@ -1342,6 +1342,23 @@ for (const [what, archive] of [
         );
 
         test(
+            'a live metadata.db that does not read replays every pending upload, and says so',
+            async () => {
+                const dir = install();
+                liveS3Mount(dir, {});
+                const live = join(homeDirOf(dir, s3User.id), 'mounts', S3_MOUNT_ID, PATHS.DRIVE.METADATA_DB);
+                writeFileSync(live, 'A'.repeat(8192));
+                const result = await stage(dir, basename(archive()));
+                expect(result.code).toBe(0);
+                expect(result.stderr).toContain('every pending upload in the archive is replayed');
+                expect(readFileSync(join(stagedS3Mount(dir), PATHS.DRIVE.STAGING_DIR, stagedUploadName), 'utf8')).toBe(
+                    'not in the bucket yet',
+                );
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        test(
             'a pending row whose bytes the archive does not hold is counted as not replayed',
             async () => {
                 const dir = install();
