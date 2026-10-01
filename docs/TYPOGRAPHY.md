@@ -1,6 +1,6 @@
 # Typography and Self-Hosted Fonts
 
-> **TLDR:** Four self-hosted font families (Inter, Source Serif 4, JetBrains Mono, Excalifont) ship as woff2 files in `packages/ui/src/assets/fonts/`, declared in `packages/ui/src/styles/fonts.css`, with no external CDN. `EIGEN_FONTS` (`packages/lib/src/constants/fonts.ts`) is the one list the pickers read. Its order is load-bearing, since a sheet cell can store a font as an index into it. Docs and the canvas store a font's name, never a CSS stack. A new font touches six places, because the canvas metrics, the export and the licences page keep lists of their own.
+> **TLDR:** Four self-hosted font families (Inter, Source Serif 4, JetBrains Mono, Excalifont) ship as woff2 files in `packages/ui/src/assets/fonts/`, declared in `packages/ui/src/styles/fonts.css`, with no external CDN. `EIGEN_FONTS` (`packages/lib/src/constants/fonts.ts`) is the one list the pickers read. Its order is load-bearing, since a sheet cell can store a font as an index into it. Docs and the canvas store a font's name, never a CSS stack. A new font touches six places, because the canvas metrics, the export and the licenses page keep lists of their own.
 
 ## Four families ship with the app
 
@@ -13,7 +13,7 @@
 
 The files are Vite assets, so they are hashed and cached like any other. Nothing loads from a font CDN: a self-hosted server makes no request to a third party to render text. Every face uses `font-display: swap`, so text shows at once in the fallback and swaps when the font arrives.
 
-All four are licensed under the SIL Open Font License (OFL 1.1). The licence asks that it travels with the font, so each font folder carries its `OFL.txt`, and the /licenses page of the index app lists every font.
+All four are licensed under the SIL Open Font License (OFL 1.1). The license asks that it travels with the font, so each font folder carries its `OFL.txt`, and the /licenses page of the index app lists every font.
 
 ## CSS tokens name each category
 
@@ -55,7 +55,7 @@ The registry drives the pickers and the sheet lists. The other places keep their
 3. The entry in `EIGEN_FONTS`, appended at the end.
 4. `FONT_METRICS` in `packages/lib/src/vector/font-metrics.ts`. The canvas places SVG text baselines from each face's vertical metrics, and an unknown font gets Excalifont's.
 5. `FONT_FILES` in `apps/api/src/lib/export/fonts.ts`. Exports embed the faces as base64 `@font-face` rules ([EXPORT.md](EXPORT.md)), and a font missing there prints in a fallback.
-6. The `FONTS` list in `apps/index/scripts/build-licenses.ts`, which the /licenses page reads. A bundled font is not a package, so the licence build does not find it on its own.
+6. The `FONTS` list in `apps/index/scripts/build-licenses.ts`, which the /licenses page reads. A bundled font is not a package, so the license build does not find it on its own.
 
 A `--font-*` token in `globals.css` is needed only when the font fills a new category.
 
