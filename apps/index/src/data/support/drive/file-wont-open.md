@@ -8,39 +8,32 @@ order: 210
 updated: 2026-10-01
 ---
 
-If clicking a file does nothing, shows an error, or gives you a "No preview available" message, one of a few
-things is usually going on. Work through the checks below.
+If clicking a file does nothing, shows an error, or gives you a "No preview available" message, one of a few things is usually going on. Work through the checks below.
 
 ## You see "You need access"
 
-This means the file exists but has not been shared with your account. Eigen shows the owner's name so you know
-who to contact.
+This means the file exists but has not been shared with your account. Eigen shows the owner's name so you know who to contact.
 
-To ask for access, click **Request access** on that screen. You can add a short note before you send it. The
-owner will receive a notification and can share the file with you from there.
+To ask for access, click **Request access** on that screen. You can add a short note before you send it. The owner will receive a notification and can share the file with you from there.
 
 For more detail, see [Request access to a file](/support/drive/request-access).
 
 ## The file is not listed at all
 
-If you expect to see a file but it is not in the folder, check the Trash. Eigen moves deleted files to the
-Trash rather than removing them straight away. Open the **Trash** from the sidebar to see deleted files.
+If you expect to see a file but it is not in the folder, check the Trash. Eigen moves deleted files to the Trash rather than removing them straight away. Open the **Trash** from the sidebar to see deleted files.
 
-If you find the file there, right-click it and choose **Restore**. The file goes back to the folder it was in
-before.
+If you find the file there, right-click it and choose **Restore**. The file goes back to the folder it was in before.
 
 If it is not in the Trash either, it may have been permanently deleted.
 
 ## The preview shows "No preview available"
 
-Drive previews images, PDFs, videos, audio files, and most text and code files. For other file types, the
-preview overlay shows **No preview available**.
+Drive previews images, PDFs, videos, audio files, and most text and code files. For other file types, the preview overlay shows **No preview available**.
 
 To work with the file:
 
 - Click **Open** in the footer of the preview to open it in the editor, if applicable.
-- Right-click the file (or click its **⋮** button) and choose **Download** to save it to your computer, then
-  open it with a suitable application.
+- Right-click the file (or click its **⋮** button) and choose **Download** to save it to your computer, then open it with a suitable application.
 
 ## You see "This file is too large to preview."
 
@@ -50,24 +43,20 @@ Drive shows a text or code file of more than 1 MB without its preview. If you ca
 
 Different file types open in different ways:
 
-- **Documents, spreadsheets, presentations, boards, drawings, and chats** open in their own app (Docs, Sheets,
-  Slides, Stickies, Vector, Chat). If the app seems to hang on loading, try refreshing the page.
+- **Documents, spreadsheets, presentations, boards, drawings, and chats** open in their own app (Docs, Sheets, Slides, Stickies, Vector, Chat). If the app seems to hang on loading, try refreshing the page.
 - **Images, PDFs, videos, and audio** open in the preview overlay in Drive.
 - **Text and code files** (such as `.md`, `.txt`, `.json`) open in a text editor in the browser.
 - **Contact files** (`.vcf`) open in the preview overlay as contact cards, not as text. You can [import them to Contacts](/support/contacts/import-contacts) from there.
 - **Saved emails** (`.eml`) open in the preview overlay as the message they hold, not as text. You can [put them back in your inbox](/support/mail/import-an-email) from there.
 - **Calendar files** (`.ics`) open in the preview overlay as the events they hold, not as text. You can [import them to Calendar](/support/calendar/import-events) from there.
 
-If you want to open any file in a new browser tab rather than the default behavior, right-click it and
-choose **Open in new tab**.
+If you want to open any file in a new browser tab rather than the default behavior, right-click it and choose **Open in new tab**.
 
 ## The preview is slow or blank
 
-A large file may take a moment to load, especially on a slow connection. Wait a few seconds and see if the
-content appears.
+A large file may take a moment to load, especially on a slow connection. Wait a few seconds and see if the content appears.
 
-If the preview stays blank, try closing it and opening it again. You can close the preview by pressing
-**Esc** or clicking the dark area around the file.
+If the preview stays blank, try closing it and opening it again. You can close the preview by pressing **Esc** or clicking the dark area around the file.
 
 <div class="eigen-callout">
 
