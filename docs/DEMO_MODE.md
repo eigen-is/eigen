@@ -2,6 +2,8 @@
 
 > **TLDR:** Demo mode is a deployment shape, not a code mode. A release install with `EIGEN_DEMO=1` lets visitors in through one public route, `GET /p/demo/enter`, as a random persona from a pool of 20. `scripts/demo-reset.sh` wipes the data root every hour and reruns `apps/api/src/scripts/seed-demo.ts`, which builds the "Tuimel Festival" world through the real product surfaces. What surprises: the reset is the security model, so the app only guards what a visitor could do within the hour; the reset shares the launcher's lock; and on a real install every demo branch is dead code.
 
+A demo box is a public Eigen that anyone can try without an account. A visitor clicks **Enter demo** and lands in a shared workspace as a persona: one of the made-up staff of the festival, an ordinary member account the seeder creates, with a team drive, chats, mail, calendars and documents already in it. The sign-in is real, through the same scoped-password mechanism guests use ([GUEST-ACCESS.md](GUEST-ACCESS.md)). Everything else is the normal product on a normal release install ([SELF-HOSTING.md](SELF-HOSTING.md)), with a handful of guards and the hourly reset added.
+
 ## One env var turns the whole instance into a demo
 
 `isDemo()` (`apps/api/src/lib/config/env.ts`) reads `EIGEN_DEMO === '1'`. It is an env var, not a server setting: the whole instance is the mode, so no admin UI can toggle it and it cannot drift onto a real box. `docker-compose.yml` passes it through with a default of `0`, and `./eigen update` keeps every key of `.env.production` it does not own.
