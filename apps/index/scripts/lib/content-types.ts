@@ -65,4 +65,4 @@ export type LicensePackage = { name: string; version: string; license: string; u
 export type LicenseVendored = { name: string; license: string; url: string; note: string };
 
 // The fonts packages/ui bundles. Each folder under packages/ui/src/assets/fonts holds its OFL.txt.
-export type LicenseFont = { name: string; license: string; url: string };
+export type LicenseFont = Omit<LicenseVendored, 'note'>;

@@ -49,15 +49,7 @@ function LicensesPage() {
                                 {vendored.map((project) => (
                                     <li key={project.name} className="py-2 text-sm">
                                         <div className="flex items-baseline gap-3">
-                                            <a
-                                                href={project.url}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                className="text-link hover:text-link/80 font-medium"
-                                            >
-                                                {project.name}
-                                            </a>
-                                            <span className="ml-auto text-muted-foreground">{project.license}</span>
+                                            <LicenseLine {...project} />
                                         </div>
                                         <p className="text-muted-foreground">{project.note}</p>
                                     </li>
@@ -67,15 +59,7 @@ function LicensesPage() {
                             <ul className="divide-y divide-border mb-10">
                                 {fonts.map((font) => (
                                     <li key={font.name} className="flex items-baseline gap-3 py-2 text-sm">
-                                        <a
-                                            href={font.url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="text-link hover:text-link/80 font-medium"
-                                        >
-                                            {font.name}
-                                        </a>
-                                        <span className="ml-auto text-muted-foreground">{font.license}</span>
+                                        <LicenseLine {...font} />
                                     </li>
                                 ))}
                             </ul>
@@ -83,16 +67,7 @@ function LicensesPage() {
                             <ul className="divide-y divide-border">
                                 {packages.map((pkg) => (
                                     <li key={pkg.name} className="flex items-baseline gap-3 py-2 text-sm">
-                                        <a
-                                            href={pkg.url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="text-link hover:text-link/80 font-medium"
-                                        >
-                                            {pkg.name}
-                                        </a>
-                                        <span className="text-muted-foreground tabular-nums">{pkg.version}</span>
-                                        <span className="ml-auto text-muted-foreground">{pkg.license}</span>
+                                        <LicenseLine {...pkg} />
                                     </li>
                                 ))}
                             </ul>
@@ -101,5 +76,17 @@ function LicensesPage() {
                 </Column>
             </ColumnLayout>
         </AppShell>
+    );
+}
+
+function LicenseLine({ name, url, license, version }: LicenseFont & { version?: string }) {
+    return (
+        <>
+            <a href={url} target="_blank" rel="noreferrer" className="text-link hover:text-link/80 font-medium">
+                {name}
+            </a>
+            {version && <span className="text-muted-foreground tabular-nums">{version}</span>}
+            <span className="ml-auto text-muted-foreground">{license}</span>
+        </>
     );
 }
