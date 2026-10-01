@@ -35,8 +35,8 @@ Reports on the running server with what ./eigen status gathers from Docker and t
 type StatusFlags = ReturnType<typeof parseArgs<{ options: typeof STATUS_OPTIONS }>>['values'];
 
 // Red while the newest scheduled attempt failed, whatever came after it: the schedule is what the
-// owner counts on. Yellow while the newest archive was backed up with warnings, while it is here but not in the
-// bucket, and while the schedule is on and no complete Full verified in two days.
+// owner counts on. Yellow while its archive is here but not in the bucket, the more urgent, while the newest archive
+// was backed up with warnings, and while the schedule is on and no complete Full verified in two days.
 function backupRow({
     scheduleEnabled,
     newest,
@@ -50,14 +50,14 @@ function backupRow({
         const { name, createdAt, error } = scheduledFailure;
         return { level: 'bad', label: 'Backup', value: `${name} failed, ${formatTimeAgo(createdAt)}${why(error)}` };
     }
-    if (warned) {
-        const { name, createdAt, error } = warned;
-        const value = `${name} backed up with warnings, ${formatTimeAgo(createdAt)}${why(error)}`;
-        return { level: 'warn', label: 'Backup', value };
-    }
     if (scheduledNotUploaded) {
         const { name, createdAt, error } = scheduledNotUploaded;
         const value = `${name} not uploaded, ${formatTimeAgo(createdAt)}${why(error)}`;
+        return { level: 'warn', label: 'Backup', value };
+    }
+    if (warned) {
+        const { name, createdAt, error } = warned;
+        const value = `${name} backed up with warnings, ${formatTimeAgo(createdAt)}${why(error)}`;
         return { level: 'warn', label: 'Backup', value };
     }
     if (!newest) return { level: 'warn', label: 'Backup', value: 'none yet; ./eigen backup makes one' };

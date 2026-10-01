@@ -168,6 +168,19 @@ describe('the Backup row', () => {
         expect(row).toBe(`▲  Backup       ${warned.name} backed up with warnings, 5h ago: Alice, Team Blue`);
     });
 
+    test('says a night with warnings that did not reach the bucket is not uploaded, the more urgent of the two', async () => {
+        const night = archive('scheduled', hoursAgo(5));
+        const row = await backupRow({
+            scheduleEnabled: true,
+            newest: { ...night, state: 'done', bytes: 1024, error: null },
+            scheduledFailure: null,
+            scheduledNotUploaded: { ...night, error: 'bucket refused' },
+            warned: { ...night, error: 'Alice' },
+            newestGoodFullAt: hoursAgo(29).toISOString(),
+        });
+        expect(row).toBe(`▲  Backup       ${night.name} not uploaded, 5h ago: bucket refused`);
+    });
+
     test('is yellow while the schedule is on and no Full verified in two days', async () => {
         const newest = archive('manual', hoursAgo(1));
         const facts = {

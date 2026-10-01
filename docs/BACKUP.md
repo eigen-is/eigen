@@ -262,7 +262,7 @@ A failed or warned night never pushes out the last good archive, and nights that
 
 ## Failures reach the owner
 
-Every failure of a server backup or its upload sends an `admin-alert` to `getOrgOwner()` through `alertOwner` (`apps/api/src/lib/user/alert-owner.ts`), tagged per archive so repeats coalesce, and so does a backup with warnings, under a tag of its own. `./eigen status` shows a Backup row from `ControlStatus.backup`, built by `getServerBackupStatus` in `apps/api/src/lib/backup/server-archives.ts`: red while the newest scheduled attempt failed; yellow, "backed up with warnings" and the homes, while the newest scheduled archive or the newest archive has warnings; yellow while it is not in the bucket, or while the schedule is on and no complete Full verified in two days. With Eigen stopped the row reads the names in `backups/`.
+Every failure of a server backup or its upload sends an `admin-alert` to `getOrgOwner()` through `alertOwner` (`apps/api/src/lib/user/alert-owner.ts`), tagged per archive so repeats coalesce, and so does a backup with warnings, under a tag of its own. `./eigen status` shows a Backup row from `ControlStatus.backup`, built by `getServerBackupStatus` in `apps/api/src/lib/backup/server-archives.ts`: red while the newest scheduled attempt failed; yellow while its archive is not in the bucket; yellow, "backed up with warnings" and the homes, while the newest scheduled archive or the newest archive has warnings; yellow while the schedule is on and no complete Full verified in two days. Each reads only when the one before it does not apply. With Eigen stopped the row reads the names in `backups/`.
 
 ## Upload goes to a bucket of its own
 
