@@ -311,6 +311,38 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         expect(archivedReports(folder)).toEqual(reportBodies);
     });
 
+    test('an empty folder moved out of a folder deleted for good during the capture keeps its rows', async () => {
+        const user = await raceUser('local-id');
+        const { root } = await seed(user);
+        const t = user.sessionToken;
+        const old = await drivePost(t, user.id, M, `folder/${root.id}`, { folderName: 'Old' });
+        const gone = await driveUpload(t, user.id, M, old.id, new File(['gone'], 'gone.txt'));
+        const keep = await drivePost(t, user.id, M, `folder/${old.id}`, { folderName: 'Keep' });
+        const inner = await drivePost(t, user.id, M, `folder/${keep.id}`, { folderName: 'Inner' });
+        // Run whole before the first read: a flat-key mount has no tree lock that could wait on the capture.
+        let moved: Promise<unknown> | undefined;
+        const readKey = Mount.prototype.readKey;
+        const read = spyOn(Mount.prototype, 'readKey').mockImplementation(async function (this: Mount, key: string) {
+            moved ??= (async () => {
+                await drivePut(t, user.id, M, `path/${keep.id}/move`, { targetParentId: root.id });
+                await driveDelete(t, user.id, M, `path/${old.id}`);
+                await driveDelete(t, user.id, M, `trash/${old.id}`);
+            })();
+            await moved;
+            return readKey.call(this, key);
+        });
+        let folder: string;
+        try {
+            ({ folder } = await snapshotInto(await getHome(user.id), 'full'));
+        } finally {
+            read.mockRestore();
+        }
+        expect(archivedRow(folder, gone.id)).toBeNull();
+        expect(archivedRow(folder, keep.id)?.name).toBe('Keep');
+        expect(archivedRow(folder, inner.id)?.name).toBe('Inner');
+        expect((await verifyFolder(folder)).status).toBe('verified');
+    });
+
     test('a folder moved during a backup job reads back after the restore', async () => {
         const user = await raceUser('local-fullnames');
         const { projects, archive } = await seed(user);

@@ -148,21 +148,20 @@ export async function snapshotMountData(
     }
 
     // The archive lists no file it holds no bytes for: a row deleted for good since the copy leaves the archived
-    // metadata.db, with the topmost folder or container above it that is gone too and holds none of the archive's
-    // bytes, and all under it.
-    const holding = new Set<string>();
-    for (const id of held) {
-        for (let up = byId.get(id)?.parentId; up && !holding.has(up); up = byId.get(up)?.parentId) holding.add(up);
+    // metadata.db, with the topmost folder or container above it that is gone too and holds no live row and none of
+    // the archive's bytes, and all under it.
+    const live = new Set((await mount.db.select({ id: paths.id }).from(paths).all()).map((row) => row.id));
+    const kept = new Set<string>();
+    for (const row of rows) {
+        if (!live.has(row.id) && !held.has(row.id)) continue;
+        for (let id: string | null = row.id; id && !kept.has(id); id = byId.get(id)?.parentId ?? null) kept.add(id);
     }
     const gone = new Set<string>();
     for (const row of fileRows) {
-        if (held.has(row.id) || (await mount.getPath(row.id))) continue;
+        if (kept.has(row.id)) continue;
         let top = row.id;
-        let up = row.parentId;
-        while (up && byId.get(up)?.parentId && !holding.has(up) && !gone.has(up) && !(await mount.getPath(up))) {
+        for (let up = row.parentId; up && byId.get(up)?.parentId && !kept.has(up); up = byId.get(up)?.parentId ?? null)
             top = up;
-            up = byId.get(up)?.parentId ?? null;
-        }
         gone.add(top);
     }
     if (gone.size > 0) {
@@ -175,8 +174,8 @@ export async function snapshotMountData(
             db.close();
         }
     }
-    const kept = gone.size > 0 ? readArchivedRows(metadataPath) : rows;
-    return { entries, databases, pathIds: new Set(kept.filter((row) => row.type === 'file').map((row) => row.id)) };
+    const left = gone.size > 0 ? readArchivedRows(metadataPath) : rows;
+    return { entries, databases, pathIds: new Set(left.filter((row) => row.type === 'file').map((row) => row.id)) };
 }
 
 // A metadata-only capture of an s3 mount reads no object, so an open document's newest commits reach
