@@ -2,6 +2,12 @@
 
 > **TLDR:** Mail is a personal email client over a per-user Maildir. The server half is `apps/api/src/lib/mail/`, the app is `apps/mail/`. The Maildir files are the truth and `mail.db` is only an index rebuilt from them, because Dovecot writes the same files out of process. The inbox has three spellings, one per layer. A send can grant its recipients access to the documents it links. The Maildir format, the sync engine and Dovecot are in [IMAP.md](IMAP.md).
 
+Every user has one mailbox, and no team or guest has one. Mail exists only on a server that hosts its own mail ([SERVER-SETTINGS.md § What a server without hosted mail leaves out](SERVER-SETTINGS.md#what-a-server-without-hosted-mail-leaves-out)). A message gets in and out in four ways. The web app talks to the REST routes in `apps/api/src/routes/mail.ts`. A mail client such as Apple Mail or Thunderbird reads the same mailbox over IMAP, which Dovecot serves straight from the files. Postfix, the mail server beside the API, hands every arriving message to the API and carries every send out. And a `.eml` file can be imported, from the computer or from Drive.
+
+A Maildir is a tree of plain files, one per message, at `eigen.mail/Maildir/` in the user's home folder, with `mail.db` beside it ([STORAGE.md § Every owner's data lives under one folder](STORAGE.md#every-owners-data-lives-under-one-folder)). Mail reaches the rest of Eigen at a few points. A draft can link Drive documents, and a send can share them with its recipients, guests included ([ACL.md](ACL.md), [GUEST-ACCESS.md](GUEST-ACCESS.md)). An invitation in an arriving mail updates the calendar ([CALENDAR.md](CALENDAR.md)). Mail counts toward the user's home-data budget together with contacts and calendar ([QUOTA.md](QUOTA.md)). And every change reaches the open app as an SSE event ([SSE.md](SSE.md)).
+
+The sections run from the store through reading, the mailbox names and the list, to drafts, sending and arrival.
+
 ## Mail is personal and sits behind a swappable store
 
 Every user route in `apps/api/src/routes/mail.ts` is `requireSelf`: a mailbox belongs to one user and has no ACL. The route hands off to the user's `Mail` (`mail-domain.ts`), which talks to a `MailStore`. `MaildirStore` is the only one. The interface is where a second backend plugs in ([JMAP](proposals/PROPOSAL_STALWART_MAIL.md), or [the user's own provider over IMAP](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)), so no file name crosses into the domain or the routes.
