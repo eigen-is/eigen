@@ -110,7 +110,6 @@ describe('Server backup routes', () => {
             const job = await waitForJob(data!.jobId);
             expect(job.error).toBeUndefined();
             expect(job.state).toBe('done');
-            expect(job.reason).toBe('manual');
             expect(job.startedBy).toBe(ctx.alice.user.id);
             expect(parseServerArchiveName(job.artifact ?? '')).toMatchObject({ reason: 'manual', level: 'light' });
 

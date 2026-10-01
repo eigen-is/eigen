@@ -9,6 +9,7 @@ import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { SERVER_DATABASES } from '../config/paths';
 import { PATHS } from '../core/constants';
+import { ApiError } from '../core/errors';
 import { hashFile } from '../storage/deadline';
 import { type ArchiveMember, readArchiveMember, readArchiveMembers } from './archive';
 import { checkArchivedPathRows, HOME_DATABASE_PATHS, listManagedDatabases, readMountPathRows } from './archive-layout';
@@ -33,6 +34,12 @@ const FAILURES_IN_MESSAGE = 3;
 
 export function describeFailures(verify: Pick<BackupVerifyRecord, 'failures'>): string {
     return verify.failures.slice(0, FAILURES_IN_MESSAGE).join('; ');
+}
+
+// The refusal of what does not verify, `name` being what was judged.
+export function requireVerified(verified: BackupVerifyRecord, name: string): void {
+    if (verified.status === 'verified') return;
+    throw new ApiError(400, `${name} did not verify: ${describeFailures(verified)}`);
 }
 
 // An Eigen-owned database inside the archive: the path the manifest speaks of, and the resolved
@@ -300,8 +307,4 @@ export async function readServerArchive(archivePath: string): Promise<ReadServer
     for (const extra of present.keys()) failures.push(`${extra}: not in the manifest`);
     const status = failures.length === 0 ? 'verified' : 'failed';
     return { verify: { status, checkedAt, failures }, members, manifest };
-}
-
-export async function verifyArchiveTransport(archivePath: string): Promise<BackupVerifyRecord> {
-    return (await readServerArchive(archivePath)).verify;
 }

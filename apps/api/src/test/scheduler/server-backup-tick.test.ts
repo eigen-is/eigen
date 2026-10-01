@@ -67,7 +67,6 @@ describe('The nightly server backup tick', () => {
                 id: 'job',
                 kind: 'server-backup',
                 ownerId: 'org',
-                reason,
                 state: 'running',
                 progress: { step: 'starting', done: 0, total: 0 },
                 startedAt,

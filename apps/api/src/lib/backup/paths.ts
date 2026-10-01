@@ -177,7 +177,7 @@ export function archiveServerPath(relPath: string): string {
 // The one collision rule these names have: a stamp is a second wide, and two of a home's artifacts
 // or safety copies can land inside one. The later one is stamped a second on, so every name in
 // both grammars keeps exactly one shape.
-function freeAt(at: Date, taken: (candidate: Date) => boolean): Date {
+export function freeAt(at: Date, taken: (candidate: Date) => boolean): Date {
     let candidate = at;
     while (taken(candidate)) candidate = new Date(candidate.getTime() + 1000);
     return candidate;

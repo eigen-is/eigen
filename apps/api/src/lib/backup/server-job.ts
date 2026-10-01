@@ -51,7 +51,7 @@ import { pruneServerArchives } from './retention';
 import { type SnapshotProgress, treeBytes } from './snapshot-home';
 import { appendInstallFiles, snapshotServer } from './snapshot-server';
 import { backupKey, uploadServerArchive } from './upload';
-import { describeFailures, verifyArchiveTransport, verifyFolder } from './verify';
+import { readServerArchive, requireVerified, verifyFolder } from './verify';
 
 const HOME_DELETED = 'deleted during the backup';
 const INTERRUPTED = 'interrupted by a restart';
@@ -130,10 +130,7 @@ async function appendHome(
         // 409, as the server job waited out theirs.
         const release = await waitForHomeSlot(home.ownerId, 'server backup');
         const manifest = await pullHomeSnapshot(home.ownerId, staging, { level, onProgress }).finally(release);
-        const verify = await verifyFolder(folder, onProgress);
-        if (verify.status !== 'verified') {
-            throw new Error(`did not verify: ${describeFailures(verify)}`);
-        }
+        requireVerified(await verifyFolder(folder, onProgress), member);
         await packFolder(folder, packed);
         bytes = manifest.counts.bytes;
     } catch (error) {
@@ -162,10 +159,7 @@ async function writeServerArchive(
     try {
         await snapshotServer(staging, at, (_step, done, total) => onProgress('server', done, total));
         const serverFolder = path.join(staging, buildServerFolderName(at));
-        const serverVerify = await verifyFolder(serverFolder);
-        if (serverVerify.status !== 'verified') {
-            throw new Error(`The server member did not verify: ${describeFailures(serverVerify)}`);
-        }
+        requireVerified(await verifyFolder(serverFolder), SERVER_ARCHIVE_SERVER_MEMBER);
         // The homes and the accounts in the archive are one moment.
         const { homes, orphans } = enumerateHomes(path.join(serverFolder, archiveServerPath(SERVER_DATABASES.users)));
         const packedServer = path.join(staging, SERVER_ARCHIVE_SERVER_MEMBER);
@@ -372,10 +366,8 @@ async function runServerBackup(
         admit();
         sidecar.manifest = await writeServerArchive(job, archivePath, options, onProgress);
         onProgress('verify', 0, 1);
-        sidecar.verify = await verifyArchiveTransport(archivePath);
-        if (sidecar.verify.status !== 'verified') {
-            throw new Error(`${name} did not verify: ${describeFailures(sidecar.verify)}`);
-        }
+        sidecar.verify = (await readServerArchive(archivePath)).verify;
+        requireVerified(sidecar.verify, name);
         const failed = sidecar.manifest.homes.filter((home) => home.failed);
         if (failed.length > 0) {
             const named = failed.map((home) => `${home.name} (${home.failed})`).join('; ');
@@ -440,7 +432,8 @@ async function uploadAndRecord(archivePath: string, signal: AbortSignal): Promis
         signal.throwIfAborted();
         const record = await readServerSidecar(archivePath);
         const retention = { keep, partial: record?.manifest?.homes.some((home) => home.failed) };
-        upload = { state: 'done', at: new Date(), key: await uploadServerArchive(archivePath, s3, retention, signal) };
+        await uploadServerArchive(archivePath, s3, retention, signal);
+        upload = { state: 'done', at: new Date(), key };
     } catch (error) {
         const reason = signal.aborted ? UPLOAD_STOPPED : describeError(error);
         upload = { state: 'failed', at: new Date(), key, error: reason };
@@ -487,7 +480,6 @@ export async function startServerBackup({
         const at = freeServerArchiveAt(reason, level, new Date());
         const archivePath = path.join(getBackupsDir(), buildServerArchiveName(reason, level, at));
         return startBackupJob('server-backup', ownerId, startedBy, (started, onProgress) => {
-            started.reason = reason;
             started.artifact = path.basename(archivePath);
             const run = runServerBackup(started, archivePath, { level, reason, at }, admitted.resolve, onProgress);
             // A promise settles once, so after admission this reject is a no-op.

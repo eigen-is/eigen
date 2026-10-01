@@ -146,8 +146,6 @@ export type BackupJob = {
     // The admin who started it: a home job's notifications go to their home. Absent for the scheduler
     // and the CLI; a server job alerts the org owner. A home job's pokes go to every admin, a server job's to the owner.
     startedBy?: string;
-    // Why a server backup runs.
-    reason?: BackupReason;
     state: (typeof BACKUP_JOB_STATES)[number];
     progress: { step: string; done: number; total: number };
     // The artifact the job ended on, once it has one: what a backup wrote, what a verify judged,

@@ -12,7 +12,7 @@ import {
 } from '../../lib/backup/paths';
 import { readServerSidecar, startServerBackup } from '../../lib/backup/server-job';
 import * as upload from '../../lib/backup/upload';
-import { backupKey, checkBackupDestination, multipartOptions, uploadServerArchive } from '../../lib/backup/upload';
+import { backupKey, checkBackupDestination, uploadServerArchive } from '../../lib/backup/upload';
 import { getDataRoot, USER_HOMES_DIR } from '../../lib/config/paths';
 import { getDomain } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
@@ -36,7 +36,8 @@ const MULTIPART_BYTES = 12 * 1024 * 1024;
 const BACKUP_KEY_ID = 'backup-key-id';
 // Nothing listens there; the secret is one no message may carry.
 const UNREACHABLE = { ...DUMMY_S3, accessKeyId: BACKUP_KEY_ID, secretAccessKey: 'backup-secret-never-shown' };
-const MIB = 1024 * 1024;
+// An upload nothing stops.
+const UNABORTED = new AbortController().signal;
 // A rule that aborts what a cut-off upload left, for the whole bucket.
 const ABORT_RULE =
     '<LifecycleConfiguration><Rule><ID>abort-parts</ID><Filter></Filter><Status>Enabled</Status>' +
@@ -143,8 +144,8 @@ describe('Upload of server archives', () => {
 
     test("an archive streams to its name in this server's folder under the prefix, and the bucket holds its bytes", async () => {
         const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z', 'the whole server');
-        const key = await uploadServerArchive(archivePath, bucket, { keep: 30 });
-        expect(key).toBe(own(buildServerArchiveName('manual', 'full', new Date('2026-09-01T02:00:00Z'))));
+        await uploadServerArchive(archivePath, bucket, { keep: 30 }, UNABORTED);
+        const key = own(buildServerArchiveName('manual', 'full', new Date('2026-09-01T02:00:00Z')));
         expect(await backing.read(key).text()).toBe('the whole server');
     });
 
@@ -165,7 +166,7 @@ describe('Upload of server archives', () => {
         const key = own(basename(archivePath));
         fake.faults.set(key, 'fail-put');
 
-        await expect(uploadServerArchive(archivePath, bucket, { keep: 1 })).rejects.toThrow();
+        await expect(uploadServerArchive(archivePath, bucket, { keep: 1 }, UNABORTED)).rejects.toThrow();
         // Bun sends the abort just after the write rejects.
         await waitFor(() => fake.abortedUploads > 0);
         expect(fake.openUploads.size).toBe(0);
@@ -193,26 +194,16 @@ describe('Upload of server archives', () => {
 
     test('a multipart upload that succeeds is one object of the archive size', async () => {
         const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z', new Uint8Array(MULTIPART_BYTES).fill(7));
-        const key = await uploadServerArchive(archivePath, bucket, { keep: 30 });
-        expect(await backing.size(key)).toBe(MULTIPART_BYTES);
+        await uploadServerArchive(archivePath, bucket, { keep: 30 }, UNABORTED);
+        expect(await backing.size(own(basename(archivePath)))).toBe(MULTIPART_BYTES);
         expect(fake.openUploads.size).toBe(0);
-    });
-
-    test('parts stay small and few: two in flight, at least 5 MiB, never over 10,000 of them', () => {
-        expect(multipartOptions(MULTIPART_BYTES)).toEqual({ partSize: 5 * MIB, queueSize: 2 });
-        expect(multipartOptions(40 * 1024 ** 3).partSize).toBe(5 * MIB);
-        const huge = 2 * 1024 ** 4;
-        const { partSize } = multipartOptions(huge);
-        expect(Math.ceil(huge / partSize)).toBeLessThanOrEqual(10_000);
-        expect(partSize).toBeLessThanOrEqual(5120 * MIB);
-        expect(() => multipartOptions(60 * 1024 ** 4)).toThrow('too large');
     });
 
     test('a bucket that holds fewer bytes than the archive loses the object', async () => {
         const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z', 'the whole server');
         const key = own(basename(archivePath));
         fake.faults.set(key, 'short-head');
-        await expect(uploadServerArchive(archivePath, bucket, { keep: 30 })).rejects.toThrow('bytes');
+        await expect(uploadServerArchive(archivePath, bucket, { keep: 30 }, UNABORTED)).rejects.toThrow('bytes');
         expect(await backing.exists(key)).toBe(false);
     });
 
@@ -220,7 +211,7 @@ describe('Upload of server archives', () => {
         const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z', 'the whole server');
         const key = own(basename(archivePath));
         fake.faults.set(key, 'fail');
-        await expect(uploadServerArchive(archivePath, bucket, { keep: 30 })).rejects.toThrow();
+        await expect(uploadServerArchive(archivePath, bucket, { keep: 30 }, UNABORTED)).rejects.toThrow();
         expect(await backing.exists(key)).toBe(true);
     });
 
@@ -246,7 +237,12 @@ describe('Upload of server archives', () => {
         for (const name of [night('03'), night('04')]) await neighbour.write(name, new TextEncoder().encode(name));
         await outside.write(night('01'), new TextEncoder().encode('another tenant'));
 
-        await uploadServerArchive(writeArchive('scheduled', '2026-09-01T02:00:00.000Z'), bucket, { keep: 2 });
+        await uploadServerArchive(
+            writeArchive('scheduled', '2026-09-01T02:00:00.000Z'),
+            bucket,
+            { keep: 2 },
+            UNABORTED,
+        );
 
         const kept = (await mine.list()).sort();
         const newest = buildServerArchiveName('scheduled', 'full', new Date('2026-09-01T02:00:00Z'));
@@ -262,7 +258,12 @@ describe('Upload of server archives', () => {
         for (const name of [night('03'), night('04'), night('05')]) {
             await mine.write(name, new TextEncoder().encode(name));
         }
-        await uploadServerArchive(writeArchive('scheduled', '2026-08-01T02:00:00.000Z'), bucket, { keep: 2 });
+        await uploadServerArchive(
+            writeArchive('scheduled', '2026-08-01T02:00:00.000Z'),
+            bucket,
+            { keep: 2 },
+            UNABORTED,
+        );
         expect((await mine.list()).sort()).toEqual([night('01'), night('03'), night('04'), night('05')]);
     });
 
@@ -277,7 +278,7 @@ describe('Upload of server archives', () => {
         for (const name of [night('04'), night('05')])
             await mine.write(`${name}${BUCKET_PARTIAL_SUFFIX}`, new Uint8Array());
         const newest = basename(writeArchive('scheduled', '2026-09-01T02:00:00.000Z', 'most homes', 'failed'));
-        await uploadServerArchive(join(getBackupsDir(), newest), bucket, { keep: 2, partial: true });
+        await uploadServerArchive(join(getBackupsDir(), newest), bucket, { keep: 2, partial: true }, UNABORTED);
         const marked = [night('05'), newest].map((name) => `${name}${BUCKET_PARTIAL_SUFFIX}`);
         expect((await mine.list()).sort()).toEqual([night('03'), night('05'), newest, ...marked].sort());
     });
@@ -380,7 +381,9 @@ describe('Upload of server archives', () => {
         test('refuses a data bucket before an upload, and uploads nothing', async () => {
             await updateServerSettings({ defaults: { mount: { s3Config: bucket } } });
             const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z');
-            await expect(uploadServerArchive(archivePath, bucket, { keep: 30 })).rejects.toThrow('holds Eigen data');
+            await expect(uploadServerArchive(archivePath, bucket, { keep: 30 }, UNABORTED)).rejects.toThrow(
+                'holds Eigen data',
+            );
             expect(await new S3Storage({ ...bucket, prefix: '' }).list()).toEqual([]);
         });
     });

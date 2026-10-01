@@ -45,7 +45,7 @@ import {
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { appendInstallFiles, snapshotServer } from '../../lib/backup/snapshot-server';
-import { verifyArchiveTransport, verifyFolder } from '../../lib/backup/verify';
+import { readServerArchive, verifyFolder } from '../../lib/backup/verify';
 import { SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
@@ -708,7 +708,7 @@ describe('Whole-server archive', () => {
             const entry = read!.entries.find((e) => e.path === home.member)!;
             expect(entry.sha256).toBe(await sha256Of(home.standalone));
         }
-        const record = await verifyArchiveTransport(archivePath);
+        const record = (await readServerArchive(archivePath)).verify;
         expect(record.failures).toEqual([]);
         expect(record.status).toBe('verified');
     });
@@ -760,7 +760,7 @@ describe('Whole-server archive', () => {
         const corrupted = join(mkdtempSync(join(TEST_DATA_DIR, 'server-corrupt-')), basename(archivePath));
         writeFileSync(corrupted, bytes);
 
-        const record = await verifyArchiveTransport(corrupted);
+        const record = (await readServerArchive(corrupted)).verify;
         expect(record.status).toBe('failed');
         expect(record.failures).toEqual([`${homes[1].member}: sha256 does not match the manifest`]);
     });
@@ -945,7 +945,7 @@ describe('Archive writer and reader', () => {
             ['lead.txt', lead],
             ['lead.txt', lead],
         ]);
-        const record = await verifyArchiveTransport(archivePath);
+        const record = (await readServerArchive(archivePath)).verify;
         expect(record.status).toBe('failed');
         expect(record.failures).toEqual(['lead.txt: appears more than once in the archive']);
     });
@@ -964,7 +964,7 @@ describe('Archive writer and reader', () => {
         } finally {
             await writer.abort();
         }
-        const record = await verifyArchiveTransport(archivePath);
+        const record = (await readServerArchive(archivePath)).verify;
         expect(record.status).toBe('failed');
     });
 });

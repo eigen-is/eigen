@@ -10,7 +10,7 @@ import { getBackupJob, startBackupJob, withBackupJobSlot } from '../../lib/backu
 import { buildServerArchiveName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { readServerSidecar, recoverInterruptedServerBackups, startServerBackup } from '../../lib/backup/server-job';
-import { verifyArchiveTransport } from '../../lib/backup/verify';
+import { readServerArchive } from '../../lib/backup/verify';
 import { getServerDataPath, SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
@@ -96,7 +96,7 @@ describe('Server backup job', () => {
             expect(job.state).toBe('done');
             expect(job.kind).toBe('server-backup');
 
-            const record = await verifyArchiveTransport(archivePath);
+            const record = (await readServerArchive(archivePath)).verify;
             expect(record.failures).toEqual([]);
             const manifest = await readManifest(archivePath);
             expect(manifest.reason).toBe('manual');
@@ -220,7 +220,7 @@ describe('Server backup job', () => {
             expect(job.error).toContain('bucket unreachable');
 
             expect(existsSync(archivePath)).toBe(true);
-            expect((await verifyArchiveTransport(archivePath)).status).toBe('verified');
+            expect((await readServerArchive(archivePath)).verify.status).toBe('verified');
             const manifest = await readManifest(archivePath);
             const failed = manifest.homes.find((home) => home.ownerId === broken);
             expect(failed?.failed).toContain('bucket unreachable');

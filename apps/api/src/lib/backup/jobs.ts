@@ -15,7 +15,7 @@ import {
 } from './paths';
 import type { SnapshotProgress } from './snapshot-home';
 import { buildBackupJobEvent } from './sse-events';
-import { describeFailures, verifyFolder } from './verify';
+import { describeFailures, requireVerified, verifyFolder } from './verify';
 
 // A finished job stays this long so an admin who was away still sees the outcome. The artifact and
 // its sidecar are the durable record, so dropping the job loses nothing.
@@ -264,9 +264,7 @@ export async function runArtifactVerify(
         const { folder, manifest } = readUnpackedHome(unpackDir, job.ownerId, artifactName);
         const record = await verifyFolder(folder, onProgress);
         await writeSidecar(artifactPath, manifest, record);
-        if (record.status !== 'verified') {
-            throw new Error(`${artifactName} did not verify: ${describeFailures(record)}`);
-        }
+        requireVerified(record, artifactName);
         return artifactName;
     } finally {
         wipeBackupStagingDir(job.id);

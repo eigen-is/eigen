@@ -1,9 +1,9 @@
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BackupVerifyRecord, ServerArchiveManifest } from '@workspace/lib/types/backup';
+import type { ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { BACKUP_OWNER_ID, buildBackupStamp, parseBackupManifest } from '@workspace/lib/validation';
-import { homeDirUnder, ORG_HOMES_DIR, SERVER_DIR, SERVER_RUNTIME_FILES } from '../config/paths';
+import { getDataRoot, homeDirUnder, ORG_HOMES_DIR, SERVER_DIR, SERVER_RUNTIME_FILES } from '../config/paths';
 import { PATHS } from '../core/constants';
 import { ApiError } from '../core/errors';
 import { isUsableName } from '../mount/names';
@@ -20,7 +20,7 @@ import {
     resolveInside,
     SERVER_ARCHIVE_SERVER_MEMBER,
 } from './paths';
-import { describeFailures, verifyFolder } from './verify';
+import { requireVerified, verifyFolder } from './verify';
 
 // ./eigen restore stages a whole-server archive into data/.restoring while the API runs on data/, then swaps it in
 // with the API stopped. This is the stage's work on the tree; cli/restore.ts asks, refuses and swaps. Nothing it
@@ -30,11 +30,6 @@ export const RESTORING_DIR = '.restoring';
 export const RESTORING_DATA_DIR = 'data';
 
 export type ServerArchiveFile = { name: string; manifest: ServerArchiveManifest; members: Map<string, ArchiveMember> };
-
-function requireVerified(verified: BackupVerifyRecord, name: string): void {
-    if (verified.status === 'verified') return;
-    throw new ApiError(400, `${name} did not verify: ${describeFailures(verified)}`);
-}
 
 // server/ and org/ out of server.tar.zst. The runtime files are never captured; one found here goes, so the
 // restored server draws a new data epoch and every tab from before reloads.
@@ -159,7 +154,6 @@ export function stageBytesNeeded(manifest: ServerArchiveManifest): number {
 type StageContext = {
     dataDir: string;
     unpackDir: string;
-    liveDataRoot: string;
     s3FromArchive: boolean;
     stamp: string;
     now: number;
@@ -172,7 +166,7 @@ type StageContext = {
 async function stageHome(
     archive: ServerArchiveFile,
     home: ServerArchiveManifest['homes'][number] & { member: string },
-    { dataDir, unpackDir, liveDataRoot, s3FromArchive, stamp, now }: StageContext,
+    { dataDir, unpackDir, s3FromArchive, stamp, now }: StageContext,
     notReplayed: NotReplayed,
 ): Promise<void> {
     if (!BACKUP_OWNER_ID.test(home.ownerId)) throw new ApiError(400, `${home.ownerId} is not a home id`);
@@ -189,7 +183,7 @@ async function stageHome(
     }
 
     const homeDir = homeDirUnder(dataDir, home.ownerId);
-    const liveHomeDir = homeDirUnder(liveDataRoot, home.ownerId);
+    const liveHomeDir = homeDirUnder(getDataRoot(), home.ownerId);
     movePath(path.join(folder, ARCHIVE_HOME_DIR), homeDir);
     const carried = manifest.mounts.filter((summary) => !summary.skipped);
     const containerDatabases: VersionedDatabase[] = [];
@@ -225,16 +219,11 @@ async function stageHome(
 export async function stageServerArchive(
     archive: ServerArchiveFile,
     restoringDir: string,
-    {
-        liveDataRoot,
-        s3FromArchive,
-        onStep,
-    }: { liveDataRoot: string; s3FromArchive: boolean; onStep: (step: string) => void },
+    { s3FromArchive, onStep }: { s3FromArchive: boolean; onStep: (step: string) => void },
 ): Promise<NotReplayed> {
     const context: StageContext = {
         dataDir: path.join(restoringDir, RESTORING_DATA_DIR),
         unpackDir: path.join(restoringDir, 'unpack'),
-        liveDataRoot,
         s3FromArchive,
         stamp: buildBackupStamp(new Date()),
         now: Math.floor(Date.now() / 1000),

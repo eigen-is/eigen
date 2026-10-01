@@ -29,7 +29,7 @@ import {
 import { markRestoreComplete, writeRestoringMarker } from './recovery';
 import { forgetSafetyCopySize, resolveSafetyCopy } from './safety-copy';
 import type { SnapshotProgress } from './snapshot-home';
-import { describeFailures, verifyFolder } from './verify';
+import { requireVerified, verifyFolder } from './verify';
 
 // A safety copy of a home whose owner is gone is a delete candidate, not a restore: the folder on
 // its own leaves a home nobody can sign in to. Restoring a deleted user goes through an artifact,
@@ -154,10 +154,7 @@ export async function restoreHome(
             // already have cost the user their open pages.
             const incomplete = incompleteReason(manifest);
             if (incomplete) throw new ApiError(400, `${artifactName} ${incomplete}`);
-            const verified = await verifyFolder(folder, onProgress);
-            if (verified.status !== 'verified') {
-                throw new ApiError(400, `${artifactName} did not verify: ${describeFailures(verified)}`);
-            }
+            requireVerified(await verifyFolder(folder, onProgress), artifactName);
 
             return async (stamp) => {
                 // The archive's `home/` IS the home folder, one for one.

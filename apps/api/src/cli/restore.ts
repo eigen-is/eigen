@@ -21,19 +21,20 @@ import { basename, dirname, join, relative } from 'node:path';
 import type { parseArgs } from 'node:util';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import type { BackupLevel } from '@workspace/lib/types/backup';
-import { buildBackupStamp, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
+import { buildBackupStamp } from '@workspace/lib/validation';
 import { copyArchiveMember } from '../lib/backup/archive';
 import { isLightSkipped } from '../lib/backup/archive-layout';
 import { describeError } from '../lib/backup/errors';
 import {
     backupsDirPath,
+    buildSafetyCopyName,
+    freeAt,
     INSTALL_FOLDERS,
     roomShortfall,
     SERVER_ARCHIVE_ENV_MEMBER,
     STAGING_DIR,
 } from '../lib/backup/paths';
 import {
-    type NotReplayed,
     RESTORING_DATA_DIR,
     RESTORING_DIR,
     type ServerArchiveFile,
@@ -280,16 +281,10 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         }
     }
 
-    let notReplayed: NotReplayed = { settled: 0, missing: 0 };
-    try {
-        notReplayed = await stageServerArchive(archived, restoring, {
-            liveDataRoot: dataRoot,
-            s3FromArchive: flags['s3-from-archive'] === true,
-            onStep: (step) => console.log(glyphLine('bar', step)),
-        });
-    } catch (error) {
-        refuse(`${name} cannot be restored: ${describeError(error)}.`, 'Restore another archive.');
-    }
+    const notReplayed = await stageServerArchive(archived, restoring, {
+        s3FromArchive: flags['s3-from-archive'] === true,
+        onStep: (step) => console.log(glyphLine('bar', step)),
+    }).catch((error) => refuse(`${name} cannot be restored: ${describeError(error)}.`, 'Restore another archive.'));
     const record: StagedRestore = { archive: name, level: manifest.level, appVersion: manifest.appVersion };
     writeFileSync(join(restoring, STAGE_RECORD), JSON.stringify(record));
     console.log(glyphLine('ok', `Staged ${name} in data/${RESTORING_DIR}`));
@@ -532,10 +527,12 @@ async function swap(): Promise<void> {
         );
     }
 
-    let at = new Date();
-    const asideOf = (path: string) => `${path}${PRE_RESTORE_SUFFIX}${buildBackupStamp(at)}`;
-    while (lexists(asideOf(DATA)) || lexists(asideOf(ENV_PATH))) at = new Date(at.getTime() + 1000);
-    const [dataAside, envAside] = [asideOf(DATA), asideOf(ENV_PATH)];
+    const asideOf = (path: string, at: Date) => buildSafetyCopyName(path, 'pre-restore', buildBackupStamp(at));
+    const at = freeAt(
+        new Date(),
+        (candidate) => lexists(asideOf(DATA, candidate)) || lexists(asideOf(ENV_PATH, candidate)),
+    );
+    const [dataAside, envAside] = [asideOf(DATA, at), asideOf(ENV_PATH, at)];
     const stagedEnv = join(restoring, ENV_PATH);
     const env = existsSync(stagedEnv);
     const copies: [string, string][] = [];
