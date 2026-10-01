@@ -108,7 +108,6 @@ function serverJob(state: BackupJob['state']): BackupJob {
         id: 'job-1',
         kind: 'server-backup',
         ownerId: SERVER_OWNER,
-        reason: 'manual',
         state,
         progress: { step: 'home 1 of 2', done: 0, total: 0 },
         artifact: NAME,
