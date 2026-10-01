@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, spyOn, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
@@ -52,9 +52,9 @@ async function seed(user: TestUser) {
 }
 
 // A document with one saved version, created after seed's files so the capture reaches it after its first plain read.
-async function seedDocument(user: TestUser, rootId: string) {
+async function seedDocument(user: TestUser, parentId: string) {
     const t = user.sessionToken;
-    const doc = await drivePost(t, user.id, M, `folder/${rootId}/create/doc`, { fileName: 'Plan' });
+    const doc = await drivePost(t, user.id, M, `folder/${parentId}/create/doc`, { fileName: 'Plan' });
     const saved = await authedRequest(t, `/drive/${user.id}/${M}/file/${doc.id}/versions/save`, { method: 'POST' });
     expect(saved.status).toBe(200);
     const [version] = await assertJson<DrivePath[]>(
@@ -209,6 +209,57 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         expect(archivedRow(folder, version.id)).toBeNull();
         expect(manifest.entries.some((entry) => entry.path.endsWith(`versions/${version.name}`))).toBe(false);
         expect(manifest.entries.some((entry) => entry.path.endsWith('Plan.eigendoc/data.db'))).toBe(true);
+        expect((await verifyFolder(folder)).status).toBe('verified');
+    });
+
+    test('a closed document whose folder is renamed between its key and its read is captured', async () => {
+        const user = await raceUser('local-fullnames');
+        const { projects } = await seed(user);
+        const { doc } = await seedDocument(user, projects.id);
+        const mount = await defaultMount(user);
+        const dataDb = findOrFail(await mount.listFolder(doc.id), (child) => child.name === 'data.db');
+        await mount.closeDatabase(dataDb.id);
+        // The rename runs to its end right after the capture resolved the key, unless the tree lock is held: a granted
+        // exclusive starts its body before withTreeExclusive returns, a queued one does not.
+        const getStorageKey = Mount.prototype.getStorageKey;
+        const withTreeExclusive = Mount.prototype.withTreeExclusive;
+        const blocked = Promise.withResolvers<void>();
+        let renamed: Promise<unknown> | undefined;
+        const exclusive = spyOn(Mount.prototype, 'withTreeExclusive').mockImplementation(function <T>(
+            this: Mount,
+            fn: () => Promise<T>,
+        ) {
+            let granted = false;
+            const result = withTreeExclusive.bind(this)(() => {
+                granted = true;
+                return fn();
+            });
+            if (!granted) blocked.resolve();
+            return result;
+        });
+        const keyOf = spyOn(Mount.prototype, 'getStorageKey').mockImplementation(async function (
+            this: Mount,
+            pathId: string,
+        ) {
+            const key = await getStorageKey.call(this, pathId);
+            if (pathId === dataDb.id && !renamed) {
+                renamed = drivePut(user.sessionToken, user.id, M, `path/${projects.id}/rename`, {
+                    newName: 'Projects 2026',
+                });
+                await Promise.race([renamed, blocked.promise]);
+            }
+            return key;
+        });
+        let folder: string;
+        try {
+            ({ folder } = await snapshotInto(await getHome(user.id), 'full'));
+            await renamed;
+        } finally {
+            keyOf.mockRestore();
+            exclusive.mockRestore();
+        }
+        expect(renamed).toBeDefined();
+        expect(existsSync(join(folder, 'home/mounts', M, 'data/Projects/Plan.eigendoc/data.db'))).toBe(true);
         expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
