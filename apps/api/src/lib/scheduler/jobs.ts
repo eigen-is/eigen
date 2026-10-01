@@ -1,6 +1,7 @@
 import { cleanupInactiveGuests } from '../auth/guest-cleanup';
 import { describeError } from '../backup/errors';
-import { alertOwner, hasScheduledAttemptOn, startServerBackup } from '../backup/server-job';
+import { alertOwner, hasScheduledAttemptOn } from '../backup/server-archives';
+import { startServerBackup } from '../backup/server-job';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { scheduleInterval } from './scheduler';

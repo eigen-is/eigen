@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import type { ServerArchive, ServerArchiveSidecar } from '@workspace/lib/types/backup';
 import { canUploadServerArchive } from '@workspace/lib/validation';
 import { listBackupJobs } from '../backup/jobs';
-import { listServerArchives } from '../backup/server-job';
+import { listServerArchives } from '../backup/server-archives';
 import { getRelayHost, isBundledCaddy, isMailEnabled } from './env';
 import { CERT_FILES, CERTS_DIR, getDataRoot } from './paths';
 import { getDomain, getPublicConfig, isSetupRequired } from './server-config';

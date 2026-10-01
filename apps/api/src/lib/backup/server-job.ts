@@ -4,7 +4,6 @@ import type {
     BackupJob,
     BackupLevel,
     BackupReason,
-    ServerArchive,
     ServerArchiveManifest,
     ServerArchiveSidecar,
     ServerArchiveUpload,
@@ -14,19 +13,17 @@ import {
     BACKUP_FORMAT_VERSION,
     canUploadServerArchive,
     parseServerArchiveName,
-    parseServerArchiveNames,
-    parseServerArchiveSidecar,
     SERVER_ARCHIVE_EXTENSION,
 } from '@workspace/lib/validation';
 import { getDataRoot, getServerDataPath, ORG_HOMES_DIR, SERVER_DATABASES, SERVER_FILES } from '../config/paths';
-import { API_IMAGE_KEY, PIN_KEYS } from '../config/release';
+import { PIN_KEYS } from '../config/release';
 import { getPublicConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
-import { pullHomeBackupBytes, pullHomeSnapshot, sendToHome } from '../home/home-relay';
+import { pullHomeBackupBytes, pullHomeSnapshot } from '../home/home-relay';
 import { getTeamExists } from '../team/team';
-import { getOrgOwner, getUserById } from '../user';
-import { type ArchiveWriter, createArchiveWriter, packFolder, writeRecord } from './archive';
+import { getUserById } from '../user';
+import { type ArchiveWriter, createArchiveWriter, packFolder } from './archive';
 import { enumerateHomes, type ServerHome } from './enumerate-homes';
 import { describeError } from './errors';
 import { listBackupJobs, runningJobOn, startBackupJob, waitForHomeSlot, whenSlotFree } from './jobs';
@@ -43,18 +40,15 @@ import {
     getBackupTempPath,
     roomShortfall,
     SERVER_ARCHIVE_SERVER_MEMBER,
-    SERVER_SIDECAR_SUFFIX,
-    serverSidecarPath,
     wipeBackupStagingDir,
 } from './paths';
-import { pruneServerArchives } from './retention';
+import { alertOwner, pruneLocalArchives, readServerSidecar, writeServerSidecar } from './server-archives';
 import { type SnapshotProgress, treeBytes } from './snapshot-home';
 import { appendInstallFiles, snapshotServer } from './snapshot-server';
 import { backupKey, uploadServerArchive } from './upload';
 import { readServerArchive, requireVerified, verifyFolder } from './verify';
 
 const HOME_DELETED = 'deleted during the backup';
-const INTERRUPTED = 'interrupted by a restart';
 const UPLOAD_STOPPED = 'Eigen stopped before the upload finished';
 
 type ServerBackupOptions = {
@@ -66,18 +60,6 @@ type ServerBackupOptions = {
     // The waiting caller's: once it is gone, nothing starts when the slot frees.
     signal?: AbortSignal;
 };
-
-function writeServerSidecar(archivePath: string, sidecar: ServerArchiveSidecar): Promise<void> {
-    return writeRecord(serverSidecarPath(archivePath), sidecar);
-}
-
-// Null when there is none, or none that reads: nothing is judged or deleted on a record nobody can read.
-export async function readServerSidecar(archivePath: string): Promise<ServerArchiveSidecar | null> {
-    const text = await Bun.file(serverSidecarPath(archivePath))
-        .text()
-        .catch(() => null);
-    return text === null ? null : parseServerArchiveSidecar(text);
-}
 
 // What the server member stages at most: the databases and files of server/ it takes by name, and
 // the org folder. Runtime files and strays in server/ stay out of the archive, and out of this.
@@ -195,149 +177,6 @@ async function writeServerArchive(
     } finally {
         await writer.abort();
         wipeBackupStagingDir(job.id);
-    }
-}
-
-// Fire-and-forget like the poke: a relay that fails must not replace the failure the job records.
-export function alertOwner(tag: string, error: string, title = 'Server backup failed'): void {
-    getOrgOwner()
-        .then((owner) =>
-            owner
-                ? sendToHome(owner.id, {
-                      type: 'notification',
-                      notification: {
-                          type: 'admin-alert',
-                          title,
-                          body: error,
-                          tag: `server-backup-${tag}`,
-                          coalesce: true,
-                      },
-                  })
-                : undefined,
-        )
-        .catch(() => {});
-}
-
-// Every server archive and refused attempt in the backups folder, once each, newest first.
-function listServerRecords() {
-    const dir = backupsDirPath();
-    if (!fs.existsSync(dir)) return [];
-    const names = new Set(
-        fs
-            .readdirSync(dir)
-            .map((file) =>
-                file.endsWith(SERVER_SIDECAR_SUFFIX) ? file.slice(0, -SERVER_SIDECAR_SUFFIX.length) : file,
-            ),
-    );
-    return parseServerArchiveNames(names).map((record) => ({ ...record, archivePath: path.join(dir, record.name) }));
-}
-
-// The owner's list, newest first, from names and sidecars alone.
-export async function listServerArchives(): Promise<ServerArchive[]> {
-    const archives: ServerArchive[] = [];
-    for (const { name, level, reason, at, archivePath } of listServerRecords()) {
-        archives.push({
-            name,
-            level,
-            reason,
-            createdAt: at,
-            bytes: fs.statSync(archivePath, { throwIfNoEntry: false })?.size ?? null,
-            record: await readServerSidecar(archivePath),
-        });
-    }
-    return archives;
-}
-
-// What ./eigen backup follows over the control socket: plain JSON with no dates, since the CLI reads it
-// without Eden's reviver. `bytes` is null until the archive is renamed into place.
-export type ControlBackupJob = Pick<BackupJob, 'id' | 'state' | 'progress' | 'artifact' | 'error' | 'uploadJobId'> & {
-    bytes: number | null;
-};
-
-export function toControlJob({ id, state, progress, artifact, error, uploadJobId }: BackupJob): ControlBackupJob {
-    const archivePath = artifact && path.join(backupsDirPath(), artifact);
-    const bytes = archivePath ? (fs.statSync(archivePath, { throwIfNoEntry: false })?.size ?? null) : null;
-    return { id, state, progress, artifact, error, uploadJobId, bytes };
-}
-
-// The schedule's one question. A failed or refused attempt left its record, so it counts: a night
-// that fails is one alert, not a retry every tick.
-export function hasScheduledAttemptOn(day: Date): boolean {
-    const date = day.toISOString().slice(0, 10);
-    return listServerRecords().some(
-        ({ reason, at }) => reason === 'scheduled' && at.toISOString().slice(0, 10) === date,
-    );
-}
-
-// An archive and its record go together. Only a running job refuses, as it would write the record back: a record
-// left running with no job behind it lost its final write.
-export async function deleteServerArchive(name: string): Promise<void> {
-    if (!parseServerArchiveName(name)) throw new ApiError(400, 'Not a server backup name');
-    const archivePath = path.join(backupsDirPath(), name);
-    const recordPath = serverSidecarPath(archivePath);
-    if (!fs.existsSync(archivePath) && !fs.existsSync(recordPath)) throw new ApiError(404, 'Archive not found');
-    if (runningJobOn(name)) throw new ApiError(409, `${name} is still being written`);
-    fs.rmSync(archivePath, { force: true });
-    fs.rmSync(recordPath, { force: true });
-}
-
-// Retention by each sidecar: an archive is good only when its job ended done, and nothing is deleted on a record
-// nobody can read.
-async function pruneLocalArchives(): Promise<void> {
-    const archives: Parameters<typeof pruneServerArchives>[0] = [];
-    const unread: string[] = [];
-    for (const record of listServerRecords()) {
-        const sidecar = await readServerSidecar(record.archivePath);
-        if (sidecar) {
-            archives.push({
-                ...record,
-                good: sidecar.state === 'done',
-                build: sidecar.manifest?.images[API_IMAGE_KEY],
-            });
-        } else unread.push(record.name);
-    }
-    if (unread.length > 0) {
-        console.warn(`[backup] retention skips archives without a readable record: ${unread.join(', ')}`);
-    }
-    // An archive a job still reads, as an upload does, stays until the next round.
-    const { keep } = getServerSettings().backups.schedule;
-    for (const name of pruneServerArchives(archives, keep, process.env[API_IMAGE_KEY])) {
-        if (runningJobOn(name)) continue;
-        const archivePath = path.join(backupsDirPath(), name);
-        fs.rmSync(archivePath, { force: true });
-        fs.rmSync(serverSidecarPath(archivePath), { force: true });
-    }
-}
-
-// Boot: a job or an upload killed mid-run left its record running, and nothing will ever end it, so it becomes a
-// failed one. The owner hears of each once.
-export async function recoverInterruptedServerBackups(): Promise<void> {
-    const interrupted: string[] = [];
-    const notUploaded: string[] = [];
-    for (const { name, archivePath } of listServerRecords()) {
-        const sidecar = await readServerSidecar(archivePath);
-        if (sidecar?.state === 'running') {
-            await writeServerSidecar(archivePath, {
-                ...sidecar,
-                state: 'failed',
-                error: INTERRUPTED,
-                finishedAt: new Date(),
-            });
-            interrupted.push(name);
-        } else if (sidecar?.upload?.state === 'running') {
-            const upload: ServerArchiveUpload = {
-                ...sidecar.upload,
-                state: 'failed',
-                at: new Date(),
-                error: INTERRUPTED,
-            };
-            await writeServerSidecar(archivePath, { ...sidecar, upload });
-            notUploaded.push(name);
-        }
-    }
-    if (interrupted.length > 0) alertOwner('interrupted', `${interrupted.join(', ')}: ${INTERRUPTED}`);
-    if (notUploaded.length > 0) {
-        alertOwner('upload-interrupted', `${notUploaded.join(', ')}: ${INTERRUPTED}`, 'Server backup not uploaded');
     }
 }
 
@@ -484,4 +323,16 @@ export async function startServerBackup({
         : start();
     await admitted.promise;
     return job;
+}
+
+// What ./eigen backup follows over the control socket: plain JSON with no dates, since the CLI reads it
+// without Eden's reviver. `bytes` is null until the archive is renamed into place.
+export type ControlBackupJob = Pick<BackupJob, 'id' | 'state' | 'progress' | 'artifact' | 'error' | 'uploadJobId'> & {
+    bytes: number | null;
+};
+
+export function toControlJob({ id, state, progress, artifact, error, uploadJobId }: BackupJob): ControlBackupJob {
+    const archivePath = artifact && path.join(backupsDirPath(), artifact);
+    const bytes = archivePath ? (fs.statSync(archivePath, { throwIfNoEntry: false })?.size ?? null) : null;
+    return { id, state, progress, artifact, error, uploadJobId, bytes };
 }
