@@ -1,6 +1,12 @@
 # Notification Center
 
-> **TLDR:** `NotificationCenter` (`apps/api/src/lib/notification-center/`) is a per-user SQLite service on the home, like calendar and contacts. A producer calls `home.notifications.persist({...})` in the recipient's home, usually through `sendToHome`. The row upserts on its `tag`, so repeats fold into one refreshed row, and a `notification:created` event makes the toast and refreshes the topbar bell. Not obvious from the code: the tag is both the row's identity and the source of its link, `coalesce` suppresses the toast but never the row, and team homes have no notification center. What each row says and where it links: [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md).
+> **TLDR:** A notification tells a user that something happened that involves them: someone shared a file, mentioned them or invited them, mail arrived, a backup failed. It is a row in the recipient's own database, listed in the topbar bell and shown as a toast when it arrives. The service is `NotificationCenter` (`apps/api/src/lib/notification-center/`), and what each row says and where it links is [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md).
+
+A producer is the code that notices the event, such as the share propagation or a chat room posting a message. It writes the row into the recipient's Home, the data folder of one user or guest ([STORAGE.md](STORAGE.md)), by calling `home.notifications.persist({...})`, usually through `sendToHome`, the call that crosses from one Home to another ([SCALABILITY.md](SCALABILITY.md)). The write broadcasts `notification:created` on the recipient's event stream, and that event raises the toast and refreshes the bell.
+
+Each row carries a tag, a string the producer builds from the ids of what the row is about, such as `share:{ownerId}:{mountId}:{pathId}`. The row upserts on its tag, so a repeat refreshes one row instead of adding a second. No URL is stored: the client builds the link from the tag. A producer can also ask to coalesce, which skips the toast for a quick repeat but still writes the row.
+
+Three things surprise people: the tag is both the row's identity and the source of its link ([A notification's tag is its identity](#a-notifications-tag-is-its-identity)), `coalesce` suppresses the toast but never the row ([A coalesced persist skips the toast, not the row](#a-coalesced-persist-skips-the-toast-not-the-row)), and a team home has no notification center, so a notification sent to a team is dropped ([Every user and guest home has its own notification database](#every-user-and-guest-home-has-its-own-notification-database)).
 
 ## Every user and guest home has its own notification database
 
@@ -21,12 +27,12 @@ The tag also carries the ids the link is built from, so each producer's tag deci
 | `share` / `unshare` | `receiveSharedPathChange` (`lib/drive/shared-with-me.ts`) | `share:{ownerId}:{mountId}:{pathId}` / none |
 | `calendar-share` / `calendar-unshare` | `lib/calendar/shares.ts` | `calendar-share:{calId}:{ownerUserId}` / none |
 | `calendar-invite`, `-updated`, `-cancelled` | `lib/calendar/invitations.ts` | `calendar-invite:{eventId}:{startTime}`, shared by all three, so one occurrence is one row |
-| `mail` | `MailDomain` (`lib/mail/mail-domain.ts`) | `mail:new`, a constant, so all incoming mail folds into one row |
+| `mail` | `Mail` (`lib/mail/mail-domain.ts`) | `mail:new`, a constant, so all incoming mail folds into one row |
 | `mention-chat`, `mention-comment`, `chat-message`, `comment-reply` | `ChatRoom.postMessage` | built in `core/notification/tags.ts` ([the tags name the thread](#chat-and-comment-tags-name-the-thread)) |
 | `assigned` | the assignee route in `routes/collab.ts` | built in `core/notification/tags.ts` |
 | `access-request` | `propagateAccessRequest` (`lib/drive/access-request-propagation.ts`) | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
 | `file-event` | `FileHistory.notifyWatchers` | `file-event:{ownerId}:{mountId}:{pathId}`; burst events tag the parent folder ([FILE-HISTORY.md](FILE-HISTORY.md#notifications-coalesce-per-file-and-bursts-per-folder)) |
-| `admin-alert` | backup verify (`lib/backup/jobs.ts`), mail queue (`routes/internal.ts`) | `backup-verify-{ownerId}`, `mail-queue-backlog` |
+| `admin-alert` | backup verify (`lib/backup/jobs.ts`), whole-server backup (`alertOwner`, `lib/backup/server-job.ts`), mail queue (`routes/internal.ts`) | `backup-verify-{ownerId}`, `server-backup-{reason}`, `mail-queue-backlog` |
 
 An unshare carries no tag, because the reader has lost access and there is nothing to link to.
 
