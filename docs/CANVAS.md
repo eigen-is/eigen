@@ -1,6 +1,22 @@
 # Canvas Engine
 
-> **TLDR:** One engine draws every free-canvas document. `packages/lib/src/vector/` is the React-free half (element model, kind registry, reader, layers, SVG) and `packages/ui/src/components/vector/` is the host, `CanvasEditor`. Drawings mount it on the infinite canvas, decks in frame mode ([SLIDES.md](SLIDES.md)). Not obvious from the code: a kind is one registry entry and nothing switches on a shape's type, the reader validates every stored field, the live canvas and the server share one layer per element, one discrete op is one undo step, and an arrow's binding lives on the arrow alone and re-glues in the shape's own transaction.
+> **TLDR:** A drawing and a slide deck are the same thing underneath: a page of elements (shapes, lines, arrows, text boxes, images, freehand strokes) that people place freely and edit together. One engine stores, draws and edits both. `packages/lib/src/vector/` is the half without React, which the server runs too. `packages/ui/src/components/vector/` is the editor, `CanvasEditor`. The Vector app mounts it as an infinite canvas, and the Slides app shows one fixed 16:9 page at a time ([SLIDES.md](SLIDES.md)).
+
+A drawing is a `.eigenvector` file and a deck is a `.eigenslides` file. Both are collab documents ([COLLAB.md](COLLAB.md)): the content is a Yjs document that every open editor holds a copy of, and the server relays and stores the changes. Both use the same three roots in it. `elements` holds one small map per element: its type, position, size, rotation, colors, and whatever that type needs, such as the points of a line or the HTML of a text box. `frames` holds the slides of a deck. A frame is one page of fixed size, and an element on a slide names its frame. Only a deck writes frames, so a drawing has none. `meta` holds the background.
+
+An element's type is called its kind. Each kind is one file that answers every question the engine has about it: its defaults, how to read and validate it, its bounds, whether a click hits it, and how to draw it. Rendering, bounds, hit testing and the panel never ask "is this a rectangle". They ask the kind. Adding a shape is adding a file.
+
+Nothing in a stored document is trusted. Any collaborator, or a forged paste, can write any value. So one function, the reader, turns the Yjs document into a clean scene and repairs what it finds, and everything else works from that scene. The server runs the same reader for previews, export and search.
+
+Drawing is the same on screen and on the server. Each element becomes one layer: a positioned box with the kind's SVG or HTML inside. The live canvas and the server's PDF and preview build that layer with the same code, so an export looks like the screen.
+
+Two more terms come back often. A host is the app that mounts `CanvasEditor` and decides how new elements look: the Vector app or the Slides app. Frame mode is how Slides mounts the canvas: it shows the active frame only, fitted to the screen.
+
+The sections cover the stored fields, the reader, kinds, layers, arrows that stay attached to shapes (bindings), elbow arrows, the viewport, frame mode, undo, text editing, Escape and touch. Three things in them surprise people:
+
+- The reader's repairs live only in the scene it returns, until the next real write stores them ([§ The reader is the trust boundary](#the-reader-is-the-trust-boundary)).
+- One discrete op, such as a delete or a panel change, is one undo step ([§ One discrete op is one undo step](#one-discrete-op-is-one-undo-step)).
+- An arrow's binding lives on the arrow alone and re-glues in the shape's own transaction ([§ A binding is stored on the arrow only](#a-binding-is-stored-on-the-arrow-only)).
 
 ## Every stored field is a scalar
 
@@ -22,7 +38,7 @@ A pasted clipboard record goes through the same `readElementFromFields`, so a fo
 
 ## A kind is one registry entry
 
-Each kind is one `defineKind` file in `packages/lib/src/vector/kinds/`. It answers what the engine asks: defaults, `read`, bounds, hit test, outline, `render`, and the `searchText` that feeds both ⌘F and the server search index. `defineKind` derives the kind's stored `fields` from its `defaults`, so a kind names its keys once. It also re-narrows through the kind's own guard in every method, so no caller casts and a mis-dispatch degrades quietly instead of throwing mid-render. Presentation (icon, label, shortcut, in-place editor, panel section) is the matching `ELEMENT_KIND_UI` entry in `packages/ui/src/components/vector/kinds/`.
+Each kind is one `defineKind` file in `packages/lib/src/vector/kinds/`. Besides defaults, `read`, bounds, hit test and `render`, it gives the outline and the `searchText` that feeds both ⌘F and the server search index. `defineKind` derives the kind's stored `fields` from its `defaults`, so a kind names its keys once. It also re-narrows through the kind's own guard in every method, so no caller casts and a mis-dispatch degrades quietly instead of throwing mid-render. Presentation (icon, label, shortcut, in-place editor, panel section) is the matching `ELEMENT_KIND_UI` entry in `packages/ui/src/components/vector/kinds/`.
 
 `kinds/index.ts` derives the rest: `ELEMENT_FIELDS`, the type validator, the toolbar tools, `baseDefaultsFor` (so a panel reset restores exactly what create gave). A host's style table (`VECTOR_STYLE_DEFAULTS`, `SLIDES_STYLE_DEFAULTS`) decides how a new element looks, never which kinds exist.
 
@@ -96,13 +112,13 @@ Anything that must be exact mid-gesture reads the ref: scene conversion, hit-tes
 
 ## Frame mode always shows the whole page
 
-Frame mode fits the page on open, on every resize and on every frame switch (`packages/lib/src/vector/viewport.ts`). The zoom is the fit's, never the user's: `settle`, which every gesture write passes through, restores it, so wheel zoom and pinch do nothing and a pan settles back.
+Frame mode fits the page on open, on every resize and on every frame switch (`fitFrameViewport` in `packages/lib/src/vector/viewport.ts`). The zoom is the fit's, never the user's: `settle` (`packages/ui/src/components/vector/hooks/use-viewport.ts`), which every gesture write passes through, restores it, so wheel zoom and pinch do nothing and a pan settles back.
 
 The page card's border is drawn in the screen-space chrome at 1 px. A border inside the scaled scene layer fails, because the browser floors `border-width` to whole px: at a 0.57 fit it becomes a blurry, drifting hairline.
 
 `.eigen-paper` (`packages/ui/src/styles/globals.css`) pins the light palette on a surface that shows user content, and `paper.tsx` decides which surface gets it. The infinite canvas is all paper; in frame mode only the card is, and the surround follows the theme. Both chrome layers carry the pin too, so a resize grip is not dark gray on a white slide.
 
-The canvas and the page use `overflow-clip`, not `overflow-hidden`. A hidden box scrolls to reveal a focused caret, which slid the page away from its chrome during text editing.
+The canvas and the page use `overflow-clip`, not `overflow-hidden`. A hidden box scrolls to reveal a focused caret, which would slide the page away from its chrome during text editing.
 
 ## Frame mode scopes the canvas, except comments and search
 
@@ -147,3 +163,4 @@ Every panel row is a `PropertyRow` over the shared controls in `packages/ui/src/
 - [COMMENTS.md](COMMENTS.md) and [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md): comments and ⌘F on a canvas
 - [EXPORT.md](EXPORT.md) and [PREVIEWS.md](PREVIEWS.md): the server compositor, and how it draws the same arrow
 - [COLLAB.md](COLLAB.md): `useCollabDoc` and the loading gate
+- [MOBILE.md](MOBILE.md#a-phone-views-canvas-documents-never-edits-them): the view-only canvas on phones
