@@ -28,7 +28,13 @@ import { FakeS3Server } from '../fake-s3-server';
 import { DUMMY_S3, waitFor } from '../fault-storage-helpers';
 import { getTestContext, type TestContext } from '../setup';
 import { TEST_DATA_DIR } from '../test-env';
-import { alertTitlesTo, removeServerRecords, waitForJob, writeServerRecord } from './backup-test-helpers';
+import {
+    alertTitlesTo,
+    removeServerRecords,
+    serverManifestOf,
+    waitForJob,
+    writeServerRecord,
+} from './backup-test-helpers';
 
 // A Light job of the file's few homes, for real.
 const JOB_TIMEOUT_MS = 120_000;
@@ -52,31 +58,13 @@ function writeArchive(
     reason: BackupReason,
     at: string,
     bytes: Uint8Array | string = 'archive bytes',
-    state: 'done' | 'failed' = 'done',
+    outcome: 'complete' | 'failed' | 'warned' = 'complete',
 ): string {
     const archivePath = join(getBackupsDir(), buildServerArchiveName(reason, 'full', new Date(at)));
     const verify = { status: 'verified', checkedAt: at, failures: [] };
-    const record = { state, startedAt: at, finishedAt: at, verify, manifest: manifestOf(reason, at, state) };
+    const state = outcome === 'failed' ? 'failed' : 'done';
+    const record = { state, startedAt: at, finishedAt: at, verify, manifest: serverManifestOf(reason, at, outcome) };
     return writeServerRecord(basename(archivePath), record, bytes);
-}
-
-function manifestOf(reason: BackupReason, at: string, state: 'done' | 'failed') {
-    const home = { ownerId: 'a'.repeat(32), kind: 'user', name: 'alice' };
-    return {
-        formatVersion: 1,
-        level: 'full',
-        reason,
-        createdAt: at,
-        appVersion: 'test',
-        domain: getDomain(),
-        entries: [],
-        homes: [state === 'failed' ? { ...home, failed: 'bucket unreachable' } : home],
-        orphans: [],
-        envFile: true,
-        dkim: true,
-        certs: true,
-        images: {},
-    };
 }
 
 describe('Upload of server archives', () => {
@@ -575,6 +563,21 @@ describe('Upload of server archives', () => {
                 await mine.write(name, new TextEncoder().encode(name));
             }
             const newest = basename(writeArchive('scheduled', '2026-08-05T02:00:00.000Z', 'most homes', 'failed'));
+
+            const { data } = await ctx.alice.api.admin['server-backup'].archives({ name: newest }).upload.post();
+            expect((await waitForJob(data!.jobId)).state).toBe('done');
+            expect((await mine.list()).sort()).toEqual([complete, newest, `${newest}${BUCKET_PARTIAL_SUFFIX}`].sort());
+        });
+
+        test('an archive with warnings is partial too: warned nights never push out the newest complete one', async () => {
+            await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 1 } } });
+            const mine = new S3Storage({ ...bucket, prefix: `nightly/${getDomain()}` });
+            const complete = buildServerArchiveName('scheduled', 'full', new Date('2026-08-13T02:00:00Z'));
+            const warned = buildServerArchiveName('scheduled', 'full', new Date('2026-08-14T02:00:00Z'));
+            for (const name of [complete, warned, `${warned}${BUCKET_PARTIAL_SUFFIX}`]) {
+                await mine.write(name, new TextEncoder().encode(name));
+            }
+            const newest = basename(writeArchive('scheduled', '2026-08-15T02:00:00.000Z', 'most of it', 'warned'));
 
             const { data } = await ctx.alice.api.admin['server-backup'].archives({ name: newest }).upload.post();
             expect((await waitForJob(data!.jobId)).state).toBe('done');

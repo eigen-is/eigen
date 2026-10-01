@@ -1,8 +1,10 @@
+import { Database } from 'bun:sqlite';
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, readdirSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupJob, BackupLevel, BackupReason } from '@workspace/lib/types/backup';
+import { isCompleteArchive } from '@workspace/lib/validation';
 import * as archive from '../../lib/backup/archive';
 import { enumerateHomes } from '../../lib/backup/enumerate-homes';
 import { getBackupJob, startBackupJob, withBackupJobSlot } from '../../lib/backup/jobs';
@@ -14,13 +16,18 @@ import {
     serverSidecarPath,
 } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
-import { readServerSidecar, recoverInterruptedServerBackups } from '../../lib/backup/server-archives';
+import {
+    getServerBackupStatus,
+    pruneLocalArchives,
+    readServerSidecar,
+    recoverInterruptedServerBackups,
+} from '../../lib/backup/server-archives';
 import { startServerBackup } from '../../lib/backup/server-job';
 import { readServerArchive } from '../../lib/backup/verify';
 import { getServerDataPath, SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
-import { ApiError } from '../../lib/core';
+import { ApiError, PATHS } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
@@ -31,7 +38,10 @@ import {
     type RealShapeHome,
     readServerManifest,
     realShapeHome,
+    removeServerRecords,
+    serverManifestOf,
     waitForJob,
+    writeServerRecord,
 } from './backup-test-helpers';
 
 // A server job snapshots, verifies and packs every home of the file's fixture for real.
@@ -231,6 +241,70 @@ describe('Server backup job', () => {
         },
         JOB_TIMEOUT_MS,
     );
+
+    test(
+        'a home backed up with warnings ends the job done, alerts the owner once, and the status turns yellow',
+        async () => {
+            const relay = quietRelay();
+            const damaged = await createTestUser(`warned-${Date.now()}@test.eigen.is`, 'testpassword123', 'Warned');
+            const home = await getHome(damaged.id);
+            const [mount] = home.drive.getMounts();
+            const rootId = (await mount.getRootFolder())!.id;
+            const folderId = await mount.createFolder(rootId, 'Salvaged');
+            await mount.createFile(folderId, 'left.txt', 'text/plain', 4, new TextEncoder().encode('left'));
+            // What a salvaged database leaves: the folder row gone, its child still naming it.
+            const db = new Database(join(home.homeDir, PATHS.DRIVE.ROOT, mount.id, PATHS.DRIVE.METADATA_DB));
+            db.run('PRAGMA foreign_keys = OFF');
+            db.run('DELETE FROM paths WHERE id = ?', [folderId]);
+            db.close();
+            try {
+                const { job, archivePath } = await runJob({ reason: 'scheduled' });
+                expect(job.error).toBeUndefined();
+                expect(job.state).toBe('done');
+                const { manifest } = await readServerManifest(archivePath);
+                const warned = manifest.homes.find((h) => h.ownerId === damaged.id);
+                expect(warned?.member).toBeDefined();
+                expect(warned?.failed).toBeUndefined();
+                expect(warned?.warnings).toEqual([
+                    `mount ${mount.id}: entries that do not reach the drive's root, left out: left.txt`,
+                ]);
+                expect(isCompleteArchive(manifest)).toBe(false);
+                expect((await readServerSidecar(archivePath))?.state).toBe('done');
+                await Bun.sleep(50);
+                expect(alertTitlesTo(relay, ctx.alice.user.id)).toEqual(['Server backup has warnings']);
+                const status = await getServerBackupStatus();
+                expect(status.warned?.name).toBe(basename(archivePath));
+                expect(status.warned?.error).toBe('Warned');
+                expect(status.newestGoodFullAt).not.toBe(status.warned?.createdAt);
+            } finally {
+                await deleteUserCompletely(damaged.id, null);
+            }
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test('warned nights never push out the last complete archive, and rotate at keep', async () => {
+        removeServerRecords();
+        const night = (day: number, outcome: 'complete' | 'warned') => {
+            const at = new Date(Date.UTC(2021, 0, day, 2)).toISOString();
+            const name = buildServerArchiveName('scheduled', 'full', new Date(at));
+            const manifest = serverManifestOf('scheduled', at, outcome);
+            return writeServerRecord(name, { state: 'done', startedAt: at, manifest }, 'archive');
+        };
+        const complete = night(1, 'complete');
+        const warned = [2, 3, 4].map((day) => night(day, 'warned'));
+        await updateServerSettings({ backups: { schedule: { keep: 2 } } });
+        try {
+            await pruneLocalArchives();
+        } finally {
+            await updateServerSettings({ backups: { schedule: { keep: 7 } } });
+        }
+        expect(existsSync(complete)).toBe(true);
+        expect(existsSync(warned[0])).toBe(false);
+        expect(existsSync(serverSidecarPath(warned[0]))).toBe(false);
+        for (const kept of warned.slice(1)) expect(existsSync(kept)).toBe(true);
+        removeServerRecords();
+    });
 
     test(
         'a home deleted during the backup is skipped, without failing the job or alerting anyone',
@@ -470,8 +544,11 @@ describe('Server backup job', () => {
             const dir = getBackupsDir();
             const old = (reason: BackupReason, day: number) =>
                 join(dir, buildServerArchiveName(reason, 'full', new Date(Date.UTC(2020, 0, day, 2))));
-            const record = (archivePath: string, state: BackupJob['state']) =>
-                writeFileSync(serverSidecarPath(archivePath), JSON.stringify({ state, startedAt: new Date() }));
+            const record = (archivePath: string, state: BackupJob['state']) => {
+                const at = new Date().toISOString();
+                const manifest = state === 'done' ? serverManifestOf('scheduled', at, 'complete') : undefined;
+                writeFileSync(serverSidecarPath(archivePath), JSON.stringify({ state, startedAt: at, manifest }));
+            };
             const scheduled = [1, 2, 3].map((day) => old('scheduled', day));
             for (const archivePath of scheduled) {
                 writeFileSync(archivePath, 'archive');

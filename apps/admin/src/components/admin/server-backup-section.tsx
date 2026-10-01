@@ -285,7 +285,7 @@ type ServerArchiveRowProps = {
 
 function ServerArchiveRow({ archive, uploadable, onUpload, onDelete }: ServerArchiveRowProps) {
     const { record } = archive;
-    const failedHomes = record?.manifest?.homes.filter((home) => home.failed) ?? [];
+    const homes = record?.manifest?.homes ?? [];
     const detail = [
         BACKUP_LEVEL_NAMES[archive.level],
         REASON_LABEL[archive.reason],
@@ -326,23 +326,46 @@ function ServerArchiveRow({ archive, uploadable, onUpload, onDelete }: ServerArc
             {record?.upload?.error && (
                 <p className="text-xs text-destructive pl-7">Not uploaded: {record.upload.error}</p>
             )}
-            {failedHomes.length > 0 && (
-                <Alert variant="destructive" className="mt-1">
-                    <AlertTriangle className="h-4 w-4" />
-                    <AlertDescription>
-                        <p>Not in this backup:</p>
-                        <ul className="list-disc pl-4">
-                            {failedHomes.map((home) => (
-                                <li key={home.ownerId}>
-                                    {home.name}: {home.failed}
-                                </li>
-                            ))}
-                        </ul>
-                    </AlertDescription>
-                </Alert>
-            )}
+            <HomesAlert
+                variant="destructive"
+                title="Not in this backup:"
+                homes={homes.flatMap(({ ownerId, name, failed }) => (failed ? [{ ownerId, name, why: failed }] : []))}
+            />
+            <HomesAlert
+                variant="warning"
+                title="In this backup with warnings:"
+                homes={homes.flatMap(({ ownerId, name, warnings }) =>
+                    warnings ? [{ ownerId, name, why: warnings.join('; ') }] : [],
+                )}
+            />
             {record?.verify && <VerifyFailures verify={record.verify} />}
         </BackupArtifactRow>
+    );
+}
+
+type HomesAlertProps = {
+    variant: 'destructive' | 'warning';
+    title: string;
+    homes: { ownerId: string; name: string; why: string }[];
+};
+
+// The homes of an archive the owner should look at: those it lacks, and those it holds with warnings.
+function HomesAlert({ variant, title, homes }: HomesAlertProps) {
+    if (homes.length === 0) return null;
+    return (
+        <Alert variant={variant} className="mt-1">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+                <p>{title}</p>
+                <ul className="list-disc pl-4">
+                    {homes.map((home) => (
+                        <li key={home.ownerId}>
+                            {home.name}: {home.why}
+                        </li>
+                    ))}
+                </ul>
+            </AlertDescription>
+        </Alert>
     );
 }
 

@@ -123,6 +123,7 @@ describe('the Backup row', () => {
             newest: { ...newest, state: 'done', bytes: 1024 * 1024, error: null },
             scheduledFailure: null,
             scheduledNotUploaded: null,
+            warned: null,
             newestGoodFullAt: hoursAgo(3).toISOString(),
         });
         expect(row).toBe(`◇  Backup       ${newest.name}, 3h ago, 1.0 MB`);
@@ -135,6 +136,7 @@ describe('the Backup row', () => {
             newest: { ...archive('manual', hoursAgo(1)), state: 'done', bytes: 1024, error: null },
             scheduledFailure: { ...failed, error: 'no room' },
             scheduledNotUploaded: null,
+            warned: null,
             newestGoodFullAt: hoursAgo(1).toISOString(),
         });
         expect(row).toBe(`■  Backup       ${failed.name} failed, 5h ago: no room`);
@@ -147,9 +149,23 @@ describe('the Backup row', () => {
             newest: { ...missed, state: 'done', bytes: 1024, error: null },
             scheduledFailure: null,
             scheduledNotUploaded: { ...missed, error: 'bucket refused' },
+            warned: null,
             newestGoodFullAt: hoursAgo(5).toISOString(),
         });
         expect(row).toBe(`▲  Backup       ${missed.name} not uploaded, 5h ago: bucket refused`);
+    });
+
+    test('is yellow while the newest archive was backed up with warnings, naming the homes', async () => {
+        const warned = archive('scheduled', hoursAgo(5));
+        const row = await backupRow({
+            scheduleEnabled: true,
+            newest: { ...warned, state: 'done', bytes: 1024, error: null },
+            scheduledFailure: null,
+            scheduledNotUploaded: null,
+            warned: { ...warned, error: 'Alice, Team Blue' },
+            newestGoodFullAt: hoursAgo(29).toISOString(),
+        });
+        expect(row).toBe(`▲  Backup       ${warned.name} backed up with warnings, 5h ago: Alice, Team Blue`);
     });
 
     test('is yellow while the schedule is on and no Full verified in two days', async () => {
@@ -158,6 +174,7 @@ describe('the Backup row', () => {
             newest: { ...newest, state: 'done' as const, bytes: 1024, error: null },
             scheduledFailure: null,
             scheduledNotUploaded: null,
+            warned: null,
             newestGoodFullAt: hoursAgo(49).toISOString(),
         };
         expect(await backupRow({ scheduleEnabled: true, ...facts })).toBe(
@@ -175,6 +192,7 @@ describe('the Backup row', () => {
             newest: { ...newest, state: 'running', bytes: null, error: null },
             scheduledFailure: null,
             scheduledNotUploaded: null,
+            warned: null,
             newestGoodFullAt: null,
         });
         expect(running).toBe(`◇  Backup       ${name}, just now, running`);
@@ -183,6 +201,7 @@ describe('the Backup row', () => {
             newest: { ...newest, state: 'failed', bytes: null, error: 'no room' },
             scheduledFailure: null,
             scheduledNotUploaded: null,
+            warned: null,
             newestGoodFullAt: null,
         });
         expect(failed).toBe(`▲  Backup       ${name}, just now, failed: no room`);
@@ -191,6 +210,7 @@ describe('the Backup row', () => {
             newest: null,
             scheduledFailure: null,
             scheduledNotUploaded: null,
+            warned: null,
             newestGoodFullAt: null,
         });
         expect(none).toBe('▲  Backup       none yet; ./eigen backup makes one');
