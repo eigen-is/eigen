@@ -24,7 +24,7 @@ Every search runs in two passes. Pass 1 is raw SQL: the FTS join ranks by `bm25(
 
 `MailDB.searchMail` (`apps/api/src/lib/mail/maildb.ts`) applies `from` and `to` first: a `LIKE` over the sender and recipient columns picks the candidate ids, and the FTS pass ranks only those. That gives exact recall at any selectivity, with no over-fetched candidate pool. A filter with no text term is a query on its own and ranks by date.
 
-Trash and Junk are left out unless the caller names a mailbox. `MailDomain.search` canonicalizes the names first, because the filter compares the stored value exactly.
+Trash and Junk are left out unless the caller names a mailbox. `Mail.search` (`apps/api/src/lib/mail/mail-domain.ts`) canonicalizes the names first, because the filter compares the stored value exactly.
 
 ## Inside one mount, a name match outranks a body match
 

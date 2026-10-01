@@ -11,7 +11,7 @@
 /webdav/<ownerId>/<mountId>/<path>    a file or folder by name
 ```
 
-`<ownerId>` is the user's id, or `team_<teamId>` for a team drive. Each mount is one volume in the client, and a share of a sub-folder is not possible. The levels above a mount answer 404 on purpose: there is no discovery, and the Integrations page (`apps/space/src/routes/_auth.services.tsx`) lists one URL per mount the user can reach. So a client that walks up from a mount URL gets nothing. Windows' "Add a network location" wizard does exactly that and rejects the URL, which is why the help center sends users to Map network drive instead.
+`<ownerId>` is the user's id, or `team_<teamId>` for a team drive. Each mount is one volume in the client, and a share of a sub-folder is not possible. The levels above a mount answer 404 on purpose: there is no discovery, and the Integrations page (`apps/space/src/routes/_auth.services.tsx`) lists one URL per mount the user can reach. So a client that walks up from a mount URL gets nothing. Windows' **Add a network location** wizard does exactly that and rejects the URL, which is why the help center sends users to **Map network drive** instead.
 
 A trailing slash is stripped, so `/foo/` and `/foo` name one row. The path and the `Destination` header are percent-decoded per segment, and a malformed escape (`bad%E0`) is a 400.
 
@@ -43,7 +43,7 @@ An overwrite trashes the target first. So a request whose source and destination
 
 `LockManager` (`apps/api/src/lib/drive/lock-manager.ts`) keeps one table per `Drive`, keyed by path id. Memory is enough: collab editing never relies on WebDAV locks, Office refreshes its locks about every 10 minutes whatever `Timeout` the server answers, and a restart that drops every lock is correct. A second node would need a shared store ([SCALABILITY.md](SCALABILITY.md)).
 
-- A lock belongs to the user who took it. Another user's token on a write is a 423, and so is their UNLOCK (a 403).
+- A lock belongs to the user who took it. A write with another user's token is a 423. Their UNLOCK is a 403.
 - A depth-infinity lock on a folder gates writes on everything below it. Each write walks its breadcrumb for covering locks (`coveringLocks`).
 - The TTL is 600 s unless the client asks, and never over 24 h, so a client can't pin lock state for years.
 - DELETE and an overwrite release the replaced path's locks.

@@ -12,7 +12,7 @@ Authorship (`authorEmail`) and the whisper target (`whisperTo`) are emails. A ch
 
 ## Membership is the Drive ACL
 
-If you can read the room, you are in it: `read` shows the messages and `write` posts, edits and deletes. The `:chatId` routes go through `getSharedDrive()`, and the write routes also check `canWrite`. Edit and delete additionally require that you wrote the message, and answer 404 otherwise.
+A user who can read the room is in it: `read` shows the messages and `write` posts, edits and deletes. The `:chatId` routes go through `getSharedDrive()`, and the write routes also check `canWrite`. Edit and delete additionally require that the caller wrote the message, and answer 404 otherwise.
 
 `/invite` and `POST .../invite` put the new entry on the outermost container document for an embedded chat, because that is where inheritance reads it ([ACL.md § Chat Invite Bubbling](ACL.md#chat-invite-bubbling)).
 
@@ -60,35 +60,27 @@ Delete sets `deletedAt`, empties the content and trashes the message's attachmen
 
 An attachment is a file name in the room's `media/` folder, or a reference to a drive container. A device file uploads into `media/`. A regular drive file is copied there (`useChatRoom`), because the room's ACL has to cover the file for every member. A container document stays a reference. Comment cards follow the same rule ([COMMENTS.md](COMMENTS.md)).
 
-A chip opens the file's actions from the shared chip menu ([PREVIEWS.md § One hook wires every attachment chip to the menu](PREVIEWS.md#one-hook-wires-every-attachment-chip-to-the-menu)), and "Save attachments" copies the files into Drive server-side through `SaveToDrivePicker`, with "Download instead" as the escape hatch.
+A chip opens the file's actions from the shared chip menu ([PREVIEWS.md § One hook wires every attachment chip to the menu](PREVIEWS.md#one-hook-wires-every-attachment-chip-to-the-menu)), and **Save attachments** copies the files into Drive server-side through `SaveToDrivePicker`, with **Download instead** as the escape hatch.
 
 ## The new-chat wizard opens an existing chat before it creates one
 
-`ChatCreateWizard` (`packages/ui/src/components/chat/chat-create-wizard.tsx`) is a two-step dialog. Step 1 picks people or a team. If a chat with exactly that membership exists, the primary button opens it and "Create new chat" moves on. Step 2 confirms the name and the location. The chat sidebar's "New chat" button, the chat app's empty state and the contacts menu open it. Guests never see it (`useIsGuest`): they can't share, so it could never succeed, and the create route rejects them too (`requireNonGuest`).
+`ChatCreateWizard` (`packages/ui/src/components/chat/chat-create-wizard.tsx`) is a two-step dialog. Step 1 picks people or a team. If a chat with exactly that membership exists, the primary button opens it and **Create new chat** moves on. Step 2 confirms the name and the location. The chat sidebar's **New chat** button, the chat app's empty state and the contacts menu open it. Guests never see it (`useIsGuest`): they can't share, so it could never succeed, and the create route rejects them too (`requireNonGuest`).
 
 ### A chat is a file, so the wizard hides as much file-ness as it can
 
 Signal, WhatsApp, Telegram, Slack and Google Chat are all person-first: the new-chat action is a picker, with no name step, no location step, and no way to create a second 1:1. An Eigen chat is a file with a name and a place in Drive, so it sits closer to a Slack channel and can never be fully person-first. The wizard shows as little file-ness as possible at creation time and copies Slack's `conversations.open`: open the existing chat instead of warning about a duplicate.
 
-What follows from that:
-
-- Matching is on the exact effective member set, never on the name, so a renamed chat still matches.
-- Guest and account-less emails are allowed as members, because they become ACL entries exactly like a share.
-- New chats default into the owner's `chats` folder, not the drive root.
-- Being added to a chat sends no share email.
-- The contacts entry prefers the person's registered address.
-
 ### Drive creates a plain chat file, never the wizard
 
-Drive is a place-first surface. Its "New" menu, list context menu and mobile toolbar create a chat like any other Eigen type (`DriveCreateEigenDoc type="chat"`) in the folder you are browsing. The new chat starts with exactly the members its location's ACL implies, which keeps the file model visible. The wizard, with its open-don't-duplicate rule and its `chats` default, belongs to the person-first surfaces, where the intent is "talk to someone", not "create a file here". So Drive has no path into the wizard: its open-don't-duplicate rule would answer a create in this folder with a chat that lives somewhere else.
+Drive is a place-first surface. Its **New** menu, list context menu and mobile toolbar create a chat like any other Eigen type (`DriveCreateEigenDoc type="chat"`) in the folder you are browsing. The new chat starts with exactly the members its location's ACL implies, which keeps the file model visible. The wizard, with its open-don't-duplicate rule and its `chats` default, belongs to the person-first surfaces, where the intent is "talk to someone", not "create a file here". So Drive has no path into the wizard: its open-don't-duplicate rule would answer a create in this folder with a chat that lives somewhere else.
 
 ### Step 1 works like the share dialog
 
-Adding members is an ACL edit, so step 1 uses the share dialog's `ContactAddRow` with its `+` button, shows suggestions only after typing, and puts the "Team chat" dropdown where the share dialog puts "Share with team". Consistency across the product beats a bespoke picker.
+Adding members is an ACL edit, so step 1 uses the share dialog's `ContactAddRow` with its `+` button, shows suggestions only after typing, and puts the **Team chat** dropdown where the share dialog puts **Share with team**. Consistency across the product beats a bespoke picker.
 
 ### Matching compares effective member sets
 
-`GET /chat/:ownerId/rooms/by-members?emails=…` returns the standalone chats whose members are exactly `{me} ∪ emails`, writable first, then most recently updated. "Writable" means I own it or my ACL entry has `write`. `findChatsByMembers` (`apps/api/src/lib/chat/find-by-members.ts`) reads only the caller's own home: their mounts plus the shared-with-me mirror. It makes no cross-home calls ([SCALABILITY.md](SCALABILITY.md)), which is why the route is self-only.
+`GET /chat/:ownerId/rooms/by-members?emails=…` returns the standalone chats whose members are exactly the caller plus `emails`, writable first, then most recently updated. Writable means the caller owns the chat or the caller's ACL entry has `write`. Matching never looks at the name, so a renamed chat still matches. `findChatsByMembers` (`apps/api/src/lib/chat/find-by-members.ts`) reads only the caller's own home: their mounts plus the shared-with-me mirror. It makes no cross-home calls ([SCALABILITY.md](SCALABILITY.md)), which is why the route is self-only.
 
 A chat's members are its effective member emails: path ACL, ancestor ACLs, expanded teams and the owner, all lowercased. A chat whose membership is not a fixed set of people never matches:
 
@@ -105,7 +97,7 @@ The panel suggests; it never guards. Two point-in-time misses are accepted:
 
 ### Create and share are one server-side step
 
-`POST /chat/:ownerId/:mountId/rooms {parentId?, fileName, members?, dedupeName?}` creates the chat and shares it with `{read, write}` per member in one request, then returns the `DrivePath`. Members are emails by contract: both wizard routes trim, lowercase and validate them first (`normalizeMemberEmails`), and reject owner-shaped ids like `team_*`. A personal chat without members is a 422, before anything is created.
+`POST /chat/:ownerId/:mountId/rooms {parentId?, fileName, members?, dedupeName?}` creates the chat and shares it with `{read, write}` per member in one request, then returns the `DrivePath`. Members are emails by contract: both wizard routes trim, lowercase and validate them first (`normalizeMemberEmails`), and reject owner-shaped ids like `team_*`. Guest and account-less emails are allowed, because they become ACL entries exactly like a share. A personal chat without members is a 422, before anything is created.
 
 A wizard chat is born shared. If the ACL step fails, the route trashes and purges the fresh container and rethrows, because a created-but-unshared chat is worse than a clean error. `dedupeName` is set for the wizard's generated default names and suffixes a collision (`Name (2)`). A name the user typed omits it, and a duplicate is a 409 shown inline.
 
@@ -119,11 +111,11 @@ A "someone shared a file with you" email for being added to a chat has the wrong
 
 ### A team chat takes its members from the team
 
-Picking a team in the footer switches the wizard to team mode. The people rows collapse to "Everyone in <team> is a member", the name becomes required (a topic, like a channel), and the location defaults to the team drive's `chats` folder. Instead of the member matcher, the panel lists the team's existing chats from the sidebar aggregate, and the primary button opens the first one, as in person mode. The create goes through the same rooms route with the team's `ownerId`, gated by `requireTeamAccess`. It skips the ACL step and so sends no share email, because team membership is implicit.
+Picking a team in the footer switches the wizard to team mode. The people rows collapse to **Everyone in <team> is a member**, the name becomes required (a topic, like a channel), and the location defaults to the team drive's `chats` folder. Instead of the member matcher, the panel lists the team's existing chats from the sidebar aggregate, and the primary button opens the first one, as in person mode. The create goes through the same rooms route with the team's `ownerId`, gated by `requireTeamAccess`. It skips the ACL step and so sends no share email, because team membership is implicit.
 
 ### Contacts open an existing chat directly
 
-"Start chat" in the contacts menu (`apps/contacts/src/components/contacts/contact-menu.tsx`, shared by the list's context menu and the detail toolbar) shows for any selected person with an email except yourself. An address without an account becomes an ACL invite, so there is no registered-user gate. For one person, `useStartChatWith` first finds which of their addresses belongs to an account and prefers it, because the first address can be a later-added alias and the match is keyed by the account address. Exactly one writable match opens directly. Otherwise, and for several people, the wizard opens pre-filled.
+**Start chat** in the contacts menu (`apps/contacts/src/components/contacts/contact-menu.tsx`, shared by the list's context menu and the detail toolbar) shows for any selected person with an email except yourself. An address without an account becomes an ACL invite, so there is no registered-user gate. For one person, `useStartChatWith` first finds which of their addresses belongs to an account and prefers it, because the first address can be a later-added alias and the match is keyed by the account address. Exactly one writable match opens directly. Otherwise, and for several people, the wizard opens pre-filled.
 
 ## See also
 
