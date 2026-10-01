@@ -14,7 +14,7 @@ import { alertOwner } from '../user/alert-owner';
 import { writeRecord } from './archive';
 import { listBackupJobs, runningJobOn } from './jobs';
 import { backupsDirPath, SERVER_SIDECAR_SUFFIX, serverSidecarPath } from './paths';
-import { pruneServerArchives } from './retention';
+import { pruneServerArchives, type RetainedArchive } from './retention';
 
 // The server archives and their records in the backups folder: what the owner's list and the status read, what a
 // delete takes with it, retention, and the boot that ends a record left running. Running a backup is server-job.ts.
@@ -122,10 +122,9 @@ export async function deleteServerArchive(name: string): Promise<void> {
     fs.rmSync(recordPath, { force: true });
 }
 
-// Retention by each sidecar: an archive is good only when its job ended done, and nothing is deleted on a record
-// nobody can read.
+// Retention by each sidecar: an archive is good only when its job ended done.
 export async function pruneLocalArchives(): Promise<void> {
-    const archives: Parameters<typeof pruneServerArchives>[0] = [];
+    const archives: RetainedArchive[] = [];
     const unread: string[] = [];
     for (const record of listServerRecords()) {
         const sidecar = await readServerSidecar(record.archivePath);
