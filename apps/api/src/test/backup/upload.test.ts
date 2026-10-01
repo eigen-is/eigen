@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, te
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { BackupJob, BackupReason } from '@workspace/lib/types/backup';
-import { EMPTY_S3, type S3Config } from '@workspace/lib/types/mount';
+import type { S3Config } from '@workspace/lib/types/mount';
 import { drainBackupJobs, getBackupJob } from '../../lib/backup/jobs';
 import {
     BUCKET_PARTIAL_SUFFIX,
@@ -25,7 +25,7 @@ import { LocalStorage } from '../../lib/storage/local-storage';
 import { S3Storage } from '../../lib/storage/s3-storage';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 import { FakeS3Server } from '../fake-s3-server';
-import { DUMMY_S3, waitFor } from '../fault-storage-helpers';
+import { CLEARED_S3, DUMMY_S3, waitFor } from '../fault-storage-helpers';
 import { getTestContext, type TestContext } from '../setup';
 import { TEST_DATA_DIR } from '../test-env';
 import {
@@ -95,7 +95,7 @@ describe('Upload of server archives', () => {
         await fake.stop();
         removeServerRecords();
         await updateServerSettings({
-            backups: { upload: { enabled: false, s3: { ...EMPTY_S3, region: undefined }, keep: 30 } },
+            backups: { upload: { enabled: false, s3: CLEARED_S3, keep: 30 } },
         });
     });
 

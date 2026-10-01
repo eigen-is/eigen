@@ -1,7 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { EMPTY_S3 } from '@workspace/lib/types/mount';
 import { eq } from 'drizzle-orm';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { account as accountSchema, user as userSchema } from '../../../auth-schema';
@@ -25,7 +24,7 @@ import {
     writeServerRecord,
 } from '../backup/backup-test-helpers';
 import * as cli from '../cli-test-helpers';
-import { DUMMY_S3 } from '../fault-storage-helpers';
+import { CLEARED_S3, DUMMY_S3 } from '../fault-storage-helpers';
 import { createTestUser, ensureServer, getTestContext, hasSession, signsIn, TEST_DATA_DIR } from '../setup';
 
 const FIXTURE_CERT = join(import.meta.dir, '../fixtures/control/expires-2036.crt');
@@ -604,7 +603,7 @@ describe('the server backup on the control socket', () => {
                     expect(archive).toBeDefined();
                     expect(existsSync(join(getBackupsDir(), archive!))).toBe(true);
                 } finally {
-                    await updateServerSettings({ backups: { upload: { enabled: false, s3: EMPTY_S3 } } });
+                    await updateServerSettings({ backups: { upload: { enabled: false, s3: CLEARED_S3 } } });
                 }
             },
             JOB_TIMEOUT_MS,

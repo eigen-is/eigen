@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
+import { EMPTY_S3 } from '@workspace/lib/types/mount';
 import type { BunFile } from 'bun';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import type Drive from '../lib/drive/drive';
@@ -148,6 +149,9 @@ export const DUMMY_S3: S3Config = {
     region: 'us-east-1',
     prefix: '',
 };
+
+// Settings merge deeply, so storing EMPTY_S3 over DUMMY_S3 keeps its region; this one clears it.
+export const CLEARED_S3 = { ...EMPTY_S3, region: undefined };
 
 // A distinct bucket per id gives each mount its own destination semaphore (matching the
 // per-destination design); mounts given one bucket share it, as every default mount shares the server's.
