@@ -165,28 +165,18 @@ export async function snapshotMountData(
         }
         gone.add(top);
     }
-    const removed = new Set<string>();
     if (gone.size > 0) {
         const db = new Database(metadataPath, { readwrite: true, create: false });
         try {
-            // As a live delete: its file events and watchers cascade, and the triggers clear its search rows.
+            // As a live delete: its children, file events and watchers cascade, and the triggers clear its search rows.
             db.run('PRAGMA foreign_keys = ON');
-            const remove = db.query<{ id: string }, [string]>(
-                `WITH RECURSIVE subtree(id) AS (SELECT ?1 UNION SELECT paths.id FROM paths JOIN subtree ON paths.parentId = subtree.id)
-                 DELETE FROM paths WHERE id IN subtree RETURNING id`,
-            );
-            db.transaction(() => {
-                for (const id of gone) for (const row of remove.all(id)) removed.add(row.id);
-            })();
+            db.run('DELETE FROM paths WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify([...gone])]);
         } finally {
             db.close();
         }
     }
-    return {
-        entries,
-        databases,
-        pathIds: new Set(fileRows.filter((row) => !removed.has(row.id)).map((row) => row.id)),
-    };
+    const kept = gone.size > 0 ? readArchivedRows(metadataPath) : rows;
+    return { entries, databases, pathIds: new Set(kept.filter((row) => row.type === 'file').map((row) => row.id)) };
 }
 
 // A metadata-only capture of an s3 mount reads no object, so an open document's newest commits reach
