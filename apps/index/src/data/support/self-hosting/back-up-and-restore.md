@@ -9,7 +9,7 @@ order: 90
 updated: 2026-10-01
 ---
 
-Eigen backs up the whole server while it runs: every account's mail, files, contacts, and calendars, the settings, the server databases, `.env.production`, the key that signs your mail, and the mail server's certificate. Nobody is signed out and nothing stops. This page shows how to back up every night, how to keep a copy off the server, and what a backup leaves out. To put one back, go to [Put a backup back](#put-a-backup-back).
+Eigen backs up the whole server while it runs: every account's mail, files, contacts, and calendars, the settings, the server databases, `.env.production`, the key that signs your mail, and the mail server's certificate. Nobody is signed out and nothing stops: only a rename or move on a drive, and the saves and uploads on that drive after it, can wait while the backup copies one very large file there. This page shows how to back up every night, how to keep a copy off the server, and what a backup leaves out. To put one back, go to [Put a backup back](#put-a-backup-back).
 
 ## Back up every night
 
