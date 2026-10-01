@@ -255,7 +255,8 @@ function isServerArchiveManifest(value: unknown): value is ServerArchiveManifest
         typeof value.envFile === 'boolean' &&
         'dkim' in value &&
         typeof value.dkim === 'boolean' &&
-        (!('certs' in value) || typeof value.certs === 'boolean') &&
+        'certs' in value &&
+        typeof value.certs === 'boolean' &&
         'images' in value &&
         isStringRecord(value.images)
     );

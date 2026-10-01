@@ -817,6 +817,7 @@ describe('Archive writer and reader', () => {
         orphans: [],
         envFile: false,
         dkim: false,
+        certs: false,
         images: {},
     };
     let dir: string;

@@ -49,8 +49,7 @@ export type BackupReason = 'scheduled' | 'manual' | 'pre-update';
 // The last member of a whole-server archive. `entries` lists every other member of the outer tar,
 // so the archive is checked member by member without unpacking one. A home whose capture failed
 // has no `member` and says why in `failed`; `bytes` is its inner manifest's `counts.bytes`.
-// `envFile`, `dkim` and `certs` say whether those members are in it: each can be unreadable to the API. An archive
-// from before certs were archived has no `certs`.
+// `envFile`, `dkim` and `certs` say whether those members are in it: each can be unreadable to the API.
 export type ServerArchiveManifest = {
     formatVersion: 1;
     level: BackupLevel;
@@ -73,7 +72,7 @@ export type ServerArchiveManifest = {
     orphans: string[];
     envFile: boolean;
     dkim: boolean;
-    certs?: boolean;
+    certs: boolean;
     // The pinned image references the install ran, for display.
     images: Record<string, string>;
 };

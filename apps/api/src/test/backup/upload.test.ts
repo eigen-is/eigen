@@ -92,6 +92,7 @@ function manifestOf(reason: BackupReason, at: string, state: 'done' | 'failed') 
         orphans: [],
         envFile: true,
         dkim: true,
+        certs: true,
         images: {},
     };
 }

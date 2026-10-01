@@ -200,7 +200,7 @@ async function stageHome(
     const { folder, manifest } = readUnpackedHome(unpacked, home.ownerId, home.member);
     requireVerified(await verifyFolder(folder), home.member);
     // The swap goes by the outer level: a light home under a full one would replace a home with no files.
-    const level = manifest.level ?? 'full-s3';
+    const { level } = manifest;
     if (level !== archive.manifest.level) {
         throw new ApiError(400, `${home.member} is a ${level} capture in a ${archive.manifest.level} archive`);
     }
