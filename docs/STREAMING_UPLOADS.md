@@ -6,7 +6,7 @@
 
 The route declares `parse: 'none'`, so Elysia leaves the request body alone and `Drive.uploadFiles` hands it to the parser. The client appends every file as a `file` field of one `FormData` and posts it once, with XHR for progress in the upload dialog. Before any byte is read, the route computes the size limit with `getUploadMaxSize` ([QUOTA.md](QUOTA.md)). A mount that is already full answers 507 without reading the body.
 
-Mail draft attachments (`MailDomain.uploadDraftAttachment`) use the same parser.
+Mail draft attachments (`Mail.uploadDraftAttachment`, `apps/api/src/lib/mail/mail-domain.ts`) use the same parser.
 
 ## Each file part streams to a temp file
 
