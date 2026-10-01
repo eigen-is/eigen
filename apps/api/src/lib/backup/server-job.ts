@@ -79,7 +79,13 @@ async function serverMemberBytes(): Promise<number> {
 // it, at most twice the largest. A home that cannot be sized is its capture's to judge.
 async function requireRoom(level: BackupLevel, homes: ServerHome[]): Promise<void> {
     const sizes = [await serverMemberBytes()];
-    for (const home of homes) sizes.push(await pullHomeBackupBytes(home.ownerId, level).catch(() => 0));
+    for (const home of homes) {
+        const bytes = await pullHomeBackupBytes(home.ownerId, level).catch((error) => {
+            console.warn(`[backup] ${home.ownerId} could not be sized for the room check: ${describeError(error)}`);
+            return 0;
+        });
+        sizes.push(bytes);
+    }
     const needed = 2 * Math.max(...sizes) + sizes.reduce((sum, bytes) => sum + bytes, 0);
     const shortfall = roomShortfall(`A ${level} backup`, needed, getBackupsDir(), 'the backups folder');
     if (shortfall) throw new ApiError(507, shortfall);
