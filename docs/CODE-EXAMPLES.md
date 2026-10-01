@@ -1,6 +1,6 @@
 # Code Examples
 
-> **TLDR**: The long-form companion to [CODE-STANDARDS.md](CODE-STANDARDS.md): the review hot spots with BAD/GOOD code, the worked examples behind the key patterns, and exactly what `bun scripts/check-standards.ts` measures. CODE-STANDARDS.md carries the rules; this file carries the examples and the gate's metric list.
+> **TLDR:** The long-form companion to [CODE-STANDARDS.md](CODE-STANDARDS.md), which carries the rules: the review hot spots with BAD/GOOD code, the worked examples behind the key patterns, and exactly what `bun scripts/check-standards.ts` measures.
 
 ## Review Hot Spots
 
@@ -31,8 +31,8 @@ home.notifications.persist({ type: 'chat:message', userId: user.id, ... });
 
 BAD: defensive code around trusted internals:
 ```typescript
-const path = await drive.getPath(mountId, pathId);
-if (!path) throw new ApiError(404, 'Path not found'); // getPath already throws
+const { path } = await drive.resolveFile(mountId, pathId);
+if (!path) throw new ApiError(404, 'Path not found'); // resolveFile already throws
 try {
     await drive.deletePath(mountId, pathId);
 } catch (error) {
@@ -43,8 +43,8 @@ try {
 
 GOOD: trust the type system and let errors propagate:
 ```typescript
-const path = await drive.getPath(mountId, pathId); // throws ApiError(404) if missing
-await drive.deletePath(mountId, pathId);            // errors bubble to Elysia handler
+const { path } = await drive.resolveFile(mountId, pathId); // throws ApiError(404) if missing or trashed
+await drive.deletePath(mountId, pathId);                    // errors bubble to Elysia handler
 ```
 
 Only use try-catch for: (1) fire-and-forget where failure is acceptable, (2) external integrations, (3) cleanup that must run regardless. Never re-wrap ApiError.
@@ -204,7 +204,7 @@ The mechanical rules in [CODE-STANDARDS.md](CODE-STANDARDS.md) are enforced, not
 Seven are hard zeros, and any hit fails: `"use client"` directives, imports reaching past a package barrel (`@workspace/lib/core/…`, `@workspace/lib/src/…`, `@workspace/ui/src/…`, extension-suffixed specifiers), `export type` re-exports from a `packages/lib/src/core/**/index.ts` barrel, and `useQuery`/`useMutation`/`useInfiniteQuery`/`toast.error`/`toast.success` calls in an app outside a `hooks/` folder, plus three rules that enforce conventions this prose states:
 
 - **Non-canonical `application/eigen…` MIMEs**: the canonical six are read out of the `DRIVE_MIME_*` constants in `packages/lib/src/types/drive.ts` at run time, so a seventh document type needs no second list. Catches `eigenslide` for `eigenslides` and `eigensheet` for `eigensheets`. The `application/eigen-*` wire formats (drag, clipboard) are a different family and are not document MIMEs
-- **Authenticated routes without `:ownerId` second**: every `{ auth: true }` route in `apps/api/src/routes/` must carry `:ownerId` as its second path segment. Unauthenticated routes answer to no Home and are skipped; the home-independent files (`setup.ts`, `settings.ts`, `waitlist.ts`, `public.ts`, `backup.ts`) are exempt in one list in the script; `/ws` counts as a transport prefix, not a segment
+- **Authenticated routes without `:ownerId` second**: every `{ auth: true }` route in `apps/api/src/routes/` must carry `:ownerId` as its second path segment. Unauthenticated routes answer to no Home and are skipped; the home-independent route files are exempt in one list in the script, `OWNER_ID_EXEMPT`; `/ws` counts as a transport prefix, not a segment
 - **Hover-revealed affordances without touch**: a hiding utility (`invisible`, `hidden`, `opacity-0`) plus a revealing `group-hover:` in the same class string needs the matching `pointer-coarse:` variant, because touch has no hover. A decorative `group-hover:scale-105` reveals nothing and does not count, and `pointer-fine:group-hover:` declares the hover desktop-only on purpose
 
 The other five ratchet: `as Type` casts, `interface` declarations (module augmentation excepted, since it only merges through interfaces), `biome-ignore` suppressions, JSDoc blocks, and raw Tailwind color utilities. Their allowance lives in `scripts/standards-baseline.json`, so a count can fall but never rise. After a cleanup run `bun run standards:update` to write the new, lower numbers; the script refuses to raise a baseline. `bun run standards -- --verbose` prints the per-file breakdown.
