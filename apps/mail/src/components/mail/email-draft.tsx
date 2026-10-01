@@ -1,4 +1,5 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
+import { wasToasted } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import { checkPathAccess } from '@workspace/lib/drive';
@@ -340,7 +341,13 @@ export function EmailDraft({
             setConfirmNoSubject(true);
             return;
         }
-        await sendWithFreshDraft();
+        // A rejected send was toasted by its hook and the draft stays open; the dialog entry points
+        // need the rejection to stay open, so only this one swallows it.
+        try {
+            await sendWithFreshDraft();
+        } catch (error) {
+            if (!wasToasted(error)) throw error;
+        }
     };
 
     // ⌘/Ctrl+Enter sends from subject, recipients, or body. Mod+Enter is a modifier

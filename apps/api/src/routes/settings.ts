@@ -39,6 +39,13 @@ import {
 // `ne(user.role, 'guest')` alone excludes NULL-role orphans in SQLite, so OR in isNull.
 const nonGuestUsers = () => or(isNull(user.role), ne(user.role, 'guest'));
 
+// t.Integer is a union with a numeric string, whose default 422 dumps both branches; `error` replaces it.
+const backupKeepSchema = t.Integer({
+    minimum: 1,
+    maximum: BACKUP_KEEP_MAX,
+    error: `Backups to keep must be a whole number from 1 to ${BACKUP_KEEP_MAX}`,
+});
+
 export const settingsRouter = new Elysia({ name: 'settings' })
     .use(betterAuth)
 
@@ -166,16 +173,22 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                         schedule: t.Optional(
                             t.Object({
                                 enabled: t.Optional(t.Boolean()),
-                                hourUtc: t.Optional(t.Integer({ minimum: 0, maximum: 23 })),
+                                hourUtc: t.Optional(
+                                    t.Integer({
+                                        minimum: 0,
+                                        maximum: 23,
+                                        error: 'The backup hour must be a whole number from 0 to 23',
+                                    }),
+                                ),
                                 withS3: t.Optional(t.Boolean()),
-                                keep: t.Optional(t.Integer({ minimum: 1, maximum: BACKUP_KEEP_MAX })),
+                                keep: t.Optional(backupKeepSchema),
                             }),
                         ),
                         upload: t.Optional(
                             t.Object({
                                 enabled: t.Optional(t.Boolean()),
                                 s3: t.Optional(s3DestinationBody),
-                                keep: t.Optional(t.Integer({ minimum: 1, maximum: BACKUP_KEEP_MAX })),
+                                keep: t.Optional(backupKeepSchema),
                             }),
                         ),
                     }),

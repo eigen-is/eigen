@@ -8,7 +8,7 @@ This doc governs every toast in the apps: who raises it and where its words come
 
 Every `useMutation` in `packages/lib/src/core/[domain]/hooks/` hands its error to `onMutationError` (`packages/lib/src/core/api-error.ts`), which calls `toast.error(getErrorMessage(error))`. An optimistic mutation rolls its cache back first and then calls it. One place owns the wording, so every app says the same thing for the same failure.
 
-`AppError` keeps the HTTP status of an Eden response, so the toast reads as a message and its status, like "Too large (413)". The message comes from the response body: a plain string (what every `ApiError` returns), else its `message`, else its `summary`, else the first `errors` entry. A body with none of those falls back to a phrase for the status, because Elysia strips a validation error down to `{ type, on, found }` in production, and `String()` on that reads as `[object Object]`.
+`AppError` keeps the HTTP status of an Eden response, so the toast reads as a message and its status, like "Too large (413)". The message comes from the response body: a plain string (what every `ApiError` returns), else its `message`, else its `summary`, else the first `errors` entry. A body with none of those falls back to a phrase for the status, because Elysia strips a validation error down to `{ type, on, found }` in production, and `String()` on that reads as `[object Object]`. A schema field with an `error` option answers that string instead, in production too, so a route whose 422 a person may read names the field and its range there (the backup settings' `keep` and `hourUtc`).
 
 ## Apps never catch a mutation error to toast it
 

@@ -134,6 +134,17 @@ describe('owner-only settings', () => {
             }
         });
 
+        test('a keep or hour out of range answers a message that names the field and its range', async () => {
+            for (const backups of [{ schedule: { keep: 0 } }, { upload: { keep: 400 } }]) {
+                const res = await putBackups(ctx.alice.user.sessionToken, backups);
+                expect(res.status).toBe(422);
+                expect(await res.text()).toBe('Backups to keep must be a whole number from 1 to 365');
+            }
+            const res = await putBackups(ctx.alice.user.sessionToken, { schedule: { hourUtc: 24 } });
+            expect(res.status).toBe(422);
+            expect(await res.text()).toBe('The backup hour must be a whole number from 0 to 23');
+        });
+
         test('an admin cannot change them', async () => {
             const res = await putBackups(admin.sessionToken, { schedule: { enabled: true } });
             expect(res.status).toBe(403);
