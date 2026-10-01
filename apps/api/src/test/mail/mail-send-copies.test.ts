@@ -391,6 +391,18 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         expect(sent.length).toBe(0);
     });
 
+    test('a send with no recipients is rejected with 400', async () => {
+        startCapture();
+        const res = await sendMailBody({
+            subject: 'Nobody',
+            to: { value: [], text: '' },
+            text: 'hi',
+            html: '<p>hi</p>',
+        });
+        expect(res.status).toBe(400);
+        expect(sent.length).toBe(0);
+    });
+
     test('an empty-subject send with a body goes out with an empty Subject, not a placeholder', async () => {
         startCapture();
         const res = await sendMailBody({

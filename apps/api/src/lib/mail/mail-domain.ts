@@ -561,6 +561,7 @@ export class Mail {
         if (!message.subject.trim() && !message.text.trim() && !message.html && !refs.length) {
             throw new ApiError(400, 'Cannot send email with empty subject and body');
         }
+        if (!allRecipients.length) throw new ApiError(400, 'Add at least one recipient');
 
         // A demo box has no MTA: fail loudly rather than pretend to send, with the message kept in Drafts.
         if (isDemo()) {
