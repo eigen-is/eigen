@@ -16,7 +16,7 @@ The home is on disk rather than in memory so it reuses Drive and NotificationCen
 | No mail, contacts or calendar | The services are absent, and `requireNonGuest()` guards every mail, contacts and calendar route |
 | No org or team membership | Guest creation skips the auth hooks, and `authEnsureDefaultOrgMembership` skips guests on sign-in |
 | No admin          | Admin checks read the org role, and a guest has none       |
-| No sharing or access requests | `requireNonGuest()` on the ACL route, the chat `/invite` route, the mail `access-check` and `request-access` |
+| No sharing or access requests | `requireNonGuest()` on the ACL route, the chat `/invite` route, the drive `access-check` and `request-access` |
 | Read/write per ACL| SharedDrive enforces the entries the owner set             |
 
 A calendar invitation treats a guest like an external address: an iMIP mail and a registry entry, no in-app copy (`invite-propagation.ts`, [CALENDAR.md § The organizer's writes fan out](CALENDAR.md#the-organizers-writes-fan-out-and-only-the-organizers)). A guest answers from their own mail, which reaches the organizer through [inbound iMIP](CALENDAR.md#inbound-imip-acts-only-on-a-sender-our-own-mta-verified). The home relay skips calendar messages for a home without a calendar (`hasCalendar`), and reconciliation skips the calendar steps, so no calendar push crashes on a `GuestHome`.
@@ -110,9 +110,9 @@ A guest whose home is loaded (`atHome(userId)`) is skipped, to protect an in-fli
 
 The sweep calls `deleteUserCompletely(userId, null)`, the system mode that goes through better-auth's internal adapter instead of its admin API. The teardown is the same as any deletion, and the registry entries addressed to the guest stay.
 
-## Admins see guests on two pages
+## Guests have two Admin pages, and one is the org owner's
 
-The Admin app has **Guest access** (`/guest-settings`), with the `guests.openSignup` toggle and the `guests.inactivityDays` threshold, and **Guests** (`/guests`), every `role: 'guest'` account from `GET /settings/users/guests` with a detail view and delete. Guest access is the owner's page ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#the-owner-holds-server-settings-and-admins-manage-people)). No endpoint turns a guest into a regular user ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)).
+The Admin app has two guest pages. **Guests** (`/guests`) is every admin's: every `role: 'guest'` account from `GET /settings/users/guests`, with a detail view and delete. **Guest access** (`/guest-settings`) holds the `guests.openSignup` toggle and the `guests.inactivityDays` threshold, and only the org owner sees it, because it is server settings ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#the-owner-holds-server-settings-and-admins-manage-people)). No endpoint turns a guest into a regular user ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)).
 
 ## See also
 
