@@ -18,16 +18,7 @@ import {
     parseServerArchiveSidecar,
     SERVER_ARCHIVE_EXTENSION,
 } from '@workspace/lib/validation';
-import { getEnvFile } from '../config/env';
-import {
-    CERTS_DIR,
-    DKIM_DIR,
-    getDataRoot,
-    getServerDataPath,
-    ORG_HOMES_DIR,
-    SERVER_DATABASES,
-    SERVER_FILES,
-} from '../config/paths';
+import { getDataRoot, getServerDataPath, ORG_HOMES_DIR, SERVER_DATABASES, SERVER_FILES } from '../config/paths';
 import { API_IMAGE_KEY, PIN_KEYS } from '../config/release';
 import { getPublicConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
@@ -190,11 +181,7 @@ async function writeServerArchive(
             summaries.push(await appendHome(writer, home, { at, level, staging, onProgress: homeProgress }));
         }
 
-        const install = await appendInstallFiles(writer, {
-            envFile: getEnvFile(),
-            dkimDir: path.join(getDataRoot(), DKIM_DIR),
-            certsDir: path.join(getDataRoot(), CERTS_DIR),
-        });
+        const install = await appendInstallFiles(writer);
         const config = getPublicConfig();
         const manifest = await writer.finish({
             formatVersion: BACKUP_FORMAT_VERSION,

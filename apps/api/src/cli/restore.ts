@@ -25,7 +25,13 @@ import { buildBackupStamp, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation'
 import { copyArchiveMember } from '../lib/backup/archive';
 import { isLightSkipped } from '../lib/backup/archive-layout';
 import { describeError } from '../lib/backup/errors';
-import { backupsDirPath, roomShortfall, SERVER_ARCHIVE_ENV_MEMBER, STAGING_DIR } from '../lib/backup/paths';
+import {
+    backupsDirPath,
+    INSTALL_FOLDERS,
+    roomShortfall,
+    SERVER_ARCHIVE_ENV_MEMBER,
+    STAGING_DIR,
+} from '../lib/backup/paths';
 import {
     type NotReplayed,
     RESTORING_DATA_DIR,
@@ -38,8 +44,6 @@ import { describeFailures, readServerArchive } from '../lib/backup/verify';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
 import { getEnvFile } from '../lib/config/env';
 import {
-    CERTS_DIR,
-    DKIM_DIR,
     getDataRoot,
     homeDirUnder,
     ORG_HOMES_DIR,
@@ -354,7 +358,7 @@ function planLight(
 ): { renames: [string, string][]; merged: string[] } | { conflict: string } {
     const renames: [string, string][] = [];
     const merged: string[] = [];
-    for (const top of [SERVER_DIR, ORG_HOMES_DIR, DKIM_DIR, CERTS_DIR]) {
+    for (const top of [SERVER_DIR, ORG_HOMES_DIR, ...INSTALL_FOLDERS.map((folder) => folder.dir)]) {
         if (!existsSync(join(staged, top))) continue;
         if (lexists(join(DATA, top))) renames.push([join(DATA, top), join(aside, top)]);
         renames.push([join(staged, top), join(DATA, top)]);
@@ -557,7 +561,7 @@ async function swap(): Promise<void> {
     } else {
         // An archive without the DKIM key or the TLS certificate keeps the one here: mail would sign with a key DNS
         // does not publish, and serve IMAP and SMTP with a self-signed certificate.
-        for (const top of [DKIM_DIR, CERTS_DIR]) {
+        for (const { dir: top } of INSTALL_FOLDERS) {
             if (!existsSync(join(stagedData, top)) && existsSync(join(DATA, top))) {
                 cpSync(join(DATA, top), join(stagedData, top), { recursive: true });
             }

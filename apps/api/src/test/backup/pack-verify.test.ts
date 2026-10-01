@@ -609,6 +609,9 @@ describe('Whole-server archive', () => {
     const at = new Date(Math.floor(Date.now() / 1000) * 1000);
     const DKIM_FILES = ['eigen.private', 'eigen.txt'];
     const CERT_FILES = ['cert.pem', 'key.pem'];
+    // appendInstallFiles reads the install's own folders under the data root.
+    const dkimDir = join(TEST_DATA_DIR, 'dkim');
+    const certsDir = join(TEST_DATA_DIR, 'certs');
     let dir: string;
     let archivePath: string;
     let manifest: ServerArchiveManifest;
@@ -646,15 +649,14 @@ describe('Whole-server archive', () => {
 
             const envFile = join(dir, 'env.production');
             writeFileSync(envFile, 'DOMAIN=test.eigen.is\n');
-            const dkimDir = join(dir, 'dkim-source');
-            mkdirSync(dkimDir);
+            process.env['EIGEN_ENV_FILE'] = envFile;
+            mkdirSync(dkimDir, { recursive: true });
             for (const name of DKIM_FILES) writeFileSync(join(dkimDir, name), `${name} bytes`);
-            const certsDir = join(dir, 'certs-source');
-            mkdirSync(certsDir);
+            mkdirSync(certsDir, { recursive: true });
             for (const name of CERT_FILES) writeFileSync(join(certsDir, name), `${name} bytes`);
             // A temp file of a certificate being swapped in is not the certificate.
             writeFileSync(join(certsDir, 'key.pem.tmp'), 'half a key');
-            const install = await appendInstallFiles(writer, { envFile, dkimDir, certsDir });
+            const install = await appendInstallFiles(writer);
             expect(install).toEqual({ envFile: true, dkim: true, certs: true });
 
             manifest = await writer.finish({
@@ -671,6 +673,9 @@ describe('Whole-server archive', () => {
             });
         } finally {
             await writer.abort();
+            delete process.env['EIGEN_ENV_FILE'];
+            rmSync(dkimDir, { recursive: true, force: true });
+            rmSync(certsDir, { recursive: true, force: true });
         }
     }, PACK_TIMEOUT_MS);
 
@@ -782,17 +787,20 @@ describe('Whole-server archive', () => {
         const envFile = join(dir, 'unreadable.env');
         writeFileSync(envFile, 'SECRET=1\n');
         chmodSync(envFile, 0o000);
+        process.env['EIGEN_ENV_FILE'] = envFile;
         // A certificate without its key restores nothing.
-        const certsDir = mkdtempSync(join(TEST_DATA_DIR, 'certs-unreadable-'));
+        mkdirSync(certsDir, { recursive: true });
         for (const name of CERT_FILES) writeFileSync(join(certsDir, name), `${name} bytes`);
         chmodSync(join(certsDir, 'key.pem'), 0o000);
         const writer = await createArchiveWriter(small);
         try {
-            const install = await appendInstallFiles(writer, { envFile, dkimDir: join(dir, 'no-dkim'), certsDir });
+            const install = await appendInstallFiles(writer);
             expect(install).toEqual({ envFile: false, dkim: false, certs: false });
             await writer.finish({ ...manifest, ...install });
         } finally {
             await writer.abort();
+            delete process.env['EIGEN_ENV_FILE'];
+            rmSync(certsDir, { recursive: true, force: true });
         }
         expect((await readArchiveMembers(small)).map((member) => member.name)).toEqual(['manifest.json']);
     });
