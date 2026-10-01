@@ -12,6 +12,7 @@ import { Mount } from '../../lib/mount/mount';
 import {
     assertJson,
     authedRequest,
+    chatPost,
     createTestUser,
     driveDelete,
     driveGetList,
@@ -326,4 +327,31 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
             expect(res.status).toBe(200);
         }
     }, 120_000);
+});
+
+describe('a chat whose version is restored during the backup', () => {
+    for (const storageType of ['local-fullnames', 'local-id'] as const) {
+        test(`reopens with its messages after a restore, on ${storageType}`, async () => {
+            const user = await raceUser(storageType);
+            const t = user.sessionToken;
+            const { root } = await seed(user);
+            const chat = await drivePost(t, user.id, M, `folder/${root.id}/create/chat`, { fileName: 'Talk' });
+            await chatPost(t, user.id, M, `${chat.id}/messages`, { content: 'v1' });
+            const saved = await assertJson<DrivePath>(
+                await authedRequest(t, `/drive/${user.id}/${M}/file/${chat.id}/versions/save`, { method: 'POST' }),
+            );
+            await chatPost(t, user.id, M, `${chat.id}/messages`, { content: 'v2' });
+            const job = await backupDuring(user, () =>
+                authedRequest(t, `/drive/${user.id}/${M}/file/${chat.id}/versions/${saved.name}/restore`, {
+                    method: 'POST',
+                }),
+            );
+            expect(job.state).toBe('done');
+            await restoreHome(job.artifact!, user.id, `race-${Date.now()}`);
+            const res = await authedRequest(t, `/chat/${user.id}/${M}/${chat.id}/messages`);
+            expect(res.status).toBe(200);
+            const messages = await assertJson<{ content: string }[]>(res);
+            expect(messages.map((message) => message.content)).toContain('v1');
+        }, 120_000);
+    }
 });
