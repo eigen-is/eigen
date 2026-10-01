@@ -1,6 +1,8 @@
 # Code Standards
 
-Code style and conventions. Architecture and file locations: [ARCHITECTURE.md](ARCHITECTURE.md). The reasoning and BAD/GOOD code behind every section here, plus the gate's metric list: [CODE-EXAMPLES.md](CODE-EXAMPLES.md).
+These are the rules for how code in Eigen is written: typing, style, imports, the patterns every hook and route follows, and the checklist a change passes before anyone calls it done. Read them before you write code, whether you are a person or an agent, and expect a reviewer to judge your change against them ([REVIEW-STANDARD.md](REVIEW-STANDARD.md)). The idea behind all of them is that new code looks like the code next to it.
+
+The rules are kept short on purpose. The reasoning and the BAD/GOOD code behind each section live in [CODE-EXAMPLES.md](CODE-EXAMPLES.md), under the same heading, and where files go is in [ARCHITECTURE.md](ARCHITECTURE.md). The rules a machine can count are enforced by Biome and a standards script, as [Standards Gates](#standards-gates) explains.
 
 ## Code Philosophy
 

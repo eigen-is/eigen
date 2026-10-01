@@ -2,6 +2,8 @@
 
 > **TLDR:** The long-form companion to [CODE-STANDARDS.md](CODE-STANDARDS.md), which carries the rules: the review hot spots with BAD/GOOD code, the worked examples behind the key patterns, and exactly what `bun scripts/check-standards.ts` measures.
 
+Open a section here when a rule in CODE-STANDARDS.md is not obvious, or when a review points at one of the hot spots. Each section carries the name of the CODE-STANDARDS.md section it explains. A rule itself changes in CODE-STANDARDS.md, and this file follows it.
+
 ## Review Hot Spots
 
 These six slips recur in review here. Each shows the shape to avoid and the shape this codebase uses.

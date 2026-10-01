@@ -4,6 +4,8 @@ Eigen started as a solo project. I wanted to see how far one person could get bu
 
 If you're curious about how this started, I wrote about it here: [Eigen: Building a Workspace](https://reindernijhoff.net/2025/10/eigen-building-a-workspace/).
 
+This page covers the ways you can help, how to get Eigen running on your own machine, and where to start reading the code.
+
 ## Current state
 
 A lot has happened since that first blog post. Mail, Drive, Docs, Sheets, Slides, Stickies, Calendar, Contacts, Chat, and an Admin panel are all working. Real-time collaboration, CalDAV sync, file sharing, document export, passkey login. It's a real thing now.

@@ -2,6 +2,8 @@
 
 > **TLDR:** The sheet grid is one HTML5 canvas under a stack of React DOM overlays. The canvas paints cells, gridlines, borders and the cell glyphs, and redraws at most once per animation frame. Everything a user clicks or types into (the headers, the selection, the cell editor, images, cards) is React DOM over the canvas, in pane regions that scroll and clip in step with it. The browser does the scrolling natively, and the workbook surface stays light in dark mode. What the grid's data means, and why its glyphs behave as they do, is in [SHEETS.md](../../docs/SHEETS.md).
 
+These are the rendering notes of `packages/sheet`, Eigen's fork of fortune-sheet. Read them before you change how cells paint, where an overlay lines up with the canvas, or how the grid scrolls. The sections start with the component tree and the technology each layer uses, then walk the layers from the canvas up, and end with scrolling, the z-index stack and the patterns that keep a redraw cheap.
+
 The fork's class and id prefix is `sheet-`. One engine-private class keeps a bare name, `header-arrow` (`ColumnHeader`), and so do the engine's bare ids: `link-text`/`-type`/`-address`/`-cell`/`-sheet`, `searchFormulaListInput`, `checkTextColor`, `checkCellColor`, and the screen-reader nodes `sr-selection`, `sr-sheetFocus`, `shortcut-list`, `shortcuts-heading`. So grepping `sheet-` does not list the whole DOM contract. `sheet-copy-action-table` is a different kind of exception: a clipboard wire format rather than a style hook, and it lives in one constant (`COPY_ACTION_TABLE_MARKER`).
 
 ## Component Tree

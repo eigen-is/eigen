@@ -1,6 +1,6 @@
 # Sheets: TODO
 
-Single source of truth for all remaining sheets work (`packages/sheet`, `apps/sheets`, xlsx import/export, sheets clipboard). Direction: behave like Excel/Google Sheets wherever the two agree.
+This is the backlog for sheets: all remaining work on `packages/sheet`, `apps/sheets`, xlsx import and export, and the sheets clipboard, in one place. [SHEETS.md](SHEETS.md) describes how sheets work today and links here for each gap it names. The rest of Eigen's open work is in [ROADMAP.md](ROADMAP.md). The direction for every item: behave like Excel and Google Sheets wherever the two agree.
 
 Line numbers drift; confirm them against the code. Items that are already fixed, were never accurate, or are not worth doing are listed under [Closed / dropped](#closed--dropped) with the reason, so they don't get re-added.
 
