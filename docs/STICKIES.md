@@ -2,9 +2,17 @@
 
 > **TLDR:** A collaborative Kanban board in `apps/stickies/src/components/stickies/`, stored as an `.eigenstickies` Drive folder whose Yjs doc is the source of truth. The board owns only columns and their order: a card is the shared `CommentCard` with its own chat, so most of the board is the comment machinery. Three things are not obvious. Stickies data stays readable in every shape that ever shipped. A concurrent merge can put a card in two columns or none, so a shared repair ranks columns by `columnOrder`. A drag writes to Yjs once, on drop.
 
+A Stickies board is a file in Drive with columns of cards, which people drag from column to column as work moves along. Everyone the file is shared with can open it at the same time and sees the others' changes live, with an outline on the card someone is editing or dragging.
+
+A board is a collab document, like a doc, a sheet or a slide deck, so it runs on the same Yjs backend ([COLLAB.md](COLLAB.md)). Yjs is a library for shared data that merges concurrent edits. The `.eigenstickies` file is a container, a Drive folder named like a file. Its `data.db` keeps the board's Yjs updates and snapshots, and one WebSocket per open board relays every change to the other peers. Saving, live sync, presence, access checks and version history all come from that shared code through `useCollabDoc`. Stickies only decides what goes into the doc.
+
+A card is a comment, the same record the comments pane shows in a doc or a sheet ([COMMENTS.md](COMMENTS.md)). It has the same title, description, color, attachments and creator, and the same hooks and dialogs open, edit, resolve and assign it. Two things differ. The cards live in a Yjs map called `tasks`, where the other apps use `comments`. And a card is anchored by a column that lists its id, where a doc comment hangs on a run of text.
+
+Each comment, and so each card, gets its own chat for its replies. That chat is an `.eigenchat` room in the board's `chat/` folder, with its own database of messages, served by the chat routes like any other room ([CHAT.md](CHAT.md#a-chat-inside-a-document-is-a-comment-thread)). The card holds only the room's name. A card's status and assignee are not in Yjs. The server keeps them in the board's `comments.db`.
+
 ## The Yjs doc is the source of truth
 
-Every change goes into the Yjs doc first. Observers then rebuild the React state (`hooks/use-board.ts` for columns, the shared comment hooks for cards), so a local edit and a peer's edit take the same path to the screen. Peers sync through the shared `useCollabDoc` ([COLLAB.md](COLLAB.md)). The doc has three roots:
+Every change goes into the Yjs doc first. Observers then rebuild the React state (`hooks/use-board.ts` for columns, the shared comment hooks for cards), so a local edit and a peer's edit take the same path to the screen. The doc has three roots:
 
 ```
 Y.Map            "tasks"        cardId → Y.Map { id, title, description, color?, chatName?, creator?, createdAt?, attachments? }
