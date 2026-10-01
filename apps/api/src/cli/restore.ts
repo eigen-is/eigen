@@ -20,7 +20,7 @@ import {
 import { basename, dirname, join, relative } from 'node:path';
 import type { parseArgs } from 'node:util';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
-import type { BackupLevel } from '@workspace/lib/types/backup';
+import { BACKUP_LEVELS, type BackupLevel } from '@workspace/lib/types/backup';
 import { buildBackupStamp } from '@workspace/lib/validation';
 import { copyArchiveMember } from '../lib/backup/archive';
 import { isLightSkipped } from '../lib/backup/archive-layout';
@@ -156,14 +156,56 @@ function lightWalk(root: string): Held[] {
     return held;
 }
 
+function isStagedRestore(value: unknown): value is StagedRestore {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'archive' in value &&
+        typeof value.archive === 'string' &&
+        'level' in value &&
+        BACKUP_LEVELS.some((level) => level === value.level) &&
+        'appVersion' in value &&
+        typeof value.appVersion === 'string'
+    );
+}
+
+function isPaths(value: unknown): value is string[] {
+    return Array.isArray(value) && value.every((path) => typeof path === 'string');
+}
+
+function isMoves(value: unknown): value is [string, string][] {
+    return Array.isArray(value) && value.every((move) => isPaths(move) && move.length === 2);
+}
+
+function isRestoreSwap(value: unknown): value is RestoreSwap {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        'archive' in value &&
+        typeof value.archive === 'string' &&
+        'copies' in value &&
+        isMoves(value.copies) &&
+        'renames' in value &&
+        isMoves(value.renames) &&
+        'aside' in value &&
+        isPaths(value.aside) &&
+        'leftover' in value &&
+        typeof value.leftover === 'string' &&
+        'env' in value &&
+        typeof value.env === 'boolean'
+    );
+}
+
 // Records this CLI wrote. A stage cut off mid-write leaves a torn staged.json, which is nothing staged; the marker is
-// written whole or not at all, and one that does not read stops the swap.
-function readRecord<T>(file: string): T | null {
+// written whole or not at all, and one that does not read stops the swap. One of another shape reads as neither.
+function readRecord<T>(file: string, is: (value: unknown) => value is T): T | null {
+    let value: unknown;
     try {
-        return JSON.parse(readFileSync(file, 'utf8'));
+        value = JSON.parse(readFileSync(file, 'utf8'));
     } catch {
         return null;
     }
+    return is(value) ? value : null;
 }
 
 async function stage(archive: string | undefined, flags: Flags): Promise<void> {
@@ -306,13 +348,35 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
     }
 }
 
-function staged(): void {
+// The swap is renames: a linked data/ would move the link, and one on another disk cannot be renamed. The check of
+// each rename in swap() misses a Full swap's second: its source is only there once data/ moved aside.
+function requireRenamable(ui: Ui, archive: string): void {
+    const data = lstatSync(DATA);
+    if (data.isSymbolicLink() || data.dev !== statSync('.').dev) {
+        ui.fail(
+            'Restore needs data/ as a folder inside the install folder.',
+            'Move the data into data/ here, then run ./eigen restore again.',
+        );
+    }
+    const stagedData = join(DATA, RESTORING_DIR, RESTORING_DATA_DIR);
+    const tree = lstatSync(stagedData, { throwIfNoEntry: false });
+    if (tree && tree.dev !== data.dev) {
+        ui.fail(
+            `${archive} cannot be swapped in: ${stagedData} is on another disk than ${DATA}.`,
+            `Restore needs data/${RESTORING_DIR} on the disk of data/: unmount what is there, then run ./eigen restore again.`,
+        );
+    }
+}
+
+// Run by the launcher before it stops Eigen, so a swap that cannot rename is refused while Eigen still runs.
+async function staged(): Promise<void> {
     const restoring = join(DATA, RESTORING_DIR);
-    const record = readRecord<StagedRestore>(join(restoring, STAGE_RECORD));
+    const record = readRecord(join(restoring, STAGE_RECORD), isStagedRestore);
     if (!record) {
         console.error(glyphLine('bad', 'Nothing is staged.'));
         process.exit(1);
     }
+    requireRenamable(await createUi(true), record.archive);
     const env = readEnvFile(join(restoring, ENV_PATH));
     const pins = PIN_KEYS.flatMap((key) => (env.has(key) ? [`${key}=${env.get(key)}`] : []));
     console.log([`version=${record.appVersion}`, `level=${record.level}`, ...pins].join('\n'));
@@ -490,8 +554,8 @@ async function swap(): Promise<void> {
     }
     if (existsSync(SWAP_MARKER)) {
         lockData(ui);
-        const marked = readRecord<RestoreSwap>(SWAP_MARKER);
-        if (!Array.isArray(marked?.renames)) {
+        const marked = readRecord(SWAP_MARKER, isRestoreSwap);
+        if (!marked) {
             return ui.fail(
                 `${SWAP_MARKER} does not read as a swap.`,
                 `Put data/ right by hand, then delete ${SWAP_MARKER}.`,
@@ -500,17 +564,10 @@ async function swap(): Promise<void> {
         return runSwap(ui, marked);
     }
     const restoring = join(DATA, RESTORING_DIR);
-    const record = readRecord<StagedRestore>(join(restoring, STAGE_RECORD));
+    const record = readRecord(join(restoring, STAGE_RECORD), isStagedRestore);
     if (!record)
         return ui.fail('Nothing is staged to swap in.', 'Run ./eigen restore <archive>, which stages it first.');
-    // The swap is renames: a linked data/ would move the link, and one on another disk cannot be renamed.
-    const data = lstatSync(DATA);
-    if (data.isSymbolicLink() || data.dev !== statSync('.').dev) {
-        ui.fail(
-            'Restore needs data/ as a folder inside the install folder.',
-            'Move the data into data/ here, then run ./eigen restore again.',
-        );
-    }
+    requireRenamable(ui, record.archive);
     lockData(ui);
     const reason = await refusal(restoring);
     if (reason)
@@ -519,13 +576,6 @@ async function swap(): Promise<void> {
             'Run ./eigen restore <archive> again.',
         );
     const stagedData = join(restoring, RESTORING_DATA_DIR);
-    // The check of each rename below misses a Full swap's second: its source is only there once data/ moved aside.
-    if (lstatSync(stagedData).dev !== data.dev) {
-        return ui.fail(
-            `${record.archive} cannot be swapped in: ${stagedData} is on another disk than ${DATA}.`,
-            `Restore needs data/${RESTORING_DIR} on the disk of data/: unmount what is there, then run ./eigen restore again.`,
-        );
-    }
 
     const asideOf = (path: string, at: Date) => buildSafetyCopyName(path, 'pre-restore', buildBackupStamp(at));
     const at = freeAt(

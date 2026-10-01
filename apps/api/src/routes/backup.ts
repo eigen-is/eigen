@@ -217,9 +217,6 @@ export const backupRouter = new Elysia({ name: 'backup' })
             await requireRestorableHome(params.ownerId);
             const { folder, homeDir } = await resolveSafetyCopy(params.ownerId, params.name);
             if (!fs.existsSync(folder)) throw new ApiError(404, 'Safety copy not found');
-            // Synchronous, but it holds the home's one job slot for its whole duration: it decides
-            // what is garbage by reading the live home's storage keys, and a restore swapping that
-            // folder underneath it would turn the answer into "delete what the home now points at".
             await withBackupJobSlot(params.ownerId, () => deleteSafetyCopy(folder, homeDir));
             return { success: true };
         },

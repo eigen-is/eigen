@@ -21,8 +21,8 @@ import { assertJson, authedRequest, driveUpload, getTestContext, TEST_DATA_DIR, 
 
 // An archive comes from outside — an admin uploads one, or copies one in by scp — so every segment
 // it names is untrusted input. A manifest that spells a mount id as `../../{victim}/mounts/{id}`
-// used to send the restore straight into another user's live home: it cleared their pending
-// uploads, rekeyed every row of their paths table and deleted their data/ tree, and reported done.
+// would send the restore straight into another user's live home: clear their pending uploads, rekey
+// every row of their paths table, delete their data/ tree, and report done.
 
 const PASSWORD = 'testpassword123';
 

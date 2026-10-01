@@ -1,8 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { verifyProtocolAuth } from '../lib/auth/protocol-auth';
 import { requireLocalhost } from '../lib/core/access';
-import { sendToHome } from '../lib/home/home-relay';
-import { getOrgOwner } from '../lib/user';
+import { alertOwner } from '../lib/user/alert-owner';
 
 export const internalRouter = new Elysia({ name: 'internal' })
     .post(
@@ -30,19 +29,13 @@ export const internalRouter = new Elysia({ name: 'internal' })
         '/internal/mail/queue-alert',
         async ({ body, request, server }) => {
             requireLocalhost(request, server);
-            const owner = await getOrgOwner();
-            if (!owner) return { notified: false };
-            await sendToHome(owner.id, {
-                type: 'notification',
-                notification: {
-                    type: 'admin-alert',
-                    title: 'Mail queue backlog',
-                    body: `${body.queued} messages queued`,
-                    tag: 'mail-queue-backlog',
-                    coalesce: true,
-                },
-            });
-            return { notified: true };
+            return {
+                notified: await alertOwner(
+                    'Mail queue backlog',
+                    `${body.queued} messages queued`,
+                    'mail-queue-backlog',
+                ),
+            };
         },
         {
             body: t.Object({

@@ -8,7 +8,6 @@ import { and, eq, inArray } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
 import { member as memberSchema, organization as organizationSchema, team as teamSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
-import { BACKUP_DESTINATION_NOTICE } from '../../lib/backup/upload';
 import { getDataRoot } from '../../lib/config/paths';
 import { getMailDomain, getOrgName, getServerConfig } from '../../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
@@ -233,7 +232,7 @@ describe('owner-only settings', () => {
                     keep: 30,
                 });
                 expect(getServerSettings().backups.upload.s3).toEqual(bucket);
-                expect(first.notice).toBe(BACKUP_DESTINATION_NOTICE);
+                expect(first.notice).toContain('keep them somewhere other than this server');
                 expect(first.warning).toContain('AbortIncompleteMultipartUpload');
                 const again = await assertJson<ServerSettingsSaved>(
                     await putBackups(ctx.alice.user.sessionToken, { upload: { keep: 20 } }),

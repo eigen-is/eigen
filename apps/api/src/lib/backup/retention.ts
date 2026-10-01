@@ -16,20 +16,16 @@ function keptOf(archives: Dated[], keep: number): Dated[] {
     return [...good.slice(0, keep), ...failedSinceGood.slice(0, keep)];
 }
 
-// The whole-server archives to delete from the backups folder, by name, grouped by the reason in the
-// name; their names are read already. Scheduled ones keep `keep`, pre-update ones two, and manual ones are the owner's to delete. A
-// pre-update archive of another build than `running` stays too when it is the newest good one: an update
-// that switched builds recorded it in .eigen/last-update, which the API cannot read, and retries that
-// failed after their backup may be newer. A name the grammar does not read is never touched.
-export function pruneServerArchives(
-    archives: (Dated & { reason: BackupReason })[],
-    keep: number,
-    running?: string,
-): string[] {
-    const dated = archives.toSorted((a, b) => b.at.getTime() - a.at.getTime());
+export type RetainedArchive = Dated & { reason: BackupReason };
 
-    const scheduled = dated.filter((archive) => archive.reason === 'scheduled');
-    const preUpdate = dated.filter((archive) => archive.reason === 'pre-update');
+// The whole-server archives to delete from the backups folder, by name, of `archives` newest first as the folder
+// lists them, grouped by the reason in the name. Scheduled ones keep `keep`, pre-update ones two, and manual ones
+// are the owner's to delete. A pre-update archive of another build than `running` stays too when it is the newest
+// good one: an update that switched builds recorded it in .eigen/last-update, which the API cannot read, and retries
+// that failed after their backup may be newer. A name the grammar does not read is never touched.
+export function pruneServerArchives(archives: RetainedArchive[], keep: number, running?: string): string[] {
+    const scheduled = archives.filter((archive) => archive.reason === 'scheduled');
+    const preUpdate = archives.filter((archive) => archive.reason === 'pre-update');
     const rollback = preUpdate.find((archive) => archive.good && archive.build !== running);
     const kept = new Set([...keptOf(scheduled, keep), ...keptOf(preUpdate, PRE_UPDATE_KEEP), rollback]);
     return [...scheduled, ...preUpdate].filter((archive) => !kept.has(archive)).map((archive) => archive.name);

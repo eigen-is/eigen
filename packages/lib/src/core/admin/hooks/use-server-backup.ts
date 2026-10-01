@@ -32,12 +32,9 @@ export function useServerArchives() {
     });
 }
 
-// One key for every render: the job hook's effect depends on it.
-const ARCHIVES_KEY = serverBackupKeys.archives();
-
 // The server backups and uploads, polled while one runs; one that ends refetches the archive list.
 export function useServerBackupJobs() {
-    return useBackupJobs(useServerOwnerId(), ARCHIVES_KEY);
+    return useBackupJobs(useServerOwnerId(), serverBackupKeys.archives());
 }
 
 export function useStartServerBackup() {

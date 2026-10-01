@@ -26,7 +26,7 @@ const NO_ABORT_RULE =
     "No lifecycle rule on this bucket aborts an incomplete multipart upload. Add one with AbortIncompleteMultipartUpload after 1 day, so the parts of an upload cut off halfway don't stay and cost money.";
 // Said once, when the owner saves a backup bucket: the archives in it are not encrypted, and its keys
 // are inside them, so a restore on a new machine starts from a copy kept elsewhere.
-export const BACKUP_DESTINATION_NOTICE =
+const BACKUP_DESTINATION_NOTICE =
     "Write down this bucket's endpoint, name and keys, and keep them somewhere other than this server. " +
     'A restore on a new machine starts from them: the only other copy is inside the backups. ' +
     'The backups are not encrypted, so keep the bucket private and its keys scoped to it.';
@@ -76,9 +76,7 @@ export async function checkBackupDestination(config: S3Config): Promise<S3CheckR
     return aborts ? result : { ...result, warning: NO_ABORT_RULE };
 }
 
-// The backup bucket's secret reaches no browser, the owner's included: a copy there is one more to lose. So a
-// destination as the owner sends it lies over the saved one: a field left out keeps its saved value, a blank secret
-// the saved one where keepsSavedSecret allows it.
+// The backup bucket's secret reaches no browser, the owner's included: a copy there is one more to lose.
 export function withoutBackupSecret(settings: ServerSettings): ServerSettings {
     const { upload } = settings.backups;
     return {
@@ -87,6 +85,8 @@ export function withoutBackupSecret(settings: ServerSettings): ServerSettings {
     };
 }
 
+// A destination as the owner sends it lies over the saved one, the browser never having had the secret: a field left
+// out keeps its saved value, a blank secret the saved one where keepsSavedSecret allows it.
 export function withSavedSecret(s3: Partial<S3Config>): S3Config {
     const saved = getServerSettings().backups.upload.s3;
     const next = { ...saved, ...s3 };

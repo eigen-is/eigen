@@ -10,12 +10,11 @@ import {
 import { API_IMAGE_KEY } from '../config/release';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
-import { sendToHome } from '../home/home-relay';
-import { getOrgOwner } from '../user';
+import { alertOwner } from '../user/alert-owner';
 import { writeRecord } from './archive';
 import { listBackupJobs, runningJobOn } from './jobs';
 import { backupsDirPath, SERVER_SIDECAR_SUFFIX, serverSidecarPath } from './paths';
-import { pruneServerArchives } from './retention';
+import { pruneServerArchives, type RetainedArchive } from './retention';
 
 // The server archives and their records in the backups folder: what the owner's list and the status read, what a
 // delete takes with it, retention, and the boot that ends a record left running. Running a backup is server-job.ts.
@@ -32,26 +31,6 @@ export async function readServerSidecar(archivePath: string): Promise<ServerArch
         .text()
         .catch(() => null);
     return text === null ? null : parseServerArchiveSidecar(text);
-}
-
-// Fire-and-forget like the poke: a relay that fails must not replace the failure the job records.
-export function alertOwner(tag: string, error: string, title = 'Server backup failed'): void {
-    getOrgOwner()
-        .then((owner) =>
-            owner
-                ? sendToHome(owner.id, {
-                      type: 'notification',
-                      notification: {
-                          type: 'admin-alert',
-                          title,
-                          body: error,
-                          tag: `server-backup-${tag}`,
-                          coalesce: true,
-                      },
-                  })
-                : undefined,
-        )
-        .catch(() => {});
 }
 
 // Every server archive and refused attempt in the backups folder, once each, newest first.
@@ -127,11 +106,8 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
 
 // The schedule's one question. A failed or refused attempt left its record, so it counts: a night
 // that fails is one alert, not a retry every tick.
-export function hasScheduledAttemptOn(day: Date): boolean {
-    const date = day.toISOString().slice(0, 10);
-    return listServerRecords().some(
-        ({ reason, at }) => reason === 'scheduled' && at.toISOString().slice(0, 10) === date,
-    );
+export function hasScheduledAttemptOn(day: string): boolean {
+    return listServerRecords().some(({ reason, at }) => reason === 'scheduled' && at.toISOString().startsWith(day));
 }
 
 // An archive and its record go together. Only a running job refuses, as it would write the record back: a record
@@ -146,10 +122,9 @@ export async function deleteServerArchive(name: string): Promise<void> {
     fs.rmSync(recordPath, { force: true });
 }
 
-// Retention by each sidecar: an archive is good only when its job ended done, and nothing is deleted on a record
-// nobody can read.
+// Retention by each sidecar: an archive is good only when its job ended done.
 export async function pruneLocalArchives(): Promise<void> {
-    const archives: Parameters<typeof pruneServerArchives>[0] = [];
+    const archives: RetainedArchive[] = [];
     const unread: string[] = [];
     for (const record of listServerRecords()) {
         const sidecar = await readServerSidecar(record.archivePath);
@@ -200,8 +175,12 @@ export async function recoverInterruptedServerBackups(): Promise<void> {
             notUploaded.push(name);
         }
     }
-    if (interrupted.length > 0) alertOwner('interrupted', `${interrupted.join(', ')}: ${INTERRUPTED}`);
+    if (interrupted.length > 0) {
+        const body = `${interrupted.join(', ')}: ${INTERRUPTED}`;
+        alertOwner('Server backup failed', body, 'server-backup-interrupted').catch(() => {});
+    }
     if (notUploaded.length > 0) {
-        alertOwner('upload-interrupted', `${notUploaded.join(', ')}: ${INTERRUPTED}`, 'Server backup not uploaded');
+        const body = `${notUploaded.join(', ')}: ${INTERRUPTED}`;
+        alertOwner('Server backup not uploaded', body, 'server-backup-upload-interrupted').catch(() => {});
     }
 }

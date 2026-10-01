@@ -4,6 +4,7 @@ import type { BackupJob } from '@workspace/lib/types/backup';
 import { ApiError } from '../core';
 import { pullHomeSnapshot, sendToHome } from '../home/home-relay';
 import { getOrgAdmins, getOrgOwner } from '../user';
+import { alertUser } from '../user/alert-owner';
 import { extractArtifact, packFolder, readUnpackedHome, writeSidecar } from './archive';
 import { describeError } from './errors';
 import {
@@ -221,24 +222,14 @@ export async function runHomeBackup(ownerId: string, job: BackupJob, onProgress:
         const artifactPath = path.join(getBackupsDir(), name);
         await packFolder(folder, artifactPath, onProgress);
         await writeSidecar(artifactPath, manifest, verify);
-        if (verify.status !== 'verified') {
-            const failures = describeFailures(verify);
-            // Fire-and-forget like the poke: a relay that fails must not replace the failure the
-            // admin actually needs to read in the job.
-            if (job.startedBy) {
-                sendToHome(job.startedBy, {
-                    type: 'notification',
-                    notification: {
-                        type: 'admin-alert',
-                        title: `Backup of ${manifest.name} did not verify`,
-                        body: failures,
-                        tag: `backup-verify-${manifest.ownerId}`,
-                        coalesce: true,
-                    },
-                }).catch(() => {});
-            }
-            throw new Error(`${name} did not verify: ${failures}`);
+        // Fire-and-forget like the poke: a relay that fails must not replace the failure the admin needs to read.
+        if (verify.status !== 'verified' && job.startedBy) {
+            const title = `Backup of ${manifest.name} did not verify`;
+            alertUser(job.startedBy, title, describeFailures(verify), `backup-verify-${manifest.ownerId}`).catch(
+                () => {},
+            );
         }
+        requireVerified(verify, name);
         return name;
     } finally {
         wipeBackupStagingDir(job.id);

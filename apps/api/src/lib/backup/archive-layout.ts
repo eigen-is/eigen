@@ -43,9 +43,8 @@ export function isLightSkipped(rel: string): boolean {
 // files are Eigen's own.
 export const HOME_DATABASE_PATHS = new Set(HOME_DATABASES.map(([, relPath]) => relPath));
 
-// The columns every reader of a mount's paths table wants, spelled once: snapshotMountData selects
-// them from the live mount, readMountPathRows derives the SELECT list of an archived copy from their
-// names, and the row type both hand back is this object's keys.
+// The columns every reader of an archived paths table wants, spelled once: readMountPathRows derives
+// its SELECT list from their names, and the row type it hands back is this object's keys.
 export const MOUNT_PATH_COLUMNS = {
     id: paths.id,
     file: paths.file,

@@ -17,7 +17,7 @@ import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
 import { HOME_DATABASE_PATHS, HOME_DATABASES, isLightSkipped, MAILDIR_ROOT } from './archive-layout';
 import { readAuthRows } from './auth-tables';
-import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
+import { captureFile, captureUnlessGone, captureWrittenFile, countEntries } from './capture';
 import { readHomeMounts } from './enumerate-homes';
 import { describeError } from './errors';
 import {
@@ -74,22 +74,40 @@ export function listFileTree(root: string, skipDir: (rel: string) => boolean = (
     return tree;
 }
 
+const MESSAGE_DIRS: readonly string[] = [PATHS.MAIL.CUR, PATHS.MAIL.NEW];
+
+// A mail client's first look moves a Maildir message from new/ to cur/ and a flag change renames it in cur/, so one
+// gone mid-copy is looked for in its mailbox by its unique name, the part before `:2,`.
+function renamedMessage(homeDir: string, rel: string): string | null {
+    const box = path.dirname(rel);
+    if (!rel.startsWith(`${MAILDIR_ROOT}/`) || !MESSAGE_DIRS.includes(path.basename(box))) return null;
+    const unique = path.basename(rel).split(':')[0];
+    for (const sub of MESSAGE_DIRS) {
+        const dir = path.join(path.dirname(box), sub);
+        const abs = path.join(homeDir, dir);
+        const name = fs.existsSync(abs) && fs.readdirSync(abs).find((found) => found.split(':')[0] === unique);
+        if (name) return `${dir}/${name}`;
+    }
+    return null;
+}
+
 // What a capture of the tree stages, at most: its files and databases as they sit on disk. The room check before a
 // server backup sizes every home with it while the server runs, so a file or folder gone since its listing counts
 // nothing. A folder's files are statted together, its subfolders walked one at a time to keep few handles open.
 export async function treeBytes(root: string, skipDir: (rel: string) => boolean = () => false): Promise<number> {
-    const gone =
-        <T>(value: T) =>
-        (error: unknown): T => {
-            if (isEnoent(error)) return value;
-            throw error;
-        };
     const walk = async (relDir: string): Promise<number> => {
-        const entries = await fsp.readdir(path.join(root, relDir), { withFileTypes: true }).catch(gone([]));
+        const entries = await fsp
+            .readdir(path.join(root, relDir), { withFileTypes: true })
+            .catch((error) => (isEnoent(error) ? [] : Promise.reject(error)));
         const rel = (name: string) => (relDir ? `${relDir}/${name}` : name);
         const files = entries.filter((entry) => entry.isFile() && !JOURNAL_FILE.test(entry.name));
         const sizes = await Promise.all(
-            files.map((entry) => fsp.stat(path.join(root, rel(entry.name))).then((stat) => stat.size, gone(0))),
+            files.map((entry) =>
+                fsp.stat(path.join(root, rel(entry.name))).then(
+                    (stat) => stat.size,
+                    (error) => (isEnoent(error) ? 0 : Promise.reject(error)),
+                ),
+            ),
         );
         let bytes = sizes.reduce((sum, size) => sum + size, 0);
         for (const entry of entries) {
@@ -104,7 +122,6 @@ export async function treeBytes(root: string, skipDir: (rel: string) => boolean 
 // server backup's room check sizes every home before it starts. Full is every local byte. Light
 // walks no Maildir and of each mount only its metadata.db. Full + S3 adds each s3 mount's objects.
 export async function captureBytes(homeDir: string, level: BackupLevel): Promise<number> {
-    if (!fs.existsSync(homeDir)) return 0;
     if (level === 'light') return treeBytes(homeDir, isLightSkipped);
     const local = await treeBytes(homeDir);
     if (level === 'full') return local;
@@ -159,14 +176,16 @@ export async function snapshotHome(
         const stagedOnly = level === 'full' && mount?.isRemote === true;
         const metadataOnly = !mount || stagedOnly;
         if (stagedOnly) await flushOpenDocumentDbs(mount);
-        await stageDatabase(MOUNT_DB_CONFIG, `${PATHS.DRIVE.ROOT}/${config.id}/${PATHS.DRIVE.METADATA_DB}`);
+        const relMetadata = `${PATHS.DRIVE.ROOT}/${config.id}/${PATHS.DRIVE.METADATA_DB}`;
+        await stageDatabase(MOUNT_DB_CONFIG, relMetadata);
         const mountEntries: BackupEntry[] = [];
         if (mount) {
             const relFiles = archiveMountPath(mount.id, stagedOnly ? PATHS.DRIVE.STAGING_DIR : PATHS.DRIVE.DATA_DIR);
             const relThumbs = archiveMountPath(mount.id, PATHS.DRIVE.THUMBS_DIR);
+            const metadataPath = path.join(folder, ARCHIVE_HOME_DIR, relMetadata);
             const data = stagedOnly
                 ? await snapshotMountStaging(mount, path.join(folder, relFiles), relFiles)
-                : await snapshotMountData(mount, path.join(folder, relFiles), relFiles, onProgress);
+                : await snapshotMountData(mount, metadataPath, path.join(folder, relFiles), relFiles, onProgress);
             const thumbs = await snapshotMountThumbs(
                 mount.thumbsDir,
                 path.join(folder, relThumbs),
@@ -235,14 +254,20 @@ export async function snapshotHome(
     const unlisted = tree.databases.find((rel) => !HOME_DATABASE_PATHS.has(rel));
     if (unlisted) throw new Error(`snapshotHome: unlisted home database ${unlisted} — add it to HOME_DATABASES`);
     for (const rel of tree.dirs) fs.mkdirSync(path.join(folder, ARCHIVE_HOME_DIR, rel), { recursive: true });
-    for (const [index, rel] of tree.files.entries()) {
-        const source = Bun.file(path.join(home.homeDir, rel));
-        // A mail client's first look moves a Maildir message from new/ to cur/, so one can go mid-copy.
-        const captured = await captureUnlessGone(
-            source,
+    const taken = new Set(tree.files);
+    const capture = (rel: string) =>
+        captureUnlessGone(
+            Bun.file(path.join(home.homeDir, rel)),
             path.join(folder, ARCHIVE_HOME_DIR, rel),
             archiveHomePath(rel),
         );
+    for (const [index, rel] of tree.files.entries()) {
+        let captured = await capture(rel);
+        const renamed = captured ? null : renamedMessage(home.homeDir, rel);
+        if (renamed && !taken.has(renamed)) {
+            taken.add(renamed);
+            captured = await capture(renamed);
+        }
         if (captured) entries.push(captured);
         onProgress?.('home files', index + 1, tree.files.length);
     }
@@ -292,11 +317,7 @@ export async function snapshotHome(
         createdAt: new Date().toISOString(),
         appVersion: config.version,
         server: { domain: config.domain, orgId: config.orgId },
-        counts: {
-            databases,
-            files: entries.length - databases,
-            bytes: entries.reduce((sum, entry) => sum + entry.bytes, 0),
-        },
+        counts: countEntries(entries, databases),
         level,
         mounts: mountSummaries,
         entries,

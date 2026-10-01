@@ -11,7 +11,7 @@ import { buildHomeFolderName, getBackupsDir, serverSidecarPath } from '../../lib
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { readServerArchive } from '../../lib/backup/verify';
 import { getStorageType, updateServerSettings } from '../../lib/config/server-settings';
-import type { DatabaseConfig } from '../../lib/core';
+import { type DatabaseConfig, PATHS } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
@@ -125,14 +125,16 @@ export function alertTitlesTo(
 // file, a trashed file, a trashed folder with a child, a trashed document and a document with a saved version.
 export type RealShapeHome = {
     user: TestUser;
-    mountId: string;
     // Storage key under the mount's data/ to the bytes a restore must put back there.
     files: Record<string, string>;
     // Storage keys of the databases a restore must put back.
     databases: string[];
+    // The renamed file, the trashed file and the versioned document, for reads through the API.
+    ids: { renamed: string; trashed: string; versioned: string };
 };
 
 const MOUNT_ID = 'default';
+const mountData = (homeDir: string) => join(homeDir, PATHS.DRIVE.ROOT, MOUNT_ID, PATHS.DRIVE.DATA_DIR);
 
 async function trash(user: TestUser, pathId: string): Promise<void> {
     const res = await authedRequest(user.sessionToken, `/drive/${user.id}/${MOUNT_ID}/path/${pathId}`, {
@@ -187,25 +189,39 @@ export async function realShapeHome(): Promise<RealShapeHome> {
     );
     expect(saved.status).toBe(200);
 
-    const data = join((await getHome(user.id)).homeDir, 'mounts', MOUNT_ID, 'data');
-    const [version] = readdirSync(join(data, 'Versioned.eigendoc/versions')).sort();
+    const { homeDir } = await getHome(user.id);
+    const [version] = readdirSync(join(mountData(homeDir), 'Versioned.eigendoc/versions')).sort();
     const shape: RealShapeHome = {
         user,
-        mountId: MOUNT_ID,
         files: {
             'Projects/2026/final.txt': 'renamed bytes',
             [`.trash/${trashedFile.id}.txt`]: 'trashed bytes',
             [`.trash/${trashedFolder.id}/child.txt`]: 'child bytes',
         },
         databases: [`.trash/${trashedDoc.id}.eigendoc/data.db`, `Versioned.eigendoc/versions/${version}`],
+        ids: { renamed: renamed.id, trashed: trashedFile.id, versioned: versioned.id },
     };
-    // The keys are the live mount's own, so the fixture is the shape trashPath and renamePath write today.
-    expectRealShape(data, shape);
+    // Against the live mount's disk, so the fixture cannot encode the capture's own assumption.
+    expectRealShape(homeDir, shape);
     return shape;
 }
 
-// Every byte of the fixture where the mount looks for it, under a mount's data/ folder.
-export function expectRealShape(data: string, shape: RealShapeHome): void {
+// Every byte of the fixture where the mount looks for it, in the home folder `homeDir`.
+export function expectRealShape(homeDir: string, shape: RealShapeHome): void {
+    const data = mountData(homeDir);
     for (const [key, body] of Object.entries(shape.files)) expect(readFileSync(join(data, key), 'utf8')).toBe(body);
     for (const key of shape.databases) expect(existsSync(join(data, key))).toBe(true);
+}
+
+// The restored fixture as its user meets it: the trash lists its three items, the renamed file downloads, the
+// trashed one restores and downloads, and the document lists its version.
+export async function expectRealShapeServed({ user, ids }: RealShapeHome): Promise<void> {
+    const drive = (path: string, init?: RequestInit) =>
+        authedRequest(user.sessionToken, `/drive/${user.id}/${MOUNT_ID}/${path}`, init);
+    const trash = await assertJson<DrivePath[]>(await drive('trash'));
+    expect(trash.map((item) => item.name).sort()).toEqual(['Old', 'Trashed Doc.eigendoc', 'trashed.txt']);
+    expect(await (await drive(`file/${ids.renamed}/download`)).text()).toBe('renamed bytes');
+    expect((await drive(`trash/${ids.trashed}/restore`, { method: 'POST' })).status).toBe(200);
+    expect(await (await drive(`file/${ids.trashed}/download`)).text()).toBe('trashed bytes');
+    expect(await assertJson<unknown[]>(await drive(`file/${ids.versioned}/versions`))).toHaveLength(1);
 }

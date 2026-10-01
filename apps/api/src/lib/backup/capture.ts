@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BackupEntry } from '@workspace/lib/types/backup';
+import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
 import { hashFile, isMissingObjectCause, type StorageFile, writeTempWithHash } from '../storage';
 
 // Copy one file into the archive folder and return its manifest entry. The sha256 is taken on the
@@ -28,6 +28,15 @@ export async function captureUnlessGone(
         fs.rmSync(destPath, { force: true });
         return null;
     });
+}
+
+// A manifest's counts: its databases and files are disjoint, so the two add up to its entries.
+export function countEntries(entries: BackupEntry[], databases: number): BackupManifest['counts'] {
+    return {
+        databases,
+        files: entries.length - databases,
+        bytes: entries.reduce((sum, entry) => sum + entry.bytes, 0),
+    };
 }
 
 // The entry for a file already sitting in the archive — a VACUUM INTO copy, which SQLite writes

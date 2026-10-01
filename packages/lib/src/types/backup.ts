@@ -77,7 +77,7 @@ export type ServerArchiveManifest = {
     envFile: boolean;
     dkim: boolean;
     certs: boolean;
-    // The pinned image references the install ran, for display.
+    // The pinned image references the install ran; retention keeps a rollback's archive by its api image.
     images: Record<string, string>;
 };
 

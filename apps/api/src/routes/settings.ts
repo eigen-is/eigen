@@ -73,7 +73,6 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             const destination = body.backups?.upload && (await resolveBackupUpload(body.backups.upload));
             const backups = destination && { ...body.backups, upload: destination.upload };
             await updateServerSettings({ ...body, ...(mail && { mail }), ...(backups && { backups }) });
-            // The bucket's keys are inside the archives in it: the owner hears once to keep them elsewhere.
             return {
                 ...withoutBackupSecret(getServerSettings()),
                 ...(destination?.notice && { notice: destination.notice }),

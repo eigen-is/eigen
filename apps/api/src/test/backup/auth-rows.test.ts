@@ -19,9 +19,9 @@ import { getHome } from '../../lib/home/get-home';
 import { authedRequest, createTestUser, getTestContext, TEST_DATA_DIR, type TestUser } from '../setup';
 
 // `auth.json` is the one part of an archive that writes to users3.db, and an archive is a file an
-// admin uploaded. Every row used to go in as it stood: a planted `member` row with the public org id
-// and role `owner` made its user an instance admin, and a planted `user` row gave them an account to
-// sign in with. A restore puts one home's identity back and nothing else.
+// admin uploaded. Taken as it stood, a planted `member` row with the public org id and role `owner`
+// would make its user an instance admin, and a planted `user` row would give them an account to sign
+// in with. A restore puts one home's identity back and nothing else.
 
 const PASSWORD = 'testpassword123';
 const PLANTED_ID = 'plantedattackerrowAAAAAAAAAAAAAA';

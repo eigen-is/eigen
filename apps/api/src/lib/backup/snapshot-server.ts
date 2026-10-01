@@ -10,7 +10,7 @@ import { getOrgName, getPublicConfig } from '../config/server-config';
 import { stageEigenDbCopy } from '../share/db';
 import { stageWaitlistDbCopy } from '../waitlist/waitlist';
 import type { ArchiveWriter } from './archive';
-import { captureUnlessGone, captureWrittenFile } from './capture';
+import { captureUnlessGone, captureWrittenFile, countEntries } from './capture';
 import {
     ARCHIVE_MANIFEST_FILE,
     archiveServerPath,
@@ -91,11 +91,7 @@ export async function snapshotServer(
         createdAt: new Date().toISOString(),
         appVersion: config.version,
         server: { domain: config.domain, orgId: config.orgId },
-        counts: {
-            databases,
-            files: entries.length - databases,
-            bytes: entries.reduce((sum, entry) => sum + entry.bytes, 0),
-        },
+        counts: countEntries(entries, databases),
         mounts: [],
         entries,
     };
@@ -138,13 +134,12 @@ export async function appendInstallFiles(
     const envFile = getEnvFile();
     const hasEnvFile = envFile !== undefined && isReadable(envFile);
     if (hasEnvFile) await writer.appendFile(SERVER_ARCHIVE_ENV_MEMBER, envFile);
-    const held: boolean[] = [];
-    for (const { dir, names } of INSTALL_FOLDERS) {
+    const held = { dkim: false, certs: false };
+    for (const { dir, field, names } of INSTALL_FOLDERS) {
         const source = path.join(getDataRoot(), dir);
         const files = readableFiles(source, names ?? listFiles(source));
         for (const name of files) await writer.appendFile(`${dir}/${name}`, path.join(source, name));
-        held.push(files.length > 0);
+        held[field] = files.length > 0;
     }
-    const [dkim, certs] = held;
-    return { envFile: hasEnvFile, dkim, certs };
+    return { envFile: hasEnvFile, ...held };
 }

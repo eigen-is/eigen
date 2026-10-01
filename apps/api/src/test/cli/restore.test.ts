@@ -7,6 +7,7 @@ import {
     mkdtempSync,
     readdirSync,
     readFileSync,
+    renameSync,
     rmSync,
     statSync,
     symlinkSync,
@@ -510,11 +511,11 @@ describe('restore --stage and --swap', () => {
         'a home that stores files by name comes back with every renamed, trashed and versioned item, Full and then Light',
         async () => {
             const dir = install();
-            const data = join(homeDirOf(dir, realShape.user.id), 'mounts', realShape.mountId, 'data');
+            const home = homeDirOf(dir, realShape.user.id);
             await stageAndSwap(dir, basename(fullArchive));
-            expectRealShape(data, realShape);
+            expectRealShape(home, realShape);
             await stageAndSwap(dir, basename(lightArchive));
-            expectRealShape(data, realShape);
+            expectRealShape(home, realShape);
         },
         JOB_TIMEOUT_MS,
     );
@@ -864,6 +865,31 @@ describe('restore --stage and --swap', () => {
         JOB_TIMEOUT_MS,
     );
 
+    // The launcher runs --staged before it stops Eigen: a swap that cannot rename is refused there.
+    test(
+        '--staged refuses a data/ that is a link, or a staged tree on another disk, as the swap would',
+        async () => {
+            const dir = install();
+            expect((await stage(dir, basename(fullArchive))).code).toBe(0);
+            const elsewhere = await restoreCli(dir, ['--staged'], {
+                preamble: [
+                    `import { spyOn } from 'bun:test';`,
+                    `import * as fs from 'node:fs';`,
+                    'const lstat = fs.lstatSync;',
+                    `spyOn(fs, 'lstatSync').mockImplementation((path, options) => { const stat = lstat(path, options); if (stat && String(path).startsWith('data/.restoring')) stat.dev += 1; return stat; });`,
+                ],
+            });
+            expect(elsewhere.code).toBe(1);
+            expect(elsewhere.stderr).toContain('is on another disk than data');
+            renameSync(join(dir, 'data'), join(dir, 'data-real'));
+            symlinkSync('data-real', join(dir, 'data'));
+            const linked = await restoreCli(dir, ['--staged']);
+            expect(linked.code).toBe(1);
+            expect(linked.stderr).toContain('Restore needs data/ as a folder inside the install folder.');
+        },
+        JOB_TIMEOUT_MS,
+    );
+
     test(
         'a Light swap onto an install with no data/team makes it as the owner of what moves in, before its marker',
         async () => {
@@ -1019,12 +1045,22 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'the stage counts server.tar.zst at what its databases unpack to, well past its compressed size',
+        'the stage counts each member once at what it unpacks to, since it moves what it unpacks',
         async () => {
             const { manifest } = await readServerManifest(fullArchive);
             const server = manifest.entries.find((entry) => entry.path === SERVER_ARCHIVE_SERVER_MEMBER)!;
-            const alone = { ...manifest, entries: [{ ...server, bytes: 1_000_000 }], homes: [] };
-            expect(stageBytesNeeded(alone)).toBeGreaterThanOrEqual(10_000_000);
+            const home = manifest.homes.find((candidate) => candidate.member)!;
+            const member = manifest.entries.find((entry) => entry.path === home.member)!;
+            const sized = {
+                ...manifest,
+                entries: [
+                    { ...server, bytes: 1_000_000 },
+                    { ...member, bytes: 1_000 },
+                ],
+                homes: [{ ...home, bytes: 5_000_000 }],
+            };
+            // server.tar.zst at what its databases unpack to, a home at its inner count.
+            expect(stageBytesNeeded(sized)).toBe(15_000_000);
         },
         JOB_TIMEOUT_MS,
     );
@@ -1255,18 +1291,20 @@ describe('an interrupted swap', () => {
         JOB_TIMEOUT_MS,
     );
 
-    test('a stage record cut off mid-write reads as nothing staged, not a stack', async () => {
+    test('a stage record cut off mid-write or of another shape reads as nothing staged, not a stack', async () => {
         const dir = install();
         mkdirSync(join(dir, 'data/.restoring'));
-        writeFileSync(join(dir, 'data/.restoring/staged.json'), '{"archive": "cut of');
-        for (const [flag, said] of [
-            ['--swap', 'Nothing is staged to swap in'],
-            ['--staged', 'Nothing is staged.'],
-        ]) {
-            const result = await restoreCli(dir, [flag]);
-            expect(result.code).toBe(1);
-            expect(result.stderr).toContain(said);
-            expect(result.stderr).not.toContain('SyntaxError');
+        for (const record of ['{"archive": "cut of', JSON.stringify({ archive: 'another-build', level: 'all' })]) {
+            writeFileSync(join(dir, 'data/.restoring/staged.json'), record);
+            for (const [flag, said] of [
+                ['--swap', 'Nothing is staged to swap in'],
+                ['--staged', 'Nothing is staged.'],
+            ]) {
+                const result = await restoreCli(dir, [flag]);
+                expect(result.code).toBe(1);
+                expect(result.stderr).toContain(said);
+                expect(result.stderr).not.toContain('SyntaxError');
+            }
         }
     });
 
@@ -1281,11 +1319,16 @@ describe('an interrupted swap', () => {
 
     test('a marker of another shape is refused with what to do, not a stack', async () => {
         const dir = install();
-        writeFileSync(join(dir, SWAP_MARKER), JSON.stringify({ archive: 'another-build', steps: [] }));
-        const result = await swap(dir);
-        expect(result.code).toBe(1);
-        expect(result.stderr).toContain('does not read as a swap');
-        expect(result.stderr).not.toContain('TypeError');
+        for (const marker of [
+            { archive: 'another-build', steps: [] },
+            { archive: 'another-build', renames: [] },
+        ]) {
+            writeFileSync(join(dir, SWAP_MARKER), JSON.stringify(marker));
+            const result = await swap(dir);
+            expect(result.code).toBe(1);
+            expect(result.stderr).toContain('does not read as a swap');
+            expect(result.stderr).not.toContain('TypeError');
+        }
     });
 });
 

@@ -22,21 +22,14 @@ import { requireMountDir, resolveInside } from './paths';
 // A restored database and the schema this build expects of it.
 export type VersionedDatabase = { filePath: string; config: DatabaseConfig<SchemaType> };
 
-// The backups folder may sit on another disk than the data root, and a rename across the two fails
-// with EXDEV — so fall back to a copy.
+// A move inside one unpacked tree, so on one disk.
 export function movePath(from: string, to: string): void {
     fs.mkdirSync(path.dirname(to), { recursive: true });
-    try {
-        fs.renameSync(from, to);
-    } catch (error) {
-        if (errnoOf(error) !== 'EXDEV') throw error;
-        fs.cpSync(from, to, { recursive: true });
-        fs.rmSync(from, { recursive: true, force: true });
-    }
+    fs.renameSync(from, to);
 }
 
-// The same move for a whole home in the API: on Docker data/ and backups/ are two mounts, so it is always the
-// copy, and that copy must not hold every other user's requests.
+// A whole home from the backups folder into data/: on Docker the two are separate mounts, a rename between them
+// fails with EXDEV, and the copy that replaces it must not hold every other user's requests.
 export async function movePathAsync(from: string, to: string): Promise<void> {
     await fsp.mkdir(path.dirname(to), { recursive: true });
     await fsp.rename(from, to).catch(async (error: unknown) => {
@@ -108,10 +101,10 @@ export function materializeMount(
 
         if (isPathBased) {
             // A folder carries no bytes, so an empty one has no archive entry — recreate them from
-            // the table, or a later rename of one 404s.
+            // the table, at the key the mount renames them from, or a later rename of one 404s.
             for (const row of rows) {
                 if (row.type === 'file' || row.parentId === null) continue;
-                fs.mkdirSync(inData(archivePath(row, byId)), { recursive: true });
+                fs.mkdirSync(inData(storageKeyOf(row, byId, true)), { recursive: true });
             }
         }
         // The mount's own staging folder, where the upload queue keeps a copy until its PUT acks.
@@ -125,8 +118,8 @@ export function materializeMount(
                 if (row.type !== 'file') continue;
                 const archived = archivePath(row, byId);
                 const source = inData(archived);
-                // A bucket's objects did not move aside with the folder, so every row gets a fresh key and the
-                // `.pre-restore-` copy keeps its objects; a row with no bytes too, or a late upload lands on one.
+                // A bucket's objects did not move aside with the folder: every row gets a fresh key, even one with
+                // no bytes, so no upload lands on an object the `.pre-restore-` copy still names.
                 if (isRemote) {
                     row.file = buildStorageKey(`${row.id}-r${stamp}`, row.name);
                     orm.update(paths).set({ file: row.file }).where(eq(paths.id, row.id)).run();
