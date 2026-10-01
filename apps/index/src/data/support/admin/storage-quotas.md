@@ -25,7 +25,7 @@ The **Save** and **Reset** buttons appear only when you have unsaved changes. Cl
 
 <div class="eigen-callout">
 
-These limits apply to all users by default. A user in a team with a higher override gets the higher limit. A user in multiple teams with different overrides gets the highest limit across all their teams.
+These limits apply to all users by default. A changed **Default Mount (MB)** applies to drives created after the change: a user's existing drive keeps the limit it was created with. A user in a team with a higher override gets the higher limit. A user in multiple teams with different overrides gets the highest limit across all their teams.
 
 </div>
 
