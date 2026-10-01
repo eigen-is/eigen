@@ -330,9 +330,14 @@ export const CODE_EXTENSIONS = new Set([
 
 const INLINE_EDITABLE_EXTENSIONS = new Set([...CODE_EXTENSIONS, '.md', '.markdown', '.txt']);
 
-// The server previews these as cards, events and a message, and has no edit mode for them.
+// A vCard, a calendar and a saved message are text, but the server previews them as the cards, events and
+// message they hold, not as their raw lines, and has no edit mode for them.
+export function isStructuredTextFile(mimeType: string, name: string): boolean {
+    return isVCardFile(mimeType, name) || isIcsFile(mimeType, name) || isEmlFile(mimeType, name);
+}
+
 export function isInlineEditable(mimeType: string, name: string): boolean {
-    if (isVCardFile(mimeType, name) || isIcsFile(mimeType, name) || isEmlFile(mimeType, name)) return false;
+    if (isStructuredTextFile(mimeType, name)) return false;
     if (INLINE_EDITABLE_MIMES.has(mimeType)) return true;
     const dot = name.lastIndexOf('.');
     if (dot === -1) return false;
