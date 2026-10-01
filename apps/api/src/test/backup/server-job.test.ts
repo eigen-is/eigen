@@ -270,6 +270,28 @@ describe('Server backup job', () => {
     );
 
     test(
+        'a home deleted mid-capture, whatever the capture then throws, is skipped',
+        async () => {
+            quietRelay();
+            const doomed = await createTestUser(`mid-capture-${Date.now()}@test.eigen.is`, 'testpassword123', 'Gone');
+            await getHome(doomed.id);
+            spies.push(
+                spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
+                    if (ownerId !== doomed.id) return pullHomeSnapshot(ownerId, dir, options);
+                    await deleteUserCompletely(doomed.id, null);
+                    throw new Error('Database has closed');
+                }),
+            );
+            const { job, archivePath } = await runJob();
+            expect(job.error).toBeUndefined();
+            expect(job.state).toBe('done');
+            const home = (await readManifest(archivePath)).homes.find((h) => h.ownerId === doomed.id);
+            expect(home?.skipped).toBe('deleted during the backup');
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
         'a 404 from the capture of a home whose owner still exists is a failure, not a deletion',
         async () => {
             quietRelay();

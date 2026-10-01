@@ -144,13 +144,10 @@ async function appendHome(
         await packFolder(folder, packed);
         bytes = manifest.counts.bytes;
     } catch (error) {
-        // A 404 means the home is gone only when its row is: one from its storage is a failure like any other.
-        if (error instanceof ApiError && error.status === 404) {
-            const id = parseOwnerId(home.ownerId).id;
-            const gone = home.kind === 'team' ? !(await getTeamExists(id)) : !(await getUserById(home.ownerId));
-            if (gone) return { ...home, skipped: HOME_DELETED };
-        }
-        return { ...home, failed: describeError(error) };
+        // A delete mid-capture throws whatever the torn-down home throws: the row says whether it is gone.
+        const id = parseOwnerId(home.ownerId).id;
+        const gone = home.kind === 'team' ? !(await getTeamExists(id)) : !(await getUserById(home.ownerId));
+        return gone ? { ...home, skipped: HOME_DELETED } : { ...home, failed: describeError(error) };
     } finally {
         fs.rmSync(folder, { recursive: true, force: true });
     }
