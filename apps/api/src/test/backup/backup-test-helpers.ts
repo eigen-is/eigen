@@ -1,11 +1,20 @@
-import { expect } from 'bun:test';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { Database } from 'bun:sqlite';
+import { expect, spyOn } from 'bun:test';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { BackupJob } from '@workspace/lib/types/backup';
+import type { BackupJob, BackupLevel, BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { SERVER_ARCHIVE_PREFIX } from '@workspace/lib/validation';
+import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { getBackupJob } from '../../lib/backup/jobs';
+import { buildHomeFolderName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
+import { snapshotHome } from '../../lib/backup/snapshot-home';
+import { readServerArchive } from '../../lib/backup/verify';
 import { getStorageType, updateServerSettings } from '../../lib/config/server-settings';
+import type { DatabaseConfig } from '../../lib/core';
+import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
+import * as homeRelay from '../../lib/home/home-relay';
 import {
     assertJson,
     authedRequest,
@@ -13,6 +22,7 @@ import {
     drivePost,
     driveUpload,
     ensureServer,
+    TEST_DATA_DIR,
     type TestUser,
 } from '../setup';
 
@@ -23,6 +33,91 @@ export async function waitForJob(id: string): Promise<BackupJob> {
         await Bun.sleep(50);
     }
     throw new Error(`job ${id} did not finish`);
+}
+
+// The server archives and records in the backups folder, which the whole run shares.
+export function serverRecords(): string[] {
+    return readdirSync(getBackupsDir()).filter((name) => name.startsWith(SERVER_ARCHIVE_PREFIX));
+}
+
+export function removeServerRecords(): void {
+    for (const name of serverRecords()) rmSync(join(getBackupsDir(), name), { force: true });
+}
+
+// A record the way a finished or refused attempt leaves one, without running a job, and the archive's bytes if given.
+export function writeServerRecord(name: string, record: object, archive?: string | Uint8Array): string {
+    const archivePath = join(getBackupsDir(), name);
+    if (archive !== undefined) writeFileSync(archivePath, archive);
+    writeFileSync(serverSidecarPath(archivePath), JSON.stringify(record));
+    return archivePath;
+}
+
+// The manifest and members of a server archive that reads.
+export async function readServerManifest(archivePath: string) {
+    const { manifest, members } = await readServerArchive(archivePath);
+    if (!manifest) throw new Error(`${archivePath} carries no server manifest`);
+    return { manifest, members };
+}
+
+// Holds every home capture until released, so a job stays running while a test looks at it.
+export function holdCaptures(): { release(): void; restore(): void } {
+    const gate = Promise.withResolvers<void>();
+    const pull = homeRelay.pullHomeSnapshot;
+    const spy = spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (...args) => {
+        await gate.promise;
+        return pull(...args);
+    });
+    return {
+        release: () => gate.resolve(),
+        restore: () => {
+            gate.resolve();
+            spy.mockRestore();
+        },
+    };
+}
+
+// A container database of one table, a row per marker, so which copy a capture took reads back by its markers. No
+// snapshot config: a close-time version would be noise.
+export const MARKER_SCHEMA = { items: sqliteTable('items', { id: integer('id').primaryKey(), data: text('data') }) };
+export const MARKER_DB_CONFIG: DatabaseConfig<typeof MARKER_SCHEMA> = {
+    name: 'backup-marker-doc',
+    currentVersion: 1,
+    schema: MARKER_SCHEMA,
+    migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
+};
+
+export function readMarkers(dbPath: string): string[] {
+    const db = new Database(dbPath, { readonly: true });
+    try {
+        return db
+            .query<{ data: string }, []>('SELECT data FROM items ORDER BY id')
+            .all()
+            .map((row) => row.data);
+    } finally {
+        db.close();
+    }
+}
+
+// One capture of `home` into a folder of its own.
+export async function snapshotInto(
+    home: Home,
+    level?: BackupLevel,
+): Promise<{ manifest: BackupManifest; folder: string }> {
+    const target = mkdtempSync(join(TEST_DATA_DIR, `backup-snapshot-${level ?? 'default'}-`));
+    const manifest = await snapshotHome(home, target, { level });
+    return { manifest, folder: join(target, buildHomeFolderName(home.user.id)) };
+}
+
+// The titles of the admin alerts sendToHome was handed for `ownerId`.
+export function alertTitlesTo(
+    spy: { mock: { calls: Parameters<typeof homeRelay.sendToHome>[] } },
+    ownerId: string,
+): string[] {
+    return spy.mock.calls.flatMap(([target, message]) =>
+        target === ownerId && message.type === 'notification' && message.notification.type === 'admin-alert'
+            ? [message.notification.title]
+            : [],
+    );
 }
 
 // A home the way installs have them: the default mount stores files by name (local-fullnames, the install default;

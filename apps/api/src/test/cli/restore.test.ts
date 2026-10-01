@@ -14,32 +14,28 @@ import {
 } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
-import type { BackupJob, BackupLevel, ServerArchiveManifest } from '@workspace/lib/types/backup';
+import type { BackupLevel, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { parseOwnerId } from '@workspace/lib/types/owner';
-import { parseServerArchiveManifest } from '@workspace/lib/validation';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { STAGE_LOCK, SWAP_LOCK, SWAP_MARKER } from '../../cli/restore';
-import {
-    type ArchiveMember,
-    copyArchiveMember,
-    createArchiveWriter,
-    extractArtifact,
-    packFolder,
-    readArchiveMember,
-    readArchiveMembers,
-} from '../../lib/backup/archive';
-import { getBackupJob } from '../../lib/backup/jobs';
-import { getBackupsDir } from '../../lib/backup/paths';
+import { copyArchiveMember, createArchiveWriter, extractArtifact, packFolder } from '../../lib/backup/archive';
+import { ARCHIVE_MANIFEST_FILE, getBackupsDir, SERVER_ARCHIVE_SERVER_MEMBER } from '../../lib/backup/paths';
 import { stageBytesNeeded } from '../../lib/backup/restore-server';
 import { startServerBackup } from '../../lib/backup/server-job';
 import { lockDataDir } from '../../lib/config/data-lock';
-import { SERVER_DATABASES, SERVER_RUNTIME_FILES } from '../../lib/config/paths';
+import { homeDirUnder, SERVER_DATABASES, SERVER_RUNTIME_FILES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { PATHS } from '../../lib/core/constants';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
-import { expectRealShape, type RealShapeHome, realShapeHome } from '../backup/backup-test-helpers';
+import {
+    expectRealShape,
+    type RealShapeHome,
+    readServerManifest,
+    realShapeHome,
+    removeServerRecords,
+    waitForJob,
+} from '../backup/backup-test-helpers';
 import {
     createHomeFaultMount,
     type FaultStorage,
@@ -179,17 +175,8 @@ function asideDirs(dir: string): string[] {
 function expectUntouched(dir: string): void {
     expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
     expect(existsSync(join(dir, 'data/.restoring'))).toBe(false);
-    expect(existsSync(join(dir, '.eigen/restore-swap'))).toBe(false);
+    expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
     expect(asideDirs(dir)).toEqual([]);
-}
-
-async function waitForJob(id: string): Promise<BackupJob> {
-    for (let attempt = 0; attempt < 2400; attempt++) {
-        const job = getBackupJob(id);
-        if (job && job.state !== 'running') return job;
-        await Bun.sleep(50);
-    }
-    throw new Error(`job ${id} did not finish`);
 }
 
 async function backup(level: BackupLevel): Promise<string> {
@@ -198,15 +185,6 @@ async function backup(level: BackupLevel): Promise<string> {
     expect(job.error).toBeUndefined();
     if (!job.artifact) throw new Error('the server job names no archive');
     return join(getBackupsDir(), job.artifact);
-}
-
-async function readManifest(
-    archivePath: string,
-): Promise<{ members: ArchiveMember[]; manifest: ServerArchiveManifest }> {
-    const members = await readArchiveMembers(archivePath);
-    const manifest = parseServerArchiveManifest(new TextDecoder().decode(await readArchiveMember(members.at(-1)!)));
-    if (!manifest) throw new Error(`${archivePath} carries no server manifest`);
-    return { members, manifest };
 }
 
 // A copy of `source` with its members changed: `replace` swaps a member's bytes for a file, `drop` leaves one out,
@@ -226,7 +204,7 @@ async function craft(
     },
 ): Promise<string> {
     const work = scratch('restore-craft-');
-    const { members, manifest: original } = await readManifest(source);
+    const { members, manifest: original } = await readServerManifest(source);
     const target = join(work, basename(source));
     const writer = await createArchiveWriter(target);
     try {
@@ -286,7 +264,7 @@ async function rewrittenMember(
     ownerId: string,
     change: (entries: Parameters<typeof tarOf>[0]) => Parameters<typeof tarOf>[0],
 ): Promise<{ name: string; file: string }> {
-    const { members, manifest } = await readManifest(archive);
+    const { members, manifest } = await readServerManifest(archive);
     const name = manifest.homes.find((home) => home.ownerId === ownerId)!.member!;
     const work = scratch('restore-member-');
     await extractArtifact(members.find((member) => member.name === name)!, join(work, 'tree'));
@@ -303,21 +281,21 @@ async function rewrittenMember(
 
 // server.tar.zst of `archive` with the data epoch files in server/, listed in its manifest like any other file.
 async function serverMemberWithEpochs(archive: string): Promise<Record<string, string>> {
-    const { members } = await readManifest(archive);
+    const { members } = await readServerManifest(archive);
     const work = scratch('restore-server-member-');
-    await extractArtifact(members.find((member) => member.name === 'server.tar.zst')!, join(work, 'tree'));
+    await extractArtifact(members.find((member) => member.name === SERVER_ARCHIVE_SERVER_MEMBER)!, join(work, 'tree'));
     const [folder] = readdirSync(join(work, 'tree'));
     const root = join(work, 'tree', folder);
-    const manifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'));
+    const manifest = JSON.parse(readFileSync(join(root, ARCHIVE_MANIFEST_FILE), 'utf8'));
     for (const name of [SERVER_RUNTIME_FILES.epoch, SERVER_RUNTIME_FILES.homeEpochs]) {
         const body = `${name} of the archived server`;
         writeFileSync(join(root, 'server', name), body);
         const sha256 = new Bun.CryptoHasher('sha256').update(body).digest('hex');
         manifest.entries.push({ path: `server/${name}`, bytes: body.length, sha256 });
     }
-    writeFileSync(join(root, 'manifest.json'), JSON.stringify(manifest));
-    await packFolder(root, join(work, 'server.tar.zst'));
-    return { 'server.tar.zst': join(work, 'server.tar.zst') };
+    writeFileSync(join(root, ARCHIVE_MANIFEST_FILE), JSON.stringify(manifest));
+    await packFolder(root, join(work, SERVER_ARCHIVE_SERVER_MEMBER));
+    return { [SERVER_ARCHIVE_SERVER_MEMBER]: join(work, SERVER_ARCHIVE_SERVER_MEMBER) };
 }
 
 // A home member of `archive` with `edit` run on its unpacked folder, and its manifest's entries hashed again.
@@ -326,20 +304,20 @@ async function editedMember(
     ownerId: string,
     edit: (folder: string) => void,
 ): Promise<Record<string, string>> {
-    const { members, manifest } = await readManifest(archive);
+    const { members, manifest } = await readServerManifest(archive);
     const name = manifest.homes.find((home) => home.ownerId === ownerId)!.member!;
     const work = scratch('restore-edited-');
     await extractArtifact(members.find((member) => member.name === name)!, join(work, 'tree'));
     const [folder] = readdirSync(join(work, 'tree'));
     const root = join(work, 'tree', folder);
     edit(root);
-    const inner = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'));
+    const inner = JSON.parse(readFileSync(join(root, ARCHIVE_MANIFEST_FILE), 'utf8'));
     for (const entry of inner.entries) {
         const body = readFileSync(join(root, entry.path));
         entry.bytes = body.length;
         entry.sha256 = new Bun.CryptoHasher('sha256').update(body).digest('hex');
     }
-    writeFileSync(join(root, 'manifest.json'), JSON.stringify(inner));
+    writeFileSync(join(root, ARCHIVE_MANIFEST_FILE), JSON.stringify(inner));
     await packFolder(root, join(work, 'member.tar.zst'));
     return { [name]: join(work, 'member.tar.zst') };
 }
@@ -381,8 +359,7 @@ function liveS3Mount(dir: string, pending: Record<string, string>): void {
 }
 
 function homeDirOf(dir: string, ownerId: string): string {
-    const owner = parseOwnerId(ownerId);
-    return join(dir, 'data', owner.type === 'team' ? 'team' : 'home', owner.id);
+    return homeDirUnder(join(dir, 'data'), ownerId);
 }
 
 let ctx: TestContext;
@@ -485,9 +462,7 @@ afterAll(async () => {
     unregisterFaultMount((await getHome(s3User.id)).drive, S3_MOUNT_ID);
     await s3Mount.closeAllDatabases();
     // The backups folder is the whole suite's: a later file lists its server archives.
-    for (const name of readdirSync(getBackupsDir())) {
-        if (name.startsWith('server-')) rmSync(join(getBackupsDir(), name), { force: true });
-    }
+    removeServerRecords();
 });
 
 describe('restore --stage and --swap', () => {
@@ -495,7 +470,7 @@ describe('restore --stage and --swap', () => {
         'a Full archive onto an empty data dir brings back every home, the server databases, env, DKIM and TLS, and keeps the old data aside',
         async () => {
             const dir = install();
-            const { manifest } = await readManifest(fullArchive);
+            const { manifest } = await readServerManifest(fullArchive);
             await stageAndSwap(dir, basename(fullArchive));
 
             for (const home of manifest.homes.filter((h) => h.member)) {
@@ -525,7 +500,7 @@ describe('restore --stage and --swap', () => {
             expect(readFileSync(join(dir, envAside!), 'utf8')).toBe(RELEASE_ENV);
             expect(existsSync(join(dir, 'data/.restoring'))).toBe(false);
             expect(existsSync(join(dir, aside, '.restoring'))).toBe(false);
-            expect(existsSync(join(dir, '.eigen/restore-swap'))).toBe(false);
+            expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
             expect(statSync(join(dir, '.env.production')).mode & 0o777).toBe(0o600);
         },
         JOB_TIMEOUT_MS,
@@ -647,7 +622,7 @@ describe('restore --stage and --swap', () => {
         'a Light archive onto an empty install says which homes come back without files and mail',
         async () => {
             const dir = install();
-            const { manifest } = await readManifest(lightArchive);
+            const { manifest } = await readServerManifest(lightArchive);
             const staged = await stage(dir, basename(lightArchive));
             expect(staged.code).toBe(0);
             const count = manifest.homes.filter((home) => home.member).length;
@@ -756,7 +731,7 @@ describe('restore --stage and --swap', () => {
             expect(result.stderr).toContain('evil');
             expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
             expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(RELEASE_ENV);
-            expect(existsSync(join(dir, '.eigen/restore-swap'))).toBe(false);
+            expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
             expect(asideDirs(dir)).toEqual([]);
         },
         JOB_TIMEOUT_MS,
@@ -772,7 +747,7 @@ describe('restore --stage and --swap', () => {
             expect(result.code).toBe(1);
             expect(result.stderr).toContain('setuid');
             expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
-            expect(existsSync(join(dir, '.eigen/restore-swap'))).toBe(false);
+            expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
             expect(asideDirs(dir)).toEqual([]);
         },
         JOB_TIMEOUT_MS,
@@ -854,7 +829,7 @@ describe('restore --stage and --swap', () => {
             expect(result.stderr).toContain('metadata.db');
             expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
             expect(readFileSync(join(dir, 'data/server', SERVER_RUNTIME_FILES.epoch), 'utf8')).toBe('epoch-before');
-            expect(existsSync(join(dir, '.eigen/restore-swap'))).toBe(false);
+            expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
             expect(asideDirs(dir)).toEqual([]);
         },
         JOB_TIMEOUT_MS,
@@ -1046,8 +1021,8 @@ describe('restore --stage and --swap', () => {
     test(
         'the stage counts server.tar.zst at what its databases unpack to, well past its compressed size',
         async () => {
-            const { manifest } = await readManifest(fullArchive);
-            const server = manifest.entries.find((entry) => entry.path === 'server.tar.zst')!;
+            const { manifest } = await readServerManifest(fullArchive);
+            const server = manifest.entries.find((entry) => entry.path === SERVER_ARCHIVE_SERVER_MEMBER)!;
             const alone = { ...manifest, entries: [{ ...server, bytes: 1_000_000 }], homes: [] };
             expect(stageBytesNeeded(alone)).toBeGreaterThanOrEqual(10_000_000);
         },
@@ -1191,7 +1166,7 @@ describe('an interrupted swap', () => {
             const broken = await swap(dir);
             chmodSync(join(dir, 'data/.restoring'), 0o700);
             expect(broken.code).toBe(1);
-            expect(existsSync(join(dir, '.eigen/restore-swap'))).toBe(true);
+            expect(existsSync(join(dir, SWAP_MARKER))).toBe(true);
             expect(existsSync(join(dir, '.env.production'))).toBe(false);
 
             const finished = await swap(dir);
@@ -1200,7 +1175,7 @@ describe('an interrupted swap', () => {
             expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(ARCHIVED_ENV);
             expect(existsSync(join(homeDirOf(dir, alice.id), 'mounts'))).toBe(true);
             expect(readFileSync(join(dir, asideDirs(dir)[0], 'home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
-            expect(existsSync(join(dir, '.eigen/restore-swap'))).toBe(false);
+            expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
         },
         JOB_TIMEOUT_MS,
     );
@@ -1218,7 +1193,7 @@ describe('an interrupted swap', () => {
             const [aside] = asideDirs(dir);
             chmodSync(join(dir, aside, '.restoring/stuck'), 0o700);
             expect(broken.code).not.toBe(0);
-            expect(existsSync(join(dir, '.eigen/restore-swap'))).toBe(true);
+            expect(existsSync(join(dir, SWAP_MARKER))).toBe(true);
 
             const finished = await swap(dir);
             expect(finished.stderr).toBe('');
@@ -1226,7 +1201,7 @@ describe('an interrupted swap', () => {
             expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(ARCHIVED_ENV);
             expect(existsSync(join(homeDirOf(dir, alice.id), 'mounts'))).toBe(true);
             expect(readFileSync(join(dir, aside, 'home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
-            expect(existsSync(join(dir, '.eigen/restore-swap'))).toBe(false);
+            expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
         },
         JOB_TIMEOUT_MS,
     );
@@ -1274,7 +1249,7 @@ describe('an interrupted swap', () => {
             const result = await swap(dir);
             expect(result.code).toBe(1);
             expect(result.stderr).toContain('data/.restoring/.env.production');
-            expect(existsSync(join(dir, '.eigen/restore-swap'))).toBe(true);
+            expect(existsSync(join(dir, SWAP_MARKER))).toBe(true);
             expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
         },
         JOB_TIMEOUT_MS,

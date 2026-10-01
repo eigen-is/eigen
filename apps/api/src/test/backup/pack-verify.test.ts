@@ -33,12 +33,14 @@ import {
 } from '../../lib/backup/archive';
 import { listArtifacts } from '../../lib/backup/artifacts';
 import {
+    ARCHIVE_MANIFEST_FILE,
     buildArtifactName,
     buildHomeFolderName,
     buildHomeMemberName,
     buildServerArchiveName,
     buildServerFolderName,
     getBackupsDir,
+    SERVER_ARCHIVE_ENV_MEMBER,
     SERVER_ARCHIVE_SERVER_MEMBER,
 } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
@@ -682,10 +684,10 @@ describe('Whole-server archive', () => {
         return [
             SERVER_ARCHIVE_SERVER_MEMBER,
             ...homes.map((home) => home.member),
-            '.env.production',
+            SERVER_ARCHIVE_ENV_MEMBER,
             ...DKIM_FILES.map((name) => `dkim/${name}`),
             ...CERT_FILES.map((name) => `certs/${name}`),
-            'manifest.json',
+            ARCHIVE_MANIFEST_FILE,
         ];
     }
 

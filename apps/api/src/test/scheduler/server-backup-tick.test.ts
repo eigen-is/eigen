@@ -10,17 +10,16 @@ import {
     spyOn,
     test,
 } from 'bun:test';
-import { readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { BackupJob, BackupLevel, BackupReason } from '@workspace/lib/types/backup';
 import type { ServerSettings } from '@workspace/lib/types/settings';
-import { buildServerArchiveName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
+import { buildServerArchiveName } from '../../lib/backup/paths';
 import * as serverJob from '../../lib/backup/server-job';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { ApiError } from '../../lib/core';
 import * as homeRelay from '../../lib/home/home-relay';
 import { registerScheduledJobs, serverBackupTick } from '../../lib/scheduler/jobs';
 import { stopAllSchedules } from '../../lib/scheduler/scheduler';
+import { removeServerRecords, writeServerRecord } from '../backup/backup-test-helpers';
 import { ensureServer, getTestContext } from '../setup';
 
 const TICK_MS = 5 * 60 * 1000;
@@ -29,8 +28,7 @@ type Schedule = ServerSettings['backups']['schedule'];
 
 // The record an attempt leaves the moment it starts, as the real job writes it.
 function writeAttempt(reason: BackupReason, level: BackupLevel, at: Date, state = 'running'): void {
-    const archivePath = join(getBackupsDir(), buildServerArchiveName(reason, level, at));
-    writeFileSync(serverSidecarPath(archivePath), JSON.stringify({ state, startedAt: at.toISOString() }));
+    writeServerRecord(buildServerArchiveName(reason, level, at), { state, startedAt: at.toISOString() });
 }
 
 async function settle(): Promise<void> {
@@ -80,9 +78,7 @@ describe('The nightly server backup tick', () => {
         stopAllSchedules();
         jest.useRealTimers();
         setSystemTime();
-        for (const name of readdirSync(getBackupsDir()).filter((file) => file.startsWith('server-'))) {
-            rmSync(join(getBackupsDir(), name), { force: true });
-        }
+        removeServerRecords();
     });
 
     test('waits for its hour, then starts one scheduled Full per UTC day', async () => {
@@ -144,9 +140,8 @@ describe('The nightly server backup tick', () => {
 
     test('a pre-update backup that just ended does not hold the night back: the update waits for it', async () => {
         const at = new Date('2026-10-01T02:01:00Z');
-        const archivePath = join(getBackupsDir(), buildServerArchiveName('pre-update', 'light', at));
         const record = { state: 'done', startedAt: at, finishedAt: new Date('2026-10-01T02:03:00Z') };
-        writeFileSync(serverSidecarPath(archivePath), JSON.stringify(record));
+        writeServerRecord(buildServerArchiveName('pre-update', 'light', at), record);
         await tickAt('2026-10-01T02:05:00Z');
         expect(start).toHaveBeenCalledTimes(1);
     });

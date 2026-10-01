@@ -2,16 +2,14 @@ import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { BackupLevel, BackupManifest } from '@workspace/lib/types/backup';
+import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { parseBackupManifest } from '@workspace/lib/validation';
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { HOME_DATABASE_PATHS } from '../../lib/backup/archive-layout';
+import { HOME_DATABASE_PATHS, MAILDIR_ROOT } from '../../lib/backup/archive-layout';
 import * as captureModule from '../../lib/backup/capture';
-import { buildHomeFolderName } from '../../lib/backup/paths';
+import { archiveHomePath, archiveMountPath } from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { verifyFolder } from '../../lib/backup/verify';
-import type { DatabaseConfig } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
@@ -37,6 +35,7 @@ import {
     TEST_PNG_BYTES,
     type TestUser,
 } from '../setup';
+import { MARKER_DB_CONFIG, MARKER_SCHEMA, readMarkers, snapshotInto } from './backup-test-helpers';
 
 // The two capture modes a whole-server archive adds to snapshotHome, and the manifest fields that
 // say a member is not a complete home: Light keeps every database and no file bodies or mail, Full
@@ -45,15 +44,7 @@ import {
 const S3_MOUNT_ID = 'modes-s3';
 // A flat-key mount on local disk: remote in its key shape, local in where its bytes live.
 const LOCAL_KEY_MOUNT_ID = 'modes-local-key';
-const MAILDIR = 'home/eigen.mail/Maildir';
-
-const docSchema = { items: sqliteTable('items', { id: integer('id').primaryKey(), data: text('data') }) };
-const docConfig: DatabaseConfig<typeof docSchema> = {
-    name: 'backup-modes-doc',
-    currentVersion: 1,
-    schema: docSchema,
-    migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
-};
+const MAILDIR = archiveHomePath(MAILDIR_ROOT);
 
 let user: TestUser;
 let home: Home;
@@ -63,30 +54,12 @@ let s3Fault: FaultStorage;
 let backingRoot: string;
 let pendingObjectKey: string;
 
-async function snapshot(level?: BackupLevel): Promise<{ manifest: BackupManifest; folder: string }> {
-    const target = mkdtempSync(join(TEST_DATA_DIR, `backup-modes-${level ?? 'default'}-`));
-    const manifest = await snapshotHome(home, target, { level });
-    return { manifest, folder: join(target, buildHomeFolderName(home.user.id)) };
-}
-
 function entryPaths(manifest: BackupManifest): string[] {
     return manifest.entries.map((entry) => entry.path);
 }
 
 function mountEntries(manifest: BackupManifest, mountId: string): string[] {
-    return entryPaths(manifest).filter((p) => p.startsWith(`home/mounts/${mountId}/`));
-}
-
-function readMarkers(dbPath: string): string[] {
-    const db = new Database(dbPath, { readonly: true });
-    try {
-        return db
-            .query<{ data: string }, []>('SELECT data FROM items ORDER BY id')
-            .all()
-            .map((row) => row.data);
-    } finally {
-        db.close();
-    }
+    return entryPaths(manifest).filter((p) => p.startsWith(archiveMountPath(mountId, '')));
 }
 
 function pendingStagingName(metadataPath: string, storageKey: string): string | null {
@@ -116,7 +89,7 @@ async function snapshotWhileVanishing(
         return capture(source, destPath, relPath);
     });
     try {
-        const snapshotted = await snapshot('full');
+        const snapshotted = await snapshotInto(home, 'full');
         expect(spy.mock.calls.some(([, , relPath]) => relPath === archived)).toBe(true);
         expect(entryPaths(snapshotted.manifest)).not.toContain(archived);
         expect(existsSync(join(snapshotted.folder, archived))).toBe(false);
@@ -209,7 +182,7 @@ afterAll(async () => {
 
 describe('Backup capture modes', () => {
     test('a Light snapshot holds every database and no file bodies or mail, and says so', async () => {
-        const { manifest, folder } = await snapshot('light');
+        const { manifest, folder } = await snapshotInto(home, 'light');
         expect(manifest.level).toBe('light');
 
         const paths = entryPaths(manifest);
@@ -233,7 +206,7 @@ describe('Backup capture modes', () => {
     });
 
     test('a Full snapshot keeps an s3 mount to its metadata.db and staged uploads, and says so', async () => {
-        const { manifest, folder } = await snapshot('full');
+        const { manifest, folder } = await snapshotInto(home, 'full');
         expect(manifest.level).toBe('full');
 
         const s3Entries = mountEntries(manifest, S3_MOUNT_ID);
@@ -316,13 +289,13 @@ describe('Backup capture modes', () => {
 
     test('an edit made a second before a Full snapshot is in its staged uploads', async () => {
         const { containerId, dataDbId } = await provisionDoc(s3Mount);
-        const managed = await s3Mount.createDatabase(docConfig, dataDbId);
+        const managed = await s3Mount.createDatabase(MARKER_DB_CONFIG, dataDbId);
         try {
             // Never flushed: only the open handle holds it until the capture flushes.
-            managed.db.insert(docSchema.items).values({ id: 1, data: 'a second ago' }).run();
+            managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'a second ago' }).run();
             const storageKey = await s3Mount.getStorageKey(dataDbId);
 
-            const { folder } = await snapshot('full');
+            const { folder } = await snapshotInto(home, 'full');
             const stagingName = pendingStagingName(join(folder, `home/mounts/${S3_MOUNT_ID}/metadata.db`), storageKey);
             expect(stagingName).not.toBeNull();
             expect(readMarkers(join(folder, `home/mounts/${S3_MOUNT_ID}/staging/${stagingName}`))).toEqual([
@@ -334,7 +307,7 @@ describe('Backup capture modes', () => {
     });
 
     test('the default snapshot is complete: every s3 object, no staging/, level full-s3', async () => {
-        const { manifest, folder } = await snapshot();
+        const { manifest, folder } = await snapshotInto(home);
         expect(manifest.level).toBe('full-s3');
         for (const summary of manifest.mounts) expect('contents' in summary).toBe(false);
 
@@ -346,7 +319,7 @@ describe('Backup capture modes', () => {
     });
 
     test('a manifest naming a level or contents this build does not know is not a manifest', async () => {
-        const { manifest } = await snapshot('full');
+        const { manifest } = await snapshotInto(home, 'full');
         expect(parseBackupManifest(JSON.stringify(manifest))).not.toBeNull();
         expect(parseBackupManifest(JSON.stringify({ ...manifest, level: 'partial' }))).toBeNull();
         const mounts = manifest.mounts.map((summary) => ({ ...summary, contents: 'thumbs' }));
