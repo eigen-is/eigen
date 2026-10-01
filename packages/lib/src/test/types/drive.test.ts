@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { EIGEN_DOC_TYPE_INFO, isIcsFile, isVCardFile, type YjsRootKind } from '../../types/drive';
+import { EIGEN_DOC_TYPE_INFO, isIcsFile, isInlineEditable, isVCardFile, type YjsRootKind } from '../../types/drive';
 
 // Scans each collab app's source for Y.Doc root-type access and asserts the
 // referenced names are declared in EIGEN_DOC_TYPE_INFO[type].yjsRoots. Catches
@@ -148,5 +148,18 @@ describe('isVCardFile', () => {
     });
     test('neither', () => {
         expect(isVCardFile('text/plain', 'notes.txt')).toBe(false);
+    });
+});
+
+describe('isInlineEditable', () => {
+    test('a text file by mime or extension', () => {
+        expect(isInlineEditable('text/plain', 'notes')).toBe(true);
+        expect(isInlineEditable('application/octet-stream', 'script.ts')).toBe(true);
+    });
+    // The server previews these as cards, events and a message, and edits none of them.
+    test('not a contact, calendar or message file stored as text', () => {
+        expect(isInlineEditable('text/plain', 'team.vcf')).toBe(false);
+        expect(isInlineEditable('text/plain', 'festival.ics')).toBe(false);
+        expect(isInlineEditable('text/plain', 'saved.eml')).toBe(false);
     });
 });

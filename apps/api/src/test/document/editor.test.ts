@@ -1,5 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { DrivePath, EditorSaveResult, FileEditorContent } from '@workspace/lib/types/drive';
+import {
+    DRIVE_MIME_DOC,
+    type DrivePath,
+    type EditorSaveResult,
+    type FileEditorContent,
+} from '@workspace/lib/types/drive';
 import { MAX_INLINE_EDIT_SIZE } from '../../lib/drive/inline-edit';
 import { getHome } from '../../lib/home';
 import { authedRequest, driveGet, driveUpload, getTestContext } from '../setup';
@@ -84,6 +89,13 @@ describe('Editor', () => {
             const uploaded = await uploadTextFile('notes.txt', 'Some notes');
             const { data } = await editorGet(uploaded.id);
             expect(data.editMode).toBe('plaintext');
+        });
+
+        test('a loose file under an Eigen mime edits by its name, frontmatter split off', async () => {
+            const uploaded = await uploadTextFile('loose.md', '---\ntitle: Loose\n---\n# Body', DRIVE_MIME_DOC);
+            const { data } = await editorGet(uploaded.id);
+            expect(data.editMode).toBe('markdown');
+            expect(data.frontmatter).toBe('title: Loose');
         });
 
         test('returns 400 for unsupported file types', async () => {

@@ -24,7 +24,13 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
     const canWrite = permissions?.canWrite ?? false;
     const queryClient = useQueryClient();
     const { isMobile } = useLayout();
-    const { data: preview } = useTextPreview(path.ownerId, path.mountId, path.id, path.updatedAt, !editing);
+    const { data: preview, isError: previewFailed } = useTextPreview(
+        path.ownerId,
+        path.mountId,
+        path.id,
+        path.updatedAt,
+        !editing,
+    );
 
     const handleReload = () => {
         invalidateEditorContent(queryClient, path.ownerId, path.mountId, path.id);
@@ -64,6 +70,9 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
                         <div className="w-full px-12 py-6 max-w-4xl mx-auto">
                             {preview?.body ? (
                                 <div className="eigen-prose" dangerouslySetInnerHTML={{ __html: preview.body }} />
+                            ) : previewFailed ? (
+                                // The content loaded, so a failed preview is its 1 MiB cap.
+                                <ErrorState message="This file is too large to preview." />
                             ) : (
                                 <LoadingState />
                             )}
