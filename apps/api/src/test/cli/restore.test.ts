@@ -511,11 +511,11 @@ describe('restore --stage and --swap', () => {
         'a home that stores files by name comes back with every renamed, trashed and versioned item, Full and then Light',
         async () => {
             const dir = install();
-            const data = join(homeDirOf(dir, realShape.user.id), 'mounts', realShape.mountId, 'data');
+            const home = homeDirOf(dir, realShape.user.id);
             await stageAndSwap(dir, basename(fullArchive));
-            expectRealShape(data, realShape);
+            expectRealShape(home, realShape);
             await stageAndSwap(dir, basename(lightArchive));
-            expectRealShape(data, realShape);
+            expectRealShape(home, realShape);
         },
         JOB_TIMEOUT_MS,
     );

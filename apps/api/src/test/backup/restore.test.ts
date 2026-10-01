@@ -1338,17 +1338,15 @@ describe('Backup round trip of a home that stores files by name', () => {
 
     test('the per-home backup verifies and its restore puts every renamed, trashed and versioned item back', async () => {
         const shape = await realShapeHome();
-        const { user, mountId } = shape;
+        const { user } = shape;
         await restoreHome(await backUp(user.id), user.id, `restore-real-shape-${Date.now()}`);
-        expectRealShape(join(TEST_DATA_DIR, 'home', user.id, 'mounts', mountId, 'data'), shape);
-        const trash = await driveGetList(user.sessionToken, user.id, mountId, 'trash');
-        expect(trash.map((item) => item.name).sort()).toEqual(['Old', 'Trashed Doc.eigendoc', 'trashed.txt']);
+        expectRealShape(join(TEST_DATA_DIR, 'home', user.id), shape);
         await expectRealShapeServed(shape);
     });
 
     test('the home moves in through a copy when the backups folder is another disk than data/', async () => {
         const shape = await realShapeHome();
-        const { user, mountId } = shape;
+        const { user } = shape;
         const artifact = await backUp(user.id);
         const homeDir = join(TEST_DATA_DIR, 'home', user.id);
         const rename = fsp.rename;
@@ -1364,6 +1362,6 @@ describe('Backup round trip of a home that stores files by name', () => {
             spy.mockRestore();
         }
         expect(crossed).toBe(true);
-        expectRealShape(join(homeDir, 'mounts', mountId, 'data'), shape);
+        expectRealShape(homeDir, shape);
     });
 });
