@@ -54,8 +54,7 @@ const JOURNAL_FILE = /\.db-(wal|shm)$/;
 // it, and without it a restored mailbox has nothing for MaildirStore.watch to watch, so mail stops syncing.
 type FileTree = { files: string[]; dirs: string[]; databases: string[] };
 
-// Synchronous on purpose: the mail watcher moves a message from `new/` to `cur/` between two awaits, and a walk that
-// yielded could list `cur/` before the move and `new/` after it, missing the message.
+// Synchronous to narrow the window in which the mail watcher's move from `new/` to `cur/` hides a message from a capture.
 export function listFileTree(root: string, skipDir: (rel: string) => boolean = () => false): FileTree {
     const tree: FileTree = { files: [], dirs: [], databases: [] };
     const walk = (relDir: string): void => {
