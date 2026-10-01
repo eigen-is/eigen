@@ -1291,18 +1291,20 @@ describe('an interrupted swap', () => {
         JOB_TIMEOUT_MS,
     );
 
-    test('a stage record cut off mid-write reads as nothing staged, not a stack', async () => {
+    test('a stage record cut off mid-write or of another shape reads as nothing staged, not a stack', async () => {
         const dir = install();
         mkdirSync(join(dir, 'data/.restoring'));
-        writeFileSync(join(dir, 'data/.restoring/staged.json'), '{"archive": "cut of');
-        for (const [flag, said] of [
-            ['--swap', 'Nothing is staged to swap in'],
-            ['--staged', 'Nothing is staged.'],
-        ]) {
-            const result = await restoreCli(dir, [flag]);
-            expect(result.code).toBe(1);
-            expect(result.stderr).toContain(said);
-            expect(result.stderr).not.toContain('SyntaxError');
+        for (const record of ['{"archive": "cut of', JSON.stringify({ archive: 'another-build', level: 'all' })]) {
+            writeFileSync(join(dir, 'data/.restoring/staged.json'), record);
+            for (const [flag, said] of [
+                ['--swap', 'Nothing is staged to swap in'],
+                ['--staged', 'Nothing is staged.'],
+            ]) {
+                const result = await restoreCli(dir, [flag]);
+                expect(result.code).toBe(1);
+                expect(result.stderr).toContain(said);
+                expect(result.stderr).not.toContain('SyntaxError');
+            }
         }
     });
 
@@ -1317,11 +1319,16 @@ describe('an interrupted swap', () => {
 
     test('a marker of another shape is refused with what to do, not a stack', async () => {
         const dir = install();
-        writeFileSync(join(dir, SWAP_MARKER), JSON.stringify({ archive: 'another-build', steps: [] }));
-        const result = await swap(dir);
-        expect(result.code).toBe(1);
-        expect(result.stderr).toContain('does not read as a swap');
-        expect(result.stderr).not.toContain('TypeError');
+        for (const marker of [
+            { archive: 'another-build', steps: [] },
+            { archive: 'another-build', renames: [] },
+        ]) {
+            writeFileSync(join(dir, SWAP_MARKER), JSON.stringify(marker));
+            const result = await swap(dir);
+            expect(result.code).toBe(1);
+            expect(result.stderr).toContain('does not read as a swap');
+            expect(result.stderr).not.toContain('TypeError');
+        }
     });
 });
 
