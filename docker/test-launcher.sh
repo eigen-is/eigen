@@ -8,7 +8,8 @@
 # it writes anything and hands over, typed on a terminal too, update --no-backup with Eigen stopped, the retry of an
 # update from Eigen 0.3.0 and the handover from it whose own image saves the snapshot, what setup
 # downloads with and without pins and the build it records, backup on the running API, restore's stage and swap and
-# what each failure leaves, an archive uid 1000 cannot read, a running server backup waited out before the stop, a swap
+# what each failure leaves, an archive uid 1000 cannot read, a running server backup waited out before the stop, an
+# update interrupted in that wait that stops and restarts nothing, a swap
 # that was cut off and finished first, with no .env.production too, a restore on a new machine from the launcher
 # alone, what rollback runs or prints, a lock without a pid, the group and mode every start gives .env.production first but on Docker Desktop,
 # and what status passes the CLI about backups/, the files of an unfinished update and the newest build of main, and
@@ -201,9 +202,10 @@ PATH_IN=/stub:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # launch <folder> <args…>: the launcher under $SHELL_NAME in $FIX/<folder>; sets CODE, OUT (stdout), ERR (stderr) and
 # CALLS (what docker was asked). STUB_* pass through as set here. LAUNCH_TTY=1 gives a container shell a terminal, which
-# takes stderr into OUT.
+# takes stderr into OUT. LAUNCH_TERM=<call> sends the launcher a TERM a second after docker is asked <call>, as Ctrl-C
+# would: bash starts a background job with INT ignored, which a shell cannot trap, and the launcher traps both alike.
 launch() {
-    local dir="$FIX/$1" vars=("STUB_LOG=$FIX/calls.log") flags=() name var
+    local dir="$FIX/$1" vars=("STUB_LOG=$FIX/calls.log") flags=() run name var pid
     shift
     : >"$FIX/calls.log"
     for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_REVISION STUB_LABEL_VERSION \
@@ -213,13 +215,25 @@ launch() {
     done
     CODE=0
     if [ "$SHELL_NAME" = host ]; then
-        OUT=$(cd "$dir" && env "${vars[@]}" PATH="$FIX/bin:$PATH" /bin/sh ./eigen "$@" 2>"$FIX/stderr") || CODE=$?
+        run=(env "${vars[@]}" PATH="$FIX/bin:$PATH" /bin/sh ./eigen "$@")
     else
         for var in "${vars[@]}"; do flags+=(-e "$var"); done
         # As this user, or on a Linux host root's .eigen would refuse this script's own lock below.
         if [ "${LAUNCH_TTY:-0}" = 1 ]; then flags+=(-t); fi
-        OUT=$(docker run --rm --user "$(id -u):$(id -g)" -v "$FIX:$FIX" -v "$FIX/bin:/stub:ro" -w "$dir" \
-            -e PATH="$PATH_IN" "${flags[@]}" "$IMAGE" "$SHELL_CMD" ./eigen "$@" 2>"$FIX/stderr") || CODE=$?
+        # docker run passes the TERM on to the shell in the container.
+        run=(docker run --rm --user "$(id -u):$(id -g)" -v "$FIX:$FIX" -v "$FIX/bin:/stub:ro" -w "$dir"
+            -e PATH="$PATH_IN" "${flags[@]}" "$IMAGE" "$SHELL_CMD" ./eigen "$@")
+    fi
+    if [ -z "${LAUNCH_TERM:-}" ]; then
+        OUT=$(cd "$dir" && "${run[@]}" 2>"$FIX/stderr") || CODE=$?
+    else
+        (cd "$dir" && exec "${run[@]}") >"$FIX/stdout" 2>"$FIX/stderr" &
+        pid=$!
+        while kill -0 "$pid" 2>/dev/null && ! grep -qF -- "$LAUNCH_TERM" "$FIX/calls.log"; do sleep 0.2; done
+        sleep 1
+        kill -s TERM "$pid" 2>/dev/null || :
+        wait "$pid" || CODE=$?
+        OUT=$(cat "$FIX/stdout")
     fi
     ERR=$(cat "$FIX/stderr")
     CALLS=$(cat "$FIX/calls.log")
@@ -760,6 +774,19 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: update --pulled --saved: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     rm "$FIX/release/.eigen/last-update"
+    # The stop is armed only after the wait for a running server backup, so an interrupt there leaves Eigen running.
+    mkdir -p "$FIX/release/data" "$FIX/release/backups"
+    printf '{\n  "state": "running",\n  "startedAt": "2026-01-01T02:00:00.000Z"\n}\n' \
+        >"$FIX/release/backups/server-scheduled-full-20260101-020000.tar.json"
+    LAUNCH_TERM='ps --status running --services' STUB_DIGEST=ddd \
+        launch release update --pulled 0.2.99 --saved server-pre-update-full-20260101-000000.tar
+    rm -r "$FIX/release/data" "$FIX/release/backups"
+    if [ "$CODE" = 130 ] && ! printf '%s\n' "$CALLS" | grep -Eq ' (stop|up -d --wait)$' &&
+        [ ! -e "$FIX/release/.eigen/lock" ] && [ ! -e "$FIX/release/.eigen/last-update" ]; then
+        ok "$SHELL_NAME: an interrupt while an update waits for a running server backup neither stops nor restarts Eigen"
+    else
+        fail "$SHELL_NAME: an update interrupted in the backup wait: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
 
     STUB_FAIL=compose-config launch local restart
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Eigen did not start' &&
@@ -832,9 +859,9 @@ for SHELL_NAME in dash busybox host; do
     fi
     STUB_RUN_FAIL=--swap launch local restore "$ARCHIVE" --yes
     if [ "$CODE" = 1 ] &&
-        [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|rm data/.restoring|share|up|" ] &&
+        [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|share|up|rm data/.restoring|" ] &&
         [ ! -e "$FIX/local/.eigen/lock" ]; then
-        ok "$SHELL_NAME: a swap refused before its marker removes the staged tree, starts Eigen again and removes the lock"
+        ok "$SHELL_NAME: a swap refused before its marker starts Eigen again, then removes the staged tree and the lock"
     else
         fail "$SHELL_NAME: a refused swap: exit $CODE, steps '$(steps)'"
     fi

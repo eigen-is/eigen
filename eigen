@@ -119,7 +119,8 @@ Usage: ./eigen rollback [--yes]
 Goes back to the version before the last ./eigen update, with the backup it made first. After
 a light one, the accounts, settings and databases are as they were then, and mail as it is now.
 Files and documents made since drop out of Drive, though they stay on disk; files renamed, moved
-or trashed since are listed where they were and do not open. The current data is kept aside.
+or trashed since are listed where they were and, on drives that store files by their names, do
+not open. The current data is kept aside.
 
   --yes   Do not ask
 EOF
@@ -665,7 +666,7 @@ stage_archive() {
 # had and ends the command; one cut off after it leaves Eigen stopped, for the next ./eigen command to finish.
 swap_archive() {
     before_stop
-    AT_EXIT="$UNSTAGE; restart"
+    AT_EXIT="restart; $UNSTAGE"
     stop
     trap : INT TERM
     swapped=0
