@@ -83,8 +83,7 @@ export const s3ConfigBody = t.Object({
     region: t.Optional(t.String()),
 });
 
-// The backup bucket as the owner edits it: a field left out keeps the saved one, and so does a blank secret
-// while the key, endpoint and bucket stay.
+// The backup bucket as the owner edits it: a field left out keeps the saved one; a blank secret, see keepsSavedSecret.
 export const s3DestinationBody = t.Object({
     endpoint: t.Optional(t.String()),
     bucket: t.Optional(t.String()),
