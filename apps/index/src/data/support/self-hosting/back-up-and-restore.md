@@ -21,11 +21,11 @@ The owner turns this on in Eigen itself:
 4. Set **Nightly backups to keep**. The default is 7.
 5. Click **Save** at the bottom of the page.
 
-Each night Eigen makes a Full backup, checks it, and deletes the oldest nightly ones past the number you keep. A night that failed never pushes out the last good backup. If you turn the schedule on after today's time has passed, the first backup starts within a few minutes.
+Each night Eigen makes a Full backup, checks it, and deletes the oldest nightly ones past the number you keep. A night that failed, or one with warnings, never pushes out the last complete backup. If you turn the schedule on after today's time has passed, the first backup starts within a few minutes.
 
 When a user or team keeps files in an S3 bucket, **Include files in S3 buckets** appears too. See [Drives in an S3 bucket](#drives-in-an-s3-bucket).
 
-A backup that fails, or a copy that does not reach the bucket, sends the owner a notification. `./eigen status` shows it too.
+A backup that fails, one with warnings, or a copy that does not reach the bucket, sends the owner a notification. `./eigen status` shows it too. A warning names a user or team whose files are gone from their disk or bucket: that user or team is in the backup without those files, as their account stands now. A backup with warnings still restores, and `./eigen backup` and `./eigen update` go on.
 
 ## Keep a copy off the server
 
@@ -112,7 +112,7 @@ sudo rm -rf data.pre-restore-<date>-<time> .env.production.pre-restore-<date>-<t
 
 The question also says whether the backup holds `.env.production`, the key that signs your mail, and the mail server's certificate. A backup made in the ten minutes after that certificate was renewed can miss it, and one of a server without hosted mail has neither. What a backup does not hold, the restore keeps as the server has it.
 
-A user or team that failed during the backup is not in it, and the question names them. After a restore of a Full backup, their data is in `data.pre-restore-<date>-<time>` only.
+A user or team that failed during the backup is not in it, and the question names them. One with warnings is in it, without the files the warning named. After a restore of a Full backup, their data is in `data.pre-restore-<date>-<time>` only.
 
 Everyone is signed in as they were when the backup was made. Every open browser tab reloads once. After a restore, everything in the Trash stays there for the full **Trash Retention (days)** period, counted from the restore. `--yes` skips the question, for scripts.
 

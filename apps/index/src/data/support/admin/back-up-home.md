@@ -24,7 +24,7 @@ The backup runs in the background, so you can keep working. While it runs, the s
 
 Only a rename or move on a drive, and the saves and uploads on that drive after it, can wait while the backup copies one very large file there.
 
-The backup stops if a file Eigen has on record is gone from its disk or bucket, for example because someone deleted it outside Eigen. The section then shows **Creating backup failed** and names the file. The same goes for a document whose data is gone. Only an empty file, or one deleted while the backup runs, is left out.
+A file Eigen has on record that is gone from its disk or bucket, for example because someone deleted it outside Eigen, does not stop the backup. The archive keeps its entry without the file, and the archive's row names it in a warning. The same goes for a document whose data is gone. Items whose folder is gone from the drive's records are left out, and named the same way. An archive with warnings still restores: the account comes back as it is now, without those files. The backup stops only when none of a drive's files can be found, because then the disk or bucket is out of reach: the section shows **Creating backup failed**. An empty file, or one deleted while the backup runs, is left out without a warning.
 
 Each archive is one file named `home-<id>-<date>-<time>.tar.zst`. Its row shows the date and size, and a badge:
 
