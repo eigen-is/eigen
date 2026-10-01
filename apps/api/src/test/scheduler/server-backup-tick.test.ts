@@ -13,11 +13,12 @@ import {
 import type { BackupJob, BackupLevel, BackupReason } from '@workspace/lib/types/backup';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import { buildServerArchiveName } from '../../lib/backup/paths';
+import { serverBackupTick } from '../../lib/backup/schedule';
 import * as serverJob from '../../lib/backup/server-job';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { ApiError } from '../../lib/core';
 import * as homeRelay from '../../lib/home/home-relay';
-import { registerScheduledJobs, serverBackupTick } from '../../lib/scheduler/jobs';
+import { registerScheduledJobs } from '../../lib/scheduler/jobs';
 import { stopAllSchedules } from '../../lib/scheduler/scheduler';
 import { removeServerRecords, writeServerRecord } from '../backup/backup-test-helpers';
 import { ensureServer, getTestContext } from '../setup';
