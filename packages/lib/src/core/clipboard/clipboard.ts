@@ -14,6 +14,7 @@ import {
     stripEigenMediaRefs,
 } from '../../vector/media-refs';
 import { getDriveDownloadUrl } from '../api';
+import { onMutationError } from '../api-error';
 import { bytesToBase64 } from '../format';
 import { isRecord } from '../guards';
 
@@ -31,9 +32,8 @@ export const EIGEN_CLIPBOARD_RENDER_ATTR = 'data-eigen-clipboard-render';
 // the other before it writes.
 export type ClipboardBox = { width: number; height: number; angle?: number };
 
-// Build an image item so producers never hand-assemble the five source-path fields (three producers
-// wrote the same block verbatim) and geometry lands on the typed fields. `source` is the media file's
-// DrivePath.
+// Build an image item so producers never hand-assemble the five source-path fields and geometry lands
+// on the typed fields. `source` is the media file's DrivePath.
 export function buildImageClipboardItem(args: {
     mediaName: string;
     source: DrivePath;
@@ -78,18 +78,16 @@ export function readClipboardBox(item: EigenClipboardItem): ClipboardBox {
     return { width: item.width, height: item.height, angle: item.type === 'elements' ? undefined : item.angle };
 }
 
-// A text item with a real payload, not an empty carrier. No eigen app writes one today, but the wire is
-// forgeable and any producer may, so every consumer skips them and a contentless item never lands as a
-// blank paragraph/cell. The one home for that convention.
+// A text item with a real payload, not an empty carrier. The canvas writes one per rich-text box, empty
+// boxes too, and the wire is forgeable, so every consumer skips them and a contentless item never lands
+// as a blank paragraph/cell. The one home for that convention.
 export function clipboardTextItemHasContent(item: EigenClipboardTextItem): boolean {
     return item.text.trim().length > 0;
 }
 
 // One forged item must not cost the whole paste. The wire is writable by any web page, and every
-// consumer reads the typed fields with no fallbacks — so an item that doesn't match its own variant is
-// dropped HERE. Validating only geometry was not enough: a `text` item with no `text` reached
-// `clipboardTextItemHasContent`, threw inside a paste handler that had already called preventDefault,
-// and the paste vanished with no error the user could see.
+// consumer reads the typed fields with no fallbacks, inside paste handlers that already called
+// preventDefault — so an item that doesn't match its own variant is dropped HERE.
 function isValidItem(item: unknown): item is EigenClipboardItem {
     if (!isRecord(item)) return false;
     if (!Number.isFinite(item.width) || !Number.isFinite(item.height)) return false;
@@ -345,12 +343,13 @@ export async function writeEigenClipboardAsync(
     await navigator.clipboard.write([new ClipboardItem(items)]);
 }
 
-export function copyToClipboard(text: string, message = 'Copied to clipboard') {
-    navigator.clipboard.writeText(text);
-    toast.success(message);
+export function copyToClipboard(text: string, message = 'Copied to clipboard'): Promise<void> {
+    return navigator.clipboard.writeText(text).then(() => {
+        toast.success(message);
+    }, onMutationError);
 }
 
-// No source folder on the wire is forged or incomplete: its name resolves against nothing here.
+// A wire item with no source folder (forged or incomplete) resolves nowhere, so it re-uploads.
 export function needsReUpload(sourceParentId: string | null | undefined, targetMediaFolderId: string | null): boolean {
     if (!targetMediaFolderId) return false;
     return sourceParentId !== targetMediaFolderId;
@@ -399,7 +398,7 @@ export async function reUploadImage(
 // existing credentialed `reUploadImage` seam (in parallel), same-folder refs keep their name, and the
 // stored SVG's refs are rewritten old→final (collision renames) or stripped for uploads that failed or
 // have no typed item — the drawing only ever references names that exist in the target's media/. Undo
-// is the host's single svg-insert step, exactly as an image paste today; the uploads are not undoable.
+// is the host's single svg-insert step, as for an image paste; the uploads are not undoable.
 export async function materializeClipboardSvg(
     svg: string,
     items: EigenClipboardItem[],
