@@ -2,6 +2,10 @@
 
 > **TLDR:** Every user has two budgets: home data (mail, contacts and calendar bytes together) and each Drive mount. `apps/api/src/lib/config/quota.ts` resolves the limits and `enforcement.ts` holds every check, without cache or reservation. Not obvious from the code: a team override only raises a limit, and a mount write takes the overrides of the user writing, not the mount's owner. A user's default mount cap is stamped at first sign-in, so changing the server default after that moves no existing user. A full home-data budget still lets its owner shrink, delete and make small edits. A 507 means a full budget, but a streamed upload that outgrows what is left is cut with a 413.
 
+Quotas keep one user from filling the server's disk or bucket. The owner sets the server defaults and the per-file cap in the Admin app ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)), an org admin can raise them for a team's members on the team's page, and the app sidebars show each user their usage.
+
+The two budgets follow what a Home holds. A Home is the data folder of one user or team ([STORAGE.md § A Home is loaded on demand](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)). Its mail, contacts and calendar databases share the home-data budget, and each Drive mount, one drive with its own storage backend, has a budget of its own ([STORAGE.md § A mount is a paths table](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)). The checks in `enforcement.ts` sit on the writes a person starts: an upload, copy or save into a mount, a contact card, a calendar resource and an imported message, from the web apps, WebDAV, CalDAV and CardDAV alike. Mail that arrives and edits to a collab document or a chat room are counted but never refused. The one idea is that a limit is soft: it refuses growth and never deletes, and writes at the same moment may overshoot it a little ([§ Over quota](#over-quota-keeps-the-data-and-refuses-growth)).
+
 ## Two budgets, because they grow differently
 
 | Budget | What it covers | Server setting |
