@@ -597,6 +597,30 @@ describe('Backup restoreHome', () => {
         rmSync(join(getBackupsDir(), artifactV7), { force: true });
     });
 
+    test('an empty path-based folder whose name and file differ comes back where its mount renames it from', async () => {
+        const home = await getHome(target.id);
+        const localMount = home.drive.getMounts().find((m) => m.id === LOCAL_MOUNT_ID)!;
+        const folder = await drivePost(target.sessionToken, target.id, LOCAL_MOUNT_ID, `folder/${localRootId}`, {
+            folderName: 'Deduplicated',
+        });
+        await localMount.db.update(paths).set({ name: 'Deduplicated (1)' }).where(eq(paths.id, folder.id));
+
+        const artifactV7 = await backup(target.id, new Date(Date.now() + 180_000));
+        await restoreHome(artifactV7, target.id, `restore-renamed-folder-${Date.now()}`);
+
+        const rename = await authedRequest(
+            target.sessionToken,
+            `/drive/${target.id}/${LOCAL_MOUNT_ID}/path/${folder.id}/rename`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ newName: 'Kept' }),
+            },
+        );
+        expect(rename.status).toBe(200);
+        rmSync(join(getBackupsDir(), artifactV7), { force: true });
+    });
+
     test('the home is refused while the mark is set and served again once it clears', async () => {
         const { markHomeRestoring, clearHomeRestoring } = await import('../../lib/home/get-home');
         markHomeRestoring(target.id);

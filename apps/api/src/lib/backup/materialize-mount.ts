@@ -108,10 +108,10 @@ export function materializeMount(
 
         if (isPathBased) {
             // A folder carries no bytes, so an empty one has no archive entry — recreate them from
-            // the table, or a later rename of one 404s.
+            // the table, at the key the mount renames them from, or a later rename of one 404s.
             for (const row of rows) {
                 if (row.type === 'file' || row.parentId === null) continue;
-                fs.mkdirSync(inData(archivePath(row, byId)), { recursive: true });
+                fs.mkdirSync(inData(storageKeyOf(row, byId, true)), { recursive: true });
             }
         }
         // The mount's own staging folder, where the upload queue keeps a copy until its PUT acks.
