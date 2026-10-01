@@ -335,7 +335,7 @@ function ServerArchiveRow({ archive, uploadable, onUpload, onDelete }: ServerArc
                 variant="warning"
                 title="In this backup with warnings:"
                 homes={homes.flatMap(({ ownerId, name, warnings }) =>
-                    warnings ? [{ ownerId, name, why: warnings.join('; ') }] : [],
+                    warnings?.length ? [{ ownerId, name, why: warnings.join('; ') }] : [],
                 )}
             />
             {record?.verify && <VerifyFailures verify={record.verify} />}

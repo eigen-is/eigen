@@ -300,7 +300,7 @@ function isServerArchiveManifest(value: unknown): value is ServerArchiveManifest
 // an archive counts as good for local retention, the bucket's and ./eigen status, so warned nights never push out the
 // last complete one. A record without a manifest has none.
 export function isCompleteArchive(manifest: Pick<ServerArchiveManifest, 'homes'> | undefined): boolean {
-    return manifest?.homes.every((home) => !home.failed && !home.warnings) ?? false;
+    return manifest?.homes.every((home) => !home.failed && !home.warnings?.length) ?? false;
 }
 
 // The outer manifest's gate, beside the per-home one below. Null means "not a version 1 manifest of

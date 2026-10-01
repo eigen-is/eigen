@@ -145,6 +145,7 @@ describe('parseServerArchiveManifest', () => {
         expect(isCompleteArchive({ homes: [user, deleted] })).toBe(true);
         expect(isCompleteArchive({ homes: [user, team] })).toBe(false);
         expect(isCompleteArchive({ homes: [{ ...user, warnings: ['mount drive: a.png'] }, deleted] })).toBe(false);
+        expect(isCompleteArchive({ homes: [{ ...user, warnings: [] }, deleted] })).toBe(true);
         expect(isCompleteArchive(undefined)).toBe(false);
     });
 

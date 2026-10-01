@@ -113,7 +113,7 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
             ? line(
                   warned,
                   warned.record?.manifest?.homes
-                      .filter((home) => home.warnings)
+                      .filter((home) => home.warnings?.length)
                       .map((home) => home.name)
                       .join(', '),
               )
