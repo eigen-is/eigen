@@ -32,7 +32,7 @@ The tag also carries the ids the link is built from, so each producer's tag deci
 | `assigned` | the assignee route in `routes/collab.ts` | built in `core/notification/tags.ts` |
 | `access-request` | `propagateAccessRequest` (`lib/drive/access-request-propagation.ts`) | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
 | `file-event` | `FileHistory.notifyWatchers` | `file-event:{ownerId}:{mountId}:{pathId}`; burst events tag the parent folder ([FILE-HISTORY.md](FILE-HISTORY.md#notifications-coalesce-per-file-and-bursts-per-folder)) |
-| `admin-alert` | backup verify (`lib/backup/jobs.ts`), whole-server backup (`alertOwner`, `lib/backup/server-archives.ts`), mail queue (`routes/internal.ts`) | `backup-verify-{ownerId}`, `server-backup-{reason}`, `mail-queue-backlog` |
+| `admin-alert` | `alertUser` and `alertOwner` (`lib/user/alert-owner.ts`): backup verify to the admin who started it (`lib/backup/jobs.ts`), whole-server backup (`lib/backup/server-job.ts`, `server-archives.ts`) and mail queue (`routes/internal.ts`) to the owner | `backup-verify-{ownerId}`, `server-backup-{archive}` and `server-backup-upload-{archive}` (`interrupted` for the boot's alert), `mail-queue-backlog` |
 
 An unshare carries no tag, because the reader has lost access and there is nothing to link to. For the same reason `isClickableNotification` leaves both unshare types out, so their rows are not links.
 

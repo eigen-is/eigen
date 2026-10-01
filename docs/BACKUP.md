@@ -36,16 +36,16 @@ The manifest records the level in `level`, and every mount whose bodies are not 
 
 - Every database, copied with `VACUUM INTO` through the running server's own handle, never as a file copy of a live WAL database: the drive's `shared.db`, each mount's `metadata.db`, `calendar.db`, and for a user `mail.db`, `contacts.db` and `notifications.db`. A database under the home that `HOME_DATABASES` (`apps/api/src/lib/backup/archive-layout.ts`) does not list fails the backup, so a new subsystem's database is noticed the day it lands.
 - Every mount the home declares, disabled ones too. What happens to a mount or file the backup cannot read: [An unreadable enabled mount or a lost file fails the backup](#an-unreadable-enabled-mount-or-a-lost-file-fails-the-backup).
-- Every file the drive knows about, by the path it would have on a `local` mount, on all three backends. A restore re-derives whatever keys the target mount needs, so an archive never depends on a bucket, its credentials or the storage type staying the same.
+- Every file the drive knows about, by the path it would have on a `local` mount, on all three backends. The capture reads a mount's rows from the archived copy of its `metadata.db` and fetches each file by id from wherever the mount keeps it now. On a `local` mount, whose keys are names, it reads under the mount's shared tree lock, so no rename moves the bytes mid-read. Each file is in the archive at the path its archived row gives, which is the path a restore puts it at. A restore re-derives whatever keys the target mount needs, so an archive never depends on a bucket, its credentials or the storage type staying the same.
 - Every container's `data.db` and `comments.db`, freshest first: an open document's live handle, then a crash temp in `tmp/`, then a pending staged upload, then the stored object. A backup taken during an S3 outage holds the newest local bytes.
 - Version history and trash (`versions/` and `.trash/`). Version history is the only copy of an old file state, and trash is data the user can still restore.
 - Thumbnails. A thumbnail is made once, at upload, and never again, so it is not derived data.
 - The contacts avatar renditions (`eigen.contacts/avatars/`). The served webp keeps the animation and alpha the card's Apple-safe `PHOTO` gave up ([CONTACTS.md](CONTACTS.md#the-avatars-folder-is-a-second-source-of-truth-not-a-cache)).
-- Mail as Maildir files, empty folders included. A mailbox nobody delivered to still needs its `new/` and `cur/`, because the mail sync watches them.
+- Mail as Maildir files, empty folders included. A mailbox nobody delivered to still needs its `new/` and `cur/`, because the mail sync watches them. A message renamed during the capture, by a flag change or by delivery moving it from `new/` to `cur/`, is taken under its new name.
 - The home's `settings.json`, mount configs and every `s3` mount's keys included.
 - For a user, `auth.json` (their `user`, `account`, `apikey`, `two_factor`, `member` and `team_member` rows), `shares.json` (the share-registry rows they granted) and their avatar.
 
-Each database copy is one committed state. The archive as a whole is not one instant: a mail that arrives during the backup may or may not be in it. That is the standard guarantee for a backup of a running system, and it is why users keep working during one.
+Each database copy is one committed state. The archive as a whole is not one instant: a mail that arrives during the backup may or may not be in it, and a file created after its mount's database copy is not. That is the standard guarantee for a backup of a running system, and it is why users keep working during one.
 
 ## An unreadable enabled mount or a lost file fails the backup
 
@@ -58,7 +58,9 @@ An archive that misses files the home should be serving is not a backup, so a ba
 | A disabled mount whose storage cannot be read | Skips it with the reason in the manifest, and a restore leaves it disabled and absent | Its bucket is often unreachable because it was turned off |
 | An enabled mount whose storage fails, or that the drive could not open | Fails, naming the mount and the error code | The home serves its files |
 | A file whose row records bytes and whose object is gone | Fails | The home lists the file |
-| A file with no bytes on record, or deleted during the backup | Leaves it out | There is nothing to take |
+| A file with no bytes on record | Leaves it out | There is nothing to take |
+| A file renamed, moved or trashed during the backup | Takes it from where it is now, at the path its archived row gives | The archived `metadata.db` is what a restore reads |
+| A file deleted for good during the backup | Keeps its archived row and has no bytes | There is nothing to take, and verify and restore allow a missing body |
 
 ## A home archive leaves out caches, sessions and other homes
 
@@ -233,7 +235,7 @@ A failed night never pushes out the last good archive, and nights that keep fail
 
 ## Failures reach the owner
 
-Every failure of a server backup or its upload sends an `admin-alert` to `getOrgOwner()` through `alertOwner`, tagged per archive so repeats coalesce. `./eigen status` shows a Backup row from `ControlStatus.backup`, built by `getServerBackupStatus` in `apps/api/src/lib/backup/server-archives.ts`: red while the newest scheduled attempt failed, yellow while it is not in the bucket or while the schedule is on and no Full verified in two days. With Eigen stopped the row reads the names in `backups/`.
+Every failure of a server backup or its upload sends an `admin-alert` to `getOrgOwner()` through `alertOwner` (`apps/api/src/lib/user/alert-owner.ts`), tagged per archive so repeats coalesce. `./eigen status` shows a Backup row from `ControlStatus.backup`, built by `getServerBackupStatus` in `apps/api/src/lib/backup/server-archives.ts`: red while the newest scheduled attempt failed, yellow while it is not in the bucket or while the schedule is on and no Full verified in two days. With Eigen stopped the row reads the names in `backups/`.
 
 ## Upload goes to a bucket of its own
 
@@ -272,7 +274,7 @@ The server backup routes (`apps/api/src/routes/server-backup.ts`) have no downlo
 2. Pull: on a release install, the images the archive's `.env.production` pins, while Eigen still runs.
 3. Swap (`restore --swap`, as root with Eigen stopped). It writes `.eigen/restore-swap`, the full list of copies and renames, and syncs it to disk before the first rename. Then it runs them and clears `backups/.staging/`. The per-home restore notes in it name homes of the `data/` that went aside, and boot recovery would act on the restored ones. It removes the marker and starts Eigen on the pinned images, with their launcher and Compose files. A local build runs `configure --backfill` instead.
 
-A swap cut off anywhere is finished by the next `./eigen` command other than `logs`, `reset-password` and `help`: `preflight` finds the marker and runs `restore --swap` again with the build whose files wrote it, which skips the renames already done. The staged tree was verified before the marker existed, so rolling forward is safe. The swap holds the API's instance lock ([DATABASE.md](DATABASE.md#one-api-process-owns-a-data-folder)) and `.eigen/restore.lock`; the launcher holds `.eigen/lock` throughout.
+A swap that ends after its marker is written leaves Eigen stopped, and the launcher says so: "The swap is unfinished and Eigen is stopped: ./eigen restart finishes it." A swap cut off anywhere is finished by the next `./eigen` command other than `logs`, `reset-password` and `help`: `preflight` finds the marker and runs `restore --swap` again with the build whose files wrote it, which skips the renames already done. The staged tree was verified before the marker existed, so rolling forward is safe. The swap holds the API's instance lock ([DATABASE.md](DATABASE.md#one-api-process-owns-a-data-folder)) and `.eigen/restore.lock`; the launcher holds `.eigen/lock` throughout.
 
 ## A Full restore swaps data/ whole, a Light one merges
 
@@ -309,11 +311,11 @@ The stage refuses:
 - one from a newer Eigen;
 - one from a release install on a local build, or the other way around (one pins images, the other builds its own);
 - `--s3-from-archive` on an archive without S3 files;
-- an archive the data disk has no room to stage.
+- an archive the data disk has no room to stage: it needs the archive's unpacked size free, once, since the stage streams each member out of the archive and renames what it unpacked into place (`stageBytesNeeded` in `apps/api/src/lib/backup/restore-server.ts`).
 
 The launcher refuses an archive path with a colon, which Docker cannot mount, and an archive uid 1000 cannot read, such as a copy root left 0600, with the `chown` that fixes it.
 
-The swap runs as root on files the API's user wrote, so it refuses a staged tree with a link, a device or a setuid or setgid file, and drops fifos and sockets. It needs `data/`, `data/.restoring/` and every home on the install folder's disk, not a link or another mount, because it only renames.
+The swap runs as root on files the API's user wrote, so it refuses a staged tree with a link, a device or a setuid or setgid file, and drops fifos and sockets. It needs `data/`, `data/.restoring/` and every home on the install folder's disk, not a link or another mount, because it only renames. So `restore --staged` checks it before Eigen stops: it refuses a linked `data/`, a `data/` on another disk than the install folder, and a staged tree on another disk than `data/`. The launcher runs it after every stage, on a release install and a local build alike (`put_back` in `eigen`), and a refusal removes the staged tree while Eigen runs on. The swap checks again.
 
 ## A restore on a new machine needs no setup
 
