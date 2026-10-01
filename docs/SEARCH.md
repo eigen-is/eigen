@@ -2,6 +2,10 @@
 
 > **TLDR:** Full-text search is SQLite FTS5 inside each domain's own database, with no search service: `emails_fts` in `mail.db`, and `paths_fts` (names) plus `paths_content_fts` (bodies) in every mount's `metadata.db`. One route, `GET /search/:ownerId`, fans out and returns `{ mail, file }`. Three things are not obvious from the code: a `bm25()` score is never compared across two indexes, so the final file list sorts by recency; the `contentDirty` bit on `paths` is the reindex queue; and a document's body comes from the same readers export and preview use. Calendar events and contacts have no index. Finding a match inside the open document is [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md).
 
+Search answers "which mail or file holds this term". Two places ask it. The ⌘K command palette shows mail and file hits as you type ([the proposal](proposals/PROPOSAL_COMMAND_PALETTE.md)), and the mail app's search box shows mail hits. Both read the user's own Home: their mail, the files in their Drive mounts and, for the palette, their teams' drives, which the home relay reads in each team's Home ([SCALABILITY.md](SCALABILITY.md)).
+
+A body index needs plain text. So docs, sheets, slides and drawings are read through the document content layer ([DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md)) in a background Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). The client caches results for a short time and drops them on the SSE events that can change a hit ([SSE.md](SSE.md)).
+
 ## Each index lives in the database it indexes
 
 Every FTS5 table is an external-content table over its source (`content='<source>'`) with three `AFTER INSERT / DELETE / UPDATE` triggers. The triggers write the index in the same transaction as the source row, so the index can't drift from it, and deleting a scope (a mount, the mail directory) takes its index along. Creating an index is an ordinary migration that ends with `INSERT INTO <fts> SELECT … FROM <source>`, the backfill for existing rows: `mail.db` v3 in `apps/api/src/lib/mail/db-config.ts`, `metadata.db` v2 (names) and v6 (bodies) in `apps/api/src/lib/mount/db-config.ts`.
