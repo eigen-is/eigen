@@ -63,7 +63,7 @@ On a phone `DropdownMenu` shows a `DropdownMenuSub` as a page of the same menu, 
 - A pane row shows the comment's anchor text, the card dialog its title.
 - On desktop, tapping a card in the docs activity panel switches to the comments panel to reveal its anchor. Every phone pane stays put.
 
-Open mobile work, and the real-device check still owed, is the Mobile row in [ROADMAP.md](ROADMAP.md). How to verify at phone sizes: the [verify-in-browser skill](../.claude/skills/verify-in-browser/SKILL.md).
+Open mobile work, a check on real devices included, is the Mobile row in [ROADMAP.md](ROADMAP.md). How to verify at phone sizes: the [verify-in-browser skill](../.claude/skills/verify-in-browser/SKILL.md).
 
 ## See also
 
