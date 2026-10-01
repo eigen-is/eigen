@@ -1,6 +1,18 @@
 # Comments
 
-> **TLDR:** A comment is a card in the document's Y.Doc, a chat thread in the container's `chat/` folder, and a row in the container's `comments.db`. Docs, sheets, stickies, slides and vector share all three; an app only decides how a card anchors to its content. Text and color are collaborative Yjs state, but status and assignee are written by the server, which records the activity row and sends the notification. A card whose anchor is gone is an orphan, not deleted. Hooks live in `packages/lib/src/core/comments/`, components in `packages/ui/src/components/comments/` and `cards/`, the server side in `apps/api/src/lib/chat/`.
+> **TLDR:** A comment is a card pinned to a piece of a document, with a chat thread under it for the replies. Docs, sheets, stickies, slides and vector share one comment model, and each app only decides how a card anchors to its content. Hooks live in `packages/lib/src/core/comments/`, components in `packages/ui/src/components/comments/` and `cards/`, the server side in `apps/api/src/lib/chat/`.
+
+A user selects something in a document, such as a run of text, a cell, a shape or an image, and adds a comment. They see a card with a title, a description, a color and optional attachments, and under it a chat thread for the replies. A comment can be resolved and reopened, and assigned to a member of the document. The comments pane beside the editor lists them. On a stickies board every card is a comment card.
+
+Each app that shows comments is called a host. A host decides only where a card anchors, such as a mark on text in a doc or a list of card ids on a sheet cell. The shared hooks and components do the rest, so a change to comments lands in every app at once.
+
+A comment is spread over three stores in the document's container, the Drive folder that holds one document, such as `Notes.eigendoc` ([STORAGE.md](STORAGE.md)). The card lives in the document's Y.Doc, the shared Yjs state every editor holds a copy of ([COLLAB.md](COLLAB.md)). The thread is a chat in the container's `chat/` folder ([CHAT.md](CHAT.md)). And `comments.db` keeps one index row per thread ([A comment lives in three stores](#a-comment-lives-in-three-stores)).
+
+Three things surprise people:
+
+- Text and color are collaborative Yjs state, but status and assignee are written by the server, which records the activity row and sends the notification ([A comment lives in three stores](#a-comment-lives-in-three-stores)).
+- In docs and sheets a delete strips the anchor and leaves the card an orphan, so an undo brings the whole comment back ([An anchorless card is an orphan, not deleted](#an-anchorless-card-is-an-orphan-not-deleted)).
+- On a phone the pane hides the editor instead of unmounting it ([The pane hides the editor, never unmounts it](#the-pane-hides-the-editor-never-unmounts-it)).
 
 ## A comment lives in three stores
 
@@ -31,11 +43,11 @@ A cut image keeps its card, because the cut serializes the figure's `data-commen
 
 ## A docs image opens its own menu and paints its own mark
 
-ProseMirror never sees a right-click inside a node view, so the figure's node view hands it to the `Figure` extension's `onContextMenu`. The editor node-selects the figure and opens the image menu (Download original image, then the card's rows or Add comment) only when a row will render; otherwise the browser's menu shows. A commented figure paints the canvas' `CommentIndicator` in its top-right corner, in the color a node decoration carries, resolved cards included, and only that mark opens the card. The node view re-renders on every update, because TipTap skips a decoration-only change and the color arrives as one.
+ProseMirror never sees a right-click inside a node view, so the figure's node view hands it to the `Figure` extension's `onContextMenu`. The editor node-selects the figure and opens the image menu (**Download original image**, then the card's rows or **Add comment**) only when a row will render; otherwise the browser's menu shows. A commented figure paints the canvas' `CommentIndicator` in its top-right corner, in the color a node decoration carries, resolved cards included, and only that mark opens the card. The node view re-renders on every update, because TipTap skips a decoration-only change and the color arrives as one.
 
 ## An anchorless card is an orphan, not deleted
 
-Docs and sheets delete a comment by stripping its anchor. The card, its thread and its index row stay. The panel shows only active cards, the ones the host finds anchored in its content, so the orphan disappears from view. An undo or a version restore that brings the anchor back brings the whole comment back, thread included. This holds for docs, sheets and the canvas: their `comments` map is not one of their declared `yjsRoots`, so a version restore leaves the cards alone and moves only the anchors ([COLLAB.md](COLLAB.md#a-version-restore-rewrites-an-open-document-in-one-transaction)). Stickies is different. Its `tasks` map is a declared root, so a restore rewrites the cards too: a card added after the version drops off the board while its thread and row stay, and an edit made since to a card's text or color reverts.
+Docs and sheets delete a comment by stripping its anchor. The card, its thread and its index row stay. The panel shows only active cards, the ones the host finds anchored in its content, so the orphan disappears from view. An undo or a version restore that brings the anchor back brings the whole comment back, thread included. This holds for docs and sheets: their `comments` map is not one of their declared `yjsRoots`, so a version restore leaves the cards alone and moves only the anchors ([COLLAB.md](COLLAB.md#a-version-restore-rewrites-an-open-document-in-one-transaction)). The canvas shares that rule but deletes a card from its map, so a restore from before the delete brings back an element flag for a card that is gone ([ROADMAP.md](ROADMAP.md)). Stickies is different. Its `tasks` map is a declared root, so a restore rewrites the cards too: a card added after the version drops off the board while its thread and row stay, and an edit made since to a card's text or color reverts.
 
 Stickies deletes a card from its column and from `tasks` in one transaction (`deleteCardFromBoard`). Its UndoManager tracks `tasks`, so one ⌘Z brings back the card and its place. It is the only host whose undo scope holds the comment map.
 
@@ -69,7 +81,7 @@ The client posts the card title with every status and assignee write, and the se
 
 The toolbar badge counts the open, anchored comments assigned to you (`useAssignedCommentCount`). It is personal because a document-wide unresolved count would show every viewer the same red number, for threads that belong to someone else.
 
-Mentions are recorded in `comment_mentions` on every message, and nothing reads them yet ([ROADMAP.md](ROADMAP.md)).
+Mentions are recorded in `comment_mentions` on every message, and nothing reads them ([ROADMAP.md](ROADMAP.md)).
 
 ## One lifecycle bundle drives every host
 
@@ -90,7 +102,7 @@ Below the breakpoint the pane takes the whole screen. Docs, sheets and the canva
 
 On mobile every host opens a card with plain `setOpenCardId`. Scrolling to a mark or revealing an element would move a view nobody can see. On desktop docs and the canvas reveal the anchor first; slides activates the element's slide, then selects it.
 
-Stickies mounts the pane for activity only and only on desktop; the mobile pane is open work in [ROADMAP.md](ROADMAP.md). The canvas passes `onAddComment`, which puts a New comment button in the pane for a document-level card.
+Stickies mounts the pane for activity only and only on desktop; the mobile pane is open work in [ROADMAP.md](ROADMAP.md). The canvas passes `onAddComment`, which puts a **New comment** button in the pane for a document-level card.
 
 ## The filter lives on the surface it filters
 
