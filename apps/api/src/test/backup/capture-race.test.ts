@@ -12,6 +12,7 @@ import { Mount } from '../../lib/mount/mount';
 import {
     assertJson,
     authedRequest,
+    chatPost,
     createTestUser,
     driveDelete,
     driveGetList,
@@ -134,7 +135,9 @@ function archivedReports(folder: string): string[] {
 function archivedRow(folder: string, id: string) {
     const db = new Database(join(folder, 'home/mounts', M, 'metadata.db'), { readonly: true });
     try {
-        return db.query<{ name: string }, [string]>('SELECT name FROM paths WHERE id = ?').get(id);
+        return db
+            .query<{ name: string; size: number | null }, [string]>('SELECT name, size FROM paths WHERE id = ?')
+            .get(id);
     } finally {
         db.close();
     }
@@ -200,13 +203,16 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
-    test('a version pruned during the capture is left out', async () => {
+    test('a version pruned during the capture is left out, and the document size above it is stale', async () => {
         const user = await raceUser('local-fullnames');
         const { root } = await seed(user);
-        const { version } = await seedDocument(user, root.id);
+        const { doc, version } = await seedDocument(user, root.id);
         const mount = await defaultMount(user);
+        // Reading the document caches its size, which the archived metadata.db copy then carries.
+        await mount.getPath(doc.id);
         const { manifest, folder } = await captureDuring(user, () => mount.deletePath(version.id));
         expect(archivedRow(folder, version.id)).toBeNull();
+        expect(archivedRow(folder, doc.id)?.size).toBeNull();
         expect(manifest.entries.some((entry) => entry.path.endsWith(`versions/${version.name}`))).toBe(false);
         expect(manifest.entries.some((entry) => entry.path.endsWith('Plan.eigendoc/data.db'))).toBe(true);
         expect((await verifyFolder(folder)).status).toBe('verified');
@@ -263,6 +269,44 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
+    test('a large file overwritten in place during its copy is archived whole', async () => {
+        const user = await raceUser('local-fullnames');
+        const { root } = await seed(user);
+        const size = 8 * 1024 * 1024;
+        const big = await driveUpload(
+            user.sessionToken,
+            user.id,
+            M,
+            root.id,
+            new File([new Uint8Array(size)], 'big.bin'),
+        );
+        const mount = await defaultMount(user);
+        const bigKey = await mount.getStorageKey(big.id);
+        // The overwrite starts on the next turn of the event loop, so it lands only if the copy gives the loop up.
+        const readKey = Mount.prototype.readKey;
+        let overwritten: Promise<unknown> | undefined;
+        const read = spyOn(Mount.prototype, 'readKey').mockImplementation(async function (this: Mount, key: string) {
+            if (key === bigKey && !overwritten) {
+                const { promise, resolve } = Promise.withResolvers<unknown>();
+                overwritten = promise;
+                setImmediate(() => resolve(mount.writeFile(big.id, new Uint8Array(size).fill(1))));
+            }
+            return readKey.call(this, key);
+        });
+        let result: Awaited<ReturnType<typeof snapshotInto>>;
+        try {
+            result = await snapshotInto(await getHome(user.id), 'full');
+            await overwritten;
+        } finally {
+            read.mockRestore();
+        }
+        const archived = readFileSync(join(result.folder, 'home/mounts', M, 'data/big.bin'));
+        expect(archived.byteLength).toBe(size);
+        expect(new Set(archived).size).toBe(1);
+        const entry = findOrFail(result.manifest.entries, (e) => e.path.endsWith('/data/big.bin'));
+        expect(entry.bytes).toBe(archived.byteLength);
+    });
+
     test('a flat-key mount, whose keys a rename does not change, is captured as before', async () => {
         const user = await raceUser('local-id');
         const { projects } = await seed(user);
@@ -270,6 +314,38 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
             drivePut(user.sessionToken, user.id, M, `path/${projects.id}/rename`, { newName: 'Projects 2026' }),
         );
         expect(archivedReports(folder)).toEqual(reportBodies);
+    });
+
+    test('an empty folder moved out of a folder deleted for good during the capture keeps its rows', async () => {
+        const user = await raceUser('local-id');
+        const { root } = await seed(user);
+        const t = user.sessionToken;
+        const old = await drivePost(t, user.id, M, `folder/${root.id}`, { folderName: 'Old' });
+        const gone = await driveUpload(t, user.id, M, old.id, new File(['gone'], 'gone.txt'));
+        const keep = await drivePost(t, user.id, M, `folder/${old.id}`, { folderName: 'Keep' });
+        const inner = await drivePost(t, user.id, M, `folder/${keep.id}`, { folderName: 'Inner' });
+        // Run whole before the first read: a flat-key mount has no tree lock that could wait on the capture.
+        let moved: Promise<unknown> | undefined;
+        const readKey = Mount.prototype.readKey;
+        const read = spyOn(Mount.prototype, 'readKey').mockImplementation(async function (this: Mount, key: string) {
+            moved ??= (async () => {
+                await drivePut(t, user.id, M, `path/${keep.id}/move`, { targetParentId: root.id });
+                await driveDelete(t, user.id, M, `path/${old.id}`);
+                await driveDelete(t, user.id, M, `trash/${old.id}`);
+            })();
+            await moved;
+            return readKey.call(this, key);
+        });
+        let folder: string;
+        try {
+            ({ folder } = await snapshotInto(await getHome(user.id), 'full'));
+        } finally {
+            read.mockRestore();
+        }
+        expect(archivedRow(folder, gone.id)).toBeNull();
+        expect(archivedRow(folder, keep.id)?.name).toBe('Keep');
+        expect(archivedRow(folder, inner.id)?.name).toBe('Inner');
+        expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
     test('a folder moved during a backup job reads back after the restore', async () => {
@@ -288,4 +364,31 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
             expect(res.status).toBe(200);
         }
     }, 120_000);
+});
+
+describe('a chat whose version is restored during the backup', () => {
+    for (const storageType of ['local-fullnames', 'local-id'] as const) {
+        test(`reopens with its messages after a restore, on ${storageType}`, async () => {
+            const user = await raceUser(storageType);
+            const t = user.sessionToken;
+            const { root } = await seed(user);
+            const chat = await drivePost(t, user.id, M, `folder/${root.id}/create/chat`, { fileName: 'Talk' });
+            await chatPost(t, user.id, M, `${chat.id}/messages`, { content: 'v1' });
+            const saved = await assertJson<DrivePath>(
+                await authedRequest(t, `/drive/${user.id}/${M}/file/${chat.id}/versions/save`, { method: 'POST' }),
+            );
+            await chatPost(t, user.id, M, `${chat.id}/messages`, { content: 'v2' });
+            const job = await backupDuring(user, () =>
+                authedRequest(t, `/drive/${user.id}/${M}/file/${chat.id}/versions/${saved.name}/restore`, {
+                    method: 'POST',
+                }),
+            );
+            expect(job.state).toBe('done');
+            await restoreHome(job.artifact!, user.id, `race-${Date.now()}`);
+            const res = await authedRequest(t, `/chat/${user.id}/${M}/${chat.id}/messages`);
+            expect(res.status).toBe(200);
+            const messages = await assertJson<{ content: string }[]>(res);
+            expect(messages.map((message) => message.content)).toContain('v1');
+        }, 120_000);
+    }
 });

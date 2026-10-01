@@ -44,10 +44,6 @@ export function withStorageDeadline<T>(request: Promise<T>): Promise<T> {
     ]).finally(() => clearTimeout(timer));
 }
 
-// A local file's reads resolve without leaving the microtask queue, so a copy yields to the event loop this often or
-// every other request waits for the whole file.
-const YIELD_EVERY_BYTES = 2 * 1024 * 1024;
-
 // The one storage stream loop: pulls chunk by chunk and reports the total, past maxBytes a 413. With
 // idleMs it is a storage read: silence for idleMs, an aborted signal or a failed read cancels it and answers 503.
 export async function consumeStream(
@@ -73,8 +69,8 @@ export async function consumeStream(
     signal?.addEventListener('abort', stop);
     if (signal?.aborted) stop();
     let size = 0;
-    let unyielded = 0;
     try {
+        // Never yields to the event loop: readers and in-place writers of a local file rely on a copy not interleaving.
         while (true) {
             timer?.refresh();
             // A read pending when cancel() runs resolves done rather than throwing, hence the flag.
@@ -88,11 +84,6 @@ export async function consumeStream(
             size += value.byteLength;
             if (size > maxBytes) throw new ApiError(413, 'Upload too large');
             onChunk(value);
-            unyielded += value.byteLength;
-            if (unyielded >= YIELD_EVERY_BYTES) {
-                unyielded = 0;
-                await new Promise((resolve) => setImmediate(resolve));
-            }
         }
     } catch (error) {
         reader.cancel().catch(() => {});
