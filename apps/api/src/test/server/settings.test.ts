@@ -311,7 +311,7 @@ describe('Team Mount Management', () => {
         const listRes = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mounts`);
         const mounts = await assertJson<Record<string, MountResponse>>(listRes);
         // Select by name, not Object.keys order — all-digit mount ids reorder the keys
-        // numerically, which used to surface a residual-disabled mount from an earlier test.
+        // numerically, which can surface a residual-disabled mount from an earlier test.
         const sharedId = Object.entries(mounts).find(([, m]) => m.name === 'Shared Files')![0];
         const archiveId = Object.entries(mounts).find(([, m]) => m.name === 'Archives')![0];
 

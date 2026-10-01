@@ -307,8 +307,8 @@ describe('Backup freshest-first on an s3 mount', () => {
         });
     });
 
-    // The container branch used to name the archive path instead of the object it could not read,
-    // which is the one thing an admin chasing a bucket failure needs.
+    // The object it could not read, not the archive path: the one thing an admin chasing a bucket
+    // failure needs.
     test('a container database that cannot be read names its storage key', async () => {
         await withFakeS3Mount(FAILING_CONTAINER_MOUNT_ID, async (mount, fake) => {
             const { containerId, dataDbId } = await provisionDoc(mount);
