@@ -12,16 +12,16 @@ let alertedOn: string | null = null;
 // what ran, so a restart neither skips the night nor doubles it; one that kills the attempt costs it.
 export async function serverBackupTick(): Promise<void> {
     const now = new Date();
+    const day = now.toISOString().slice(0, 10);
     const { enabled, hourUtc, withS3 } = getServerSettings().backups.schedule;
-    if (!enabled || now.getUTCHours() < hourUtc || hasScheduledAttemptOn(now)) return;
+    if (!enabled || now.getUTCHours() < hourUtc || hasScheduledAttemptOn(day)) return;
     try {
         await startServerBackup({ level: withS3 ? 'full-s3' : 'full', reason: 'scheduled' });
     } catch (error) {
         // A 409 is another server backup running, and a start that wrote its record told the owner
         // itself. One that failed before it is tried every tick, so the owner hears of it once a day.
-        const day = now.toISOString().slice(0, 10);
         const refused = error instanceof ApiError && error.status === 409;
-        if (!refused && alertedOn !== day && !hasScheduledAttemptOn(now)) {
+        if (!refused && alertedOn !== day && !hasScheduledAttemptOn(day)) {
             alertedOn = day;
             alertOwner('Server backup failed', describeError(error), 'server-backup-schedule').catch(() => {});
         }

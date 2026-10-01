@@ -56,7 +56,7 @@ async function stageServerMember(archive: ServerArchiveFile, dataDir: string, un
 // What the stage leaves out of the pending uploads it finds: `settled` the ones data/ here already uploaded or
 // canceled, `missing` the ones whose bytes the archive does not hold. Their rows name missing files, which
 // reconcile drops.
-export type NotReplayed = { settled: number; missing: number };
+type NotReplayed = { settled: number; missing: number };
 
 // The storage keys the live mount still has to upload, or null for a mount that never ran here or whose
 // metadata.db does not read: a damaged live database is a reason to restore, not to refuse one. Read-write like

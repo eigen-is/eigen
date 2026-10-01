@@ -17,7 +17,7 @@ import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
 import { HOME_DATABASE_PATHS, HOME_DATABASES, isLightSkipped, MAILDIR_ROOT } from './archive-layout';
 import { readAuthRows } from './auth-tables';
-import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
+import { captureFile, captureUnlessGone, captureWrittenFile, countEntries } from './capture';
 import { readHomeMounts } from './enumerate-homes';
 import { describeError } from './errors';
 import {
@@ -317,11 +317,7 @@ export async function snapshotHome(
         createdAt: new Date().toISOString(),
         appVersion: config.version,
         server: { domain: config.domain, orgId: config.orgId },
-        counts: {
-            databases,
-            files: entries.length - databases,
-            bytes: entries.reduce((sum, entry) => sum + entry.bytes, 0),
-        },
+        counts: countEntries(entries, databases),
         level,
         mounts: mountSummaries,
         entries,

@@ -106,11 +106,8 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
 
 // The schedule's one question. A failed or refused attempt left its record, so it counts: a night
 // that fails is one alert, not a retry every tick.
-export function hasScheduledAttemptOn(day: Date): boolean {
-    const date = day.toISOString().slice(0, 10);
-    return listServerRecords().some(
-        ({ reason, at }) => reason === 'scheduled' && at.toISOString().slice(0, 10) === date,
-    );
+export function hasScheduledAttemptOn(day: string): boolean {
+    return listServerRecords().some(({ reason, at }) => reason === 'scheduled' && at.toISOString().startsWith(day));
 }
 
 // An archive and its record go together. Only a running job refuses, as it would write the record back: a record

@@ -149,10 +149,10 @@ export const SERVER_ARCHIVE_SERVER_MEMBER = 'server.tar.zst';
 export const SERVER_ARCHIVE_ENV_MEMBER = '.env.production';
 
 // The install folders an archive carries beside its members, under the name they have in data/: the DKIM key with
-// whatever its folder holds, the TLS certificate as its two files or not at all.
-export const INSTALL_FOLDERS: { dir: string; what: string; names?: readonly string[] }[] = [
-    { dir: DKIM_DIR, what: 'DKIM' },
-    { dir: CERTS_DIR, what: 'TLS', names: Object.values(CERT_FILES) },
+// whatever its folder holds, the TLS certificate as its two files or not at all. `field` is the manifest's flag.
+export const INSTALL_FOLDERS: { dir: string; field: 'dkim' | 'certs'; what: string; names?: readonly string[] }[] = [
+    { dir: DKIM_DIR, field: 'dkim', what: 'DKIM' },
+    { dir: CERTS_DIR, field: 'certs', what: 'TLS', names: Object.values(CERT_FILES) },
 ];
 
 export function buildServerArchiveName(reason: BackupReason, level: BackupLevel, at: Date): string {
