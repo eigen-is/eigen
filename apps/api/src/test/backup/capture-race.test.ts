@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
@@ -364,6 +364,65 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
             expect(res.status).toBe(200);
         }
     }, 120_000);
+});
+
+describe('a file whose stream overwrite is in flight when the capture reaches it', () => {
+    for (const storageType of ['local-fullnames', 'local-id'] as const) {
+        test(`is archived whole, on ${storageType}`, async () => {
+            const user = await raceUser(storageType);
+            const { root } = await seed(user);
+            const size = 8 * 1024 * 1024;
+            const big = await driveUpload(
+                user.sessionToken,
+                user.id,
+                M,
+                root.id,
+                new File([new Uint8Array(size)], 'big.bin'),
+            );
+            const home = await getHome(user.id);
+            const mount = await defaultMount(user);
+            const bigKey = await mount.getStorageKey(big.id);
+            const frozen = Promise.withResolvers<void>();
+            const release = Promise.withResolvers<void>();
+            // Frozen where Bun.write's thread is part-way: half of the new bytes over the file.
+            const write = mount.storage.write.bind(mount.storage);
+            const writeSpy = spyOn(mount.storage, 'write').mockImplementation(async (key, data) => {
+                if (key === bigKey) {
+                    writeFileSync(mount.storage.getPath!(key), Buffer.alloc(size / 2, 1));
+                    frozen.resolve();
+                    await release.promise;
+                }
+                return write(key, data);
+            });
+            const overwrite = home.drive.writeFileContent(M, big.id, new Blob([new Uint8Array(size).fill(1)]).stream());
+            await frozen.promise;
+            // The capture's own request for the file's lock lets the overwrite finish.
+            const withPathLock = Mount.prototype.withPathLock;
+            const lock = spyOn(Mount.prototype, 'withPathLock').mockImplementation(function <T>(
+                this: Mount,
+                pathId: string,
+                fn: () => Promise<T>,
+            ) {
+                if (pathId === big.id) release.resolve();
+                return withPathLock.bind(this)(pathId, fn);
+            });
+            let result: Awaited<ReturnType<typeof snapshotInto>>;
+            try {
+                result = await snapshotInto(home, 'full');
+            } finally {
+                release.resolve();
+                await overwrite;
+                lock.mockRestore();
+                writeSpy.mockRestore();
+            }
+            const archived = readFileSync(join(result.folder, 'home/mounts', M, 'data/big.bin'));
+            expect(archived.byteLength).toBe(size);
+            expect(new Set(archived).size).toBe(1);
+            const entry = findOrFail(result.manifest.entries, (e) => e.path.endsWith('/data/big.bin'));
+            expect(entry.bytes).toBe(size);
+            expect((await verifyFolder(result.folder)).status).toBe('verified');
+        });
+    }
 });
 
 describe('a chat whose version is restored during the backup', () => {

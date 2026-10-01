@@ -120,25 +120,28 @@ export async function snapshotMountData(
                 if (live?.size) throw lostObject(live.size, await mount.getStorageKey(sourceId));
             }
         } else {
-            // Shared, as the mount's own key-derived reads: no rename moves the bytes between the key and the copy.
-            const entry = await mount.withTreeShared(async () => {
-                const live = await mount.getPath(row.id);
-                if (!live) return null;
-                const storageKey = await mount.getStorageKey(row.id);
-                const fail = (error: unknown) => rethrowStorageFailure(mount.id, storageKey, error);
-                // Freshest first: the pending staged copy, then the stored object. Null for a row with no bytes on
-                // record mirrors that absence.
-                const file = await mount.readKey(storageKey).catch(fail);
-                if (!file) {
-                    if (live.size && !(await isGone())) throw lostObject(live.size, storageKey);
-                    return null;
-                }
-                return captureFile(file, destPath, entryPath).catch(async (error: unknown) => {
-                    if (!isMissingObjectCause(error) || !(await isGone())) fail(error);
-                    fs.rmSync(destPath, { force: true });
-                    return null;
-                });
-            });
+            // Path lock, then shared: an overwrite rewrites the file in place, so it and the copy wait for each other,
+            // and no rename moves the bytes between the key and the copy.
+            const entry = await mount.withPathLock(row.id, () =>
+                mount.withTreeShared(async () => {
+                    const live = await mount.getPath(row.id);
+                    if (!live) return null;
+                    const storageKey = await mount.getStorageKey(row.id);
+                    const fail = (error: unknown) => rethrowStorageFailure(mount.id, storageKey, error);
+                    // Freshest first: the pending staged copy, then the stored object. Null for a row with no bytes on
+                    // record mirrors that absence.
+                    const file = await mount.readKey(storageKey).catch(fail);
+                    if (!file) {
+                        if (live.size && !(await isGone())) throw lostObject(live.size, storageKey);
+                        return null;
+                    }
+                    return captureFile(file, destPath, entryPath).catch(async (error: unknown) => {
+                        if (!isMissingObjectCause(error) || !(await isGone())) fail(error);
+                        fs.rmSync(destPath, { force: true });
+                        return null;
+                    });
+                }),
+            );
             if (entry) {
                 entries.push(entry);
                 held.add(row.id);
