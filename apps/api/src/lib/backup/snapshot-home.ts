@@ -159,14 +159,16 @@ export async function snapshotHome(
         const stagedOnly = level === 'full' && mount?.isRemote === true;
         const metadataOnly = !mount || stagedOnly;
         if (stagedOnly) await flushOpenDocumentDbs(mount);
-        await stageDatabase(MOUNT_DB_CONFIG, `${PATHS.DRIVE.ROOT}/${config.id}/${PATHS.DRIVE.METADATA_DB}`);
+        const relMetadata = `${PATHS.DRIVE.ROOT}/${config.id}/${PATHS.DRIVE.METADATA_DB}`;
+        await stageDatabase(MOUNT_DB_CONFIG, relMetadata);
         const mountEntries: BackupEntry[] = [];
         if (mount) {
             const relFiles = archiveMountPath(mount.id, stagedOnly ? PATHS.DRIVE.STAGING_DIR : PATHS.DRIVE.DATA_DIR);
             const relThumbs = archiveMountPath(mount.id, PATHS.DRIVE.THUMBS_DIR);
+            const metadataPath = path.join(folder, ARCHIVE_HOME_DIR, relMetadata);
             const data = stagedOnly
                 ? await snapshotMountStaging(mount, path.join(folder, relFiles), relFiles)
-                : await snapshotMountData(mount, path.join(folder, relFiles), relFiles, onProgress);
+                : await snapshotMountData(mount, metadataPath, path.join(folder, relFiles), relFiles, onProgress);
             const thumbs = await snapshotMountThumbs(
                 mount.thumbsDir,
                 path.join(folder, relThumbs),

@@ -9,7 +9,7 @@ import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { errnoOf, isMissingObjectCause } from '../storage';
 import { stageManagedDbCopy } from '../versioning/snapshot';
-import { archivePath, MOUNT_PATH_COLUMNS, managedDbContainer, storageKeyOf } from './archive-layout';
+import { archivePath, managedDbContainer, readMountPathRows } from './archive-layout';
 import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
 import type { SnapshotProgress } from './snapshot-home';
 
@@ -45,29 +45,31 @@ function rethrowStorageFailure(mountId: string, storageKey: string, error: unkno
     throw new Error(`mount ${mountId}: storage unreachable${code ? ` (${code})` : ''} reading ${storageKey}`);
 }
 
-// False once the row was deleted, or moved to another key, since the tree read.
-async function isStillAt(mount: Mount, pathId: string, storageKey: string): Promise<boolean> {
-    return Boolean(await mount.getPath(pathId)) && (await mount.getStorageKey(pathId)) === storageKey;
+function readArchivedRows(metadataPath: string) {
+    const db = new Database(metadataPath, { readonly: true });
+    try {
+        return readMountPathRows(db);
+    } finally {
+        db.close();
+    }
 }
 
 // One mount's data tree in an archive: the entries written, how many of them are Eigen's own
 // databases (a user's `notes.db` upload is a file), and the ids the thumbnails are keyed by.
 type MountSnapshot = { entries: BackupEntry[]; databases: number; pathIds: Set<string> };
 
-// Copy every file the mount's paths table knows about into `targetDir`. Walking the table rather
-// than the filesystem is what keeps `tmp/` and `staging/` out and `.trash/` + `versions/` in, on
-// every backend; `thumbs/` is copied separately (snapshotMountThumbs), keyed by the ids returned
-// here.
+// Copy every file the archived `metadata.db` copy knows about into `targetDir`, at the path its row gives, from
+// wherever the live mount keeps it now: a rename, move or trash since the copy changes the key, not the archive path.
+// Walking the table rather than the filesystem is what keeps `tmp/` and `staging/` out and `.trash/` + `versions/` in,
+// on every backend; `thumbs/` is copied separately (snapshotMountThumbs), keyed by the ids returned here.
 export async function snapshotMountData(
     mount: Mount,
+    metadataPath: string,
     targetDir: string,
     relPrefix: string,
     onProgress?: SnapshotProgress,
 ): Promise<MountSnapshot> {
-    const rows = await mount.db
-        .select({ ...MOUNT_PATH_COLUMNS, size: paths.size })
-        .from(paths)
-        .all();
+    const rows = readArchivedRows(metadataPath);
     const byId = new Map(rows.map((row) => [row.id, row]));
 
     const fileRows = rows.filter((row) => row.type === 'file');
@@ -77,44 +79,50 @@ export async function snapshotMountData(
         const relPath = archivePath(row, byId);
         const destPath = path.join(targetDir, relPath);
         const entryPath = `${relPrefix}/${relPath}`;
-        const storageKey = storageKeyOf(row, byId, mount.isPathBased);
+        const lostObject = (size: number, storageKey: string) =>
+            new Error(`mount ${mount.id}: ${relPath} has ${size} bytes on record but no object at ${storageKey}`);
 
         const container = managedDbContainer(row, byId);
-        // A row with bytes on record and none anywhere is a lost object, unless the row went since the tree read.
-        const lostObject = () =>
-            new Error(`mount ${mount.id}: ${relPath} has ${row.size} bytes on record but no object at ${storageKey}`);
         if (container) {
             fs.mkdirSync(path.dirname(destPath), { recursive: true });
             // A blocking lock: a raw read of the live main file would drop every commit still in the WAL. False is
-            // no bytes anywhere, skipped when the row went since the tree read.
+            // no bytes anywhere.
             const copied = await mount
                 .withPathLock(container.id, () => stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'))
-                .catch((error: unknown) => rethrowStorageFailure(mount.id, storageKey, error));
+                .catch(async (error: unknown) =>
+                    rethrowStorageFailure(mount.id, await mount.getStorageKey(row.id), error),
+                );
             if (copied) {
                 normalizeArchiveDatabase(destPath);
                 entries.push(await captureWrittenFile(destPath, entryPath));
                 databases++;
-            } else if (row.size && (await isStillAt(mount, row.id, storageKey))) {
-                throw lostObject();
+            } else {
+                const live = await mount.getPath(row.id);
+                if (live?.size) throw lostObject(live.size, await mount.getStorageKey(row.id));
             }
         } else {
-            // Freshest first: the pending staged copy, then the stored object. Null for a row with no bytes on record
-            // mirrors that absence; a delete since the tree read fails the read, and the row drops out.
-            const file = await mount
-                .readKey(storageKey)
-                .catch((error: unknown) => rethrowStorageFailure(mount.id, storageKey, error));
-            if (file) {
-                const entry = await captureFile(file, destPath, entryPath).catch(async (error: unknown) => {
-                    if (!isMissingObjectCause(error) || (await isStillAt(mount, row.id, storageKey))) {
-                        rethrowStorageFailure(mount.id, storageKey, error);
-                    }
+            // Shared, as the mount's own key-derived reads: no rename moves the bytes between the key and the copy.
+            const entry = await mount.withTreeShared(async () => {
+                // Deleted for good since the copy: its archived row keeps no bytes, as verify and restore allow.
+                const isGone = async () => !(await mount.getPath(row.id));
+                const live = await mount.getPath(row.id);
+                if (!live) return null;
+                const storageKey = await mount.getStorageKey(row.id);
+                const fail = (error: unknown) => rethrowStorageFailure(mount.id, storageKey, error);
+                // Freshest first: the pending staged copy, then the stored object. Null for a row with no bytes on
+                // record mirrors that absence.
+                const file = await mount.readKey(storageKey).catch(fail);
+                if (!file) {
+                    if (live.size && !(await isGone())) throw lostObject(live.size, storageKey);
+                    return null;
+                }
+                return captureFile(file, destPath, entryPath).catch(async (error: unknown) => {
+                    if (!isMissingObjectCause(error) || !(await isGone())) fail(error);
                     fs.rmSync(destPath, { force: true });
                     return null;
                 });
-                if (entry) entries.push(entry);
-            } else if (row.size && (await isStillAt(mount, row.id, storageKey))) {
-                throw lostObject();
-            }
+            });
+            if (entry) entries.push(entry);
         }
         onProgress?.('mount files', index + 1, fileRows.length);
     }
