@@ -2,6 +2,8 @@
 
 > **TLDR:** An Eigen document refers to its embedded files (images, backgrounds, comment threads, chat attachments) by **file name**, never by path id or URL. Names are unique per folder, and the folders are fixed (`{doc}/media/`, `{doc}/chat/`, `{chat}/media/`), so a name resolves to a path id at render time through `MediaResolverProvider` (`packages/lib/src/core/drive/media-resolver.tsx`). A copied container therefore needs no rewriting, and no stored reference bakes in the API host. Not obvious from the code: a new upload renders from a `pending:` name before it lands, a container document attached to a chat or card is the one reference by id, and a download never goes through the preview URL the image renders from.
 
+Every Eigen document is a container, a Drive folder named like a file that holds the document's own files ([STORAGE.md](STORAGE.md#containers-name-users-by-email-never-by-id)). Its content is a Yjs document ([COLLAB.md](COLLAB.md)), or for a chat room a SQLite database ([CHAT.md](CHAT.md)), and a reference is a field in that content that names one of those files. Inserting an image, starting a comment thread and attaching a file to a message all write such a name. The sections cover why names beat ids, the fields per document kind, the one reference by id, and how a name becomes an image on screen.
+
 ## A name survives a copy, a path id does not
 
 A copy gives every file a new id but keeps its name. A reference by name therefore resolves against the copy's own files, and a copy is a plain byte copy of the tree with no Yjs or SQLite rewriting ([STORAGE.md](STORAGE.md#copy-goes-anywhere-a-move-stays-in-its-mount)). A URL would also bake in the API host, which differs per deployment.
