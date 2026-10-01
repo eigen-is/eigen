@@ -70,7 +70,6 @@ export function isClickableNotification(type: string): boolean {
         ...CHAT_NOTIFICATION_TYPES,
         'share',
         'calendar-share',
-        'calendar-unshare',
         'calendar-invite',
         'calendar-invite-updated',
         'calendar-invite-cancelled',
@@ -105,7 +104,6 @@ export async function resolveNotificationLink(
         }
 
         case 'calendar-share':
-        case 'calendar-unshare':
             return getCalendarAppUrl();
 
         case 'mail': {
