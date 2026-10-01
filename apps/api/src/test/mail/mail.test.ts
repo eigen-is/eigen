@@ -30,6 +30,21 @@ describe.skipIf(isWindows)('Mail', () => {
         expect(await res.text()).toContain('Invalid mailbox');
     });
 
+    // The name check behind every mailbox route refuses these; without it they read as a folder that is missing.
+    test.each([
+        ['a .. traversal', '..%2F..%2Fetc'],
+        ['a leading separator', '%2Fetc'],
+        ['a control character', 'test%00mailbox'],
+        ['an encoded separator', 'Projects%2F%2F2026'],
+    ])('open mailbox with %s returns 400', async (_name, mailboxPath) => {
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/mail/${ctx.alice.user.id}/mailbox/${mailboxPath}`,
+        );
+        expect(res.status).toBe(400);
+        expect(await res.text()).toContain('Invalid mailbox');
+    });
+
     test('get unknown mailbox returns 404', async () => {
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
