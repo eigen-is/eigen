@@ -21,7 +21,7 @@ import { basename, dirname, join, relative } from 'node:path';
 import type { parseArgs } from 'node:util';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import type { BackupLevel } from '@workspace/lib/types/backup';
-import { BACKUP_LEVELS, buildBackupStamp, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
+import { buildBackupStamp, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { copyArchiveMember } from '../lib/backup/archive';
 import { isLightSkipped } from '../lib/backup/archive-layout';
 import { describeError } from '../lib/backup/errors';
@@ -151,50 +151,14 @@ function lightWalk(root: string): Held[] {
     return held;
 }
 
-function readStagedRecord(file: string): StagedRestore | null {
-    if (!existsSync(file)) return null;
-    const value: unknown = JSON.parse(readFileSync(file, 'utf8'));
-    if (typeof value !== 'object' || value === null) return null;
-    const level = 'level' in value ? BACKUP_LEVELS.find((candidate) => candidate === value.level) : undefined;
-    if (
-        !level ||
-        !('archive' in value && typeof value.archive === 'string') ||
-        !('appVersion' in value && typeof value.appVersion === 'string')
-    ) {
-        return null;
-    }
-    return { archive: value.archive, level, appVersion: value.appVersion };
-}
-
-function readSwapMarker(): RestoreSwap | null {
-    let value: unknown;
+// Records this CLI wrote. A stage cut off mid-write leaves a torn staged.json, which is nothing staged; the marker is
+// written whole or not at all, and one that does not read stops the swap.
+function readRecord<T>(file: string): T | null {
     try {
-        value = JSON.parse(readFileSync(SWAP_MARKER, 'utf8'));
+        return JSON.parse(readFileSync(file, 'utf8'));
     } catch {
         return null;
     }
-    const isPair = (pair: unknown) =>
-        Array.isArray(pair) && pair.length === 2 && pair.every((path) => typeof path === 'string');
-    if (
-        typeof value !== 'object' ||
-        value === null ||
-        !('archive' in value && typeof value.archive === 'string') ||
-        !('copies' in value && Array.isArray(value.copies) && value.copies.every(isPair)) ||
-        !('renames' in value && Array.isArray(value.renames) && value.renames.every(isPair)) ||
-        !('aside' in value && Array.isArray(value.aside) && value.aside.every((path) => typeof path === 'string')) ||
-        !('leftover' in value && typeof value.leftover === 'string') ||
-        !('env' in value && typeof value.env === 'boolean')
-    ) {
-        return null;
-    }
-    return {
-        archive: value.archive,
-        copies: value.copies,
-        renames: value.renames,
-        aside: value.aside,
-        leftover: value.leftover,
-        env: value.env,
-    };
 }
 
 async function stage(archive: string | undefined, flags: Flags): Promise<void> {
@@ -343,7 +307,7 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
 
 function staged(): void {
     const restoring = join(DATA, RESTORING_DIR);
-    const record = readStagedRecord(join(restoring, STAGE_RECORD));
+    const record = readRecord<StagedRestore>(join(restoring, STAGE_RECORD));
     if (!record) {
         console.error(glyphLine('bad', 'Nothing is staged.'));
         process.exit(1);
@@ -525,7 +489,7 @@ async function swap(): Promise<void> {
     }
     if (existsSync(SWAP_MARKER)) {
         lockData(ui);
-        const marked = readSwapMarker();
+        const marked = readRecord<RestoreSwap>(SWAP_MARKER);
         if (!marked) {
             return ui.fail(
                 `${SWAP_MARKER} does not read as a swap.`,
@@ -535,7 +499,7 @@ async function swap(): Promise<void> {
         return runSwap(ui, marked);
     }
     const restoring = join(DATA, RESTORING_DIR);
-    const record = readStagedRecord(join(restoring, STAGE_RECORD));
+    const record = readRecord<StagedRestore>(join(restoring, STAGE_RECORD));
     if (!record)
         return ui.fail('Nothing is staged to swap in.', 'Run ./eigen restore <archive>, which stages it first.');
     // The swap is renames: a linked data/ would move the link, and one on another disk cannot be renamed.

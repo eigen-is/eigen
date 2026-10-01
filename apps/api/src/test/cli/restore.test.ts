@@ -1279,6 +1279,21 @@ describe('an interrupted swap', () => {
         JOB_TIMEOUT_MS,
     );
 
+    test('a stage record cut off mid-write reads as nothing staged, not a stack', async () => {
+        const dir = install();
+        mkdirSync(join(dir, 'data/.restoring'));
+        writeFileSync(join(dir, 'data/.restoring/staged.json'), '{"archive": "cut of');
+        for (const [flag, said] of [
+            ['--swap', 'Nothing is staged to swap in'],
+            ['--staged', 'Nothing is staged.'],
+        ]) {
+            const result = await restoreCli(dir, [flag]);
+            expect(result.code).toBe(1);
+            expect(result.stderr).toContain(said);
+            expect(result.stderr).not.toContain('SyntaxError');
+        }
+    });
+
     test('a marker that does not parse is refused with what to do, not a stack', async () => {
         const dir = install();
         writeFileSync(join(dir, SWAP_MARKER), '{"archive": "cut of');
