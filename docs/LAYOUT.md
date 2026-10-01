@@ -2,6 +2,8 @@
 
 > **TLDR:** Every app is `EigenApp` (the provider stack) around `AppShell` (topbar, sidebar, content), and every page is a `ColumnLayout` of `Column`s with the toolbar passed as a prop. The shell lives in `packages/ui/src/components/layout/`, Drive's file UI in `packages/ui/src/components/drive/`. Four things are not obvious from the code: on a phone only the `mobileColumn` renders and the sidebar is a column, not an overlay; z-index is one project-wide scale and app code sets none; buttons navigate in the same tab while links inside content open a new tab; and every document-level keymap stands down while a dialog is open.
 
+This doc governs the frame every app draws its pages in and the conventions that make the apps feel like one product: the shell, the columns, Drive's file UI, lists, drag, the keyboard, layering and where a click opens. Read it before you add a page, a list, a menu or a shortcut. The pieces live in `packages/ui`, with their logic in `packages/lib`, so an app composes the shared pieces instead of laying out its own, and a fix to the shell reaches every app at once. Phones and touch screens add their own rules on top ([MOBILE.md](MOBILE.md)).
+
 ## Every app is `EigenApp` around `AppShell`
 
 `EigenApp` (`layout/app/eigen-app.tsx`) holds the providers every app shares: hotkeys, query client, auth, theme, SSE, uploads, the quick-look overlay and the command palette. `AppShell` (`layout/app/app-shell.tsx`) draws the topbar, the sidebar and `<main>`. A new app wraps its `__root.tsx` in `AppShell` and makes `_auth.tsx` a `createAuthRouteOptions` route.

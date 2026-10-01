@@ -2,6 +2,8 @@
 
 > **TLDR:** The public help center (`/support`) and the blog (`/blog`) are static pages built by `apps/index`, with no backend. Articles are Markdown with Zod-validated frontmatter under `apps/index/src/data/`. A prebuild renders them to JSON, and a postbuild prerenders every route to real HTML that hydrates in place, so the first client render must match the server's. Search is a Pagefind index built from the same JSON. A section is a folder and an article's URL is its file path, so renaming either breaks links.
 
+The help center is where users and the people who run a server read how Eigen works: a section for each app such as Mail or Drive, plus getting started, integrations, account, admin and self-hosting. Every app links to it, and the command palette searches it. Its pages are built with the apps, so every install serves its own copy. This doc covers how it is built and served. How an article is written is [SUPPORT-STYLE-GUIDE.md](SUPPORT-STYLE-GUIDE.md) and the [support-article skill](../.claude/skills/support-article/SKILL.md).
+
 ## The help center is static files
 
 Everything lives in `apps/index` plus three shared pieces in `packages/lib/src/core/`: `getSupportUrl` in `api.ts`, the Pagefind loader in `search/pagefind.ts`, and the palette's `command-palette/providers/help-search.ts`. No `apps/api` code serves it, so there is nothing to deploy or operate beyond the files in `dist/index`.

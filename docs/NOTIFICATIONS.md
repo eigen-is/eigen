@@ -2,6 +2,8 @@
 
 > **TLDR:** The toast contract. Error toasts come from `onMutationError` in the mutation hooks under `packages/lib/src/core/[domain]/hooks/`, so an app never toasts a mutation's error itself. Success toasts are rare and live in the hook too. A toast's action button needs `pointer-events` of its own, because it often appears over a modal. Persistent cross-user notifications are a different system, and it raises their toasts: [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md).
 
+This doc governs every toast in the apps: who raises it and where its words come from. Read it before you write a mutation hook or handle an error in a component. The toasts are Sonner's, drawn by the `Toaster` that `EigenApp` mounts ([LAYOUT.md](LAYOUT.md#every-app-is-eigenapp-around-appshell)). The idea behind the rules is that feedback lives next to the request: the hook that sends a mutation also says how it went, so every app says the same thing for the same outcome.
+
 ## Error toasts come from the mutation hook
 
 Every `useMutation` in `packages/lib/src/core/[domain]/hooks/` hands its error to `onMutationError` (`packages/lib/src/core/api-error.ts`), which calls `toast.error(getErrorMessage(error))`. An optimistic mutation rolls its cache back first and then calls it. One place owns the wording, so every app says the same thing for the same failure.

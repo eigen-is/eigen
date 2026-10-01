@@ -2,6 +2,8 @@
 
 > **TLDR:** Eigen has no separate mobile app: the same components adapt, keyed on two independent signals. The viewport width picks the layout (`useIsMobile`, `useIsTablet` in `packages/lib/src/core/media/`), and the pointer type picks the touch affordances (`pointer-coarse:`, `useIsCoarsePointer`, a `touch` pointer event). On a phone one column shows at a time, and a surface that steps aside is hidden with CSS, never unmounted. A phone views the canvas documents (slides, vector) but never edits them. Long-press opens the same context menu as right-click, and a submenu drills in as a page of its menu.
 
+This doc governs how the apps behave on a phone, a tablet and a touch screen. Read it before you build anything a user hovers, right-clicks or opens in a narrow window. It builds on the shell in [LAYOUT.md](LAYOUT.md): the same `ColumnLayout` and sidebar decide what a phone shows, so a page that follows the layout rules gets most of its phone behavior for free.
+
 ## Width picks the layout, the pointer picks the affordances
 
 | Width | Hook | Layout |

@@ -2,6 +2,8 @@
 
 > **TLDR:** Four self-hosted font families (Inter, Source Serif 4, JetBrains Mono, Excalifont) ship as woff2 files in `packages/ui/src/assets/fonts/`, declared in `packages/ui/src/styles/fonts.css`, with no external CDN. `EIGEN_FONTS` (`packages/lib/src/constants/fonts.ts`) is the one list the pickers read. Its order is load-bearing, since a sheet cell can store a font as an index into it. Docs and the canvas store a font's name, never a CSS stack. A new font touches six places, because the canvas metrics, the export and the licenses page keep lists of their own.
 
+This doc governs the fonts every app, editor and export uses, and the weight scale of the UI. Read it before you add a font, change a weight or touch how an editor stores a font choice. A font choice is part of a document: a doc's text, a sheet cell and a canvas text box each store theirs in the document's Yjs data ([COLLAB.md](COLLAB.md)), and an export embeds the same faces ([EXPORT.md](EXPORT.md)). So the font list is a stored format as much as a menu, and most of its rules follow from that.
+
 ## Four families ship with the app
 
 | Font | Category | Weights | Italic | Role |

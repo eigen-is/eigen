@@ -2,6 +2,8 @@
 
 > **TLDR**: Where every backend, frontend and tooling concept lives, the four Drive layers, the package boundaries (`lib` never imports `ui` or `sheet`; the backend imports lib only through React-free subpaths) and the pitfalls that have bitten more than one domain. [AGENTS.md](../AGENTS.md) holds the rules an agent needs before its first edit; [§ Package boundaries](#package-boundaries) and [§ Pitfalls](#pitfalls) give the reasons behind them.
 
+Eigen is one API server (`apps/api`) and a set of web apps (`apps/*`), which share the code in `packages/`: `lib` for the types, hooks and logic both sides use, `ui` for the shared components and `sheet` for the spreadsheet. The API keeps each user's and team's data in a Home ([STORAGE.md](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)). The apps reach it through Eden, typed from the Elysia routes, with TanStack Query hooks for reads and writes and SSE for live changes ([SSE.md](SSE.md)). Read the tables to find where a concept lives and which doc explains it. Read the boundaries and pitfalls before your first change in an area you have not worked in: they are the rules a change in one domain most often breaks in another.
+
 ## Backend
 
 | Concept               | Location                                     | Pattern                                                                                                    |
