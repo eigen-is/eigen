@@ -2,6 +2,10 @@
 
 > **TLDR:** A delete moves a Drive item to trash instead of erasing it. Two columns on `paths` hold the state, and the item is re-parented to the mount root. The code is `apps/api/src/lib/mount/trash.ts` (rows and bytes) and `apps/api/src/lib/drive/trash.ts` (collab close, sharing, SSE, history). Four things are not obvious. Only `local` storage moves bytes, into `data/.trash/`. Trash revokes every share, and restore brings them back without a new email. Trash is the drive owner's alone. Expired trash is purged only when a mount opens, which is when its Home loads, and trashed bytes count toward the quota until then.
 
+Everything in Drive goes to the same trash: a plain file, a folder, or an Eigen document such as a doc or a chat room, which is a container folder. A delete in the Drive app and a WebDAV `DELETE` both trash, and the owner restores or erases from Drive's Trash view. Each item is a row in its mount's `paths` table. A mount is one drive of a Home, with its own `metadata.db` and one storage backend ([STORAGE.md § A mount is a paths table](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)).
+
+The one idea is that trash is a state of the row, not a copy. A trashed row stays in its mount, every lookup skips it, and restore clears the state. Around that change, trash reaches the shared pieces an item touches. It closes the collab documents under the item ([COLLAB.md](COLLAB.md)), updates its sharing ([ACL.md](ACL.md)), tells the open apps over SSE, and records history for the item's watchers ([FILE-HISTORY.md](FILE-HISTORY.md)).
+
 ## Two columns mark trash, and the item moves to the root
 
 `trashedAt` is the time an item went to trash, `NULL` while it is live. `trashedFrom` holds its original parent, so restore knows where to put it back. `trashedFrom` also marks the trash root: set means the user trashed this item directly, and it is what the trash view lists. The descendants of a trashed folder get `trashedAt` but keep `trashedFrom` empty, since they are trashed through their parent. `DrivePath` carries `trashedAt`. `trashedFrom` stays on the server.
