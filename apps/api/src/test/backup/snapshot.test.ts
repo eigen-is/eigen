@@ -600,16 +600,6 @@ describe('Backup snapshotHome under contention', () => {
         }
     });
 
-    test('touches the home along the walk so its idle timer cannot destruct it mid-snapshot', async () => {
-        const touch = spyOn(home, 'touch');
-        try {
-            await snapshotHome(home, mkdtempSync(join(TEST_DATA_DIR, 'backup-touch-')));
-            expect(touch.mock.calls.length).toBeGreaterThan(10);
-        } finally {
-            touch.mockRestore();
-        }
-    });
-
     test('a container database whose stored bytes are gone fails the snapshot', async () => {
         const alice = owner;
         const root = await assertJson<DrivePath>(

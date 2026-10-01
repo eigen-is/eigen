@@ -73,7 +73,7 @@ export async function snapshotMountData(
     mount: Mount,
     targetDir: string,
     relPrefix: string,
-    onProgress: SnapshotProgress,
+    onProgress?: SnapshotProgress,
 ): Promise<MountSnapshot> {
     const rows = await mount.db
         .select({ ...MOUNT_PATH_COLUMNS, size: paths.size })
@@ -135,7 +135,7 @@ export async function snapshotMountData(
                 throw lostObject();
             }
         }
-        onProgress('mount files', index + 1, fileRows.length);
+        onProgress?.('mount files', index + 1, fileRows.length);
     }
     return { entries, databases, pathIds: new Set(fileRows.map((row) => row.id)) };
 }

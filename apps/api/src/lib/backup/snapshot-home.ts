@@ -120,13 +120,6 @@ export async function snapshotHome(
     fs.mkdirSync(folder, { recursive: true });
     const entries: BackupEntry[] = [];
 
-    // Every tick doubles as a keep-alive: a home whose idle timer (5 minutes for a user) fires
-    // mid-walk destructs itself, and the next stageCopy hits a closed database.
-    const report: SnapshotProgress = (step, done, total) => {
-        home.touch();
-        onProgress?.(step, done, total);
-    };
-
     // Eigen's own databases, counted as they are staged: a file a user happens to have uploaded
     // called `notes.db` is a file, and the manifest's counts have to say so (verify draws the same
     // line when it decides what it may open).
@@ -142,7 +135,7 @@ export async function snapshotHome(
 
     for (const [index, [config, relPath]] of HOME_DATABASES.entries()) {
         if (fs.existsSync(path.join(home.homeDir, relPath))) await stageDatabase(config, relPath);
-        report('databases', index + 1, HOME_DATABASES.length);
+        onProgress?.('databases', index + 1, HOME_DATABASES.length);
     }
 
     const mounts = home.drive.getMounts();
@@ -172,7 +165,7 @@ export async function snapshotHome(
             const relThumbs = archiveMountPath(mount.id, PATHS.DRIVE.THUMBS_DIR);
             const data = stagedOnly
                 ? await snapshotMountStaging(mount, path.join(folder, relFiles), relFiles)
-                : await snapshotMountData(mount, path.join(folder, relFiles), relFiles, report);
+                : await snapshotMountData(mount, path.join(folder, relFiles), relFiles, onProgress);
             const thumbs = await snapshotMountThumbs(
                 mount.thumbsDir,
                 path.join(folder, relThumbs),
@@ -195,7 +188,7 @@ export async function snapshotHome(
     const total = mounts.length + unserved.length;
     for (const [index, mount] of mounts.entries()) {
         await archiveMount(mount.config, level === 'light' ? undefined : mount);
-        report('mounts', index + 1, total);
+        onProgress?.('mounts', index + 1, total);
     }
 
     for (const [index, [id, settings]] of unserved.entries()) {
@@ -244,7 +237,7 @@ export async function snapshotHome(
             // cache, which closes it when the home evicts.
             await mount?.closeAllDatabases();
         }
-        report('mounts', mounts.length + index + 1, total);
+        onProgress?.('mounts', mounts.length + index + 1, total);
     }
 
     // The home outside its mounts and its databases.
@@ -263,7 +256,7 @@ export async function snapshotHome(
             archiveHomePath(rel),
         );
         if (captured) entries.push(captured);
-        report('home files', index + 1, tree.files.length);
+        onProgress?.('home files', index + 1, tree.files.length);
     }
 
     if (owner.type === 'user') {
@@ -321,6 +314,6 @@ export async function snapshotHome(
         entries,
     };
     await Bun.write(path.join(folder, ARCHIVE_MANIFEST_FILE), JSON.stringify(manifest, null, 2));
-    report('done', 1, 1);
+    onProgress?.('done', 1, 1);
     return manifest;
 }
