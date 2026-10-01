@@ -61,7 +61,7 @@ Enter a number in each field. The **Save** button appears at the bottom of the p
 
 ### Storage type
 
-**Storage Type** controls where new users' Drive files are written when their account is first created. Changing this setting does not move existing files; it affects only accounts created after the change.
+**Storage Type** controls where new users' Drive files are written. Eigen sets it the first time a new user's workspace opens, usually at their first sign-in. Changing it moves no one's files and reaches only users who have not signed in yet.
 
 | Option | Where files are stored |
 |---|---|
