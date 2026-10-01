@@ -806,7 +806,7 @@ for SHELL_NAME in dash busybox host; do
     # With data/ gone, which Docker would make root's for the stage's bind mount.
     rm -rf "$FIX/local/data"
     launch local restore "$ARCHIVE" --yes
-    if [ "$CODE" = 0 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|configure ghcr.io/eigen-is/eigen/api:local|share|up|" ] &&
+    if [ "$CODE" = 0 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|configure ghcr.io/eigen-is/eigen/api:local|share|up|" ] &&
         [ ! -e "$FIX/local/.eigen/lock" ] && [ ! -e "$FIX/local/.eigen/last-update" ] && [ -d "$FIX/local/data" ] &&
         printf '%s\n' "$OUT" | grep -q 'Data folders ready'; then
         ok "$SHELL_NAME: a restore prepares the data/ that is gone, stages while Eigen runs, then stops it, swaps as root, adds what is new to a local build's .env.production, forgets the last update's backup and starts Eigen"
@@ -852,6 +852,14 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: a refused stage: exit $CODE, steps '$(steps)'"
     fi
+    # As when data/.restoring is on another disk than data/: refused before the stop.
+    STUB_RUN_FAIL=--staged launch local restore "$ARCHIVE" --yes
+    if [ "$CODE" = 1 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|rm data/.restoring|" ] &&
+        [ ! -e "$FIX/local/.eigen/lock" ]; then
+        ok "$SHELL_NAME: a staged tree the swap cannot rename in is refused before the stop, and removed"
+    else
+        fail "$SHELL_NAME: a refused --staged: exit $CODE, steps '$(steps)'"
+    fi
     STUB_STAGE=3 launch local restore "$ARCHIVE"
     if [ "$CODE" = 0 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage|" ]; then
         ok "$SHELL_NAME: a no to the stage's question exits 0 and stops nothing"
@@ -860,7 +868,7 @@ for SHELL_NAME in dash busybox host; do
     fi
     STUB_RUN_FAIL=--swap launch local restore "$ARCHIVE" --yes
     if [ "$CODE" = 1 ] &&
-        [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|share|up|rm data/.restoring|" ] &&
+        [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|share|up|rm data/.restoring|" ] &&
         [ ! -e "$FIX/local/.eigen/lock" ]; then
         ok "$SHELL_NAME: a swap refused before its marker starts Eigen again, then removes the staged tree and the lock"
     else
@@ -892,7 +900,7 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: a failure after the swap: exit $CODE, steps '$(steps)', '$ERR'"
     fi
     STUB_SWAP_CUT=1 launch local restore "$ARCHIVE" --yes
-    if [ "$CODE" = 1 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|" ] &&
+    if [ "$CODE" = 1 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|" ] &&
         [ -e "$FIX/local/.eigen/restore-swap" ] && [ ! -e "$FIX/local/.eigen/lock" ] &&
         printf '%s\n' "$ERR" | grep -q '■  The swap is unfinished and Eigen is stopped: ./eigen restart finishes it.'; then
         ok "$SHELL_NAME: a swap cut off after its marker leaves Eigen stopped, the marker in place, and says ./eigen restart finishes it"

@@ -708,8 +708,9 @@ put_back() {
         step "Preparing data/ and backups/" "Data folders ready" "The data folders are not writable" prepare_data
     fi
     stage_archive
+    # It also refuses a staged tree the swap cannot rename in, while Eigen still runs.
+    pins=$(cli_as 0 restore --staged </dev/null)
     if [ "$MODE" = release ]; then
-        pins=$(cli_as 0 restore --staged </dev/null)
         pin=$(answer EIGEN_API_IMAGE "$pins")
         if [ -n "$pin" ] && [ "$pin" != "$before" ]; then pull_pinned "$pins"; fi
     fi
