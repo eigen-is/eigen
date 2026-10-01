@@ -1,6 +1,23 @@
 # Sheets
 
-> **TLDR:** `apps/sheets/` is a collaborative spreadsheet over `packages/sheet` (`@workspace/sheet`), our own fork of fortune-sheet/luckysheet. A workbook is a `.eigensheets` Drive folder whose Yjs doc holds a snapshot and an op log. Not obvious from the code: every edit is an immer-patch op pushed to a Y.Array, not a Yjs structure; a sheet's config collections always exist, because creating one ships it whole; the snapshot moves only through one codec; undo is per tab and blind to peers; and the editor computes formula values on write, so the server recalculates only a workbook nobody computed.
+> **TLDR:** Sheets is Eigen's spreadsheet: a workbook of tabs that several people edit at once, with formulas, number formats, validation and xlsx import and export. The grid, its state and the formula engine are `packages/sheet` (`@workspace/sheet`), our own fork of the open-source fortune-sheet, itself based on luckysheet. `apps/sheets/` is the app around it. A workbook is stored as a snapshot plus a log of edits.
+
+A workbook is a `.eigensheets` file. It holds one or more sheets, the tabs. A sheet is a grid of cells. A cell holds its value (`v`), the string the grid shows (`m`), its formula (`f`), its number format and its style. What belongs to a grid position rather than to the cell, such as borders, merges, row heights, validation rules and hyperlinks, sits in maps beside the grid, keyed `"r_c"` (row and column, counted from 0). The maps under a sheet's `config` (merges, borders, row and column sizes, hidden rows and columns) are its config collections. Conditional-format rules and floating images hang off the sheet too.
+
+In the browser the fork keeps the whole workbook as one plain object, the context, and changes it only through immer. An edit is a recipe, a function that changes a draft of the context, and immer reports the change as patches: small records of a path and a value.
+
+A workbook is a collab document ([COLLAB.md](COLLAB.md)), but its Yjs document holds no Yjs grid. It has two roots: `state.snapshot`, the whole workbook encoded as one value, and `ops`, a Yjs array of op batches. An op is an immer patch in a form a peer can apply, and a batch holds the ops of one edit. So an edit travels like this. The recipe runs on the local context, its patches become one batch, the batch is pushed onto `ops`, Yjs carries it to the other browsers, and each applies it to its own context. A browser that opens the workbook decodes the snapshot and replays the batches on top. An editor that closes with edits pending writes a fresh snapshot and empties the log.
+
+The op log is the idea the design rests on. Writing the whole snapshot on every edit would make the last writer win for the whole workbook, while two ops on different cells merge cleanly.
+
+The server reads workbooks for export, the Drive preview and the search index. `packages/sheet/src/engine/` is the half without the DOM, and the API imports it: the formula parser and evaluator, the op replay and recalc, the pass that recomputes formula values. So the browser and the server read a workbook and compute a formula with the same code.
+
+The sections run from storage (ops, config collections, borders, the snapshot codec, undo) through the engine and formulas to the painted glyphs, comments and export. Four things in them surprise people:
+
+- A sheet's config collections always exist, because creating one ships it whole ([§ Creating a collection ships it whole](#creating-a-collection-ships-it-whole-so-every-collection-exists)).
+- The snapshot moves only through one codec ([§ The snapshot is interned](#the-snapshot-is-interned-and-written-only-through-the-codec)).
+- Undo is per tab and blind to peers ([§ Undo is per tab and blind to peers](#undo-is-per-tab-and-blind-to-peers)).
+- The editor computes formula values as it writes, so the server recalculates only a workbook nobody computed ([§ The editor computes on write](#the-editor-computes-on-write-the-server-only-what-nobody-computed)).
 
 ## `packages/sheet` is a fork we own
 
@@ -8,9 +25,9 @@ The whole upstream library (UI components, state runtime, formula parser) lives 
 
 ## An edit is an op in a Y.Array
 
-The Yjs doc has two roots. `state` is a Y.Map whose `snapshot` holds the encoded workbook. `ops` is a Y.Array of op batches. A local edit is an immer recipe; its patches become one op batch, which `use-sheet.ts` pushes to `ops`. A peer applies it with `applyOp()` (`components/Workbook/api.ts`), which patches the context without remounting the grid.
+`use-sheet.ts` (`apps/sheets/src/components/sheets/hooks/`) pushes each local batch to `ops`. A peer applies it with `applyOp()` (`components/Workbook/api.ts`), which patches the context without remounting the grid.
 
-Why ops and not whole snapshots: a snapshot write is last-writer-wins for the whole workbook, while two ops on different cells merge cleanly. Two clients editing the *same* cell still diverge, because each applies its own op optimistically. Applying batches in array order would close that ([the proposal](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md#what-to-do-first)).
+Two clients editing the *same* cell still diverge, because each applies its own op optimistically. Applying batches in array order would close that ([the proposal](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md#what-to-do-first)).
 
 A joiner decodes the snapshot and replays the pending ops through `replaySheetsOps` (`engine/replay-ops.ts`). The API's document reader calls the same function, so every consumer agrees on what snapshot plus ops means. A batch that can't apply is rolled back and skipped, so one bad op never makes the doc unreadable. `applyOp` is not atomic: a failing patch keeps what already applied, so a live client and a joiner can disagree until reload ([SHEETS-TODO.md](SHEETS-TODO.md#bugs)).
 
@@ -20,17 +37,21 @@ immer records the creation of a key as one `add` carrying the whole new value. S
 
 `normalizeSheetConfig` (`engine/sheet-config.ts`) therefore materializes every config collection where a sheet enters a consumer: `initSheetData`, the replay base, `addSheet` ops, `createDefaultSheets` and the Workbook's seeding effect. Its `SHEET_CONFIG_COLLECTIONS` list has an exhaustiveness assert, so a new collection fails the build instead of reopening the hole. `withNormalizedSheet` does the same for `calcChain` and `images`, which live outside `config`: the first formula a user types emits `add ['calcChain', 0]` in the same batch as the cell.
 
-There is no `ctx.config` shortcut. Read a sheet's config with `getSheetConfig` (`state/context.ts`) and write through `ctx.sheets[i].config`. immer names a patch after the path its draft was reached through, so a second route to the config emits patches at a root `filterPatch` drops, and assigning it back replaces the whole config.
+There is no `ctx.config` shortcut. Read a sheet's config with `getSheetConfig` (`state/context.ts`) and write through `ctx.sheets[i].config`. immer names a patch after the path its draft was reached through, so a second route to the config emits patches at a root `filterPatch` drops, and assigning it back replaces the whole config. `packages/sheet/src/test/state/events/concurrent-config.test.ts` pins it through the real op pipeline: one client merges cells, another drags a row taller, and the drag must not undo the merge.
+
+`filterPatch` and `sheetMetadataOps` (`state/utils/patch.ts`) decide what goes on the wire, and both read one list of per-client `Sheet` fields, `PER_CLIENT_SHEET_FIELDS`. With two lists, a row insert would broadcast state the op path drops.
 
 A write on a path that then rejects the operation still ships an op and costs the user an undo entry. `packages/sheet/src/test/state/rejected-writes.test.ts` is the table-driven gate; add a row to it when you add a writer.
 
 ## `borderInfo` holds each cell's own sides
 
-`config.borderInfo` maps an `"r_c"` key to that cell's sides. `applyBorder` (`state/modules/border.ts`) expands a toolbar layout per cell at write time, and `border-none` and every carry tombstone delete the key. Order carries nothing, so two clients bordering different cells converge (`packages/sheet/src/test/state/modules/border-convergence.test.ts`).
+`config.borderInfo` maps an `"r_c"` key to that cell's sides. `applyBorder` (`state/modules/border.ts`) expands a toolbar layout per cell at write time. `border-none` deletes the key and clears the facing side of each outside neighbor, so the shared edges go blank. Paste, move, fill and the format painter carry borders through `carrySides`, which deletes the destination's key when the source cell has no border, the Excel and Google overwrite rule. Order carries nothing, so two clients bordering different cells converge (`packages/sheet/src/test/state/modules/border-convergence.test.ts`).
 
-A shared edge never creates the neighbor's key, because that would be the whole-object `add` of [§ Creating a collection ships it whole](#creating-a-collection-ships-it-whole-so-every-collection-exists). A neighbor entry that already exists gets its facing side overridden, so the edge just drawn wins on screen. When two neighbors disagree on a shared edge, as after many xlsx imports, the higher-index one wins (B1's left over A1's right), so the color can't flip with the viewport's walk order.
+A border belongs to the cell it was drawn on. The painter draws each cell's own sides at coordinates that coincide with the neighbor's, so the pixels match without a mirror. A shared edge never creates the neighbor's key, because that would be the whole-object `add` of [§ Creating a collection ships it whole](#creating-a-collection-ships-it-whole-so-every-collection-exists). A neighbor entry that already exists gets its facing side overridden, so the edge just drawn wins on screen. One result a user can see: copying B1 alone does not pick up A1's right edge. When two neighbors disagree on a shared edge, as after many xlsx imports, the higher-index one wins (B1's left over A1's right), so the color can't flip with the viewport's walk order.
 
-A header click selects a whole axis, so it is clipped to the used extent first (`clipToUsedExtent`); one click must not write a key for every row. Cells filled in later rows show no border, an accepted divergence from Excel and Google. Merges are a read-time filter: `mergeEdgeSides` (`packages/lib/src/sheets/borders.ts`) is the one predicate: the canvas calls it, and the xlsx and HTML exports call it through `mergedBorderSides`, and storage stays raw so an unmerge shows the sides again.
+A header click selects a whole axis, so it is clipped to the used extent first (`clipToUsedExtent`); one click must not write a key for every row. Cells filled in later rows show no border, an accepted divergence from Excel and Google. Merges are a read-time filter. `mergeEdgeSides` (`packages/lib/src/sheets/borders.ts`) is the one predicate. The canvas calls it per cell, and the xlsx and HTML exports fold a merge's cells onto its top-left cell through `mergedBorderSides`, because ExcelJS shares one style across a merge and the HTML has one `<td>`. Storage stays raw, so an unmerge shows the sides again.
+
+Only the canvas border pass skips hidden rows and columns. Every carry path (cut, move, fill, the format painter, copy as HTML) reads the merge-filtered sides through `getBorderInfoCompute`, which keeps them, so a drag-fill from a hidden source keeps its border. A row or column insert clones the borders of the row or column at the insert index onto the new ones, as validation rules do (`shiftCellKeyedForInsert` in `engine/rowcol.ts`). So inserting above the top row of a bordered block repeats that row's top edge.
 
 ## Position-bound properties live beside the cell
 
@@ -62,15 +83,17 @@ The editor flushes a snapshot and clears the op log on unmount, and on `beforeun
 
 Anything that is not a v2 envelope throws, and so does a dictionary index past its table. How `use-sheet.ts` reacts depends on when. On the initial load it opens read-only on blank defaults, and the `loadedRef` gate keeps it from ever flushing them over the stored snapshot. On a peer's flush it can't read mid-session, it keeps the workbook already on screen and arms the same lock, because local state may now diverge from the wire. Either way a persistent banner in `editor.tsx` says so, because a blank read-only sheet with no lasting explanation looks like data loss.
 
+Version history keeps snapshots in older encodings. Restoring one hands every connected client an undecodable snapshot, which trips the same lock, so that restore does not take.
+
 ## Undo is per tab and blind to peers
 
 Undo is the engine's own stack of inverse immer patches (`handleUndo`/`handleRedo` in `components/Workbook/index.tsx`). An undo is broadcast as an ordinary op batch, so peers see an edit. A peer's batch applies with `noHistory` and is never undoable locally.
 
-The stack's paths are absolute and nothing corrects them for a peer's changes. So an undo after a peer's row insert lands one row off, and one after a peer's sheet deletion can land on the wrong sheet. Undoing your own row insert applies the whole-sheet inverse locally but ships a `deleteRowCol` marker, so a peer's later edits on that sheet vanish on your side only. All three are in [SHEETS-TODO.md](SHEETS-TODO.md#bugs). Whether to move to Yjs structures and `Y.UndoManager` is answered in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md): only with stable row and column ids, and not first.
+The stack's paths are absolute and nothing corrects them for a peer's changes. So an undo after a peer's row insert lands one row off, and one after a peer's sheet deletion can land on the wrong sheet. Undoing your own row insert applies the whole-sheet inverse locally but ships a `deleteRowCol` marker, so a peer's later edits on that sheet vanish on your side only. All three are open in [SHEETS-TODO.md](SHEETS-TODO.md). Whether to move to Yjs structures and `Y.UndoManager` is answered in [PROPOSAL_SHEETS_YJS_WORKBOOK.md](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md): only with stable row and column ids, and not first.
 
 ## Every sheet switch goes through `changeSheet`
 
-Tab clicks, the sheet list, search, hyperlinks, the API and the current sheet going away all call `changeSheet` (`state/modules/sheet.ts`). When the current sheet is hidden or deleted, here, by a peer or by an undo, `leaveCurrentSheet` lands on the first visible sheet in tab order, with `force` skipping the `beforeActivateSheet` veto. A hidden target is refused, and so is hiding your last visible sheet.
+Tab clicks, the sheet list, search, hyperlinks, the API and the current sheet going away all call `changeSheet` (`state/modules/sheet.ts`). When the current sheet is hidden or deleted, locally, by a peer or by an undo, `leaveCurrentSheet` lands on the first visible sheet in tab order, with `force` skipping the `beforeActivateSheet` veto. A hidden target is refused, and so is hiding your last visible sheet.
 
 A switch closes the cell editor and any formula range selection, so Enter can never commit into a sheet a peer switched you to. It also derives everything the grid paints (`applySheetView`) inside the same recipe. The first frame after the commit paints before any effect runs, so anything left to an effect would draw the new sheet on the old sheet's geometry for one frame.
 
@@ -80,18 +103,18 @@ A switch closes the cell editor and any formula range selection, so Enter can ne
 
 `apps/api` imports only the `@workspace/sheet/engine` subpath. The `./engine` entry in `packages/sheet/package.json` points at the TypeScript source, not a build, so the API's own type check covers the engine under its stricter options: no DOM lib, `verbatimModuleSyntax`, `noUnusedParameters`. A DOM or state import in the engine fails the API build.
 
-The functions come from `@formulajs/formulajs`, behind a parser inherited from the fortune-sheet fork. A function this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER) evaluates to `#NAME?`. The engine overrides `TEXT`, which formulajs leaves unimplemented, so it formats through the same numfmt masks the grid renders with.
+The functions come from `@formulajs/formulajs`, behind a parser inherited from the fortune-sheet fork. A function this build lacks (XLOOKUP, TEXTJOIN, LET, FILTER) evaluates to `#NAME?`. The engine overrides `VALUE`, which rejects a number, and `TEXT`, which formulajs leaves unimplemented, so it formats through the same numfmt masks the grid renders with.
 
 ## Values follow Excel's grid and calendar
 
-- A Date result (`DATE`, `EOMONTH`, `NOW`) is stored as its Excel serial, taken from the Date's local calendar fields, because formulajs builds its Dates at local midnight. `dateToSerial` in `parser/helper/number.ts` is the engine's conversion, with the Lotus leap day from 1900-03-01. The cell keeps its format mask, so a mask-less cell shows the serial.
+- A Date result (`DATE`, `EOMONTH`, `NOW`) is stored as its Excel serial, taken from the Date's local calendar fields, because formulajs builds its Dates at local midnight. `dateToSerial` in `engine/parser/helper/number.ts` is the engine's conversion, with the Lotus leap day from 1900-03-01. The cell keeps its format mask, so a mask-less cell shows the serial.
 - Every range is clamped to the sheet grid, because an unclamped `A1:XFD1048576`, a shape real xlsx files carry, is 17 billion cells. So `ROWS(A1:A100)` on a two-row grid is 2 (`packages/sheet/src/test/engine/formula-engine.test.ts`), a range past the grid is empty, and an `INDEX` past the grid is `#REF!`.
 - formulajs parses an ISO date string as UTC (`DATEVALUE("2026-01-05")`), so the result is off by the zone offset outside UTC. `DATE(...)` is built in local time and is right everywhere. The fix is open in [SHEETS-TODO.md](SHEETS-TODO.md#formula-engine).
 
 The dependency graph has two limits:
 
 - A reference cycle never errors: the visited set in `getCalculationOrder` breaks the walk, and the cycle's cells evaluate in visit order.
-- `INDIRECT`, `OFFSET` and `INDEX` produce references the dependency graph can't see statically. `isFunctionRange` special-cases them; keep that logic when you touch the graph.
+- `INDEX` produces references the dependency graph can't see statically. `isFunctionRange` special-cases it, together with `INDIRECT` and `OFFSET`; keep that logic when you touch the graph. formulajs 2.9.3 has no `INDIRECT` or `OFFSET`, so today both evaluate to `#NAME?`.
 
 ## The editor computes on write, the server only what nobody computed
 
@@ -118,7 +141,7 @@ At mount the Workbook materializes each sheet's `data` and `seedCalcChain` recor
 
 The dependency map (`ctx.formulaCache.formulaCellInfoMap` and its reverse `dependencyIndex`) is built from an idle callback, so the first edit on a large workbook doesn't pay a multi-second rebuild. It is all or nothing: whichever comes first, the idle build, an edit or a paste, builds the whole map, from a plain `current()` snapshot, because reading every formula through an immer draft is slow.
 
-Once built, the map is kept current cell by cell. Local writers register what they write through `setFormulaCellInfo`. Undo, redo and a peer's ops go through `updateFormulaCache`, which reads only `data` patches, because every formula change carries one. A structural patch or a row or column insert or delete sets the map to `null` for a lazy rebuild. The `calcChain` patch that rides along is ignored, because re-registering from it cost a whole sheet per edit. The known gaps are in [SHEETS-TODO.md](SHEETS-TODO.md#bugs).
+Once built, the map is kept current cell by cell. Local writers register what they write through `setFormulaCellInfo`. Undo, redo and a peer's ops go through `updateFormulaCache`, which reads only `data` patches, because every formula change carries one. A structural patch or a row or column insert or delete sets the map to `null` for a lazy rebuild. The `calcChain` patch that rides along is ignored, because re-registering from it cost a whole sheet per edit. The known gap, a copied sheet's formulas, is in [SHEETS-TODO.md](SHEETS-TODO.md#bugs).
 
 ## Number display strings go through `numberDisplay`
 
@@ -128,7 +151,7 @@ A typed number is stored as a number in `v`, unless the cell is text-formatted. 
 
 ## Conditional formats evaluate headless
 
-`evaluateConditionalFormat(rules, data, options?)` (`engine/conditional-format.ts`) returns the `"r_c"`-keyed style map the canvas paints, and the HTML export calls it too ([§ Conditional formats run through the canvas engine](#conditional-formats-run-through-the-canvas-engine)). Formula rules need an evaluator, and both pass the same one, `createCfFormulaEvaluator`.
+`evaluateConditionalFormat(rules, data, options?)` (`engine/conditional-format.ts`) returns the `"r_c"`-keyed style map the canvas paints, and the HTML export calls it too ([§ The export paints conditional formats with the grid's evaluator](#the-export-paints-conditional-formats-with-the-grids-evaluator)). Without an evaluator, formula rules are skipped. Both callers pass the same one, `createCfFormulaEvaluator`.
 
 Every rule scans only the materialized matrix, because Excel writes a whole-column rule as `A1:A1048576`. Overlapping rules layer per style property in rule order, so a later rule's fill never erases an earlier rule's text color. `textContains` ignores case and `duplicateValue` skips blank cells, both as in Excel.
 
@@ -192,7 +215,7 @@ A rejection outranks a prompt, since it is the more urgent message. The card sta
 
 ## Comments are Eigen comment cards
 
-A cell anchors comments through `commentCardIds` on the `Cell`. The upstream comment system is gone; the context menu, the panel and the card dialogs are the shared components from [COMMENTS.md](COMMENTS.md). Only adding and deleting a cell's anchor stay sheet-specific hooks.
+A cell anchors comments through `commentCardIds` on the `Cell`. The context menu, the panel and the card dialogs are the shared components from [COMMENTS.md](COMMENTS.md). Only adding and deleting a cell's anchor stay sheet-specific hooks.
 
 On mobile the comments pane takes the whole width, so `editor.tsx` hides the workbook instead of unmounting it. `Sheet` keeps a `ResizeObserver` on its container and skips 0×0 boxes, so the canvas re-measures when the workbook shows again. App code may rely on that.
 
@@ -215,7 +238,7 @@ Cell values are schemaless CRDT strings, and stylesheet text is a different esca
 
 Values are still `escapeHtml`'d on the way in, except the font family: entity encoding would corrupt a real name like `Bell MT & Co`, so its quotes and backslashes are dropped instead. The sanitizer's data-URI rule and `@import` strip cover style-element text too ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-weasyprint-fetches)).
 
-## Conditional formats run through the canvas engine
+## The export paints conditional formats with the grid's evaluator
 
 `render.ts` calls `evaluateConditionalFormat` per sheet and merges its colors into each cell's style, so an export shows what the canvas shows. For formula rules it builds one `FormulaEngine` and one `createArrayResolver` over all loaded sheets, so a cross-sheet rule like `=Sheet2!A1>10` resolves. The pass reads `cell.v` and never recomputes the sheet's own formulas. Those values are already fresh, because `readSheetsFromDoc` ran the [gated recalc](#the-editor-computes-on-write-the-server-only-what-nobody-computed).
 
@@ -227,7 +250,7 @@ A sheet with images wraps its table in a `position:relative` box and emits one a
 
 The stored coordinates are grid pixels from A1, while the table starts at the used range. So the overlay subtracts the rows and columns above and left of that window. An image above or left of the used range pulls the window back to where the image starts, so the offset never goes negative and the page covers the image.
 
-An image's name is a media reference ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)), looked up in a map the transform prepared: `data:` URIs for an export, preview URLs for a preview. A name that resolves to nothing renders nothing. The xlsx export drops images, because ExcelJS has no floating-picture writer this exporter uses.
+An image's name is a media reference ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)), looked up in a map the transform prepared: `data:` URIs for an export, preview URLs for a preview. A name that resolves to nothing renders nothing. The xlsx export drops images, an open [ROADMAP](ROADMAP.md) row.
 
 ## Some xlsx round-trip drifts are decisions
 
