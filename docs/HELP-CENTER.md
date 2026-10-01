@@ -6,7 +6,7 @@
 
 Everything lives in `apps/index` plus three shared pieces in `packages/lib/src/core/`: `getSupportUrl` in `api.ts`, the Pagefind loader in `search/pagefind.ts`, and the palette's `command-palette/providers/help-search.ts`. No `apps/api` code serves it, so there is nothing to deploy or operate beyond the files in `dist/index`.
 
-- `apps/index/src/data/{support,blog}/` holds the content: 15 support sections and about 180 articles.
+- `apps/index/src/data/{support,blog}/` holds the content: one folder per support section, and the blog posts.
 - `apps/index/scripts/` holds the build steps, with `scripts/lib/` for frontmatter, Markdown and related articles.
 - `apps/index/src/components/support/` and `src/routes/support.*` render the pages.
 

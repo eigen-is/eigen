@@ -32,12 +32,12 @@ Orchestrating multi-step work or dispatching subagents: the [orchestrate skill](
 
 File locations and patterns per concept (backend + frontend tables, package boundaries, pitfalls): [ARCHITECTURE.md](docs/ARCHITECTURE.md). Per domain:
 
-- Drive, storage, mounts, trash, versioning, copy/move: [STORAGE.md](docs/STORAGE.md); soft delete: [SOFT-DELETE.md](docs/SOFT-DELETE.md); file history and watch: [FILE-HISTORY.md](docs/FILE-HISTORY.md)
+- Drive, storage, mounts, versioning, copy/move: [STORAGE.md](docs/STORAGE.md); soft delete and trash: [SOFT-DELETE.md](docs/SOFT-DELETE.md); file history and watch: [FILE-HISTORY.md](docs/FILE-HISTORY.md)
 - Databases: [DATABASE.md](docs/DATABASE.md)
 - Sharing and permissions: [ACL.md](docs/ACL.md); guests: [GUEST-ACCESS.md](docs/GUEST-ACCESS.md); organizations and teams: [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md)
 - Collab documents (Yjs, offline, restore): [COLLAB.md](docs/COLLAB.md)
 - Canvas engine (vector + slides): [CANVAS.md](docs/CANVAS.md), [SLIDES.md](docs/SLIDES.md); clipboard: [CLIPBOARD.md](docs/CLIPBOARD.md)
-- Sheets: [SHEETS.md](docs/SHEETS.md); stickies: [STICKIES.md](docs/STICKIES.md); documents: [DOCUMENT-CONTENT-LAYER.md](docs/DOCUMENT-CONTENT-LAYER.md), [INLINE-EDITING.md](docs/INLINE-EDITING.md), [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)
+- Sheets: [SHEETS.md](docs/SHEETS.md); stickies: [STICKIES.md](docs/STICKIES.md); how the server reads and writes document content: [DOCUMENT-CONTENT-LAYER.md](docs/DOCUMENT-CONTENT-LAYER.md); editing a text file in Drive: [INLINE-EDITING.md](docs/INLINE-EDITING.md); the files a document embeds: [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)
 - Comments: [COMMENTS.md](docs/COMMENTS.md)
 - Mail: [MAIL.md](docs/MAIL.md), [IMAP.md](docs/IMAP.md)
 - Chat: [CHAT.md](docs/CHAT.md)
@@ -46,16 +46,17 @@ File locations and patterns per concept (backend + frontend tables, package boun
 - WebDAV: [WEBDAV.md](docs/WEBDAV.md)
 - Search: [SEARCH.md](docs/SEARCH.md); in-document find bar: [IN_DOCUMENT_SEARCH.md](docs/IN_DOCUMENT_SEARCH.md)
 - SSE: [SSE.md](docs/SSE.md); toasts: [NOTIFICATIONS.md](docs/NOTIFICATIONS.md); notification center: [NOTIFICATION-CENTER.md](docs/NOTIFICATION-CENTER.md); activity rows: [ACTIVITY-ROWS.md](docs/ACTIVITY-ROWS.md)
-- Previews, quick look and file actions, export, off-thread transforms: [PREVIEWS.md](docs/PREVIEWS.md), [EXPORT.md](docs/EXPORT.md), [DOCUMENT-TRANSFORMS.md](docs/DOCUMENT-TRANSFORMS.md)
+- Previews, quick look and file actions: [PREVIEWS.md](docs/PREVIEWS.md); export and import: [EXPORT.md](docs/EXPORT.md); off-thread transforms: [DOCUMENT-TRANSFORMS.md](docs/DOCUMENT-TRANSFORMS.md)
 - Uploads and S3 sync: [SYNC.md](docs/SYNC.md), [STREAMING_UPLOADS.md](docs/STREAMING_UPLOADS.md)
 - Backup and restore: [BACKUP.md](docs/BACKUP.md)
 - Self-hosting and `./eigen`: [SELF-HOSTING.md](docs/SELF-HOSTING.md); the operator's steps live in the help center's `self-hosting/` section
 - Server config, settings, quotas: [SERVER-SETTINGS.md](docs/SERVER-SETTINGS.md), [QUOTA.md](docs/QUOTA.md); demo instance: [DEMO_MODE.md](docs/DEMO_MODE.md)
 - Cross-home relay and sharding: [SCALABILITY.md](docs/SCALABILITY.md)
-- Layout, lists, keyboard, z-index, hover icons: [LAYOUT.md](docs/LAYOUT.md); mobile: [MOBILE.md](docs/MOBILE.md); typography: [TYPOGRAPHY.md](docs/TYPOGRAPHY.md); command palette: [the proposal](docs/proposals/PROPOSAL_COMMAND_PALETTE.md)
+- Layout, lists, Drive's file UI, keyboard, z-index, hover icons: [LAYOUT.md](docs/LAYOUT.md); mobile: [MOBILE.md](docs/MOBILE.md); typography: [TYPOGRAPHY.md](docs/TYPOGRAPHY.md); command palette: [the proposal](docs/proposals/PROPOSAL_COMMAND_PALETTE.md)
 - Testing and browser verification: [TESTING.md](docs/TESTING.md), the [verify-in-browser skill](.claude/skills/verify-in-browser/SKILL.md)
 - Help center: [HELP-CENTER.md](docs/HELP-CENTER.md), [SUPPORT-STYLE-GUIDE.md](docs/SUPPORT-STYLE-GUIDE.md)
-- Backlog: [ROADMAP.md](docs/ROADMAP.md)
+- Code standards and their worked examples: [CODE-STANDARDS.md](docs/CODE-STANDARDS.md), [CODE-EXAMPLES.md](docs/CODE-EXAMPLES.md); setting up and contributing: [CONTRIBUTING.md](docs/CONTRIBUTING.md)
+- Backlog: [ROADMAP.md](docs/ROADMAP.md); after 1.0: [ROADMAP-POST-1.md](docs/ROADMAP-POST-1.md); sheets: [SHEETS-TODO.md](docs/SHEETS-TODO.md)
 
 ## Pitfalls
 

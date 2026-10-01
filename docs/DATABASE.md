@@ -6,9 +6,9 @@
 
 | Kind | Files | Opened by | Leaves the disk |
 |---|---|---|---|
-| Server | `users3.db` (better-auth), `eigen.db` (the [share registry](ACL.md#share-registry)), `waitlist.db`, all in `data/server/` (`SERVER_DATABASES`, `apps/api/src/lib/config/paths.ts`) | Once per process, through `createAsyncSingleton` (`apps/api/src/utils/singleton.ts`) | Never |
-| Home | `mounts/shared.db`, each mount's `metadata.db`, and the mail, contacts, calendar and notification databases (`PATHS`, `apps/api/src/lib/core/constants.ts`) | `Home.getLocalDatabase(config, relativePath)`, once per path | Never |
-| Container | A collab document's or chat's `data.db` and a collab document's `comments.db`, stored as Drive files keyed by their `pathId` | `Mount.openDatabase`, one slot per `pathId` | Through the mount, queued on `s3` ([SYNC.md](SYNC.md)) |
+| Server | `users3.db` (better-auth), `eigen.db` (the [share registry](ACL.md#share-registry)), `waitlist.db`, all in `data/server/` (`SERVER_DATABASES`, `apps/api/src/lib/config/paths.ts`) | Once per process, through `createAsyncSingleton` (`apps/api/src/utils/singleton.ts`) | Only in a backup ([BACKUP.md](BACKUP.md)) |
+| Home | `mounts/shared.db`, each mount's `metadata.db`, and the mail, contacts, calendar and notification databases (`PATHS`, `apps/api/src/lib/core/constants.ts`) | `Home.getLocalDatabase(config, relativePath)`, once per path | Only in a backup |
+| Container | A collab document's or chat's `data.db` and a collab document's `comments.db`, stored as Drive files keyed by their `pathId` | `Mount.openDatabase`, one slot per `pathId` | Through the mount, queued on `s3` ([SYNC.md](SYNC.md)), and in a backup |
 
 A container database lives in its container folder:
 
