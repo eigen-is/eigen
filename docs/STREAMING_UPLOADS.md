@@ -2,6 +2,8 @@
 
 > **TLDR:** Every Drive upload, one file or many, is one `POST /drive/:ownerId/:mountId/file/:pathId` whose body Eigen's own streaming multipart parser reads (`apps/api/src/lib/multipart/`). Each file streams from the wire into a mount temp file, hashed chunk by chunk as it arrives, and then moves into storage. Memory stays constant whatever the file size, so `maxUploadSizeMB` is a policy knob, not a memory knob. The size limit holds per file and cuts the request off mid-stream.
 
+Uploads come from Drive's upload dialog and drag and drop, from an image an editor puts in its document's `media/` folder ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)), and from chat and comment attachments. Each lands in a mount, one drive of a Home over local disk or an S3 bucket ([STORAGE.md § A mount is a paths table](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)). On its way in, an upload meets the quota, which sets how large each file may be ([QUOTA.md](QUOTA.md)), and file history, which tells the folder's watchers ([FILE-HISTORY.md](FILE-HISTORY.md)).
+
 ## Elysia never reads the upload body
 
 The route declares `parse: 'none'`, so Elysia leaves the request body alone and `Drive.uploadFiles` hands it to the parser. The client appends every file as a `file` field of one `FormData` and posts it once, with XHR for progress in the upload dialog. Before any byte is read, the route computes the size limit with `getUploadMaxSize` ([QUOTA.md](QUOTA.md)). A mount that is already full answers 507 without reading the body.
