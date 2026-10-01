@@ -15,9 +15,7 @@ import type { NotificationPersistInput } from '@workspace/lib/types/notification
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
-import { isLightSkipped } from '../backup/archive-layout';
-import { readHomeMounts } from '../backup/enumerate-homes';
-import { type SnapshotProgress, snapshotHome, treeBytes } from '../backup/snapshot-home';
+import { captureBytes, type SnapshotProgress, snapshotHome } from '../backup/snapshot-home';
 import { readCalendarTotalSize } from '../calendar/resource-store';
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/types';
 import { getAvatarsDir, getDataRoot, getUserHomePath, homeDirUnder } from '../config/paths';
@@ -233,19 +231,9 @@ export async function pullHomeSnapshot(
     }
 }
 
-// What a capture of the home at `level` stages at most, read off its folder like pullHomeSize: the
-// server backup's room check sizes every home before it starts. Full is every local byte. Light
-// walks no Maildir and of each mount only its metadata.db. Full + S3 adds each s3 mount's objects.
+// The server backup's room check sizes every home through here, before it starts.
 export async function pullHomeBackupBytes(ownerId: string, level: BackupLevel): Promise<number> {
-    const homeDir = homeDirUnder(getDataRoot(), ownerId);
-    if (!fs.existsSync(homeDir)) return 0;
-    if (level === 'light') return treeBytes(homeDir, isLightSkipped);
-    const local = await treeBytes(homeDir);
-    if (level === 'full') return local;
-    const s3Bytes = Object.entries(readHomeMounts(homeDir) ?? {})
-        .filter(([, mount]) => mount.storageType === 's3')
-        .map(([id]) => readMountTotalSize(path.join(homeDir, PATHS.DRIVE.ROOT, id, PATHS.DRIVE.METADATA_DB)));
-    return s3Bytes.reduce((sum, bytes) => sum + bytes, local);
+    return captureBytes(homeDirUnder(getDataRoot(), ownerId), level);
 }
 
 export async function pullCalendarShares(

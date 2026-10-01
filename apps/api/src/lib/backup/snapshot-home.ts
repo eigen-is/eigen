@@ -12,11 +12,13 @@ import { type DatabaseConfig, isEnoent, PATHS, type SchemaType } from '../core';
 import type { Home } from '../home';
 import { createMountConfig, Mount } from '../mount';
 import { MOUNT_DB_CONFIG } from '../mount/db-config';
+import { readMountTotalSize } from '../mount/helpers';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
 import { HOME_DATABASE_PATHS, HOME_DATABASES, isLightSkipped, MAILDIR_ROOT } from './archive-layout';
 import { readAuthRows } from './auth-tables';
 import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
+import { readHomeMounts } from './enumerate-homes';
 import { describeError } from './errors';
 import {
     ARCHIVE_AUTH_FILE,
@@ -97,6 +99,20 @@ export async function treeBytes(root: string, skipDir: (rel: string) => boolean 
         return bytes;
     };
     return walk('');
+}
+
+// What a capture of the home at `level` stages at most, read off its folder like pullHomeSize: the
+// server backup's room check sizes every home before it starts. Full is every local byte. Light
+// walks no Maildir and of each mount only its metadata.db. Full + S3 adds each s3 mount's objects.
+export async function captureBytes(homeDir: string, level: BackupLevel): Promise<number> {
+    if (!fs.existsSync(homeDir)) return 0;
+    if (level === 'light') return treeBytes(homeDir, isLightSkipped);
+    const local = await treeBytes(homeDir);
+    if (level === 'full') return local;
+    const s3Bytes = Object.entries(readHomeMounts(homeDir) ?? {})
+        .filter(([, mount]) => mount.storageType === 's3')
+        .map(([id]) => readMountTotalSize(path.join(homeDir, PATHS.DRIVE.ROOT, id, PATHS.DRIVE.METADATA_DB)));
+    return s3Bytes.reduce((sum, bytes) => sum + bytes, local);
 }
 
 // Writes a storage-independent copy of one home into `{targetDir}/home-{ownerId}/` and returns its manifest. Each
