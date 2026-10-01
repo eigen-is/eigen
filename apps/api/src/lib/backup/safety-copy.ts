@@ -180,6 +180,6 @@ async function deleteRemoteObjects(folder: string, homeDir: string): Promise<voi
 
 export async function deleteSafetyCopy(folder: string, homeDir: string): Promise<void> {
     await deleteRemoteObjects(folder, homeDir);
-    fs.rmSync(folder, { recursive: true, force: true });
+    await fsp.rm(folder, { recursive: true, force: true });
     forgetSafetyCopySize(folder);
 }

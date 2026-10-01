@@ -647,7 +647,7 @@ describe('Backup restoreHome', () => {
     // held off here to look at what was written.
     test('a finished restore leaves its completion note beside the marker', async () => {
         const jobId = `restore-sentinel-${Date.now()}`;
-        const spy = spyOn(pathsModule, 'wipeBackupStagingDir').mockImplementation(() => {});
+        const spy = spyOn(pathsModule, 'wipeBackupStagingDir').mockImplementation(async () => {});
         try {
             await restoreHome(artifact, target.id, jobId);
         } finally {

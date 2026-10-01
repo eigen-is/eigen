@@ -232,7 +232,7 @@ export async function runHomeBackup(ownerId: string, job: BackupJob, onProgress:
         requireVerified(verify, name);
         return name;
     } finally {
-        wipeBackupStagingDir(job.id);
+        await wipeBackupStagingDir(job.id);
     }
 }
 
@@ -258,6 +258,6 @@ export async function runArtifactVerify(
         requireVerified(record, artifactName);
         return artifactName;
     } finally {
-        wipeBackupStagingDir(job.id);
+        await wipeBackupStagingDir(job.id);
     }
 }

@@ -1,12 +1,18 @@
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, readdirSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupJob, BackupLevel, BackupReason } from '@workspace/lib/types/backup';
-import { copyArchiveMember } from '../../lib/backup/archive';
+import * as archive from '../../lib/backup/archive';
 import { enumerateHomes } from '../../lib/backup/enumerate-homes';
 import { getBackupJob, startBackupJob, withBackupJobSlot } from '../../lib/backup/jobs';
-import { buildServerArchiveName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
+import {
+    buildHomeFolderName,
+    buildServerArchiveName,
+    getBackupsDir,
+    SERVER_ARCHIVE_SERVER_MEMBER,
+    serverSidecarPath,
+} from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { readServerSidecar, recoverInterruptedServerBackups } from '../../lib/backup/server-archives';
 import { startServerBackup } from '../../lib/backup/server-job';
@@ -18,7 +24,7 @@ import { ApiError } from '../../lib/core';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
-import { createTeam, createTestUser, getTestContext, type TestContext } from '../setup';
+import { countLoopTurns, createTeam, createTestUser, getTestContext, type TestContext } from '../setup';
 import {
     alertTitlesTo,
     expectRealShapeServed,
@@ -31,6 +37,8 @@ import {
 // A server job snapshots, verifies and packs every home of the file's fixture for real.
 const JOB_TIMEOUT_MS = 120_000;
 const pullHomeSnapshot = homeRelay.pullHomeSnapshot;
+const packFolder = archive.packFolder;
+const createArchiveWriter = archive.createArchiveWriter;
 
 async function runJob(
     options: { level?: BackupLevel; reason?: BackupReason } = {},
@@ -100,7 +108,7 @@ describe('Server backup job', () => {
                     (m) => m.name === manifest.homes.find((h) => h.ownerId === ownerId)?.member,
                 )!;
                 const name = basename(member.name);
-                await copyArchiveMember(member, join(getBackupsDir(), name));
+                await archive.copyArchiveMember(member, join(getBackupsDir(), name));
                 await restoreHome(name, ownerId, `server-member-restore-${ownerId}`);
             }
             await expectRealShapeServed(realShape);
@@ -291,6 +299,49 @@ describe('Server backup job', () => {
             const home = (await readServerManifest(archivePath)).manifest.homes.find((home) => home.ownerId === broken);
             expect(home?.failed).toContain('Object not found');
             expect(home?.skipped).toBeUndefined();
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    // A staged folder is deleted between its pack and its append: thousands of files deleted in one step froze every
+    // request for a second.
+    test(
+        'gives the event loop turns while it deletes a staged folder of thousands of files',
+        async () => {
+            quietRelay();
+            const turns = countLoopTurns();
+            const packedAt = new Map<string, number>();
+            const turnsWhileDeleting = new Map<string, number>();
+            spies.push(
+                spyOn(archive, 'packFolder').mockImplementation(async (dir, packed, onProgress) => {
+                    await packFolder(dir, packed, onProgress);
+                    const isServer = basename(packed) === SERVER_ARCHIVE_SERVER_MEMBER;
+                    if (!isServer && basename(dir) !== buildHomeFolderName(ctx.alice.user.id)) return;
+                    // After the pack, so only the delete meets them.
+                    mkdirSync(join(dir, 'clutter'));
+                    for (let i = 0; i < 3000; i++) writeFileSync(join(dir, 'clutter', `${i}.txt`), 'x');
+                    packedAt.set(packed, turns.read());
+                }),
+                spyOn(archive, 'createArchiveWriter').mockImplementation(async (archivePath) => {
+                    const writer = await createArchiveWriter(archivePath);
+                    const appendFile = writer.appendFile;
+                    writer.appendFile = (name, sourcePath) => {
+                        const before = packedAt.get(sourcePath);
+                        if (before !== undefined) turnsWhileDeleting.set(name, turns.read() - before);
+                        return appendFile(name, sourcePath);
+                    };
+                    return writer;
+                }),
+            );
+            try {
+                const { job } = await runJob();
+                expect(job.state).toBe('done');
+            } finally {
+                turns.stop();
+            }
+            expect(turnsWhileDeleting.size).toBe(2);
+            expect(turnsWhileDeleting.get(SERVER_ARCHIVE_SERVER_MEMBER)).toBeGreaterThan(0);
+            expect(Math.min(...turnsWhileDeleting.values())).toBeGreaterThan(0);
         },
         JOB_TIMEOUT_MS,
     );

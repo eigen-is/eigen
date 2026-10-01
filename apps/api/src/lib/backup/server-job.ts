@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type {
     BackupJob,
@@ -125,7 +126,7 @@ async function appendHome(
         const gone = home.kind === 'team' ? !(await getTeamExists(id)) : !(await getUserById(home.ownerId));
         return gone ? { ...home, skipped: HOME_DELETED } : { ...home, failed: describeError(error) };
     } finally {
-        fs.rmSync(folder, { recursive: true, force: true });
+        await fsp.rm(folder, { recursive: true, force: true });
     }
     await appendPacked(writer, member, packed);
     return { ...home, member, bytes };
@@ -149,7 +150,7 @@ async function writeServerArchive(
         const { homes, orphans } = enumerateHomes(path.join(serverFolder, archiveServerPath(SERVER_DATABASES.users)));
         const packedServer = path.join(staging, SERVER_ARCHIVE_SERVER_MEMBER);
         await packFolder(serverFolder, packedServer);
-        fs.rmSync(serverFolder, { recursive: true, force: true });
+        await fsp.rm(serverFolder, { recursive: true, force: true });
         await appendPacked(writer, SERVER_ARCHIVE_SERVER_MEMBER, packedServer);
 
         const summaries: ServerArchiveManifest['homes'] = [];
@@ -183,7 +184,7 @@ async function writeServerArchive(
         return manifest;
     } finally {
         await writer.abort();
-        wipeBackupStagingDir(job.id);
+        await wipeBackupStagingDir(job.id);
     }
 }
 

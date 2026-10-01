@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { incompleteReason, parseBackupArtifactName } from '@workspace/lib/validation';
@@ -94,7 +95,7 @@ async function replaceHomeFolder(
         // may throw over the failure that brought us here.
         clearHomeRestoring(ownerId);
         try {
-            wipeBackupStagingDir(jobId);
+            await wipeBackupStagingDir(jobId);
         } catch (error) {
             console.error(`[backup] could not clear the staging folder of job ${jobId}:`, error);
         }
@@ -128,7 +129,7 @@ export async function restoreHome(
             const unpackDir = path.join(getBackupStagingDir(jobId), 'restore');
             // A retry of a job whose id was reused would otherwise extract over the last attempt's
             // tree, and stage 1 fails an archive on a file the manifest does not list.
-            fs.rmSync(unpackDir, { recursive: true, force: true });
+            await fsp.rm(unpackDir, { recursive: true, force: true });
             onProgress?.('extract', 0, 1);
             await extractArtifact(artifactPath, unpackDir);
             onProgress?.('extract', 1, 1);
