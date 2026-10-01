@@ -6,15 +6,11 @@
 
 Every user route in `apps/api/src/routes/mail.ts` is `requireSelf`: a mailbox belongs to one user and has no ACL. The route hands off to the user's `Mail` (`mail-domain.ts`), which talks to a `MailStore`. `MaildirStore` is the only one. The interface is where a second backend plugs in ([JMAP](proposals/PROPOSAL_STALWART_MAIL.md), or [the user's own provider over IMAP](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)), so no file name crosses into the domain or the routes.
 
-The `emails` row is the `EmailSummary` the list returns, unmapped; a full message is re-parsed from its `.eml`.
+The `emails` row is the `EmailSummary` the list returns, unmapped except that the list cuts `textShort` to its preview length (`MAIL_PREVIEW_CHARS`). A full message is re-parsed from its `.eml`.
 
 ## The Maildir is the truth and the index follows it
 
-Mail is the one domain whose truth is still files, because Dovecot moves and renames them behind the API's back. Hence the watchers and the readdir diff that contacts and calendar don't need ([CONTACTS.md](CONTACTS.md)).
-
-**The file lands before the index row, always.** A crash between the two leaves the index behind the disk, and the next `reconcileMailbox` repairs it. A fast-saved draft keeps its subject, preview and recipients in a `draft-meta/` sidecar, which the Drafts sync projects back over the row it rebuilds from the stale `.eml`. A sidecar that can't be read counts as absent, so one torn file can't fail that sync.
-
-Every Maildir write fsyncs the staged file and each indexed directory its rename or unlink changes (`lib/core/local-filesystem.ts`). A directory fsync the file system refuses (NFS, some FUSE mounts) is logged once, not thrown: the rename already happened, and a delivery answering 500 makes the MTA send a duplicate. `apps/api/src/test/mail/mail-durability.test.ts` pins each write.
+Mail is the one domain whose truth is still files, because Dovecot moves and renames them behind the API's back. How the index follows the files, and how each write survives a crash: [IMAP.md § The files are the truth because Dovecot writes them too](IMAP.md#the-files-are-the-truth-because-dovecot-writes-them-too).
 
 ## Only the reader's parse sanitizes
 
