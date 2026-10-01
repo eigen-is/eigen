@@ -4,15 +4,17 @@
 
 ## A file opens read-only, and Edit needs write access
 
-Drive opens a file at the inline-edit route when `isInlineEditable(mimeType, name)` accepts it (`getDriveItemUrl`). The page starts in view mode, which renders the server's text preview, the same body the Drive preview shows. The Edit button shows only when `useCheckPermissions` reports write access. Edit mode mounts the editor on the content from `GET /editor/.../content`, and the heavy editors load lazily (`native-file-editor.tsx`).
+Drive opens a file at the inline-edit route when `isInlineEditable(mimeType, name)` accepts it (`getDriveItemUrl`). The page starts in view mode, which renders the server's text preview, the same body the Drive preview shows. The Edit button shows only when `useCheckPermissions` reports write access and `GET /editor/.../content` has answered. Edit mode mounts the editor on that content, and the heavy editors load lazily (`native-file-editor.tsx`).
 
 ## Two lists decide what is editable
 
-The client asks `isInlineEditable` (`packages/lib/src/types/drive.ts`): a MIME list plus `INLINE_EDITABLE_EXTENSIONS`, which is the code preview's `CODE_EXTENSIONS` plus `.md`, `.markdown` and `.txt`. The server asks `getTextPreviewMode` (`packages/lib/src/constants/preview.ts`), which also picks the edit mode (`markdown`, `plaintext` or `code`) on both sides. The server refuses a file it has no mode for with a 400. It checks on save as well as on read, because otherwise a write collaborator could overwrite a binary, such as a container's `data.db`, with text.
+The client asks `isInlineEditable` (`packages/lib/src/types/drive.ts`): a MIME list plus `INLINE_EDITABLE_EXTENSIONS`, which is the code preview's `CODE_EXTENSIONS` plus `.md`, `.markdown` and `.txt`. The server asks `getTextPreviewMode` (`packages/lib/src/constants/preview.ts`), and the mode it answers is the edit mode the content GET returns (`markdown`, `plaintext` or `code`). The client never computes a mode: it mounts the markdown editor for `markdown` and the code editor for anything else. For a file whose mime is an Eigen document type, `getTextPreviewMode` answers that type's container mode instead, so such a file passes the gate and opens in the code editor. The server refuses a file it has no mode for with a 400. It checks on save as well as on read, because otherwise a write collaborator could overwrite a binary, such as a container's `data.db`, with text.
+
+The two lists can disagree. A file the client offers and the server refuses, such as a `.vcf` stored as `text/plain`, opens into that 400, an open [ROADMAP](ROADMAP.md) row.
 
 ## A read refuses bytes it can't round-trip
 
-The read decodes with strict UTF-8 (`TextDecoder` with `fatal: true`) and answers 400 on invalid bytes. A lossy decode would replace them silently, and the next save would write the replacements back over the file. Read and save share one 5 MB cap (`MAX_INLINE_EDIT_SIZE`), so a save never produces a file the next open would refuse.
+The read decodes with strict UTF-8 (`TextDecoder` with `fatal: true`) and answers 400 on invalid bytes. A lossy decode would replace them silently, and the next save would write the replacements back over the file. Read and save share one 5 MiB cap (`MAX_INLINE_EDIT_SIZE`), so a save never produces a file the next open would refuse.
 
 ## Frontmatter stays out of the WYSIWYG editor
 
