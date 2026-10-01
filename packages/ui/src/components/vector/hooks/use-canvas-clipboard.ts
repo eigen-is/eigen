@@ -190,9 +190,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                     if (!mediaFolderId) continue;
                     const { width, height } = box;
                     const index = plan.partials.length;
-                    // No source folder on the wire is forged or incomplete: re-upload it like any
-                    // cross-mount item rather than trust a name that resolves against nothing here.
-                    const crossMount = !item.sourceParentId || needsReUpload(item.sourceParentId, mediaFolderId);
+                    const crossMount = needsReUpload(item.sourceParentId, mediaFolderId);
                     plan.partials.push({
                         type: 'image',
                         ...placeAt(width, height),

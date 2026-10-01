@@ -350,8 +350,9 @@ export function copyToClipboard(text: string, message = 'Copied to clipboard') {
     toast.success(message);
 }
 
+// No source folder on the wire is forged or incomplete: its name resolves against nothing here.
 export function needsReUpload(sourceParentId: string | null | undefined, targetMediaFolderId: string | null): boolean {
-    if (!sourceParentId || !targetMediaFolderId) return false;
+    if (!targetMediaFolderId) return false;
     return sourceParentId !== targetMediaFolderId;
 }
 

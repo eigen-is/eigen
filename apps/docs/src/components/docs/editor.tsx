@@ -597,7 +597,7 @@ const TiptapEditor = ({
     const insertEigenTextItem = (item: EigenClipboardTextItem) => {
         if (!editorRef.current) return;
         const text = htmlToPlainText(item.text);
-        // Empty carriers (vector shapes ride as empty text items) must not land as blank paragraphs.
+        // Empty carriers (an empty canvas text box, a forged payload) must not land as blank paragraphs.
         if (!text.trim()) return;
         const typo = item.typography;
         const textStyleAttrs: Record<string, string> = {};
