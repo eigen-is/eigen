@@ -7,6 +7,7 @@ import {
     mkdtempSync,
     readdirSync,
     readFileSync,
+    renameSync,
     rmSync,
     statSync,
     symlinkSync,
@@ -860,6 +861,31 @@ describe('restore --stage and --swap', () => {
                 'EIGEN_VERSION=0.3.1',
                 'EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api@sha256:abc',
             ]);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    // The launcher runs --staged before it stops Eigen: a swap that cannot rename is refused there.
+    test(
+        '--staged refuses a data/ that is a link, or a staged tree on another disk, as the swap would',
+        async () => {
+            const dir = install();
+            expect((await stage(dir, basename(fullArchive))).code).toBe(0);
+            const elsewhere = await restoreCli(dir, ['--staged'], {
+                preamble: [
+                    `import { spyOn } from 'bun:test';`,
+                    `import * as fs from 'node:fs';`,
+                    'const lstat = fs.lstatSync;',
+                    `spyOn(fs, 'lstatSync').mockImplementation((path, options) => { const stat = lstat(path, options); if (stat && String(path).startsWith('data/.restoring')) stat.dev += 1; return stat; });`,
+                ],
+            });
+            expect(elsewhere.code).toBe(1);
+            expect(elsewhere.stderr).toContain('is on another disk than data');
+            renameSync(join(dir, 'data'), join(dir, 'data-real'));
+            symlinkSync('data-real', join(dir, 'data'));
+            const linked = await restoreCli(dir, ['--staged']);
+            expect(linked.code).toBe(1);
+            expect(linked.stderr).toContain('Restore needs data/ as a folder inside the install folder.');
         },
         JOB_TIMEOUT_MS,
     );

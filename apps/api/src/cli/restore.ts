@@ -306,13 +306,35 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
     }
 }
 
-function staged(): void {
+// The swap is renames: a linked data/ would move the link, and one on another disk cannot be renamed. The check of
+// each rename in swap() misses a Full swap's second: its source is only there once data/ moved aside.
+function requireRenamable(ui: Ui, archive: string): void {
+    const data = lstatSync(DATA);
+    if (data.isSymbolicLink() || data.dev !== statSync('.').dev) {
+        ui.fail(
+            'Restore needs data/ as a folder inside the install folder.',
+            'Move the data into data/ here, then run ./eigen restore again.',
+        );
+    }
+    const stagedData = join(DATA, RESTORING_DIR, RESTORING_DATA_DIR);
+    const tree = lstatSync(stagedData, { throwIfNoEntry: false });
+    if (tree && tree.dev !== data.dev) {
+        ui.fail(
+            `${archive} cannot be swapped in: ${stagedData} is on another disk than ${DATA}.`,
+            `Restore needs data/${RESTORING_DIR} on the disk of data/: unmount what is there, then run ./eigen restore again.`,
+        );
+    }
+}
+
+// Run by the launcher before it stops Eigen, so a swap that cannot rename is refused while Eigen still runs.
+async function staged(): Promise<void> {
     const restoring = join(DATA, RESTORING_DIR);
     const record = readRecord<StagedRestore>(join(restoring, STAGE_RECORD));
     if (!record) {
         console.error(glyphLine('bad', 'Nothing is staged.'));
         process.exit(1);
     }
+    requireRenamable(await createUi(true), record.archive);
     const env = readEnvFile(join(restoring, ENV_PATH));
     const pins = PIN_KEYS.flatMap((key) => (env.has(key) ? [`${key}=${env.get(key)}`] : []));
     console.log([`version=${record.appVersion}`, `level=${record.level}`, ...pins].join('\n'));
@@ -503,14 +525,7 @@ async function swap(): Promise<void> {
     const record = readRecord<StagedRestore>(join(restoring, STAGE_RECORD));
     if (!record)
         return ui.fail('Nothing is staged to swap in.', 'Run ./eigen restore <archive>, which stages it first.');
-    // The swap is renames: a linked data/ would move the link, and one on another disk cannot be renamed.
-    const data = lstatSync(DATA);
-    if (data.isSymbolicLink() || data.dev !== statSync('.').dev) {
-        ui.fail(
-            'Restore needs data/ as a folder inside the install folder.',
-            'Move the data into data/ here, then run ./eigen restore again.',
-        );
-    }
+    requireRenamable(ui, record.archive);
     lockData(ui);
     const reason = await refusal(restoring);
     if (reason)
@@ -519,13 +534,6 @@ async function swap(): Promise<void> {
             'Run ./eigen restore <archive> again.',
         );
     const stagedData = join(restoring, RESTORING_DATA_DIR);
-    // The check of each rename below misses a Full swap's second: its source is only there once data/ moved aside.
-    if (lstatSync(stagedData).dev !== data.dev) {
-        return ui.fail(
-            `${record.archive} cannot be swapped in: ${stagedData} is on another disk than ${DATA}.`,
-            `Restore needs data/${RESTORING_DIR} on the disk of data/: unmount what is there, then run ./eigen restore again.`,
-        );
-    }
 
     const asideOf = (path: string, at: Date) => buildSafetyCopyName(path, 'pre-restore', buildBackupStamp(at));
     const at = freeAt(
