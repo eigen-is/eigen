@@ -573,8 +573,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
                     // A vector SVG payload (or a pasted SVG document) becomes a floating image through the
                     // app's exact image-file path — stored in media/, served as-is, rendered by <image>.
-                    // Ahead of the eigen-items split so a vector selection lands as one image, not as empty
-                    // shape carriers. An image-bearing selection's svg references its images BY NAME
+                    // Ahead of the eigen-items split so a vector selection lands as one image, not as its
+                    // separate items. An image-bearing selection's svg references its images BY NAME
                     // (eigen-media:), so it rides onPasteSvgFile — the app materializes each into its media/
                     // before storing the svg; an image-free svg rides onPasteImageFile as today.
                     if (paste.svg) {
@@ -606,8 +606,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             ? paste.eigen.items.filter((item): item is EigenClipboardImageItem => item.type === 'image')
                             : [];
                         // Extract text from eigen clipboard items and paste as plain text. Empty
-                        // carriers (vector shapes ride as empty text items) must not paste as blank
-                        // cells over existing content.
+                        // carriers (an empty canvas text box, a forged payload) must not paste as
+                        // blank cells over existing content.
                         const textParts = paste.eigen.items
                             .filter(
                                 (item): item is EigenClipboardTextItem =>

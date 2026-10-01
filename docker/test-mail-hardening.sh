@@ -195,9 +195,7 @@ ADMIN_EMAIL=$ALICE_EMAIL
 BASE="https://localhost:$PORT_HTTPS/eigen"
 JAR="$SCRATCH/session"
 if ! create_admin "$SCRATCH/setup.log" "$ALICE_PASSWORD"; then
-    fail "the setup link made no $ALICE_EMAIL who signs in"
-    header "Result"
-    probe_summary
+    abort "the setup link made no $ALICE_EMAIL who signs in"
 fi
 # A same-domain address the login does NOT own. It need not exist: the login/sender map is
 # consulted for the sender address, not the mailbox.
@@ -206,9 +204,7 @@ SENDER_FOREIGN="${SENDER_FOREIGN:-anne@pobox.com}"
 
 log "up (queue alert threshold $QUEUE_ALERT_THRESHOLD, checked every ${QUEUE_CHECK_INTERVAL}s)"
 if ! wait_smtps; then
-    fail "postfix never answered on :465 within 60s; look at: dc logs postfix"
-    header "Result"
-    probe_summary
+    abort "postfix never answered on :465 within 60s; look at: dc logs postfix"
 fi
 
 # Login probes. Probe 1 is what proves the credentials and sets HAVE_LOGIN, so it is not optional

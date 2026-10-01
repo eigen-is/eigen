@@ -66,7 +66,7 @@ function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, strin
         },
     });
 
-    return wrapInDocument(title, sanitizeExportHtml(bodyHtml, { ADD_DATA_URI_TAGS: ['img'] }));
+    return wrapInDocument(title, sanitizeExportHtml(bodyHtml));
 }
 
 function wrapInDocument(title: string, bodyHtml: string): string {

@@ -28,7 +28,8 @@ env:
 
 jobs:
   # Only main and a v* tag publish, whatever started the run. The launcher reads the version from the image label, the
-  # API from package.json: on a tag they must agree.
+  # API from package.json: on a tag they must agree. The gate finds a breaking change only under the tag's own section
+  # of CHANGELOG.md: one still under [Unreleased] would publish as a release that breaks nothing.
   meta:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -53,6 +54,10 @@ jobs:
               version=${GITHUB_REF_NAME#v}
               if [ "$(jq -r .version package.json)" != "$version" ]; then
                 echo "::error::$GITHUB_REF_NAME does not match package.json $(jq -r .version package.json)"
+                exit 1
+              fi
+              if ! grep -qF "## [$version]" CHANGELOG.md; then
+                echo "::error::CHANGELOG.md has no ## [$version] section"
                 exit 1
               fi
               channel='' target=$version
@@ -169,7 +174,7 @@ jobs:
     if: >-
       ${{ !cancelled() && needs.publish.result == 'success' && (
       (github.ref_type == 'tag' && needs.gate.result == 'success' && needs.boot-arm64.result == 'success') ||
-      (github.ref_type == 'branch' && needs.gate.result == 'skipped' && needs.boot-arm64.result == 'skipped')) }}
+      github.ref_type == 'branch') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -190,11 +195,10 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      # IMAGES in ./eigen, the images a release pins, here and in the steps below. The index takes each candidate by
-      # digest once its created annotation shows this run built it: a later run may have rebuilt the tag since.
+      # IMAGES in ./eigen, the images a release pins; the step below reads it through probe-lib.sh. The index takes each
+      # candidate by digest once its created annotation shows this run built it: a later run may have rebuilt the tag since.
       - run: |
           IMAGES=$(sed -n "s/^IMAGES='\(.*\)'/\1/p" eigen)
-          echo "IMAGES=$IMAGES" >>"$GITHUB_ENV"
           for name in $IMAGES; do
             refs=()
             for platform in amd64 arm64; do

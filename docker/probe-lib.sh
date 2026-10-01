@@ -17,6 +17,8 @@ header() { printf '\n=== %s ===\n' "$*"; }
 ok()     { log "✓ $*"; PASS=$((PASS+1)); }
 fail()   { log "✗ $*"; FAIL=$((FAIL+1)); FAIL_LINES+=("$*"); }
 skip()   { log "– skipped: $*"; SKIP=$((SKIP+1)); }
+# A failure the rest of the harness cannot run past.
+abort()  { fail "$@"; header "Result"; probe_summary; }
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 BUN_VERSION=$(cat "$REPO_ROOT/.bun-version")
@@ -250,11 +252,9 @@ run_setup() {
         ok "./eigen setup finished in $((SECONDS - started))s"
         return 0
     fi
-    fail "./eigen setup failed after $((SECONDS - started))s"
     sed 's/^/    /' "$log"
     dc logs --tail=30 2>&1 | sed 's/^/    /' || true
-    header "Result"
-    probe_summary
+    abort "./eigen setup failed after $((SECONDS - started))s"
 }
 
 # The harness's own view of the install's stack, with the files the launcher uses, from the no-Bun container as root:
@@ -343,7 +343,7 @@ sign_in() {
 
 # admin_fields <password>: the /setup/complete fields that make $ADMIN_EMAIL, without the token.
 admin_fields() {
-    printf '"orgName":"Probe","storageType":"local-id","adminUsername":"%s","adminPassword":"%s","adminName":"Alice"' \
+    printf '"orgName":"Probe","storageType":"local-fullnames","adminUsername":"%s","adminPassword":"%s","adminName":"Alice"' \
         "${ADMIN_EMAIL%@*}" "$1"
 }
 
@@ -521,10 +521,8 @@ release_install() {
     fi
     assert_isolated
     if ! in_cli_container docker run --rm -v "$INSTALL:/out" "${3:-$REGISTRY}/api:$2" bootstrap >"$log" 2>&1; then
-        fail "bootstrap of $2 failed"
         sed 's/^/    /' "$log"
-        header "Result"
-        probe_summary
+        abort "bootstrap of $2 failed"
     fi
     write_override
     BASE="https://localhost:$PORT_HTTPS/eigen"

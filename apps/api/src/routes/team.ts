@@ -12,6 +12,7 @@ import { betterAuth } from './auth';
 
 function teamId(ownerId: string): string {
     const parsed = parseOwnerId(ownerId);
+    if (parsed.type !== 'team') throw new ApiError(400, 'Invalid teamId format');
     return parsed.id;
 }
 

@@ -215,13 +215,6 @@ export class MaildirStore implements MailStore {
         return mailboxes;
     }
 
-    async mailboxCreate(mailbox: string): Promise<void> {
-        if (await this.mailboxDirExists(mailbox)) {
-            throw new ApiError(409, `Mailbox '${mailbox}' already exists`);
-        }
-        await this.createMailboxDir(mailbox);
-    }
-
     async mailboxExists(mailbox: string): Promise<MaildirMailbox | false> {
         if (!(await this.mailboxDirExists(mailbox))) return false;
         return this.getMailboxInfo(mailbox, await this.listMailboxPaths());

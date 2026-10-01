@@ -170,16 +170,9 @@ export const auth = betterAuth({
                 },
             },
             delete: {
-                // better-auth's own deleteUser (e.g. the admin plugin's /admin/remove-user)
-                // removes only session/account/user rows. This seam is the one place every
-                // better-auth deletion path passes through while the user row still exists,
-                // so the COMPLETE Eigen teardown (home directory, share registry, auth
-                // reference rows) runs here — the raw endpoint must not leave user data
-                // behind, and a leftover member row 500s listMembers org-wide. No extra
-                // guard needed: /admin/remove-user already rejects non-admins (403) and
-                // self-removal (400), and hooks.before keeps it off the owner, matching the
-                // Eigen route's requireAdmin + own-account-400 + owner-400. Lazy import to avoid the static cycle
-                // (delete-user → home/get-home → … → auth).
+                // Every better-auth deletion path passes here while the user row still exists, so the
+                // whole Eigen teardown runs here: a leftover member row 500s listMembers org-wide.
+                // Lazy import: delete-user → home/get-home → … → auth is a static cycle.
                 before: async (hookUser) => {
                     const user = hookUser as User;
                     const { teardownUserData } = await import('../user/delete-user');
@@ -329,7 +322,7 @@ export function authDeleteUserReferences(userId: string): void {
 // connection lifecycle, so we can't safely share the instance it creates via drizzleAdapter().
 let authDrizzleDb: ReturnType<typeof drizzle> | undefined;
 
-export function getAuthDrizzleDb() {
+export function getAuthDrizzleDb(): ReturnType<typeof drizzle> {
     if (!authDrizzleDb) {
         authDrizzleDb = drizzle(getServerDataPath(SERVER_DATABASES.users), {
             schema: {

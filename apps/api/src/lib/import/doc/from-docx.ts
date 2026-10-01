@@ -47,8 +47,8 @@ export async function docxToPmJson(buffer: Buffer): Promise<{ json: JSONContent;
                 const ext = extensionFromMime(image.contentType);
                 const name = `image-${imageIndex++}.${ext}`;
                 images.push({ name, data, contentType: image.contentType });
-                // mammoth types only model { src }, but we need data-media-name for FigureNode
-                return { src: '', 'data-media-name': name } as { src: string };
+                // FigureNode resolves the image by data-media-name; mammoth passes extra attributes through.
+                return { src: '', 'data-media-name': name };
             }),
         },
     );

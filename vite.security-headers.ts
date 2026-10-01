@@ -11,13 +11,13 @@ export function themeScriptCspSource(): string {
     return `'sha256-${createHash('sha256').update(THEME_FLASH_SCRIPT).digest('base64')}'`;
 }
 
-interface SecurityPolicyOptions {
+type SecurityPolicyOptions = {
     // Vite serve (dev) vs build (prod). In dev each app is served from its own :30xx origin and the
     // API is a separate cross-origin http://localhost:8000; in prod the API is same-origin under /eigen.
     dev: boolean;
     // The client's VITE_API_HOST. Absolute in dev, relative ("/eigen") or empty in prod.
     apiHost: string;
-}
+};
 
 // Build the Content-Security-Policy served as a <meta> in every app shell, so every deployment shape
 // (edge Caddy, static bundle, host proxies, dev) inherits one policy. Prod stays tight: same-origin

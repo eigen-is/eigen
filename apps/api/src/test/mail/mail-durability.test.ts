@@ -5,7 +5,7 @@ import { type FileHandle, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { MAILBOX_DRAFTS, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import { getHome } from '../../lib/home';
-import { boxDir, maildirOf, mailRootOf, makeEml } from '../mail-test-helpers';
+import { boxDir, mailRootOf, makeEml, seedMaildirFolder } from '../mail-test-helpers';
 import { createTestUser, ensureServer, TEST_DATA_DIR } from '../setup';
 
 // Durability can only be proven by killing the machine, so what these tests pin is the protocol that buys
@@ -150,7 +150,7 @@ describe('Maildir write durability', () => {
         // A cold sync of a large new/ would otherwise pay one directory fsync per message for the one
         // directory every rename lands in.
         const home = await getHome(userId);
-        await home.mail.mailboxCreate('Batched');
+        seedMaildirFolder(userId, 'Batched');
         const dirs = { new: join(box('Batched'), 'new'), cur: join(box('Batched'), 'cur') };
         for (const subject of ['One', 'Two', 'Three']) {
             const body = eml(subject);
@@ -164,17 +164,6 @@ describe('Maildir write durability', () => {
         expect(events).toEqual(['rename', 'rename', 'rename', 'cur']);
         expect(readdirSync(dirs.new)).toEqual([]);
         expect(readdirSync(dirs.cur)).toHaveLength(3);
-    });
-
-    test('creating a mailbox fsyncs the folder and the Maildir root that gained it', async () => {
-        const home = await getHome(userId);
-        const dirs = { root: maildirOf(userId), box: box('Created') };
-
-        const events = await record(dirs, async () => {
-            await home.mail.mailboxCreate('Created');
-        });
-
-        expect(events).toEqual(['box', 'root']);
     });
 
     test('a delivery survives a directory fsync the file system refuses', async () => {

@@ -19,7 +19,8 @@ fi
 share_key() {
     chgrp 1000 /certs/key.pem && chmod 0640 /certs/key.pem
 }
-share_key
+# A data folder root may not chgrp, as NFS with root_squash: IMAP runs on, and the backup leaves the key out.
+share_key || echo "WARNING: group 1000 cannot read the TLS key; the server backup leaves it out."
 
 # Wait for API to be reachable
 echo "Waiting for Eigen API..."

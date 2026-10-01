@@ -40,7 +40,7 @@ export function useFileSearchResults(
         const encodedQ = parsed.q ? encodeURIComponent(parsed.q) : '';
         return data.file.map((path, i) => {
             const presentation = getFilePresentation(path.mimeType, path.type, path.name);
-            // Only the four eigendoc editors consume ?q= — chat/folder/inline-edit URLs never do.
+            // Only the five collab editors consume ?q= — chat/folder/inline-edit URLs never do.
             const carryQ = encodedQ && isCollabType(path.type) ? encodedQ : '';
             return {
                 kind: 'file' as const,

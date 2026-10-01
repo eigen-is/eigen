@@ -4,14 +4,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
 import type { CellMatrix } from '../../engine/types';
-import { initSheetData } from '../api/sheet';
 import { type Context, firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Settings } from '../settings';
 import type { Sheet } from '../types';
 import { generateRandomSheetName, getSheetIndex } from '../utils';
 import { cancelNormalSelected } from './cell';
 import { applySheetFilter } from './filter';
-import { registerSheetFormulas, setFormulaCellInfo } from './formula-cache';
 
 export function storeSheetSelections(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
@@ -183,44 +181,6 @@ export function deleteSheet(
         setTimeout(() => {
             ctx.hooks.afterDeleteSheet?.(id);
         });
-    }
-}
-
-export function updateSheet(ctx: Context, newData: Sheet[]) {
-    for (const newDatum of newData) {
-        const { data, row, column } = newDatum;
-        const index = getSheetIndex(ctx, newDatum.id!) as number;
-        if (data != null) {
-            // If row and column exist, compare row and column with data. If row and column do not exist, compare data with default.
-            let lastRowNum = data.length;
-            let lastColNum = data[0].length;
-            if (row != null && column != null && row > 0 && column > 0) {
-                lastRowNum = Math.max(lastRowNum, row);
-                lastColNum = Math.max(lastColNum, column);
-            } else {
-                lastRowNum = Math.max(lastRowNum, ctx.defaultrowNum);
-                lastColNum = Math.max(lastColNum, ctx.defaultcolumnNum);
-            }
-            const expandedData: Sheet['data'] = times(lastRowNum, () => times(lastColNum, () => null));
-            for (let i = 0; i < data.length; i += 1) {
-                for (let j = 0; j < data[i].length; j += 1) {
-                    expandedData[i][j] = data[i][j];
-                }
-            }
-            newDatum.data = expandedData;
-            if (ctx.sheets[index] == null) {
-                ctx.sheets.push(newDatum);
-            } else {
-                ctx.sheets[index] = newDatum;
-            }
-            registerSheetFormulas(ctx, newDatum.id!, expandedData);
-        } else if (newDatum.celldata != null) {
-            initSheetData(ctx, index, newDatum);
-            const _index = getSheetIndex(ctx, newDatum.id!) as number;
-            for (const d of newDatum.celldata) {
-                setFormulaCellInfo(ctx, { r: d.r, c: d.c, id: newDatum.id! }, ctx.sheets[_index].data, newDatum.id);
-            }
-        }
     }
 }
 

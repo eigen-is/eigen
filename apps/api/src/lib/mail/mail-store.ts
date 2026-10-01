@@ -61,7 +61,6 @@ export interface MailStore {
     search(opts: MailSearchOptions): EmailSummary[];
 
     mailboxesList(): Promise<MaildirMailbox[]>;
-    mailboxCreate(mailbox: string): Promise<void>;
     mailboxExists(mailbox: string): Promise<MaildirMailbox | false>;
     listMessages(
         mailbox: string,

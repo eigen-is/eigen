@@ -7,7 +7,7 @@ import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
 import type { SearchResponse } from '@workspace/lib/types/search';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { boxDir, mailRootOf, makeEml, seedMaildirFile } from '../mail-test-helpers';
+import { boxDir, mailRootOf, makeEml, seedMaildirFile, seedMaildirFolder } from '../mail-test-helpers';
 import {
     app,
     assertJson,
@@ -31,15 +31,6 @@ const isWindows = process.platform === 'win32';
 // genuinely "unreadable .eml" fault distinct from ENOENT, exercising the per-message skip.
 function seedUnreadableCurEntry(userId: string, mailbox: string, uniqueId: string): void {
     mkdirSync(join(boxDir(userId, mailbox), 'cur', `${uniqueId},S=10:2,S`));
-}
-
-async function createMailbox(token: string, ownerId: string, mailbox: string): Promise<void> {
-    const res = await authedRequest(token, `/mail/${ownerId}/mailbox`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mailbox }),
-    });
-    expect(res.status).toBe(200);
 }
 
 async function listBox(token: string, ownerId: string, box: string, limit: number): Promise<EmailSummary[]> {
@@ -112,7 +103,7 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
 
     test('serve-stale: listMessages returns the current DB state without waiting for a pending background sync', async () => {
         const box = `Stale-${Date.now()}`;
-        await createMailbox(token, userId, box);
+        seedMaildirFolder(userId, box);
 
         // First open (empty DB) — blocking path, gives us one known indexed row.
         seedMaildirFile(userId, box, `${Date.now()}.first`, makeEml('Seed', { body: 'seed body' }));
@@ -147,7 +138,7 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
 
     test('cold-index correctness: batched insert produces the same counts/flags/FTS as the old per-row path', async () => {
         const box = `Cold-${Date.now()}`;
-        await createMailbox(token, userId, box);
+        seedMaildirFolder(userId, box);
 
         const TOTAL = 260; // > NEW_CHUNK (250) — spans two chunks
         const NEEDLE = `coldindexneedle${Date.now()}`;
@@ -188,7 +179,7 @@ describe.skipIf(isWindows)('Mail sync (Step 3: non-blocking sync + batched cold-
 
     test("a bad .eml in a chunk does not drop the chunk's other inserts", async () => {
         const box = `Bad-${Date.now()}`;
-        await createMailbox(token, userId, box);
+        seedMaildirFolder(userId, box);
 
         const goodIds: string[] = [];
         for (let i = 0; i < 5; i++) {

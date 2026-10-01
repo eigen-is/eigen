@@ -23,6 +23,7 @@ import {
     handleCellAreaMouseDown,
     handleOverlayMouseMove,
     handleOverlayMouseUp,
+    isAllowEdit,
     overlayRegionForCell,
     selectAll,
     showLinkCard,
@@ -434,8 +435,8 @@ export const SheetOverlay: React.FC = () => {
                         cursor: context.cellSelectExtending
                             ? 'crosshair'
                             : context.filterButtonHover != null ||
-                                context.cellGlyphHover === 'dropdown' ||
-                                context.cellGlyphHover === 'checkbox'
+                                (isAllowEdit(context) &&
+                                    (context.cellGlyphHover === 'dropdown' || context.cellGlyphHover === 'checkbox'))
                               ? 'pointer'
                               : 'default',
                     }}

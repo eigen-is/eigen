@@ -7,6 +7,7 @@ import {
     hasRichHtmlBeyondMarker,
     inlineClipboardSvgMedia,
     materializeClipboardSvg,
+    needsReUpload,
     readEigenClipboard,
     readSvgClipboardWithItems,
     svgToImageDataUri,
@@ -82,6 +83,22 @@ describe('embedClipboardSvgMetadata / extractClipboardSvgMetadata', () => {
             items: [{ type: 'text', text: 'x', width: Number.NaN, height: 5 }],
         });
         expect(extractClipboardSvgMetadata(forged)?.items).toEqual([]);
+    });
+});
+
+describe('needsReUpload', () => {
+    test('re-uploads from another folder, keeps a same-folder name', () => {
+        expect(needsReUpload('m1', 'm2')).toBe(true);
+        expect(needsReUpload('m1', 'm1')).toBe(false);
+    });
+
+    test('re-uploads an item with no source folder, whose name resolves nowhere', () => {
+        expect(needsReUpload(null, 'm1')).toBe(true);
+        expect(needsReUpload(undefined, 'm1')).toBe(true);
+    });
+
+    test('has nothing to upload into without a media folder', () => {
+        expect(needsReUpload('m1', null)).toBe(false);
     });
 });
 

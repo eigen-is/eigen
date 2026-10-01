@@ -391,7 +391,7 @@ for SHELL_NAME in dash busybox host; do
     fi
     STUB_INFO='27.5.1 aarch64 Docker Desktop' launch release restart
     if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q '◇  Docker 27.5.1 on aarch64, Compose 2.29.1' &&
-        printf '%s\n' "$CALLS" | grep -q ' up -d --wait$' && ! printf '%s\n' "$CALLS" | grep -qF "$SHARE"; then
+        printf '%s\n' "$CALLS" | grep -q ' up -d --wait$' && ! printf '%s\n' "$CALLS" | grep -qF -- "$SHARE"; then
         ok "$SHELL_NAME: on Docker Desktop, where uid 1000 reads the file already, restart leaves .env.production alone"
     else
         fail "$SHELL_NAME: restart on Docker Desktop: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
@@ -639,7 +639,7 @@ for SHELL_NAME in dash busybox host; do
 
     # The update as the operator types it: the new version's CLI names the level, the running API makes the backup,
     # and only then are the new files written and the new launcher takes over, with the archive.
-    mkdir "$FIX/release/data"
+    mkdir -p "$FIX/release/data"
     STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
     sequence=$(update_steps)
     if [ "$CODE" = 0 ] && [ "$sequence" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|level ghcr.io/eigen-is/eigen/api:0.3.1|backup --level light --reason pre-update --wait|bootstrap ghcr.io/eigen-is/eigen/api@sha256:ddd|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
@@ -775,10 +775,13 @@ for SHELL_NAME in dash busybox host; do
     : >"$FIX/elsewhere/$ARCHIVE"
     : >"$FIX/release/backups/$ARCHIVE"
     echo server-pre-update-light-20260101-000000.tar >"$FIX/local/.eigen/last-update"
+    # With data/ gone, which Docker would make root's for the stage's bind mount.
+    rm -rf "$FIX/local/data"
     launch local restore "$ARCHIVE" --yes
     if [ "$CODE" = 0 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|configure ghcr.io/eigen-is/eigen/api:local|share|up|" ] &&
-        [ ! -e "$FIX/local/.eigen/lock" ] && [ ! -e "$FIX/local/.eigen/last-update" ]; then
-        ok "$SHELL_NAME: a restore stages while Eigen runs, then stops it, swaps as root, adds what is new to a local build's .env.production, forgets the last update's backup and starts Eigen"
+        [ ! -e "$FIX/local/.eigen/lock" ] && [ ! -e "$FIX/local/.eigen/last-update" ] && [ -d "$FIX/local/data" ] &&
+        printf '%s\n' "$OUT" | grep -q 'Data folders ready'; then
+        ok "$SHELL_NAME: a restore prepares the data/ that is gone, stages while Eigen runs, then stops it, swaps as root, adds what is new to a local build's .env.production, forgets the last update's backup and starts Eigen"
     else
         fail "$SHELL_NAME: a local build's restore: exit $CODE, steps '$(steps)', '$ERR'"
     fi
@@ -829,9 +832,9 @@ for SHELL_NAME in dash busybox host; do
     fi
     STUB_RUN_FAIL=--swap launch local restore "$ARCHIVE" --yes
     if [ "$CODE" = 1 ] &&
-        [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|share|up|rm data/.restoring|" ] &&
+        [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|rm data/.restoring|share|up|" ] &&
         [ ! -e "$FIX/local/.eigen/lock" ]; then
-        ok "$SHELL_NAME: a swap refused before its marker starts Eigen again, then removes the staged tree and the lock"
+        ok "$SHELL_NAME: a swap refused before its marker removes the staged tree, starts Eigen again and removes the lock"
     else
         fail "$SHELL_NAME: a refused swap: exit $CODE, steps '$(steps)'"
     fi

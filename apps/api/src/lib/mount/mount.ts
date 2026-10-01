@@ -73,7 +73,7 @@ export class Mount {
     private pathLocks: Map<string, Promise<void>> = new Map();
     private treeLock = new RWLock();
 
-    // Write-behind upload queue (Phase 1b) — only for isRemote (s3) mounts; undefined otherwise.
+    // Write-behind upload queue — only for isRemote (s3) mounts; undefined otherwise.
     uploadQueue?: UploadQueue; // internal — used by mount/*.ts + versioning/snapshot.ts
     // Set for an s3 mount only — see buildUploadDestinationKey, which is also the gate Mount.init
     // stands the upload queue up behind.
@@ -137,9 +137,8 @@ export class Mount {
         return path.join(this.baseDir, PATHS.DRIVE.TMP_DIR);
     }
 
-    // Frozen VACUUM INTO upload payloads (Phase 1b) live here, NOT in tmpDir — the
-    // cleanupStaleFiles sweep must never purge a staged copy whose PUT hasn't acked yet
-    // (invariant 2). Only used by isRemote mounts.
+    // Frozen VACUUM INTO upload payloads live here, NOT in tmpDir — the cleanupStaleFiles
+    // sweep must never purge a staged copy whose PUT hasn't acked yet. Only used by isRemote mounts.
     get stagingDir(): string {
         return path.join(this.baseDir, PATHS.DRIVE.STAGING_DIR);
     }
@@ -637,8 +636,8 @@ export class Mount {
     }
 
     // On `local` a key is a name path: key-derived writes hold shared from resolve through the row
-    // write, directory renames exclusive. Order: path lock → tree lock → nothing; a holder never
-    // locks again (shared inside shared deadlocks once an exclusive is queued).
+    // write, directory renames exclusive. Order: path lock → document-db slot → tree lock → nothing;
+    // a holder never locks again (shared inside shared deadlocks once an exclusive is queued).
     // internal — used by mount/*.ts
     async withTreeShared<T>(fn: () => Promise<T>): Promise<T> {
         return this.isPathBased ? this.treeLock.shared(fn) : fn();
@@ -1159,7 +1158,7 @@ export class Mount {
         return this.reindexQueue?.drain() ?? Promise.resolve();
     }
 
-    // ---- Upload-queue facade (Phase 1b) — thin delegation to the per-mount UploadQueue ----
+    // ---- Upload-queue facade — thin delegation to the per-mount UploadQueue ----
 
     // Force a drain of this mount's pending uploads. The queue otherwise self-drives (on enqueue +
     // backoff), and process shutdown flushes via uploadQueue.drain() directly (see closeAllDatabases),

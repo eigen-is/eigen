@@ -1,4 +1,4 @@
-// Enforce that getHome() is only imported in routes and home-relay.ts.
+// Enforce that getHome() appears in lib/ only inside lib/home/ and the allowlist below.
 // Lib code must receive Home as a parameter or use relay pull*/sendToHome functions.
 
 import { Glob } from 'bun';

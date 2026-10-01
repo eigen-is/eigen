@@ -328,7 +328,9 @@ export const CODE_EXTENSIONS = new Set([
 
 const INLINE_EDITABLE_EXTENSIONS = new Set([...CODE_EXTENSIONS, '.md', '.markdown', '.txt']);
 
+// The server previews these as cards, events and a message, and has no edit mode for them.
 export function isInlineEditable(mimeType: string, name: string): boolean {
+    if (isVCardFile(mimeType, name) || isIcsFile(mimeType, name) || isEmlFile(mimeType, name)) return false;
     if (INLINE_EDITABLE_MIMES.has(mimeType)) return true;
     const dot = name.lastIndexOf('.');
     if (dot === -1) return false;
