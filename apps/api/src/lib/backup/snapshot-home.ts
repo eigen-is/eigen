@@ -256,7 +256,7 @@ export async function snapshotHome(
             if (settings.enabled) throw new Error(`mount ${id} cannot be opened: ${describeError(error)}`);
             entries.length = entriesBefore;
             databases = databasesBefore;
-            fs.rmSync(path.join(folder, ARCHIVE_HOME_DIR, PATHS.DRIVE.ROOT, id), { recursive: true, force: true });
+            await fsp.rm(path.join(folder, ARCHIVE_HOME_DIR, PATHS.DRIVE.ROOT, id), { recursive: true, force: true });
             const skipped = describeError(error);
             console.warn(`[backup] ${ownerId}: disabled mount ${id} was skipped — ${skipped}`);
             mountSummaries.push({ id, storageType: config.storageType, files: 0, bytes: 0, skipped });

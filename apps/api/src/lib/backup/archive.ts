@@ -519,7 +519,7 @@ export async function extractArtifact(source: ArtifactSource, targetDir: string)
     } catch (error) {
         // Half an unpacked archive is worse than none — nothing downstream can tell the two apart.
         // A folder the caller already had is left alone; only the tree this call made is taken back.
-        if (!existed) fs.rmSync(targetDir, { recursive: true, force: true });
+        if (!existed) await fsp.rm(targetDir, { recursive: true, force: true });
         throw error;
     }
 }

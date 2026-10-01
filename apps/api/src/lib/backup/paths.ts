@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { formatFileSize } from '@workspace/lib/format';
 import type { BackupLevel, BackupReason, BackupSafetyCopy } from '@workspace/lib/types/backup';
@@ -58,8 +59,8 @@ export function getBackupStagingDir(jobId: string): string {
 }
 
 // Everything one job staged: the unpacked archive, and the restoring marker if it got that far.
-export function wipeBackupStagingDir(jobId: string): void {
-    fs.rmSync(path.join(getStagingRoot(), jobId), { recursive: true, force: true });
+export async function wipeBackupStagingDir(jobId: string): Promise<void> {
+    await fsp.rm(path.join(getStagingRoot(), jobId), { recursive: true, force: true });
 }
 
 // Called on server start: a job interrupted by a restart leaves a half-written folder behind,
