@@ -23,15 +23,6 @@ echo "Trust range: ${MAIL_TRUST_NETWORKS}"
 envsubst '$DOMAIN $MAIL_DOMAIN $MAIL_TRUST_NETWORKS' < /etc/postfix/main.cf.template > /etc/postfix/main.cf
 envsubst '$DOMAIN $MAIL_DOMAIN' < /etc/postfix/master.cf.template > /etc/postfix/master.cf
 
-# --- TLS cert fallback ---
-if [ ! -f /certs/cert.pem ]; then
-    echo "No TLS certificate found. Generating self-signed cert for ${DOMAIN:-localhost}..."
-    openssl req -x509 -newkey rsa:2048 \
-        -keyout /certs/key.pem -out /certs/cert.pem \
-        -days 365 -nodes -subj "/CN=${DOMAIN:-localhost}" 2>/dev/null
-    echo "Self-signed certificate generated."
-fi
-
 # --- SMTP relay (optional) ---
 # The keys and rules the API follows when Eigen hosts no mail: port 465 is implicit TLS, any other port
 # STARTTLS, and credentials only go over TLS.
@@ -72,11 +63,12 @@ fi
 
 # OpenDKIM owns the key, and group 1000 reads it: the API, uid 1000 through data/, for the server backup. No process
 # in this image runs with gid 1000. The DNS record in eigen.txt is public, for the operator to open. A key brought from
-# another server may come without its eigen.txt.
-chown -R opendkim:1000 /data/dkim
-chmod 0755 /data/dkim
-find /data/dkim -type f -name '*.private' -exec chmod 0640 {} +
-find /data/dkim -type f -name '*.txt' -exec chmod 0644 {} +
+# another server may come without its eigen.txt. A data folder root may not chown, as NFS with root_squash: Postfix
+# runs on, and OpenDKIM says below whether it can use the key.
+{ chown -R opendkim:1000 /data/dkim && chmod 0755 /data/dkim &&
+    find /data/dkim -type f -name '*.private' -exec chmod 0640 {} + &&
+    find /data/dkim -type f -name '*.txt' -exec chmod 0644 {} +; } ||
+    echo "WARNING: could not give the DKIM key to OpenDKIM and group 1000; the server backup may leave it out."
 
 # Hosts whose mail OpenDKIM signs (rather than just verifying). Must include the
 # docker bridge subnet — eigen-api submits SMTP from 172.20.0.x, and OpenDKIM's
