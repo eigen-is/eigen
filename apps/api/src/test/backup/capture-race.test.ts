@@ -13,6 +13,7 @@ import {
     assertJson,
     authedRequest,
     chatPost,
+    countLoopTurns,
     createTestUser,
     driveDelete,
     driveGetList,
@@ -423,6 +424,51 @@ describe('a file whose stream overwrite is in flight when the capture reaches it
             expect((await verifyFolder(result.folder)).status).toBe('verified');
         });
     }
+});
+
+describe('a capture of a local mount shares the event loop', () => {
+    test('the event loop turns during the copy of a large file and between files', async () => {
+        const user = await raceUser('local-fullnames');
+        const { root } = await seed(user);
+        const big = await driveUpload(
+            user.sessionToken,
+            user.id,
+            M,
+            root.id,
+            new File([new Uint8Array(16 * 1024 * 1024)], 'big.bin'),
+        );
+        const turns = countLoopTurns();
+        let turnsDuringBig = 0;
+        const withPathLock = Mount.prototype.withPathLock;
+        const lock = spyOn(Mount.prototype, 'withPathLock').mockImplementation(async function <T>(
+            this: Mount,
+            pathId: string,
+            fn: () => Promise<T>,
+        ) {
+            const before = turns.read();
+            try {
+                return await withPathLock.bind(this)(pathId, fn);
+            } finally {
+                if (pathId === big.id) turnsDuringBig = turns.read() - before;
+            }
+        });
+        const samples: number[] = [];
+        const readKey = Mount.prototype.readKey;
+        const read = spyOn(Mount.prototype, 'readKey').mockImplementation(function (this: Mount, key: string) {
+            samples.push(turns.read());
+            return readKey.call(this, key);
+        });
+        try {
+            await snapshotInto(await getHome(user.id), 'full');
+        } finally {
+            turns.stop();
+            read.mockRestore();
+            lock.mockRestore();
+        }
+        expect(turnsDuringBig).toBeGreaterThanOrEqual(7);
+        expect(samples.length).toBe(REPORTS.length + 2);
+        expect(samples.slice(1).every((sample, i) => sample > samples[i])).toBe(true);
+    });
 });
 
 describe('a chat whose version is restored during the backup', () => {

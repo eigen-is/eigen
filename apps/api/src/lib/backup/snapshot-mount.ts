@@ -7,7 +7,7 @@ import { ApiError } from '../core';
 import { withDocumentDb } from '../mount/document-db';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
-import { errnoOf, isMissingObjectCause } from '../storage';
+import { errnoOf, eventLoopTurn, isMissingObjectCause } from '../storage';
 import { stageManagedDbCopy } from '../versioning/snapshot';
 import { archivePath, managedDbContainer, readMountPathRows } from './archive-layout';
 import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
@@ -78,6 +78,7 @@ export async function snapshotMountData(
     const held = new Set<string>();
     let databases = 0;
     for (const [index, row] of fileRows.entries()) {
+        await eventLoopTurn();
         const relPath = archivePath(row, byId);
         const destPath = path.join(targetDir, relPath);
         const entryPath = `${relPrefix}/${relPath}`;
@@ -135,7 +136,7 @@ export async function snapshotMountData(
                         if (live.size && !(await isGone())) throw lostObject(live.size, storageKey);
                         return null;
                     }
-                    return captureFile(file, destPath, entryPath).catch(async (error: unknown) => {
+                    return captureFile(file, destPath, entryPath, true).catch(async (error: unknown) => {
                         if (!isMissingObjectCause(error) || !(await isGone())) fail(error);
                         fs.rmSync(destPath, { force: true });
                         return null;

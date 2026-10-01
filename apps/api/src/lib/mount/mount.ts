@@ -1075,7 +1075,7 @@ export class Mount {
         const sideId = randomUUID();
         let size: number;
         try {
-            ({ size } = await writeTempWithHash(this.getTempPath(sideId), source, this.downloads.signal));
+            ({ size } = await writeTempWithHash(this.getTempPath(sideId), source, { signal: this.downloads.signal }));
         } catch (err) {
             await this.cleanupTemp(sideId);
             throw err;
