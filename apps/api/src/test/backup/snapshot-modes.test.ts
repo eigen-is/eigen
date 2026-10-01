@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { parseBackupManifest } from '@workspace/lib/validation';
@@ -313,6 +313,40 @@ describe('Backup capture modes', () => {
         const { manifest, folder } = await snapshotWhileVanishing(gone, `${MAILDIR}/.Lists/new/1-vanishing.eigen`);
         expect(entryPaths(manifest).some((p) => p.startsWith(`${MAILDIR}/`))).toBe(true);
         expect((await verifyFolder(folder)).status).toBe('verified');
+    });
+
+    // The real INBOX watcher runs in the capture's turns and moves mail the listing saw in new/ to cur/ before its copy.
+    // The 40 written before and the six delivered during the mount walk are each archived once, under either name.
+    test('mail the INBOX watcher moves from new/ to cur/ during a capture is archived once each', async () => {
+        const inboxNew = join(home.homeDir, MAILDIR_ROOT, 'new');
+        const batch = (label: string, count: number) =>
+            Array.from({ length: count }, (_, index) => `${Date.now()}.${label}${index}.watched`);
+        const deliver = (names: string[]) => {
+            for (const name of names) writeFileSync(join(inboxNew, name), `Subject: ${name}\r\n\r\nbody`);
+        };
+        const early = batch('early', 40);
+        const late = batch('late', 6);
+        deliver(early);
+        const kept = `home/mounts/${defaultMountId}/data/kept.png`;
+        const capture = captureModule.captureFile;
+        const spy = spyOn(captureModule, 'captureFile').mockImplementation(async (bytes, destPath, relPath, yields) => {
+            if (relPath === kept) deliver(late);
+            return capture(bytes, destPath, relPath, yields);
+        });
+        try {
+            const { manifest, folder } = await snapshotInto(home, 'full');
+            expect(spy.mock.calls.some(([, , relPath]) => relPath === kept)).toBe(true);
+            const archived = entryPaths(manifest)
+                .filter((p) => p.startsWith(`${MAILDIR}/cur/`) || p.startsWith(`${MAILDIR}/new/`))
+                .map((p) => basename(p).split(':')[0]);
+            const notOnce = [...early, ...late].filter(
+                (name) => archived.filter((unique) => unique === name).length !== 1,
+            );
+            expect(notOnce).toEqual([]);
+            expect((await verifyFolder(folder)).status).toBe('verified');
+        } finally {
+            spy.mockRestore();
+        }
     });
 
     // Deleting a file for good deletes its thumbnail (Mount.deletePath), so one can go mid-capture.
