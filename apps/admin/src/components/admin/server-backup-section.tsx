@@ -69,7 +69,7 @@ export function ServerBackupSection({
     const [level, setLevel] = useState<BackupLevel>('full');
     const [deleting, setDeleting] = useState<string | null>(null);
     const [deleteOpen, setDeleteOpen] = useState(false);
-    const [dismissedJobId, setDismissedJobId] = useState<string | null>(null);
+    const [dismissed, setDismissed] = useState<string[]>([]);
 
     const { data, isLoading, isError } = useServerArchives();
     const { data: jobs = [], isError: jobsFailed } = useServerBackupJobs();
@@ -80,10 +80,16 @@ export function ServerBackupSection({
 
     const hasS3Mounts = !!data?.hasS3Mounts;
     const levels = BACKUP_LEVELS.filter((option) => option !== 'full-s3' || hasS3Mounts);
-    // Newest first. An upload can run beside the next backup, so every running job gets its line, and the newest
-    // one that ended keeps its line until dismissed.
-    const latest = jobs[0];
-    const shown = jobs.filter((job) => job.state === 'running' || (job === latest && job.id !== dismissedJobId));
+    // The last S3 mount can go while the page is open.
+    const shownLevel = levels.includes(level) ? level : 'full';
+    // Newest first. An upload starts as its backup ends and can run beside the next one, so every running job gets
+    // its line, and the newest of each kind that ended keeps its line until dismissed.
+    const shown = jobs.filter(
+        (job) =>
+            job.state === 'running' ||
+            (job === jobs.find((other) => other.kind === job.kind && other.state !== 'running') &&
+                !dismissed.includes(job.id)),
+    );
     const backingUp = jobs.some((job) => job.state === 'running' && job.kind === 'server-backup');
 
     const { schedule, upload } = value;
@@ -177,7 +183,10 @@ export function ServerBackupSection({
             <div className="flex items-center justify-between gap-2 pt-2">
                 <h4 className="text-sm font-medium">Server backups</h4>
                 <div className="flex items-center gap-2">
-                    <Select value={level} onValueChange={(next) => setLevel(levels.find((l) => l === next) ?? 'full')}>
+                    <Select
+                        value={shownLevel}
+                        onValueChange={(next) => setLevel(levels.find((l) => l === next) ?? 'full')}
+                    >
                         <SelectTrigger size="sm">
                             <SelectValue />
                         </SelectTrigger>
@@ -193,7 +202,7 @@ export function ServerBackupSection({
                         variant="outline"
                         size="sm"
                         disabled={backingUp || startBackup.isPending}
-                        onClick={() => startBackup.mutate(level)}
+                        onClick={() => startBackup.mutate(shownLevel)}
                     >
                         <Archive className="h-4 w-4 mr-1" />
                         Back up now
@@ -202,7 +211,7 @@ export function ServerBackupSection({
             </div>
 
             {shown.map((job) => (
-                <BackupJobStatus key={job.id} job={job} onDismiss={() => setDismissedJobId(job.id)} />
+                <BackupJobStatus key={job.id} job={job} onDismiss={() => setDismissed((ids) => [...ids, job.id])} />
             ))}
             {jobsFailed && <p className="text-xs text-destructive">Could not load the running backups.</p>}
 
