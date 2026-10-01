@@ -1,6 +1,6 @@
 # Document Transform Workers
 
-> **TLDR:** Every CPU-heavy document transform runs in a one-shot Bun Worker behind one bounded runner in `apps/api/src/lib/document/transform/`: the collab and `.vcf`/`.eml`/`.ics` previews, the HTML, PDF, XLSX and DOCX exports, the xlsx and docx import and convert, and the search extract. The main thread keeps access checks, cache coordination, storage I/O, media prep and the import commit. Only transferred `ArrayBuffer`s and plain data cross. Not obvious from the code: one Worker runs at a time because memory is the limit, a Worker never serves a second job, and overload answers 503 with no main-thread fallback.
+> **TLDR:** Every CPU-heavy document transform runs in a one-shot Bun Worker, a separate thread that serves one job and then exits, behind one bounded runner in `apps/api/src/lib/document/transform/`. The runner queues the jobs and admits a new one only while the predicted wait allows. The transforms are the collab and `.vcf`/`.eml`/`.ics` previews, the HTML, PDF, XLSX and DOCX exports, the xlsx and docx import and convert, and the search extract. The main thread keeps access checks, cache coordination, storage I/O, media prep and the import commit. Only transferred `ArrayBuffer`s and plain data cross. Not obvious from the code: one Worker runs at a time because memory is the limit, a Worker never serves a second job, and overload answers 503 with no main-thread fallback.
 
 ## `async` does not leave the event loop
 
@@ -36,7 +36,7 @@ Memory is the limit, not cores: one ExcelJS or Yjs heap exists at a time. A Bun 
 
 ## Admission is bounded by predicted wait
 
-The queue holds 16 jobs at two priorities. Foreground is a user waiting. Background is the search extract and a stale preview's regeneration. A queued request holds its HTTP connection open, so foreground admission is capped by predicted wait, the summed admission costs of the queued and active jobs (at most 120 s), not by queue length alone. Background work may hold at most 8 of the 16 slots, so a mass reindex can't starve users. A dropped background job is safe: the `contentDirty` bit or the next preview request enqueues it again.
+The queue holds 16 jobs at two priorities. Foreground is a user waiting. Background is the search extract and a stale preview's regeneration. A queued request holds its HTTP connection open, so foreground admission is capped by predicted wait, the summed admission costs of the queued and active jobs (at most 120 s), not by queue length alone. Background work may hold at most 8 of the 16 slots, so a mass reindex can't starve users. A dropped background job is safe: the next preview request enqueues it again, and so does the `contentDirty` bit, the flag on a `paths` row that marks its body for the search reindex ([SEARCH.md](SEARCH.md)).
 
 `TRANSFORM_LIMITS` (`runner.ts`) gives each kind a kill deadline and an admission cost. The deadline bounds a runaway. The cost is what a job is expected to take from the queue. It is keyed by kind, not document type, so the bytes previews run under the same `preview` row as the collab ones.
 
@@ -55,14 +55,14 @@ The measurements behind the choice: a spawn costs 2 to 4 ms, and the real cost i
 Not after a timeout, a crash, an overload or a module that fails to load. A fallback would bring back the server-wide freeze this layer exists to remove.
 
 - A recalc failure returns the replayed values with a `recalc-failed` warning and never fails the job. Only an export recalcs ([SHEETS.md](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)).
-- Sanitizing runs inside the Worker. Every HTML preview and export body goes through `sanitizeExportHtml` ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-weasyprint-fetches), [PREVIEWS.md](PREVIEWS.md#no-preview-body-may-fetch-a-url-the-file-chose)). The `.eml` preview uses the mail reader's own DOMPurify config.
+- Sanitizing runs inside the Worker. Every HTML preview and export body goes through `sanitizeExportHtml` ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-weasyprint-fetches), [PREVIEWS.md](PREVIEWS.md#no-preview-body-may-fetch-a-url-the-file-chose)). The `.eml` preview uses the mail reader's DOMPurify config plus hooks of its own that strip every reference but an inlined raster image and every CSS fetch, and it forbids more tags, such as `svg` and `video` (`apps/api/src/lib/preview/eml-preview.ts`).
 - The import commit stays on the main thread ([EXPORT.md](EXPORT.md#an-import-writes-nothing-until-the-worker-succeeds)).
 
 ## The runner logs one line per job, overload included
 
 Each job logs its kind, type, format, priority, queue depth and wait, the main-thread capture and media-prep time, startup, transform and total time, input and output bytes, the outcome and its warning codes. The main-thread times are there because a fast Worker behind slow preparation is not a successful offload. A refused admission logs its reason and the queue state. No line carries document content, upload bytes or HTML.
 
-`apps/api/src/test/transform-benchmark.ts` measures latency, event-loop delay, health-route latency and RSS on heavy fixtures. It is not a test: run it from `apps/api` with `bun src/test/transform-benchmark.ts [--memory]`. Its gates are a health p95 under 150 ms, a loop p99 under 100 ms and no single delay over 250 ms. Output bytes are pinned by the goldens in `src/test/document/document-transform.test.ts`, and runner behaviour in `document-transform-runner.test.ts`.
+`apps/api/src/test/transform-benchmark.ts` measures latency, event-loop delay, health-route latency and RSS on heavy fixtures. It is not a test: run it from `apps/api` with `bun src/test/transform-benchmark.ts [--memory]`. Its gates are a health p95 under 150 ms, a loop p99 under 100 ms and no single delay over 250 ms. Output bytes are pinned by the goldens in `src/test/document/document-transform.test.ts`, and runner behavior in `document-transform-runner.test.ts`.
 
 ## See also
 
