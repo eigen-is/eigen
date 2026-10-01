@@ -35,7 +35,7 @@ describe.skipIf(isWindows)('Mail', () => {
         ['a .. traversal', '..%2F..%2Fetc'],
         ['a leading separator', '%2Fetc'],
         ['a control character', 'test%00mailbox'],
-        ['an encoded separator', 'Projects%2F%2F2026'],
+        ['an empty segment', 'Projects%2F%2F2026'],
     ])('open mailbox with %s returns 400', async (_name, mailboxPath) => {
         const res = await authedRequest(
             ctx.alice.user.sessionToken,

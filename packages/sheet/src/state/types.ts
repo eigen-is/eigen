@@ -92,8 +92,8 @@ export type Presence = {
 };
 
 // Sheet-protection settings. Read-only in this fork: no UI or xlsx-import
-// path writes the field today (the upstream luckysheet protect-sheet dialog
-// was never ported).
+// path writes the field (the upstream luckysheet protect-sheet dialog was
+// never ported).
 // protection.ts reads only these five fields: `sheet !== 0` toggles
 // protection on; the `selectLockedCells` / `selectunLockedCells` flags allow
 // selection when set to `1` (any other value, including undefined, blocks);

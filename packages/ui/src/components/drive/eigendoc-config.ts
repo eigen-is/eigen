@@ -38,7 +38,7 @@ const EIGEN_DOC_APP_URLS: Record<EigenDocType, (() => string) | null> = {
 // metadata and icons derive from shared registries so adding a new app type is a
 // single-source edit.
 //
-// `mimeType` is historically the route-safe url-slug (`application-eigendoc`) —
+// `mimeType` is the route-safe url-slug (`application-eigendoc`) —
 // the `/drive/.../mime/:slug` route reverses dash→slash server-side.
 function buildConfig(type: EigenDocType): EigenDocAppConfig {
     const info = EIGEN_DOC_TYPE_INFO[type];

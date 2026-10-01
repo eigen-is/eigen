@@ -367,8 +367,8 @@ export class Mount {
     // SQLite's LOWER() folds ASCII only. On path-based mounts names are disk paths, and
     // case-insensitive filesystems (APFS, Windows) also alias non-ASCII case pairs to one file —
     // so those must compare equal too. JS toLowerCase() is the stricter fold; only consulted for
-    // non-ASCII names on path-based mounts, keeping ASCII lookups and id-keyed backends at
-    // today's exact semantics. The v7 unique index stays the ASCII race net.
+    // non-ASCII names on path-based mounts, so ASCII lookups and id-keyed backends keep SQLite's
+    // fold. The v7 unique index stays the ASCII race net.
     // An ASCII query never scans, so a stored-side-only alias (U+212A 'K') or an unfoldable pair (ſ/s) is not caught.
     private async findCaseFoldedChild(parentId: string, name: string): Promise<{ id: string } | null> {
         if (!this.isPathBased || !/\P{ASCII}/u.test(name)) return null;

@@ -9,6 +9,7 @@
 set -euo pipefail
 
 . "$(dirname "$0")/probe-lib.sh"
+ADMIN_EMAIL=alice@eigen.test
 
 # probe_large_body <origin>: a 2 MB request, past nginx's default 1 MB limit, reaches the API whole. The setup route
 # reads the whole body before it refuses the missing token with 403; a web server that caps the body answers 413.
@@ -16,8 +17,7 @@ probe_large_body() {
     local body="$SCRATCH/large-body.json" got_code
     if [ ! -f "$body" ]; then
         {
-            printf '{"storageType":"local-fullnames","adminUsername":"alice","adminPassword":"probe-password","adminName":"Alice",'
-            printf '"orgName":"'
+            printf '{%s,"orgName":"' "$(admin_fields probe-password)"
             head -c 2097152 /dev/zero | tr '\0' a
             printf '"}'
         } >"$body"

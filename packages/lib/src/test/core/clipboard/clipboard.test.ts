@@ -1,6 +1,8 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, spyOn, test } from 'bun:test';
+import { toast } from 'sonner';
 import {
     clipboardTextItemHasContent,
+    copyToClipboard,
     EIGEN_CLIPBOARD_RENDER_ATTR,
     embedClipboardSvgMetadata,
     extractClipboardSvgMetadata,
@@ -391,6 +393,27 @@ describe('writeEigenClipboardAsync', () => {
             expect(captured.items?.['text/plain']).toBeDefined();
         } finally {
             gg.navigator = origNavigator;
+        }
+    });
+});
+
+describe('copyToClipboard', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
+    const gg = globalThis as any;
+
+    test('a refused write toasts why, and no success', async () => {
+        const success = spyOn(toast, 'success');
+        const error = spyOn(toast, 'error');
+        const origNavigator = gg.navigator;
+        gg.navigator = { clipboard: { writeText: () => Promise.reject(new Error('Document is not focused.')) } };
+        try {
+            await copyToClipboard('https://example.org', 'Link copied to clipboard');
+            expect(success).not.toHaveBeenCalled();
+            expect(error).toHaveBeenCalledWith('Document is not focused.');
+        } finally {
+            gg.navigator = origNavigator;
+            success.mockRestore();
+            error.mockRestore();
         }
     });
 });

@@ -182,9 +182,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                   AND type IN ('doc', 'sheets', 'slides', 'stickies', 'chat');
             `);
 
-                // Backfill plaintext/code files through the canonical eligibility gate
-                // (getTextPreviewMode) so the rule lives in exactly one place. Raw bun:sqlite
-                // query/prepare on the migration db.
+                // Text files through isSearchableTextFile, so the rule lives in one place.
                 const files = db
                     .query<{ id: string; name: string; mimeType: string }, []>(
                         `SELECT id, name, mimeType FROM paths WHERE type = 'file' AND trashedAt IS NULL`,
@@ -198,35 +196,16 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             },
         },
         {
-            // Close the concurrent same-name-create race (AUDIT_MOUNT finding 27). assertUniqueName's
-            // SELECT and the storage-write-then-INSERT that follows it aren't serialized, so two racers
-            // both pass the check and both insert. On the path-based `local` backend both rows get
-            // file = name → the SAME disk path → the second write clobbers the first and deleting either
-            // deletes both. A partial UNIQUE INDEX makes the losing INSERT throw (translated to 409 in
-            // mount.ts), and it hardens id-based (s3/local-key) metadata against duplicate active names.
-            //
-            // Runs inside the ManagedDatabase migration transaction (BEGIN/COMMIT with ROLLBACK on throw),
-            // so a failure leaves the db at v6 untouched.
+            // assertUniqueName's SELECT and the INSERT after the storage write are not serialized, so two
+            // creates of one name can both pass; on a by-name mount they then share one disk path. The
+            // partial unique index makes the losing INSERT throw, which mount.ts answers with 409.
             version: 7,
             up: (db) => {
-                // A1 — DEDUP PRE-STEP. On a LIVE db CREATE UNIQUE INDEX FAILS if a duplicate already
-                // exists, so first make (parentId, LOWER(name)) unique by RENAMING every colliding row
-                // except the oldest. Scope = trashedFrom IS NULL: LIVE rows (what the index constrains)
-                // PLUS folder-descendant-trashed rows (trashedAt set by trashDescendants, trashedFrom
-                // NULL) — restoreDescendants bulk-restores that whole cohort in one recursive UPDATE
-                // with no conflict handling, so a pre-v7 duplicate surviving inside an already-trashed
-                // folder would trip the index on restore and permanently brick it. Independently-trashed
-                // rows (trashedFrom SET) are excluded: they restore one at a time through restorePath's
-                // conflict rename and may legitimately duplicate a live name (trash-then-recreate).
-                // RENAME `name` ONLY — never touch `file`:
-                //   - id-based (s3/local-key): file = `${id}.${ext}` is keyed by the immutable ROW ID,
-                //     independent of name, so renaming (extension preserved) leaves both distinct storage
-                //     objects valid → lossless. The collision was a metadata-only clash.
-                //   - path-based (local): file = name (old) is left as-is, so the renamed row still
-                //     resolves to the SAME already-shared disk path. That clobber predates this migration
-                //     and can't be undone; renaming introduces NO NEW loss and makes the index satisfiable.
-                // parentId IS NULL is excluded: SQLite treats NULLs as distinct in a unique index, so
-                // roots never collide and must not be renamed.
+                // The index cannot be created over an existing duplicate, so every one but the oldest is
+                // renamed first. Rows trashed with a folder count, since restoreDescendants restores them
+                // with no conflict check; rows trashed on their own restore through restorePath's conflict
+                // rename. Only `name` changes: an id-keyed `file` does not depend on it, and on a by-name
+                // mount the duplicates already share one path. Roots never collide: NULLs are distinct.
 
                 // Mirror SQLite's ASCII-only LOWER() — the index and assertUniqueName both fold with it —
                 // so the dedup renames EXACTLY the rows CREATE UNIQUE INDEX would reject, no more (a JS
@@ -286,9 +265,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 }
                 rename.finalize();
 
-                // A2 — the partial unique index. LOWER(name) + non-trashed scope match getChildByName /
-                // assertUniqueName exactly; trashed rows are excluded so a trashed item doesn't block
-                // re-creating a live one. IF NOT EXISTS keeps a re-run a no-op.
+                // The scope of getChildByName and assertUniqueName: a trashed item does not block a live name.
                 db.exec(
                     `CREATE UNIQUE INDEX IF NOT EXISTS idx_paths_unique_active_name ON paths(parentId, LOWER(name)) WHERE trashedAt IS NULL;`,
                 );
@@ -297,9 +274,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
         {
             version: PENDING_UPLOAD_KIND_VERSION,
             up: (db) =>
-                // Until now every staged copy was a managed database, so the queue could judge one by
-                // its SQLite header. A restore stages plain files too; they say so on the row. The
-                // default keeps every existing row on the old, guarded meaning.
+                // A restore stages plain files too, which the queue must not check for a SQLite header.
                 db.exec(`ALTER TABLE pending_uploads ADD COLUMN isDatabase INTEGER NOT NULL DEFAULT 1;`),
         },
     ],

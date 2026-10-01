@@ -31,7 +31,7 @@ export function useOptionalDocSearchBar(): DocSearchBarContextValue | null {
 
 export type DocSearchProviderProps = {
     controller: DocSearchController;
-    // Optional comment-thread search capability (stickies + docs today). Published alongside the
+    // Optional comment-thread search capability (stickies + docs). Published alongside the
     // controller so the palette `doc:` scope gains its async IN COMMENTS section; apps that omit it
     // publish null and nothing changes for them.
     commentSearch?: DocCommentSearch;
@@ -76,7 +76,7 @@ export function DocSearchProvider({
     const [options, setOptions] = useState<DocSearchOptions>(DEFAULT_OPTIONS);
     const [matches, setMatches] = useState<DocSearchMatch[]>([]);
     const [activeIndex, setActiveIndex] = useState(-1);
-    // v1.5 replace session state. mode is 'search' until ⌥⌘F / the chevron opens replace;
+    // Replace session state. mode is 'search' until ⌥⌘F / the chevron opens replace;
     // replacedCount is the transient "Replaced N" the bar shows after Replace All.
     const [mode, setMode] = useState<'search' | 'replace'>('search');
     const [replacement, setReplacement] = useState('');
@@ -390,8 +390,8 @@ export function DocSearchProvider({
     );
 
     // Publish the per-app controller so the palette `doc:` scope can list in-document matches, plus
-    // the session's revealFromPalette so a hit's run() opens THIS bar pre-filled + reveals the match
-    // (Reinder, 2026-07-06; was reveal-in-place). usePaletteDocSearch stabilises both by shape, so the
+    // the session's revealFromPalette so a hit's run() opens THIS bar pre-filled + reveals the match.
+    // usePaletteDocSearch stabilises both by shape, so the
     // publish effect doesn't loop even though the app rebuilds the controller each render.
     usePaletteDocSearch(controller, commentSearch, { revealFromPalette });
 

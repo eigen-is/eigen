@@ -133,11 +133,9 @@ async function buildDocumentDb<S extends SchemaType>(
                       if (mode === 'create') return;
                       const tempPath = mount.getTempPath(pathId);
                       if (fs.existsSync(tempPath)) {
-                          // A surviving temp signals an unclean shutdown. Adopt it as recovered live
-                          // state ONLY if it's a real, non-collapsed SQLite. A 0-byte/partial/fresh-init
-                          // temp (e.g. from a failed or empty S3 GET) must NOT be opened as an empty doc
-                          // and re-uploaded over the good stored object (the 2026-06-08 wipe) — discard
-                          // it and fall through to the authoritative copy.
+                          // A surviving temp signals an unclean shutdown. Adopt it only if it's a real,
+                          // non-collapsed SQLite: a 0-byte, partial or fresh-init temp (a failed or empty
+                          // S3 GET) would be uploaded as an empty doc over the good stored object.
                           const known = await mount.getPath(pathId);
                           if (isViableRecoveryTemp(tempPath, known?.size ?? 0)) {
                               console.log(`[Mount] Recovering from crash: using existing tmp file for ${pathId}`);
@@ -222,12 +220,8 @@ async function buildDocumentDb<S extends SchemaType>(
 
     await managed.open();
 
-    // Crash recovery: a surviving temp means a prior process
-    // died before its writes synced. The fresh connection's total_changes() reset to
-    // 0, so the DB looks clean and the close-time cleanupTemp would silently drop
-    // those bytes (the most plausible cause of the 2026-05-30 chat loss). Force the
-    // next sync so they re-reach storage. A surviving temp (unclean shutdown, failed
-    // final sync or failed open) may hold bytes storage lacks.
+    // A recovered temp may hold writes storage lacks, but the fresh connection's total_changes() is 0, so
+    // the close-time cleanupTemp would drop them. Force the next sync.
     if (recoveredFromCrash) {
         managed.markDirty();
     }
@@ -346,6 +340,5 @@ async function syncDocumentDbSize(mount: Mount, pathId: string, localPath: strin
     }
     const size = fs.statSync(localPath).size;
     await mount.db.update(paths).set({ size, updatedAt: new Date() }).where(eq(paths.id, pathId));
-    console.log(`[Mount] syncDocumentDbSize ${pathId} size=${size}`);
     await mount.invalidateAncestorsOf(pathId);
 }

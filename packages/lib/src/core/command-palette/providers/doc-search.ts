@@ -41,9 +41,8 @@ export function useDocSearchResults(
                 rank: -i,
                 payload: match,
                 // Enter/click opens the find bar pre-filled with this query — all matches painted,
-                // THIS one active + revealed (n of m at its index) — leaving focus in the document
-                // (Reinder, 2026-07-06; was reveal-in-place). q is the debounced term that produced
-                // the row; the session resolves match.id to its index.
+                // THIS one active + revealed (n of m at its index) — leaving focus in the document.
+                // q is the debounced term that produced the row; the session resolves match.id to its index.
                 run: (rctx) => rctx.docSearchSession?.revealFromPalette(q, match.id),
             }));
     }, [controller, scopeBlocks, q]);

@@ -6,7 +6,7 @@ import { MESSAGE_AWARENESS } from './collabDocument';
 // client constant) and reconnects on a ~2.5s backoff. A cold open of a large doc
 // (home init + S3 download + main-thread materialization) can stay silent longer
 // than that, and every retry re-pays the full load — a self-sustaining spiral that
-// degraded the whole server (2026-08-04 incident). So the WS route speaks first:
+// degrades the whole server. So the WS route speaks first:
 // an empty awareness frame immediately and on an interval, until sync-step-1
 // takes over. Clients apply it as a no-op; it only resets their silence timer.
 const LOADING_HEARTBEAT_MS = 10_000;

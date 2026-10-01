@@ -252,7 +252,7 @@ export function EmailDraft({
 
     // Both send entry points funnel here (the Send button via handleSendEmail, and the no-subject
     // ConfirmDialog). When the draft links documents, offer recipients who need it view access before
-    // sending; otherwise send exactly as today.
+    // sending.
     const sendWithFreshDraft = async () => {
         if (sendingRef.current) return;
         sendingRef.current = true;
@@ -272,7 +272,7 @@ export function EmailDraft({
 
             // Probe each reference for the current recipient set. A failed check (stale 404, network)
             // makes that reference non-checkable — excluded from the dialog entirely, so the mail
-            // sends as-is with whatever access already exists (the link may be dead, exactly as today).
+            // sends as-is with whatever access already exists (the link may be dead).
             const checks = await Promise.all(
                 refs.map((ref) =>
                     checkPathAccess(ref.ownerId, ref.mountId, ref.id, emails)

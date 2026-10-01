@@ -15,7 +15,7 @@ describe('state/presence/presencesFromPeers', () => {
 
     test('keeps a same-user peer — the local tab is already absent, another window shows', () => {
         // The local client is omitted upstream (useAwarenessPeers), so an entry sharing the local
-        // userId is the user's other window and must render like any peer (cross-app ruling).
+        // userId is the user's other window and must render like any peer, as in the other apps.
         expect(presencesFromPeers([alice]).map((p) => p.userId)).toEqual(['alice']);
     });
 

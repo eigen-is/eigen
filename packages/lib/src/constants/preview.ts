@@ -4,8 +4,8 @@ import {
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_VECTOR,
-    isEmlFile,
     isIcsFile,
+    isStructuredTextFile,
     isVCardFile,
 } from '../types/drive';
 
@@ -71,13 +71,7 @@ export function getExtension(fileName: string): string {
 
 // A mime is the sender's word, so loose bytes are only what their name and a plain text mime say.
 export function getBytesTextPreviewMode(mimeType: string, fileName: string): BytesTextPreviewMode | null {
-    // A vCard is text, but its raw body is mostly base64 photo: it previews as contact cards instead.
-    if (isVCardFile(mimeType, fileName)) return null;
-    // A calendar is text too, and reads as folded property lines nobody wants: it previews as its events.
-    if (isIcsFile(mimeType, fileName)) return null;
-    // A saved message is text under any of three mimes, and reads as headers and boundaries: it previews
-    // as the message it holds.
-    if (isEmlFile(mimeType, fileName)) return null;
+    if (isStructuredTextFile(mimeType, fileName)) return null;
     const ext = getExtension(fileName);
     if (mimeType === 'text/markdown' || ext === '.md' || ext === '.markdown') return 'markdown';
     if (mimeType === 'text/plain' || ext === '.txt') return 'plaintext';

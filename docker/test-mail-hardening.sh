@@ -86,11 +86,9 @@ RCPT_PROBE=rcpt-probe@example.com
 # One AUTH per connection, and QUIT only goes out after the reply has had time to arrive. Writing
 # the whole dialog in one shot (AUTH then QUIT, no pause) disconnects while the dovecot request is
 # still in flight, and postfix abandons it: dovecot logs "auth client disconnected with 1 pending
-# requests: EOF" and the attempt never reaches the API. Measured 15 of 60 lost that way, and the
-# loss scales with the spray, so no larger spray fixes it. The generator subshell holds the pipe
-# open across the pause; callers then count the 535s they actually got, so a lost attempt is
-# reported rather than quietly shrinking the spray. (A read-driven dialog would need `coproc`,
-# which macOS's stock bash 3.2 does not have.)
+# requests: EOF" and the attempt never reaches the API; the loss scales with the spray. The generator
+# subshell holds the pipe open across the pause; callers count the 535s they actually got, so a lost
+# attempt is reported. (A read-driven dialog would need `coproc`, which macOS's bash 3.2 lacks.)
 auth_once() {
     local auth="$1"
     {
@@ -235,7 +233,7 @@ else
 fi
 
 ##############################################################################
-header "Probe 2 — own sender is still accepted (regression guard)"
+header "Probe 2 — own sender is still accepted"
 ##############################################################################
 if should_run 2 && [ "$HAVE_LOGIN" = 1 ]; then
     probe_submission "AUTH $ALICE_EMAIL + MAIL FROM <$ALICE_EMAIL>" \
@@ -255,7 +253,7 @@ else
 fi
 
 ##############################################################################
-header "Probe 4 — foreign forged sender is rejected (the incident shape)"
+header "Probe 4 — foreign forged sender is rejected"
 ##############################################################################
 if should_run 4 && [ "$HAVE_LOGIN" = 1 ]; then
     probe_submission "AUTH $ALICE_EMAIL + MAIL FROM <$SENDER_FOREIGN>" \
@@ -444,9 +442,8 @@ header "Probe 11 — the client IP reaches the limiter through real SMTP AUTH"
 # The bucket is filled over HTTP rather than by spraying SMTP. A write-only SMTP spray cannot get
 # there on this host: postfix abandons an auth request that is still in flight when the client
 # disconnects, and the next connection on that smtpd then finds its cached dovecot connection dead,
-# so losses arrive in pairs. Only 28-36 of 60 attempts landed, and holding the connection 12s
-# instead of 2s bought one extra delivery — the loss is proportional, so no larger spray fixes it.
-# Probe 10 is the real-SASL-transport proof; this probe is the IP-threading proof.
+# so losses arrive in pairs, in proportion to the spray. Probe 10 is the real-SASL-transport proof;
+# this probe is the IP-threading proof.
 if should_run 11 && [ "$HAVE_LOGIN" = 1 ]; then
     log "restarting eigen-api for a clean failure-bucket baseline..."
     dc restart eigen-api >/dev/null 2>&1
@@ -481,10 +478,9 @@ if should_run 11 && [ "$HAVE_LOGIN" = 1 ]; then
         good=$(auth_plain "$ALICE_EMAIL" "$ALICE_PASSWORD")
         transcript=$(auth_once "$good")
         if printf '%s\n' "$transcript" | grep -qE '^(454|450)'; then
-            # 454 is a pre-existing quirk, unrelated to this branch: the first AUTH after an
-            # auth-server restart hits postfix's stale cached SASL connection, and postfix
-            # reconnects on the next attempt. A 450 would be postfix's own anvil cap answering, so
-            # give the window room before the retry.
+            # The first AUTH after an auth-server restart hits postfix's stale cached SASL
+            # connection (454), and postfix reconnects on the next attempt. A 450 would be postfix's
+            # own anvil cap answering, so give the window room before the retry.
             log "  $(printf '%s\n' "$transcript" | grep -E '^(454|450)' | head -1) on the first attempt; retrying once"
             anvil_reserve 2
             transcript=$(auth_once "$good")
@@ -511,11 +507,10 @@ fi
 ##############################################################################
 header "Probe 12 — mynetworks, OpenDKIM InternalHosts and the API trust range are scoped to the bridge subnet"
 ##############################################################################
-# Finding #19: the trust range must be loopback plus the actual docker bridge subnet, not the
-# whole 172.16.0.0/12. Postfix's mynetworks and OpenDKIM's TrustedHosts render from EIGEN_SUBNET in
-# the entrypoint, and compose derives the API's TRUSTED_NETWORKS from the same value; assert none
+# The trust range must be loopback plus the actual docker bridge subnet, not the whole
+# 172.16.0.0/12. Postfix's mynetworks and OpenDKIM's TrustedHosts render from EIGEN_SUBNET in the
+# entrypoint, and compose derives the API's TRUSTED_NETWORKS from the same value; assert none
 # still carries the /12 and all three carry the subnet.
-# Needs no login, so it runs whether or not ALICE_* are set.
 if should_run 12; then
     expect_subnet="${EIGEN_SUBNET:-172.20.0.0/24}"
     mynetworks=$(dc exec -T postfix postconf -h mynetworks | tr -d '\r' || true)
