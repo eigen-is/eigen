@@ -13,13 +13,8 @@ import { archivePath, MOUNT_PATH_COLUMNS, managedDbContainer, storageKeyOf } fro
 import { captureFile, captureUnlessGone, captureWrittenFile } from './capture';
 import type { SnapshotProgress } from './snapshot-home';
 
-// A WAL-mode database cannot be opened at all — not even read-only — without the `-wal` beside it,
-// and an archive carries main files only: the journals belong to the running server. Rewrite the
-// copy's journal mode so every database in the archive stands alone. Only reached for mount-owned
-// databases, whose copied bytes are already whole (the live handle is captured with VACUUM INTO,
-// and a closed one was checkpointed TRUNCATE by ManagedDatabase.close). A corrupt container must
-// not cost the user the rest of the backup, so a failure keeps the copied bytes and verify's
-// quick_check flags them.
+// A WAL-mode database does not open without the `-wal` beside it, which an archive leaves out, so the copy's
+// journal mode is rewritten. A failure keeps the copied bytes for verify's quick_check to flag.
 function normalizeArchiveDatabase(destPath: string): void {
     try {
         const db = new Database(destPath, { readwrite: true, create: false });
@@ -35,18 +30,12 @@ function normalizeArchiveDatabase(destPath: string): void {
     fs.rmSync(`${destPath}-shm`, { force: true });
 }
 
-// The codes a failure on THIS machine carries: SQLite's own from a VACUUM INTO, and the local-disk
-// errnos the copy into the archive folder raises. Both already say what went wrong and where, and
-// calling either "storage unreachable" would send the admin after the wrong machine. Listed one by
-// one rather than as `E[A-Z]+`: a bucket that refuses the connection can surface as a node errno
-// (`ECONNREFUSED`, `ETIMEDOUT`, `ENOTFOUND`), and that IS the storage being unreachable.
+// The codes of a failure on this machine, which "storage unreachable" would misname. One by one, not `E[A-Z]+`: a
+// bucket that refuses the connection surfaces as ECONNREFUSED, and that is the storage being unreachable.
 const LOCAL_FAILURE_CODE = /^(SQLITE_[A-Z]+|ENOSPC|EACCES|EDQUOT|EROFS|EIO|ENOENT)$/;
 
-// A storage failure fails the whole backup — an archive silently missing a mount's objects is worse
-// than no archive. A failed storage call is a 503 carrying the provider's error or the local errno as
-// its cause (a timeout carries none), and Bun's S3Error hides the actionable part in `code` behind
-// "an unexpected error has occurred". So a local errno is rethrown as itself, a 503 or a coded error
-// as one line naming the code and the object, anything else untouched.
+// A storage failure fails the whole backup: an archive missing a mount's objects is worse than none. Bun's S3Error
+// hides the actionable part in `code`, so a 503 or a coded error becomes one line naming the code and the object.
 function rethrowStorageFailure(mountId: string, storageKey: string, error: unknown): never {
     const unavailable = error instanceof ApiError && error.status === 503;
     const failure = unavailable ? error.cause : error;
@@ -96,12 +85,8 @@ export async function snapshotMountData(
             new Error(`mount ${mount.id}: ${relPath} has ${row.size} bytes on record but no object at ${storageKey}`);
         if (container) {
             fs.mkdirSync(path.dirname(destPath), { recursive: true });
-            // Blocking lock, like snapshotContainerDataDb: a contended lock must never degrade to a
-            // raw read of the live main file, which would drop every commit still sitting in the WAL.
-            // Deadlock-safe: a close never parks on the container lock (its own snapshot try-locks and
-            // skips), and the backup is never inside a close of this doc when it waits on its slot.
-            // False = no bytes anywhere: skipped when the container was deleted, or the version pruned,
-            // since the tree read; a live row with bytes on record fails the backup.
+            // A blocking lock: a raw read of the live main file would drop every commit still in the WAL. False is
+            // no bytes anywhere, skipped when the row went since the tree read.
             const copied = await mount
                 .withPathLock(container.id, () => stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'))
                 .catch((error: unknown) => rethrowStorageFailure(mount.id, storageKey, error));
@@ -113,12 +98,8 @@ export async function snapshotMountData(
                 throw lostObject();
             }
         } else {
-            // readKey is freshest-first (pending staged copy, then the stored object). Null for a
-            // row with no bytes on record (a touched file) mirrors that absence; null for a row with
-            // a size is a lost object. A delete landing between readKey's HEAD and the GET fails the
-            // read with NoSuchKey/ENOENT. Either drops out of the archive when the row was deleted or
-            // moved since the tree read. A disk that fills up in the archive folder keeps its own
-            // errno (LOCAL_FAILURE_CODE): it is not the bucket being unreachable.
+            // Freshest first: the pending staged copy, then the stored object. Null for a row with no bytes on record
+            // mirrors that absence; a delete since the tree read fails the read, and the row drops out.
             const file = await mount
                 .readKey(storageKey)
                 .catch((error: unknown) => rethrowStorageFailure(mount.id, storageKey, error));

@@ -46,11 +46,8 @@ export async function movePathAsync(from: string, to: string): Promise<void> {
     });
 }
 
-// What a database says about itself. Absent — no __schema_version table, or a file that cannot be
-// opened at all (EACCES, EIO), which is why the open is inside the try — reads as 0, the same as
-// ManagedDatabase's own "never migrated" answer, and the quick_check right after it is what turns
-// that into a named failure. Read-write, like every open below it: a WAL database nobody is holding
-// open has no -shm beside it, and a read-only open of one fails outright.
+// A database with no stamp, or one that does not open, reads as 0, ManagedDatabase's "never migrated": the
+// quick_check after it names the failure. Read-write: a closed WAL database has no -shm, and a read-only open fails.
 function schemaVersionOf(filePath: string): number {
     let db: Database | null = null;
     try {
@@ -64,38 +61,30 @@ function schemaVersionOf(filePath: string): number {
     }
 }
 
-// Every path a restore derives from an archive's own paths table is resolved against that mount's
-// data folder first. Verify refuses a table that could leave the mount at all
-// (checkArchivedPathRows); this is the second lock on the same door, one resolve per path, so no
-// route in here can read or move a byte outside `data/`.
+// Verify refuses a paths table that could leave its mount (checkArchivedPathRows); this second lock resolves every
+// path a restore derives from one, so nothing here reads or moves a byte outside `data/`.
 function inMountData(dataDir: string, mountId: string, relPath: string): string {
     const abs = resolveInside(dataDir, relPath);
     if (!abs) throw new ApiError(400, `Mount ${mountId} names a path that leaves it: ${relPath}`);
     return abs;
 }
 
-// Put one mount's files where the restored mount will look for them. The archive holds every file
-// under `data/` by path (what a `local` mount stores natively), so every backend re-derives its own
-// keys from the restored tree: a path-based mount its name chain, a `local-key` mount a flat key,
-// and an `s3` mount stages the file with a pending upload so the existing UploadQueue drains it to
-// the bucket with its normal retry and backoff — the user can work at once, and a flaky bucket makes
-// the restore resumable by construction. Returns the container databases that stayed on local disk.
+// Puts one mount's files where the restored mount looks for them. The archive holds them by path, so each backend
+// derives its keys again; an `s3` mount stages each file with a pending upload, which the UploadQueue drains with
+// its retry. Returns the container databases that stayed on local disk.
 export function materializeMount(
     homeDir: string,
     summary: BackupManifest['mounts'][number],
     stamp: string,
 ): VersionedDatabase[] {
-    // restoreHome refuses such an archive from its manifest (incompleteReason); this is the second
-    // lock, where the harm would be: below, an s3 mount's rows get fresh keys and a body the archive
-    // does not hold reads as missing at backup, so every file of the mount would be lost.
+    // restoreHome refuses such an archive from its manifest; here the harm would be: an s3 mount's rows get fresh
+    // keys below, and every file would read as missing.
     if (summary.contents === 'metadata') {
         throw new ApiError(
             400,
             `Mount ${summary.id} holds only its metadata in the archive, not its files, so it cannot be restored`,
         );
     }
-    // The id comes out of the archive's manifest. The parser holds it to the class a real mount id
-    // uses, and this is the second lock on the same door.
     const mountDir = requireMountDir(homeDir, summary.id);
     const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
     const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
@@ -104,10 +93,8 @@ export function materializeMount(
     }
     const isPathBased = summary.storageType === 'local';
     const isRemote = summary.storageType === 's3';
-    // Only a remote mount gets pending rows written for it, and those name the column that carries
-    // the kind of each staged copy (schema.ts, `isDatabase`). An archive from before that column
-    // would take its DEFAULT and every restored plain file would later be dropped as a corrupt
-    // staged copy — so refuse it here, and leave a local mount's older archive alone.
+    // The pending rows written below need the `isDatabase` column: without it every restored file would later be
+    // dropped as a corrupt staged copy.
     const metadataVersion = schemaVersionOf(metadataPath);
     if (isRemote && metadataVersion < PENDING_UPLOAD_KIND_VERSION) {
         throw new ApiError(
@@ -135,8 +122,7 @@ export function materializeMount(
                 fs.mkdirSync(inData(archivePath(row, byId)), { recursive: true });
             }
         }
-        // The MOUNT's staging folder, where the upload queue keeps a copy until its PUT acks —
-        // nothing to do with the job staging folder the archive was unpacked into.
+        // The mount's own staging folder, where the upload queue keeps a copy until its PUT acks.
         const mountStagingDir = path.join(mountDir, PATHS.DRIVE.STAGING_DIR);
         if (isRemote) fs.mkdirSync(mountStagingDir, { recursive: true });
         const now = Date.now();
@@ -147,13 +133,8 @@ export function materializeMount(
                 if (row.type !== 'file') continue;
                 const archived = archivePath(row, byId);
                 const source = inData(archived);
-                // A remote mount's objects are the only ones a restore could write over: they are in a
-                // bucket, not in the folder that moved aside. So every one of its rows gets a key of its
-                // own, and the `.pre-restore-` copy keeps pointing at objects that still hold its bytes.
-                // Before the missing-bytes check, not after: a row the archive carries nothing for must
-                // not keep the key the copy references, or a late upload would land on an object it owns
-                // (a fresh key with nothing behind it reads as absent, which is what that row is). The
-                // row is this function's read model, so the new key goes into it and into the table.
+                // A bucket's objects did not move aside with the folder, so every row gets a fresh key and the
+                // `.pre-restore-` copy keeps its objects; a row with no bytes too, or a late upload lands on one.
                 if (isRemote) {
                     row.file = buildStorageKey(`${row.id}-r${stamp}`, row.name);
                     orm.update(paths).set({ file: row.file }).where(eq(paths.id, row.id)).run();
@@ -177,18 +158,14 @@ export function materializeMount(
                         .run();
                     continue;
                 }
-                // Usually the same file on a path-based mount (`file` is the name), but migration v7
-                // renamed the NAME of a deduplicated row and left its `file` alone, so the two differ
-                // there — and the mount resolves reads through `file`. Nothing can be overwritten either
-                // way: a local mount's bytes moved aside with the folder.
+                // On a path-based mount the key is the archive path unless migration v7 renamed a deduplicated
+                // row's name and left its `file`, which reads go by.
                 const target = inData(key);
                 if (target !== source) movePath(source, target);
             }
         })();
         if (isRemote) {
-            // An s3 mount's bytes belong in the bucket, and the queue holds every one of them in
-            // staging until the PUT acks; the archive still has them all if that never happens.
-            // Keeping the by-path tree as well would double the disk a restored remote mount costs.
+            // Every byte is in staging until its PUT acks; the by-path tree as well would double the disk.
             fs.rmSync(dataDir, { recursive: true, force: true });
             return [];
         }

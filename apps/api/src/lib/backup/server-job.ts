@@ -93,9 +93,8 @@ async function serverMemberBytes(): Promise<number> {
     return bytes;
 }
 
-// Refuses a job the backups folder has no room for, before it writes anything. The bound is
-// uncompressed: every member as it will be appended, plus the one being staged and packed beside
-// it, which is at most twice the largest. A home that cannot be sized is its capture's to judge.
+// Refuses a job the backups folder has no room for: every member uncompressed, plus the one staged and packed beside
+// it, at most twice the largest. A home that cannot be sized is its capture's to judge.
 async function requireRoom(level: BackupLevel, homes: ServerHome[]): Promise<void> {
     const sizes = [await serverMemberBytes()];
     for (const home of homes) sizes.push(await pullHomeBackupBytes(home.ownerId, level).catch(() => 0));
@@ -112,10 +111,8 @@ async function appendPacked(writer: ArchiveWriter, member: string, packed: strin
     }
 }
 
-// One home into the archive. A home that fails is named in the manifest and the archive goes
-// on without it: one broken bucket must not leave every other home without a backup. A home deleted
-// since the listing is skipped, which is no failure. A failed append is the archive's failure, not
-// the home's, and ends the job.
+// One home into the archive. A home that fails is named and the archive goes on: one broken bucket must not leave
+// every other home without a backup. A failed append is the archive's failure and ends the job.
 async function appendHome(
     writer: ArchiveWriter,
     home: ServerHome,
@@ -145,8 +142,7 @@ async function appendHome(
     return { ...home, member, bytes };
 }
 
-// The server member, the homes it names, the install files and the manifest, into a
-// temp file renamed into place once the manifest closes it. Nothing is left behind on a throw.
+// Into a temp file renamed into place once the manifest closes it, so nothing is left behind on a throw.
 async function writeServerArchive(
     job: BackupJob,
     archivePath: string,
@@ -222,8 +218,7 @@ export function alertOwner(tag: string, error: string, title = 'Server backup fa
         .catch(() => {});
 }
 
-// Every server archive and sidecar-only record in the backups folder, once each, by its archive name, newest first.
-// A missing folder holds none.
+// Every server archive and refused attempt in the backups folder, once each, newest first.
 function listServerRecords() {
     const dir = backupsDirPath();
     if (!fs.existsSync(dir)) return [];
@@ -274,9 +269,8 @@ export function hasScheduledAttemptOn(day: Date): boolean {
     );
 }
 
-// An archive and its record go together, and a refused attempt's record alone. One still being
-// written is refused: its job would write the record back when it ends. The job map says so
-// whatever the record reads: a record left running with no job behind it lost its final write.
+// An archive and its record go together. Only a running job refuses, as it would write the record back: a record
+// left running with no job behind it lost its final write.
 export async function deleteServerArchive(name: string): Promise<void> {
     if (!parseServerArchiveName(name)) throw new ApiError(400, 'Not a server backup name');
     const archivePath = path.join(backupsDirPath(), name);
@@ -287,9 +281,8 @@ export async function deleteServerArchive(name: string): Promise<void> {
     fs.rmSync(recordPath, { force: true });
 }
 
-// Retention over the folder, judged by each sidecar: an archive counts as good only when its job ended
-// done. An archive and its sidecar go together. One whose sidecar is missing or unreadable is left
-// alone: nothing is deleted on a record nobody can read.
+// Retention by each sidecar: an archive is good only when its job ended done, and nothing is deleted on a record
+// nobody can read.
 async function pruneLocalArchives(): Promise<void> {
     const archives: Parameters<typeof pruneServerArchives>[0] = [];
     const unread: string[] = [];
@@ -316,9 +309,8 @@ async function pruneLocalArchives(): Promise<void> {
     }
 }
 
-// Boot: a job killed mid-run left its record running, and nothing will ever end it. It becomes a
-// failed attempt, for retention and the list alike, and an upload killed mid-run a failed upload, for the
-// list and ./eigen status. The owner hears of each once.
+// Boot: a job or an upload killed mid-run left its record running, and nothing will ever end it, so it becomes a
+// failed one. The owner hears of each once.
 export async function recoverInterruptedServerBackups(): Promise<void> {
     const interrupted: string[] = [];
     const notUploaded: string[] = [];
@@ -397,9 +389,8 @@ async function runServerBackup(
 // Uploads take turns: two at once share one uplink and gain nothing.
 let uploadsSettled: Promise<unknown> = Promise.resolve();
 
-// An archive's upload is a job of its own that holds no slot, so a backup never waits for the bucket. A failure
-// is never the archive's, which stays good here: the owner hears of it, and the record says so for the list and
-// ./eigen status. Shutdown aborts it, and the next Upload sends it whole.
+// An upload is a job that holds no slot, so a backup never waits for the bucket, and its failure is never the
+// archive's. Shutdown aborts it, and the next Upload sends it whole.
 function startUploadJob(archivePath: string, startedBy: string | undefined): BackupJob {
     const name = path.basename(archivePath);
     const ownerId = orgOwnerId(getPublicConfig().orgId);
@@ -463,10 +454,8 @@ export async function startArchiveUpload(name: string, startedBy: string): Promi
     return startUploadJob(archivePath, startedBy);
 }
 
-// Starts the whole-server backup and resolves once it is under way. One runs at a time, in the org's
-// job slot: a second start is startBackupJob's 409, which names the archive being written, unless it
-// is to `wait` for that one to end. No room is a 507, and the attempt's record stays, failed, like
-// any other.
+// Starts the whole-server backup and resolves once it is under way. One runs at a time in the org's slot: a second
+// start gets the 409 unless it is to `wait`, and no room is a 507 whose record stays, failed.
 export async function startServerBackup({
     level,
     reason,

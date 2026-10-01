@@ -48,12 +48,8 @@ function isSkippedHomeDir(rel: string, level: BackupLevel): boolean {
 const DB_FILE = /\.db(-wal|-shm)?$/;
 const JOURNAL_FILE = /\.db-(wal|shm)$/;
 
-// A folder as plain files: every file to copy, every directory to create in the archive folder, and
-// the databases found, which are not copied (the caller says what one found there means). Journals
-// are left out. Directories are listed because an empty one carries no file to imply it — a Maildir
-// `new/` nobody has delivered to, an empty mailbox — and the tar writer emits an entry per directory
-// in the staging folder. Without them a restored Maildir has no `new/` for MaildirStore.watch to
-// install its watcher on, and mail stops syncing in silence.
+// A folder as plain files, the databases found and every directory: an empty Maildir `new/` carries no file to imply
+// it, and without it a restored mailbox has nothing for MaildirStore.watch to watch, so mail stops syncing.
 type FileTree = { files: string[]; dirs: string[]; databases: string[] };
 
 export async function listFileTree(root: string, skipDir: (rel: string) => boolean = () => false): Promise<FileTree> {
@@ -101,12 +97,8 @@ export async function treeBytes(root: string, skipDir: (rel: string) => boolean 
     return walk('');
 }
 
-// Writes a storage-independent copy of one home into `{targetDir}/home-{ownerId}/` and returns the
-// manifest describing it. Every database copy is internally consistent (VACUUM INTO); the folder as a
-// whole is not one instant, which is the standard guarantee for a live-system backup — the home keeps
-// serving its user throughout. `full-s3`, the default, always holds a complete home. The other levels
-// are capture modes of the whole-server archive: their manifest says what they left out (BackupLevel),
-// and a Full member of a home with no s3 mount left out nothing (incompleteReason).
+// Writes a storage-independent copy of one home into `{targetDir}/home-{ownerId}/` and returns its manifest. Each
+// database copy is one committed state, the folder as a whole is not one instant: the home keeps serving its user.
 export async function snapshotHome(
     home: Home,
     targetDir: string,
@@ -120,9 +112,7 @@ export async function snapshotHome(
     fs.mkdirSync(folder, { recursive: true });
     const entries: BackupEntry[] = [];
 
-    // Eigen's own databases, counted as they are staged: a file a user happens to have uploaded
-    // called `notes.db` is a file, and the manifest's counts have to say so (verify draws the same
-    // line when it decides what it may open).
+    // Counted as they are staged: a user's upload called `notes.db` is a file, as verify sees it too.
     let databases = 0;
     const stageDatabase = async (config: DatabaseConfig<SchemaType>, relPath: string): Promise<void> => {
         const managed = await home.getLocalDatabase(config, relPath);
@@ -139,21 +129,15 @@ export async function snapshotHome(
     }
 
     const mounts = home.drive.getMounts();
-    // Every mount the home declares, not only the ones it serves: a disabled mount, and an enabled one
-    // whose init failed, are not in the drive's map and their folders are walked by nothing else here,
-    // so an archive without them is a restore that drops them. A disabled one comes back disabled,
-    // because settings.json rides along as it is.
+    // Every mount the home declares: a disabled one, or one whose init failed, is not in the drive's map, and an
+    // archive without it is a restore that drops it.
     const unserved = Object.entries(home.settings.get().mounts ?? {}).filter(
         ([id]) => !mounts.some((mount) => mount.id === id),
     );
     const mountSummaries: BackupManifest['mounts'] = [];
 
-    // One mount's own bytes, enabled or disabled: its metadata.db, whatever else the level takes of
-    // it, and the summary row. metadata.db is counted as a database, so the summary means the files
-    // the archive holds for this mount. Light takes no more; Full leaves an s3 mount's objects to its
-    // bucket (whose versioning is their history) and takes the uploads still in staging/ instead.
-    // Light reads no storage, so it hands over no Mount, and a mount without one is its metadata.db
-    // alone: a disabled mount whose storage cannot even be built keeps that much at Light.
+    // One mount: its metadata.db, what the level takes of its files, and its summary. Full leaves an s3 mount's
+    // objects to its bucket's versioning and takes its staged uploads; Light reads no storage, so it gets no Mount.
     const archiveMount = async (config: MountConfig, mount?: Mount): Promise<void> => {
         const stagedOnly = level === 'full' && mount?.isRemote === true;
         const metadataOnly = !mount || stagedOnly;
@@ -197,19 +181,13 @@ export async function snapshotHome(
         // are written before the drive creates its folder.
         if (!fs.existsSync(path.join(home.homeDir, relMetadata))) continue;
         const config = createMountConfig(id, settings);
-        // Where the archive stands before this mount: a mount that turns out to be unreadable is
-        // taken back out again, entries and all, so the folder never holds bytes the manifest does
-        // not list (which is what verify's transport stage would fail it on).
+        // A mount that turns out unreadable is taken back out, so the folder holds nothing the manifest does not list.
         const entriesBefore = entries.length;
         const databasesBefore = databases;
         let mount: Mount | undefined;
         try {
-            // Archived through the same Mount a served one goes through: one spelling of the capture
-            // rules (freshest-first, managed databases, manifest entries) for both. Opened passively
-            // because the drive does not serve this one: nothing is created, purged or
-            // uploaded (Mount.init). Its metadata.db is the Home's own cached handle, the one
-            // archiveMount stages its copy from, so this opens nothing a second time. Light builds
-            // no Mount at all.
+            // Through the same Mount as a served one, so the capture rules are spelled once; passive, since nothing
+            // serves it, so nothing is created, purged or uploaded.
             if (level === 'light') {
                 await archiveMount(config);
             } else {
@@ -218,10 +196,8 @@ export async function snapshotHome(
                 await archiveMount(config, mount);
             }
         } catch (error) {
-            // An enabled mount that cannot be opened fails the backup: that archive would be missing
-            // files the home should be serving. One an admin turned off must not fail the backup of
-            // everything else, since its storage is often unreachable because it was turned off. It is
-            // recorded as skipped with the reason instead, and a restore leaves it disabled and absent.
+            // An enabled mount that cannot open fails the backup, which would miss files the home serves. One turned
+            // off is often unreachable for that reason: it is skipped with the reason.
             if (settings.enabled) throw new Error(`mount ${id} cannot be opened: ${describeError(error)}`);
             entries.length = entriesBefore;
             databases = databasesBefore;
@@ -230,11 +206,7 @@ export async function snapshotHome(
             console.warn(`[backup] ${ownerId}: disabled mount ${id} was skipped — ${skipped}`);
             mountSummaries.push({ id, storageType: config.storageType, files: 0, bytes: 0, skipped });
         } finally {
-            // The Drive's own teardown for a mount it drops (Drive.removeMount): this one opened no
-            // document database and never reconciled its queue, so it cancels the queue's timer and
-            // returns. It cannot flush at shutdown either — gracefulShutdown runs drainBackupJobs
-            // before setShutdownDrainDeadline. metadata.db stays open: it belongs to the Home's
-            // cache, which closes it when the home evicts.
+            // Drive.removeMount's teardown; metadata.db stays open, as it is the Home's cached handle.
             await mount?.closeAllDatabases();
         }
         onProgress?.('mounts', mounts.length + index + 1, total);
@@ -243,7 +215,6 @@ export async function snapshotHome(
     // The home outside its mounts and its databases.
     const tree = await listFileTree(home.homeDir, (rel) => isSkippedHomeDir(rel, level));
     // A home database missing from HOME_DATABASES would be dropped from every archive in silence.
-    // Fail loudly instead, so a new subsystem's db is noticed the day it lands.
     const unlisted = tree.databases.find((rel) => !HOME_DATABASE_PATHS.has(rel));
     if (unlisted) throw new Error(`snapshotHome: unlisted home database ${unlisted} — add it to HOME_DATABASES`);
     for (const rel of tree.dirs) fs.mkdirSync(path.join(folder, ARCHIVE_HOME_DIR, rel), { recursive: true });

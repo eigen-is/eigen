@@ -16,13 +16,9 @@ import { ApiError } from '../core/errors';
 import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath, sidecarPath } from './paths';
 import type { SnapshotProgress } from './snapshot-home';
 
-// An artifact is a plain POSIX tar (pax for long paths) piped through zstd, so `tar --zstd -xf`
-// unpacks one on any machine. The tar is generated entry by entry into the compressor rather than
-// built with Bun.Archive.write, which holds the whole archive in memory (measured on Bun 1.3.14: a
-// 1.2 GB folder peaked at 3.9 GB RSS, against 0.1 GB for the stream below). Reading is this file's
-// own parser for a reason of its own: Bun.Archive (libarchive on Bun 1.3.14) stops at the first
-// entry name that is not ASCII, and segfaults on a ustar one, so every home holding an accented
-// file name would read back as a folder without a manifest, or take the process down.
+// An artifact is a plain POSIX tar (pax for long paths) piped through zstd, so `tar --zstd -xf` unpacks one
+// anywhere. Written and read here, not with Bun.Archive: its writer holds the whole archive in memory, and its
+// reader stops at the first non-ASCII name and segfaults on a ustar one.
 const BLOCK = 512;
 const NAME_FIELD = 100;
 // The biggest size a header's 11 octal digits hold (8 GiB); above it the size goes in base-256.
@@ -165,8 +161,7 @@ async function* tarChunks(dir: string, rootName: string, onProgress?: SnapshotPr
 
     yield* directory(`${rootName}/`, fs.statSync(dir).mtimeMs);
     for (const [index, rel] of relPaths.entries()) {
-        // Packing dominates a large home's wall clock, so it reports per entry: one `pack` step for
-        // the whole folder left the admin pane's bar at 0% for 38 of a 40-second job.
+        // Packing dominates a large home's wall clock, so it reports per entry.
         onProgress?.('pack', index + 1, relPaths.length);
         const abs = path.join(dir, rel);
         const stat = fs.statSync(abs);
