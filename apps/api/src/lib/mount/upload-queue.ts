@@ -40,7 +40,7 @@ export type UploadQueueDeps = {
 // setTimeout, so there is no process-global sweep or registry. Timed-out PUTs are tracked as
 // in-process orphans and repaired when they settle (trackOrphan). Producers (sync/close/create,
 // snapshots) stage a copy then call enqueueStaged; a home restore writes its rows into
-// pending_uploads directly and lets mount init pick them up (lib/backup/materialize.ts);
+// pending_uploads directly and lets mount init pick them up (lib/backup/materialize-mount.ts);
 // delete/restore call cancel; mount init calls reconcile; shutdown races drain({flushNow}) against
 // its deadline, then calls close.
 export class UploadQueue {

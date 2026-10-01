@@ -6,7 +6,8 @@ export type EigenFont = {
 };
 
 // Order is load-bearing: numeric xlsx font indices (ff) index into this array, [0] is the
-// document default everywhere, and each category maps to exactly one bundled font.
+// default in docs and sheets (the canvas has its own, DEFAULT_FONT_FAMILY), and each category
+// maps to exactly one bundled font.
 export const EIGEN_FONTS: EigenFont[] = [
     { name: 'Inter', family: "'Inter', sans-serif", category: 'sans-serif', weights: [400, 500, 600, 700] },
     { name: 'Source Serif 4', family: "'Source Serif 4', serif", category: 'serif', weights: [400, 600, 700] },
