@@ -2,7 +2,7 @@
 
 > **TLDR:** CardDAV is how a contacts app on a phone or a desktop syncs a user's one address book. Eigen serves it (RFC 6352) at `/dav/addressbooks/:ownerId/contacts/`. The protocol layer is `apps/api/src/lib/carddav/`, a near twin of `caldav/` that shares `lib/dav/`. The book is vCard 3.0 in storage and on the wire. The storage model is in [CONTACTS.md](CONTACTS.md).
 
-CardDAV is the address-book twin of CalDAV, and [CALDAV.md](CALDAV.md) explains the words both use: principal, collection, resource, ETag, ctag and sync token. A client such as Apple Contacts, Thunderbird or DAVx⁵ on Android signs in with an app password, finds the principal, and syncs one collection, the book. Each card is one resource, a `.vcf` file holding the vCard text that [CONTACTS.md](CONTACTS.md) stores byte for byte, so CardDAV has no storage of its own.
+CardDAV is the address-book twin of CalDAV, and [CALDAV.md](CALDAV.md) explains the words both use: principal, collection, resource, ETag, ctag and sync token. A client such as Apple Contacts, Thunderbird or DAVx⁵ on Android signs in with an app password, finds the principal, and syncs one collection, the book. Each card is one resource, a `.vcf` file holding the vCard text that [CONTACTS.md](CONTACTS.md) stores, so CardDAV has no storage of its own.
 
 The sections cover the routes and discovery, the privileges Apple needs, the 3.0 transcode, how a PUT is judged, sync and REPORTs. Five things in them surprise people:
 
