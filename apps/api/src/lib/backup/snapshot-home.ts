@@ -95,18 +95,19 @@ function renamedMessage(homeDir: string, rel: string): string | null {
 // server backup sizes every home with it while the server runs, so a file or folder gone since its listing counts
 // nothing. A folder's files are statted together, its subfolders walked one at a time to keep few handles open.
 export async function treeBytes(root: string, skipDir: (rel: string) => boolean = () => false): Promise<number> {
-    const gone =
-        <T>(value: T) =>
-        (error: unknown): T => {
-            if (isEnoent(error)) return value;
-            throw error;
-        };
     const walk = async (relDir: string): Promise<number> => {
-        const entries = await fsp.readdir(path.join(root, relDir), { withFileTypes: true }).catch(gone([]));
+        const entries = await fsp
+            .readdir(path.join(root, relDir), { withFileTypes: true })
+            .catch((error) => (isEnoent(error) ? [] : Promise.reject(error)));
         const rel = (name: string) => (relDir ? `${relDir}/${name}` : name);
         const files = entries.filter((entry) => entry.isFile() && !JOURNAL_FILE.test(entry.name));
         const sizes = await Promise.all(
-            files.map((entry) => fsp.stat(path.join(root, rel(entry.name))).then((stat) => stat.size, gone(0))),
+            files.map((entry) =>
+                fsp.stat(path.join(root, rel(entry.name))).then(
+                    (stat) => stat.size,
+                    (error) => (isEnoent(error) ? 0 : Promise.reject(error)),
+                ),
+            ),
         );
         let bytes = sizes.reduce((sum, size) => sum + size, 0);
         for (const entry of entries) {
@@ -121,7 +122,6 @@ export async function treeBytes(root: string, skipDir: (rel: string) => boolean 
 // server backup's room check sizes every home before it starts. Full is every local byte. Light
 // walks no Maildir and of each mount only its metadata.db. Full + S3 adds each s3 mount's objects.
 export async function captureBytes(homeDir: string, level: BackupLevel): Promise<number> {
-    if (!fs.existsSync(homeDir)) return 0;
     if (level === 'light') return treeBytes(homeDir, isLightSkipped);
     const local = await treeBytes(homeDir);
     if (level === 'full') return local;

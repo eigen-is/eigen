@@ -64,15 +64,6 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, SERVER_FILES.setti
     backups: DEFAULT_BACKUPS,
 });
 
-let loaded = false;
-
-async function ensureLoaded() {
-    if (!loaded) {
-        await settingsStore.load();
-        loaded = true;
-    }
-}
-
 export function getServerSettings(): ServerSettings {
     return settingsStore.get();
 }
@@ -93,4 +84,4 @@ export function getS3Config(): S3Config | undefined {
     return getServerSettings().defaults.mount.s3Config;
 }
 
-await ensureLoaded();
+await settingsStore.load();
