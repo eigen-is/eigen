@@ -1,6 +1,6 @@
 import { cleanupInactiveGuests } from '../auth/guest-cleanup';
 import { describeError } from '../backup/errors';
-import { alertOwner, hasRecentPreUpdateBackup, hasScheduledAttemptOn, startServerBackup } from '../backup/server-job';
+import { alertOwner, hasScheduledAttemptOn, startServerBackup } from '../backup/server-job';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { scheduleInterval } from './scheduler';
@@ -12,12 +12,11 @@ const SERVER_BACKUP_TICK_MS = 5 * 60 * 1000;
 let alertedOn: string | null = null;
 
 // One scheduled attempt per UTC day, from the owner's hour on. The backups folder is the record of
-// what ran, so a restart neither skips the night nor doubles it.
+// what ran, so a restart neither skips the night nor doubles it; one that kills the attempt costs it.
 export async function serverBackupTick(): Promise<void> {
     const now = new Date();
     const { enabled, hourUtc, withS3 } = getServerSettings().backups.schedule;
     if (!enabled || now.getUTCHours() < hourUtc || hasScheduledAttemptOn(now)) return;
-    if (await hasRecentPreUpdateBackup(now)) return;
     try {
         await startServerBackup({ level: withS3 ? 'full-s3' : 'full', reason: 'scheduled' });
     } catch (error) {

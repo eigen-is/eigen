@@ -292,20 +292,6 @@ export function hasScheduledAttemptOn(day: Date): boolean {
     );
 }
 
-// ./eigen update stops Eigen soon after its backup, and a scheduled Full started in between would die with the stop
-// or hold the update up. The window covers the steps between the two.
-const UPDATE_STOP_WINDOW_MS = 15 * 60 * 1000;
-
-export async function hasRecentPreUpdateBackup(now: Date): Promise<boolean> {
-    const archives = await listServerArchives();
-    return archives.some(
-        (archive) =>
-            archive.reason === 'pre-update' &&
-            archive.record?.finishedAt !== undefined &&
-            now.getTime() - archive.record.finishedAt.getTime() < UPDATE_STOP_WINDOW_MS,
-    );
-}
-
 // An archive and its record go together, and a refused attempt's record alone. One still being
 // written is refused: its job would write the record back when it ends. The job map says so
 // whatever the record reads: a record left running with no job behind it lost its final write.
