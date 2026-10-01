@@ -120,7 +120,7 @@ function parseJson(text: string): unknown {
     }
 }
 
-function isKind(value: string): value is BackupManifest['kind'] {
+function isKind(value: unknown): value is BackupManifest['kind'] {
     return BACKUP_KINDS.some((kind) => kind === value);
 }
 
@@ -198,7 +198,6 @@ function isManifest(value: unknown): value is BackupManifest {
         'formatVersion' in value &&
         value.formatVersion === BACKUP_FORMAT_VERSION &&
         'kind' in value &&
-        typeof value.kind === 'string' &&
         isKind(value.kind) &&
         'ownerId' in value &&
         typeof value.ownerId === 'string' &&
