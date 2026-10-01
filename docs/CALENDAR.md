@@ -1,10 +1,31 @@
 # Calendar
 
-> **TLDR:** A calendar event series is its VCALENDAR bytes: the `ics` BLOB of one `resources` row in the Home's `calendar.db`, with the `events` rows beside it as a projection that rebuilds from them. The store is `apps/api/src/lib/calendar/`, the format layer `lib/ical/`, the app `apps/calendar/`; the CalDAV server has [CALDAV.md](CALDAV.md). Not obvious from the code: Eigen's own facts ride inside the bytes as `X-EIGEN-*` lines no client can forge, and an invitation's link is one of them, never the `ORGANIZER` address. A web save patches only what moved, while a CalDAV PUT replaces the file. Inbound iMIP acts only for a sender our own MTA verified.
+> **TLDR:** Each user, and each team that turns it on, has calendars of events in one SQLite database per Home. An event is kept as the iCalendar text that was written for it, byte for byte, and that text is the truth. Beside it the database keeps extracted fields such as title, start and end, so the app can query fast, and those can be rebuilt from the text at any time. The store is `apps/api/src/lib/calendar/`, the iCalendar reading and writing is `apps/api/src/lib/ical/`, the web app is `apps/calendar/`, and the CalDAV server has [CALDAV.md](CALDAV.md).
+
+A user has one or more calendars, and each calendar holds events. A calendar can be shared with other users and with teams. A team can have calendars too, once an admin turns that on. Guests have no calendar.
+
+An event gets in and out in four ways. The web app talks to the REST routes in `apps/api/src/routes/calendar.ts`. A calendar client such as Apple Calendar or Thunderbird syncs over CalDAV. An invitation travels between Eigen users directly, and to and from everyone else by mail. That mail format is iMIP (RFC 6047): a mail that carries a small iCalendar file. And a whole `.ics` file can be imported or exported.
+
+All of it lives in one file per Home, `eigen.calendar/calendar.db`. A Home is the data folder of one user or one team ([STORAGE.md](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)), so there is one database per owner, not one per calendar. The calendars are rows in its `calendars` table.
+
+The truth for an event is its iCalendar text (RFC 5545, the `.ics` format): a `VCALENDAR` wrapper with one `VEVENT` block per event inside. Eigen stores that text exactly as it was written, in the `ics` column of a row in the `resources` table. A resource is one such stored file, the unit a CalDAV client reads and writes. It holds one series: an event with all its repeats. When someone changes a single occurrence of a series, iCalendar writes the changed occurrence as an extra `VEVENT`, called an override, and it lives in the same resource. Keeping the text as written means nothing a client sent is lost. A reminder setting or a property Eigen has never heard of goes back to that client unchanged on its next sync.
+
+The text sits in a database column and not in `.ics` files on disk, for two reasons. One transaction writes the text together with everything derived from it, so a crash can't leave the two disagreeing. And only the API process opens the database, so there are no watchers and nothing to reconcile, unlike mail, where Dovecot changes the files too ([IMAP.md](IMAP.md)).
+
+Parsing iCalendar text for every "what happens this week" would be slow. So each write also fills the `events` table: one row per `VEVENT` and one per cancelled occurrence, with the title, the start and end, the repeat rule and the guests as columns. The resource row has a few derived columns of its own. Together these are the projection. None of it is truth, because all of it can be thrown away and computed again from the stored text.
+
+Two more terms come back in every section. A stamp is an `X-EIGEN-*` line Eigen adds to the text for a fact iCalendar has no field for, such as who created the event. A linked copy is the event an invitation puts in a guest's own calendar: an ordinary resource with a stamp that names the organizer's event.
+
+The sections run in this order: how an event is stored and written, time zones, repeats, sharing and quota, invitations between Eigen users, invitations by mail, import and export. Four things in them surprise people:
+
+- No client can write a stamp, and an invitation's link to its organizer is a stamp, never the `ORGANIZER` address ([§ Eigen's own facts ride as X-EIGEN- lines](#eigens-own-facts-ride-as-x-eigen--lines-no-client-can-write)).
+- A web save patches only what moved, while a CalDAV PUT replaces the file ([§ A web save patches what moved](#a-web-save-patches-what-moved-and-a-caldav-put-replaces-the-file)).
+- A repeat is expanded on every read and never stored ([§ Recurrence is expanded per read](#recurrence-is-expanded-per-read-never-stored)).
+- An invitation by mail acts only for a sender our own mail server verified ([§ Inbound iMIP](#inbound-imip-acts-only-on-a-sender-our-own-mta-verified)).
 
 ## The stored bytes are the event, and every column is a projection
 
-Each Home has one `eigen.calendar/calendar.db`. Only the API process opens it, so unlike mail there are no watchers and nothing to reconcile ([IMAP.md](IMAP.md)). How a resource and a calendar are named is in [CALDAV.md](CALDAV.md#eigen-names-what-it-creates-and-keeps-a-clients-name-as-written). A resource row holds the bytes a client wrote, `VALARM` details and unknown properties included, and the SHA-256 of those bytes is its etag. A CalDAV GET serves them back verbatim ([CALDAV.md](CALDAV.md#get-serves-the-stored-bytes-and-put-answers-an-etag-only-for-bytes-it-kept)).
+A resource row holds the bytes a client wrote, `VALARM` details and unknown properties included, and the SHA-256 of those bytes is its etag. A CalDAV GET serves them back verbatim ([CALDAV.md](CALDAV.md#get-serves-the-stored-bytes-and-put-answers-an-etag-only-for-bytes-it-kept)). How a resource and a calendar are named is in [CALDAV.md](CALDAV.md#eigen-names-what-it-creates-and-keeps-a-clients-name-as-written).
 
 The `events` rows, `uid`, `etag` and `hasUnindexedRecurrence` are projected from the bytes. `rebuildProjection` (`calendar.ts`) rewrites all of them from the blobs in one transaction, and `apps/api/src/test/calendar/resource-store.test.ts` pins that contract. A new projected column is added by altering the table and calling it.
 
@@ -12,7 +33,7 @@ Some facts no VCALENDAR can hold live only in the database: a calendar's name, c
 
 ## One resource holds one series
 
-A resource holds one UID: its master VEVENT, one override VEVENT per edited occurrence, and the VTIMEZONE of every TZID they name. A PUT carrying two UIDs is refused, or a second UID's overrides would hang off the first master.
+A resource holds one UID, the id iCalendar gives a series. Under it sit the master VEVENT, which carries the repeat rule, one override VEVENT per edited occurrence, and a VTIMEZONE, the definition of a time zone, for every TZID they name. A PUT carrying two UIDs is refused, or a second UID's overrides would hang off the first master.
 
 Eigen cancels one occurrence with an `EXDATE` on the master, never with a `STATUS:CANCELLED` override. Thunderbird omits such an override from its next PUT, and the full replace would read that as "the client removed the exception" and bring the occurrence back. Cancelling a moved override is the one path that still stores one ([ROADMAP.md](ROADMAP.md)). Deleting an occurrence that is already cancelled puts it back, whichever of the two spellings a client used.
 
