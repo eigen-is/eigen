@@ -1278,6 +1278,15 @@ describe('an interrupted swap', () => {
         expect(result.stderr).toContain('does not read as a swap');
         expect(result.stderr).not.toContain('SyntaxError');
     });
+
+    test('a marker of another shape is refused with what to do, not a stack', async () => {
+        const dir = install();
+        writeFileSync(join(dir, SWAP_MARKER), JSON.stringify({ archive: 'another-build', steps: [] }));
+        const result = await swap(dir);
+        expect(result.code).toBe(1);
+        expect(result.stderr).toContain('does not read as a swap');
+        expect(result.stderr).not.toContain('TypeError');
+    });
 });
 
 function stagedS3Mount(dir: string): string {

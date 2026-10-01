@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1596 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1600 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -888,7 +888,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (744)
+## Utilities & constants (748)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1070,7 +1070,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `writeCardToDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
 | `APP_URLS` | `@workspace/lib/constants` | packages/lib/src/constants/app-urls.ts |
-| `BACKUP_DESTINATION_NOTICE` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `BACKUP_KEEP_MAX` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `BACKUP_LEVEL_NAMES` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
 | `BACKUP_UPLOAD_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/backup.ts |
@@ -1330,13 +1329,16 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VCARD_ACCEPT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `VCARD_MIMES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `withEigenExtension` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `BACKUP_JOB_STATES` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BACKUP_KINDS` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BACKUP_VERIFY_STATUSES` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `toAttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `BACKUP_ARTIFACT_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `BACKUP_FORMAT_VERSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `BACKUP_HOME_PREFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
-| `BACKUP_LEVELS` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `BACKUP_LEVELS` | `@workspace/lib/validation` | packages/lib/src/types/backup.ts |
 | `BACKUP_OWNER_ID` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
-| `BACKUP_REASONS` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `BACKUP_REASONS` | `@workspace/lib/validation` | packages/lib/src/types/backup.ts |
 | `BACKUP_STAMP_PATTERN` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `buildBackupStamp` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `canUploadServerArchive` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
@@ -1357,7 +1359,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseHomeMountSettings` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `parseServerArchiveManifest` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `parseServerArchiveName` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `parseServerArchiveNames` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `parseServerArchiveSidecar` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `parseStringRecord` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `PRE_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `ROLE_MAILBOX_LOCAL_PARTS` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
 | `SERVER_ARCHIVE_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |

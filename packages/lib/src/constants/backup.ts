@@ -13,10 +13,3 @@ export const BACKUP_KEEP_MAX = 365;
 
 // A level as the owner reads it, in ./eigen backup and the admin pane alike.
 export const BACKUP_LEVEL_NAMES: Record<BackupLevel, string> = { light: 'Light', full: 'Full', 'full-s3': 'Full + S3' };
-
-// Said once, when the owner saves a backup bucket: the archives in it are not encrypted, and its keys
-// are inside them, so a restore on a new machine starts from a copy kept elsewhere.
-export const BACKUP_DESTINATION_NOTICE =
-    "Write down this bucket's endpoint, name and keys, and keep them somewhere other than this server. " +
-    'A restore on a new machine starts from them: the only other copy is inside the backups. ' +
-    'The backups are not encrypted, so keep the bucket private and its keys scoped to it.';

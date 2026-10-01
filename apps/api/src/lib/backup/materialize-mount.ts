@@ -77,14 +77,6 @@ export function materializeMount(
     summary: BackupManifest['mounts'][number],
     stamp: string,
 ): VersionedDatabase[] {
-    // restoreHome refuses such an archive from its manifest; here the harm would be: an s3 mount's rows get fresh
-    // keys below, and every file would read as missing.
-    if (summary.contents === 'metadata') {
-        throw new ApiError(
-            400,
-            `Mount ${summary.id} holds only its metadata in the archive, not its files, so it cannot be restored`,
-        );
-    }
     const mountDir = requireMountDir(homeDir, summary.id);
     const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
     const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);

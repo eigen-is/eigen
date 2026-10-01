@@ -10,7 +10,8 @@ import {
     getBackupsDir,
     serverSidecarPath,
 } from '../../lib/backup/paths';
-import { readServerSidecar, startServerBackup } from '../../lib/backup/server-job';
+import { readServerSidecar } from '../../lib/backup/server-archives';
+import { startServerBackup } from '../../lib/backup/server-job';
 import * as upload from '../../lib/backup/upload';
 import { backupKey, checkBackupDestination, uploadServerArchive } from '../../lib/backup/upload';
 import { getDataRoot, USER_HOMES_DIR } from '../../lib/config/paths';
