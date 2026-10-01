@@ -25,7 +25,7 @@ Each night Eigen makes a Full backup, checks it, and deletes the oldest nightly 
 
 When a user or team keeps files in an S3 bucket, **Include files in S3 buckets** appears too. See [Drives in an S3 bucket](#drives-in-an-s3-bucket).
 
-A backup that fails, one with warnings, or a copy that does not reach the bucket, sends the owner a notification. `./eigen status` shows it too. A warning names a user or team whose files are gone from their disk or bucket: that user or team is in the backup without those files, as their account stands now. A backup with warnings still restores, and `./eigen backup` and `./eigen update` go on.
+A backup that fails, one with warnings, or a copy that does not reach the bucket, sends the owner a notification. `./eigen status` shows it too. A warning names a user or team whose files are gone from their disk or bucket: that user or team is in the backup without those files, as their account stands now. A backup with warnings still restores, and `./eigen backup` and `./eigen update` go on, naming each user or team with warnings.
 
 ## Keep a copy off the server
 

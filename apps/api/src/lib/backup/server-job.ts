@@ -217,10 +217,12 @@ async function runServerBackup(
             throw new Error(`${failed.length} of ${sidecar.manifest.homes.length} homes failed: ${named}`);
         }
         sidecar.state = 'done';
-        const warned = sidecar.manifest.homes.filter((home) => home.warnings);
+        const warned = sidecar.manifest.homes.flatMap((home) =>
+            home.warnings?.length ? [`${home.name} (${home.warnings.join('; ')})`] : [],
+        );
         if (warned.length > 0) {
-            const named = warned.map((home) => `${home.name} (${home.warnings?.join('; ')})`).join('; ');
-            const body = `${warned.length} of ${sidecar.manifest.homes.length} homes have warnings: ${named}`;
+            job.warnings = warned;
+            const body = `${warned.length} of ${sidecar.manifest.homes.length} homes have warnings: ${warned.join('; ')}`;
             alertOwner('Server backup has warnings', body, `server-backup-warnings-${name}`).catch(() => {});
         }
     } catch (error) {
@@ -349,12 +351,23 @@ export async function startServerBackup({
 
 // What ./eigen backup follows over the control socket: plain JSON with no dates, since the CLI reads it
 // without Eden's reviver. `bytes` is null until the archive is renamed into place.
-export type ControlBackupJob = Pick<BackupJob, 'id' | 'state' | 'progress' | 'artifact' | 'error' | 'uploadJobId'> & {
+export type ControlBackupJob = Pick<
+    BackupJob,
+    'id' | 'state' | 'progress' | 'artifact' | 'error' | 'uploadJobId' | 'warnings'
+> & {
     bytes: number | null;
 };
 
-export function toControlJob({ id, state, progress, artifact, error, uploadJobId }: BackupJob): ControlBackupJob {
+export function toControlJob({
+    id,
+    state,
+    progress,
+    artifact,
+    error,
+    uploadJobId,
+    warnings,
+}: BackupJob): ControlBackupJob {
     const archivePath = artifact && path.join(backupsDirPath(), artifact);
     const bytes = archivePath ? (fs.statSync(archivePath, { throwIfNoEntry: false })?.size ?? null) : null;
-    return { id, state, progress, artifact, error, uploadJobId, bytes };
+    return { id, state, progress, artifact, error, uploadJobId, warnings, bytes };
 }

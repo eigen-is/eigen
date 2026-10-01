@@ -240,7 +240,7 @@ The API reads `.env.production` through a read-only mount at `EIGEN_ENV_FILE`, a
 
 A home whose capture or verify fails gets `failed` with the reason in the manifest, and the loop carries on: one broken bucket must not leave every other home without a backup. The job then ends failed, naming the homes, and the owner is alerted. The archive is kept, verified and uploaded all the same. A home deleted during the run is `skipped`, which is no failure.
 
-A home backed up with warnings has its member, and its entry carries the member's `warnings`. The job ends done, so `./eigen backup` exits 0 and `./eigen update` goes on, and the owner gets an alert of its own. Such an archive is not complete: `isCompleteArchive` (`packages/lib/src/validation/backup.ts`) is false when any home failed or has warnings, and it is the one test local retention, the bucket's partial marker and the status row use. So warned nights never push out the last complete archive.
+A home backed up with warnings has its member, and its entry carries the member's `warnings`. The job ends done, so `./eigen backup` exits 0 and `./eigen update` goes on, and the owner gets an alert of its own. The job's `warnings` name each such home, which `./eigen backup` prints as `▲` lines and `./eigen update` repeats from its log, since its step line alone hides them. Such an archive is not complete: `isCompleteArchive` (`packages/lib/src/validation/backup.ts`) is false when any home failed or has warnings, and it is the one test local retention, the bucket's partial marker and the status row use. So warned nights never push out the last complete archive.
 
 ## The schedule makes one attempt per UTC day
 

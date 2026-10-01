@@ -159,6 +159,8 @@ export type BackupJob = {
     error?: string;
     // A server backup's archive goes up in an upload job of its own, started as it ends: this is its id.
     uploadJobId?: string;
+    // A server backup that ended done with homes backed up with warnings: one line per home, its name and warnings.
+    warnings?: string[];
     startedAt: Date;
     finishedAt?: Date;
 };

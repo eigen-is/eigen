@@ -556,18 +556,25 @@ describe('the server backup on the control socket', () => {
         );
 
         test(
-            'a backup with a home backed up with warnings exits 0, so the update after it goes on',
+            'a backup with a home backed up with warnings names them and exits 0, so the update after it goes on',
             async () => {
                 const pull = homeRelay.pullHomeSnapshot;
                 const warned = spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (...args) => ({
                     ...(await pull(...args)),
                     warnings: ['mount default: files with no object in storage, archived without their bytes: a.png'],
                 }));
-                const { stdout, code } = await runCli(['backup', '--level', 'light', '--reason', 'pre-update']).finally(
-                    () => warned.mockRestore(),
-                );
+                const { stdout, stderr, code } = await runCli([
+                    'backup',
+                    '--level',
+                    'light',
+                    '--reason',
+                    'pre-update',
+                ]).finally(() => warned.mockRestore());
                 expect(code).toBe(0);
                 expect(stdout).toMatch(/\narchive=server-pre-update-light-\d{8}-\d{6}\.tar\n$/);
+                expect(stderr).toMatch(
+                    /^▲ {2}Backed up with warnings: .+ \(mount default: files with no object in storage, archived without their bytes: a\.png\)$/m,
+                );
             },
             JOB_TIMEOUT_MS,
         );
