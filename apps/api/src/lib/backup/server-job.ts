@@ -293,8 +293,12 @@ export async function startArchiveUpload(name: string, startedBy: string): Promi
     if (!canUploadServerArchive({ name, reason: parsed.reason, record }, { uploadEnabled, jobs: listBackupJobs() })) {
         // One upload of an archive at a time, a queued one included: a second would send it again.
         const busy = runningJobOn(name);
-        const why = busy ? (busy.kind === 'upload' ? 'is already being uploaded' : 'is still being written') : null;
-        throw new ApiError(409, `${name} ${why ?? 'did not verify, so it is not uploaded'}`);
+        const why = busy
+            ? busy.kind === 'upload'
+                ? 'is already being uploaded'
+                : 'is still being written'
+            : `${record ? 'did not verify' : 'has no readable record'}, so it is not uploaded`;
+        throw new ApiError(409, `${name} ${why}`);
     }
     return startUploadJob(archivePath, startedBy);
 }
