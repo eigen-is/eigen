@@ -84,8 +84,15 @@ function renamedMessage(homeDir: string, rel: string): string | null {
     const unique = path.basename(rel).split(':')[0];
     for (const sub of MESSAGE_DIRS) {
         const dir = path.join(path.dirname(box), sub);
-        const abs = path.join(homeDir, dir);
-        const name = fs.existsSync(abs) && fs.readdirSync(abs).find((found) => found.split(':')[0] === unique);
+        let names: string[];
+        try {
+            names = fs.readdirSync(path.join(homeDir, dir));
+        } catch (error) {
+            // The mail program can remove the whole mailbox meanwhile.
+            if (isEnoent(error)) continue;
+            throw error;
+        }
+        const name = names.find((found) => found.split(':')[0] === unique);
         if (name) return `${dir}/${name}`;
     }
     return null;
@@ -146,19 +153,25 @@ export async function snapshotHome(
     fs.mkdirSync(folder, { recursive: true });
     const entries: BackupEntry[] = [];
 
-    // Counted as they are staged: a user's upload called `notes.db` is a file, as verify sees it too.
-    let databases = 0;
+    const stagedPath = (relPath: string) => path.join(folder, ARCHIVE_HOME_DIR, relPath);
     const stageDatabase = async (config: DatabaseConfig<SchemaType>, relPath: string): Promise<void> => {
         const managed = await home.getLocalDatabase(config, relPath);
-        const destPath = path.join(folder, ARCHIVE_HOME_DIR, relPath);
-        fs.mkdirSync(path.dirname(destPath), { recursive: true });
-        managed.stageCopy(destPath);
-        entries.push(await captureWrittenFile(destPath, archiveHomePath(relPath)));
+        fs.mkdirSync(path.dirname(stagedPath(relPath)), { recursive: true });
+        managed.stageCopy(stagedPath(relPath));
+    };
+    // Counted as they are recorded: a user's upload called `notes.db` is a file, as verify sees it too. Hashed once
+    // nothing changes it: a mount's walk drops from its metadata.db the rows it found deleted for good.
+    let databases = 0;
+    const recordDatabase = async (relPath: string): Promise<void> => {
+        entries.push(await captureWrittenFile(stagedPath(relPath), archiveHomePath(relPath)));
         databases++;
     };
 
     for (const [index, [config, relPath]] of HOME_DATABASES.entries()) {
-        if (fs.existsSync(path.join(home.homeDir, relPath))) await stageDatabase(config, relPath);
+        if (fs.existsSync(path.join(home.homeDir, relPath))) {
+            await stageDatabase(config, relPath);
+            await recordDatabase(relPath);
+        }
         onProgress?.('databases', index + 1, HOME_DATABASES.length);
     }
 
@@ -182,10 +195,15 @@ export async function snapshotHome(
         if (mount) {
             const relFiles = archiveMountPath(mount.id, stagedOnly ? PATHS.DRIVE.STAGING_DIR : PATHS.DRIVE.DATA_DIR);
             const relThumbs = archiveMountPath(mount.id, PATHS.DRIVE.THUMBS_DIR);
-            const metadataPath = path.join(folder, ARCHIVE_HOME_DIR, relMetadata);
             const data = stagedOnly
                 ? await snapshotMountStaging(mount, path.join(folder, relFiles), relFiles)
-                : await snapshotMountData(mount, metadataPath, path.join(folder, relFiles), relFiles, onProgress);
+                : await snapshotMountData(
+                      mount,
+                      stagedPath(relMetadata),
+                      path.join(folder, relFiles),
+                      relFiles,
+                      onProgress,
+                  );
             const thumbs = await snapshotMountThumbs(
                 mount.thumbsDir,
                 path.join(folder, relThumbs),
@@ -195,6 +213,7 @@ export async function snapshotHome(
             mountEntries.push(...data.entries, ...thumbs);
             databases += data.databases;
         }
+        await recordDatabase(relMetadata);
         entries.push(...mountEntries);
         mountSummaries.push({
             id: config.id,

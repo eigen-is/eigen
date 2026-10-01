@@ -178,30 +178,33 @@ export async function stageManagedDbCopy(
         });
         if (staged) return true;
     }
-    const storageKey = await mount.getStorageKey(pathId);
-    // Copy SYNCHRONOUSLY: with no await between pendingStagedCopy's existsSync and the copy, a
-    // concurrent enqueue can't unlink it mid-read.
-    const pendingStaging = mount.pendingStagedCopy(storageKey);
-    if (pendingStaging) {
-        fs.copyFileSync(pendingStaging, destPath);
-        return true;
-    }
-    // Nothing pending: a live VACUUM INTO if the doc is open, else the storage object — which is
-    // current because every upload acked.
-    const cached = mount.documentDbs.get(pathId)?.db;
-    if (cached) {
-        cached.stageCopy(destPath);
-        return true;
-    }
-    // A GET, not a HEAD: a HEAD answers a missing bucket as a missing key, and false here is terminal.
-    try {
-        await writeTempWithHash(destPath, mount.storage.read(storageKey));
-        return true;
-    } catch (error) {
-        if (!isMissingObjectCause(error)) throw error;
-        fs.rmSync(destPath, { force: true });
-        return false;
-    }
+    // Shared, after the slot: an ancestor's rename on a by-name mount would move the object between its key and the read.
+    return mount.withTreeShared(async () => {
+        const storageKey = await mount.getStorageKey(pathId);
+        // Copy SYNCHRONOUSLY: with no await between pendingStagedCopy's existsSync and the copy, a
+        // concurrent enqueue can't unlink it mid-read.
+        const pendingStaging = mount.pendingStagedCopy(storageKey);
+        if (pendingStaging) {
+            fs.copyFileSync(pendingStaging, destPath);
+            return true;
+        }
+        // Nothing pending: a live VACUUM INTO if the doc is open, else the storage object — which is
+        // current because every upload acked.
+        const cached = mount.documentDbs.get(pathId)?.db;
+        if (cached) {
+            cached.stageCopy(destPath);
+            return true;
+        }
+        // A GET, not a HEAD: a HEAD answers a missing bucket as a missing key, and false here is terminal.
+        try {
+            await writeTempWithHash(destPath, mount.storage.read(storageKey));
+            return true;
+        } catch (error) {
+            if (!isMissingObjectCause(error)) throw error;
+            fs.rmSync(destPath, { force: true });
+            return false;
+        }
+    });
 }
 
 // Replaces the container's data.db with the file at `sourcePath` — a snapshot the

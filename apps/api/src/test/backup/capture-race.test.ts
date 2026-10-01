@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, spyOn, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
@@ -19,6 +19,7 @@ import {
     drivePut,
     driveUpload,
     ensureServer,
+    findOrFail,
     type TestUser,
 } from '../setup';
 import { snapshotInto, waitForJob } from './backup-test-helpers';
@@ -47,7 +48,23 @@ async function seed(user: TestUser) {
         await driveUpload(t, user.id, M, projects.id, new File([`report ${i}`], `report-${i}.txt`));
     const single = await driveUpload(t, user.id, M, root.id, new File(['single'], 'zz-single.txt'));
     const archive = await drivePost(t, user.id, M, `folder/${root.id}`, { folderName: 'Archive' });
-    return { projects, single, archive };
+    return { root, projects, single, archive };
+}
+
+// A document with one saved version, created after seed's files so the capture reaches it after its first plain read.
+async function seedDocument(user: TestUser, parentId: string) {
+    const t = user.sessionToken;
+    const doc = await drivePost(t, user.id, M, `folder/${parentId}/create/doc`, { fileName: 'Plan' });
+    const saved = await authedRequest(t, `/drive/${user.id}/${M}/file/${doc.id}/versions/save`, { method: 'POST' });
+    expect(saved.status).toBe(200);
+    const [version] = await assertJson<DrivePath[]>(
+        await authedRequest(t, `/drive/${user.id}/${M}/file/${doc.id}/versions`),
+    );
+    return { doc, version };
+}
+
+async function defaultMount(user: TestUser): Promise<Mount> {
+    return findOrFail((await getHome(user.id)).drive.getMounts(), (mount) => mount.id === M);
 }
 
 // The user's action starts right before the capture reads its first plain file and runs to its end, or until it
@@ -88,6 +105,21 @@ async function captureDuring(user: TestUser, action: () => Promise<unknown>) {
         const result = await snapshotInto(await getHome(user.id), 'full');
         await race.settled();
         return result;
+    } finally {
+        race.restore();
+    }
+}
+
+function backupJob(user: TestUser) {
+    return waitForJob(startBackupJob('backup', user.id, undefined, (s, p) => runHomeBackup(user.id, s, p)).id);
+}
+
+async function backupDuring(user: TestUser, action: () => Promise<unknown>) {
+    const race = duringCapture(action);
+    try {
+        const job = await backupJob(user);
+        await race.settled();
+        return job;
     } finally {
         race.restore();
     }
@@ -142,16 +174,92 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
-    test('a file deleted for good during the capture is left out, its archived row with no bytes', async () => {
+    test('a file deleted for good during the capture is left out, row and bytes, and the restored home backs up', async () => {
         const user = await raceUser('local-fullnames');
         const { single } = await seed(user);
-        await driveDelete(user.sessionToken, user.id, M, `path/${single.id}`);
+        const t = user.sessionToken;
+        await driveDelete(t, user.id, M, `path/${single.id}`);
+        const job = await backupDuring(user, () => driveDelete(t, user.id, M, `trash/${single.id}`));
+        expect(job.state).toBe('done');
+        await restoreHome(job.artifact!, user.id, `race-${Date.now()}`);
+        expect(await driveGetList(t, user.id, M, 'trash')).toEqual([]);
+        expect((await backupJob(user)).state).toBe('done');
+    }, 120_000);
+
+    test('a trashed document deleted for good during the capture is left out, row and bytes', async () => {
+        const user = await raceUser('local-fullnames');
+        const { root } = await seed(user);
+        const { doc } = await seedDocument(user, root.id);
+        await driveDelete(user.sessionToken, user.id, M, `path/${doc.id}`);
         const { manifest, folder } = await captureDuring(user, () =>
-            driveDelete(user.sessionToken, user.id, M, `trash/${single.id}`),
+            driveDelete(user.sessionToken, user.id, M, `trash/${doc.id}`),
         );
-        expect(archivedRow(folder, single.id)?.name).toBe('zz-single.txt');
-        expect(manifest.entries.some((entry) => entry.path.includes(single.id))).toBe(false);
+        expect(archivedRow(folder, doc.id)).toBeNull();
+        expect(manifest.entries.some((entry) => entry.path.includes(doc.id))).toBe(false);
         expect(archivedReports(folder)).toEqual(reportBodies);
+        expect((await verifyFolder(folder)).status).toBe('verified');
+    });
+
+    test('a version pruned during the capture is left out', async () => {
+        const user = await raceUser('local-fullnames');
+        const { root } = await seed(user);
+        const { version } = await seedDocument(user, root.id);
+        const mount = await defaultMount(user);
+        const { manifest, folder } = await captureDuring(user, () => mount.deletePath(version.id));
+        expect(archivedRow(folder, version.id)).toBeNull();
+        expect(manifest.entries.some((entry) => entry.path.endsWith(`versions/${version.name}`))).toBe(false);
+        expect(manifest.entries.some((entry) => entry.path.endsWith('Plan.eigendoc/data.db'))).toBe(true);
+        expect((await verifyFolder(folder)).status).toBe('verified');
+    });
+
+    test('a closed document whose folder is renamed between its key and its read is captured', async () => {
+        const user = await raceUser('local-fullnames');
+        const { projects } = await seed(user);
+        const { doc } = await seedDocument(user, projects.id);
+        const mount = await defaultMount(user);
+        const dataDb = findOrFail(await mount.listFolder(doc.id), (child) => child.name === 'data.db');
+        await mount.closeDatabase(dataDb.id);
+        // The rename runs to its end right after the capture resolved the key, unless the tree lock is held: a granted
+        // exclusive starts its body before withTreeExclusive returns, a queued one does not.
+        const getStorageKey = Mount.prototype.getStorageKey;
+        const withTreeExclusive = Mount.prototype.withTreeExclusive;
+        const blocked = Promise.withResolvers<void>();
+        let renamed: Promise<unknown> | undefined;
+        const exclusive = spyOn(Mount.prototype, 'withTreeExclusive').mockImplementation(function <T>(
+            this: Mount,
+            fn: () => Promise<T>,
+        ) {
+            let granted = false;
+            const result = withTreeExclusive.bind(this)(() => {
+                granted = true;
+                return fn();
+            });
+            if (!granted) blocked.resolve();
+            return result;
+        });
+        const keyOf = spyOn(Mount.prototype, 'getStorageKey').mockImplementation(async function (
+            this: Mount,
+            pathId: string,
+        ) {
+            const key = await getStorageKey.call(this, pathId);
+            if (pathId === dataDb.id && !renamed) {
+                renamed = drivePut(user.sessionToken, user.id, M, `path/${projects.id}/rename`, {
+                    newName: 'Projects 2026',
+                });
+                await Promise.race([renamed, blocked.promise]);
+            }
+            return key;
+        });
+        let folder: string;
+        try {
+            ({ folder } = await snapshotInto(await getHome(user.id), 'full'));
+            await renamed;
+        } finally {
+            keyOf.mockRestore();
+            exclusive.mockRestore();
+        }
+        expect(renamed).toBeDefined();
+        expect(existsSync(join(folder, 'home/mounts', M, 'data/Projects/Plan.eigendoc/data.db'))).toBe(true);
         expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
@@ -167,18 +275,9 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
     test('a folder moved during a backup job reads back after the restore', async () => {
         const user = await raceUser('local-fullnames');
         const { projects, archive } = await seed(user);
-        const race = duringCapture(() =>
+        const job = await backupDuring(user, () =>
             drivePut(user.sessionToken, user.id, M, `path/${projects.id}/move`, { targetParentId: archive.id }),
         );
-        let job: Awaited<ReturnType<typeof waitForJob>>;
-        try {
-            job = await waitForJob(
-                startBackupJob('backup', user.id, undefined, (s, p) => runHomeBackup(user.id, s, p)).id,
-            );
-            await race.settled();
-        } finally {
-            race.restore();
-        }
         expect(job.state).toBe('done');
         await restoreHome(job.artifact!, user.id, `race-${Date.now()}`);
         const t = user.sessionToken;

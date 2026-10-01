@@ -74,6 +74,8 @@ export async function snapshotMountData(
 
     const fileRows = rows.filter((row) => row.type === 'file');
     const entries: BackupEntry[] = [];
+    // The rows whose bytes are in the archive.
+    const held = new Set<string>();
     let databases = 0;
     for (const [index, row] of fileRows.entries()) {
         const relPath = archivePath(row, byId);
@@ -81,20 +83,29 @@ export async function snapshotMountData(
         const entryPath = `${relPrefix}/${relPath}`;
         const lostObject = (size: number, storageKey: string) =>
             new Error(`mount ${mount.id}: ${relPath} has ${size} bytes on record but no object at ${storageKey}`);
+        // Deleted for good since the copy: there are no bytes to take, and its row leaves the archive after the walk.
+        const isGone = async () => !(await mount.getPath(row.id));
 
         const container = managedDbContainer(row, byId);
         if (container) {
             fs.mkdirSync(path.dirname(destPath), { recursive: true });
             // A blocking lock: a raw read of the live main file would drop every commit still in the WAL. False is
-            // no bytes anywhere.
+            // no bytes anywhere. A gone row is never read: on a by-name mount its key resolves to the data/ folder.
             const copied = await mount
-                .withPathLock(container.id, () => stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'))
-                .catch(async (error: unknown) =>
-                    rethrowStorageFailure(mount.id, await mount.getStorageKey(row.id), error),
-                );
+                .withPathLock(
+                    container.id,
+                    async () => !(await isGone()) && stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'),
+                )
+                .catch(async (error: unknown) => {
+                    // Empty trash takes no path lock, so a row can still go between the check and the read.
+                    if (!(await isGone())) rethrowStorageFailure(mount.id, await mount.getStorageKey(row.id), error);
+                    fs.rmSync(destPath, { force: true });
+                    return false;
+                });
             if (copied) {
                 normalizeArchiveDatabase(destPath);
                 entries.push(await captureWrittenFile(destPath, entryPath));
+                held.add(row.id);
                 databases++;
             } else {
                 const live = await mount.getPath(row.id);
@@ -103,8 +114,6 @@ export async function snapshotMountData(
         } else {
             // Shared, as the mount's own key-derived reads: no rename moves the bytes between the key and the copy.
             const entry = await mount.withTreeShared(async () => {
-                // Deleted for good since the copy: its archived row keeps no bytes, as verify and restore allow.
-                const isGone = async () => !(await mount.getPath(row.id));
                 const live = await mount.getPath(row.id);
                 if (!live) return null;
                 const storageKey = await mount.getStorageKey(row.id);
@@ -122,11 +131,54 @@ export async function snapshotMountData(
                     return null;
                 });
             });
-            if (entry) entries.push(entry);
+            if (entry) {
+                entries.push(entry);
+                held.add(row.id);
+            }
         }
         onProgress?.('mount files', index + 1, fileRows.length);
     }
-    return { entries, databases, pathIds: new Set(fileRows.map((row) => row.id)) };
+
+    // The archive lists no file it holds no bytes for: a row deleted for good since the copy leaves the archived
+    // metadata.db, with the topmost folder or container above it that is gone too and holds none of the archive's
+    // bytes, and all under it.
+    const holding = new Set<string>();
+    for (const id of held) {
+        for (let up = byId.get(id)?.parentId; up && !holding.has(up); up = byId.get(up)?.parentId) holding.add(up);
+    }
+    const gone = new Set<string>();
+    for (const row of fileRows) {
+        if (held.has(row.id) || (await mount.getPath(row.id))) continue;
+        let top = row.id;
+        let up = row.parentId;
+        while (up && byId.get(up)?.parentId && !holding.has(up) && !gone.has(up) && !(await mount.getPath(up))) {
+            top = up;
+            up = byId.get(up)?.parentId ?? null;
+        }
+        gone.add(top);
+    }
+    const removed = new Set<string>();
+    if (gone.size > 0) {
+        const db = new Database(metadataPath, { readwrite: true, create: false });
+        try {
+            // As a live delete: its file events and watchers cascade, and the triggers clear its search rows.
+            db.run('PRAGMA foreign_keys = ON');
+            const remove = db.query<{ id: string }, [string]>(
+                `WITH RECURSIVE subtree(id) AS (SELECT ?1 UNION SELECT paths.id FROM paths JOIN subtree ON paths.parentId = subtree.id)
+                 DELETE FROM paths WHERE id IN subtree RETURNING id`,
+            );
+            db.transaction(() => {
+                for (const id of gone) for (const row of remove.all(id)) removed.add(row.id);
+            })();
+        } finally {
+            db.close();
+        }
+    }
+    return {
+        entries,
+        databases,
+        pathIds: new Set(fileRows.filter((row) => !removed.has(row.id)).map((row) => row.id)),
+    };
 }
 
 // A metadata-only capture of an s3 mount reads no object, so an open document's newest commits reach
