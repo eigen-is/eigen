@@ -1,6 +1,6 @@
 # Eigen Support Writing Style Guide
 
-> **TLDR**: House rules for the help-center articles in `apps/index/src/data/support/`: voice, structure, frontmatter, en-US, no em-dashes. Read this before writing or reviewing any support article.
+> **TLDR:** House rules for the help-center articles in `apps/index/src/data/support/`: voice, structure, frontmatter, en-US, no em-dashes. Read this before writing or reviewing any support article.
 
 The single source of truth for **how** Eigen Support articles are written. The goal: every article reads as if one calm, friendly person wrote the whole help center.
 
@@ -24,7 +24,7 @@ Everything else is secondary to this.
 
 ## 2. Write for the user, not the engineer
 
-The reader is a normal Eigen user. Assume they can use a computer; do **not** assume they know any jargon.
+The reader is a normal Eigen user. Assume they can use a computer; do **not** assume they know any jargon. The Self-hosting section is the one exception: its reader is the operator who runs the server, so Docker, containers, file paths and commands are words they know.
 
 - **Describe what the user sees and does**, never how it's built. They click buttons and read labels. They don't know or care about the implementation.
 - **Banned vocabulary** (implementation words that must never appear in a user article): `Yjs`, `ACL`, `ApiError`, `Eden`, `Elysia`, `SQLite`, `WebSocket`, `SSE`, `Drizzle`, `Home`, `container`, `data.db`. WebDAV, IMAP, and CalDAV **are** allowed, because they're real things users configure in other apps. So is "mount": it is the word the Admin interface uses for a storage location, so an admin article names the control. In an app article, say "drive".
@@ -117,11 +117,10 @@ Every article is exactly **one** [Diátaxis](https://diataxis.fr) type, matching
 ## 6. Mechanics
 
 - **American English** (en-US): "color", "organize", "center", "canceled". Keep proper nouns, protocol names, HTTP reason phrases and third-party quotes verbatim (`401 Unauthorized`, WebDAV, Google Workspace).
-- **Three deliberate exceptions to en-US**: dates in prose are day-month-year ("5 January 2026", never "January 5, 2026"), units are metric, currency is the euro.
+- **Three deliberate exceptions to en-US**: dates in prose are day-month-year ("5 January 2026", never "January 5, 2026") while the frontmatter `updated` field stays `YYYY-MM-DD`, units are metric, currency is the euro.
 - **Product names are capitalized**: Eigen, and the apps (Drive, Mail, Docs, Sheets, Slides, Calendar, Contacts, Chat, Stickies, Space). Generic nouns stay lowercase ("your files", "a folder", "the document").
 - Refer to the product as **Eigen** and the apps by name ("in Drive", "open Mail"). "Your Eigen Drive" is fine occasionally; usually just "Drive".
 - **Oxford comma.** Numbers one to nine are spelled out in prose; use digits for 10 and up, and always for UI values and sizes.
-- **Dates** are day-month-year in prose ("5 January 2026"); the frontmatter `updated` field stays `YYYY-MM-DD`.
 
 ## 7. Frontmatter
 
