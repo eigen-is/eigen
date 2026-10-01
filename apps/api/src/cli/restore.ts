@@ -257,7 +257,9 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         lines.push(
             bare
                 ? `A light archive holds no files and no mail: ${bare} homes come back without their files and mail`
-                : 'A light archive holds no files and no mail: those stay as they are here',
+                : 'A light archive holds no files and no mail: the mail here stays',
+            'Files and documents added since drop out of Drive; their bytes stay on disk',
+            'Files renamed, moved or trashed since are listed at their old place and do not open',
         );
     }
     ui.note(name, lines);

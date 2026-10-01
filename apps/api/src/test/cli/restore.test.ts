@@ -612,7 +612,8 @@ describe('restore --stage and --swap', () => {
 
             const output = await stageAndSwap(dir, basename(lightArchive));
             expect(output).toMatch(/light/i);
-            expect(output).toMatch(/files and mail/);
+            expect(output).toContain('Files and documents added since drop out of Drive');
+            expect(output).toContain('renamed, moved or trashed since');
 
             expect(readFileSync(join(live, 'mounts', aliceMountId, 'data/live.txt'), 'utf8')).toBe('live file');
             expect(readFileSync(join(live, PATHS.MAIL.ROOT, PATHS.MAIL.MAILDIR, 'cur/1.eml'), 'utf8')).toBe(
