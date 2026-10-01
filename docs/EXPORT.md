@@ -2,6 +2,8 @@
 
 > **TLDR:** One route downloads a doc as docx, PDF or HTML, a sheet as xlsx, PDF or HTML, a deck as PDF or HTML and a drawing as SVG or PDF (`apps/api/src/lib/export/`). Import turns an xlsx into a sheet and a docx into a doc (`lib/import/`). Not obvious from the code: every format but xlsx and SVG is one HTML document, and PDF is that document through WeasyPrint. Every body keeps only `data:` references, because WeasyPrint fetches anything else from the API host. An import writes nothing until the Worker succeeds, and checks write again last.
 
+A user exports from the file menu of the docs, sheets, slides and drawing editors, or from a Drive item's menu. Import sits on the docs and sheets toolbars and replaces the open document. Convert to Sheet and Convert to Document are file actions on an xlsx or docx, and make a new document from it. Every document that exports is a collab document, so its content is the Yjs state stored in its container's `data.db` ([COLLAB.md](COLLAB.md)), and an export renders that state. The heavy work runs in a one-shot transform Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)).
+
 ## A type's format list is both the menu and the gate
 
 `EIGEN_DOC_TYPE_INFO[type].exportFormats` (`packages/lib/src/types/drive.ts`) lists what a type offers, in menu order. The file menu and the drive item menu read it through `exportFormatsFor`. The route checks the same list, and `offers()` in `export-document.ts` narrows each entry to a literal. So a format added to a type without a Worker envelope fails to compile instead of reaching a user as a 400.

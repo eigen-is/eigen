@@ -2,7 +2,7 @@
 
 > **TLDR:** A deck is a set of slides that people edit together and then present. Underneath, it is a canvas document whose pages are fixed 16:9 frames, drawn by the canvas engine ([CANVAS.md](CANVAS.md)). `apps/slides/src/components/slides/` is a thin shell over the engine's `CanvasEditor`: it adds the slide rail, present mode, the slide background panel and the slide counter.
 
-A deck is a `.eigenslides` file. Each slide is a frame: one page of the canvas, stored in the `frames` map of the deck's Yjs document. Every element on the deck sits on one frame and stores its position relative to it. The shell mounts the canvas in frame mode, which shows only the active slide, fitted to the screen. Everything else (elements, tools, keymap, clipboard, rich text, comments, ⌘F, previews, export) is the engine's.
+A deck is a `.eigenslides` file. Each slide is a frame: one page of the canvas, stored in the `frames` map of the deck's Yjs document ([COLLAB.md](COLLAB.md)). Every element on the deck sits on one frame and stores its position relative to it. The shell mounts the canvas in frame mode, which shows only the active slide, fitted to the screen. Everything else (elements, tools, keymap, clipboard, rich text, comments, ⌘F, previews, export) is the engine's.
 
 So the shell adds only what the engine has no word for: a deck as an ordered list of slides. Three things in it surprise people:
 
