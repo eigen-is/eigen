@@ -3,7 +3,7 @@
 All notable user-visible changes to Eigen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com).
 
-## [Unreleased]
+## [0.3.1] - 2026-10-01
 
 Whole-server backup and restore. Eigen backs up the whole server every night while it runs, can keep a copy in a bucket of its own, and puts a backup back with `./eigen restore`, on the same machine or a new one. Close every open document before you update from 0.3.0: an edit that has not reached the server is lost, offline edits included.
 
