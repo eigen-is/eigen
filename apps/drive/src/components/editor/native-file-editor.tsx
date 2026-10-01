@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants';
 import { downloadDriveFile } from '@workspace/lib/download';
 import { useCheckPermissions, useTextPreview } from '@workspace/lib/drive';
 import { invalidateEditorContent, useFileContent } from '@workspace/lib/editor';
@@ -71,8 +72,13 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
                             {preview?.body ? (
                                 <div className="eigen-prose" dangerouslySetInnerHTML={{ __html: preview.body }} />
                             ) : previewFailed ? (
-                                // The content loaded, so a failed preview is its 1 MiB cap.
-                                <ErrorState message="This file is too large to preview." />
+                                <ErrorState
+                                    message={
+                                        path.size > TEXT_PREVIEW_MAX_BYTES
+                                            ? 'This file is too large to preview.'
+                                            : undefined
+                                    }
+                                />
                             ) : (
                                 <LoadingState />
                             )}
