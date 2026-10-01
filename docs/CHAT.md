@@ -1,10 +1,20 @@
 # Chat
 
-> **TLDR:** A chat room is a `.eigenchat` Drive container with its own SQLite `data.db` and a `media/` folder. Messages are append-only rows, not Yjs. Membership is the Drive ACL, and a room stores emails, never user ids. Server code lives in `apps/api/src/lib/chat/` and `apps/api/src/routes/chat.ts`, hooks in `packages/lib/src/core/chat/`, UI in `packages/ui/src/components/chat/`. Not obvious from the code: built-in emotes are stored as keys and phrased per viewer, the server redacts whispers before they leave it, and the new-chat wizard opens an existing chat with the same members instead of creating a duplicate.
+> **TLDR:** Chat is messaging between the people a room is shared with, and the thread behind every comment card in a document is a chat room too. A room is a file in Drive with its own SQLite database of messages, so Drive's sharing decides who is in it. Server code lives in `apps/api/src/lib/chat/` and `apps/api/src/routes/chat.ts`, hooks in `packages/lib/src/core/chat/`, UI in `packages/ui/src/components/chat/`.
+
+A user meets rooms in three places. The chat app (`apps/chat/`) lists the rooms they are in, their teams' rooms included. Every comment card in a doc, sheet, slide deck, drawing or stickies board opens a room stored inside that document, so a comment thread is a chat with a different look ([COMMENTS.md](COMMENTS.md)). And **Start chat** in the contacts menu starts a chat with that person.
+
+A room is a container: a Drive folder named like a file, such as `Project.eigenchat`, holding `data.db` with the messages and `media/` with the attachments ([STORAGE.md](STORAGE.md#containers-name-users-by-email-never-by-id)). Storage, sharing, versioning and trash all come from Drive, so chat adds no infrastructure of its own. Whoever can read the room is a member ([ACL.md](ACL.md)). Unlike the editors, a room is not a Yjs document ([COLLAB.md](COLLAB.md)). A message is a row, and the other members hear about it over SSE, which the home relay carries to each member's own home ([SSE.md](SSE.md), [SCALABILITY.md](SCALABILITY.md)).
+
+The one idea is that a room is a portable file. That is why it stores emails and never user ids, and why the new-chat wizard works to hide that a chat is a file. The sections cover storage and membership, comment threads, commands, notifications, paging, attachments and the wizard. Three things in them surprise people:
+
+- Built-in emotes are stored as keys and phrased per viewer ([§ Emotes](#emotes-are-stored-as-keys-and-phrased-per-viewer)).
+- The server redacts whispers before they leave it ([§ The server redacts whispers](#the-server-redacts-whispers)).
+- The new-chat wizard opens an existing chat with the same members instead of creating a duplicate ([§ The new-chat wizard](#the-new-chat-wizard-opens-an-existing-chat-before-it-creates-one)).
 
 ## A chat room is a Drive container with its own SQLite database
 
-Each `.eigenchat` is one room: a `data.db` of messages beside a `media/` folder for attachments. Messages are appended, paged and soft-deleted, never merged, so SQLite with an index on `createdAt` fits them better than a Yjs document. Storage, sharing, versioning and trash all come from Drive, so chat adds no infrastructure of its own. The table is in `apps/api/src/lib/chat/schema.ts`.
+Each `.eigenchat` is one room. Messages are appended, paged and soft-deleted, never merged, so SQLite with an index on `createdAt` fits them better than a Yjs document. The table is in `apps/api/src/lib/chat/schema.ts`.
 
 ## A room stores emails, never user ids
 
