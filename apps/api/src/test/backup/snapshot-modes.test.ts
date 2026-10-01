@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import * as fs from 'node:fs';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
@@ -276,6 +277,30 @@ describe('Backup capture modes', () => {
         } finally {
             spy.mockRestore();
             rmSync(target, { force: true });
+        }
+    });
+
+    test('a Maildir folder removed while a message of it is looked for is left out, not a failure', async () => {
+        const box = join(home.homeDir, MAILDIR_ROOT, '.Gone');
+        await Bun.write(join(box, 'new/4-gone.eigen'), 'Subject: Gone\r\n\r\nbody');
+        const capture = captureModule.captureFile;
+        const exists = fs.existsSync;
+        const spies = [
+            spyOn(captureModule, 'captureFile').mockImplementation(async (bytes, destPath, relPath) => {
+                if (relPath === `${MAILDIR}/.Gone/new/4-gone.eigen`) rmSync(box, { recursive: true, force: true });
+                return capture(bytes, destPath, relPath);
+            }),
+            // The folder goes after an existence check would have seen it, which only a spy can time.
+            spyOn(fs, 'existsSync').mockImplementation(
+                (p) => [join(box, 'cur'), join(box, 'new')].includes(String(p)) || exists(p),
+            ),
+        ];
+        try {
+            const { manifest, folder } = await snapshotInto(home, 'full');
+            expect(entryPaths(manifest)).not.toContain(`${MAILDIR}/.Gone/new/4-gone.eigen`);
+            expect((await verifyFolder(folder)).status).toBe('verified');
+        } finally {
+            for (const spy of spies) spy.mockRestore();
         }
     });
 

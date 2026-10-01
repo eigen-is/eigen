@@ -84,8 +84,15 @@ function renamedMessage(homeDir: string, rel: string): string | null {
     const unique = path.basename(rel).split(':')[0];
     for (const sub of MESSAGE_DIRS) {
         const dir = path.join(path.dirname(box), sub);
-        const abs = path.join(homeDir, dir);
-        const name = fs.existsSync(abs) && fs.readdirSync(abs).find((found) => found.split(':')[0] === unique);
+        let names: string[];
+        try {
+            names = fs.readdirSync(path.join(homeDir, dir));
+        } catch (error) {
+            // The mail program can remove the whole mailbox meanwhile.
+            if (isEnoent(error)) continue;
+            throw error;
+        }
+        const name = names.find((found) => found.split(':')[0] === unique);
         if (name) return `${dir}/${name}`;
     }
     return null;
