@@ -1,6 +1,18 @@
 # S3 Sync
 
-> **TLDR:** On an `s3` mount every container database (`data.db`, `comments.db`) is a local temp file that goes to the bucket whole. A sync stages a frozen `VACUUM INTO` copy and records a durable `pending_uploads` row in the mount's `metadata.db`. A per-mount `UploadQueue` (`apps/api/src/lib/mount/upload-queue.ts`, process-global parts in `apps/api/src/lib/sync/`) uploads it in the background with retry and backoff. So a slow or failing bucket becomes upload lag, never a hung request or lost bytes. Four things are not obvious from the code. Local bytes are never discarded before the bucket acks. Reads serve the staged copy before the stored object. An empty or collapsed working copy can never overwrite a good object. A timed-out PUT is tracked until it settles, so it can neither roll an object back nor bring a deleted one back. `local` and `local-key` mounts write synchronously.
+> **TLDR:** On an `s3` mount, a document's SQLite database lives on local disk while it is open and reaches the bucket in the background, through a queue that survives a restart. So a slow or failing bucket becomes upload lag, never a hung request or lost bytes. The queue is `apps/api/src/lib/mount/upload-queue.ts`, with its process-global parts in `apps/api/src/lib/sync/`. `local` and `local-key` mounts write synchronously and have no queue.
+
+Drive keeps files on mounts, and a mount of type `s3` keeps their bytes in an S3 bucket ([STORAGE.md](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)). A plain file, such as an upload, is PUT to the bucket in the request that brings it ([STREAMING_UPLOADS.md](STREAMING_UPLOADS.md#a-plain-file-goes-to-the-bucket-in-the-request)). The hard case is a container database. A container is the folder behind an Eigen document or chat, such as `Notes.eigendoc`, and its SQLite files (`data.db`, `comments.db`) are its container databases. SQLite needs a real file on local disk and writes to it all the time. A bucket only takes whole objects.
+
+So opening a container database downloads its object into the mount's `tmp/` folder, and SQLite works on that local file, the working copy. `ManagedDatabase` syncs a working copy that changed every 30 s and again when it closes. On `s3` a sync does not upload the working copy. It writes a frozen copy into the mount's `staging/` folder, the staged copy, records it as a row in the `pending_uploads` table of the mount's `metadata.db`, and returns. A per-mount `UploadQueue` PUTs the staged copies in the background and retries with backoff. Only when the bucket confirms a PUT, the ack, does it delete the row and the staged copy.
+
+The design rests on one rule: bytes the bucket has not acknowledged stay on local disk. Until the ack, the newest state is in the working copy or the staged copy, and every read looks there before it asks the bucket. The `pending_uploads` row carries that through a restart. The price is that the bucket lags behind the server, by one sync on a good day and by the whole outage on a bad one.
+
+The sections cover the sync and its seven numbered invariants, restart and crash recovery, reads, cancels and timeouts, shutdown, and the bucket's settings. Three things surprise people:
+
+- Reads serve the staged copy before the stored object ([§ Reads serve the staged copy first](#reads-serve-the-staged-copy-first)).
+- An empty or collapsed working copy can never overwrite a good object ([§ An empty or collapsed working copy](#an-empty-or-collapsed-working-copy-never-overwrites-a-good-object)).
+- A timed-out PUT is tracked until it settles, so it can neither roll an object back nor bring a deleted one back ([§ A timed-out PUT](#a-timed-out-put-is-tracked-until-it-settles)).
 
 ## A sync stages a frozen copy and returns
 
@@ -10,7 +22,7 @@ write → ManagedDatabase (WAL, local temp)
         └─ UploadQueue.drain → [per-destination Semaphore] → storage.write(S3) → ack: delete row + staged copy
 ```
 
-A sync never awaits the PUT. `onSync` (`apps/api/src/lib/mount/document-db.ts`) writes a `VACUUM INTO` copy to the mount's `staging/` folder and calls `enqueueStaged`, which writes the row before it returns and kicks the drain. So `close` and the 30 s sync tick return after the local write. `VACUUM INTO` captures committed frames still in the WAL, so the copy is complete without a checkpoint, and it is frozen while the live file keeps changing.
+A sync never awaits the PUT. `onSync` (`apps/api/src/lib/mount/document-db.ts`) writes the staged copy with `VACUUM INTO` and calls `enqueueStaged`, which writes the row before it returns and kicks the drain. So `close` and the sync tick return after the local write. `VACUUM INTO` captures committed frames still in the WAL, so the copy is complete without a checkpoint, and it is frozen while the live file keeps changing.
 
 Only container databases and the plain files a per-home restore stages go through the queue. A container create first checks that the key is free, a HEAD under the storage deadline. Reads and plain-file PUTs (uploads, editor saves, WebDAV) still wait on the bucket: reads under the idle deadline in [STORAGE.md](STORAGE.md#every-storage-read-has-a-30-s-idle-deadline), a direct PUT with no ceiling at all ([ROADMAP.md](ROADMAP.md)).
 
@@ -99,7 +111,7 @@ A failed upload backs off with full jitter, capped (`uploadBackoffMs`), and the 
 
 The budget covers the whole process. It starts after the transform runner closes and running backup jobs settle, but before the ACL fan-outs drain, so a slow fan-out leaves less of it for the mounts. A Home with several mounts drains them one after another.
 
-## The API container gets 30 s to stop
+## The API container gets 90 s to stop
 
 `docker-compose.yml` gives `eigen-api` a `stop_grace_period` of 90 s: a running backup job gets 30 s first ([BACKUP.md](BACKUP.md#the-whole-server-backup-runs-inside-the-api)), then the 20 s drain, and both finish before SIGKILL. A long restore, which is waited out in full, can still end in SIGKILL, and its rows replay on boot.
 
@@ -107,7 +119,7 @@ The budget covers the whole process. It starts after the transform runner closes
 
 Versioning makes an accidental overwrite recoverable, and it is the recovery for the two orphan cases a timed-out PUT leaves unrepaired ([A timed-out PUT is tracked until it settles](#a-timed-out-put-is-tracked-until-it-settles)). Because every sync re-PUTs the whole file, old versions pile up, so a lifecycle rule expires them. The same rule aborts incomplete multipart uploads after 7 days.
 
-The admin app's S3 config card sets both ("Bucket safety", "Enable safe defaults", `hardenS3Bucket` behind `POST /settings/s3harden` and `/setup/s3harden`). It matches its rule by ID (`S3_LIFECYCLE_RULE_ID`, `packages/lib/src/constants/s3.ts`), so a repeat updates the rule instead of adding one. A lifecycle configuration Eigen didn't write is never rewritten. The card reports it and shows the `aws s3api` commands to run by hand instead, as it does for a key that can't read the bucket's settings. The operator's side is the [bucket safety article](../apps/index/src/data/support/admin/s3-bucket-safety.md).
+The admin app's S3 config card sets both (**Bucket safety**, **Enable safe defaults**, `hardenS3Bucket` behind `POST /settings/s3harden` and `/setup/s3harden`). It matches its rule by ID (`S3_LIFECYCLE_RULE_ID`, `packages/lib/src/constants/s3.ts`), so a repeat updates the rule instead of adding one. A lifecycle configuration Eigen didn't write is never rewritten. The card reports it and shows the `aws s3api` commands to run by hand instead, as it does for a key that can't read the bucket's settings. The operator's side is the [bucket safety article](../apps/index/src/data/support/admin/s3-bucket-safety.md).
 
 ## See also
 
