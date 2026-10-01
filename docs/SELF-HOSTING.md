@@ -10,9 +10,7 @@ How to run Eigen on your own server. The step-by-step guide lives in the help ce
 - A domain you control
 - A mail relay when you keep your existing mail. When Eigen hosts your mail, only when your provider blocks outgoing port 25
 
-The containers use about 200 MB of RAM idle, 250 MB with the mail services. The API is almost all of it. Exports are the peak: five PDF exports at once took the stack to about 850 MB, one sheet PDF to about 600 MB. The images unpack to about 2.8 GB, 3.2 GB with mail (the api image alone is 2.6 GB). Docker's containerd image store keeps the downloaded layers too, which makes it 3.8 and 4.3 GB. An update keeps the previous release's images for `./eigen rollback`, so there can be two sets. A fresh `data/` is under 1 MB. More users and bigger documents need more.
-
-Memory, disk and ports per setup: [What you need to run Eigen](https://eigen.is/support/self-hosting/requirements).
+Memory, disk and ports per setup, with the measurements behind them: [What you need to run Eigen](https://eigen.is/support/self-hosting/requirements). Two numbers the article leaves out: the api image is 2.6 GB of the images, and Docker's containerd image store, which keeps the downloaded layers too, takes 3.8 GB, 4.3 GB with mail. An update keeps the previous release's images for `./eigen rollback`, so there can be two sets.
 
 ## Quick start
 
@@ -55,17 +53,20 @@ The help center at eigen.is follows the `main` channel, so it can describe a bui
 | `status` | The version, a waiting update, the services, disk space, the newest backup, the certificate and the mail queue |
 | `update [version]` | Backs up the running server, then switches to the new release. `--check` only tells whether there is an update and what it brings. `--accept-breaking` goes on past breaking changes without asking, as a run without a terminal must. `--full` makes the backup Full, `--no-backup` makes none |
 | `rollback` | Restores the backup the last update made, with the version it ran. `--yes` does not ask |
-| `backup` | Backs up the whole server into `backups/` while Eigen runs. `--light`, `--full` (the default), `--s3`, `--wait`. Exits 0 verified, 1 failed, 2 on a wrong argument, 4 verified but not in the bucket |
+| `backup` | Backs up the whole server into `backups/` while Eigen runs. `--light`, `--full` (the default), `--s3`, `--wait`. Its exit codes: [BACKUP.md § The whole-server backup runs inside the API](BACKUP.md#the-whole-server-backup-runs-inside-the-api) |
 | `restore <archive>` | Puts a whole-server backup back, from `backups/` or a path, on this machine or a new one. `--yes` does not ask, `--s3-from-archive` uploads an archive's S3 files under fresh keys instead of keeping each bucket as it is |
-| `restart`, `stop`, `logs [service]`, `reset-password` | What they say |
+| `restart` | Starts Eigen, and any part of it that stopped |
+| `stop` | Stops Eigen |
+| `logs [service]` | Follows the logs of every service, or of one |
+| `reset-password` | Sets a new password for an account and signs it out everywhere |
 
 One command that changes Eigen runs at a time, under `.eigen/lock`. `backup` takes no lock: it changes nothing and runs inside the API. What the backup and restore do, and why, is in [BACKUP.md](BACKUP.md).
 
-The backup `update` makes is Light, the databases and settings without files and mail, unless a release since the running one lists a breaking change or `--full` asks for Full. Its name starts with `server-pre-update-`. The two newest stay, and they never go to the backup bucket: they exist for `rollback` on this machine.
+The backup `update` makes is Light, the databases and settings without files and mail, unless a release since the running one lists a breaking change or `--full` asks for Full. Its name starts with `server-pre-update-`. Eigen keeps the two newest good ones and the one `rollback` needs ([BACKUP.md § Retention keeps good scheduled archives and every manual one](BACKUP.md#retention-keeps-good-scheduled-archives-and-every-manual-one)), and they never go to the backup bucket: they exist for `rollback` on this machine. A rollback from a Light backup puts the databases back over the files of today ([BACKUP.md § A Full restore swaps data/ whole, a Light one merges](BACKUP.md#a-full-restore-swaps-data-whole-a-light-one-merges)).
 
 ## backups/ is outside data/
 
-Whole-server and per-home backups go to `backups/` in the install folder, mounted into the API as `/app/backups` (`EIGEN_BACKUPS_DIR`). It sits beside `data/`, so a wipe of the data folder cannot take the backups with it. Setup creates both folders and gives an empty one to uid 1000, the user Eigen runs as. A folder Docker creates for a bind mount is root's, so a stack started by hand needs `mkdir -p data backups && chown -R 1000:1000 data backups` first. `backups/` is not in any backup: copy archives off the box, or turn on the backup bucket in Settings.
+Whole-server and per-home backups go to `backups/` in the install folder, mounted into the API as `/app/backups` (`EIGEN_BACKUPS_DIR`). It sits beside `data/`, so a wipe of the data folder cannot take the backups with it. Setup creates both folders and gives an empty one to uid 1000, the user Eigen runs as. A folder Docker creates for a bind mount is root's, so a stack started by hand needs `mkdir -p data backups && chown -R 1000:1000 data backups` first. `backups/` is not in any backup: copy archives off the server, or turn on the backup bucket in Settings.
 
 ## Compose profiles
 
@@ -87,7 +88,7 @@ Setup writes it, readable by its owner and by group 1000 ([The API reads three s
 | Keys | Written by | What they are |
 |---|---|---|
 | `DOMAIN`, `MAIL_DOMAIN`, `ACME_EMAIL` | setup | The web address, the domain of every address (fixed after the first setup), the Let's Encrypt contact |
-| `COMPOSE_PROFILES`, `MAIL_ENABLED` | setup | The deployment shape, above |
+| `COMPOSE_PROFILES`, `MAIL_ENABLED` | setup | The deployment shape ([Compose profiles](#compose-profiles)) |
 | `EIGEN_STATIC_HOST`, `EIGEN_STATIC_PORT` | setup | Where `eigen-static` listens for your web server (`127.0.0.1:8080` by default) |
 | `SMTP_RELAY_HOST`, `SMTP_RELAY_PORT`, `SMTP_RELAY_USER`, `SMTP_RELAY_PASSWORD` | setup | The relay. Postfix sends through it with hosted mail, the API without. Details in [SERVER-SETTINGS.md § Hosted mail and the relay are environment, not settings](SERVER-SETTINGS.md#hosted-mail-and-the-relay-are-environment-not-settings) |
 | `EIGEN_SUBNET`, `EIGEN_UNBOUND_IP` | setup | Eigen's Docker network and the resolver's address in it, on a /24 no other network uses |

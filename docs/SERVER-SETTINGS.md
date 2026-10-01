@@ -1,12 +1,12 @@
 # Server Settings
 
-> **TLDR:** A server keeps two JSON files in `data/server/`. `settings.json` holds the runtime settings the owner edits in the Admin app (`apps/api/src/lib/config/server-settings.ts`). `config.json` is the identity file (`server-config.ts`): the auth secret and what setup recorded. Neither holds the web address or whether this server hosts mail: those are environment. Not obvious from the code: the mail domain is recorded once and a boot on another one exits, a settings file that does not parse stops the boot instead of being overwritten, S3 becomes the default only while a saved config connects, and one sender rule in `buildMailOptions()` decides whether mail goes out as the person or "via" the organization.
+> **TLDR:** A server keeps two JSON files in `data/server/`. `settings.json` holds the runtime settings the owner edits in the Admin app (`apps/api/src/lib/config/server-settings.ts`). `config.json` is the identity file (`server-config.ts`): the auth secret and what setup recorded. Neither holds the web address, whether this server hosts mail, or the relay outbound mail goes through: those are environment. Not obvious from the code: the mail domain is recorded once and a boot on another one exits, a settings file that does not parse stops the boot instead of being overwritten, S3 becomes the default only while a saved config connects, and one sender rule in `buildMailOptions()` decides whether mail goes out as the person or "via" the organization.
 
 ## config.json is identity, settings.json is runtime
 
 |  | `config.json` | `settings.json` |
 |---|---|---|
-| Holds | `secret`, `orgName`, `orgId`, `setupCompleted`, `setupCompletedAt`, `mailDomain` | quotas, mount defaults, onboarding, guests, landing, notifications, mail |
+| Holds | `secret`, `orgName`, `orgId`, `setupCompleted`, `setupCompletedAt`, `mailDomain` | quotas, mount defaults, onboarding, guests, landing, notifications, mail, backups |
 | Written | The secret at first boot, the rest when setup completes | By the owner at runtime; setup writes the storage type and the sender |
 | Changes after setup | `orgName` only | Everything |
 
@@ -20,7 +20,7 @@ The secret is made at first boot and never changes, so a session signed in right
 
 Every account's address was made on the mail domain, so on another one nobody can sign in. Setup records `MAIL_DOMAIN` as `mailDomain` in `config.json`. Once it is recorded, `./eigen setup` states it instead of asking and refuses a different `--mail-domain` (`apps/api/src/cli/configure.ts`).
 
-At boot `assertMailDomainUnchanged()` compares `MAIL_DOMAIN` with the recorded value. On a mismatch it exits in production, naming the value to put back, and warns in development. An install from before the field records the domain at the first boot whose `MAIL_DOMAIN` the owner's address is on. A boot it is not on records nothing, so a wrong value at that boot is never taken as the truth. An owner address on another domain only logs a warning.
+At boot `assertMailDomainUnchanged()` compares `MAIL_DOMAIN` with the recorded value. On a mismatch it exits in production, naming the value to put back, and warns in development. A `config.json` without `mailDomain` records it at the first boot whose `MAIL_DOMAIN` the owner's address is on. A boot it is not on records nothing, so a wrong value at that boot is never taken as the truth. An owner address on another domain only logs a warning.
 
 ## Renaming the organization renames its default team
 
@@ -70,7 +70,7 @@ The ACL flags are read inline in `propagateSharedPathChange` (`apps/api/src/lib/
 
 `apps/api/src/routes/settings.ts` holds the routes. Changing the server's settings is the org owner's (`requireOwner`), and so is the waitlist (`apps/api/src/routes/waitlist.ts`). In the Admin app the `_owner` route guard puts Settings, Onboarding, Guest settings and Waitlist behind the same rule, and an admin who types one of those URLs sees "Only the server owner can open this page."
 
-Admins keep what the Users, Guests and team pages need. They read `GET /settings/server`, because the team page shows the quota defaults and the team mount form starts from the S3 defaults. A non-owner gets the S3 config with an empty `secretAccessKey`: the secret is the owner's. The backup bucket's secret reaches nobody, the owner included ([BACKUP.md § Upload goes to a bucket of its own](BACKUP.md#upload-goes-to-a-bucket-of-its-own)). They can also test an S3 connection and harden a bucket (`/settings/s3check`, `/settings/s3harden`) for a team mount, and manage user accounts. Deleting refuses your own account and the owner's.
+Admins keep what the Users, Guests and team pages need. They read `GET /settings/server`, because the team page shows the quota defaults and the team mount form starts from the S3 defaults. A non-owner gets the S3 config with an empty `secretAccessKey`: the secret is the owner's. They also get the rest of `settings.json`, the backup schedule and the backup bucket's endpoint, bucket and access key among it. The backup bucket's secret reaches nobody, the owner included ([BACKUP.md § Upload goes to a bucket of its own](BACKUP.md#upload-goes-to-a-bucket-of-its-own)). They can also test an S3 connection and harden a bucket (`/settings/s3check`, `/settings/s3harden`) for a team mount, and manage user accounts. Deleting refuses your own account and the owner's.
 
 ## An admin password reset revokes every way in
 
