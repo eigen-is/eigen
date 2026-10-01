@@ -2,6 +2,12 @@
 
 > **TLDR:** A guest is an external person who signs in with an emailed code instead of a password and reaches only what was shared with them. Sign-in lives in `apps/api/src/lib/auth/guest-auth.ts`, the home in `apps/api/src/lib/home/guest-home.ts`. Access itself is the ordinary Drive ACL ([ACL.md](ACL.md)). Not obvious from the code: a guest gets a real disk-based `GuestHome` with no mail, contacts or calendar; the share registry outlives a deleted guest, so signing in again rebuilds the same shares; open signup is on by default, and closed signup admits only an address someone shared with; inactive guests are deleted once a day.
 
+Guests are how a user shares with someone who has no account on the server. The user shares a document, a folder or a chat with an email address. Eigen mails that address a link, and the person signs in on the login page's Guest tab with a code sent to the same address. From then on the guest opens what was shared in the same Drive, editors and chat as everyone else.
+
+Underneath, a guest is an ordinary account with `role: 'guest'`, so the rest of Eigen needs almost no guest case. What a guest may open is decided by the ACL, through the same `SharedDrive` check every user goes through. The guest's Home, the data folder every account has ([STORAGE.md § A Home is loaded on demand](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)), keeps `shared.db`, the list of paths others shared with the guest. A share made before the guest exists waits in the share registry, a server-wide list of "this owner shared something with this address", and each sign-in reads it into `shared.db` ([ACL.md § Reconciliation](ACL.md#reconciliation)).
+
+The sections cover the guest's Home and limits, the sign-in and its rate limits, the registry, access requests, the narrower frontend and the daily cleanup.
+
 ## A guest has a disk-based home with only drive and notifications
 
 `getHome()` builds a `GuestHome` for a user with `role: 'guest'`. It holds a Drive and a NotificationCenter under `data/guest/{guestId}/` ([STORAGE.md](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)), and leaves mail, contacts and calendar uninitialized. Its `settings.json` names no mounts, so the Drive only carries `shared.db`, the mirror of what others shared with the guest. `GuestHome.size()` reports zero everywhere.
