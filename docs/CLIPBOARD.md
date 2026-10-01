@@ -32,7 +32,7 @@ Text re-measures. Every consumer measures a text item with its own fonts, becaus
 
 `readEigenClipboard` checks each item before a consumer sees it: finite geometry, a string `text` on a text item, the five source identifiers on an image item, an array on an elements item. A bad item is dropped and the good ones survive (`packages/lib/src/test/core/clipboard/clipboard.test.ts`). Consumers read the typed fields with no fallbacks, inside a paste handler that has already called `preventDefault`. An item that passed and then threw would eat the paste, and the user would see nothing.
 
-A text item with no content is valid but useless. No Eigen app writes one, but a forged payload may, so every consumer filters with `clipboardTextItemHasContent`.
+A text item with no content is valid but useless. The canvas writes one for an empty rich-text box, and a forged payload may too, so every consumer filters with `clipboardTextItemHasContent`.
 
 ## A copy never writes two flavors one consumer would both accept
 

@@ -45,7 +45,7 @@ sudo chown 1000:1000 <backup>
 
 **"… cannot be swapped in: … is in the way here".** A restore of a Light backup moves the files of the backup into the users' and teams' folders, and something in your `data/` sits where one of them goes. Move what the message names out of the way, then run `./eigen restore` again.
 
-**"… is on another disk than …".** A restore moves folders by renaming them, which works only within one disk. `data/`, `data/.restoring/`, and every user's and team's folder in `data/` must be on the disk of the install folder, not mounted from another one. Move them there, then run `./eigen restore` again.
+**"… is on another disk than …".** A restore moves folders by renaming them, which works only within one disk. `data/`, `data/.restoring/`, and every user's and team's folder in `data/` must be on the disk of the install folder, not mounted from another one. Restore checks `data/` and `data/.restoring/` before it stops Eigen, so Eigen keeps running. Move them there, then run `./eigen restore` again.
 
 ## Eigen does not start: pool overlaps
 
