@@ -2,7 +2,8 @@ import { X509Certificate } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ServerArchive, ServerArchiveSidecar } from '@workspace/lib/types/backup';
-import { runningJobOn } from '../backup/jobs';
+import { canUploadServerArchive } from '@workspace/lib/validation';
+import { listBackupJobs } from '../backup/jobs';
 import { listServerArchives } from '../backup/server-job';
 import { getRelayHost, isBundledCaddy, isMailEnabled } from './env';
 import { CERT_FILES, CERTS_DIR, getDataRoot } from './paths';
@@ -26,27 +27,20 @@ export type ControlStatus = {
     // reason, its state null when its record does not read.
     backup: {
         scheduleEnabled: boolean;
-        newest: {
-            name: string;
-            createdAt: string;
-            state: ServerArchiveSidecar['state'] | null;
-            bytes: number | null;
-            error: string | null;
-        } | null;
+        newest: (ArchiveLine & { state: ServerArchiveSidecar['state'] | null; bytes: number | null }) | null;
         // The newest scheduled attempt, when it failed.
-        scheduledFailure: { name: string; createdAt: string; error: string | null } | null;
+        scheduledFailure: ArchiveLine | null;
         // The newest scheduled attempt, when its archive is here but not in the bucket: its last upload failed, or
-        // it verified while uploads are on and no upload was tried or runs, as when a restart cut in between.
-        scheduledNotUploaded: { name: string; createdAt: string; error: string | null } | null;
+        // the owner could upload it and no upload was tried, as when a restart cut in between.
+        scheduledNotUploaded: ArchiveLine | null;
         newestGoodFullAt: string | null;
     };
 };
 
-function isNotUploaded({ name, record }: ServerArchive): boolean {
-    if (record?.upload?.state === 'failed') return true;
-    if (record?.upload || record?.verify?.status !== 'verified') return false;
-    if (!getServerSettings().backups.upload.enabled) return false;
-    return !runningJobOn(name);
+type ArchiveLine = { name: string; createdAt: string; error: string | null };
+
+function line({ name, createdAt }: ServerArchive, error: string | undefined): ArchiveLine {
+    return { name, createdAt: createdAt.toISOString(), error: error ?? null };
 }
 
 async function getBackupStatus(): Promise<ControlStatus['backup']> {
@@ -54,33 +48,19 @@ async function getBackupStatus(): Promise<ControlStatus['backup']> {
     const [newest] = archives;
     const scheduled = archives.find((archive) => archive.reason === 'scheduled');
     const goodFull = archives.find((archive) => archive.level !== 'light' && archive.record?.state === 'done');
+    const { schedule, upload } = getServerSettings().backups;
+    const notUploaded =
+        scheduled &&
+        (scheduled.record?.upload?.state === 'failed' ||
+            (!scheduled.record?.upload &&
+                canUploadServerArchive(scheduled, { uploadEnabled: upload.enabled, jobs: listBackupJobs() })));
     return {
-        scheduleEnabled: getServerSettings().backups.schedule.enabled,
+        scheduleEnabled: schedule.enabled,
         newest: newest
-            ? {
-                  name: newest.name,
-                  createdAt: newest.createdAt.toISOString(),
-                  state: newest.record?.state ?? null,
-                  bytes: newest.bytes,
-                  error: newest.record?.error ?? null,
-              }
+            ? { ...line(newest, newest.record?.error), state: newest.record?.state ?? null, bytes: newest.bytes }
             : null,
-        scheduledFailure:
-            scheduled?.record?.state === 'failed'
-                ? {
-                      name: scheduled.name,
-                      createdAt: scheduled.createdAt.toISOString(),
-                      error: scheduled.record.error ?? null,
-                  }
-                : null,
-        scheduledNotUploaded:
-            scheduled && isNotUploaded(scheduled)
-                ? {
-                      name: scheduled.name,
-                      createdAt: scheduled.createdAt.toISOString(),
-                      error: scheduled.record?.upload?.error ?? null,
-                  }
-                : null,
+        scheduledFailure: scheduled?.record?.state === 'failed' ? line(scheduled, scheduled.record.error) : null,
+        scheduledNotUploaded: notUploaded ? line(scheduled, scheduled.record?.upload?.error) : null,
         newestGoodFullAt: goodFull?.createdAt.toISOString() ?? null,
     };
 }

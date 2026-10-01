@@ -396,8 +396,9 @@ function parseUploadRecord(value: unknown): ServerArchiveUpload | null {
     return upload;
 }
 
-// The Upload route's rule: a verified archive, not a pre-update one (that stays on this server for ./eigen rollback),
-// with no job still writing or uploading it, while a backup bucket is set. One the bucket holds already goes again.
+// Whether the owner can upload an archive, for the Upload route, its button and ./eigen status: a verified archive,
+// not a pre-update one (that stays on this server for ./eigen rollback), with no job still writing or uploading it,
+// while a backup bucket is set. One the bucket holds already goes again.
 export function canUploadServerArchive(
     { name, reason, record }: Pick<ServerArchive, 'name' | 'reason' | 'record'>,
     { uploadEnabled, jobs }: { uploadEnabled: boolean; jobs: readonly Pick<BackupJob, 'state' | 'artifact'>[] },

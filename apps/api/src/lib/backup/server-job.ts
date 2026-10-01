@@ -12,6 +12,7 @@ import type {
 import { orgOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
 import {
     BACKUP_FORMAT_VERSION,
+    canUploadServerArchive,
     parseServerArchiveName,
     parseServerArchiveNames,
     parseServerArchiveSidecar,
@@ -37,7 +38,7 @@ import { getOrgOwner, getUserById } from '../user';
 import { type ArchiveWriter, createArchiveWriter, packFolder, writeRecord } from './archive';
 import { enumerateHomes, type ServerHome } from './enumerate-homes';
 import { describeError } from './errors';
-import { runningJobOn, startBackupJob, waitForHomeSlot, whenSlotFree } from './jobs';
+import { listBackupJobs, runningJobOn, startBackupJob, waitForHomeSlot, whenSlotFree } from './jobs';
 import {
     archiveServerPath,
     backupsDirPath,
@@ -468,19 +469,16 @@ export async function startArchiveUpload(name: string, startedBy: string): Promi
     const parsed = parseServerArchiveName(name);
     if (!parsed) throw new ApiError(400, 'Not a server backup name');
     if (parsed.reason === 'pre-update') throw new ApiError(400, 'A pre-update backup stays on this server');
-    if (!getServerSettings().backups.upload.enabled) throw new ApiError(400, 'No backup bucket is set');
+    const uploadEnabled = getServerSettings().backups.upload.enabled;
+    if (!uploadEnabled) throw new ApiError(400, 'No backup bucket is set');
     const archivePath = path.join(backupsDirPath(), name);
     if (!fs.existsSync(archivePath)) throw new ApiError(404, 'Archive not found');
-    const sidecar = await readServerSidecar(archivePath);
-    if (!sidecar) throw new ApiError(409, `${name} has no readable record, so it is not uploaded`);
-    if (sidecar.verify?.status !== 'verified') throw new ApiError(409, `${name} did not verify, so it is not uploaded`);
-    // One upload of an archive at a time, a queued one included: a second would send it again.
-    const busy = runningJobOn(name);
-    if (busy) {
-        throw new ApiError(
-            409,
-            busy.kind === 'upload' ? `${name} is already being uploaded` : `${name} is still being written`,
-        );
+    const record = await readServerSidecar(archivePath);
+    if (!canUploadServerArchive({ name, reason: parsed.reason, record }, { uploadEnabled, jobs: listBackupJobs() })) {
+        // One upload of an archive at a time, a queued one included: a second would send it again.
+        const busy = runningJobOn(name);
+        const why = busy ? (busy.kind === 'upload' ? 'is already being uploaded' : 'is still being written') : null;
+        throw new ApiError(409, `${name} ${why ?? 'did not verify, so it is not uploaded'}`);
     }
     return startUploadJob(archivePath, startedBy);
 }
