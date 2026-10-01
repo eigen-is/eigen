@@ -31,7 +31,7 @@ The response is silent while the job queues and its Worker runs. Queue wait plus
 
 The document is self-contained, because WeasyPrint and a downloaded file have no app to fetch from. Fonts are WOFF2 files base64'd into `@font-face` rules (`export/fonts.ts`). A doc imports `eigen-prose.css` as text and flattens it at load: WeasyPrint does not read CSS nesting, so nesting is expanded, `.dark` rules are dropped and theme variables become values.
 
-The doc node renderers (`export/doc/render.ts`) are pure and shared with the preview. A figure resolves its media name to a `data:` URI; a missing image renders no `<img>`, and an external `src` is stripped by the sanitizer. A task item is rendered by hand, because the static renderer drops `checked`.
+The doc node renderers (`export/doc/render.ts`) are pure and shared with the preview. A figure resolves its media name to a `data:` URI; a missing image renders no `<img>`, and an external `src` is stripped by the sanitizer. So a figure with only an external `src` exports empty, with no warning, an open [ROADMAP](ROADMAP.md) row. A task item is rendered by hand, because the static renderer drops `checked`.
 
 ## The sanitizer keeps only data: references, because WeasyPrint fetches
 
@@ -48,7 +48,7 @@ Previews pass the same function the exact set of their own preview URLs ([PREVIE
 
 ## A sheet export recalcs, and xlsx carries cells only
 
-Export is the one read that recalcs a workbook nobody computed ([SHEETS.md § The editor computes on write](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)), so an imported xlsx nobody opened still exports values. A recalc failure exports the replayed values with a `recalc-failed` warning. A legacy workbook whose recalc outlasts the 120 s deadline fails the export, an accepted residual.
+Export is the one read that recalcs a workbook nobody computed ([SHEETS.md § The editor computes on write](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)), so an import whose recalc failed still exports values. A recalc failure exports the replayed values with a `recalc-failed` warning. A legacy workbook whose recalc outlasts the 120 s deadline fails the export, an accepted residual.
 
 `to-xlsx.ts` reverses the importer with the same library. A merge's border perimeter is folded onto its master by `mergedBorderSides`, because ExcelJS keeps one style across a merge. Webpage links pass `resolveWebLink`, the editor's gate. Internal links are written in Excel's own `location` form. Floating images are dropped, an open [ROADMAP](ROADMAP.md) row. The class-styled HTML and the round-trip drifts: [SHEETS.md](SHEETS.md).
 
@@ -68,7 +68,7 @@ A frame is the page: 1920 by 1080, and an overhanging element is clipped as the 
 
 The `svg` arm is `sceneToSvg` (`packages/lib/src/vector`) with the used `@font-face` blocks spliced in. The sanitizer allows `<foreignObject>` as an HTML integration point, or it would drop the rich-text `<div>`. The result is re-serialized as XML, because an XML parser reads an `.svg` and one unclosed `<br>` from a text box would blank the drawing.
 
-The `pdf` arm is a single compositor page sized to the content plus 10 px, the margin `sceneToSvg` leaves for roughjs's overshoot. Rich text prints because it is an HTML div; WeasyPrint ignores `<foreignObject>`. A transparent drawing prints on white paper, because WeasyPrint has no canvas behind the page.
+The `pdf` arm is a single compositor page sized to the content plus 10 px on each side, the margin `sceneToSvg` leaves for roughjs's overshoot. Rich text prints because it is an HTML div; WeasyPrint ignores `<foreignObject>`. A transparent drawing prints on white paper, because WeasyPrint has no canvas behind the page.
 
 ## WeasyPrint dictates how a layer references its paint
 
