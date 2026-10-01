@@ -1,6 +1,6 @@
 # Soft Delete and Trash
 
-> **TLDR:** A delete moves a Drive item to trash instead of erasing it. Two columns on `paths` hold the state, and the item is re-parented to the mount root. The code is `apps/api/src/lib/mount/trash.ts` (rows and bytes) and `apps/api/src/lib/drive/trash.ts` (collab close, sharing, SSE, history). Four things are not obvious. Only `local` storage moves bytes, into `data/.trash/`. Trash revokes every share, and restore brings them back without a new email. Trash is the drive owner's alone. Expired trash is purged only when a Home loads, and trashed bytes count toward the quota until then.
+> **TLDR:** A delete moves a Drive item to trash instead of erasing it. Two columns on `paths` hold the state, and the item is re-parented to the mount root. The code is `apps/api/src/lib/mount/trash.ts` (rows and bytes) and `apps/api/src/lib/drive/trash.ts` (collab close, sharing, SSE, history). Four things are not obvious. Only `local` storage moves bytes, into `data/.trash/`. Trash revokes every share, and restore brings them back without a new email. Trash is the drive owner's alone. Expired trash is purged only when a mount opens, which is when its Home loads, and trashed bytes count toward the quota until then.
 
 ## Two columns mark trash, and the item moves to the root
 
@@ -48,7 +48,7 @@ A folder's permanent delete first removes every trash root whose `trashedFrom` l
 
 ## Expired trash is purged only when a Home loads
 
-`Mount.init` purges trash roots older than `quotas.trashRetentionDays` (30 by default, `apps/api/src/lib/config/server-settings.ts`, 0 turns it off). A mount that never loads keeps its trash past the window. The purge calls `Mount.permanentlyDeleteFromTrash` directly, so it sends no SSE and notifies no watcher.
+`Mount.init` purges trash roots older than `quotas.trashRetentionDays` (30 by default, `apps/api/src/lib/config/server-settings.ts`). A Home opens its mounts when it loads, so that is the only time the purge runs. A disabled mount never opens, and neither does a mount whose Home nobody loads, so both keep their trash past the window. A value of 0 turns the purge off, but the settings route accepts only 1 and up ([ROADMAP.md](ROADMAP.md)). The purge calls `Mount.permanentlyDeleteFromTrash` directly, so it sends no SSE and notifies no watcher.
 
 History and watcher notifications for trash, restore and permanent delete are in [FILE-HISTORY.md](FILE-HISTORY.md#chain-rewriting-mutations-record-their-own-events).
 
