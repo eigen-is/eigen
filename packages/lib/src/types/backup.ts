@@ -43,6 +43,9 @@ export type BackupManifest = {
     }[];
     // Every file under the folder except manifest.json itself, relative to the folder root.
     entries: BackupEntry[];
+    // What the home lacks that its live drives list: rows that do not reach a drive's root, left out, and files whose
+    // object is gone, kept without bytes. The archive restores, and is not complete (isCompleteArchive).
+    warnings?: string[];
 };
 
 // Why a whole-server archive was made. It is part of the archive's name, so retention and the
@@ -71,6 +74,8 @@ export type ServerArchiveManifest = {
         bytes?: number;
         failed?: string;
         skipped?: string;
+        // The home member's own, copied up so retention and the status read them without opening it.
+        warnings?: string[];
     }[];
     // Home folders with no row in users3.db, left out of the archive.
     orphans: string[];
@@ -166,7 +171,7 @@ export type BackupArtifact = {
     createdAt: Date;
     manifest: Pick<
         BackupManifest,
-        'kind' | 'ownerId' | 'email' | 'name' | 'appVersion' | 'counts' | 'level' | 'mounts'
+        'kind' | 'ownerId' | 'email' | 'name' | 'appVersion' | 'counts' | 'level' | 'mounts' | 'warnings'
     > | null;
     verify: BackupVerifyRecord;
 };

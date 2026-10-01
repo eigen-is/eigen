@@ -12,6 +12,7 @@ export {
     canUploadServerArchive,
     FAILED_RESTORE_SUFFIX,
     incompleteReason,
+    isCompleteArchive,
     ON_DEMAND_BACKUP_REASONS,
     PRE_RESTORE_SUFFIX,
     parseBackupArtifactName,
