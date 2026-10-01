@@ -1,24 +1,10 @@
 # Proposal: Data integrity + verified backups
 
-> **Status — Proposal, written 2026-07-05, re-verified against code 2026-08-04. Seam F shipped;
-> the rest not started.** The P0 roadmap row "Data integrity + verified backups": semantic restore
-> tests, integrity checks at every write path, scheduled corruption detection with alerts. Effort M.
->
-> **Shipped 2026-07-13** (`16faf466`, Yjs deep-dive P3 tail): **seam F** — `replayYjsState` returns
-> `blobsSkipped` and `readYjsStateFromFile` throws `ApiError(422, 'Snapshot is corrupted…')`, so a
-> restore from a snapshot with unreadable Yjs blobs aborts instead of silently degrading
-> (`../../apps/api/src/lib/collab/yjs-loader.ts`); plus the Phase-1 regression test "restore from a corrupt
-> snapshot fails 422 and leaves the live doc untouched" (`../../apps/api/src/test/storage/versioning.test.ts`).
-> That skip-count return is also Phase 3's prerequisite, so §3's semantic verification now builds on
-> an existing signal.
->
-> **Still to build:** there is no `lib/integrity/`, and the scheduler registers only `guest-cleanup`
-> and the nightly server backup. `eigen backup` is the verified whole-server backup of
-> [BACKUP.md](../BACKUP.md), which is what Phase 5 asked for. Phase 1 is reduced to
-> seams A/C/E/G, the post-ack size verify (B), and moving `isSqliteFile` into `lib/integrity/`.
-> Phases 2–5 are untouched — every one remains to build. The 2026-07-06 storage-audit fixes overlap
-> only as *reactive* guards (notably audit item 9, which closed the failed-read half of seam E —
-> see §1).
+This proposal adds checks that find damaged data before a user does: a cheap validity check wherever new bytes replace good ones (a write seam), a paced background sweep for corruption, a check that a backup or version snapshot really decodes, and an alert when something is found. It is the design for the P0 row "Data integrity + verified backups" in [ROADMAP.md](../ROADMAP.md), effort M.
+
+**Status:** partly built. Seam F is built: `materializeYjsState` (the `replayYjsState` of the design below) returns `blobsSkipped` and `readYjsStateFromFile` throws `ApiError(422, 'Snapshot is corrupted…')`, so a restore from a snapshot with unreadable Yjs blobs aborts instead of silently degrading (`../../apps/api/src/lib/collab/yjs-loader.ts`). The Phase 1 regression test "restore from a corrupt snapshot fails 422 and leaves the live doc untouched" pins it (`../../apps/api/src/test/storage/versioning.test.ts`), and the skip count is the signal Phase 3's semantic verification builds on. Phase 5, the verified whole-server backup, is built as `eigen backup`, which [BACKUP.md](../BACKUP.md) describes.
+
+Still to build: there is no `lib/integrity/`, and the scheduler registers only `guest-cleanup` and the nightly server backup. Phase 1 is down to seams A, C, E and G, the post-ack size verify (B), and moving `isSqliteFile` into `lib/integrity/`. Phases 2 to 4 are untouched. The storage-audit fixes of 2026-07-06 overlap only as *reactive* guards (audit item 9 closed the failed-read half of seam E, see §1). Written 2026-07-05 and checked against the code on 2026-08-04.
 
 > **TLDR**: Eigen's stated core weakness is "I would not yet trust it with data you cannot afford to
 > lose." The write paths already carry strong *reactive* guards (the `mustExist` open guard, the

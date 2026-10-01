@@ -1,6 +1,6 @@
 # Proposal: Docker-only installation, with a Synology DSM preset
 
-> **Status: milestones 1 and 2 are built, and v0.3.0 is the first published release. Milestone 3 (DSM) is not started.** [SELF-HOSTING.md](../SELF-HOSTING.md) and the help center's [Self-hosting](https://eigen.is/support/self-hosting/get-started) section describe what exists, and what remains is in the [ROADMAP.md](../ROADMAP.md) row. "DSM" means Synology DiskStation Manager. No Synology hardware was exercised.
+> **Status: milestone 1, the `eigen` command that needs only Docker on the host, and milestone 2, the published release images, are built, and v0.3.0 is the first published release. Milestone 3, the Synology DSM preset, is not started.** [SELF-HOSTING.md](../SELF-HOSTING.md) and the help center's [Self-hosting](https://eigen.is/support/self-hosting/get-started) section describe what exists, and what remains is in the [ROADMAP.md](../ROADMAP.md) row. "DSM" means Synology DiskStation Manager. No Synology hardware was exercised.
 >
 > Where the build differs from the text below:
 >

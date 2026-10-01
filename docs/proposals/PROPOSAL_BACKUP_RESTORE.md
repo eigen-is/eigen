@@ -1,5 +1,7 @@
 # Proposal: Backup, restore & migration
 
+This proposal designs how Eigen backs up one user's data or the whole server, checks that the backup really restores, brings it back, and later moves it to another server or storage backend. The problem it answers: a backup has to run while Eigen keeps serving, has to be verified, because a faithful copy of a corrupt database is useless at restore time, and has to restore one user without touching the rest.
+
 > **Status: phases ② (per-home backup) and ③ (whole-server backup) are built; phase ④ (migration) is not started.** [BACKUP.md](../BACKUP.md) describes what exists and wins where this page differs. § As built (phase ②) and § As built (phase ③) list where the build left the design below.
 
 > **TLDR**: One primitive does all the work: `snapshotHome` produces a **self-contained, storage-independent archive of one home** — every SQLite database captured with `VACUUM INTO` (never a raw copy of a live WAL file), every S3 object downloaded into the archive, plus the user's auth rows and share-registry rows. Per-user backup is that primitive with a download button. Whole-server backup is a loop over all homes plus the server databases. Migration is a restore pointed at a different server or a different storage backend. Restore is replace-with-a-safety-net: the current home is moved aside, never deleted, until the restored home passes verification.
