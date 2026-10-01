@@ -509,10 +509,10 @@ start() {
     services=$(dc config --services) || return 1
     active=" $(printf '%s ' $services)"
     project
+    # Not a read loop: after a trapped signal, BusyBox's read spins and never returns.
     stale=$(docker ps -a --filter "label=com.docker.compose.project=$PROJECT" \
-        --format '{{.ID}} {{.Label "com.docker.compose.service"}}' | while read -r id service; do
-        case $active in (*" $service "*) ;; (*) echo "$id" ;; esac
-    done)
+        --format '{{.ID}} {{.Label "com.docker.compose.service"}}' |
+        awk -v active="$active" '!index(active, " " $2 " ") { print $1 }')
     if [ -n "$stale" ]; then docker rm -f $stale || return 1; fi
     share_env || return 1
     dc up -d --wait
@@ -666,7 +666,7 @@ stage_archive() {
 # had and ends the command; one cut off after it leaves Eigen stopped, for the next ./eigen command to finish.
 swap_archive() {
     before_stop
-    AT_EXIT="restart; $UNSTAGE"
+    AT_EXIT="(restart); $UNSTAGE"
     stop
     trap : INT TERM
     swapped=0
@@ -676,7 +676,10 @@ swap_archive() {
         AT_EXIT=restart
         return
     fi
-    if [ -e "$SWAP_MARKER" ]; then AT_EXIT=''; fi
+    if [ -e "$SWAP_MARKER" ]; then
+        AT_EXIT=''
+        say "$RED" '■' "The swap is unfinished and Eigen is stopped: ./eigen restart finishes it." >&2
+    fi
     exit "$swapped"
 }
 
@@ -687,11 +690,14 @@ after_swap() {
     rm -f .eigen/last-update
     API_IMAGE=$(image api)
     if [ "$MODE" = local ]; then
+        NEXT="The data is restored. Fix what it says, then run ./eigen setup."
         step "Adding what is new to .env.production" ".env.production has what Eigen needs" \
             "Could not update .env.production" cli configure --backfill
     elif [ "$API_IMAGE" != "$1" ]; then
+        NEXT="The data is restored. Fix what it says, then run ./eigen restart."
         write_bundle "$API_IMAGE"
     fi
+    NEXT=''
 }
 
 # put_back: the archive where_archive found, staged, swapped in and started on the images it pins.
