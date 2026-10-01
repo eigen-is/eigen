@@ -12,20 +12,13 @@ import type {
 import { orgOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
 import {
     BACKUP_FORMAT_VERSION,
+    canUploadServerArchive,
     parseServerArchiveName,
+    parseServerArchiveNames,
     parseServerArchiveSidecar,
     SERVER_ARCHIVE_EXTENSION,
 } from '@workspace/lib/validation';
-import { getEnvFile } from '../config/env';
-import {
-    CERTS_DIR,
-    DKIM_DIR,
-    getDataRoot,
-    getServerDataPath,
-    ORG_HOMES_DIR,
-    SERVER_DATABASES,
-    SERVER_FILES,
-} from '../config/paths';
+import { getDataRoot, getServerDataPath, ORG_HOMES_DIR, SERVER_DATABASES, SERVER_FILES } from '../config/paths';
 import { API_IMAGE_KEY, PIN_KEYS } from '../config/release';
 import { getPublicConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
@@ -36,7 +29,7 @@ import { getOrgOwner, getUserById } from '../user';
 import { type ArchiveWriter, createArchiveWriter, packFolder, writeRecord } from './archive';
 import { enumerateHomes, type ServerHome } from './enumerate-homes';
 import { describeError } from './errors';
-import { runningJobOn, startBackupJob, waitForHomeSlot, whenSlotFree } from './jobs';
+import { listBackupJobs, runningJobOn, startBackupJob, waitForHomeSlot, whenSlotFree } from './jobs';
 import {
     archiveServerPath,
     backupsDirPath,
@@ -58,13 +51,13 @@ import { pruneServerArchives } from './retention';
 import { type SnapshotProgress, treeBytes } from './snapshot-home';
 import { appendInstallFiles, snapshotServer } from './snapshot-server';
 import { backupKey, uploadServerArchive } from './upload';
-import { describeFailures, verifyArchiveTransport, verifyFolder } from './verify';
+import { readServerArchive, requireVerified, verifyFolder } from './verify';
 
 const HOME_DELETED = 'deleted during the backup';
 const INTERRUPTED = 'interrupted by a restart';
 const UPLOAD_STOPPED = 'Eigen stopped before the upload finished';
 
-export type ServerBackupOptions = {
+type ServerBackupOptions = {
     level: BackupLevel;
     reason: BackupReason;
     startedBy?: string;
@@ -100,12 +93,11 @@ async function serverMemberBytes(): Promise<number> {
     return bytes;
 }
 
-// Refuses a job the backups folder has no room for, before it writes anything. The bound is
-// uncompressed: every member as it will be appended, plus the one being staged and packed beside
-// it, which is at most twice the largest.
+// Refuses a job the backups folder has no room for: every member uncompressed, plus the one staged and packed beside
+// it, at most twice the largest. A home that cannot be sized is its capture's to judge.
 async function requireRoom(level: BackupLevel, homes: ServerHome[]): Promise<void> {
     const sizes = [await serverMemberBytes()];
-    for (const home of homes) sizes.push(await pullHomeBackupBytes(home.ownerId, level));
+    for (const home of homes) sizes.push(await pullHomeBackupBytes(home.ownerId, level).catch(() => 0));
     const needed = 2 * Math.max(...sizes) + sizes.reduce((sum, bytes) => sum + bytes, 0);
     const shortfall = roomShortfall(`A ${level} backup`, needed, getBackupsDir(), 'the backups folder');
     if (shortfall) throw new ApiError(507, shortfall);
@@ -119,10 +111,8 @@ async function appendPacked(writer: ArchiveWriter, member: string, packed: strin
     }
 }
 
-// One home into the archive. A home that fails is named in the manifest and the archive goes
-// on without it: one broken bucket must not leave every other home without a backup. A home deleted
-// since the listing is skipped, which is no failure. A failed append is the archive's failure, not
-// the home's, and ends the job.
+// One home into the archive. A home that fails is named and the archive goes on: one broken bucket must not leave
+// every other home without a backup. A failed append is the archive's failure and ends the job.
 async function appendHome(
     writer: ArchiveWriter,
     home: ServerHome,
@@ -137,20 +127,14 @@ async function appendHome(
         // 409, as the server job waited out theirs.
         const release = await waitForHomeSlot(home.ownerId, 'server backup');
         const manifest = await pullHomeSnapshot(home.ownerId, staging, { level, onProgress }).finally(release);
-        const verify = await verifyFolder(folder, onProgress);
-        if (verify.status !== 'verified') {
-            throw new Error(`did not verify: ${describeFailures(verify)}`);
-        }
+        requireVerified(await verifyFolder(folder, onProgress), member);
         await packFolder(folder, packed);
         bytes = manifest.counts.bytes;
     } catch (error) {
-        // A 404 means the home is gone only when its row is: one from its storage is a failure like any other.
-        if (error instanceof ApiError && error.status === 404) {
-            const id = parseOwnerId(home.ownerId).id;
-            const gone = home.kind === 'team' ? !(await getTeamExists(id)) : !(await getUserById(home.ownerId));
-            if (gone) return { ...home, skipped: HOME_DELETED };
-        }
-        return { ...home, failed: describeError(error) };
+        // A delete mid-capture throws whatever the torn-down home throws: the row says whether it is gone.
+        const id = parseOwnerId(home.ownerId).id;
+        const gone = home.kind === 'team' ? !(await getTeamExists(id)) : !(await getUserById(home.ownerId));
+        return gone ? { ...home, skipped: HOME_DELETED } : { ...home, failed: describeError(error) };
     } finally {
         fs.rmSync(folder, { recursive: true, force: true });
     }
@@ -158,8 +142,7 @@ async function appendHome(
     return { ...home, member, bytes };
 }
 
-// The server member, the homes it names, the install files and the manifest, into a
-// temp file renamed into place once the manifest closes it. Nothing is left behind on a throw.
+// Into a temp file renamed into place once the manifest closes it, so nothing is left behind on a throw.
 async function writeServerArchive(
     job: BackupJob,
     archivePath: string,
@@ -172,10 +155,7 @@ async function writeServerArchive(
     try {
         await snapshotServer(staging, at, (_step, done, total) => onProgress('server', done, total));
         const serverFolder = path.join(staging, buildServerFolderName(at));
-        const serverVerify = await verifyFolder(serverFolder);
-        if (serverVerify.status !== 'verified') {
-            throw new Error(`The server member did not verify: ${describeFailures(serverVerify)}`);
-        }
+        requireVerified(await verifyFolder(serverFolder), SERVER_ARCHIVE_SERVER_MEMBER);
         // The homes and the accounts in the archive are one moment.
         const { homes, orphans } = enumerateHomes(path.join(serverFolder, archiveServerPath(SERVER_DATABASES.users)));
         const packedServer = path.join(staging, SERVER_ARCHIVE_SERVER_MEMBER);
@@ -191,11 +171,7 @@ async function writeServerArchive(
             summaries.push(await appendHome(writer, home, { at, level, staging, onProgress: homeProgress }));
         }
 
-        const install = await appendInstallFiles(writer, {
-            envFile: getEnvFile(),
-            dkimDir: path.join(getDataRoot(), DKIM_DIR),
-            certsDir: path.join(getDataRoot(), CERTS_DIR),
-        });
+        const install = await appendInstallFiles(writer);
         const config = getPublicConfig();
         const manifest = await writer.finish({
             formatVersion: BACKUP_FORMAT_VERSION,
@@ -242,26 +218,24 @@ export function alertOwner(tag: string, error: string, title = 'Server backup fa
         .catch(() => {});
 }
 
-type ServerRecord = { name: string; reason: BackupReason; level: BackupLevel; at: Date };
-
-// Every server archive and sidecar-only record in the folder, once each, by its archive name.
-function listServerRecords(dir: string): ServerRecord[] {
-    const records = new Map<string, ServerRecord>();
-    for (const file of fs.readdirSync(dir)) {
-        const name = file.endsWith(SERVER_SIDECAR_SUFFIX) ? file.slice(0, -SERVER_SIDECAR_SUFFIX.length) : file;
-        const parsed = parseServerArchiveName(name);
-        if (parsed) records.set(name, { name, ...parsed });
-    }
-    return [...records.values()];
-}
-
-// The owner's list, newest first, from names and sidecars alone. A missing folder is an empty one.
-export async function listServerArchives(): Promise<ServerArchive[]> {
+// Every server archive and refused attempt in the backups folder, once each, newest first.
+function listServerRecords() {
     const dir = backupsDirPath();
     if (!fs.existsSync(dir)) return [];
+    const names = new Set(
+        fs
+            .readdirSync(dir)
+            .map((file) =>
+                file.endsWith(SERVER_SIDECAR_SUFFIX) ? file.slice(0, -SERVER_SIDECAR_SUFFIX.length) : file,
+            ),
+    );
+    return parseServerArchiveNames(names).map((record) => ({ ...record, archivePath: path.join(dir, record.name) }));
+}
+
+// The owner's list, newest first, from names and sidecars alone.
+export async function listServerArchives(): Promise<ServerArchive[]> {
     const archives: ServerArchive[] = [];
-    for (const { name, level, reason, at } of listServerRecords(dir)) {
-        const archivePath = path.join(dir, name);
+    for (const { name, level, reason, at, archivePath } of listServerRecords()) {
         archives.push({
             name,
             level,
@@ -271,7 +245,7 @@ export async function listServerArchives(): Promise<ServerArchive[]> {
             record: await readServerSidecar(archivePath),
         });
     }
-    return archives.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    return archives;
 }
 
 // What ./eigen backup follows over the control socket: plain JSON with no dates, since the CLI reads it
@@ -289,54 +263,38 @@ export function toControlJob({ id, state, progress, artifact, error, uploadJobId
 // The schedule's one question. A failed or refused attempt left its record, so it counts: a night
 // that fails is one alert, not a retry every tick.
 export function hasScheduledAttemptOn(day: Date): boolean {
-    const dir = backupsDirPath();
-    if (!fs.existsSync(dir)) return false;
     const date = day.toISOString().slice(0, 10);
-    return listServerRecords(dir).some(
+    return listServerRecords().some(
         ({ reason, at }) => reason === 'scheduled' && at.toISOString().slice(0, 10) === date,
     );
 }
 
-// ./eigen update stops Eigen soon after its backup, and a scheduled Full started in between would die with the stop
-// or hold the update up. The window covers the steps between the two.
-const UPDATE_STOP_WINDOW_MS = 15 * 60 * 1000;
-
-export async function hasRecentPreUpdateBackup(now: Date): Promise<boolean> {
-    const archives = await listServerArchives();
-    return archives.some(
-        (archive) =>
-            archive.reason === 'pre-update' &&
-            archive.record?.finishedAt !== undefined &&
-            now.getTime() - archive.record.finishedAt.getTime() < UPDATE_STOP_WINDOW_MS,
-    );
-}
-
-// An archive and its record go together, and a refused attempt's record alone. One still being
-// written is refused: its job would write the record back when it ends. The job map says so
-// whatever the record reads.
+// An archive and its record go together. Only a running job refuses, as it would write the record back: a record
+// left running with no job behind it lost its final write.
 export async function deleteServerArchive(name: string): Promise<void> {
     if (!parseServerArchiveName(name)) throw new ApiError(400, 'Not a server backup name');
     const archivePath = path.join(backupsDirPath(), name);
     const recordPath = serverSidecarPath(archivePath);
     if (!fs.existsSync(archivePath) && !fs.existsSync(recordPath)) throw new ApiError(404, 'Archive not found');
-    const record = await readServerSidecar(archivePath);
-    if (runningJobOn(name) || record?.state === 'running') throw new ApiError(409, `${name} is still being written`);
+    if (runningJobOn(name)) throw new ApiError(409, `${name} is still being written`);
     fs.rmSync(archivePath, { force: true });
     fs.rmSync(recordPath, { force: true });
 }
 
-// Retention over the folder, judged by each sidecar: an archive counts as good only when its job ended
-// done. An archive and its sidecar go together. One whose sidecar is missing or unreadable is left
-// alone: nothing is deleted on a record nobody can read.
+// Retention by each sidecar: an archive is good only when its job ended done, and nothing is deleted on a record
+// nobody can read.
 async function pruneLocalArchives(): Promise<void> {
-    const dir = getBackupsDir();
-    const archives: { name: string; good: boolean; build?: string }[] = [];
+    const archives: Parameters<typeof pruneServerArchives>[0] = [];
     const unread: string[] = [];
-    for (const { name } of listServerRecords(dir)) {
-        const sidecar = await readServerSidecar(path.join(dir, name));
+    for (const record of listServerRecords()) {
+        const sidecar = await readServerSidecar(record.archivePath);
         if (sidecar) {
-            archives.push({ name, good: sidecar.state === 'done', build: sidecar.manifest?.images[API_IMAGE_KEY] });
-        } else unread.push(name);
+            archives.push({
+                ...record,
+                good: sidecar.state === 'done',
+                build: sidecar.manifest?.images[API_IMAGE_KEY],
+            });
+        } else unread.push(record.name);
     }
     if (unread.length > 0) {
         console.warn(`[backup] retention skips archives without a readable record: ${unread.join(', ')}`);
@@ -345,21 +303,18 @@ async function pruneLocalArchives(): Promise<void> {
     const { keep } = getServerSettings().backups.schedule;
     for (const name of pruneServerArchives(archives, keep, process.env[API_IMAGE_KEY])) {
         if (runningJobOn(name)) continue;
-        fs.rmSync(path.join(dir, name), { force: true });
-        fs.rmSync(serverSidecarPath(path.join(dir, name)), { force: true });
+        const archivePath = path.join(backupsDirPath(), name);
+        fs.rmSync(archivePath, { force: true });
+        fs.rmSync(serverSidecarPath(archivePath), { force: true });
     }
 }
 
-// Boot: a job killed mid-run left its record running, and nothing will ever end it. It becomes a
-// failed attempt, for retention and the list alike, and an upload killed mid-run a failed upload, for the
-// list and ./eigen status. The owner hears of each once.
+// Boot: a job or an upload killed mid-run left its record running, and nothing will ever end it, so it becomes a
+// failed one. The owner hears of each once.
 export async function recoverInterruptedServerBackups(): Promise<void> {
-    const dir = backupsDirPath();
-    if (!fs.existsSync(dir)) return;
     const interrupted: string[] = [];
     const notUploaded: string[] = [];
-    for (const { name } of listServerRecords(dir)) {
-        const archivePath = path.join(dir, name);
+    for (const { name, archivePath } of listServerRecords()) {
         const sidecar = await readServerSidecar(archivePath);
         if (sidecar?.state === 'running') {
             await writeServerSidecar(archivePath, {
@@ -403,10 +358,8 @@ async function runServerBackup(
         admit();
         sidecar.manifest = await writeServerArchive(job, archivePath, options, onProgress);
         onProgress('verify', 0, 1);
-        sidecar.verify = await verifyArchiveTransport(archivePath);
-        if (sidecar.verify.status !== 'verified') {
-            throw new Error(`${name} did not verify: ${describeFailures(sidecar.verify)}`);
-        }
+        sidecar.verify = (await readServerArchive(archivePath)).verify;
+        requireVerified(sidecar.verify, name);
         const failed = sidecar.manifest.homes.filter((home) => home.failed);
         if (failed.length > 0) {
             const named = failed.map((home) => `${home.name} (${home.failed})`).join('; ');
@@ -436,9 +389,8 @@ async function runServerBackup(
 // Uploads take turns: two at once share one uplink and gain nothing.
 let uploadsSettled: Promise<unknown> = Promise.resolve();
 
-// An archive's upload is a job of its own that holds no slot, so a backup never waits for the bucket. A failure
-// is never the archive's, which stays good here: the owner hears of it, and the record says so for the list and
-// ./eigen status. Shutdown aborts it, and the next Upload sends it whole.
+// An upload is a job that holds no slot, so a backup never waits for the bucket, and its failure is never the
+// archive's. Shutdown aborts it, and the next Upload sends it whole.
 function startUploadJob(archivePath: string, startedBy: string | undefined): BackupJob {
     const name = path.basename(archivePath);
     const ownerId = orgOwnerId(getPublicConfig().orgId);
@@ -471,7 +423,8 @@ async function uploadAndRecord(archivePath: string, signal: AbortSignal): Promis
         signal.throwIfAborted();
         const record = await readServerSidecar(archivePath);
         const retention = { keep, partial: record?.manifest?.homes.some((home) => home.failed) };
-        upload = { state: 'done', at: new Date(), key: await uploadServerArchive(archivePath, s3, retention, signal) };
+        await uploadServerArchive(archivePath, s3, retention, signal);
+        upload = { state: 'done', at: new Date(), key };
     } catch (error) {
         const reason = signal.aborted ? UPLOAD_STOPPED : describeError(error);
         upload = { state: 'failed', at: new Date(), key, error: reason };
@@ -487,27 +440,22 @@ export async function startArchiveUpload(name: string, startedBy: string): Promi
     const parsed = parseServerArchiveName(name);
     if (!parsed) throw new ApiError(400, 'Not a server backup name');
     if (parsed.reason === 'pre-update') throw new ApiError(400, 'A pre-update backup stays on this server');
-    if (!getServerSettings().backups.upload.enabled) throw new ApiError(400, 'No backup bucket is set');
+    const uploadEnabled = getServerSettings().backups.upload.enabled;
+    if (!uploadEnabled) throw new ApiError(400, 'No backup bucket is set');
     const archivePath = path.join(backupsDirPath(), name);
     if (!fs.existsSync(archivePath)) throw new ApiError(404, 'Archive not found');
-    const sidecar = await readServerSidecar(archivePath);
-    if (!sidecar) throw new ApiError(409, `${name} has no readable record, so it is not uploaded`);
-    if (sidecar.verify?.status !== 'verified') throw new ApiError(409, `${name} did not verify, so it is not uploaded`);
-    // One upload of an archive at a time, a queued one included: a second would send it again.
-    const busy = runningJobOn(name);
-    if (busy) {
-        throw new ApiError(
-            409,
-            busy.kind === 'upload' ? `${name} is already being uploaded` : `${name} is still being written`,
-        );
+    const record = await readServerSidecar(archivePath);
+    if (!canUploadServerArchive({ name, reason: parsed.reason, record }, { uploadEnabled, jobs: listBackupJobs() })) {
+        // One upload of an archive at a time, a queued one included: a second would send it again.
+        const busy = runningJobOn(name);
+        const why = busy ? (busy.kind === 'upload' ? 'is already being uploaded' : 'is still being written') : null;
+        throw new ApiError(409, `${name} ${why ?? 'did not verify, so it is not uploaded'}`);
     }
     return startUploadJob(archivePath, startedBy);
 }
 
-// Starts the whole-server backup and resolves once it is under way. One runs at a time, in the org's
-// job slot: a second start is startBackupJob's 409, which names the archive being written, unless it
-// is to `wait` for that one to end. No room is a 507, and the attempt's record stays, failed, like
-// any other.
+// Starts the whole-server backup and resolves once it is under way. One runs at a time in the org's slot: a second
+// start gets the 409 unless it is to `wait`, and no room is a 507 whose record stays, failed.
 export async function startServerBackup({
     level,
     reason,
@@ -521,7 +469,6 @@ export async function startServerBackup({
         const at = freeServerArchiveAt(reason, level, new Date());
         const archivePath = path.join(getBackupsDir(), buildServerArchiveName(reason, level, at));
         return startBackupJob('server-backup', ownerId, startedBy, (started, onProgress) => {
-            started.reason = reason;
             started.artifact = path.basename(archivePath);
             const run = runServerBackup(started, archivePath, { level, reason, at }, admitted.resolve, onProgress);
             // A promise settles once, so after admission this reject is a no-op.

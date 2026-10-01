@@ -105,24 +105,17 @@ export function backupKey(destination: S3Config, name: string): string {
     return serverBucket(destination).getKey(name);
 }
 
-// Bun keeps a multipart upload within the part and queue sizes it is given.
-export function multipartOptions(bytes: number): { partSize: number; queueSize: number } {
-    const partSize = Math.max(MIN_PART_BYTES, Math.ceil(bytes / MAX_PARTS));
-    if (partSize > MAX_PART_BYTES) throw new Error(`The archive is too large for one S3 object: ${bytes} bytes`);
-    return { partSize, queueSize: PARTS_IN_FLIGHT };
-}
-
 // The archive's bytes, failing once `signal` aborts, which makes Bun abort the multipart upload.
-function abortableStream(archivePath: string, signal?: AbortSignal): ReadableStream<Uint8Array> {
+function abortableStream(archivePath: string, signal: AbortSignal): ReadableStream<Uint8Array> {
     const reader = Bun.file(archivePath).stream().getReader();
     return new ReadableStream<Uint8Array>({
         start(controller) {
             const fail = () => {
-                controller.error(signal?.reason);
-                reader.cancel(signal?.reason).catch(() => {});
+                controller.error(signal.reason);
+                reader.cancel(signal.reason).catch(() => {});
             };
-            if (signal?.aborted) fail();
-            else signal?.addEventListener('abort', fail, { once: true });
+            if (signal.aborted) fail();
+            else signal.addEventListener('abort', fail, { once: true });
         },
         async pull(controller) {
             const { done, value } = await reader.read();
@@ -135,17 +128,13 @@ function abortableStream(archivePath: string, signal?: AbortSignal): ReadableStr
 
 // Bun reads the stream's error only once the parts in flight settle, and a slow bucket may hold one past the
 // shutdown budget: the upload stops waiting at the abort, and Bun aborts the multipart upload once they settle.
-function untilAborted<T>(work: Promise<T>, signal?: AbortSignal): Promise<T> {
-    if (!signal) return work;
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
     const aborted = Promise.withResolvers<never>();
     const stop = () => aborted.reject(signal.reason);
     if (signal.aborted) stop();
     else signal.addEventListener('abort', stop, { once: true });
     return Promise.race([work, aborted.promise]).finally(() => signal.removeEventListener('abort', stop));
 }
-
-// How many scheduled archives the bucket keeps, and whether this one lacks a home.
-export type RemoteRetention = { keep: number; partial?: boolean };
 
 // Only scheduled archives, and only by name: a manual one is the owner's, a pre-update one never left its box,
 // and a key the grammar does not read is not an archive. An archive uploaded late may be one the keep would
@@ -157,23 +146,26 @@ async function pruneRemoteArchives(bucket: S3Storage, uploaded: string, keep: nu
 }
 
 // Streams a finished archive to the bucket under its own name, checks the bucket holds all of it, then
-// prunes the bucket. Bun aborts the multipart upload when a part or the stream fails, and pruning never
-// runs after a failure. Resolves to the object's key.
+// prunes the bucket to `keep` scheduled archives; `partial` says this one lacks a home. Bun aborts the
+// multipart upload when a part or the stream fails, and pruning never runs after a failure.
 export async function uploadServerArchive(
     archivePath: string,
     destination: S3Config,
-    retention: RemoteRetention,
-    signal?: AbortSignal,
-): Promise<string> {
+    retention: { keep: number; partial?: boolean },
+    signal: AbortSignal,
+): Promise<void> {
     const check = await checkBackupDestination(destination);
     if (!check.ok) throw new Error(`The backup bucket was refused: ${check.message}`);
     const name = path.basename(archivePath);
     const bytes = Bun.file(archivePath).size;
+    // Bun keeps a multipart upload within the part and queue sizes it is given.
+    const partSize = Math.max(MIN_PART_BYTES, Math.ceil(bytes / MAX_PARTS));
+    if (partSize > MAX_PART_BYTES) throw new Error(`The archive is too large for one S3 object: ${bytes} bytes`);
     const bucket = serverBucket(destination);
     // Before the archive, so the bucket never holds a partial one it would count as complete.
     if (retention.partial) await bucket.write(`${name}${BUCKET_PARTIAL_SUFFIX}`, new Uint8Array());
-    const write = bucket.read(name).write(new Response(abortableStream(archivePath, signal)), multipartOptions(bytes));
-    await untilAborted(write, signal);
+    const stream = new Response(abortableStream(archivePath, signal));
+    await untilAborted(bucket.read(name).write(stream, { partSize, queueSize: PARTS_IN_FLIGHT }), signal);
     const stored = await bucket.size(name);
     if (stored === null) throw new Error(`The bucket did not say how many bytes of ${name} it holds`);
     if (stored !== bytes) {
@@ -183,5 +175,4 @@ export async function uploadServerArchive(
     }
     // Pruning that fails must not turn an upload that worked into one that did not.
     await pruneRemoteArchives(bucket, name, retention.keep).catch(console.error);
-    return bucket.getKey(name);
 }

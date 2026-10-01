@@ -16,13 +16,9 @@ import { ApiError } from '../core/errors';
 import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath, sidecarPath } from './paths';
 import type { SnapshotProgress } from './snapshot-home';
 
-// An artifact is a plain POSIX tar (pax for long paths) piped through zstd, so `tar --zstd -xf`
-// unpacks one on any machine. The tar is generated entry by entry into the compressor rather than
-// built with Bun.Archive.write, which holds the whole archive in memory (measured on Bun 1.3.14: a
-// 1.2 GB folder peaked at 3.9 GB RSS, against 0.1 GB for the stream below). Reading is this file's
-// own parser for a reason of its own: Bun.Archive (libarchive on Bun 1.3.14) stops at the first
-// entry name that is not ASCII, and segfaults on a ustar one, so every home holding an accented
-// file name would read back as a folder without a manifest, or take the process down.
+// An artifact is a plain POSIX tar (pax for long paths) piped through zstd, so `tar --zstd -xf` unpacks one
+// anywhere. Written and read here, not with Bun.Archive: its writer holds the whole archive in memory, and its
+// reader stops at the first non-ASCII name and segfaults on a ustar one.
 const BLOCK = 512;
 const NAME_FIELD = 100;
 // The biggest size a header's 11 octal digits hold (8 GiB); above it the size goes in base-256.
@@ -150,10 +146,7 @@ function* archiveEnd(written: number): Generator<Uint8Array> {
 }
 
 async function* tarChunks(dir: string, rootName: string, onProgress?: SnapshotProgress): AsyncGenerator<Uint8Array> {
-    const relPaths: string[] = [];
-    for await (const rel of new Bun.Glob('**/*').scan({ cwd: dir, onlyFiles: false, dot: true })) {
-        relPaths.push(rel.replaceAll('\\', '/'));
-    }
+    const relPaths = await Array.fromAsync(new Bun.Glob('**/*').scan({ cwd: dir, onlyFiles: false, dot: true }));
     relPaths.sort();
 
     let written = 0;
@@ -168,8 +161,7 @@ async function* tarChunks(dir: string, rootName: string, onProgress?: SnapshotPr
 
     yield* directory(`${rootName}/`, fs.statSync(dir).mtimeMs);
     for (const [index, rel] of relPaths.entries()) {
-        // Packing dominates a large home's wall clock, so it reports per entry: one `pack` step for
-        // the whole folder left the admin pane's bar at 0% for 38 of a 40-second job.
+        // Packing dominates a large home's wall clock, so it reports per entry.
         onProgress?.('pack', index + 1, relPaths.length);
         const abs = path.join(dir, rel);
         const stat = fs.statSync(abs);
@@ -266,7 +258,7 @@ export type ArchiveMember = { archivePath: string; name: string; offset: number;
 
 // Where an artifact's compressed bytes are read from: a file of its own, or a member of a
 // whole-server archive, read in place.
-export type ArtifactSource = string | ArchiveMember;
+type ArtifactSource = string | ArchiveMember;
 
 // The artifact's bytes, decompressed. The two streams are wired by hand rather than through
 // `pipeline`, because a read that stops at the entry it wanted ends as an AbortError there.
@@ -335,6 +327,9 @@ function paxPath(records: Uint8Array): string | null {
     return null;
 }
 
+// One path record fits many times over; the size is the untrusted archive's own word.
+const MAX_LONG_HEADER_BYTES = 64 * 1024;
+
 // Hard link, symlink, character and block device, fifo.
 const LINKS_AND_DEVICES = new Set(['1', '2', '3', '4', '6']);
 
@@ -351,13 +346,18 @@ function checkedEntryPath(name: string): string {
 // stop at the entry it came for.
 async function* tarEntries(bytes: AsyncIterable<Uint8Array>): AsyncGenerator<TarEntry> {
     const source = bytes[Symbol.asyncIterator]();
-    let buffered = new Uint8Array(0);
+    let buffered: Uint8Array = new Uint8Array(0);
     let bodyLeft = 0;
     let position = 0;
 
     async function fill(): Promise<boolean> {
         const { done, value } = await source.next();
         if (done) return false;
+        // Mostly the buffer has drained, and the chunk is taken as it is rather than copied.
+        if (buffered.length === 0) {
+            buffered = value;
+            return true;
+        }
         const merged = new Uint8Array(buffered.length + value.length);
         merged.set(buffered);
         merged.set(value, buffered.length);
@@ -411,6 +411,9 @@ async function* tarEntries(bytes: AsyncIterable<Uint8Array>): AsyncGenerator<Tar
             // (what the writer above emits) or GNU's long-name block. A global header names nothing,
             // and taking its truncated name for the next entry's would write the wrong path.
             if (typeflag === 'x' || typeflag === 'g' || typeflag === 'L') {
+                if (size > MAX_LONG_HEADER_BYTES) {
+                    throw new Error(`backup archive: refusing a ${size}-byte extended header`);
+                }
                 const extra = await collect(body());
                 if (typeflag === 'x') givenName = paxPath(extra);
                 if (typeflag === 'L') givenName = headerField(extra, 0, extra.length);
@@ -457,7 +460,7 @@ export async function readArchiveMembers(archivePath: string): Promise<ArchiveMe
 }
 
 // What readArchiveMember holds in memory at most: a manifest fits many times over, a home does not.
-export const MAX_MEMBER_READ_BYTES = 16 * 1024 * 1024;
+const MAX_MEMBER_READ_BYTES = 16 * 1024 * 1024;
 
 // A member's bytes in memory, for the manifest. A member that has to land on disk goes through
 // copyArchiveMember, and a home member is unpacked in place by extractArtifact.
@@ -575,15 +578,13 @@ export async function writeSidecar(
     await writeRecord(sidecarPath(artifactPath), { manifest, verify });
 }
 
-// Null when there is no sidecar at all — an artifact copied in by hand has none, and the caller
-// shows it as unverified until a verify job writes one. A file that is there but is not a sidecar
-// is an error instead: treating it as absent would hide a half-written one behind a plausible screen.
+// Null when there is none, or none that reads, as for a server archive's record: an artifact copied in by hand has
+// none, and the list shows it as unverified until a verify job writes one.
 export async function readSidecar(
     artifactPath: string,
 ): Promise<{ manifest: BackupManifest; verify: BackupVerifyRecord } | null> {
-    const filePath = sidecarPath(artifactPath);
-    if (!fs.existsSync(filePath)) return null;
-    const sidecar = parseBackupSidecar(await Bun.file(filePath).text());
-    if (!sidecar) throw new ApiError(400, `${path.basename(filePath)} is not a backup manifest sidecar`);
-    return sidecar;
+    const text = await Bun.file(sidecarPath(artifactPath))
+        .text()
+        .catch(() => null);
+    return text === null ? null : parseBackupSidecar(text);
 }

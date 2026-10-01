@@ -52,12 +52,8 @@ async function jobsVisibleTo(userId: string): Promise<(job: BackupJob) => boolea
     return (job) => owner || !isServerJob(job.kind);
 }
 
-// A restore ends with the home evicted. On a remote mount it also ends with every file in the
-// mount's staging folder and one `pending_uploads` row per file, and the queue that drains them is a
-// Mount member — nothing runs it until the home is next opened, so an admin who restores a home
-// nobody then visits leaves the bucket stale. Opening the home here is what starts it: Mount.init
-// stands up the UploadQueue and reconciles the persisted rows. Routes may call getHome; the job
-// bodies in lib/backup may not, which is why this lives here and not in jobs.ts.
+// A restored home is opened at once, so a remote mount's upload queue (Mount.init) drains its staged files even when
+// nobody visits it. It reaches into another user's home, which belongs behind home-relay.ts once homes can move.
 function startRestoreJob(
     ownerId: string,
     adminId: string,

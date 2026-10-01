@@ -23,7 +23,6 @@ import {
     copyArchiveMember,
     createArchiveWriter,
     extractArtifact,
-    MAX_MEMBER_READ_BYTES,
     packFolder,
     readArchiveMember,
     readArchiveMembers,
@@ -34,18 +33,20 @@ import {
 } from '../../lib/backup/archive';
 import { listArtifacts } from '../../lib/backup/artifacts';
 import {
+    ARCHIVE_MANIFEST_FILE,
     buildArtifactName,
     buildHomeFolderName,
     buildHomeMemberName,
     buildServerArchiveName,
     buildServerFolderName,
     getBackupsDir,
+    SERVER_ARCHIVE_ENV_MEMBER,
     SERVER_ARCHIVE_SERVER_MEMBER,
 } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { appendInstallFiles, snapshotServer } from '../../lib/backup/snapshot-server';
-import { verifyArchiveTransport, verifyFolder } from '../../lib/backup/verify';
+import { readServerArchive, verifyFolder } from '../../lib/backup/verify';
 import { SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
@@ -469,6 +470,17 @@ describe('Backup pack and verify', () => {
         PACK_TIMEOUT_MS,
     );
 
+    test('a folder whose name holds a backslash packs and extracts under its own name', async () => {
+        const dir = mkdtempSync(join(TEST_DATA_DIR, 'backslash-'));
+        const mailbox = 'home/eigen.mail/Maildir/.Projects\\2026/cur';
+        mkdirSync(join(dir, 'home-x', mailbox), { recursive: true });
+        writeFileSync(join(dir, 'home-x', mailbox, '1.eml'), 'mail');
+        await packFolder(join(dir, 'home-x'), join(dir, 'x.tar.zst'));
+        await extractArtifact(join(dir, 'x.tar.zst'), join(dir, 'out'));
+        expect(readFileSync(join(dir, 'out/home-x', mailbox, '1.eml'), 'utf8')).toBe('mail');
+        rmSync(dir, { recursive: true, force: true });
+    });
+
     test(
         'readArtifactManifest reads the manifest without a full extract',
         async () => {
@@ -490,12 +502,12 @@ describe('Backup pack and verify', () => {
     });
 
     test(
-        'a sidecar that is not one is an error, an artifact that is not one too',
+        'a sidecar that is not one reads as none, and an artifact that is not one is an error',
         async () => {
             const dir = mkdtempSync(join(TEST_DATA_DIR, 'bad-sidecar-'));
             const fake = join(dir, buildArtifactName(ownerId, new Date()));
             writeFileSync(`${fake}.manifest.json`, '{"manifest": {"formatVersion": 2}, "verify": {}}');
-            await expect(readSidecar(fake)).rejects.toThrow('is not a backup manifest sidecar');
+            expect(await readSidecar(fake)).toBeNull();
 
             const folder = join(dir, buildHomeFolderName('bogus'));
             mkdirSync(folder, { recursive: true });
@@ -598,6 +610,9 @@ describe('Whole-server archive', () => {
     const at = new Date(Math.floor(Date.now() / 1000) * 1000);
     const DKIM_FILES = ['eigen.private', 'eigen.txt'];
     const CERT_FILES = ['cert.pem', 'key.pem'];
+    // appendInstallFiles reads the install's own folders under the data root.
+    const dkimDir = join(TEST_DATA_DIR, 'dkim');
+    const certsDir = join(TEST_DATA_DIR, 'certs');
     let dir: string;
     let archivePath: string;
     let manifest: ServerArchiveManifest;
@@ -635,15 +650,14 @@ describe('Whole-server archive', () => {
 
             const envFile = join(dir, 'env.production');
             writeFileSync(envFile, 'DOMAIN=test.eigen.is\n');
-            const dkimDir = join(dir, 'dkim-source');
-            mkdirSync(dkimDir);
+            process.env['EIGEN_ENV_FILE'] = envFile;
+            mkdirSync(dkimDir, { recursive: true });
             for (const name of DKIM_FILES) writeFileSync(join(dkimDir, name), `${name} bytes`);
-            const certsDir = join(dir, 'certs-source');
-            mkdirSync(certsDir);
+            mkdirSync(certsDir, { recursive: true });
             for (const name of CERT_FILES) writeFileSync(join(certsDir, name), `${name} bytes`);
             // A temp file of a certificate being swapped in is not the certificate.
             writeFileSync(join(certsDir, 'key.pem.tmp'), 'half a key');
-            const install = await appendInstallFiles(writer, { envFile, dkimDir, certsDir });
+            const install = await appendInstallFiles(writer);
             expect(install).toEqual({ envFile: true, dkim: true, certs: true });
 
             manifest = await writer.finish({
@@ -660,6 +674,9 @@ describe('Whole-server archive', () => {
             });
         } finally {
             await writer.abort();
+            delete process.env['EIGEN_ENV_FILE'];
+            rmSync(dkimDir, { recursive: true, force: true });
+            rmSync(certsDir, { recursive: true, force: true });
         }
     }, PACK_TIMEOUT_MS);
 
@@ -667,10 +684,10 @@ describe('Whole-server archive', () => {
         return [
             SERVER_ARCHIVE_SERVER_MEMBER,
             ...homes.map((home) => home.member),
-            '.env.production',
+            SERVER_ARCHIVE_ENV_MEMBER,
             ...DKIM_FILES.map((name) => `dkim/${name}`),
             ...CERT_FILES.map((name) => `certs/${name}`),
-            'manifest.json',
+            ARCHIVE_MANIFEST_FILE,
         ];
     }
 
@@ -692,7 +709,7 @@ describe('Whole-server archive', () => {
             const entry = read!.entries.find((e) => e.path === home.member)!;
             expect(entry.sha256).toBe(await sha256Of(home.standalone));
         }
-        const record = await verifyArchiveTransport(archivePath);
+        const record = (await readServerArchive(archivePath)).verify;
         expect(record.failures).toEqual([]);
         expect(record.status).toBe('verified');
     });
@@ -744,7 +761,7 @@ describe('Whole-server archive', () => {
         const corrupted = join(mkdtempSync(join(TEST_DATA_DIR, 'server-corrupt-')), basename(archivePath));
         writeFileSync(corrupted, bytes);
 
-        const record = await verifyArchiveTransport(corrupted);
+        const record = (await readServerArchive(corrupted)).verify;
         expect(record.status).toBe('failed');
         expect(record.failures).toEqual([`${homes[1].member}: sha256 does not match the manifest`]);
     });
@@ -771,17 +788,20 @@ describe('Whole-server archive', () => {
         const envFile = join(dir, 'unreadable.env');
         writeFileSync(envFile, 'SECRET=1\n');
         chmodSync(envFile, 0o000);
+        process.env['EIGEN_ENV_FILE'] = envFile;
         // A certificate without its key restores nothing.
-        const certsDir = mkdtempSync(join(TEST_DATA_DIR, 'certs-unreadable-'));
+        mkdirSync(certsDir, { recursive: true });
         for (const name of CERT_FILES) writeFileSync(join(certsDir, name), `${name} bytes`);
         chmodSync(join(certsDir, 'key.pem'), 0o000);
         const writer = await createArchiveWriter(small);
         try {
-            const install = await appendInstallFiles(writer, { envFile, dkimDir: join(dir, 'no-dkim'), certsDir });
+            const install = await appendInstallFiles(writer);
             expect(install).toEqual({ envFile: false, dkim: false, certs: false });
             await writer.finish({ ...manifest, ...install });
         } finally {
             await writer.abort();
+            delete process.env['EIGEN_ENV_FILE'];
+            rmSync(certsDir, { recursive: true, force: true });
         }
         expect((await readArchiveMembers(small)).map((member) => member.name)).toEqual(['manifest.json']);
     });
@@ -795,6 +815,8 @@ describe('Whole-server archive', () => {
 });
 
 describe('Archive writer and reader', () => {
+    // What readArchiveMember holds in memory at most.
+    const READ_CAP = 16 * 1024 * 1024;
     const fields: Omit<ServerArchiveManifest, 'entries'> = {
         formatVersion: 1,
         level: 'full',
@@ -806,6 +828,7 @@ describe('Archive writer and reader', () => {
         orphans: [],
         envFile: false,
         dkim: false,
+        certs: false,
         images: {},
     };
     let dir: string;
@@ -830,9 +853,21 @@ describe('Archive writer and reader', () => {
         return archivePath;
     }
 
+    test('a pax or GNU long-name header past 64 KiB is refused before it is read into memory', async () => {
+        for (const typeflag of ['x', 'g', 'L']) {
+            const size = 64 * 1024 + 1;
+            const header = Buffer.alloc(512);
+            header.write(`${size.toString(8).padStart(11, '0')}\0`, 124);
+            header.write(typeflag, 156);
+            const archivePath = join(dir, `long-header-${typeflag}.tar`);
+            writeFileSync(archivePath, Buffer.concat([header, Buffer.alloc(Math.ceil(size / 512) * 512 + 1024)]));
+            await expect(readArchiveMembers(archivePath)).rejects.toThrow('header');
+        }
+    });
+
     test('a member past the read cap is refused in memory and streamed out byte for byte', async () => {
         const big = join(dir, 'big.bin');
-        const bytes = new Uint8Array(MAX_MEMBER_READ_BYTES + 1);
+        const bytes = new Uint8Array(READ_CAP + 1);
         for (let i = 0; i < bytes.length; i += 4096) bytes[i] = (i / 4096) % 251;
         writeFileSync(big, bytes);
         const archivePath = await writeArchive('big.tar', [
@@ -913,14 +948,14 @@ describe('Archive writer and reader', () => {
             ['lead.txt', lead],
             ['lead.txt', lead],
         ]);
-        const record = await verifyArchiveTransport(archivePath);
+        const record = (await readServerArchive(archivePath)).verify;
         expect(record.status).toBe('failed');
         expect(record.failures).toEqual(['lead.txt: appears more than once in the archive']);
     });
 
     test('a last member named manifest.json past the read cap fails the transport check', async () => {
         const big = join(dir, 'big-manifest.json');
-        writeFileSync(big, new Uint8Array(MAX_MEMBER_READ_BYTES + 1));
+        writeFileSync(big, new Uint8Array(READ_CAP + 1));
         // finish() would put the real manifest after it, so the archive is taken before it closes.
         const building = join(dir, 'big-manifest-building.tar');
         const archivePath = join(dir, 'big-manifest.tar');
@@ -932,7 +967,7 @@ describe('Archive writer and reader', () => {
         } finally {
             await writer.abort();
         }
-        const record = await verifyArchiveTransport(archivePath);
+        const record = (await readServerArchive(archivePath)).verify;
         expect(record.status).toBe('failed');
     });
 });

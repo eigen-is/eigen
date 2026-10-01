@@ -222,9 +222,13 @@ export async function pullHomeSnapshot(
     const startedAt = Date.now();
     const wasLoaded = isHomeOpen(ownerId);
     const home = await getHomeForBackup(ownerId);
+    // A capture can outlast the idle with nobody connected, as one big file at 02:00 does: the timer would close
+    // the databases it reads.
+    const keepAlive = setInterval(() => home.touch(), 60_000);
     try {
         return await snapshotHome(home, targetDir, options);
     } finally {
+        clearInterval(keepAlive);
         if (!wasLoaded) home.touch(home.requestedAt < startedAt ? BACKUP_RELEASE_MS : undefined);
     }
 }

@@ -1,8 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { treaty } from '@elysiajs/eden';
-import type { BackupJob } from '@workspace/lib/types/backup';
 import { parseServerArchiveName } from '@workspace/lib/validation';
 import { and, eq } from 'drizzle-orm';
 import { member as memberSchema } from '../../../auth-schema';
@@ -15,47 +14,10 @@ import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
 import { authedRequest, createTestUser, getTestContext, type TestContext, type TestUser } from '../setup';
+import { holdCaptures, removeServerRecords, serverRecords, waitForJob, writeServerRecord } from './backup-test-helpers';
 
 // A Light job of the file's few homes, for real.
 const JOB_TIMEOUT_MS = 120_000;
-
-async function waitForJob(id: string): Promise<BackupJob> {
-    for (let attempt = 0; attempt < 1200; attempt++) {
-        const job = getBackupJob(id);
-        if (job && job.state !== 'running') return job;
-        await Bun.sleep(50);
-    }
-    throw new Error(`job ${id} did not finish`);
-}
-
-function serverRecords(): string[] {
-    return readdirSync(getBackupsDir()).filter((name) => name.startsWith('server-'));
-}
-
-// A record the way a refused or finished attempt leaves one, without running a job.
-function writeRecord(name: string, record: Record<string, unknown>, archive?: string): string {
-    const archivePath = join(getBackupsDir(), name);
-    if (archive !== undefined) writeFileSync(archivePath, archive);
-    writeFileSync(serverSidecarPath(archivePath), JSON.stringify(record));
-    return archivePath;
-}
-
-// Holds every home capture until released, so a job stays running while a test looks at it.
-function holdCaptures(): { release(): void; restore(): void } {
-    const gate = Promise.withResolvers<void>();
-    const pull = homeRelay.pullHomeSnapshot;
-    const spy = spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (...args) => {
-        await gate.promise;
-        return pull(...args);
-    });
-    return {
-        release: () => gate.resolve(),
-        restore: () => {
-            gate.resolve();
-            spy.mockRestore();
-        },
-    };
-}
 
 describe('Server backup routes', () => {
     let ctx: TestContext;
@@ -79,7 +41,7 @@ describe('Server backup routes', () => {
     });
 
     afterEach(() => {
-        for (const name of serverRecords()) rmSync(join(getBackupsDir(), name), { force: true });
+        removeServerRecords();
     });
 
     afterAll(async () => {
@@ -89,7 +51,7 @@ describe('Server backup routes', () => {
 
     test('an admin who is not the owner, and a member, are refused every one of them', async () => {
         const name = buildServerArchiveName('manual', 'full', new Date('2026-09-01T02:00:00Z'));
-        writeRecord(name, { state: 'done', startedAt: '2026-09-01T02:00:00.000Z' }, 'archive bytes');
+        writeServerRecord(name, { state: 'done', startedAt: '2026-09-01T02:00:00.000Z' }, 'archive bytes');
         for (const api of [adminApi, ctx.bob.api]) {
             expect((await api.admin['server-backup'].post({ level: 'light' })).status).toBe(403);
             expect((await api.admin['server-backup'].archives.get()).status).toBe(403);
@@ -110,7 +72,6 @@ describe('Server backup routes', () => {
             const job = await waitForJob(data!.jobId);
             expect(job.error).toBeUndefined();
             expect(job.state).toBe('done');
-            expect(job.reason).toBe('manual');
             expect(job.startedBy).toBe(ctx.alice.user.id);
             expect(parseServerArchiveName(job.artifact ?? '')).toMatchObject({ reason: 'manual', level: 'light' });
 
@@ -188,7 +149,7 @@ describe('Server backup routes', () => {
 
     test('a refused attempt lists without bytes, and an archive whose record does not read lists without one', async () => {
         const refused = buildServerArchiveName('scheduled', 'full', new Date('2026-09-02T02:00:00Z'));
-        writeRecord(refused, {
+        writeServerRecord(refused, {
             state: 'failed',
             startedAt: '2026-09-02T02:00:00.000Z',
             finishedAt: '2026-09-02T02:00:01.000Z',
@@ -214,9 +175,9 @@ describe('Server backup routes', () => {
     test('delete takes an archive and its record together, and a refused attempt its record', async () => {
         const at = new Date('2026-09-04T02:00:00Z');
         const archive = buildServerArchiveName('manual', 'full', at);
-        writeRecord(archive, { state: 'done', startedAt: at.toISOString() }, 'archive bytes');
+        writeServerRecord(archive, { state: 'done', startedAt: at.toISOString() }, 'archive bytes');
         const refused = buildServerArchiveName('scheduled', 'full', at);
-        writeRecord(refused, { state: 'failed', startedAt: at.toISOString(), error: 'no room' });
+        writeServerRecord(refused, { state: 'failed', startedAt: at.toISOString(), error: 'no room' });
 
         for (const name of [archive, refused]) {
             const { data, error } = await ctx.alice.api.admin['server-backup'].archives({ name }).delete();
@@ -226,7 +187,7 @@ describe('Server backup routes', () => {
         expect(serverRecords()).toEqual([]);
     });
 
-    test('delete refuses a name outside the grammar, one that is not there, and one being written', async () => {
+    test('delete refuses a name outside the grammar and one that is not there', async () => {
         const at = new Date('2026-09-05T02:00:00Z');
         for (const name of [buildArtifactName(ctx.alice.user.id, at), 'server-manual-full-..tar', 'x']) {
             const res = await ctx.alice.api.admin['server-backup'].archives({ name }).delete();
@@ -234,12 +195,15 @@ describe('Server backup routes', () => {
         }
         const missing = buildServerArchiveName('manual', 'full', at);
         expect((await ctx.alice.api.admin['server-backup'].archives({ name: missing }).delete()).status).toBe(404);
+    });
 
-        const running = buildServerArchiveName('scheduled', 'full', at);
-        writeRecord(running, { state: 'running', startedAt: at.toISOString() }, 'half an archive');
-        const res = await ctx.alice.api.admin['server-backup'].archives({ name: running }).delete();
-        expect(res.status).toBe(409);
-        expect(serverRecords().sort()).toEqual([running, `${running}.json`]);
+    test('delete takes a record left running by a job whose final write failed', async () => {
+        const at = new Date('2026-09-05T02:00:00Z');
+        const stuck = buildServerArchiveName('scheduled', 'full', at);
+        writeServerRecord(stuck, { state: 'running', startedAt: at.toISOString() }, 'half an archive');
+        const { error } = await ctx.alice.api.admin['server-backup'].archives({ name: stuck }).delete();
+        expect(error).toBeNull();
+        expect(serverRecords()).toEqual([]);
     });
 
     test(
@@ -264,7 +228,7 @@ describe('Server backup routes', () => {
 
     test('no route hands out a whole-server archive', async () => {
         const name = buildServerArchiveName('manual', 'full', new Date('2026-09-06T02:00:00Z'));
-        writeRecord(name, { state: 'done', startedAt: '2026-09-06T02:00:00.000Z' }, 'archive bytes');
+        writeServerRecord(name, { state: 'done', startedAt: '2026-09-06T02:00:00.000Z' }, 'archive bytes');
         for (const path of [`/admin/server-backup/archives/${name}`, `/admin/backup/artifacts/${name}`]) {
             const res = await authedRequest(ctx.alice.user.sessionToken, path);
             expect(res.status).not.toBe(200);

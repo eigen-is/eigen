@@ -126,4 +126,19 @@ describe('pullHomeSnapshot', () => {
         expect(atHome(ownerId)).toBe(true);
         expect(open.destructing).toBe(false);
     });
+
+    test('a capture that outlasts the idle, with no file to tick on, keeps the home it reads', async () => {
+        await getHome(ownerId);
+        jest.useFakeTimers();
+        let destructing: boolean | undefined;
+        spies.push(
+            spyOn(snapshotModule, 'snapshotHome').mockImplementation(async (home, dir, options) => {
+                jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
+                destructing = home.destructing;
+                return snapshotHome(home, dir, options);
+            }),
+        );
+        await pullHomeSnapshot(ownerId, targetDir(), {});
+        expect(destructing).toBe(false);
+    });
 });

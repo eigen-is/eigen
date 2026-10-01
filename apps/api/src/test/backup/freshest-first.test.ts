@@ -3,11 +3,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'b
 import { chmodSync, existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { drainBackupJobs, getBackupJob, runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
-import { buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
-import { snapshotHome } from '../../lib/backup/snapshot-home';
-import type { DatabaseConfig } from '../../lib/core';
+import { getBackupsDir } from '../../lib/backup/paths';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
@@ -31,6 +28,7 @@ import {
     waitFor,
 } from '../fault-storage-helpers';
 import { createTestUser, findOrFail, getTestContext, TEST_DATA_DIR, TEST_PNG_BYTES } from '../setup';
+import { MARKER_DB_CONFIG, MARKER_SCHEMA, readMarkers, snapshotInto } from './backup-test-helpers';
 
 // The remote half of snapshotHome: an `s3` mount is materialized into the archive's data/ tree by
 // path, and wherever local bytes are newer than the stored object — a container database or a plain
@@ -45,15 +43,6 @@ const NO_BUCKET_MOUNT_ID = 'backup-s3-no-bucket';
 const RACING_DELETE_MOUNT_ID = 'backup-s3-racing-delete';
 const VANISHING_OBJECT_MOUNT_ID = 'backup-s3-vanishing-object';
 const LOCAL_MOUNT_ID = 'backup-local';
-
-const docSchema = { items: sqliteTable('items', { id: integer('id').primaryKey(), data: text('data') }) };
-// No snapshot config: a close-time version enqueue would be noise for these tests.
-const docConfig: DatabaseConfig<typeof docSchema> = {
-    name: 'backup-freshest-doc',
-    currentVersion: 1,
-    schema: docSchema,
-    migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
-};
 
 let backingRoot: string;
 let home: Home;
@@ -91,18 +80,6 @@ function writeWalTailDb(filePath: string, ...markers: string[]): Database {
     return db;
 }
 
-function readMarkers(dbPath: string): string[] {
-    const db = new Database(dbPath, { readonly: true });
-    try {
-        return db
-            .query('SELECT data FROM items ORDER BY id')
-            .all()
-            .map((row) => (row as { data: string }).data);
-    } finally {
-        db.close();
-    }
-}
-
 async function archiveBytes(folder: string, relPath: string): Promise<Uint8Array> {
     return new Uint8Array(await Bun.file(join(folder, relPath)).arrayBuffer());
 }
@@ -128,24 +105,18 @@ async function withFakeS3Mount(id: string, run: (mount: Mount, fake: FakeS3Serve
     }
 }
 
-async function snapshot(): Promise<{ manifest: BackupManifest; folder: string }> {
-    const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-freshest-'));
-    const manifest = await snapshotHome(home, target);
-    return { manifest, folder: join(target, buildHomeFolderName(home.user.id)) };
-}
-
 // A settled document whose working copy in tmp/ holds one more commit, uncheckpointed, than its stored object.
 async function expectWalTailArchived(mount: Mount): Promise<void> {
     const { containerId, dataDbId } = await provisionDoc(mount);
     const containerName = (await mount.getPath(containerId))!.name;
-    const managed = await mount.createDatabase(docConfig, dataDbId);
-    managed.db.insert(docSchema.items).values({ id: 1, data: 'settled' }).run();
+    const managed = await mount.createDatabase(MARKER_DB_CONFIG, dataDbId);
+    managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'settled' }).run();
     await settleContainer(mount, containerId);
     const temp = mount.getTempPath(dataDbId);
     const writer = writeWalTailDb(temp, 'settled', 'crash tail');
     try {
         expect(statSync(`${temp}-wal`).size).toBeGreaterThan(0);
-        const { folder } = await snapshot();
+        const { folder } = await snapshotInto(home);
         const archived = join(folder, `home/mounts/${mount.id}/data/${containerName}/data.db`);
         expect(readMarkers(archived)).toEqual(['settled', 'crash tail']);
     } finally {
@@ -181,8 +152,8 @@ beforeAll(async () => {
 
     const { containerId, dataDbId } = await provisionDoc(fullMount);
     docFolderName = (await fullMount.getPath(containerId))!.name;
-    const managed = await fullMount.createDatabase(docConfig, dataDbId);
-    managed.db.insert(docSchema.items).values({ id: 1, data: 'settled' }).run();
+    const managed = await fullMount.createDatabase(MARKER_DB_CONFIG, dataDbId);
+    managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'settled' }).run();
     await settleContainer(fullMount, containerId);
 
     trashedFileId = await fullMount.createFile(
@@ -216,22 +187,22 @@ describe('Backup freshest-first on an s3 mount', () => {
     test('a container database whose upload is parked is archived from the staged copy', async () => {
         const { containerId, dataDbId } = await provisionDoc(staleMount);
         const containerName = (await staleMount.getPath(containerId))!.name;
-        const managed = await staleMount.createDatabase(docConfig, dataDbId);
-        managed.db.insert(docSchema.items).values({ id: 1, data: 'stored' }).run();
+        const managed = await staleMount.createDatabase(MARKER_DB_CONFIG, dataDbId);
+        managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'stored' }).run();
         await managed.flush();
         await staleMount.drainPendingUploads({ flushNow: true });
         expect(await countBackingRows(staleMount, dataDbId, backingRoot)).toBe(1);
 
         // The outage: the second commit is staged and enqueued, and its PUT never lands. Closing
         // the database first leaves no live handle, so the staged copy is the only fresh source.
-        managed.db.insert(docSchema.items).values({ id: 2, data: 'parked' }).run();
+        managed.db.insert(MARKER_SCHEMA.items).values({ id: 2, data: 'parked' }).run();
         staleFault.parkWrites = true;
         await staleMount.closeDatabase(dataDbId);
         const storageKey = await staleMount.getStorageKey(dataDbId);
         await staleFault.waitForParked((p) => p.key === storageKey);
         expect(await countBackingRows(staleMount, dataDbId, backingRoot)).toBe(1);
 
-        const { manifest, folder } = await snapshot();
+        const { manifest, folder } = await snapshotInto(home);
         const relPath = `home/mounts/${STALE_MOUNT_ID}/data/${containerName}/data.db`;
         expect(manifest.entries.map((e) => e.path)).toContain(relPath);
         expect(readMarkers(join(folder, relPath))).toEqual(['stored', 'parked']);
@@ -253,8 +224,8 @@ describe('Backup freshest-first on an s3 mount', () => {
     test('an open container database beats both the staged copy and the stored object', async () => {
         const { containerId, dataDbId } = await provisionDoc(staleMount);
         const containerName = (await staleMount.getPath(containerId))!.name;
-        const managed = await staleMount.createDatabase(docConfig, dataDbId);
-        managed.db.insert(docSchema.items).values({ id: 1, data: 'acked' }).run();
+        const managed = await staleMount.createDatabase(MARKER_DB_CONFIG, dataDbId);
+        managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'acked' }).run();
         await managed.flush();
         await staleMount.drainPendingUploads({ flushNow: true });
 
@@ -262,14 +233,14 @@ describe('Backup freshest-first on an s3 mount', () => {
         // adds 'staged', and 'live' only ever exists in the open handle. Nothing flushes it, so a
         // capture that settled for the staged copy would silently drop it.
         staleFault.parkWrites = true;
-        managed.db.insert(docSchema.items).values({ id: 2, data: 'staged' }).run();
+        managed.db.insert(MARKER_SCHEMA.items).values({ id: 2, data: 'staged' }).run();
         await managed.flush();
         const storageKey = await staleMount.getStorageKey(dataDbId);
         await staleFault.waitForParked((p) => p.key === storageKey);
-        managed.db.insert(docSchema.items).values({ id: 3, data: 'live' }).run();
+        managed.db.insert(MARKER_SCHEMA.items).values({ id: 3, data: 'live' }).run();
         expect(await countBackingRows(staleMount, dataDbId, backingRoot)).toBe(1);
 
-        const { manifest, folder } = await snapshot();
+        const { manifest, folder } = await snapshotInto(home);
         const relPath = `home/mounts/${STALE_MOUNT_ID}/data/${containerName}/data.db`;
         expect(manifest.entries.map((e) => e.path)).toContain(relPath);
         expect(readMarkers(join(folder, relPath))).toEqual(['acked', 'staged', 'live']);
@@ -298,7 +269,7 @@ describe('Backup freshest-first on an s3 mount', () => {
         queue.enqueueStaged(storageKey, stagingPath, true);
         await staleFault.waitForParked((p) => p.key === storageKey);
 
-        const { manifest, folder } = await snapshot();
+        const { manifest, folder } = await snapshotInto(home);
         const relPath = `home/mounts/${STALE_MOUNT_ID}/data/ledger.db`;
         expect(manifest.entries.map((e) => e.path)).toContain(relPath);
         // Byte-identical to the staged copy: a plain file is never rewritten on its way in.
@@ -326,11 +297,11 @@ describe('Backup freshest-first on an s3 mount', () => {
             const storageKey = await mount.getStorageKey(fileId);
             // The HEAD fails, then only the GET: each keeps the code the provider answered with.
             fake.faults.set(storageKey, 'fail');
-            await expect(snapshot()).rejects.toThrow(
+            await expect(snapshotInto(home)).rejects.toThrow(
                 `mount ${FAILING_MOUNT_ID}: storage unreachable (UnknownError) reading ${storageKey}`,
             );
             fake.faults.set(storageKey, 'fail-get');
-            await expect(snapshot()).rejects.toThrow(
+            await expect(snapshotInto(home)).rejects.toThrow(
                 `mount ${FAILING_MOUNT_ID}: storage unreachable (InternalError) reading ${storageKey}`,
             );
         });
@@ -341,13 +312,13 @@ describe('Backup freshest-first on an s3 mount', () => {
     test('a container database that cannot be read names its storage key', async () => {
         await withFakeS3Mount(FAILING_CONTAINER_MOUNT_ID, async (mount, fake) => {
             const { containerId, dataDbId } = await provisionDoc(mount);
-            const managed = await mount.createDatabase(docConfig, dataDbId);
-            managed.db.insert(docSchema.items).values({ id: 1, data: 'stored' }).run();
+            const managed = await mount.createDatabase(MARKER_DB_CONFIG, dataDbId);
+            managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'stored' }).run();
             // No live handle and nothing staged, so the copy has to go to the stored object.
             await settleContainer(mount, containerId);
             const storageKey = await mount.getStorageKey(dataDbId);
             fake.faults.set(storageKey, 'fail-get');
-            await expect(snapshot()).rejects.toThrow(
+            await expect(snapshotInto(home)).rejects.toThrow(
                 `mount ${FAILING_CONTAINER_MOUNT_ID}: storage unreachable (InternalError) reading ${storageKey}`,
             );
         });
@@ -357,12 +328,12 @@ describe('Backup freshest-first on an s3 mount', () => {
     test('a container database whose bucket answers NoSuchBucket fails as unreachable, not as lost', async () => {
         await withFakeS3Mount(NO_BUCKET_MOUNT_ID, async (mount, fake) => {
             const { containerId, dataDbId } = await provisionDoc(mount);
-            const managed = await mount.createDatabase(docConfig, dataDbId);
-            managed.db.insert(docSchema.items).values({ id: 1, data: 'stored' }).run();
+            const managed = await mount.createDatabase(MARKER_DB_CONFIG, dataDbId);
+            managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'stored' }).run();
             await settleContainer(mount, containerId);
             const storageKey = await mount.getStorageKey(dataDbId);
             fake.faults.set(storageKey, 'no-bucket');
-            await expect(snapshot()).rejects.toThrow(
+            await expect(snapshotInto(home)).rejects.toThrow(
                 `mount ${NO_BUCKET_MOUNT_ID}: storage unreachable (NoSuchBucket) reading ${storageKey}`,
             );
         });
@@ -390,7 +361,7 @@ describe('Backup freshest-first on an s3 mount', () => {
             await staleFault.waitForParked((p) => p.key === storageKey);
             chmodSync(stagingPath, 0);
             try {
-                await expect(snapshot()).rejects.toThrow('EACCES: permission denied');
+                await expect(snapshotInto(home)).rejects.toThrow('EACCES: permission denied');
             } finally {
                 chmodSync(stagingPath, 0o644);
             }
@@ -409,7 +380,7 @@ describe('Backup freshest-first on an s3 mount', () => {
         const storageKey = await staleMount.getStorageKey(fileId);
         try {
             await staleFault.inner.delete(storageKey);
-            await expect(snapshot()).rejects.toThrow(
+            await expect(snapshotInto(home)).rejects.toThrow(
                 `mount ${STALE_MOUNT_ID}: lost.png has ${TEST_PNG_BYTES.byteLength} bytes on record but no object at ${storageKey}`,
             );
         } finally {
@@ -437,7 +408,7 @@ describe('Backup freshest-first on an s3 mount', () => {
             return file;
         });
         try {
-            const { manifest } = await snapshot();
+            const { manifest } = await snapshotInto(home);
             const paths = manifest.entries.map((e) => e.path);
             expect(paths).not.toContain(`home/mounts/${STALE_MOUNT_ID}/data/touched.txt`);
             expect(paths).not.toContain(`home/mounts/${STALE_MOUNT_ID}/data/deleted.png`);
@@ -462,7 +433,7 @@ describe('Backup freshest-first on an s3 mount', () => {
             return file;
         });
         try {
-            return await snapshot();
+            return await snapshotInto(home);
         } finally {
             spy.mockRestore();
         }
@@ -509,13 +480,13 @@ describe('Backup freshest-first on an s3 mount', () => {
     test('a document whose last edits survive only in its crash temp is archived with them', async () => {
         const { containerId, dataDbId } = await provisionDoc(staleMount);
         const containerName = (await staleMount.getPath(containerId))!.name;
-        const managed = await staleMount.createDatabase(docConfig, dataDbId);
-        managed.db.insert(docSchema.items).values({ id: 1, data: 'settled' }).run();
+        const managed = await staleMount.createDatabase(MARKER_DB_CONFIG, dataDbId);
+        managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'settled' }).run();
         await settleContainer(staleMount, containerId);
         try {
             // What a SIGKILL leaves: tmp/ holds a commit the bucket never got, which the next open adopts.
             await writeMarkerDb(staleMount.getTempPath(dataDbId), 'settled', 'crash tail');
-            const { folder } = await snapshot();
+            const { folder } = await snapshotInto(home);
             const relPath = `home/mounts/${STALE_MOUNT_ID}/data/${containerName}/data.db`;
             expect(readMarkers(join(folder, relPath))).toEqual(['settled', 'crash tail']);
         } finally {
@@ -531,8 +502,8 @@ describe('Backup freshest-first on an s3 mount', () => {
     test('a crash temp with no WAL sidecars is archived with its last edits', async () => {
         const { containerId, dataDbId } = await provisionDoc(staleMount);
         const containerName = (await staleMount.getPath(containerId))!.name;
-        const managed = await staleMount.createDatabase(docConfig, dataDbId);
-        managed.db.insert(docSchema.items).values({ id: 1, data: 'settled' }).run();
+        const managed = await staleMount.createDatabase(MARKER_DB_CONFIG, dataDbId);
+        managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'settled' }).run();
         await settleContainer(staleMount, containerId);
         try {
             const temp = staleMount.getTempPath(dataDbId);
@@ -541,7 +512,7 @@ describe('Backup freshest-first on an s3 mount', () => {
             writer.close(true);
             expect(existsSync(`${temp}-wal`)).toBe(false);
             expect(existsSync(`${temp}-shm`)).toBe(false);
-            const { folder } = await snapshot();
+            const { folder } = await snapshotInto(home);
             const relPath = `home/mounts/${STALE_MOUNT_ID}/data/${containerName}/data.db`;
             expect(readMarkers(join(folder, relPath))).toEqual(['settled', 'unsynced']);
         } finally {
@@ -553,12 +524,12 @@ describe('Backup freshest-first on an s3 mount', () => {
     test('a 0-byte crash temp is skipped and the stored object archived', async () => {
         const { containerId, dataDbId } = await provisionDoc(staleMount);
         const containerName = (await staleMount.getPath(containerId))!.name;
-        const managed = await staleMount.createDatabase(docConfig, dataDbId);
-        managed.db.insert(docSchema.items).values({ id: 1, data: 'settled' }).run();
+        const managed = await staleMount.createDatabase(MARKER_DB_CONFIG, dataDbId);
+        managed.db.insert(MARKER_SCHEMA.items).values({ id: 1, data: 'settled' }).run();
         await settleContainer(staleMount, containerId);
         try {
             writeFileSync(staleMount.getTempPath(dataDbId), '');
-            const { folder } = await snapshot();
+            const { folder } = await snapshotInto(home);
             const relPath = `home/mounts/${STALE_MOUNT_ID}/data/${containerName}/data.db`;
             expect(readMarkers(join(folder, relPath))).toEqual(['settled']);
         } finally {
@@ -567,7 +538,7 @@ describe('Backup freshest-first on an s3 mount', () => {
     });
 
     test('a settled s3 mount is materialized into data/ by path', async () => {
-        const { manifest, folder } = await snapshot();
+        const { manifest, folder } = await snapshotInto(home);
         const prefix = `home/mounts/${FULL_MOUNT_ID}/data/`;
         const archived = manifest.entries
             .map((e) => e.path)

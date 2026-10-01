@@ -15,7 +15,7 @@ import {
     checkRestoredDatabases,
     containerDatabasesIn,
     materializeMount,
-    movePath,
+    movePathAsync,
     type VersionedDatabase,
 } from './materialize-mount';
 import {
@@ -29,7 +29,7 @@ import {
 import { markRestoreComplete, writeRestoringMarker } from './recovery';
 import { forgetSafetyCopySize, resolveSafetyCopy } from './safety-copy';
 import type { SnapshotProgress } from './snapshot-home';
-import { describeFailures, verifyFolder } from './verify';
+import { requireVerified, verifyFolder } from './verify';
 
 // A safety copy of a home whose owner is gone is a delete candidate, not a restore: the folder on
 // its own leaves a home nobody can sign in to. Restoring a deleted user goes through an artifact,
@@ -45,14 +45,9 @@ async function requireOwnerExists(ownerId: string): Promise<void> {
 // the work that judged it.
 type InstallHome = (stamp: string) => Promise<void>;
 
-// The moves every restore is made of, in one place: take the home away from everyone holding it,
-// put the folder as it stands aside as a safety copy, install the replacement, and on any failure
-// put both folders back. `prepare` runs under the mark, before a byte is touched. `parkOnFailure`
-// names where the folder in place goes if the install throws. Nothing is ever deleted, and the
-// marker written here is the only thing that tells the next boot an interrupted restore happened —
-// one writer, so recoverInterruptedRestores covers every kind of restore. Two words, two
-// mechanisms: the mark is the in-memory flag every surface refuses the home on, the marker is the
-// note on disk the next boot reads.
+// The moves every restore is made of: take the home from everyone, put its folder aside, install the replacement,
+// and on a failure put both folders back, deleting nothing. The marker written here is the only note the next boot
+// reads of an interrupted restore, so recoverInterruptedRestores covers every kind.
 async function replaceHomeFolder(
     ownerId: string,
     homeDir: string,
@@ -73,27 +68,19 @@ async function replaceHomeFolder(
         // There is no home folder to move aside on a restore after the user was deleted.
         const stamp = freeSafetyCopyStamp(homeDir, new Date());
         const movedAside = fs.existsSync(homeDir) ? buildSafetyCopyName(homeDir, 'pre-restore', stamp) : null;
-        // Always, and before the move: a process killed between here and the install leaves a home
-        // folder that is either gone or half written, and only this note tells the next boot which
-        // it is — the folders' presence alone means nothing (a deleted user's safety copies outlive
-        // them, and an install writes the home folder early).
+        // Before the move: a process killed from here on leaves a home folder gone or half written, and which one
+        // only this note tells the next boot.
         writeRestoringMarker(jobId, { ownerId, homeDir, preRestoreName: movedAside && path.basename(movedAside) });
         if (movedAside) fs.renameSync(homeDir, movedAside);
 
         try {
             await install(stamp);
-            // Every tab that holds the home as it was reloads: an event stream on its next announcement, a collab
-            // socket on its next reconnect. Only once the new folder is whole, so no tab reloads onto the 503 of a
-            // restore still running, and one that fails leaves the epoch alone with the home put back. Before the
-            // completion note: a crash between the two leaves an extra reload, never a stale tab over the new home.
+            // Every tab of the home reloads, once the folder is whole and before the completion note: a crash
+            // between the two costs an extra reload, never a stale tab over the new home.
             await rotateHomeDataEpoch(ownerId);
-            // The home folder is whole from here: everything after this only lets go of it. A crash
-            // before this line leaves a half-written folder that only the next boot can judge, and
-            // the absence of this note is what tells it so.
             markRestoreComplete(jobId);
         } catch (error) {
-            // Nothing is deleted, ever: the folder in place keeps a name of its own and the home as
-            // it was goes back. A failure while putting it back must not hide the original one.
+            // A failure while putting the home back must not hide the one that brought us here.
             try {
                 if (fs.existsSync(homeDir)) fs.renameSync(homeDir, parkOnFailure(stamp));
                 if (movedAside) fs.renameSync(movedAside, homeDir);
@@ -114,12 +101,9 @@ async function replaceHomeFolder(
     }
 }
 
-// Replaces one home with the copy inside an artifact. Nothing is ever deleted: the home as it stands
-// is renamed aside as `{id}.pre-restore-{ts}`, and a failure after that point leaves the incomplete
-// folder as `{id}.failed-restore-{ts}` and puts the original back. The home is refused on every
-// surface for the duration (markHomeRestoring, which is also the lock against a second restore) and
-// its collab sockets are told to retry, which the new data epoch turns into a reload; the first load after the mark clears runs migrations, reseeds
-// each domain's byte counters from the restored rows and refreshes shared-with-me.
+// Replaces one home with the copy inside an artifact: the home as it stands goes aside as `{id}.pre-restore-{ts}`,
+// and a failed install as `{id}.failed-restore-{ts}`. The first load after the restore runs migrations and reseeds
+// each domain's byte counters from the restored rows.
 export async function restoreHome(
     artifactName: string,
     ownerId: string,
@@ -154,15 +138,12 @@ export async function restoreHome(
             // already have cost the user their open pages.
             const incomplete = incompleteReason(manifest);
             if (incomplete) throw new ApiError(400, `${artifactName} ${incomplete}`);
-            const verified = await verifyFolder(folder, onProgress);
-            if (verified.status !== 'verified') {
-                throw new ApiError(400, `${artifactName} did not verify: ${describeFailures(verified)}`);
-            }
+            requireVerified(await verifyFolder(folder, onProgress), artifactName);
 
             return async (stamp) => {
                 // The archive's `home/` IS the home folder, one for one.
                 onProgress?.('home files', 0, 1);
-                movePath(path.join(folder, ARCHIVE_HOME_DIR), homeDir);
+                await movePathAsync(path.join(folder, ARCHIVE_HOME_DIR), homeDir);
                 onProgress?.('home files', 1, 1);
                 // A mount the backup skipped carries nothing: it stays disabled in the restored
                 // settings.json and its folder is simply not there (snapshot-home.ts).
@@ -173,10 +154,7 @@ export async function restoreHome(
                     onProgress?.('mounts', index + 1, carried.length);
                 }
 
-                // What landed is still a database this server can open. Before the identity write:
-                // the rollback moves folders, and nothing takes a users3.db row back. A restore of a deleted user that failed
-                // this check after re-inserting would leave a user who can sign in with no home —
-                // and whose retry would find that user and skip the insert for good.
+                // Before the identity write: the rollback moves folders, and nothing takes a users3.db row back.
                 checkRestoredDatabases(
                     homeDir,
                     carried.map((summary) => summary.id),

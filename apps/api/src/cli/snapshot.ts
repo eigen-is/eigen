@@ -3,7 +3,7 @@ import type { parseArgs } from 'node:util';
 import { roomShortfall } from '../lib/backup/paths';
 import { DATA, VERSION_PATTERN } from './install';
 import { createUi } from './ui';
-import { notesSince } from './update-check';
+import { hasBreaking, notesSince } from './update-check';
 
 // The ./eigen update of Eigen 0.3.0 asks this image whether to save a full or a light snapshot before it switches,
 // then saves it with its own image. It runs as root on the install folder (-w /install).
@@ -32,8 +32,7 @@ export async function snapshot(
         ui.fail('--from takes a version, like 0.2.0.', 'Run it through ./eigen update.');
     }
     if (!existsSync(DATA)) ui.fail('There is no data/ here.', 'Run ./eigen update in the install folder.');
-    // A breaking release may convert what a light snapshot leaves out, so only a full one could bring it back.
-    const kind = flags.light && !(from && notesSince(from).some(({ breaking }) => breaking.length)) ? 'light' : 'full';
+    const kind = flags.light && !(from && hasBreaking(notesSince(from))) ? 'light' : 'full';
     // What data/ takes on disk, as du counts it: the most either kind of snapshot of it can take.
     const du = Bun.spawn(['du', '-sk', DATA], { stdout: 'pipe', stderr: 'ignore' });
     const [listed] = await Promise.all([new Response(du.stdout).text(), du.exited]);

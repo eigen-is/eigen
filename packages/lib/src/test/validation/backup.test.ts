@@ -104,9 +104,9 @@ describe('parseServerArchiveManifest', () => {
         expect(parseServerArchiveManifest(JSON.stringify(valid))).toEqual(valid);
     });
 
-    test('reads a manifest without certs, as archives made before them are', () => {
-        const { certs: _, ...older } = valid;
-        expect(parseServerArchiveManifest(JSON.stringify(older))).toEqual(older);
+    test('refuses a manifest that does not say whether it holds the TLS certificate', () => {
+        const { certs: _, ...without } = valid;
+        expect(parseServerArchiveManifest(JSON.stringify(without))).toBeNull();
     });
 
     test('refuses a per-home manifest, a wrong version and a broken field', () => {

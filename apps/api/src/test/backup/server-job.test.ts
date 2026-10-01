@@ -2,15 +2,14 @@ import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, readdirSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
-import type { BackupJob, BackupLevel, BackupReason, ServerArchiveManifest } from '@workspace/lib/types/backup';
-import { parseServerArchiveManifest } from '@workspace/lib/validation';
-import { copyArchiveMember, readArchiveMember, readArchiveMembers } from '../../lib/backup/archive';
+import type { BackupJob, BackupLevel, BackupReason } from '@workspace/lib/types/backup';
+import { copyArchiveMember } from '../../lib/backup/archive';
 import { enumerateHomes } from '../../lib/backup/enumerate-homes';
 import { getBackupJob, startBackupJob, withBackupJobSlot } from '../../lib/backup/jobs';
 import { buildServerArchiveName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { readServerSidecar, recoverInterruptedServerBackups, startServerBackup } from '../../lib/backup/server-job';
-import { verifyArchiveTransport } from '../../lib/backup/verify';
+import { readServerArchive } from '../../lib/backup/verify';
 import { getServerDataPath, SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
@@ -19,19 +18,17 @@ import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
 import { createTeam, createTestUser, getTestContext, type TestContext } from '../setup';
+import {
+    alertTitlesTo,
+    type RealShapeHome,
+    readServerManifest,
+    realShapeHome,
+    waitForJob,
+} from './backup-test-helpers';
 
 // A server job snapshots, verifies and packs every home of the file's fixture for real.
 const JOB_TIMEOUT_MS = 120_000;
 const pullHomeSnapshot = homeRelay.pullHomeSnapshot;
-
-async function waitForJob(id: string): Promise<BackupJob> {
-    for (let attempt = 0; attempt < 1200; attempt++) {
-        const job = getBackupJob(id);
-        if (job && job.state !== 'running') return job;
-        await Bun.sleep(50);
-    }
-    throw new Error(`job ${id} did not finish`);
-}
 
 async function runJob(
     options: { level?: BackupLevel; reason?: BackupReason } = {},
@@ -42,26 +39,11 @@ async function runJob(
     return { job, archivePath: join(getBackupsDir(), job.artifact) };
 }
 
-async function readManifest(archivePath: string): Promise<ServerArchiveManifest> {
-    const members = await readArchiveMembers(archivePath);
-    const manifest = parseServerArchiveManifest(new TextDecoder().decode(await readArchiveMember(members.at(-1)!)));
-    if (!manifest) throw new Error(`${archivePath} carries no server manifest`);
-    return manifest;
-}
-
-// The owner's admin alerts among everything sendToHome was handed.
-function alertsTo(spy: { mock: { calls: Parameters<typeof homeRelay.sendToHome>[] } }, ownerId: string): string[] {
-    return spy.mock.calls.flatMap(([target, message]) =>
-        target === ownerId && message.type === 'notification' && message.notification.type === 'admin-alert'
-            ? [message.notification.title]
-            : [],
-    );
-}
-
 describe('Server backup job', () => {
     let ctx: TestContext;
     let sleeperId: string;
     let teamOwner: string;
+    let realShape: RealShapeHome;
     const spies: { mockRestore(): void }[] = [];
 
     beforeAll(async () => {
@@ -72,6 +54,7 @@ describe('Server backup job', () => {
         await getHome(sleeperId);
         teamOwner = teamOwnerId(await createTeam(ctx, getServerConfig()!.orgId, `Server Job Team ${Date.now()}`));
         await getHome(teamOwner);
+        realShape = await realShapeHome();
     });
 
     afterEach(() => {
@@ -93,9 +76,9 @@ describe('Server backup job', () => {
             expect(job.state).toBe('done');
             expect(job.kind).toBe('server-backup');
 
-            const record = await verifyArchiveTransport(archivePath);
-            expect(record.failures).toEqual([]);
-            const manifest = await readManifest(archivePath);
+            const { verify, manifest, members } = await readServerArchive(archivePath);
+            expect(verify.failures).toEqual([]);
+            if (!manifest) throw new Error('the archive carries no manifest');
             expect(manifest.reason).toBe('manual');
             expect(manifest.level).toBe('full');
             const owners = manifest.homes.map((home) => home.ownerId);
@@ -107,10 +90,9 @@ describe('Server backup job', () => {
             const sidecar = await readServerSidecar(archivePath);
             expect(sidecar?.state).toBe('done');
             expect(sidecar?.verify?.status).toBe('verified');
-            expect(alertsTo(relay, ctx.alice.user.id)).toEqual([]);
+            expect(alertTitlesTo(relay, ctx.alice.user.id)).toEqual([]);
 
             // A member copied into the backups folder is an ordinary artifact of its home.
-            const members = await readArchiveMembers(archivePath);
             for (const ownerId of [sleeperId, teamOwner]) {
                 const member = members.find(
                     (m) => m.name === manifest.homes.find((h) => h.ownerId === ownerId)?.member,
@@ -118,6 +100,24 @@ describe('Server backup job', () => {
                 const name = basename(member.name);
                 await copyArchiveMember(member, join(getBackupsDir(), name));
                 await restoreHome(name, ownerId, `server-member-restore-${ownerId}`);
+            }
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a home that stores files by name, with renamed, trashed and versioned items, is in a Full and a Light archive',
+        async () => {
+            quietRelay();
+            for (const level of ['full', 'light'] as const) {
+                const { job, archivePath } = await runJob({ level });
+                expect(job.error).toBeUndefined();
+                expect(job.state).toBe('done');
+                const home = (await readServerManifest(archivePath)).manifest.homes.find(
+                    (h) => h.ownerId === realShape.user.id,
+                );
+                expect(home?.failed).toBeUndefined();
+                expect(home?.member).toBeDefined();
             }
         },
         JOB_TIMEOUT_MS,
@@ -177,7 +177,7 @@ describe('Server backup job', () => {
             // Released once captured.
             await withBackupJobSlot(held, async () => {});
 
-            const manifest = await readManifest(archivePath);
+            const { manifest } = await readServerManifest(archivePath);
             expect(manifest.homes.find((home) => home.ownerId === target)?.member).toBeDefined();
             expect((await readServerSidecar(archivePath))?.state).toBe('done');
         },
@@ -201,8 +201,8 @@ describe('Server backup job', () => {
             expect(job.error).toContain('bucket unreachable');
 
             expect(existsSync(archivePath)).toBe(true);
-            expect((await verifyArchiveTransport(archivePath)).status).toBe('verified');
-            const manifest = await readManifest(archivePath);
+            expect((await readServerArchive(archivePath)).verify.status).toBe('verified');
+            const { manifest } = await readServerManifest(archivePath);
             const failed = manifest.homes.find((home) => home.ownerId === broken);
             expect(failed?.failed).toContain('bucket unreachable');
             expect(failed?.member).toBeUndefined();
@@ -214,7 +214,7 @@ describe('Server backup job', () => {
             expect(sidecar?.verify?.status).toBe('verified');
             // Pokes run after the job settles; give them the same beat before counting alerts.
             await Bun.sleep(50);
-            expect(alertsTo(relay, ctx.alice.user.id)).toHaveLength(1);
+            expect(alertTitlesTo(relay, ctx.alice.user.id)).toHaveLength(1);
             // The throw released the home's slot.
             await withBackupJobSlot(broken, async () => {});
         },
@@ -238,14 +238,36 @@ describe('Server backup job', () => {
             expect(job.error).toBeUndefined();
             expect(job.state).toBe('done');
 
-            const manifest = await readManifest(archivePath);
+            const { manifest } = await readServerManifest(archivePath);
             const skipped = manifest.homes.find((home) => home.ownerId === deleted);
             expect(skipped?.skipped).toBe('deleted during the backup');
             expect(skipped?.failed).toBeUndefined();
             expect(skipped?.member).toBeUndefined();
             expect((await readServerSidecar(archivePath))?.state).toBe('done');
             await Bun.sleep(50);
-            expect(alertsTo(relay, ctx.alice.user.id)).toEqual([]);
+            expect(alertTitlesTo(relay, ctx.alice.user.id)).toEqual([]);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a home deleted mid-capture, whatever the capture then throws, is skipped',
+        async () => {
+            quietRelay();
+            const doomed = await createTestUser(`mid-capture-${Date.now()}@test.eigen.is`, 'testpassword123', 'Gone');
+            await getHome(doomed.id);
+            spies.push(
+                spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
+                    if (ownerId !== doomed.id) return pullHomeSnapshot(ownerId, dir, options);
+                    await deleteUserCompletely(doomed.id, null);
+                    throw new Error('Database has closed');
+                }),
+            );
+            const { job, archivePath } = await runJob();
+            expect(job.error).toBeUndefined();
+            expect(job.state).toBe('done');
+            const home = (await readServerManifest(archivePath)).manifest.homes.find((h) => h.ownerId === doomed.id);
+            expect(home?.skipped).toBe('deleted during the backup');
         },
         JOB_TIMEOUT_MS,
     );
@@ -263,7 +285,7 @@ describe('Server backup job', () => {
             );
             const { job, archivePath } = await runJob();
             expect(job.state).toBe('failed');
-            const home = (await readManifest(archivePath)).homes.find((home) => home.ownerId === broken);
+            const home = (await readServerManifest(archivePath)).manifest.homes.find((home) => home.ownerId === broken);
             expect(home?.failed).toContain('Object not found');
             expect(home?.skipped).toBeUndefined();
         },
@@ -293,12 +315,12 @@ describe('Server backup job', () => {
         expect(untouched?.state).toBe('done');
         expect(untouched?.error).toBeUndefined();
         await Bun.sleep(50);
-        expect(alertsTo(relay, ctx.alice.user.id)).toHaveLength(1);
+        expect(alertTitlesTo(relay, ctx.alice.user.id)).toHaveLength(1);
 
         // Nothing left running: a second boot alerts no one.
         await recoverInterruptedServerBackups();
         await Bun.sleep(50);
-        expect(alertsTo(relay, ctx.alice.user.id)).toHaveLength(1);
+        expect(alertTitlesTo(relay, ctx.alice.user.id)).toHaveLength(1);
         for (const archivePath of [...interrupted, done]) rmSync(serverSidecarPath(archivePath), { force: true });
     });
 
@@ -322,7 +344,7 @@ describe('Server backup job', () => {
 
         await recoverInterruptedServerBackups();
         await Bun.sleep(50);
-        expect(alertsTo(relay, ctx.alice.user.id)).toHaveLength(1);
+        expect(alertTitlesTo(relay, ctx.alice.user.id)).toHaveLength(1);
         rmSync(serverSidecarPath(archivePath), { force: true });
     });
 
@@ -343,8 +365,29 @@ describe('Server backup job', () => {
         expect(sidecar?.error).toBe(refused.message);
         expect(readdirSync(join(getBackupsDir(), '.staging')).filter((name) => name.endsWith('.tar'))).toEqual([]);
         await Bun.sleep(50);
-        expect(alertsTo(relay, ctx.alice.user.id)).toHaveLength(1);
+        expect(alertTitlesTo(relay, ctx.alice.user.id)).toHaveLength(1);
     });
+
+    test(
+        'a home the room check cannot size is left to its capture, and the job goes on',
+        async () => {
+            quietRelay();
+            const unsized = ctx.bob.user.id;
+            const sized = homeRelay.pullHomeBackupBytes;
+            spies.push(
+                spyOn(homeRelay, 'pullHomeBackupBytes').mockImplementation((ownerId, level) =>
+                    ownerId === unsized ? Promise.reject(new Error('ENOENT: renamed mid-walk')) : sized(ownerId, level),
+                ),
+            );
+            const { job, archivePath } = await runJob();
+            expect(job.error).toBeUndefined();
+            expect(job.state).toBe('done');
+            expect(
+                (await readServerManifest(archivePath)).manifest.homes.find((h) => h.ownerId === unsized)?.member,
+            ).toBeDefined();
+        },
+        JOB_TIMEOUT_MS,
+    );
 
     test(
         'sizes only what the server member takes: a stray file in server/ does not count against the room',

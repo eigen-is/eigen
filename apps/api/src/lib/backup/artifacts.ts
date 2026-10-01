@@ -29,9 +29,8 @@ export async function listArtifacts(ownerId: string): Promise<BackupArtifact[]> 
         } catch {
             continue; // deleted while this folder was being read
         }
-        // Missing, unreadable, or not a sidecar all say the same thing to the list: nothing is known
-        // about this archive yet, run a verify. One bad file must not blank the whole page.
-        const sidecar = await readSidecar(artifactPath).catch(() => null);
+        // Nothing known about this archive yet: run a verify. One bad file must not blank the whole page.
+        const sidecar = await readSidecar(artifactPath);
         const manifest = sidecar?.manifest;
         artifacts.push({
             name,

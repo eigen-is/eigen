@@ -52,3 +52,8 @@ export function buildStorageKey(id: string, name: string): string {
     }
     return id;
 }
+
+// Where trashPath moves a trash root's bytes on a path-based mount, and what it writes into the row's `file`.
+export function trashStorageKey(id: string, name: string): string {
+    return `.trash/${buildStorageKey(id, name)}`;
+}

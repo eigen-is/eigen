@@ -1,14 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import {
-    copyFileSync,
-    existsSync,
-    mkdirSync,
-    readdirSync,
-    readFileSync,
-    rmSync,
-    statSync,
-    writeFileSync,
-} from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { EMPTY_S3 } from '@workspace/lib/types/mount';
 import { eq } from 'drizzle-orm';
@@ -18,7 +9,7 @@ import { callControl } from '../../cli/control-socket';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { verifyProtocolAuth } from '../../lib/auth/protocol-auth';
 import { getBackupJob } from '../../lib/backup/jobs';
-import { buildServerArchiveName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
+import { buildServerArchiveName, getBackupsDir } from '../../lib/backup/paths';
 import { type ControlBackupJob, startServerBackup } from '../../lib/backup/server-job';
 import { getDataRoot } from '../../lib/config/paths';
 import { updateServerSettings } from '../../lib/config/server-settings';
@@ -26,6 +17,7 @@ import type { ControlStatus } from '../../lib/config/server-status';
 import { getHome } from '../../lib/home/get-home';
 import * as homeRelay from '../../lib/home/home-relay';
 import { controlRouter, startControlSocket } from '../../routes/control';
+import { holdCaptures, removeServerRecords, serverRecords, writeServerRecord } from '../backup/backup-test-helpers';
 import * as cli from '../cli-test-helpers';
 import { DUMMY_S3 } from '../fault-storage-helpers';
 import { createTestUser, ensureServer, getTestContext, hasSession, signsIn, TEST_DATA_DIR } from '../setup';
@@ -374,10 +366,6 @@ describe('eigen reset-password', () => {
 // Every server backup in this file captures the few homes of the test context, for real.
 const JOB_TIMEOUT_MS = 120_000;
 
-function serverRecords(): string[] {
-    return readdirSync(getBackupsDir()).filter((name) => name.startsWith('server-'));
-}
-
 function getJob(id: string): Promise<Response> {
     return controlRouter.handle(new Request(`http://eigen/backup/jobs/${id}`));
 }
@@ -391,23 +379,6 @@ async function waitForControlJob(id: string): Promise<ControlBackupJob> {
     throw new Error(`job ${id} did not finish`);
 }
 
-// Holds every home capture until released, so a job stays running while a test starts another.
-function holdCaptures(): { release(): void; restore(): void } {
-    const gate = Promise.withResolvers<void>();
-    const pull = homeRelay.pullHomeSnapshot;
-    const spy = spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (...args) => {
-        await gate.promise;
-        return pull(...args);
-    });
-    return {
-        release: () => gate.resolve(),
-        restore: () => {
-            gate.resolve();
-            spy.mockRestore();
-        },
-    };
-}
-
 describe('the server backup on the control socket', () => {
     const spies: { mockRestore(): void }[] = [];
 
@@ -418,7 +389,7 @@ describe('the server backup on the control socket', () => {
     });
 
     afterEach(() => {
-        for (const name of serverRecords()) rmSync(join(getBackupsDir(), name), { force: true });
+        removeServerRecords();
     });
 
     afterAll(() => {
@@ -490,11 +461,8 @@ describe('the server backup on the control socket', () => {
     });
 
     describe('GET /status', () => {
-        // A record the way a finished or refused attempt leaves one, without running a job.
         function writeRecord(reason: 'scheduled' | 'manual', level: 'light' | 'full', at: string, record: object) {
-            const archivePath = join(getBackupsDir(), buildServerArchiveName(reason, level, new Date(at)));
-            writeFileSync(serverSidecarPath(archivePath), JSON.stringify({ startedAt: at, ...record }));
-            return archivePath;
+            return writeServerRecord(buildServerArchiveName(reason, level, new Date(at)), { startedAt: at, ...record });
         }
 
         test('has no backup when there is none', async () => {

@@ -10,12 +10,13 @@ import {
     BACKUP_STAMP_PATTERN,
     buildBackupStamp,
     FAILED_RESTORE_SUFFIX,
+    NO_CONTROL_PATTERN,
     PRE_RESTORE_SUFFIX,
     parseBackupStamp,
     SERVER_ARCHIVE_EXTENSION,
     SERVER_ARCHIVE_PREFIX,
 } from '@workspace/lib/validation';
-import { getDataRoot, SERVER_DIR } from '../config/paths';
+import { CERT_FILES, CERTS_DIR, DKIM_DIR, getDataRoot, SERVER_DIR } from '../config/paths';
 import { PATHS } from '../core/constants';
 import { ApiError } from '../core/errors';
 
@@ -74,13 +75,7 @@ export function getBackupTempPath(suffix: string): string {
     return path.join(getBackupStagingDir('archive'), `${randomUUID()}${suffix}`);
 }
 
-function hasControlCharacter(text: string): boolean {
-    for (let index = 0; index < text.length; index++) {
-        const code = text.charCodeAt(index);
-        if (code < 0x20 || code === 0x7f) return true;
-    }
-    return false;
-}
+const NO_CONTROL = new RegExp(NO_CONTROL_PATTERN);
 
 // An archive comes from outside: its manifest, its mount trees and the settings.json of a folder it
 // left behind all name paths this server then reads, opens and deletes. Anything that would leave
@@ -89,7 +84,7 @@ function hasControlCharacter(text: string): boolean {
 // comparison holds on a macOS /var → /private/var temp folder too. One spelling for both sides:
 // verify judges an unpacked archive with it, and restore resolves every segment it is handed.
 export function resolveInside(root: string, relPath: string): string | null {
-    if (relPath === '' || path.isAbsolute(relPath) || hasControlCharacter(relPath)) return null;
+    if (relPath === '' || path.isAbsolute(relPath) || !NO_CONTROL.test(relPath)) return null;
     if (relPath.split(/[\\/]/).includes('..')) return null;
     const realRoot = fs.existsSync(root) ? fs.realpathSync(root) : root;
     const abs = path.resolve(realRoot, relPath);
@@ -149,11 +144,16 @@ export function buildArtifactName(ownerId: string, at: Date): string {
 
 // The layout of a whole-server archive beside its manifest.json: one per-home artifact per home, the
 // server folder packed like a home, and the install files the API may be unable to read.
-export const SERVER_ARCHIVE_HOMES_DIR = 'homes';
+const SERVER_ARCHIVE_HOMES_DIR = 'homes';
 export const SERVER_ARCHIVE_SERVER_MEMBER = 'server.tar.zst';
 export const SERVER_ARCHIVE_ENV_MEMBER = '.env.production';
-export const SERVER_ARCHIVE_DKIM_DIR = 'dkim';
-export const SERVER_ARCHIVE_CERTS_DIR = 'certs';
+
+// The install folders an archive carries beside its members, under the name they have in data/: the DKIM key with
+// whatever its folder holds, the TLS certificate as its two files or not at all.
+export const INSTALL_FOLDERS: { dir: string; what: string; names?: readonly string[] }[] = [
+    { dir: DKIM_DIR, what: 'DKIM' },
+    { dir: CERTS_DIR, what: 'TLS', names: Object.values(CERT_FILES) },
+];
 
 export function buildServerArchiveName(reason: BackupReason, level: BackupLevel, at: Date): string {
     return `${SERVER_ARCHIVE_PREFIX}${reason}-${level}-${buildBackupStamp(at)}${SERVER_ARCHIVE_EXTENSION}`;
@@ -177,7 +177,7 @@ export function archiveServerPath(relPath: string): string {
 // The one collision rule these names have: a stamp is a second wide, and two of a home's artifacts
 // or safety copies can land inside one. The later one is stamped a second on, so every name in
 // both grammars keeps exactly one shape.
-function freeAt(at: Date, taken: (candidate: Date) => boolean): Date {
+export function freeAt(at: Date, taken: (candidate: Date) => boolean): Date {
     let candidate = at;
     while (taken(candidate)) candidate = new Date(candidate.getTime() + 1000);
     return candidate;
@@ -194,7 +194,7 @@ export function freeArtifactName(ownerId: string, at: Date): string {
 
 // Beside the archive, so the list and retention never open one. A home artifact's caches its manifest
 // and last verify; a server archive's is its job's record, which a refused attempt leaves with no archive.
-export const SIDECAR_SUFFIX = '.manifest.json';
+const SIDECAR_SUFFIX = '.manifest.json';
 export const SERVER_SIDECAR_SUFFIX = '.json';
 // Beside a partial archive in the bucket, which may outlive this box's record of it.
 export const BUCKET_PARTIAL_SUFFIX = '.partial';

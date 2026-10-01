@@ -21,13 +21,20 @@ import { basename, dirname, join, relative } from 'node:path';
 import type { parseArgs } from 'node:util';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import type { BackupLevel } from '@workspace/lib/types/backup';
-import { BACKUP_LEVELS, buildBackupStamp, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
+import { buildBackupStamp } from '@workspace/lib/validation';
 import { copyArchiveMember } from '../lib/backup/archive';
 import { isLightSkipped } from '../lib/backup/archive-layout';
 import { describeError } from '../lib/backup/errors';
-import { backupsDirPath, roomShortfall, SERVER_ARCHIVE_ENV_MEMBER, STAGING_DIR } from '../lib/backup/paths';
 import {
-    type NotReplayed,
+    backupsDirPath,
+    buildSafetyCopyName,
+    freeAt,
+    INSTALL_FOLDERS,
+    roomShortfall,
+    SERVER_ARCHIVE_ENV_MEMBER,
+    STAGING_DIR,
+} from '../lib/backup/paths';
+import {
     RESTORING_DATA_DIR,
     RESTORING_DIR,
     type ServerArchiveFile,
@@ -38,8 +45,6 @@ import { describeFailures, readServerArchive } from '../lib/backup/verify';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
 import { getEnvFile } from '../lib/config/env';
 import {
-    CERTS_DIR,
-    DKIM_DIR,
     getDataRoot,
     homeDirUnder,
     ORG_HOMES_DIR,
@@ -151,50 +156,14 @@ function lightWalk(root: string): Held[] {
     return held;
 }
 
-function readStagedRecord(file: string): StagedRestore | null {
-    if (!existsSync(file)) return null;
-    const value: unknown = JSON.parse(readFileSync(file, 'utf8'));
-    if (typeof value !== 'object' || value === null) return null;
-    const level = 'level' in value ? BACKUP_LEVELS.find((candidate) => candidate === value.level) : undefined;
-    if (
-        !level ||
-        !('archive' in value && typeof value.archive === 'string') ||
-        !('appVersion' in value && typeof value.appVersion === 'string')
-    ) {
-        return null;
-    }
-    return { archive: value.archive, level, appVersion: value.appVersion };
-}
-
-function readSwapMarker(): RestoreSwap | null {
-    let value: unknown;
+// Records this CLI wrote. A stage cut off mid-write leaves a torn staged.json, which is nothing staged; the marker is
+// written whole or not at all, and one that does not read stops the swap.
+function readRecord<T>(file: string): T | null {
     try {
-        value = JSON.parse(readFileSync(SWAP_MARKER, 'utf8'));
+        return JSON.parse(readFileSync(file, 'utf8'));
     } catch {
         return null;
     }
-    const isPair = (pair: unknown) =>
-        Array.isArray(pair) && pair.length === 2 && pair.every((path) => typeof path === 'string');
-    if (
-        typeof value !== 'object' ||
-        value === null ||
-        !('archive' in value && typeof value.archive === 'string') ||
-        !('copies' in value && Array.isArray(value.copies) && value.copies.every(isPair)) ||
-        !('renames' in value && Array.isArray(value.renames) && value.renames.every(isPair)) ||
-        !('aside' in value && Array.isArray(value.aside) && value.aside.every((path) => typeof path === 'string')) ||
-        !('leftover' in value && typeof value.leftover === 'string') ||
-        !('env' in value && typeof value.env === 'boolean')
-    ) {
-        return null;
-    }
-    return {
-        archive: value.archive,
-        copies: value.copies,
-        renames: value.renames,
-        aside: value.aside,
-        leftover: value.leftover,
-        env: value.env,
-    };
 }
 
 async function stage(archive: string | undefined, flags: Flags): Promise<void> {
@@ -293,7 +262,9 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         lines.push(
             bare
                 ? `A light archive holds no files and no mail: ${bare} homes come back without their files and mail`
-                : 'A light archive holds no files and no mail: those stay as they are here',
+                : 'A light archive holds no files and no mail: the mail here stays',
+            'Files and documents added since drop out of Drive; their bytes stay on disk',
+            'Files renamed, moved or trashed since are listed at their old place and do not open',
         );
     }
     ui.note(name, lines);
@@ -310,16 +281,10 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         }
     }
 
-    let notReplayed: NotReplayed = { settled: 0, missing: 0 };
-    try {
-        notReplayed = await stageServerArchive(archived, restoring, {
-            liveDataRoot: dataRoot,
-            s3FromArchive: flags['s3-from-archive'] === true,
-            onStep: (step) => console.log(glyphLine('bar', step)),
-        });
-    } catch (error) {
-        refuse(`${name} cannot be restored: ${describeError(error)}.`, 'Restore another archive.');
-    }
+    const notReplayed = await stageServerArchive(archived, restoring, {
+        s3FromArchive: flags['s3-from-archive'] === true,
+        onStep: (step) => console.log(glyphLine('bar', step)),
+    }).catch((error) => refuse(`${name} cannot be restored: ${describeError(error)}.`, 'Restore another archive.'));
     const record: StagedRestore = { archive: name, level: manifest.level, appVersion: manifest.appVersion };
     writeFileSync(join(restoring, STAGE_RECORD), JSON.stringify(record));
     console.log(glyphLine('ok', `Staged ${name} in data/${RESTORING_DIR}`));
@@ -343,7 +308,7 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
 
 function staged(): void {
     const restoring = join(DATA, RESTORING_DIR);
-    const record = readStagedRecord(join(restoring, STAGE_RECORD));
+    const record = readRecord<StagedRestore>(join(restoring, STAGE_RECORD));
     if (!record) {
         console.error(glyphLine('bad', 'Nothing is staged.'));
         process.exit(1);
@@ -388,7 +353,7 @@ function planLight(
 ): { renames: [string, string][]; merged: string[] } | { conflict: string } {
     const renames: [string, string][] = [];
     const merged: string[] = [];
-    for (const top of [SERVER_DIR, ORG_HOMES_DIR, DKIM_DIR, CERTS_DIR]) {
+    for (const top of [SERVER_DIR, ORG_HOMES_DIR, ...INSTALL_FOLDERS.map((folder) => folder.dir)]) {
         if (!existsSync(join(staged, top))) continue;
         if (lexists(join(DATA, top))) renames.push([join(DATA, top), join(aside, top)]);
         renames.push([join(staged, top), join(DATA, top)]);
@@ -525,7 +490,7 @@ async function swap(): Promise<void> {
     }
     if (existsSync(SWAP_MARKER)) {
         lockData(ui);
-        const marked = readSwapMarker();
+        const marked = readRecord<RestoreSwap>(SWAP_MARKER);
         if (!marked) {
             return ui.fail(
                 `${SWAP_MARKER} does not read as a swap.`,
@@ -535,7 +500,7 @@ async function swap(): Promise<void> {
         return runSwap(ui, marked);
     }
     const restoring = join(DATA, RESTORING_DIR);
-    const record = readStagedRecord(join(restoring, STAGE_RECORD));
+    const record = readRecord<StagedRestore>(join(restoring, STAGE_RECORD));
     if (!record)
         return ui.fail('Nothing is staged to swap in.', 'Run ./eigen restore <archive>, which stages it first.');
     // The swap is renames: a linked data/ would move the link, and one on another disk cannot be renamed.
@@ -562,10 +527,12 @@ async function swap(): Promise<void> {
         );
     }
 
-    let at = new Date();
-    const asideOf = (path: string) => `${path}${PRE_RESTORE_SUFFIX}${buildBackupStamp(at)}`;
-    while (lexists(asideOf(DATA)) || lexists(asideOf(ENV_PATH))) at = new Date(at.getTime() + 1000);
-    const [dataAside, envAside] = [asideOf(DATA), asideOf(ENV_PATH)];
+    const asideOf = (path: string, at: Date) => buildSafetyCopyName(path, 'pre-restore', buildBackupStamp(at));
+    const at = freeAt(
+        new Date(),
+        (candidate) => lexists(asideOf(DATA, candidate)) || lexists(asideOf(ENV_PATH, candidate)),
+    );
+    const [dataAside, envAside] = [asideOf(DATA, at), asideOf(ENV_PATH, at)];
     const stagedEnv = join(restoring, ENV_PATH);
     const env = existsSync(stagedEnv);
     const copies: [string, string][] = [];
@@ -591,7 +558,7 @@ async function swap(): Promise<void> {
     } else {
         // An archive without the DKIM key or the TLS certificate keeps the one here: mail would sign with a key DNS
         // does not publish, and serve IMAP and SMTP with a self-signed certificate.
-        for (const top of [DKIM_DIR, CERTS_DIR]) {
+        for (const { dir: top } of INSTALL_FOLDERS) {
             if (!existsSync(join(stagedData, top)) && existsSync(join(DATA, top))) {
                 cpSync(join(DATA, top), join(stagedData, top), { recursive: true });
             }

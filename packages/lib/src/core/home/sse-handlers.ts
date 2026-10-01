@@ -1,16 +1,16 @@
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { parseStringRecord } from '@workspace/lib/validation';
 import { DATA_EPOCHS_KEY, reloadReplacedHome } from './reload-replaced-home';
 
-const loadedEpochs = new Map<string, string>(readStoredEpochs());
+const loadedEpochs = new Map<string, string>(Object.entries(readStoredEpochs()));
 
-function readStoredEpochs(): [string, string][] {
+// sessionStorage throws where the browser refuses storage.
+function readStoredEpochs(): Record<string, string> {
     try {
-        const stored: unknown = JSON.parse(window.sessionStorage.getItem(DATA_EPOCHS_KEY) ?? '{}');
-        if (typeof stored !== 'object' || stored === null) return [];
-        return Object.entries(stored).filter((entry): entry is [string, string] => typeof entry[1] === 'string');
+        return parseStringRecord(window.sessionStorage.getItem(DATA_EPOCHS_KEY) ?? '{}') ?? {};
     } catch {
-        return [];
+        return {};
     }
 }
 

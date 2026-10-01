@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
@@ -13,7 +13,7 @@ import * as Y from 'yjs';
 import { twoFactor as twoFactorScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { buildArtifactName, buildHomeFolderName } from '../../lib/backup/paths';
-import { snapshotHome } from '../../lib/backup/snapshot-home';
+import { snapshotHome, treeBytes } from '../../lib/backup/snapshot-home';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { docUpdates } from '../../lib/collab/schema';
 import { getAvatarsDir } from '../../lib/config/paths';
@@ -600,16 +600,6 @@ describe('Backup snapshotHome under contention', () => {
         }
     });
 
-    test('touches the home along the walk so its idle timer cannot destruct it mid-snapshot', async () => {
-        const touch = spyOn(home, 'touch');
-        try {
-            await snapshotHome(home, mkdtempSync(join(TEST_DATA_DIR, 'backup-touch-')));
-            expect(touch.mock.calls.length).toBeGreaterThan(10);
-        } finally {
-            touch.mockRestore();
-        }
-    });
-
     test('a container database whose stored bytes are gone fails the snapshot', async () => {
         const alice = owner;
         const root = await assertJson<DrivePath>(
@@ -746,6 +736,25 @@ describe('Backup artifact names', () => {
             'home-abc-20261309-140307.tar.zst',
         ]) {
             expect(parseBackupArtifactName(bad)).toBeNull();
+        }
+    });
+});
+
+describe('Backup treeBytes', () => {
+    test('a folder renamed away between its listing and its walk counts nothing', async () => {
+        const root = mkdtempSync(join(TEST_DATA_DIR, 'tree-bytes-'));
+        try {
+            for (const dir of ['kept', 'gone']) {
+                mkdirSync(join(root, dir));
+                writeFileSync(join(root, dir, 'file'), 'four');
+            }
+            const bytes = await treeBytes(root, (rel) => {
+                if (rel === 'gone') rmSync(join(root, rel), { recursive: true });
+                return false;
+            });
+            expect(bytes).toBe(4);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
         }
     });
 });

@@ -4,14 +4,8 @@ import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
 import { orgOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_FORMAT_VERSION } from '@workspace/lib/validation';
 import { stageAuthDbCopy } from '../auth/auth';
-import {
-    CERT_FILES,
-    getDataRoot,
-    getServerDataPath,
-    ORG_HOMES_DIR,
-    SERVER_DATABASES,
-    SERVER_FILES,
-} from '../config/paths';
+import { getEnvFile } from '../config/env';
+import { getDataRoot, getServerDataPath, ORG_HOMES_DIR, SERVER_DATABASES, SERVER_FILES } from '../config/paths';
 import { getOrgName, getPublicConfig } from '../config/server-config';
 import { stageEigenDbCopy } from '../share/db';
 import { stageWaitlistDbCopy } from '../waitlist/waitlist';
@@ -21,8 +15,7 @@ import {
     ARCHIVE_MANIFEST_FILE,
     archiveServerPath,
     buildServerFolderName,
-    SERVER_ARCHIVE_CERTS_DIR,
-    SERVER_ARCHIVE_DKIM_DIR,
+    INSTALL_FOLDERS,
     SERVER_ARCHIVE_ENV_MEMBER,
 } from './paths';
 import { listFileTree, type SnapshotProgress } from './snapshot-home';
@@ -121,7 +114,7 @@ function isReadable(filePath: string): boolean {
 
 // `names` in `dir` when every one of them is readable, else none: a key without its DNS record or its
 // certificate restores nothing.
-function readableFiles(dir: string, names: string[]): string[] {
+function readableFiles(dir: string, names: readonly string[]): readonly string[] {
     return names.every((name) => isReadable(path.join(dir, name))) ? names : [];
 }
 
@@ -138,20 +131,20 @@ function listFiles(dir: string): string[] {
 // `.env.production`, the DKIM key and the TLS key sit outside data/ or belong to other users, so the API takes
 // what it has been let read. What it cannot read stays out and the manifest says so: a restore then keeps the
 // install's own env file, key and certificate, and a move to another machine needs new DKIM DNS and a new
-// certificate. `envFile` is unset in `bun run dev`.
+// certificate. There is no env file in `bun run dev`.
 export async function appendInstallFiles(
     writer: ArchiveWriter,
-    { envFile, dkimDir, certsDir }: { envFile?: string; dkimDir: string; certsDir: string },
 ): Promise<{ envFile: boolean; dkim: boolean; certs: boolean }> {
+    const envFile = getEnvFile();
     const hasEnvFile = envFile !== undefined && isReadable(envFile);
     if (hasEnvFile) await writer.appendFile(SERVER_ARCHIVE_ENV_MEMBER, envFile);
-    const folders = [
-        { member: SERVER_ARCHIVE_DKIM_DIR, dir: dkimDir, names: readableFiles(dkimDir, listFiles(dkimDir)) },
-        { member: SERVER_ARCHIVE_CERTS_DIR, dir: certsDir, names: readableFiles(certsDir, Object.values(CERT_FILES)) },
-    ];
-    for (const { member, dir, names } of folders) {
-        for (const name of names) await writer.appendFile(`${member}/${name}`, path.join(dir, name));
+    const held: boolean[] = [];
+    for (const { dir, names } of INSTALL_FOLDERS) {
+        const source = path.join(getDataRoot(), dir);
+        const files = readableFiles(source, names ?? listFiles(source));
+        for (const name of files) await writer.appendFile(`${dir}/${name}`, path.join(source, name));
+        held.push(files.length > 0);
     }
-    const [dkim, certs] = folders.map(({ names }) => names.length > 0);
+    const [dkim, certs] = held;
     return { envFile: hasEnvFile, dkim, certs };
 }

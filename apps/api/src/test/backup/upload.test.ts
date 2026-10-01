@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { BackupJob, BackupReason } from '@workspace/lib/types/backup';
 import { EMPTY_S3, type S3Config } from '@workspace/lib/types/mount';
@@ -12,7 +12,7 @@ import {
 } from '../../lib/backup/paths';
 import { readServerSidecar, startServerBackup } from '../../lib/backup/server-job';
 import * as upload from '../../lib/backup/upload';
-import { backupKey, checkBackupDestination, multipartOptions, uploadServerArchive } from '../../lib/backup/upload';
+import { backupKey, checkBackupDestination, uploadServerArchive } from '../../lib/backup/upload';
 import { getDataRoot, USER_HOMES_DIR } from '../../lib/config/paths';
 import { getDomain } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
@@ -24,9 +24,10 @@ import { LocalStorage } from '../../lib/storage/local-storage';
 import { S3Storage } from '../../lib/storage/s3-storage';
 import { restoreEnvAfterEach } from '../env-test-helpers';
 import { FakeS3Server } from '../fake-s3-server';
-import { DUMMY_S3 } from '../fault-storage-helpers';
+import { DUMMY_S3, waitFor } from '../fault-storage-helpers';
 import { getTestContext, type TestContext } from '../setup';
 import { TEST_DATA_DIR } from '../test-env';
+import { alertTitlesTo, removeServerRecords, waitForJob, writeServerRecord } from './backup-test-helpers';
 
 // A Light job of the file's few homes, for real.
 const JOB_TIMEOUT_MS = 120_000;
@@ -36,30 +37,13 @@ const MULTIPART_BYTES = 12 * 1024 * 1024;
 const BACKUP_KEY_ID = 'backup-key-id';
 // Nothing listens there; the secret is one no message may carry.
 const UNREACHABLE = { ...DUMMY_S3, accessKeyId: BACKUP_KEY_ID, secretAccessKey: 'backup-secret-never-shown' };
-const MIB = 1024 * 1024;
+// An upload nothing stops.
+const UNABORTED = new AbortController().signal;
 // A rule that aborts what a cut-off upload left, for the whole bucket.
 const ABORT_RULE =
     '<LifecycleConfiguration><Rule><ID>abort-parts</ID><Filter></Filter><Status>Enabled</Status>' +
     '<AbortIncompleteMultipartUpload><DaysAfterInitiation>1</DaysAfterInitiation></AbortIncompleteMultipartUpload>' +
     '</Rule></LifecycleConfiguration>';
-
-async function waitForJob(id: string): Promise<BackupJob> {
-    for (let attempt = 0; attempt < 1200; attempt++) {
-        const job = getBackupJob(id);
-        if (job && job.state !== 'running') return job;
-        await Bun.sleep(50);
-    }
-    throw new Error(`job ${id} did not finish`);
-}
-
-async function waitFor(condition: () => boolean): Promise<void> {
-    for (let attempt = 0; attempt < 400 && !condition(); attempt++) await Bun.sleep(25);
-    if (!condition()) throw new Error('never happened');
-}
-
-function serverRecords(): string[] {
-    return readdirSync(getBackupsDir()).filter((name) => name.startsWith('server-'));
-}
 
 // A finished archive the way a job leaves one, without running it: any bytes, and a record that says it verified.
 // A `failed` one is what a home that failed leaves: its manifest says which.
@@ -70,12 +54,9 @@ function writeArchive(
     state: 'done' | 'failed' = 'done',
 ): string {
     const archivePath = join(getBackupsDir(), buildServerArchiveName(reason, 'full', new Date(at)));
-    mkdirSync(getBackupsDir(), { recursive: true });
-    writeFileSync(archivePath, bytes);
     const verify = { status: 'verified', checkedAt: at, failures: [] };
     const record = { state, startedAt: at, finishedAt: at, verify, manifest: manifestOf(reason, at, state) };
-    writeFileSync(serverSidecarPath(archivePath), JSON.stringify(record));
-    return archivePath;
+    return writeServerRecord(basename(archivePath), record, bytes);
 }
 
 function manifestOf(reason: BackupReason, at: string, state: 'done' | 'failed') {
@@ -92,16 +73,9 @@ function manifestOf(reason: BackupReason, at: string, state: 'done' | 'failed') 
         orphans: [],
         envFile: true,
         dkim: true,
+        certs: true,
         images: {},
     };
-}
-
-function titlesTo(spy: { mock: { calls: Parameters<typeof homeRelay.sendToHome>[] } }, ownerId: string): string[] {
-    return spy.mock.calls.flatMap(([target, message]) =>
-        target === ownerId && message.type === 'notification' && message.notification.type === 'admin-alert'
-            ? [message.notification.title]
-            : [],
-    );
 }
 
 describe('Upload of server archives', () => {
@@ -130,7 +104,7 @@ describe('Upload of server archives', () => {
     afterEach(async () => {
         send.mockClear();
         await fake.stop();
-        for (const name of serverRecords()) rmSync(join(getBackupsDir(), name), { force: true });
+        removeServerRecords();
         await updateServerSettings({
             backups: { upload: { enabled: false, s3: { ...EMPTY_S3, region: undefined }, keep: 30 } },
         });
@@ -142,8 +116,8 @@ describe('Upload of server archives', () => {
 
     test("an archive streams to its name in this server's folder under the prefix, and the bucket holds its bytes", async () => {
         const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z', 'the whole server');
-        const key = await uploadServerArchive(archivePath, bucket, { keep: 30 });
-        expect(key).toBe(own(buildServerArchiveName('manual', 'full', new Date('2026-09-01T02:00:00Z'))));
+        await uploadServerArchive(archivePath, bucket, { keep: 30 }, UNABORTED);
+        const key = own(buildServerArchiveName('manual', 'full', new Date('2026-09-01T02:00:00Z')));
         expect(await backing.read(key).text()).toBe('the whole server');
     });
 
@@ -164,9 +138,9 @@ describe('Upload of server archives', () => {
         const key = own(basename(archivePath));
         fake.faults.set(key, 'fail-put');
 
-        await expect(uploadServerArchive(archivePath, bucket, { keep: 1 })).rejects.toThrow();
+        await expect(uploadServerArchive(archivePath, bucket, { keep: 1 }, UNABORTED)).rejects.toThrow();
         // Bun sends the abort just after the write rejects.
-        await waitFor(() => fake.abortedUploads > 0);
+        await waitFor(() => fake.abortedUploads > 0, 10_000);
         expect(fake.openUploads.size).toBe(0);
         expect(await backing.exists(key)).toBe(false);
         expect(await backing.exists(own(old))).toBe(true);
@@ -180,38 +154,28 @@ describe('Upload of server archives', () => {
             () => 'uploaded',
             (error: unknown) => error,
         );
-        await waitFor(() => fake.heldCount > 0);
+        await waitFor(() => fake.heldCount > 0, 10_000);
 
         abort.abort(new Error('Eigen is stopping'));
         const outcome = await Promise.race([settled, Bun.sleep(2000).then(() => 'still running')]);
         expect(outcome).toBeInstanceOf(Error);
         fake.heal();
-        await waitFor(() => fake.abortedUploads > 0);
+        await waitFor(() => fake.abortedUploads > 0, 10_000);
         expect(fake.openUploads.size).toBe(0);
     });
 
     test('a multipart upload that succeeds is one object of the archive size', async () => {
         const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z', new Uint8Array(MULTIPART_BYTES).fill(7));
-        const key = await uploadServerArchive(archivePath, bucket, { keep: 30 });
-        expect(await backing.size(key)).toBe(MULTIPART_BYTES);
+        await uploadServerArchive(archivePath, bucket, { keep: 30 }, UNABORTED);
+        expect(await backing.size(own(basename(archivePath)))).toBe(MULTIPART_BYTES);
         expect(fake.openUploads.size).toBe(0);
-    });
-
-    test('parts stay small and few: two in flight, at least 5 MiB, never over 10,000 of them', () => {
-        expect(multipartOptions(MULTIPART_BYTES)).toEqual({ partSize: 5 * MIB, queueSize: 2 });
-        expect(multipartOptions(40 * 1024 ** 3).partSize).toBe(5 * MIB);
-        const huge = 2 * 1024 ** 4;
-        const { partSize } = multipartOptions(huge);
-        expect(Math.ceil(huge / partSize)).toBeLessThanOrEqual(10_000);
-        expect(partSize).toBeLessThanOrEqual(5120 * MIB);
-        expect(() => multipartOptions(60 * 1024 ** 4)).toThrow('too large');
     });
 
     test('a bucket that holds fewer bytes than the archive loses the object', async () => {
         const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z', 'the whole server');
         const key = own(basename(archivePath));
         fake.faults.set(key, 'short-head');
-        await expect(uploadServerArchive(archivePath, bucket, { keep: 30 })).rejects.toThrow('bytes');
+        await expect(uploadServerArchive(archivePath, bucket, { keep: 30 }, UNABORTED)).rejects.toThrow('bytes');
         expect(await backing.exists(key)).toBe(false);
     });
 
@@ -219,7 +183,7 @@ describe('Upload of server archives', () => {
         const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z', 'the whole server');
         const key = own(basename(archivePath));
         fake.faults.set(key, 'fail');
-        await expect(uploadServerArchive(archivePath, bucket, { keep: 30 })).rejects.toThrow();
+        await expect(uploadServerArchive(archivePath, bucket, { keep: 30 }, UNABORTED)).rejects.toThrow();
         expect(await backing.exists(key)).toBe(true);
     });
 
@@ -245,7 +209,12 @@ describe('Upload of server archives', () => {
         for (const name of [night('03'), night('04')]) await neighbour.write(name, new TextEncoder().encode(name));
         await outside.write(night('01'), new TextEncoder().encode('another tenant'));
 
-        await uploadServerArchive(writeArchive('scheduled', '2026-09-01T02:00:00.000Z'), bucket, { keep: 2 });
+        await uploadServerArchive(
+            writeArchive('scheduled', '2026-09-01T02:00:00.000Z'),
+            bucket,
+            { keep: 2 },
+            UNABORTED,
+        );
 
         const kept = (await mine.list()).sort();
         const newest = buildServerArchiveName('scheduled', 'full', new Date('2026-09-01T02:00:00Z'));
@@ -261,7 +230,12 @@ describe('Upload of server archives', () => {
         for (const name of [night('03'), night('04'), night('05')]) {
             await mine.write(name, new TextEncoder().encode(name));
         }
-        await uploadServerArchive(writeArchive('scheduled', '2026-08-01T02:00:00.000Z'), bucket, { keep: 2 });
+        await uploadServerArchive(
+            writeArchive('scheduled', '2026-08-01T02:00:00.000Z'),
+            bucket,
+            { keep: 2 },
+            UNABORTED,
+        );
         expect((await mine.list()).sort()).toEqual([night('01'), night('03'), night('04'), night('05')]);
     });
 
@@ -276,7 +250,7 @@ describe('Upload of server archives', () => {
         for (const name of [night('04'), night('05')])
             await mine.write(`${name}${BUCKET_PARTIAL_SUFFIX}`, new Uint8Array());
         const newest = basename(writeArchive('scheduled', '2026-09-01T02:00:00.000Z', 'most homes', 'failed'));
-        await uploadServerArchive(join(getBackupsDir(), newest), bucket, { keep: 2, partial: true });
+        await uploadServerArchive(join(getBackupsDir(), newest), bucket, { keep: 2, partial: true }, UNABORTED);
         const marked = [night('05'), newest].map((name) => `${name}${BUCKET_PARTIAL_SUFFIX}`);
         expect((await mine.list()).sort()).toEqual([night('03'), night('05'), newest, ...marked].sort());
     });
@@ -379,7 +353,9 @@ describe('Upload of server archives', () => {
         test('refuses a data bucket before an upload, and uploads nothing', async () => {
             await updateServerSettings({ defaults: { mount: { s3Config: bucket } } });
             const archivePath = writeArchive('manual', '2026-09-01T02:00:00.000Z');
-            await expect(uploadServerArchive(archivePath, bucket, { keep: 30 })).rejects.toThrow('holds Eigen data');
+            await expect(uploadServerArchive(archivePath, bucket, { keep: 30 }, UNABORTED)).rejects.toThrow(
+                'holds Eigen data',
+            );
             expect(await new S3Storage({ ...bucket, prefix: '' }).list()).toEqual([]);
         });
     });
@@ -473,7 +449,7 @@ describe('Upload of server archives', () => {
                 expect(record?.verify?.status).toBe('verified');
                 expect(record?.upload).toMatchObject({ state: 'failed', key: `${getDomain()}/${job.artifact}` });
                 expect(record?.upload?.error).toBeString();
-                expect(titlesTo(send, ctx.alice.user.id)).toEqual(['Server backup not uploaded']);
+                expect(alertTitlesTo(send, ctx.alice.user.id)).toEqual(['Server backup not uploaded']);
                 expect(JSON.stringify(send.mock.calls)).not.toContain(UNREACHABLE.secretAccessKey);
             },
             JOB_TIMEOUT_MS,
@@ -497,7 +473,7 @@ describe('Upload of server archives', () => {
                     const archives = ctx.alice.api.admin['server-backup'].archives;
                     const a = await archives({ name: first }).upload.post();
                     expect(a.error).toBeNull();
-                    await waitFor(() => order.length === 1);
+                    await waitFor(() => order.length === 1, 10_000);
 
                     // Its retention would drop the one being uploaded, which a newer good one pushes out.
                     writeArchive('scheduled', '2026-09-03T02:00:00.000Z', 'newer');
@@ -539,7 +515,7 @@ describe('Upload of server archives', () => {
                 try {
                     const started = await startServerBackup({ level: 'light', reason: 'manual' });
                     const job = await waitForJob(started.id);
-                    await waitFor(() => calls === 1);
+                    await waitFor(() => calls === 1, 10_000);
                     const archivePath = join(getBackupsDir(), job.artifact!);
                     expect((await readServerSidecar(archivePath))?.upload?.state).toBe('running');
 
@@ -610,12 +586,12 @@ describe('Upload of server archives', () => {
             const name = basename(archivePath);
             fake.faults.set(own(name), 'slow-put');
             const { data } = await ctx.alice.api.admin['server-backup'].archives({ name }).upload.post();
-            await waitFor(() => fake.openUploads.size > 0);
+            await waitFor(() => fake.openUploads.size > 0, 10_000);
 
             await drainBackupJobs();
             expect(getBackupJob(data!.jobId)?.state).toBe('failed');
             // Bun sends the abort just after the write rejects, while the shutdown closes the homes.
-            await waitFor(() => fake.abortedUploads > 0);
+            await waitFor(() => fake.abortedUploads > 0, 10_000);
             expect(fake.openUploads.size).toBe(0);
             expect(await backing.exists(own(name))).toBe(false);
             expect((await readServerSidecar(archivePath))?.upload).toMatchObject({

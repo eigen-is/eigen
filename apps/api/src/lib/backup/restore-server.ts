@@ -1,17 +1,9 @@
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BackupVerifyRecord, ServerArchiveManifest } from '@workspace/lib/types/backup';
+import type { ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { BACKUP_OWNER_ID, buildBackupStamp, parseBackupManifest } from '@workspace/lib/validation';
-import {
-    CERT_FILES,
-    CERTS_DIR,
-    DKIM_DIR,
-    homeDirUnder,
-    ORG_HOMES_DIR,
-    SERVER_DIR,
-    SERVER_RUNTIME_FILES,
-} from '../config/paths';
+import { getDataRoot, homeDirUnder, ORG_HOMES_DIR, SERVER_DIR, SERVER_RUNTIME_FILES } from '../config/paths';
 import { PATHS } from '../core/constants';
 import { ApiError } from '../core/errors';
 import { isUsableName } from '../mount/names';
@@ -23,13 +15,12 @@ import {
     ARCHIVE_HOME_DIR,
     ARCHIVE_MANIFEST_FILE,
     buildServerFolderName,
+    INSTALL_FOLDERS,
     requireMountDir,
     resolveInside,
-    SERVER_ARCHIVE_CERTS_DIR,
-    SERVER_ARCHIVE_DKIM_DIR,
     SERVER_ARCHIVE_SERVER_MEMBER,
 } from './paths';
-import { describeFailures, verifyFolder } from './verify';
+import { requireVerified, verifyFolder } from './verify';
 
 // ./eigen restore stages a whole-server archive into data/.restoring while the API runs on data/, then swaps it in
 // with the API stopped. This is the stage's work on the tree; cli/restore.ts asks, refuses and swaps. Nothing it
@@ -39,11 +30,6 @@ export const RESTORING_DIR = '.restoring';
 export const RESTORING_DATA_DIR = 'data';
 
 export type ServerArchiveFile = { name: string; manifest: ServerArchiveManifest; members: Map<string, ArchiveMember> };
-
-function requireVerified(verified: BackupVerifyRecord, name: string): void {
-    if (verified.status === 'verified') return;
-    throw new ApiError(400, `${name} did not verify: ${describeFailures(verified)}`);
-}
 
 // server/ and org/ out of server.tar.zst. The runtime files are never captured; one found here goes, so the
 // restored server draws a new data epoch and every tab from before reloads.
@@ -67,31 +53,30 @@ async function stageServerMember(archive: ServerArchiveFile, dataDir: string, un
     }
 }
 
-// The install folders an archive may carry beside its members, each into its folder in data/. The containers that
-// use them give them their owners and modes when they start.
-const CERT_NAMES = new Set<string>(Object.values(CERT_FILES));
-const INSTALL_FOLDERS = [
-    { member: SERVER_ARCHIVE_DKIM_DIR, dir: DKIM_DIR, what: 'DKIM', accepts: isUsableName },
-    { member: SERVER_ARCHIVE_CERTS_DIR, dir: CERTS_DIR, what: 'TLS', accepts: (file: string) => CERT_NAMES.has(file) },
-];
-
 // What the stage leaves out of the pending uploads it finds: `settled` the ones data/ here already uploaded or
 // canceled, `missing` the ones whose bytes the archive does not hold. Their rows name missing files, which
 // reconcile drops.
 export type NotReplayed = { settled: number; missing: number };
 
-// The storage keys the live mount still has to upload, or null for a mount that never ran here. Read-write like
+// The storage keys the live mount still has to upload, or null for a mount that never ran here or whose
+// metadata.db does not read: a damaged live database is a reason to restore, not to refuse one. Read-write like
 // readMountTotalSize: a closed WAL database has no -shm, and a read-only open of it fails.
 function livePendingKeys(liveMountDir: string): Set<string> | null {
     const metadata = path.join(liveMountDir, PATHS.DRIVE.METADATA_DB);
     if (!fs.existsSync(metadata)) return null;
-    const db = new Database(metadata, { readwrite: true, create: false });
+    let db: Database | undefined;
     try {
+        db = new Database(metadata, { readwrite: true, create: false });
         db.run('PRAGMA busy_timeout = 5000;');
         const rows = db.query<{ storageKey: string }, []>('SELECT storageKey FROM pending_uploads').all();
         return new Set(rows.map((row) => row.storageKey));
+    } catch (error) {
+        console.warn(
+            `${metadata} does not read (${describeError(error)}): every pending upload in the archive is replayed`,
+        );
+        return null;
     } finally {
-        db.close();
+        db?.close();
     }
 }
 
@@ -169,7 +154,6 @@ export function stageBytesNeeded(manifest: ServerArchiveManifest): number {
 type StageContext = {
     dataDir: string;
     unpackDir: string;
-    liveDataRoot: string;
     s3FromArchive: boolean;
     stamp: string;
     now: number;
@@ -182,7 +166,7 @@ type StageContext = {
 async function stageHome(
     archive: ServerArchiveFile,
     home: ServerArchiveManifest['homes'][number] & { member: string },
-    { dataDir, unpackDir, liveDataRoot, s3FromArchive, stamp, now }: StageContext,
+    { dataDir, unpackDir, s3FromArchive, stamp, now }: StageContext,
     notReplayed: NotReplayed,
 ): Promise<void> {
     if (!BACKUP_OWNER_ID.test(home.ownerId)) throw new ApiError(400, `${home.ownerId} is not a home id`);
@@ -193,13 +177,13 @@ async function stageHome(
     const { folder, manifest } = readUnpackedHome(unpacked, home.ownerId, home.member);
     requireVerified(await verifyFolder(folder), home.member);
     // The swap goes by the outer level: a light home under a full one would replace a home with no files.
-    const level = manifest.level ?? 'full-s3';
+    const { level } = manifest;
     if (level !== archive.manifest.level) {
         throw new ApiError(400, `${home.member} is a ${level} capture in a ${archive.manifest.level} archive`);
     }
 
     const homeDir = homeDirUnder(dataDir, home.ownerId);
-    const liveHomeDir = homeDirUnder(liveDataRoot, home.ownerId);
+    const liveHomeDir = homeDirUnder(getDataRoot(), home.ownerId);
     movePath(path.join(folder, ARCHIVE_HOME_DIR), homeDir);
     const carried = manifest.mounts.filter((summary) => !summary.skipped);
     const containerDatabases: VersionedDatabase[] = [];
@@ -235,16 +219,11 @@ async function stageHome(
 export async function stageServerArchive(
     archive: ServerArchiveFile,
     restoringDir: string,
-    {
-        liveDataRoot,
-        s3FromArchive,
-        onStep,
-    }: { liveDataRoot: string; s3FromArchive: boolean; onStep: (step: string) => void },
+    { s3FromArchive, onStep }: { s3FromArchive: boolean; onStep: (step: string) => void },
 ): Promise<NotReplayed> {
     const context: StageContext = {
         dataDir: path.join(restoringDir, RESTORING_DATA_DIR),
         unpackDir: path.join(restoringDir, 'unpack'),
-        liveDataRoot,
         s3FromArchive,
         stamp: buildBackupStamp(new Date()),
         now: Math.floor(Date.now() / 1000),
@@ -252,11 +231,15 @@ export async function stageServerArchive(
     onStep('server');
     await stageServerMember(archive, context.dataDir, path.join(context.unpackDir, SERVER_DIR));
 
+    // Each install folder into its folder in data/. The containers that use them give them their owners and modes
+    // when they start.
     for (const [name, member] of archive.members) {
-        const folder = INSTALL_FOLDERS.find((candidate) => name.startsWith(`${candidate.member}/`));
+        const folder = INSTALL_FOLDERS.find((candidate) => name.startsWith(`${candidate.dir}/`));
         if (!folder) continue;
-        const file = name.slice(folder.member.length + 1);
-        if (!folder.accepts(file)) throw new ApiError(400, `${name} is not a ${folder.what} file`);
+        const file = name.slice(folder.dir.length + 1);
+        if (!(folder.names ? folder.names.includes(file) : isUsableName(file))) {
+            throw new ApiError(400, `${name} is not a ${folder.what} file`);
+        }
         const target = path.join(context.dataDir, folder.dir, file);
         fs.mkdirSync(path.dirname(target), { recursive: true });
         await copyArchiveMember(member, target);
