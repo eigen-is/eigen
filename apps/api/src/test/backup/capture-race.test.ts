@@ -135,7 +135,9 @@ function archivedReports(folder: string): string[] {
 function archivedRow(folder: string, id: string) {
     const db = new Database(join(folder, 'home/mounts', M, 'metadata.db'), { readonly: true });
     try {
-        return db.query<{ name: string }, [string]>('SELECT name FROM paths WHERE id = ?').get(id);
+        return db
+            .query<{ name: string; size: number | null }, [string]>('SELECT name, size FROM paths WHERE id = ?')
+            .get(id);
     } finally {
         db.close();
     }
@@ -201,13 +203,16 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
-    test('a version pruned during the capture is left out', async () => {
+    test('a version pruned during the capture is left out, and the document size above it is stale', async () => {
         const user = await raceUser('local-fullnames');
         const { root } = await seed(user);
-        const { version } = await seedDocument(user, root.id);
+        const { doc, version } = await seedDocument(user, root.id);
         const mount = await defaultMount(user);
+        // Reading the document caches its size, which the archived metadata.db copy then carries.
+        await mount.getPath(doc.id);
         const { manifest, folder } = await captureDuring(user, () => mount.deletePath(version.id));
         expect(archivedRow(folder, version.id)).toBeNull();
+        expect(archivedRow(folder, doc.id)?.size).toBeNull();
         expect(manifest.entries.some((entry) => entry.path.endsWith(`versions/${version.name}`))).toBe(false);
         expect(manifest.entries.some((entry) => entry.path.endsWith('Plan.eigendoc/data.db'))).toBe(true);
         expect((await verifyFolder(folder)).status).toBe('verified');

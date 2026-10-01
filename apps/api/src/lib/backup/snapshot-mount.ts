@@ -165,11 +165,21 @@ export async function snapshotMountData(
         gone.add(top);
     }
     if (gone.size > 0) {
+        const stale = new Set<string>();
+        for (const top of gone) {
+            for (let up = byId.get(top)?.parentId; up && !stale.has(up); up = byId.get(up)?.parentId) stale.add(up);
+        }
         const db = new Database(metadataPath, { readwrite: true, create: false });
         try {
-            // As a live delete: its children, file events and watchers cascade, and the triggers clear its search rows.
+            // As a live delete: its children, file events and watchers cascade, the triggers clear its search rows,
+            // and every folder above it has its cached size NULLed (stale).
             db.run('PRAGMA foreign_keys = ON');
-            db.run('DELETE FROM paths WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify([...gone])]);
+            db.transaction(() => {
+                db.run('UPDATE paths SET size = NULL WHERE id IN (SELECT value FROM json_each(?))', [
+                    JSON.stringify([...stale]),
+                ]);
+                db.run('DELETE FROM paths WHERE id IN (SELECT value FROM json_each(?))', [JSON.stringify([...gone])]);
+            })();
         } finally {
             db.close();
         }
