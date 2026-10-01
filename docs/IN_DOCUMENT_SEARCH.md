@@ -2,6 +2,8 @@
 
 > **TLDR:** One `⌘F` find bar serves seven surfaces: the five Eigen editors (docs, sheets, slides, stickies, drawings) and Drive's markdown and code editors. Each surface implements a `DocSearchController` over its own live state (the contract is `packages/lib/src/types/doc-search.ts`), and `DocSearchProvider` (`packages/ui/src/components/search/`) owns the session, the keys and the floating `FindReplaceBar`. A match is plain data revealed by id, so the same controller also feeds the palette's `doc:` scope and the `?q=` deep link. Docs, sheets and the Drive editors also replace; slides, stickies and drawings only search. Finding which file holds a term is [SEARCH.md](SEARCH.md).
 
+Find runs in the browser, over the content the editor already holds. For the five Eigen editors that is the collab document every collaborator edits live ([COLLAB.md](COLLAB.md)), so a match can appear, move or vanish while the bar is open, and the contract is built for that. Only comment threads are searched on the server, because the client never loads them all ([COMMENTS.md](COMMENTS.md)). The sections cover the controller contract, the provider and its keys, each surface, and the two other ways in: the `?q=` link and the palette.
+
 ## A match is plain data, resolvable from its id alone
 
 A `DocSearchMatch` is an `id`, a `label` (the matched text or card title) and an optional `context` ("Sheet1 · B12", "Slide 3"). The id describes itself: `from:to` in docs, `sheetId:r:c` in sheets, the card or element id elsewhere. `reveal` resolves it from the string and never from a cached last search, because the palette and an open bar session interleave calls on the same controller. The comments in `doc-search.ts` spell out every rule of the contract.
