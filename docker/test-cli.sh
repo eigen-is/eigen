@@ -188,9 +188,7 @@ read -r code _ <<<"$(setup_post complete "$ADMIN_FIELDS,\"setupToken\":\"$FIRST_
 if [ "$code" = 403 ]; then ok "the first link no longer works (403)"; else fail "the first link → $code, expected 403"; fi
 read -r code _ <<<"$(setup_post complete "$ADMIN_FIELDS,\"setupToken\":\"$SECOND_TOKEN\"")"
 if [ "$code" != 200 ]; then
-    fail "creating $ADMIN_EMAIL through the fresh link answered $code"
-    header "Result"
-    probe_summary
+    abort "creating $ADMIN_EMAIL through the fresh link answered $code"
 fi
 ok "the fresh link creates $ADMIN_EMAIL"
 for route in complete s3check; do
@@ -456,7 +454,7 @@ full_size=$(scratch_run stat -c %s "$INSTALL/backups/$ARCHIVE")
 light_size=$(scratch_run stat -c %s "$INSTALL/backups/$LIGHT")
 log "full $full_size bytes, light $light_size bytes: $(awk -v l="$light_size" -v f="$full_size" 'BEGIN { printf "%.1f%%", 100 * l / f }') of the full one"
 
-# The drive keeps its files by id: what is on disk is the files, what the listing shows is its database.
+# What is on disk is the files, what the listing shows is the drive's database.
 files() {
     { scratch_run ls "$INSTALL/data/home/$ADMIN_ID/mounts/default/data" 2>/dev/null || true; } |
         grep -v -e '-wal$' -e '-shm$' | tr '\n' ' ' || true
@@ -476,7 +474,7 @@ after=$(files)
 kept=1
 for file in $before; do case " $after" in *" $file "*) ;; *) kept=0 ;; esac; done
 if [ "$kept" = 1 ] && [ "$(aside_count)" = $((aside + 1)) ]; then
-    ok "and keeps the files as they are, with what it replaced kept aside"
+    ok "and leaves the files on disk as they are, with what it replaced kept aside"
 else
     fail "files after the light restore: '$after', before the document '$before'; kept aside $(aside_count), was $aside"
 fi

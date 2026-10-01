@@ -144,9 +144,7 @@ if create_admin "$SCREEN" "$OLD_PASSWORD"; then
     ok "the link on screen makes $ADMIN_EMAIL"
     ROOT_ID=$(api GET "/drive/$ADMIN_ID/default/root" | first_id)
 else
-    fail "the setup link on screen made no admin"
-    header "Result"
-    probe_summary
+    abort "the setup link on screen made no admin"
 fi
 
 ##############################################################################

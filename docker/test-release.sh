@@ -5,8 +5,9 @@
 # tree whose version is out already becomes the next patch release. Then releases <version>-harness.8, .9 (also
 # :latest) and .10 (with a breaking change), built from the working tree and pushed to a registry:2 of this run, beside
 # the new release. With ./eigen in a docker:cli container that has no Bun:
-# install .8 and seed a document, sheet, event, contact and chat message; update to :latest, which waits out a backup
-# that runs and makes its own on the running API first; roll back to that backup; refuse and then accept the breaking
+# install .8 on the default storage and seed a document, sheet, event, contact, chat message, a renamed file and a
+# trashed file and folder; update to :latest, which waits out a backup that runs and makes its own on the running API
+# first; roll back to that backup; refuse and then accept the breaking
 # release; refuse an unknown version and a downgrade; refuse the backup of .8 while the registry is down, before
 # anything stops; restore the backup of .8, which brings its launcher and Compose files back; move .8 onto the main
 # channel, update it to a second build of main, roll back one build, and leave main for .10; install from main; install
@@ -116,7 +117,7 @@ doc_text() {
 }
 
 seed() {
-    local drive="/drive/$ADMIN_ID/default"
+    local drive="/drive/$ADMIN_ID/default" folder
     ROOT_ID=$(api GET "$drive/root" | first_id)
     DOC_ID=$(api POST "$drive/folder/$ROOT_ID/create/doc" '{"fileName":"Release doc"}' | first_id)
     collab_tab caddy wss://localhost "$DOC_ID" '' 'typed before the update' >/dev/null
@@ -139,6 +140,22 @@ seed() {
         '{"firstName":"Release","lastName":"Contact","email":["release@example.com"],"phone":[]}' | tr -d '"')
     CHAT_ID=$(api POST "$drive/folder/$ROOT_ID/create/chat" '{"fileName":"Release chat"}' | first_id)
     api POST "/chat/$ADMIN_ID/default/$CHAT_ID/messages" '{"content":"survives the update"}' >/dev/null
+    # What the drive of an install that has been used holds: a file renamed, and a file and a folder with a file in it
+    # in the trash, each moved on disk, since the default storage keeps files by name.
+    RENAMED_ID=$(upload "$ROOT_ID" 'Release note.txt' | first_id)
+    api PUT "$drive/path/$RENAMED_ID/rename" '{"newName":"Release renamed.txt"}' >/dev/null
+    api DELETE "$drive/path/$(upload "$ROOT_ID" 'Release trashed.txt' | first_id)" >/dev/null
+    folder=$(api POST "$drive/folder/$ROOT_ID" '{"folderName":"Release folder"}' | first_id)
+    upload "$folder" 'Release inside.txt' >/dev/null
+    api DELETE "$drive/path/$folder" >/dev/null
+}
+
+# upload <folder ID> <name>: a file of one line, $SEED_TEXT, into that folder of the admin's drive; prints the answer.
+SEED_TEXT='kept under a new name'
+upload() {
+    printf '%s\n' "$SEED_TEXT" >"$SCRATCH/upload.txt"
+    curl -sk -b "$JAR" -X POST -H 'Origin: https://localhost' -F "file=@$SCRATCH/upload.txt;filename=$2" \
+        "$BASE/drive/$ADMIN_ID/default/file/$1" || true
 }
 
 # missing_items: what of the seed is gone, empty when all of it is there. Signs in first: a rollback brings back
@@ -156,6 +173,12 @@ missing_items() {
     api GET "/calendar/$ADMIN_ID/calendars/$CAL_ID/events/$EVENT_ID" | grep -q '"Release event"' || missing="$missing event"
     api GET "/contacts/$ADMIN_ID/contacts/$CONTACT_ID" | grep -q '"release@example.com"' || missing="$missing contact"
     api GET "/chat/$ADMIN_ID/default/$CHAT_ID/messages" | grep -q '"survives the update"' || missing="$missing message"
+    api GET "/drive/$ADMIN_ID/default/file/$RENAMED_ID/download" | grep -qxF "$SEED_TEXT" ||
+        missing="$missing 'renamed file'"
+    listing=$(api GET "/drive/$ADMIN_ID/default/trash")
+    for name in 'Release trashed.txt' 'Release folder'; do
+        printf '%s' "$listing" | grep -q "\"$name\"" || missing="$missing 'trashed $name'"
+    done
     printf '%s' "$missing"
 }
 
@@ -181,7 +204,7 @@ check_running() {
     check_pinned "$@"
     missing=$(missing_items)
     if [ -z "$missing" ]; then
-        ok "the document and its text, the sheet and its cell, event, contact and chat message are all there"
+        ok "the document and its text, the sheet and its cell, event, contact, chat message, renamed file and trash are all there"
     else
         fail "missing:$missing"
     fi
@@ -273,15 +296,11 @@ RELEASE_COMMIT=harness
 if [ -n "${CANDIDATE:-}" ]; then
     started=$SECONDS
     if ! copy_candidate "$CANDIDATE" "$RELEASE"; then
-        fail "no $CANDIDATE of this run on $PUBLISHED_REGISTRY: a publish job failed, or 40 minutes went by"
-        header "Result"
-        probe_summary
+        abort "no $CANDIDATE of this run on $PUBLISHED_REGISTRY: a publish job failed, or 40 minutes went by"
     fi
     RELEASE_COMMIT=$(image_label "$PUBLISHED_REGISTRY/api:$CANDIDATE" revision)
     if [ "$(image_label "$PUBLISHED_REGISTRY/api:$CANDIDATE" version)" != "$RELEASE" ]; then
-        fail "$CANDIDATE is $(image_label "$PUBLISHED_REGISTRY/api:$CANDIDATE" version), not $RELEASE"
-        header "Result"
-        probe_summary
+        abort "$CANDIDATE is $(image_label "$PUBLISHED_REGISTRY/api:$CANDIDATE" version), not $RELEASE"
     fi
     remove_registry_images
     ok "$CANDIDATE ($RELEASE_COMMIT), as publish.yml publishes it, is $RELEASE here after $((SECONDS - started))s"
@@ -294,7 +313,7 @@ header "Updating $PUBLISHED, as published, to $RELEASE"
 # upgrade_published: $PUBLISHED from $PUBLISHED_REGISTRY, seeded, updated to $RELEASE and rolled back, as a
 # self-hoster does when $RELEASE comes out.
 upgrade_published() {
-    local before after pinned pointer meta snapshot=eigen-pre-update-light- breaking=''
+    local before after pinned pointer meta missing snapshot=eigen-pre-update-light- breaking=''
     release_install "eigentest-published-$$" "$PUBLISHED" "$PUBLISHED_REGISTRY"
     run_setup "$SCRATCH/setup-published.log" "${SETUP_FLAGS[@]}" --domain localhost
     if ! create_admin "$SCRATCH/setup-published.log" "$PASSWORD"; then
@@ -316,13 +335,11 @@ upgrade_published() {
     eigen update "$RELEASE"
     show
     if [ "$CODE" = 1 ] && says "■  Eigen $RELEASE has breaking changes, listed above."; then
+        # The rest of the gate cannot make up for it.
         if [ "${ACCEPT_BREAKING:-}" != 1 ]; then
-            fail "$RELEASE lists breaking changes since $PUBLISHED, so ./eigen update refuses it on every install of" \
+            abort "$RELEASE lists breaking changes since $PUBLISHED, so ./eigen update refuses it on every install of" \
                 "$PUBLISHED. To publish it anyway, run publish.yml on its tag with the input breaking: true" \
                 "(locally: ACCEPT_BREAKING=1)"
-            # The rest of the gate cannot make up for it.
-            header "Result"
-            probe_summary
         fi
         ok "$RELEASE lists breaking changes since $PUBLISHED, accepted by ACCEPT_BREAKING=1"
         breaking=1
@@ -348,7 +365,13 @@ upgrade_published() {
     fi
     if [ -n "$breaking" ]; then
         check_pinned "$RELEASE"
-        skip "the seed on $RELEASE, whose breaking changes may drop it"
+        # Its breaking changes may drop some of the seed: what is gone is told, and fails nothing.
+        missing=$(missing_items)
+        if [ -z "$missing" ]; then
+            ok "the seed is all there on $RELEASE"
+        else
+            skip "the seed on $RELEASE, whose breaking changes dropped:$missing"
+        fi
     else
         check_running "$RELEASE"
     fi
@@ -407,9 +430,7 @@ header "Installing $PREVIOUS"
 release_install "eigentest-release-$$" "$PREVIOUS"
 run_setup "$SCRATCH/setup.log" "${SETUP_FLAGS[@]}" --domain localhost
 if ! create_admin "$SCRATCH/setup.log" "$PASSWORD"; then
-    fail "the setup link of $PREVIOUS made no admin"
-    header "Result"
-    probe_summary
+    abort "the setup link of $PREVIOUS made no admin"
 fi
 seed
 check_running "$PREVIOUS"
@@ -433,11 +454,24 @@ for _ in $(seq 1 300); do
     if backups | grep -q '^server-manual-full-.*\.tar\.json$'; then break; fi
     sleep 0.2
 done
+# The line the update's backup step writes while it waits, seen while it waits: the step's log is overwritten after.
+(
+    for _ in $(seq 1 1500); do
+        if scratch_run grep -q 'Waiting for the running server backup to end' "$INSTALL/.eigen/last-step.log"; then
+            touch "$SCRATCH/update-waited"
+            exit 0
+        fi
+        sleep 0.2
+    done
+) 2>/dev/null &
+watching=$!
 started=$SECONDS
 eigen update
 show
 backed_up=0
 wait "$running" || backed_up=$?
+kill "$watching" 2>/dev/null || :
+wait "$watching" 2>/dev/null || :
 scratch_run rm "$BALLAST"
 if [ "$CODE" = 0 ] && says "◆  Eigen $NEW" && says "The harness's new release" &&
     says "◇  Eigen $PREVIOUS (harness) → $NEW (harness) is running at https://localhost/"; then
@@ -447,11 +481,12 @@ else
 fi
 saved=$(scratch_run cat "$INSTALL/.eigen/last-update" 2>/dev/null || true)
 manual=$(sed -n 's/^archive=//p' "$SCRATCH/running-backup.log")
-if [ "$backed_up" = 0 ] && [ -n "$manual" ] && [[ $saved == server-pre-update-light-*.tar ]] &&
-    [[ $saved > ${manual/manual-full/pre-update-light} ]] && says "Saved before the update: backups/$saved"; then
-    ok "the backup that ran finished as $manual, then the update made $saved on the running API"
+if [ "$backed_up" = 0 ] && [ -n "$manual" ] && [ -e "$SCRATCH/update-waited" ] &&
+    [[ $saved == server-pre-update-light-*.tar ]] && says "Saved before the update: backups/$saved"; then
+    ok "the update waited for the backup that ran, $manual, then made $saved on the running API"
 else
-    fail "the backups around the update: the running one exited $backed_up as '$manual', the update's is '$saved'"
+    fail "the backups around the update: the running one exited $backed_up as '$manual', the update's is '$saved'," \
+        "and the update was$([ -e "$SCRATCH/update-waited" ] || printf ' not') seen waiting for it"
 fi
 check_running "$NEW"
 after=$(unpinned)

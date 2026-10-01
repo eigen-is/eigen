@@ -16,7 +16,7 @@ probe_large_body() {
     local body="$SCRATCH/large-body.json" got_code
     if [ ! -f "$body" ]; then
         {
-            printf '{"storageType":"local-id","adminUsername":"alice","adminPassword":"probe-password","adminName":"Alice",'
+            printf '{"storageType":"local-fullnames","adminUsername":"alice","adminPassword":"probe-password","adminName":"Alice",'
             printf '"orgName":"'
             head -c 2097152 /dev/zero | tr '\0' a
             printf '"}'

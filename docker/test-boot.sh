@@ -26,9 +26,7 @@ registry_init
 header "Booting $CANDIDATE as $TARGET"
 started=$SECONDS
 if ! copy_candidate "$CANDIDATE" "$TARGET"; then
-    fail "no $CANDIDATE on $PUBLISHED_REGISTRY after 40 minutes"
-    header "Result"
-    probe_summary
+    abort "no $CANDIDATE on $PUBLISHED_REGISTRY after 40 minutes"
 fi
 # The install must pull what it runs.
 remove_registry_images
