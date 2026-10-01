@@ -6,7 +6,7 @@ category: Basics
 tags: [self-hosting, install, requirements, server, memory, ports]
 related: [self-hosting/install, self-hosting/get-started]
 order: 20
-updated: 2026-09-30
+updated: 2026-10-01
 ---
 
 Eigen runs in Docker on one server. This page lists what that server needs before you [install Eigen](/support/self-hosting/install).
@@ -52,7 +52,7 @@ Eigen's software comes as Docker images. They take about 2.8 GB of disk, or 3.2 
 
 A fresh install starts with almost no data: under 1 MB before anyone uploads a file.
 
-Everything else lives in one install folder: the files, the mail, the databases, and the backups in `backups/`. Leave room for your data and for its backups. A Full backup is a compressed copy of all of it, apart from the files of drives kept in an S3 bucket. Eigen keeps the nightly ones you ask for, seven by default, the two newest an update made, and every one you make by hand.
+Everything else lives in one install folder: the files, the mail, the databases, and the backups in `backups/`. Leave room for your data and for its backups. A Full backup is a compressed copy of all of it, apart from the files of drives kept in an S3 bucket. Eigen keeps the nightly ones you ask for, seven by default, the two newest good ones an update made, and every one you make by hand.
 
 While it works, a backup needs more room than it ends up taking. Before it starts, it checks that `backups/` has room for all the data uncompressed and some to work with, and refuses when it has not. A restore unpacks the backup inside `data/`, on its disk, and checks for room the same way.
 

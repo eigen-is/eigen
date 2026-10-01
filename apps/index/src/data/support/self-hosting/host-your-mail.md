@@ -6,7 +6,7 @@ category: Mail
 tags: [self-hosting, mail, dns, dkim, spf, imap, smtp]
 related: [self-hosting/mail-relay, self-hosting/keep-your-mail, connect/mail-client, connect/calendar-client]
 order: 40
-updated: 2026-09-30
+updated: 2026-10-01
 ---
 
 When you answer yes to **Host email on this server?**, Eigen runs the mail server and holds everyone's mailbox. People read their mail in the Mail app and in any mail app on their phone or computer. This page covers what to do after the install so mail arrives and other servers trust what you send.
@@ -96,4 +96,4 @@ systemctl enable --now fail2ban
 systemctl restart fail2ban
 ```
 
-`fail2ban-client status eigen-postfix-sasl` shows what it caught. When `./eigen` starts new mail containers, like after an update, it copies the rules again and reloads fail2ban, so they keep watching the new mail server. Run as a user who may not do that, it prints the command to run as root instead. `docker/fail2ban/README.md` in the install folder has the details.
+`fail2ban-client status eigen-postfix-sasl` shows what it caught. When `./eigen` starts new mail containers, like after an update, it copies the rules again and reloads fail2ban, so they keep watching the new mail server. When the user who runs `./eigen` may not do that, it prints the command to run as root instead. `docker/fail2ban/README.md` in the install folder has the details.

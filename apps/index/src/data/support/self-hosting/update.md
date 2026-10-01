@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, update, rollback, release, breaking]
 related: [self-hosting/back-up-and-restore, self-hosting/commands-and-files]
 order: 80
-updated: 2026-09-30
+updated: 2026-10-01
 ---
 
 An update is one command, and so is going back. Eigen backs itself up before every update, so a rollback puts back the old version with the accounts, settings, and databases it had.
@@ -32,7 +32,7 @@ To see whether there is an update, and what it brings, without installing it: `.
 
 Usually the backup is a Light one: the accounts, settings, and databases, without the files and the mail. It is a Full one, files and mail included, when a release since yours marks a change as breaking, or when you run `./eigen update --full`.
 
-It is named `server-pre-update-<level>-<date>-<time>.tar`. Eigen keeps the two newest of these, and they stay on the server: they are not sent to your backup bucket. They do not replace your nightly backups: see [Back up and restore the whole server](/support/self-hosting/back-up-and-restore).
+It is named `server-pre-update-<level>-<date>-<time>.tar`. Eigen keeps the two newest good ones, and always the one `./eigen rollback` would restore. They stay on the server: they are not sent to your backup bucket. They do not replace your nightly backups: see [Back up and restore the whole server](/support/self-hosting/back-up-and-restore).
 
 The backup runs on the running server, so with Eigen stopped `./eigen update` refuses. Start Eigen with `./eigen restart`, or copy `data/` and `.env.production` somewhere safe and run `./eigen update --no-backup`. Without a backup, `./eigen rollback` has nothing to go back to.
 
@@ -44,9 +44,15 @@ The backup runs on the running server, so with Eigen stopped `./eigen update` re
 
 This goes back to the version before the last update. It puts back the backup the update made, the way [`./eigen restore`](/support/self-hosting/back-up-and-restore#put-a-backup-back) does, with the version that backup names, and starts Eigen. The data it replaces is kept aside, not deleted. Every open browser tab reloads once. It asks first: `./eigen rollback --yes` skips the question, for scripts.
 
-After a Light backup, the usual kind, a rollback puts back only the accounts, settings, databases, and `.env.production`. Files and mail added since the update stay. After a Full backup, it puts back the files and mail too. A rollback goes back one update, not further.
+After a Full backup, a rollback puts back everything, files and mail included. A rollback goes back one update, not further.
+
+After a Light backup, the usual kind, a rollback puts back the accounts, settings, databases, and `.env.production`, and leaves the files and the mail on disk as they are. Drive then lists what it held before the update. Files and documents made since no longer show in Drive, and on drives that store files by their names, files renamed, moved, or put in the Trash since do not open. Calendars and contacts go back to before the update, and mail stays as it is. Nothing is deleted from disk. See [A Light backup leaves the files where they are](/support/self-hosting/back-up-and-restore#a-light-backup-leaves-the-files-where-they-are). To be able to go back with the files too, update with `./eigen update --full`.
 
 ### After the update from 0.3.0
+
+Close every open document before you update from 0.3.0. When Eigen comes back, an open document reloads, and every edit it had not sent to the server is lost, edits made while it was offline included. A Drive, Mail, Calendar, or Contacts tab opened on 0.3.0 does not reload by itself: it keeps the page it had until you reload it.
+
+After the update, two files of 0.3.0 may be left over: `data/server/collab-epoch` and `data/server/collab-home-epochs.json`. Eigen does not read them, so you can delete them.
 
 Eigen 0.3.0 made its own kind of backup, a snapshot in `snapshots/`, and the update from 0.3.0 saves one the same way, with Eigen stopped. Only Eigen 0.3.0 can put it back. `./eigen rollback` then prints three commands instead: the first brings back the `eigen` command of 0.3.0, the second restores the snapshot with it, and the third clears what the newer version noted.
 

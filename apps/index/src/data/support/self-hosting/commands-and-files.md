@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, commands, logs, status, files]
 related: [self-hosting/troubleshooting, self-hosting/update, self-hosting/back-up-and-restore]
 order: 110
-updated: 2026-09-30
+updated: 2026-10-01
 ---
 
 Everything you do with Eigen on the server goes through `./eigen` in the install folder. `./eigen help` lists the commands, and `./eigen <command> --help` tells more about one.
@@ -22,7 +22,7 @@ Everything you do with Eigen on the server goes through `./eigen` in the install
 | `./eigen stop` | Stops Eigen. `./eigen restart` starts it again. |
 | `./eigen update` | Installs a new release. See [Update Eigen](/support/self-hosting/update). |
 | `./eigen rollback` | Goes back to the version before the last update |
-| `./eigen backup` | Backs up the whole server into `backups/` while Eigen runs. It exits with 0 when the backup checked out, 1 when it failed, 2 on a wrong argument, and 4 when it checked out but did not reach the bucket. See [Back up and restore the whole server](/support/self-hosting/back-up-and-restore). |
+| `./eigen backup` | Backs up the whole server into `backups/` while Eigen runs. Its exit code tells a cron job whether the backup verified and reached the bucket. See [Back up now](/support/self-hosting/back-up-and-restore#back-up-now). |
 | `./eigen restore <backup>` | Puts a whole-server backup back, on this server or a new one |
 | `./eigen reset-password <email>` | Sets a new password for an account. See [Reset a password from the server](/support/self-hosting/reset-a-password). |
 
@@ -30,7 +30,7 @@ Everything you do with Eigen on the server goes through `./eigen` in the install
 
 ## Status
 
-`./eigen status` also names the install folder, and the newest backup with its age and size. The Backup row turns red when the last nightly backup failed. It warns when that backup did not reach your backup bucket, when there is no backup yet, and when nightly backups are on but no Full backup has checked out in two days. An update that stopped halfway shows as `files of <new version>, running <old version>`, and `./eigen update` finishes it.
+`./eigen status` also names the install folder, and the newest backup with its age and size. The Backup row turns red when the last nightly backup failed. It warns when that backup did not reach your backup bucket, when there is no backup yet, and when nightly backups are on but no Full backup has verified in two days. An update that stopped halfway shows as `files of <new version>, running <old version>`, and `./eigen update` finishes it.
 
 ## Logs
 

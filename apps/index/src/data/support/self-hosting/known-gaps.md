@@ -6,7 +6,7 @@ category: Basics
 tags: [self-hosting, limits, roadmap, sso, backup]
 related: [self-hosting/get-started, self-hosting/update]
 order: 140
-updated: 2026-09-30
+updated: 2026-10-01
 ---
 
 Eigen is not 1.0 yet, and it is built by one person. The core works, but some things you may expect are not there. This page lists the ones people ask about, so you can decide before you install. No need to report these as bugs.
@@ -21,7 +21,7 @@ Eigen is not 1.0 yet, and it is built by one person. The core works, but some th
 | Kubernetes, Helm, or an installer with windows and buttons | Docker Compose, through `./eigen` |
 | 32-bit processors | amd64 and arm64 only |
 | Changing the mail domain after the first setup | Every account is made on it, so pick it with care |
-| Restoring one user's or team's backup on another server | A backup of one user or team restores on the server it came from. To move a whole server, see [Move Eigen to another server](/support/self-hosting/move-to-another-server). |
+| Restoring one user's or team's backup into another account | A backup of one user or team restores onto that same account: on the server it came from, or on a server restored from that server's backup. An account made again on another server is a different account. To move a whole server, see [Move Eigen to another server](/support/self-hosting/move-to-another-server). |
 
 ## Sign-in and mail
 

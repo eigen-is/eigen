@@ -1,17 +1,15 @@
 ---
 title: "Fix common server problems"
-description: "What to do when ./eigen stops with an error, Eigen does not start, HTTPS does not work, or mail does not arrive or go out."
+description: "What to do when ./eigen stops with an error, a backup or restore refuses, Eigen does not start, HTTPS does not work, or mail does not arrive or go out."
 type: troubleshooting
 category: Maintenance
 tags: [self-hosting, troubleshooting, logs, https, mail, docker]
 related: [self-hosting/commands-and-files, self-hosting/behind-your-web-server, self-hosting/mail-relay]
 order: 130
-updated: 2026-09-30
+updated: 2026-10-01
 ---
 
 Start with `./eigen status`, which shows every service and its health, the disk, and the certificate. `./eigen logs` shows what the services say, and `./eigen logs <service>` shows one. When a step of `./eigen` fails, it prints the last lines of its output, and the full output is in `.eigen/last-step.log`.
-
-The problems below are the common ones.
 
 ## Docker is not running, or this user cannot use it
 
@@ -21,15 +19,27 @@ When it says Docker Compose is too old, update the Docker Compose plugin to 2.20
 
 ## Another ./eigen command is running
 
-`./eigen` runs one command that changes Eigen at a time, so two of them never stop and start Eigen at the same time. Wait for the other command to end, then run yours again. If no other command runs, remove `.eigen/lock` in the install folder.
+`./eigen` runs one command that changes Eigen at a time, so two of them never stop and start Eigen at the same time. Wait for the other command to end, then run yours again. The lock of a command that has ended is taken over by the next one, so you rarely need to do more. If it still stops and no other command runs, remove `.eigen/lock` in the install folder. When it names another user, remove it as that user or as root.
 
 ## The data folders are not writable
 
-Eigen runs as user 1000 and must be able to write in `data/` and `backups/`. Setup hands them over when they are empty. When they already hold files that belong to someone else, give them to that user:
+Eigen runs as user 1000 and must be able to write in `data/` and `backups/`, and in everything in them. Setup hands the folders over when they are empty, and leaves the owners of folders that already hold files alone. When they hold files that belong to someone else, like a copy you made as root, give them all to user 1000:
 
 ```bash
-sudo chown 1000:1000 data backups
+sudo chown -R 1000:1000 data backups
 ```
+
+## A backup or restore stops with an error
+
+**"Eigen runs as uid 1000, which cannot read" a backup.** A restore reads the backup as user 1000. A copy made as root is often readable by root alone. Give it the file, as the message says:
+
+```bash
+sudo chown 1000:1000 <backup>
+```
+
+**"A full backup needs up to …; the backups folder has … free".** A backup checks for room before it starts, and needs room for everything uncompressed while it works. Free space on the disk of `backups/`, or delete backups you no longer need in **Settings → Backups**, then try again. A restore checks the disk of `data/` the same way, and says "Staging <backup> needs up to …".
+
+**"The swap of <backup> stopped halfway and cannot go on".** A restore moves folders in place one by one, and something in the way stopped it. `.eigen/restore-swap` lists every move, and the message names where the old data went aside. Put `data/` right by hand from those two, then delete `.eigen/restore-swap`. Until you do, every `./eigen` command tries to finish the restore first.
 
 ## Eigen does not start: pool overlaps
 

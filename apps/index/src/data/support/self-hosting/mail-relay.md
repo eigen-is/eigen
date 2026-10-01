@@ -6,7 +6,7 @@ category: Mail
 tags: [self-hosting, mail, relay, smtp]
 related: [self-hosting/keep-your-mail, self-hosting/host-your-mail]
 order: 60
-updated: 2026-09-30
+updated: 2026-10-01
 ---
 
 A relay is a mail server that takes your mail after a sign-in and delivers it for you. This page tells you whether you need one, and what to check when you pick one.
@@ -30,7 +30,7 @@ Anything that takes mail over SMTP with a user name and password:
 
 Answer the relay question as `host:port`, like `smtp-relay.brevo.com:587`. Setup then asks for the user name and the password. To change the relay later, run `./eigen setup` again.
 
-Port 465 means the connection is encrypted from the start. Any other port starts plain and switches to encryption. With a user name, the connection must be encrypted, so the password never travels in the clear. Keeping your mail and signing in with a user name, Eigen also checks the relay's certificate.
+Port 465 means the connection is encrypted from the start. Any other port starts plain and switches to encryption. With a user name, the connection must be encrypted, so the password never travels in the clear. When you keep your mail and the relay has a user name, Eigen also checks the relay's certificate.
 
 ## Which addresses it must accept
 
