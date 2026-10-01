@@ -35,7 +35,7 @@ The first goal is a **self-hostable workspace for individuals, enthusiasts, and 
 Eigen is **pre-1.0 and actively developed**. The core works, but be deliberate about what you put on it:
 
 - **Breaking changes** are likely between minor versions until 1.0. A release that changes how data is stored converts it once or drops it, and only stickies stay backward compatible. `./eigen update` shows such a release's notes, asks, and makes a Full backup first, so `./eigen rollback` can go back.
-- **You own your data, including the backups.** Eigen backs up only once you turn on the nightly backup in Settings, or run `./eigen backup`. Send the backups off the server to a bucket of their own, keep that bucket's keys somewhere else, and [try a restore](https://eigen.is/support/self-hosting/back-up-and-restore#try-a-restore-without-moving).
+- **You own your data, including the backups.** Apart from the backup `./eigen update` makes, Eigen backs up only once you turn on the nightly backup in Settings, or run `./eigen backup`. Send the backups off the server to a bucket of their own, keep that bucket's keys somewhere else, and [try a restore](https://eigen.is/support/self-hosting/back-up-and-restore#try-a-restore-without-moving).
 - **You own your server's security.** Keep the host patched, lock down SSH, use strong passwords, and watch your logs. A self-hosted server is your responsibility end-to-end.
 - **No warranty**: see [LICENSE.txt](LICENSE.txt). Eigen is built by a single developer in their spare time. It's provided as-is, in good faith, with no SLA.
 
