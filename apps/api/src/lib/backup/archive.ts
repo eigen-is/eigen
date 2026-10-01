@@ -351,13 +351,18 @@ function checkedEntryPath(name: string): string {
 // stop at the entry it came for.
 async function* tarEntries(bytes: AsyncIterable<Uint8Array>): AsyncGenerator<TarEntry> {
     const source = bytes[Symbol.asyncIterator]();
-    let buffered = new Uint8Array(0);
+    let buffered: Uint8Array = new Uint8Array(0);
     let bodyLeft = 0;
     let position = 0;
 
     async function fill(): Promise<boolean> {
         const { done, value } = await source.next();
         if (done) return false;
+        // Mostly the buffer has drained, and the chunk is taken as it is rather than copied.
+        if (buffered.length === 0) {
+            buffered = value;
+            return true;
+        }
         const merged = new Uint8Array(buffered.length + value.length);
         merged.set(buffered);
         merged.set(value, buffered.length);

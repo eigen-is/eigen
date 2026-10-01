@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import { eq } from 'drizzle-orm';
@@ -32,6 +33,17 @@ export function movePath(from: string, to: string): void {
         fs.cpSync(from, to, { recursive: true });
         fs.rmSync(from, { recursive: true, force: true });
     }
+}
+
+// The same move for a whole home in the API: on Docker data/ and backups/ are two mounts, so it is always the
+// copy, and that copy must not hold every other user's requests.
+export async function movePathAsync(from: string, to: string): Promise<void> {
+    await fsp.mkdir(path.dirname(to), { recursive: true });
+    await fsp.rename(from, to).catch(async (error: unknown) => {
+        if (errnoOf(error) !== 'EXDEV') throw error;
+        await fsp.cp(from, to, { recursive: true });
+        await fsp.rm(from, { recursive: true, force: true });
+    });
 }
 
 // What a database says about itself. Absent — no __schema_version table, or a file that cannot be
@@ -129,47 +141,50 @@ export function materializeMount(
         if (isRemote) fs.mkdirSync(mountStagingDir, { recursive: true });
         const now = Date.now();
         const managedPaths = new Set(managed.map((entry) => entry.path));
-        for (const row of rows) {
-            if (row.type !== 'file') continue;
-            const archived = archivePath(row, byId);
-            const source = inData(archived);
-            // A remote mount's objects are the only ones a restore could write over: they are in a
-            // bucket, not in the folder that moved aside. So every one of its rows gets a key of its
-            // own, and the `.pre-restore-` copy keeps pointing at objects that still hold its bytes.
-            // Before the missing-bytes check, not after: a row the archive carries nothing for must
-            // not keep the key the copy references, or a late upload would land on an object it owns
-            // (a fresh key with nothing behind it reads as absent, which is what that row is). The
-            // row is this function's read model, so the new key goes into it and into the table.
-            if (isRemote) {
-                row.file = buildStorageKey(`${row.id}-r${stamp}`, row.name);
-                orm.update(paths).set({ file: row.file }).where(eq(paths.id, row.id)).run();
+        // One transaction: a VACUUM INTO copy journals and fsyncs every statement on its own, and this is two per file.
+        db.transaction(() => {
+            for (const row of rows) {
+                if (row.type !== 'file') continue;
+                const archived = archivePath(row, byId);
+                const source = inData(archived);
+                // A remote mount's objects are the only ones a restore could write over: they are in a
+                // bucket, not in the folder that moved aside. So every one of its rows gets a key of its
+                // own, and the `.pre-restore-` copy keeps pointing at objects that still hold its bytes.
+                // Before the missing-bytes check, not after: a row the archive carries nothing for must
+                // not keep the key the copy references, or a late upload would land on an object it owns
+                // (a fresh key with nothing behind it reads as absent, which is what that row is). The
+                // row is this function's read model, so the new key goes into it and into the table.
+                if (isRemote) {
+                    row.file = buildStorageKey(`${row.id}-r${stamp}`, row.name);
+                    orm.update(paths).set({ file: row.file }).where(eq(paths.id, row.id)).run();
+                }
+                // A row whose storage object was already missing when the backup ran has no bytes here;
+                // the restored home mirrors that absence rather than inventing an empty object.
+                if (!fs.existsSync(source)) continue;
+                const key = storageKeyOf(row, byId, isPathBased);
+                if (isRemote) {
+                    const staged = randomUUID();
+                    movePath(source, path.join(mountStagingDir, staged));
+                    orm.insert(pendingUploads)
+                        .values({
+                            storageKey: key,
+                            stagingPath: staged,
+                            attempt: 0,
+                            enqueuedAt: now,
+                            nextAttemptAt: now,
+                            isDatabase: managedPaths.has(archived),
+                        })
+                        .run();
+                    continue;
+                }
+                // Usually the same file on a path-based mount (`file` is the name), but migration v7
+                // renamed the NAME of a deduplicated row and left its `file` alone, so the two differ
+                // there — and the mount resolves reads through `file`. Nothing can be overwritten either
+                // way: a local mount's bytes moved aside with the folder.
+                const target = inData(key);
+                if (target !== source) movePath(source, target);
             }
-            // A row whose storage object was already missing when the backup ran has no bytes here;
-            // the restored home mirrors that absence rather than inventing an empty object.
-            if (!fs.existsSync(source)) continue;
-            const key = storageKeyOf(row, byId, isPathBased);
-            if (isRemote) {
-                const staged = randomUUID();
-                movePath(source, path.join(mountStagingDir, staged));
-                orm.insert(pendingUploads)
-                    .values({
-                        storageKey: key,
-                        stagingPath: staged,
-                        attempt: 0,
-                        enqueuedAt: now,
-                        nextAttemptAt: now,
-                        isDatabase: managedPaths.has(archived),
-                    })
-                    .run();
-                continue;
-            }
-            // Usually the same file on a path-based mount (`file` is the name), but migration v7
-            // renamed the NAME of a deduplicated row and left its `file` alone, so the two differ
-            // there — and the mount resolves reads through `file`. Nothing can be overwritten either
-            // way: a local mount's bytes moved aside with the folder.
-            const target = inData(key);
-            if (target !== source) movePath(source, target);
-        }
+        })();
         if (isRemote) {
             // An s3 mount's bytes belong in the bucket, and the queue holds every one of them in
             // staging until the PUT acks; the archive still has them all if that never happens.

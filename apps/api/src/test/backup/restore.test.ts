@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import { join } from 'node:path';
 import {
     COLLAB_HOME_REPLACED_CLOSE,
@@ -1301,18 +1302,43 @@ describe('Backup restore refuses a member that is not a complete home', () => {
 });
 
 describe('Backup round trip of a home that stores files by name', () => {
+    async function backUp(userId: string): Promise<string> {
+        const job = await waitForJob(
+            startBackupJob('backup', userId, undefined, (started, onProgress) =>
+                runHomeBackup(userId, started, onProgress),
+            ).id,
+        );
+        expect(job.error).toBeUndefined();
+        return job.artifact!;
+    }
+
     test('the per-home backup verifies and its restore puts every renamed, trashed and versioned item back', async () => {
         const shape = await realShapeHome();
         const { user, mountId } = shape;
-        const backedUp = await waitForJob(
-            startBackupJob('backup', user.id, undefined, (job, onProgress) => runHomeBackup(user.id, job, onProgress))
-                .id,
-        );
-        expect(backedUp.error).toBeUndefined();
-
-        await restoreHome(backedUp.artifact!, user.id, `restore-real-shape-${Date.now()}`);
+        await restoreHome(await backUp(user.id), user.id, `restore-real-shape-${Date.now()}`);
         expectRealShape(join(TEST_DATA_DIR, 'home', user.id, 'mounts', mountId, 'data'), shape);
         const trash = await driveGetList(user.sessionToken, user.id, mountId, 'trash');
         expect(trash.map((item) => item.name).sort()).toEqual(['Old', 'Trashed Doc.eigendoc', 'trashed.txt']);
+    });
+
+    test('the home moves in through a copy when the backups folder is another disk than data/', async () => {
+        const shape = await realShapeHome();
+        const { user, mountId } = shape;
+        const artifact = await backUp(user.id);
+        const homeDir = join(TEST_DATA_DIR, 'home', user.id);
+        const rename = fsp.rename;
+        let crossed = false;
+        const spy = spyOn(fsp, 'rename').mockImplementation(async (from, to) => {
+            if (to !== homeDir) return rename(from, to);
+            crossed = true;
+            throw Object.assign(new Error('cross-device link not permitted'), { code: 'EXDEV' });
+        });
+        try {
+            await restoreHome(artifact, user.id, `restore-cross-device-${Date.now()}`);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(crossed).toBe(true);
+        expectRealShape(join(homeDir, 'mounts', mountId, 'data'), shape);
     });
 });

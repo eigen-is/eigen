@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type { BackupVerifyRecord, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { isCollabType } from '@workspace/lib/types/drive';
@@ -42,11 +43,16 @@ type ArchiveDatabase = { path: string; abs: string; isYjsDocument: boolean };
 // The folder's own files, walked with readdir's lstat-level types so a symlink is seen rather than
 // followed. packFolder writes files and directories only, so a link in an unpacked archive came
 // from somewhere else and has no business being read.
-function listFolderFiles(root: string, relDir: string, present: Set<string>, fail: (message: string) => void): void {
-    for (const entry of fs.readdirSync(path.join(root, relDir), { withFileTypes: true })) {
+async function listFolderFiles(
+    root: string,
+    relDir: string,
+    present: Set<string>,
+    fail: (message: string) => void,
+): Promise<void> {
+    for (const entry of await fsp.readdir(path.join(root, relDir), { withFileTypes: true })) {
         const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
         if (entry.isSymbolicLink()) fail(`${rel}: is a symbolic link`);
-        else if (entry.isDirectory()) listFolderFiles(root, rel, present, fail);
+        else if (entry.isDirectory()) await listFolderFiles(root, rel, present, fail);
         else if (entry.isFile()) present.add(rel);
     }
 }
@@ -150,7 +156,7 @@ export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): 
 
     // Stage 1 — transport: the manifest and the folder describe the same set of bytes.
     const present = new Set<string>();
-    listFolderFiles(root, '', present, fail);
+    await listFolderFiles(root, '', present, fail);
     present.delete(ARCHIVE_MANIFEST_FILE);
     for (const [index, entry] of manifest.entries.entries()) {
         const abs = resolveInside(root, entry.path);

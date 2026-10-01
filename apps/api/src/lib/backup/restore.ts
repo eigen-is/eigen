@@ -15,7 +15,7 @@ import {
     checkRestoredDatabases,
     containerDatabasesIn,
     materializeMount,
-    movePath,
+    movePathAsync,
     type VersionedDatabase,
 } from './materialize-mount';
 import {
@@ -162,7 +162,7 @@ export async function restoreHome(
             return async (stamp) => {
                 // The archive's `home/` IS the home folder, one for one.
                 onProgress?.('home files', 0, 1);
-                movePath(path.join(folder, ARCHIVE_HOME_DIR), homeDir);
+                await movePathAsync(path.join(folder, ARCHIVE_HOME_DIR), homeDir);
                 onProgress?.('home files', 1, 1);
                 // A mount the backup skipped carries nothing: it stays disabled in the restored
                 // settings.json and its folder is simply not there (snapshot-home.ts).

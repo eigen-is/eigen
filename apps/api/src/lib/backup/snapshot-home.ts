@@ -56,22 +56,22 @@ const JOURNAL_FILE = /\.db-(wal|shm)$/;
 // install its watcher on, and mail stops syncing in silence.
 export type FileTree = { files: string[]; dirs: string[]; databases: string[] };
 
-export function listFileTree(root: string, skipDir: (rel: string) => boolean = () => false): FileTree {
+export async function listFileTree(root: string, skipDir: (rel: string) => boolean = () => false): Promise<FileTree> {
     const tree: FileTree = { files: [], dirs: [], databases: [] };
-    const walk = (relDir: string): void => {
-        for (const entry of fs.readdirSync(path.join(root, relDir), { withFileTypes: true })) {
+    const walk = async (relDir: string): Promise<void> => {
+        for (const entry of await fsp.readdir(path.join(root, relDir), { withFileTypes: true })) {
             const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
             if (entry.isDirectory()) {
                 if (skipDir(rel)) continue;
                 tree.dirs.push(rel);
-                walk(rel);
+                await walk(rel);
             } else if (entry.isFile()) {
                 if (!DB_FILE.test(entry.name)) tree.files.push(rel);
                 else if (entry.name.endsWith('.db')) tree.databases.push(rel);
             }
         }
     };
-    walk('');
+    await walk('');
     return tree;
 }
 
@@ -241,7 +241,7 @@ export async function snapshotHome(
     }
 
     // The home outside its mounts and its databases.
-    const tree = listFileTree(home.homeDir, (rel) => isSkippedHomeDir(rel, level));
+    const tree = await listFileTree(home.homeDir, (rel) => isSkippedHomeDir(rel, level));
     // A home database missing from HOME_DATABASES would be dropped from every archive in silence.
     // Fail loudly instead, so a new subsystem's db is noticed the day it lands.
     const unlisted = tree.databases.find((rel) => !HOME_DATABASE_PATHS.has(rel));
