@@ -1,19 +1,24 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ServerArchive, ServerArchiveSidecar, ServerArchiveUpload } from '@workspace/lib/types/backup';
-import { parseServerArchiveName, parseServerArchiveNames, parseServerArchiveSidecar } from '@workspace/lib/validation';
+import {
+    canUploadServerArchive,
+    parseServerArchiveName,
+    parseServerArchiveNames,
+    parseServerArchiveSidecar,
+} from '@workspace/lib/validation';
 import { API_IMAGE_KEY } from '../config/release';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { sendToHome } from '../home/home-relay';
 import { getOrgOwner } from '../user';
 import { writeRecord } from './archive';
-import { runningJobOn } from './jobs';
+import { listBackupJobs, runningJobOn } from './jobs';
 import { backupsDirPath, SERVER_SIDECAR_SUFFIX, serverSidecarPath } from './paths';
 import { pruneServerArchives } from './retention';
 
-// The server archives and their records in the backups folder: what the owner's list reads, what a delete takes
-// with it, retention, and the boot that ends a record left running. Running a backup or an upload is server-job.ts.
+// The server archives and their records in the backups folder: what the owner's list and the status read, what a
+// delete takes with it, retention, and the boot that ends a record left running. Running a backup is server-job.ts.
 
 const INTERRUPTED = 'interrupted by a restart';
 
@@ -77,6 +82,47 @@ export async function listServerArchives(): Promise<ServerArchive[]> {
         });
     }
     return archives;
+}
+
+type ArchiveLine = { name: string; createdAt: string; error: string | null };
+
+function line({ name, createdAt }: ServerArchive, error: string | undefined): ArchiveLine {
+    return { name, createdAt: createdAt.toISOString(), error: error ?? null };
+}
+
+// What the Backup row is judged on. `newest` is the newest archive or refused attempt of any
+// reason, its state null when its record does not read.
+export type ServerBackupStatus = {
+    scheduleEnabled: boolean;
+    newest: (ArchiveLine & { state: ServerArchiveSidecar['state'] | null; bytes: number | null }) | null;
+    // The newest scheduled attempt, when it failed.
+    scheduledFailure: ArchiveLine | null;
+    // The newest scheduled attempt, when its archive is here but not in the bucket: its last upload failed, or
+    // the owner could upload it and no upload was tried, as when a restart cut in between.
+    scheduledNotUploaded: ArchiveLine | null;
+    newestGoodFullAt: string | null;
+};
+
+export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
+    const archives = await listServerArchives();
+    const [newest] = archives;
+    const scheduled = archives.find((archive) => archive.reason === 'scheduled');
+    const goodFull = archives.find((archive) => archive.level !== 'light' && archive.record?.state === 'done');
+    const { schedule, upload } = getServerSettings().backups;
+    const notUploaded =
+        scheduled &&
+        (scheduled.record?.upload?.state === 'failed' ||
+            (!scheduled.record?.upload &&
+                canUploadServerArchive(scheduled, { uploadEnabled: upload.enabled, jobs: listBackupJobs() })));
+    return {
+        scheduleEnabled: schedule.enabled,
+        newest: newest
+            ? { ...line(newest, newest.record?.error), state: newest.record?.state ?? null, bytes: newest.bytes }
+            : null,
+        scheduledFailure: scheduled?.record?.state === 'failed' ? line(scheduled, scheduled.record.error) : null,
+        scheduledNotUploaded: notUploaded ? line(scheduled, scheduled.record?.upload?.error) : null,
+        newestGoodFullAt: goodFull?.createdAt.toISOString() ?? null,
+    };
 }
 
 // The schedule's one question. A failed or refused attempt left its record, so it counts: a night

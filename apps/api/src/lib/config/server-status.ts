@@ -1,14 +1,10 @@
 import { X509Certificate } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ServerArchive, ServerArchiveSidecar } from '@workspace/lib/types/backup';
-import { canUploadServerArchive } from '@workspace/lib/validation';
-import { listBackupJobs } from '../backup/jobs';
-import { listServerArchives } from '../backup/server-archives';
+import { getServerBackupStatus, type ServerBackupStatus } from '../backup/server-archives';
 import { getRelayHost, isBundledCaddy, isMailEnabled } from './env';
 import { CERT_FILES, CERTS_DIR, getDataRoot } from './paths';
 import { getDomain, getPublicConfig, isSetupRequired } from './server-config';
-import { getServerSettings } from './server-settings';
 
 export type ControlStatus = {
     version: string;
@@ -23,47 +19,8 @@ export type ControlStatus = {
     certExpiresAt: string | null;
     certSelfSigned: boolean;
     bundledCaddy: boolean;
-    // What the Backup row is judged on. `newest` is the newest archive or refused attempt of any
-    // reason, its state null when its record does not read.
-    backup: {
-        scheduleEnabled: boolean;
-        newest: (ArchiveLine & { state: ServerArchiveSidecar['state'] | null; bytes: number | null }) | null;
-        // The newest scheduled attempt, when it failed.
-        scheduledFailure: ArchiveLine | null;
-        // The newest scheduled attempt, when its archive is here but not in the bucket: its last upload failed, or
-        // the owner could upload it and no upload was tried, as when a restart cut in between.
-        scheduledNotUploaded: ArchiveLine | null;
-        newestGoodFullAt: string | null;
-    };
+    backup: ServerBackupStatus;
 };
-
-type ArchiveLine = { name: string; createdAt: string; error: string | null };
-
-function line({ name, createdAt }: ServerArchive, error: string | undefined): ArchiveLine {
-    return { name, createdAt: createdAt.toISOString(), error: error ?? null };
-}
-
-async function getBackupStatus(): Promise<ControlStatus['backup']> {
-    const archives = await listServerArchives();
-    const [newest] = archives;
-    const scheduled = archives.find((archive) => archive.reason === 'scheduled');
-    const goodFull = archives.find((archive) => archive.level !== 'light' && archive.record?.state === 'done');
-    const { schedule, upload } = getServerSettings().backups;
-    const notUploaded =
-        scheduled &&
-        (scheduled.record?.upload?.state === 'failed' ||
-            (!scheduled.record?.upload &&
-                canUploadServerArchive(scheduled, { uploadEnabled: upload.enabled, jobs: listBackupJobs() })));
-    return {
-        scheduleEnabled: schedule.enabled,
-        newest: newest
-            ? { ...line(newest, newest.record?.error), state: newest.record?.state ?? null, bytes: newest.bytes }
-            : null,
-        scheduledFailure: scheduled?.record?.state === 'failed' ? line(scheduled, scheduled.record.error) : null,
-        scheduledNotUploaded: notUploaded ? line(scheduled, scheduled.record?.upload?.error) : null,
-        newestGoodFullAt: goodFull?.createdAt.toISOString() ?? null,
-    };
-}
 
 export async function getServerStatus(): Promise<ControlStatus> {
     const config = getPublicConfig();
@@ -91,6 +48,6 @@ export async function getServerStatus(): Promise<ControlStatus> {
         certExpiresAt,
         certSelfSigned,
         bundledCaddy: isBundledCaddy(),
-        backup: await getBackupStatus(),
+        backup: await getServerBackupStatus(),
     };
 }
