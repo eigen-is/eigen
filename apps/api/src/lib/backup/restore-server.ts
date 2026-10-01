@@ -140,15 +140,15 @@ function redateTrash(metadataPath: string, now: number): void {
 // How much server.tar.zst can grow unpacked: its manifest carries no inner count, and SQLite shrinks that much.
 const SERVER_MEMBER_EXPANSION = 10;
 
-// What the stage takes on the data disk, at most: every member unpacked, a home by its inner count, and as much
-// again for a mount materialized beside its unpacked tree.
+// What the stage takes on the data disk, at most: every member unpacked, a home by its inner count. Once: it
+// streams each member out of the archive and renames what it unpacked into place.
 export function stageBytesNeeded(manifest: ServerArchiveManifest): number {
     const homes = new Map(manifest.homes.map((home) => [home.member, home.bytes ?? 0]));
     const unpacked = (entry: ServerArchiveManifest['entries'][number]) =>
         entry.path === SERVER_ARCHIVE_SERVER_MEMBER
             ? SERVER_MEMBER_EXPANSION * entry.bytes
             : Math.max(entry.bytes, homes.get(entry.path) ?? 0);
-    return 2 * manifest.entries.reduce((sum, entry) => sum + unpacked(entry), 0);
+    return manifest.entries.reduce((sum, entry) => sum + unpacked(entry), 0);
 }
 
 type StageContext = {

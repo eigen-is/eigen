@@ -1019,12 +1019,22 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'the stage counts server.tar.zst at what its databases unpack to, well past its compressed size',
+        'the stage counts each member once at what it unpacks to, since it moves what it unpacks',
         async () => {
             const { manifest } = await readServerManifest(fullArchive);
             const server = manifest.entries.find((entry) => entry.path === SERVER_ARCHIVE_SERVER_MEMBER)!;
-            const alone = { ...manifest, entries: [{ ...server, bytes: 1_000_000 }], homes: [] };
-            expect(stageBytesNeeded(alone)).toBeGreaterThanOrEqual(10_000_000);
+            const home = manifest.homes.find((candidate) => candidate.member)!;
+            const member = manifest.entries.find((entry) => entry.path === home.member)!;
+            const sized = {
+                ...manifest,
+                entries: [
+                    { ...server, bytes: 1_000_000 },
+                    { ...member, bytes: 1_000 },
+                ],
+                homes: [{ ...home, bytes: 5_000_000 }],
+            };
+            // server.tar.zst at what its databases unpack to, a home at its inner count.
+            expect(stageBytesNeeded(sized)).toBe(15_000_000);
         },
         JOB_TIMEOUT_MS,
     );
