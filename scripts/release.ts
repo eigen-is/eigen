@@ -100,4 +100,5 @@ Next steps:
        bun run release publish
      Review it on GitHub and click Publish, or publish directly with:
        bun run release publish --publish
+  5. Update eigen.is to v${next}: it serves https://eigen.is/install from its own build, so the installer changes only then.
 `);

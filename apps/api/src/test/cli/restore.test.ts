@@ -472,7 +472,7 @@ describe('restore --stage and --swap', () => {
         async () => {
             const dir = install();
             const { manifest } = await readServerManifest(fullArchive);
-            await stageAndSwap(dir, basename(fullArchive));
+            const out = await stageAndSwap(dir, basename(fullArchive));
 
             for (const home of manifest.homes.filter((h) => h.member)) {
                 expect(existsSync(homeDirOf(dir, home.ownerId))).toBe(true);
@@ -499,6 +499,8 @@ describe('restore --stage and --swap', () => {
             expect(readFileSync(join(dir, aside, 'home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
             const envAside = readdirSync(dir).find((name) => name.startsWith('.env.production.pre-restore-'));
             expect(readFileSync(join(dir, envAside!), 'utf8')).toBe(RELEASE_ENV);
+            // eigen's finish_swap greps 'Kept aside: ' to tell what this swap kept from what was there before it.
+            expect(out.split('\n')).toContain(`◇  Kept aside: ${aside}, ${envAside}`);
             expect(existsSync(join(dir, 'data/.restoring'))).toBe(false);
             expect(existsSync(join(dir, aside, '.restoring'))).toBe(false);
             expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
@@ -531,6 +533,15 @@ describe('restore --stage and --swap', () => {
             expect(readFileSync(join(dir, '.env.production'), 'utf8')).toBe(ARCHIVED_ENV);
             expect(readdirSync(dir).filter((name) => name.includes('.pre-restore-'))).toEqual([]);
             expect(out).not.toContain('Kept aside');
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'the stage names each part as it stages it, the server’s own before the homes',
+        async () => {
+            const { stdout } = await stage(install(), basename(fullArchive));
+            expect(stdout).toContain("│  the server's own databases and settings\n│  home 1 of ");
         },
         JOB_TIMEOUT_MS,
     );

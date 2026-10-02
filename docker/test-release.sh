@@ -12,7 +12,7 @@
 # anything stops; restore the backup of .8, which brings its launcher and Compose files back; move .8 onto the main
 # channel, update it to a second build of main, roll back one build, and leave main for .10; install from main; install
 # .9 from the launcher alone; install .9 twice, on one digest. The published release updates through its own launcher,
-# which saves a snapshot, and goes back through the three commands ./eigen rollback prints for it.
+# which backs it up first, and ./eigen rollback restores that backup.
 #
 # Usage:  ./docker/test-release.sh
 #         ACCEPT_BREAKING=1 is for a new release that lists breaking changes since the published one: the update takes
@@ -310,7 +310,7 @@ header "Updating $PUBLISHED, as published, to $RELEASE"
 # upgrade_published: $PUBLISHED from $PUBLISHED_REGISTRY, seeded, updated to $RELEASE and rolled back, as a
 # self-hoster does when $RELEASE comes out.
 upgrade_published() {
-    local before after pinned pointer meta missing snapshot=eigen-pre-update-light- breaking=''
+    local before after pinned saved missing level=light breaking=''
     release_install "eigentest-published-$$" "$PUBLISHED" "$PUBLISHED_REGISTRY"
     run_setup "$SCRATCH/setup-published.log" "${SETUP_FLAGS[@]}" --domain localhost
     if ! create_admin "$SCRATCH/setup-published.log" "$PASSWORD"; then
@@ -319,12 +319,15 @@ upgrade_published() {
     fi
     seed
     check_running "$PUBLISHED" "$PUBLISHED" "$PUBLISHED_REGISTRY"
-    # $RELEASE is not out yet: the install names this run's registry, which holds it, as a mirror install does.
-    scratch_run sed -i "s|^EIGEN_REGISTRY=.*|EIGEN_REGISTRY=$REGISTRY|" "$INSTALL/.env.production"
+    # $RELEASE is not out yet: the install names this run's registry, which holds it, as a mirror install does. Written
+    # in place: eigen-api bind-mounts the file, and sed -i's new inode would leave it reading the old one.
+    scratch_run sh -c 'new=$(sed "s|^EIGEN_REGISTRY=.*|EIGEN_REGISTRY=$1|" "$2") && printf "%s\n" "$new" >"$2"' \
+        sh "$REGISTRY" "$INSTALL/.env.production"
     if [ "$(env_of EIGEN_REGISTRY)" != "$REGISTRY" ]; then
         fail ".env.production of $PUBLISHED has no EIGEN_REGISTRY line to name this run's registry"
         return
     fi
+    check_env 0:0 "on $PUBLISHED, before the update"
     before=$(unpinned)
     pinned=$(pins)
 
@@ -340,8 +343,8 @@ upgrade_published() {
         fi
         ok "$RELEASE lists breaking changes since $PUBLISHED, accepted by ACCEPT_BREAKING=1"
         breaking=1
-        # A breaking release may convert what a light snapshot leaves out.
-        snapshot=eigen-pre-update-2
+        # A breaking release may convert what a light archive leaves out.
+        level=full
         started=$SECONDS
         eigen update "$RELEASE" --accept-breaking
         show
@@ -378,38 +381,30 @@ upgrade_published() {
     else
         fail ".env.production changed: $(diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") | tr '\n' ' ')"
     fi
-    # $PUBLISHED's launcher hands over without a backup: its own image saved a snapshot after the stop.
-    pointer=$(scratch_run sed -n 1p "$INSTALL/.eigen/last-update" 2>/dev/null || true)
-    meta=$(scratch_run tar -xzOf "$INSTALL/snapshots/${pointer:-none}" eigen-snapshot.json 2>/dev/null || true)
-    if [[ $pointer == "$snapshot"* ]] && [[ $meta == *"\"version\":\"$PUBLISHED\""* ]]; then
-        ok ".eigen/last-update names snapshots/$pointer, made by $PUBLISHED before the update"
+    saved=$(scratch_run cat "$INSTALL/.eigen/last-update" 2>/dev/null || true)
+    if [[ $saved == server-pre-update-$level-*.tar ]] && backups | grep -qxF "$saved"; then
+        ok ".eigen/last-update names backups/$saved, made on $PUBLISHED before the update"
     else
-        fail ".eigen/last-update names '$pointer', expected a $snapshot* snapshot of $PUBLISHED; it holds '$meta'"
+        fail ".eigen/last-update names '$saved', expected a server-pre-update-$level-*.tar in backups/"
     fi
     probe_site "https://localhost:$PORT_HTTPS"
 
     started=$SECONDS
     eigen rollback --yes
     show
-    back=$(printf '%s\n' "$OUT" | sed -n 's/^│  \(docker run .* bootstrap --force --out \/install\)$/\1/p')
-    restore=$(printf '%s\n' "$OUT" | sed -n 's/^│  \(EIGEN_API_IMAGE=.* \.\/eigen restore .*\)$/\1/p')
-    clear=$(printf '%s\n' "$OUT" | sed -n 's/^│  \(rm -f \.eigen\/last-update \.eigen\/bundle\)$/\1/p')
-    if [ "$CODE" = 0 ] && [ -n "$back" ] && [ -n "$restore" ] && [ -n "$clear" ]; then
-        ok "./eigen rollback prints the three commands that go back to $PUBLISHED"
+    if [ "$CODE" = 0 ] && says "A $level archive of Eigen $PUBLISHED for localhost, made on " &&
+        says "◇  Eigen $RELEASE ($RELEASE_COMMIT) → $PUBLISHED (.*) is running at https://localhost/"; then
+        ok "./eigen rollback --yes went back to $PUBLISHED in $((SECONDS - started))s"
     else
-        fail "./eigen rollback after the update from $PUBLISHED: exit $CODE"
-    fi
-    CODE=0
-    OUT=$(in_cli_container sh -c "$back && $restore --yes && $clear" 2>&1) || CODE=$?
-    show
-    if [ "$CODE" = 0 ] && stack_up && ! scratch_run test -e "$INSTALL/.eigen/last-update" &&
-        ! scratch_run test -e "$INSTALL/.eigen/bundle"; then
-        ok "those three commands went back to $PUBLISHED in $((SECONDS - started))s, and left nothing of $RELEASE in .eigen/"
-    else
-        fail "the way back to $PUBLISHED exited $CODE"
+        fail "./eigen rollback after the update from $PUBLISHED exited $CODE"
     fi
     check_running "$PUBLISHED" "$PUBLISHED" "$PUBLISHED_REGISTRY"
     check_pins "$pinned"
+    if [ ! -e "$INSTALL/.eigen/last-update" ] && ls -d "$INSTALL"/data.pre-restore-* >/dev/null 2>&1; then
+        ok "the pointer is gone and the data of $RELEASE is kept aside"
+    else
+        fail "after the rollback: .eigen/last-update is left, or no data.pre-restore-*"
+    fi
     probe_site "https://localhost:$PORT_HTTPS"
 }
 if [ -n "$PUBLISHED" ]; then

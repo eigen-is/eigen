@@ -36,7 +36,8 @@ trap 'rm -rf "$FIX"' EXIT
 # digest of every local image; a docker run with STUB_RUN_FAIL among its arguments fails, and one with --staged also
 # prints STUB_CHECKED, one of update-check --level prints level=STUB_LEVEL, one of snapshot --pre-update writes
 # .eigen/last-update, one of restore --env writes a .env.production that pins sha256:eee, and one of restore --swap
-# removes .eigen/restore-swap, or with STUB_SWAP_CUT=1 leaves one and fails, after 3 s with STUB_SWAP_SLOW=1. A run of bootstrap writes a Compose
+# removes .eigen/restore-swap, or with STUB_SWAP_CUT=1 leaves one and fails, after 3 s with STUB_SWAP_SLOW=1; with
+# STUB_SWAP_KEPT=<folder> it keeps that folder aside and says so, as the CLI does. A run of bootstrap writes a Compose
 # file into this folder, the starter keys into .env.production when it names no release, keeping the registry it
 # names, and a launcher that prints STUB_LAUNCHER on stderr. Compose ps names eigen-api as running unless
 # STUB_RUNNING=0, compose run (the stage) exits STUB_STAGE, and compose exec of backup prints archive=STUB_ARCHIVE and
@@ -74,7 +75,7 @@ case $1 in
     compose)
         shift
         while :; do
-            case $1 in --env-file | -f) shift 2 ;; *) break ;; esac
+            case $1 in --env-file | -f | --progress) shift 2 ;; *) break ;; esac
         done
         fails "compose-$1"
         case $1 in
@@ -138,6 +139,10 @@ case $1 in
                 exit 1
             fi
             rm -f .eigen/restore-swap
+            if [ -n "${STUB_SWAP_KEPT:-}" ]; then
+                mkdir -p "$STUB_SWAP_KEPT"
+                echo "◇  Kept aside: $STUB_SWAP_KEPT"
+            fi
             case ${STUB_CHECKED:-} in *EIGEN_API_IMAGE=*)
                 printf 'DOMAIN=eigen.example.com\n%s\n' "$STUB_CHECKED" >.env.production
                 ;;
@@ -211,7 +216,7 @@ launch() {
     : >"$FIX/calls.log"
     for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_REVISION STUB_LABEL_VERSION \
         STUB_LABEL_REVISION STUB_LABEL_REVISION_DOVECOT STUB_MOVED STUB_DIGEST STUB_RUN_FAIL STUB_CHECKED STUB_LEVEL \
-        STUB_SWAP_CUT STUB_SWAP_SLOW STUB_RUNNING STUB_STAGE STUB_ARCHIVE STUB_EXEC STUB_OLD_CLI; do
+        STUB_SWAP_CUT STUB_SWAP_SLOW STUB_SWAP_KEPT STUB_RUNNING STUB_STAGE STUB_ARCHIVE STUB_EXEC STUB_OLD_CLI; do
         if [ -n "${!name+set}" ]; then vars+=("$name=${!name}"); fi
     done
     CODE=0
@@ -907,12 +912,17 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: a swap cut off: exit $CODE, steps '$(steps)', '$ERR'"
     fi
-    launch local restart
+    # Cut off after its first rename, the swap had set data/ aside before the command that finishes it.
+    kept=data.pre-restore-20260101-000000
+    mkdir "$FIX/local/$kept"
+    STUB_SWAP_KEPT=$kept launch local restart
+    rm -rf "${FIX:?}/local/$kept"
     if [ "$CODE" = 0 ] && [ "$(steps)" = 'restore --swap (ghcr.io/eigen-is/eigen/api:local)|configure ghcr.io/eigen-is/eigen/api:local|share|up|share|up|' ] &&
-        [ ! -e "$FIX/local/.eigen/restore-swap" ]; then
-        ok "$SHELL_NAME: the next command finishes the swap first and starts Eigen, then does what it does"
+        [ ! -e "$FIX/local/.eigen/restore-swap" ] &&
+        [ "$(printf '%s\n' "$OUT" | tail -n 2 | head -n 1)" = '└  Check that all is well, then delete what was kept aside.' ]; then
+        ok "$SHELL_NAME: the next command finishes the swap first, starts Eigen, says to delete what the swap kept aside, then does what it does"
     else
-        fail "$SHELL_NAME: the next command after a swap cut off: exit $CODE, steps '$(steps)'"
+        fail "$SHELL_NAME: the next command after a swap cut off: exit $CODE, steps '$(steps)', '$OUT'"
     fi
     : >"$FIX/release/.eigen/restore-swap"
     echo ghcr.io/eigen-is/eigen/api@sha256:bbb >"$FIX/release/.eigen/bundle"
@@ -953,13 +963,17 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: rollback after a swap cut off: exit $CODE, steps '$(steps)', '$ERR'"
     fi
+    # An aside there before the command, which the swap does not name, is not one it kept: finish_swap leaves it out.
     : >"$FIX/release/.eigen/restore-swap"
+    mkdir "$FIX/release/$kept"
     STUB_FAIL=compose-up launch release stop
+    rm -rf "${FIX:?}/release/$kept"
     if [ "$CODE" = 0 ] && [ "$(steps)" = 'restore --swap (ghcr.io/eigen-is/eigen/api:local)|stop|' ] &&
-        [ ! -e "$FIX/release/.eigen/restore-swap" ]; then
-        ok "$SHELL_NAME: stop finishes a swap that was cut off without starting Eigen, then stops it"
+        [ ! -e "$FIX/release/.eigen/restore-swap" ] &&
+        [ "$(printf '%s\n' "$OUT" | tail -n 2 | head -n 1)" = '└  Check that all is well.' ]; then
+        ok "$SHELL_NAME: stop finishes a swap that was cut off without starting Eigen, says it kept nothing aside, then stops it"
     else
-        fail "$SHELL_NAME: stop after a swap cut off: exit $CODE, steps '$(steps)', '$ERR'"
+        fail "$SHELL_NAME: stop after a swap cut off: exit $CODE, steps '$(steps)', '$OUT', '$ERR'"
     fi
     # Cut off between its two renames of .env.production, a swap leaves none: still an install, whose swap goes on.
     rm "$FIX/release/.env.production"
@@ -1023,8 +1037,9 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     pinned="$(for name in $IMAGES; do printf 'pull ghcr.io/eigen-is/eigen/%s@sha256:eee|' "$name"; done)"
     eee=ghcr.io/eigen-is/eigen/api@sha256:eee
     if [ "$CODE" = 0 ] && [ "$(steps)" = "pull ghcr.io/eigen-is/eigen/api:latest|restore /restore/$ARCHIVE --env (ghcr.io/eigen-is/eigen/api:latest)|${pinned}bootstrap $eee|share|stage -v $FIX/elsewhere/$ARCHIVE:/restore/$ARCHIVE:ro eigen-api restore /restore/$ARCHIVE --stage --yes|restore --staged ($eee)|stop|restore --swap ($eee)|share|up|" ] &&
-        printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER && [ -e "$FIX/alone/data" ] && [ ! -e "$FIX/alone/.eigen/lock" ]; then
-        ok "$SHELL_NAME: a restore beside the launcher alone takes .env.production from the archive, gets the build it pins, and hands over to its launcher, which restores"
+        printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER && [ -e "$FIX/alone/data" ] && [ ! -e "$FIX/alone/.eigen/lock" ] &&
+        [ "$(printf '%s\n' "$OUT" | tail -n 1)" = '└  Check that all is well.' ]; then
+        ok "$SHELL_NAME: a restore beside the launcher alone takes .env.production from the archive, gets the build it pins, and hands over to its launcher, which restores and keeps nothing aside"
     else
         fail "$SHELL_NAME: a restore on a new machine: exit $CODE, steps '$(steps)', '$ERR'"
     fi
@@ -1170,8 +1185,11 @@ done
 # The installer under this host's /bin/sh; the launcher it hands over to runs under all three above.
 header "The installer"
 INSTALLER="$REPO_ROOT/apps/index/public/install"
-mkdir "$FIX/fresh" "$FIX/piped" "$FIX/taken" "$FIX/empty" "$FIX/nodocker" "$FIX/page" "$FIX/home"
+mkdir "$FIX/fresh" "$FIX/piped" "$FIX/taken" "$FIX/configured" "$FIX/mirror" "$FIX/empty" "$FIX/nodocker" "$FIX/page" \
+    "$FIX/home"
 : >"$FIX/taken/docker-compose.yml"
+echo DOMAIN=eigen.example.com >"$FIX/configured/.env.production"
+echo EIGEN_REGISTRY=example.test/eigen >"$FIX/mirror/.env.production"
 ln -s "$FIX/bin/curl" "$FIX/nodocker/curl"
 
 # run_installer [--stdin] <folder> [PATH]: the installer under this host's /bin/sh in $FIX/<folder>, as a file or, with
@@ -1230,6 +1248,31 @@ if [ "$CODE" = 1 ] &&
     ok "the installer refuses a folder with an install, before it downloads anything"
 else
     fail "the installer in a folder with an install: exit $CODE, '$ERR'"
+fi
+: >"$FIX/calls.log"
+CODE=0
+OUT=$(cd "$FIX/configured" && env STUB_LOG="$FIX/calls.log" PATH="$FIX/bin:$PATH" /bin/sh "$INSTALLER" restore \
+    "$FIX/elsewhere/$ARCHIVE" </dev/null 2>"$FIX/stderr") || CODE=$?
+ERR=$(cat "$FIX/stderr")
+if [ "$CODE" = 1 ] && [ "$ERR" = 'This folder already has an Eigen install. Run ./eigen restore <archive> in it.' ] &&
+    [ ! -e "$FIX/configured/eigen" ] && [ ! -s "$FIX/calls.log" ]; then
+    ok "the installer with restore in a folder whose .env.production names a domain says to run ./eigen restore there"
+else
+    fail "the installer with restore in a folder with an install: exit $CODE, '$ERR'"
+fi
+# A mirror's .env.production names its registry before the launcher is there.
+: >"$FIX/calls.log"
+CODE=0
+OUT=$(cd "$FIX/mirror" && env STUB_LOG="$FIX/calls.log" PATH="$FIX/bin:$PATH" /bin/sh "$INSTALLER" restore \
+    "$FIX/elsewhere/$ARCHIVE" --yes </dev/null 2>"$FIX/stderr") || CODE=$?
+ERR=$(cat "$FIX/stderr")
+CALLS=$(cat "$FIX/calls.log")
+if [ "$CODE" = 0 ] && sed 2d "$FIX/mirror/eigen" | cmp -s "$REPO_ROOT/eigen" - &&
+    [ "$(steps | cut -d '|' -f 1-2)" = "pull example.test/eigen/api:latest|restore /restore/$ARCHIVE --env (example.test/eigen/api:latest)" ] &&
+    printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER; then
+    ok "the installer with restore in a mirror's folder downloads the launcher and restores from the registry it names"
+else
+    fail "the installer with restore in a mirror's folder: exit $CODE, '$ERR', steps: $(steps)"
 fi
 HOME=$FIX/home run_installer home
 if [ "$CODE" = 1 ] &&

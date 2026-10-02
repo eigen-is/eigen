@@ -228,7 +228,7 @@ export async function stageServerArchive(
         stamp: buildBackupStamp(new Date()),
         now: Math.floor(Date.now() / 1000),
     };
-    onStep('server');
+    onStep("the server's own databases and settings");
     await stageServerMember(archive, context.dataDir, path.join(context.unpackDir, SERVER_DIR));
 
     // Each install folder into its folder in data/. The containers that use them give them their owners and modes

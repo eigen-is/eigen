@@ -9,6 +9,8 @@ type ReleaseNote = { version: string; intro: string; breaking: string[] };
 // This image's own changelog, which knows every version up to it.
 const CHANGELOG = join(ROOT, 'CHANGELOG.md');
 const HEADING = /^\[([^\]]+)\]/;
+// A terminal shows a link as its text and its URL, a word wrap() keeps whole.
+const plainLinks = (text: string) => text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '$1 ($2)');
 
 export const UPDATE_CHECK_OPTIONS = {
     from: { type: 'string' },
@@ -45,10 +47,10 @@ export function releaseNotes(changelog: string, from: string, to: string): Relea
                 {
                     version,
                     // A section that opens with a heading or a list has no intro.
-                    intro: /^[#*-]/.test(paragraph[0] ?? '') ? '' : paragraph.join(' '),
+                    intro: /^[#*-]/.test(paragraph[0] ?? '') ? '' : plainLinks(paragraph.join(' ')),
                     breaking: lines
                         .filter((line) => line.includes('(breaking)'))
-                        .map((line) => line.replace(/^\s*-\s*/, '').replaceAll('**', '')),
+                        .map((line) => plainLinks(line.replace(/^\s*-\s*/, '').replaceAll('**', ''))),
                 },
             ];
         })
