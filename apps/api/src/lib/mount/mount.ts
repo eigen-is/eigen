@@ -676,7 +676,8 @@ export class Mount {
         // The row write both branches owe. Sizes are invalidated here, i.e. before any storage rename —
         // a rename failure still leaves the DB updated, so the caches must already reflect the new parent.
         const writeRow = async (): Promise<void> => {
-            const set = { ...values, updatedAt: new Date() };
+            // A caller's updatedAt wins: collab stamps the time of the edit, not of the write.
+            const set = { updatedAt: new Date(), ...values };
             const targetParentId = updates.parentId;
             try {
                 if (targetParentId === undefined) {

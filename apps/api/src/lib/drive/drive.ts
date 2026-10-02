@@ -1198,9 +1198,9 @@ export default class Drive {
     }
 
     // Called by: collab/collabDocument lifecycle (touches mtime on edit). Not route-callable.
-    async touchUpdatedAt(mountId: string, pathId: string): Promise<void> {
+    async touchUpdatedAt(mountId: string, pathId: string, updatedAt: Date): Promise<void> {
         const mount = this.getMount(mountId);
-        await mount.updatePath(pathId, {});
+        await mount.updatePath(pathId, { updatedAt });
     }
 
     async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {

@@ -186,7 +186,7 @@ describe('document transform (eigensheets preview)', () => {
         const home = await getHome(ctx.alice.user.id);
         const before = (await home.drive.resolveFile(mountId, pathId)).path.updatedAt.getTime();
         for (let i = 0; i < 30; i++) {
-            await home.drive.touchUpdatedAt(mountId, pathId);
+            await home.drive.touchUpdatedAt(mountId, pathId, new Date());
             const now = (await home.drive.resolveFile(mountId, pathId)).path.updatedAt.getTime();
             if (now !== before) return;
             await Bun.sleep(100);

@@ -63,6 +63,10 @@ A revoked read would otherwise keep receiving broadcasts until the socket drops.
 
 `CollabDocument.scheduleClose` waits `CLOSE_LINGER_MS` (60 s) after the last connection drops before tearing the document down, so a reload or a brief disconnect reattaches to the loaded document instead of re-paying the load. A new subscribe cancels the timer.
 
+## Modified moves for an update, never for an open or a close
+
+The `update` handler stamps the container's Modified time at most once a minute (`TOUCH_THROTTLE_MS`), since typing fires many updates a second. An update the throttle skips is stamped when the document closes, with its own time. So a document that was only read keeps its Modified time, and the last edit is not dated a linger after the last viewer left. `apps/api/src/test/collab/collab-modified-touch.test.ts` pins it.
+
 ## A version restore rewrites an open document in one transaction
 
 `CollabDocument.applySnapshotState` is how a version restore reaches a document that is open, and `apps/api/src/lib/versioning/restore.ts` is its only caller. It holds no container lock, because the surgery is synchronous and nothing can interleave with it. It delegates to `restoreYjsDoc` (`packages/lib/src/core/collab/yjs-utils.ts`), which replaces the doc's **declared roots** (the `yjsRoots` schema on `EIGEN_DOC_TYPE_INFO`) with a snapshot's contents inside one transaction. That transaction's update fires the normal `update` handler, so it persists and broadcasts like any other edit: **connected editors converge live, with no reload and no merge fight**, and disconnected sessions pick the new state up on their next sync handshake.

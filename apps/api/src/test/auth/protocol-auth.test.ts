@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, setSystemTime, test } from 'bun:test';
+import { beforeAll, beforeEach, describe, expect, setSystemTime, spyOn, test } from 'bun:test';
 import { app, getTestContext } from '../setup';
 
 describe('Protocol Auth', () => {
@@ -29,6 +29,18 @@ describe('Protocol Auth', () => {
         const user = await verifyProtocolAuth(ctx.alice.user.email, 'testpassword123');
         expect(user.id).toBe(ctx.alice.user.id);
         expect(user.email).toBe(ctx.alice.user.email);
+    });
+
+    // Better Auth logs every missed key lookup at ERROR, so an account password must never reach it.
+    test('an account password never reaches the API key check', async () => {
+        const verifyApiKey = spyOn(auth.api, 'verifyApiKey');
+        try {
+            const user = await verifyProtocolAuth(ctx.alice.user.email, 'testpassword123');
+            expect(user.id).toBe(ctx.alice.user.id);
+            expect(verifyApiKey).not.toHaveBeenCalled();
+        } finally {
+            verifyApiKey.mockRestore();
+        }
     });
 
     test('accepts valid app password', async () => {

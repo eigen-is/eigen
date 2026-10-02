@@ -101,6 +101,10 @@ function rejectRoleAddress(email: string | undefined): void {
     }
 }
 
+// Every app password is this many ASCII letters (the plugin's generator, no prefix), which lets
+// protocol auth tell one from an account password without a key lookup.
+export const APP_PASSWORD_LENGTH = 64;
+
 export const auth = betterAuth({
     database: drizzleAdapter(drizzle(getServerDataPath(SERVER_DATABASES.users)), {
         provider: 'sqlite',
@@ -261,6 +265,7 @@ export const auth = betterAuth({
             },
         }),
         apiKey({
+            defaultKeyLength: APP_PASSWORD_LENGTH,
             rateLimit: { enabled: false },
         }),
     ],
