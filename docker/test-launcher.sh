@@ -1182,8 +1182,11 @@ done
 # The installer under this host's /bin/sh; the launcher it hands over to runs under all three above.
 header "The installer"
 INSTALLER="$REPO_ROOT/apps/index/public/install"
-mkdir "$FIX/fresh" "$FIX/piped" "$FIX/taken" "$FIX/empty" "$FIX/nodocker" "$FIX/page" "$FIX/home"
+mkdir "$FIX/fresh" "$FIX/piped" "$FIX/taken" "$FIX/configured" "$FIX/mirror" "$FIX/empty" "$FIX/nodocker" "$FIX/page" \
+    "$FIX/home"
 : >"$FIX/taken/docker-compose.yml"
+echo DOMAIN=eigen.example.com >"$FIX/configured/.env.production"
+echo EIGEN_REGISTRY=example.test/eigen >"$FIX/mirror/.env.production"
 ln -s "$FIX/bin/curl" "$FIX/nodocker/curl"
 
 # run_installer [--stdin] <folder> [PATH]: the installer under this host's /bin/sh in $FIX/<folder>, as a file or, with
@@ -1245,14 +1248,28 @@ else
 fi
 : >"$FIX/calls.log"
 CODE=0
-OUT=$(cd "$FIX/taken" && env STUB_LOG="$FIX/calls.log" PATH="$FIX/bin:$PATH" /bin/sh "$INSTALLER" restore \
+OUT=$(cd "$FIX/configured" && env STUB_LOG="$FIX/calls.log" PATH="$FIX/bin:$PATH" /bin/sh "$INSTALLER" restore \
     "$FIX/elsewhere/$ARCHIVE" </dev/null 2>"$FIX/stderr") || CODE=$?
 ERR=$(cat "$FIX/stderr")
 if [ "$CODE" = 1 ] && [ "$ERR" = 'This folder already has an Eigen install. Run ./eigen restore <archive> in it.' ] &&
-    [ ! -e "$FIX/taken/eigen" ] && [ ! -s "$FIX/calls.log" ]; then
-    ok "the installer with restore in a folder with an install says to run ./eigen restore there"
+    [ ! -e "$FIX/configured/eigen" ] && [ ! -s "$FIX/calls.log" ]; then
+    ok "the installer with restore in a folder whose .env.production names a domain says to run ./eigen restore there"
 else
     fail "the installer with restore in a folder with an install: exit $CODE, '$ERR'"
+fi
+# A mirror's .env.production names its registry before the launcher is there.
+: >"$FIX/calls.log"
+CODE=0
+OUT=$(cd "$FIX/mirror" && env STUB_LOG="$FIX/calls.log" PATH="$FIX/bin:$PATH" /bin/sh "$INSTALLER" restore \
+    "$FIX/elsewhere/$ARCHIVE" --yes </dev/null 2>"$FIX/stderr") || CODE=$?
+ERR=$(cat "$FIX/stderr")
+CALLS=$(cat "$FIX/calls.log")
+if [ "$CODE" = 0 ] && sed 2d "$FIX/mirror/eigen" | cmp -s "$REPO_ROOT/eigen" - &&
+    [ "$(steps | cut -d '|' -f 1-2)" = "pull example.test/eigen/api:latest|restore /restore/$ARCHIVE --env (example.test/eigen/api:latest)" ] &&
+    printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER; then
+    ok "the installer with restore in a mirror's folder downloads the launcher and restores from the registry it names"
+else
+    fail "the installer with restore in a mirror's folder: exit $CODE, '$ERR', steps: $(steps)"
 fi
 HOME=$FIX/home run_installer home
 if [ "$CODE" = 1 ] &&
