@@ -318,7 +318,7 @@ Nothing matches the drive files that stay to the `shared.db` and `metadata.db` t
 
 Nothing is deleted from disk, and the newer databases are in `data.pre-restore-<date>-<time>`. A rollback is Light when the update's backup was, which is every update to a release with no breaking change; `./eigen update --full` makes it Full.
 
-`.env.production` goes aside as `.env.production.pre-restore-<date>-<time>` and the archive's comes in; an archive without one keeps the current file. A set-aside copy that would hold nothing is removed: a new machine's empty `data/`, and an `.env.production` identical to the archive's. The launcher ends with "Check that all is well, then delete what was kept aside."
+`.env.production` goes aside as `.env.production.pre-restore-<date>-<time>` and the archive's comes in; an archive without one keeps the current file. A set-aside copy that would hold nothing is removed: a new machine's empty `data/`, and an `.env.production` identical to the archive's. When the swap kept something aside, the launcher ends with "Check that all is well, then delete what was kept aside."
 
 ## An s3 mount keeps its bucket as it is
 

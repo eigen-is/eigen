@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, update, rollback, release, breaking]
 related: [self-hosting/back-up-and-restore, self-hosting/commands-and-files]
 order: 80
-updated: 2026-10-01
+updated: 2026-10-02
 ---
 
 An update is one command, and so is going back. Eigen backs itself up before every update, so a rollback puts back the old version with the accounts, settings, and databases it had.
@@ -56,7 +56,7 @@ After the update, two files of 0.3.0 may be left over: `data/server/collab-epoch
 
 Does cron run `./eigen backup` for you? Check its line. The `--keep` option of 0.3.0 is gone: with it, `./eigen backup` stops with exit 2 and makes no backup. A stop before the backup has to go too, since the backup needs Eigen running. Backups made with `./eigen backup` stay until you delete them. To have Eigen keep a set number, turn on the nightly backup in **Settings → Backups** instead: it is off until the owner turns it on. See [Back up every night](/support/self-hosting/back-up-and-restore#back-up-every-night).
 
-Eigen 0.3.0 made its own kind of backup, a snapshot in `snapshots/`, and the update from 0.3.0 saves one the same way, with Eigen stopped. Only Eigen 0.3.0 can put it back. `./eigen rollback` then prints three commands instead: the first brings back the `eigen` command of 0.3.0, the second restores the snapshot with it, and the third clears what the newer version noted.
+Eigen 0.3.0 made its own kind of backup, a snapshot in `snapshots/`, and the update from 0.3.0 saves one the same way, with Eigen stopped. Only Eigen 0.3.0 can put it back. `./eigen rollback` then prints three commands instead: the first brings back the `eigen` command of 0.3.0, the second restores the snapshot with it, and the third clears what the newer version noted. Without a terminal, like in a script, add `--yes` to the second.
 
 ## What 1.0 means for your data
 
