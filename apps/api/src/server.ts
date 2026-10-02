@@ -9,6 +9,7 @@ import { assertMailDomainUnchanged, isSetupRequired } from './lib/config/server-
 import { documentTransformRunner } from './lib/document/transform/runner';
 import { drainACLFanOuts } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';
+import { pinDefaultTeam } from './lib/org';
 import { registerScheduledJobs } from './lib/scheduler/jobs';
 import { stopAllSchedules } from './lib/scheduler/scheduler';
 import { createSetupLink } from './lib/setup/setup-token';
@@ -31,6 +32,7 @@ wipeBackupStaging();
 await recoverInterruptedServerBackups().catch((error) => console.error('[backup] recovering server records:', error));
 
 await assertMailDomainUnchanged();
+await pinDefaultTeam();
 
 const server = app.listen({
     // 8000 in every deployment — Caddy, Dovecot and the container healthcheck all name it. The
