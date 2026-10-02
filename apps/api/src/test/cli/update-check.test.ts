@@ -75,6 +75,19 @@ describe('releaseNotes', () => {
         expect(note).toEqual({ version: '0.2.1', intro: '', breaking: ['Mail (breaking) — a new store'] });
     });
 
+    test('a link reads as its text and its URL, which a wrap never splits', () => {
+        const [note] = releaseNotes(
+            '## [0.2.1] - 2026-09-01\n\nThe steps are in the [Self-hosting\nsection](https://eigen.is/support/self-hosting/get-started).\n\n- **Backups (breaking)** — see [the guide](https://eigen.is/support)\n',
+            '0.2.0',
+            '0.2.1',
+        );
+        expect(note).toEqual({
+            version: '0.2.1',
+            intro: 'The steps are in the Self-hosting section (https://eigen.is/support/self-hosting/get-started).',
+            breaking: ['Backups (breaking) — see the guide (https://eigen.is/support)'],
+        });
+    });
+
     test('skips [Unreleased], even when this image is newer than every release', () => {
         const notes = releaseNotes(CHANGELOG, '0.3.0', '9.0.0');
         expect(notes).toEqual([]);
