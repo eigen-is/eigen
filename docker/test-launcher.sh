@@ -187,8 +187,10 @@ PATH_IN=/stub:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # CALLS (what docker was asked). STUB_* pass through as set here. LAUNCH_TTY=1 gives a container shell a terminal, which
 # takes stderr into OUT. LAUNCH_TERM=<call> sends the launcher a TERM a second after docker is asked <call>, as Ctrl-C
 # would: bash starts a background job with INT ignored, which a shell cannot trap, and the launcher traps both alike.
+# A launcher that has not ended 120 s after its start is killed, its container too, and exits 137, which fails the
+# check and leaves the suite going.
 launch() {
-    local dir="$FIX/$1" vars=("STUB_LOG=$FIX/calls.log") flags=() run name var pid
+    local dir="$FIX/$1" vars=("STUB_LOG=$FIX/calls.log") flags=() run name var pid deadline
     shift
     : >"$FIX/calls.log"
     for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_REVISION STUB_LABEL_VERSION \
@@ -203,6 +205,11 @@ launch() {
         for var in "${vars[@]}"; do flags+=(-e "$var"); done
         # As this user, or on a Linux host root's .eigen would refuse this script's own lock below.
         if [ "${LAUNCH_TTY:-0}" = 1 ]; then flags+=(-t); fi
+        # A killed docker run leaves its container running.
+        if [ -n "${LAUNCH_TERM:-}" ]; then
+            rm -f "$FIX/cid"
+            flags+=(--cidfile "$FIX/cid")
+        fi
         # docker run passes the TERM on to the shell in the container.
         run=(docker run --rm --user "$(id -u):$(id -g)" -v "$FIX:$FIX" -v "$FIX/bin:/stub:ro" -w "$dir"
             -e PATH="$PATH_IN" "${flags[@]}" "$IMAGE" "$SHELL_CMD" ./eigen "$@")
@@ -212,9 +219,19 @@ launch() {
     else
         (cd "$dir" && exec "${run[@]}") >"$FIX/stdout" 2>"$FIX/stderr" &
         pid=$!
-        while kill -0 "$pid" 2>/dev/null && ! grep -qF -- "$LAUNCH_TERM" "$FIX/calls.log"; do sleep 0.2; done
-        sleep 1
-        kill -s TERM "$pid" 2>/dev/null || :
+        deadline=$(($(date +%s) + 120))
+        while kill -0 "$pid" 2>/dev/null && ! grep -qF -- "$LAUNCH_TERM" "$FIX/calls.log" &&
+            [ "$(date +%s)" -lt "$deadline" ]; do sleep 0.2; done
+        if grep -qF -- "$LAUNCH_TERM" "$FIX/calls.log"; then
+            sleep 1
+            kill -s TERM "$pid" 2>/dev/null || :
+        fi
+        while kill -0 "$pid" 2>/dev/null && [ "$(date +%s)" -lt "$deadline" ]; do sleep 0.2; done
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -s KILL "$pid" 2>/dev/null || :
+            if [ -s "$FIX/cid" ]; then docker kill "$(cat "$FIX/cid")" >/dev/null 2>&1 || :; fi
+            echo 'launch: killed, 120 s after its start' >>"$FIX/stderr"
+        fi
         wait "$pid" || CODE=$?
         OUT=$(cat "$FIX/stdout")
     fi
