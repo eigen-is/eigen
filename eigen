@@ -649,8 +649,11 @@ stage_archive() {
     # The CLI says how an interrupt ended it, so the launcher waits for it.
     trap : INT TERM
     staged=0
+    # Without Compose's lines on the container it makes; its errors still print. A Compose without it ignores it.
+    export COMPOSE_PROGRESS=quiet
     dc run --rm --no-deps $tty -e TERM -e NO_COLOR ${ARCHIVE_MOUNT:+-v} ${ARCHIVE_MOUNT:+"$ARCHIVE_MOUNT"} \
         eigen-api restore "$STAGE_ARG" --stage $yes $s3 || staged=$?
+    unset COMPOSE_PROGRESS
     trap 'exit 130' INT TERM
     case $staged in
         0) ;;
@@ -700,9 +703,13 @@ after_swap() {
     NEXT=''
 }
 
+# What restores kept aside in the install folder, as the swap names it, a name a line.
+kept_aside() { ls -d data.pre-restore-* .env.production.pre-restore-* 2>/dev/null || :; }
+
 # put_back: the archive where_archive found, staged, swapped in and started on the images it pins.
 put_back() {
     before=$(image api)
+    kept=$(kept_aside)
     # Docker would create a missing data/ as root for its bind mount, which the stage, uid 1000, cannot write.
     if [ ! -d data ]; then
         step "Preparing data/ and backups/" "Data folders ready" "The data folders are not writable" prepare_data
@@ -718,6 +725,15 @@ put_back() {
     after_swap "$before"
     AT_EXIT=''
     restart
+}
+
+# The last line of a restore: what its swap kept aside, if anything, is the operator's to delete.
+check_kept() {
+    if [ "$(kept_aside)" = "$kept" ]; then
+        say "$GRAY" '└' "Check that all is well."
+    else
+        say "$GRAY" '└' "Check that all is well, then delete what was kept aside."
+    fi
 }
 
 # finish_swap: a swap that was cut off, finished by the build whose files run it, then what follows any swap, and the
@@ -824,7 +840,7 @@ setup() {
     else
         version=$(env_value EIGEN_VERSION)
         if [ -z "$version" ]; then
-            die ".env.production names no Eigen release." "Get one into it: docker run --rm -v \"\$PWD:/out\" $REGISTRY/api:latest bootstrap --force"
+            die ".env.production names no Eigen release." "Get one into it: docker run --rm --pull always -v \"\$PWD:/out\" $REGISTRY/api:latest bootstrap --force"
         fi
         # A tag is resolved to digests once, by the first setup or by update: a rerun gets the images already pinned.
         case $(image api) in
@@ -986,7 +1002,7 @@ restore() {
     if [ "$MODE" = release ]; then api_here; fi
     lock
     put_back
-    say "$GRAY" '└' "Check that all is well, then delete what was kept aside."
+    check_kept
 }
 
 update() {
@@ -1226,7 +1242,7 @@ rollback() {
     where_archive "$archive"
     put_back
     say "$GREEN" '◇' "Eigen $current → $(describe "$API_IMAGE") is running at https://$(env_value DOMAIN)/"
-    say "$GRAY" '└' "Check that all is well, then delete what was kept aside."
+    check_kept
 }
 
 COMMAND=${1:-}

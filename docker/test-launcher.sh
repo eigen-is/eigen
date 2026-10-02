@@ -1023,8 +1023,9 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     pinned="$(for name in $IMAGES; do printf 'pull ghcr.io/eigen-is/eigen/%s@sha256:eee|' "$name"; done)"
     eee=ghcr.io/eigen-is/eigen/api@sha256:eee
     if [ "$CODE" = 0 ] && [ "$(steps)" = "pull ghcr.io/eigen-is/eigen/api:latest|restore /restore/$ARCHIVE --env (ghcr.io/eigen-is/eigen/api:latest)|${pinned}bootstrap $eee|share|stage -v $FIX/elsewhere/$ARCHIVE:/restore/$ARCHIVE:ro eigen-api restore /restore/$ARCHIVE --stage --yes|restore --staged ($eee)|stop|restore --swap ($eee)|share|up|" ] &&
-        printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER && [ -e "$FIX/alone/data" ] && [ ! -e "$FIX/alone/.eigen/lock" ]; then
-        ok "$SHELL_NAME: a restore beside the launcher alone takes .env.production from the archive, gets the build it pins, and hands over to its launcher, which restores"
+        printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER && [ -e "$FIX/alone/data" ] && [ ! -e "$FIX/alone/.eigen/lock" ] &&
+        [ "$(printf '%s\n' "$OUT" | tail -n 1)" = '└  Check that all is well.' ]; then
+        ok "$SHELL_NAME: a restore beside the launcher alone takes .env.production from the archive, gets the build it pins, and hands over to its launcher, which restores and keeps nothing aside"
     else
         fail "$SHELL_NAME: a restore on a new machine: exit $CODE, steps '$(steps)', '$ERR'"
     fi
@@ -1230,6 +1231,17 @@ if [ "$CODE" = 1 ] &&
     ok "the installer refuses a folder with an install, before it downloads anything"
 else
     fail "the installer in a folder with an install: exit $CODE, '$ERR'"
+fi
+: >"$FIX/calls.log"
+CODE=0
+OUT=$(cd "$FIX/taken" && env STUB_LOG="$FIX/calls.log" PATH="$FIX/bin:$PATH" /bin/sh "$INSTALLER" restore \
+    "$FIX/elsewhere/$ARCHIVE" </dev/null 2>"$FIX/stderr") || CODE=$?
+ERR=$(cat "$FIX/stderr")
+if [ "$CODE" = 1 ] && [ "$ERR" = 'This folder already has an Eigen install. Run ./eigen restore <archive> in it.' ] &&
+    [ ! -e "$FIX/taken/eigen" ] && [ ! -s "$FIX/calls.log" ]; then
+    ok "the installer with restore in a folder with an install says to run ./eigen restore there"
+else
+    fail "the installer with restore in a folder with an install: exit $CODE, '$ERR'"
 fi
 HOME=$FIX/home run_installer home
 if [ "$CODE" = 1 ] &&
