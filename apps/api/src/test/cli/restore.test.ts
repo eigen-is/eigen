@@ -536,6 +536,15 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
+        'the stage names each part as it stages it, the server’s own before the homes',
+        async () => {
+            const { stdout } = await stage(install(), basename(fullArchive));
+            expect(stdout).toContain("│  the server's own databases and settings\n│  home 1 of ");
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
         'the data epoch changes: no epoch file survives, so every open tab reloads',
         async () => {
             const withEpochs = await craft(fullArchive, { replace: await serverMemberWithEpochs(fullArchive) });
