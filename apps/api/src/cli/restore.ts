@@ -545,6 +545,7 @@ function runSwap(ui: Ui, swap: RestoreSwap): void {
     if (existsSync(envAside) && readFileSync(envAside).equals(readFileSync(ENV_PATH))) rmSync(envAside);
     console.log(glyphLine('ok', `Swapped in ${swap.archive}`));
     const aside = swap.aside.filter((path) => existsSync(path));
+    // 'Kept aside: ' is grepped by finish_swap in eigen.
     if (aside.length) console.log(glyphLine('ok', `Kept aside: ${aside.join(', ')}`));
     console.log(glyphLine('ok', 'Everyone is signed in as they were when the archive was made'));
 }

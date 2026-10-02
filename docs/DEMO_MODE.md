@@ -60,7 +60,7 @@ systemctl daemon-reload
 systemctl enable --now eigen-demo-reset.timer
 ```
 
-`./eigen update` rewrites the copies in `scripts/` but never installs them. The units assume `/opt/eigen`.
+`./eigen update` rewrites the copies in `scripts/` but never installs them. The units assume `/opt/eigen`. The timer is `Persistent=true`, so starting it after a pause runs one catch-up reset at once, which stops `eigen-api` for about a minute: wait until `systemctl show -p ActiveState eigen-demo-reset.service` says `inactive` before you check the site.
 
 A server backup runs inside the API and holds no `.eigen/lock` ([BACKUP.md](BACKUP.md#the-whole-server-backup-runs-inside-the-api)), so a reset that starts while one runs stops the API under it, and the archive's record says it failed. A demo box has nothing worth backing up: the next reset wipes it anyway.
 

@@ -352,7 +352,11 @@ fi
 started_at=$SECONDS
 eigen restore "$INSTALL/backups/$ARCHIVE" --yes
 show
-if [ "$CODE" = 0 ]; then ok "./eigen restore --yes finished in $((SECONDS - started_at))s"; else fail "./eigen restore exited $CODE"; fi
+if [ "$CODE" = 0 ] && says '└  Check that all is well, then delete what was kept aside.'; then
+    ok "./eigen restore --yes finished in $((SECONDS - started_at))s, and says to delete what it kept aside"
+else
+    fail "./eigen restore exited $CODE, its last line '$(printf '%s\n' "$OUT" | tail -n 1)'"
+fi
 if stack_up; then ok "the stack is up after the restore"; else fail "the stack is not up after the restore"; fi
 if curl -sk -b "$JAR" "$BASE/auth/get-session" | grep -q "\"$ADMIN_EMAIL\""; then
     ok "the session from before the backup is there after the restore"

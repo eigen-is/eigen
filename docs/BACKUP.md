@@ -301,7 +301,7 @@ The server backup routes (`apps/api/src/routes/server-backup.ts`) have no downlo
 2. Pull: on a release install, the images the archive's `.env.production` pins, while Eigen still runs.
 3. Swap (`restore --swap`, as root with Eigen stopped). It writes `.eigen/restore-swap`, the full list of copies and renames, and syncs it to disk before the first rename. Then it runs them and clears `backups/.staging/`. The per-home restore notes in it name homes of the `data/` that went aside, and boot recovery would act on the restored ones. It removes the marker and starts Eigen on the pinned images, with their launcher and Compose files. A local build runs `configure --backfill` instead.
 
-A swap that ends after its marker is written leaves Eigen stopped, and the launcher says so: "The swap is unfinished and Eigen is stopped: ./eigen restart finishes it." A swap cut off anywhere is finished by the next `./eigen` command other than `logs`, `reset-password` and `help`: `preflight` finds the marker and runs `restore --swap` again with the build whose files wrote it, which skips the renames already done. The staged tree was verified before the marker existed, so rolling forward is safe. The swap holds the API's instance lock ([DATABASE.md](DATABASE.md#one-api-process-owns-a-data-folder)) and `.eigen/restore.lock`; the launcher holds `.eigen/lock` throughout.
+A swap that ends after its marker is written leaves Eigen stopped, and the launcher says so: "The swap is unfinished and Eigen is stopped: ./eigen restart finishes it." A swap cut off anywhere is finished by the next `./eigen` command other than `logs`, `reset-password` and `help`: `preflight` finds the marker and runs `restore --swap` again with the build whose files wrote it, which skips the renames already done, and ends on whether it kept something aside, as a restore does. It reads that from the swap's own "Kept aside" line: one cut off after a rename set its aside before the command that finishes it. The staged tree was verified before the marker existed, so rolling forward is safe. The swap holds the API's instance lock ([DATABASE.md](DATABASE.md#one-api-process-owns-a-data-folder)) and `.eigen/restore.lock`; the launcher holds `.eigen/lock` throughout.
 
 ## A Full restore swaps data/ whole, a Light one merges
 
@@ -318,7 +318,7 @@ Nothing matches the drive files that stay to the `shared.db` and `metadata.db` t
 
 Nothing is deleted from disk, and the newer databases are in `data.pre-restore-<date>-<time>`. A rollback is Light when the update's backup was, which is every update to a release with no breaking change; `./eigen update --full` makes it Full.
 
-`.env.production` goes aside as `.env.production.pre-restore-<date>-<time>` and the archive's comes in; an archive without one keeps the current file. A set-aside copy that would hold nothing is removed: a new machine's empty `data/`, and an `.env.production` identical to the archive's. The launcher ends with "Check that all is well, then delete what was kept aside."
+`.env.production` goes aside as `.env.production.pre-restore-<date>-<time>` and the archive's comes in; an archive without one keeps the current file. A set-aside copy that would hold nothing is removed: a new machine's empty `data/`, and an `.env.production` identical to the archive's. When the swap kept something aside, the launcher ends with "Check that all is well, then delete what was kept aside."
 
 ## An s3 mount keeps its bucket as it is
 
