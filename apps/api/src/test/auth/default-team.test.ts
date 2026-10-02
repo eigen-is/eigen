@@ -109,6 +109,26 @@ describe('a new user joins the default team', () => {
         }, 'the team share in the new user’s Shared with me');
     });
 
+    test('a member removed from the default team stays out after signing in again', async () => {
+        const user = await adminCreatesUser('removed');
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: JSON_HEADERS,
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+        const removed = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/remove-team-member', {
+            method: 'POST',
+            headers: JSON_HEADERS,
+            body: JSON.stringify({ teamId: setupTeamId, userId: user.id }),
+        });
+        expect(removed.status).toBe(200);
+        expect(teamIdsOf(user.id)).toEqual([]);
+
+        await auth.api.signInEmail({ body: { email: user.email, password: PASSWORD } });
+        expect(isOrgMember(user.id)).toBe(true);
+        expect(teamIdsOf(user.id)).toEqual([]);
+    });
+
     test('a guest gets no team row', async () => {
         const openSignup = getServerSettings().guests.openSignup;
         await updateServerSettings({ guests: { openSignup: true } });

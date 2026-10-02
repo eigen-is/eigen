@@ -1,11 +1,15 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { eq, inArray } from 'drizzle-orm';
-import { organization as organizationSchema, team as teamSchema } from '../../../auth-schema';
+import {
+    organization as organizationSchema,
+    teamMember as teamMemberSchema,
+    team as teamSchema,
+} from '../../../auth-schema';
 import { getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getServerConfig, updateServerConfig } from '../../lib/config/server-config';
 import { pinDefaultTeam } from '../../lib/org';
-import { ensureServer } from '../setup';
+import { createTestUser, ensureServer } from '../setup';
 
 // Installs set up before Eigen pinned the default team find it once at boot, by a rule a hand-made team can't meet.
 describe('pinDefaultTeam', () => {
@@ -66,11 +70,48 @@ describe('pinDefaultTeam', () => {
         expect(getServerConfig()?.defaultTeamId).toBeUndefined();
     });
 
+    test('pins a same-named team made 4 seconds after the organization', async () => {
+        getAuthDrizzleDb()
+            .update(teamSchema)
+            .set({ name: 'Renamed by hand' })
+            .where(eq(teamSchema.id, setupTeamId))
+            .run();
+        const inside = addTeam(orgName, new Date(orgCreatedAt.getTime() + 4_000));
+        await updateServerConfig({ defaultTeamId: undefined });
+        await pinDefaultTeam();
+        expect(getServerConfig()?.defaultTeamId).toBe(inside);
+    });
+
+    test('pins nothing for a same-named team made 6 seconds after the organization', async () => {
+        getAuthDrizzleDb()
+            .update(teamSchema)
+            .set({ name: 'Renamed by hand' })
+            .where(eq(teamSchema.id, setupTeamId))
+            .run();
+        addTeam(orgName, new Date(orgCreatedAt.getTime() + 6_000));
+        await updateServerConfig({ defaultTeamId: undefined });
+        await pinDefaultTeam();
+        expect(getServerConfig()?.defaultTeamId).toBeUndefined();
+    });
+
     test('pins nothing when two teams match', async () => {
         addTeam(orgName, orgCreatedAt);
         await updateServerConfig({ defaultTeamId: undefined });
         await pinDefaultTeam();
         expect(getServerConfig()?.defaultTeamId).toBeUndefined();
+    });
+
+    test('adds no existing member to the team it pins', async () => {
+        await updateServerConfig({ defaultTeamId: undefined });
+        const user = await createTestUser(`unpinned-${randomUUID()}@test.eigen.is`, 'testpassword123', 'Unpinned');
+        await pinDefaultTeam();
+        expect(getServerConfig()?.defaultTeamId).toBe(setupTeamId);
+        const teamRows = getAuthDrizzleDb()
+            .select({ teamId: teamMemberSchema.teamId })
+            .from(teamMemberSchema)
+            .where(eq(teamMemberSchema.userId, user.id))
+            .all();
+        expect(teamRows).toEqual([]);
     });
 
     test('keeps a pinned id', async () => {

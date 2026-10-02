@@ -32,7 +32,7 @@ wipeBackupStaging();
 await recoverInterruptedServerBackups().catch((error) => console.error('[backup] recovering server records:', error));
 
 await assertMailDomainUnchanged();
-await pinDefaultTeam();
+await pinDefaultTeam().catch((error) => console.error('[org] pinning the default team:', error));
 
 const server = app.listen({
     // 8000 in every deployment — Caddy, Dovecot and the container healthcheck all name it. The

@@ -296,7 +296,7 @@ async function authEnsureDefaultOrgMembership(userId: string): Promise<void> {
     const row = await db.select({ role: userScheme.role }).from(userScheme).where(eq(userScheme.id, userId)).get();
     if (row?.role === 'guest') return;
 
-    // addMember undoes the org join when the team step fails, so a deleted default team must not reach it.
+    // addMember refuses a team that is gone, org join included, so a deleted default team must not reach it.
     const teamId = defaultTeamId && (await getTeamExists(defaultTeamId)) ? defaultTeamId : undefined;
     await auth.api.addMember({
         body: {
@@ -306,8 +306,13 @@ async function authEnsureDefaultOrgMembership(userId: string): Promise<void> {
             teamId,
         },
     });
+    if (!teamId) return;
     // addMember skips afterAddTeamMember.
-    if (teamId) await reconcileSharesForNewTeamMember(userId, teamId);
+    try {
+        await reconcileSharesForNewTeamMember(userId, teamId);
+    } catch (error) {
+        console.error(`Failed to reconcile default team shares for user ${userId}:`, error);
+    }
 }
 
 // Membership deletion also sweeps rows whose user is already gone, so instances that
