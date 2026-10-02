@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getServerDataPath } from '../../lib/config/paths';
 import { getDomain } from '../../lib/config/server-config';
@@ -173,6 +173,8 @@ describe('the /setup routes before setup', () => {
     afterAll(async () => {
         proc?.kill('SIGKILL');
         await proc?.exited;
+        // A killed API leaves its socket file, which a later listen on the path would find in use.
+        rmSync(SOCKET, { force: true });
         s3.stop(true);
     });
 

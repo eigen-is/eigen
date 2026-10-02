@@ -1,12 +1,15 @@
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, spyOn, test } from 'bun:test';
+import { toast } from 'sonner';
 import {
     clipboardTextItemHasContent,
+    copyToClipboard,
     EIGEN_CLIPBOARD_RENDER_ATTR,
     embedClipboardSvgMetadata,
     extractClipboardSvgMetadata,
     hasRichHtmlBeyondMarker,
     inlineClipboardSvgMedia,
     materializeClipboardSvg,
+    needsReUpload,
     readEigenClipboard,
     readSvgClipboardWithItems,
     svgToImageDataUri,
@@ -82,6 +85,22 @@ describe('embedClipboardSvgMetadata / extractClipboardSvgMetadata', () => {
             items: [{ type: 'text', text: 'x', width: Number.NaN, height: 5 }],
         });
         expect(extractClipboardSvgMetadata(forged)?.items).toEqual([]);
+    });
+});
+
+describe('needsReUpload', () => {
+    test('re-uploads from another folder, keeps a same-folder name', () => {
+        expect(needsReUpload('m1', 'm2')).toBe(true);
+        expect(needsReUpload('m1', 'm1')).toBe(false);
+    });
+
+    test('re-uploads an item with no source folder, whose name resolves nowhere', () => {
+        expect(needsReUpload(null, 'm1')).toBe(true);
+        expect(needsReUpload(undefined, 'm1')).toBe(true);
+    });
+
+    test('has nothing to upload into without a media folder', () => {
+        expect(needsReUpload('m1', null)).toBe(false);
     });
 });
 
@@ -374,6 +393,27 @@ describe('writeEigenClipboardAsync', () => {
             expect(captured.items?.['text/plain']).toBeDefined();
         } finally {
             gg.navigator = origNavigator;
+        }
+    });
+});
+
+describe('copyToClipboard', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
+    const gg = globalThis as any;
+
+    test('a refused write toasts why, and no success', async () => {
+        const success = spyOn(toast, 'success');
+        const error = spyOn(toast, 'error');
+        const origNavigator = gg.navigator;
+        gg.navigator = { clipboard: { writeText: () => Promise.reject(new Error('Document is not focused.')) } };
+        try {
+            await copyToClipboard('https://example.org', 'Link copied to clipboard');
+            expect(success).not.toHaveBeenCalled();
+            expect(error).toHaveBeenCalledWith('Document is not focused.');
+        } finally {
+            gg.navigator = origNavigator;
+            success.mockRestore();
+            error.mockRestore();
         }
     });
 });

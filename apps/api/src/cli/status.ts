@@ -1,11 +1,11 @@
 import type { parseArgs } from 'node:util';
+import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
-import { parseBackupStamp } from '@workspace/lib/validation';
+import { parseServerArchiveNames } from '@workspace/lib/validation';
 import type { ControlStatus } from '../lib/config/server-status';
 import { callControl } from './control-socket';
 import { VERSION, VERSION_PATTERN } from './install';
-import { newestSnapshots, SNAPSHOT_NAME } from './snapshot';
 import { createUi, type Glyph, glyphLine } from './ui';
 
 type Row = { level: Glyph; label: string; value: string };
@@ -17,22 +17,70 @@ const CERT_WARN_DAYS = 14;
 // --install is the folder on the host, which the CLI sees as /install. --latest is the newest release of a release
 // install, or on a channel the commit of its newest build: empty when the check failed, left out on a local build.
 // --files is the build the launcher and Compose files were last written from, passed only while it is not the one
-// .env.production pins: an update that failed halfway is not finished.
+// .env.production pins: an update that failed halfway is not finished. --backups lists backups/, for the Backup row
+// while the API does not run.
 export const STATUS_OPTIONS = {
     install: { type: 'string' },
     services: { type: 'string' },
     latest: { type: 'string' },
     'mail-queue': { type: 'string' },
-    snapshots: { type: 'string' },
-    'snapshots-kb': { type: 'string' },
+    backups: { type: 'string' },
     files: { type: 'string' },
 } as const;
-export const STATUS_USAGE = `Usage: status [--install=…] [--services=…] [--latest=…] [--mail-queue=…]
-              [--snapshots=…] [--snapshots-kb=…] [--files=…]
+export const STATUS_USAGE = `Usage: status [--install=…] [--services=…] [--latest=…] [--mail-queue=…] [--backups=…]
+              [--files=…]
 
 Reports on the running server with what ./eigen status gathers from Docker and the host.`;
 
 type StatusFlags = ReturnType<typeof parseArgs<{ options: typeof STATUS_OPTIONS }>>['values'];
+
+// Red while the newest scheduled attempt failed, whatever came after it: the schedule is what the
+// owner counts on. Yellow while its archive is here but not in the bucket, the more urgent, while the newest archive
+// was backed up with warnings, and while the schedule is on and no complete Full verified in two days.
+function backupRow({
+    scheduleEnabled,
+    newest,
+    scheduledFailure,
+    scheduledNotUploaded,
+    warned,
+    newestGoodFullAt,
+}: ControlStatus['backup']): Row {
+    const why = (error: string | null) => (error ? `: ${error}` : '');
+    if (scheduledFailure) {
+        const { name, createdAt, error } = scheduledFailure;
+        return { level: 'bad', label: 'Backup', value: `${name} failed, ${formatTimeAgo(createdAt)}${why(error)}` };
+    }
+    if (scheduledNotUploaded) {
+        const { name, createdAt, error } = scheduledNotUploaded;
+        const value = `${name} not uploaded, ${formatTimeAgo(createdAt)}${why(error)}`;
+        return { level: 'warn', label: 'Backup', value };
+    }
+    if (warned) {
+        const { name, createdAt, error } = warned;
+        const value = `${name} backed up with warnings, ${formatTimeAgo(createdAt)}${why(error)}`;
+        return { level: 'warn', label: 'Backup', value };
+    }
+    if (!newest) return { level: 'warn', label: 'Backup', value: 'none yet; ./eigen backup makes one' };
+    const parts = [newest.name, formatTimeAgo(newest.createdAt)];
+    if (newest.bytes !== null) parts.push(formatFileSize(newest.bytes, 1));
+    if (newest.state === 'running') parts.push('running');
+    if (newest.state === 'failed') parts.push(`failed${why(newest.error)}`);
+    const stale =
+        scheduleEnabled && (!newestGoodFullAt || Date.now() - new Date(newestGoodFullAt).getTime() > 2 * DAY_MS);
+    return {
+        level: stale || newest.state === 'failed' ? 'warn' : 'ok',
+        label: 'Backup',
+        value: `${parts.join(', ')}${stale ? '; no good Full backup in two days' : ''}`,
+    };
+}
+
+// Without the API, the newest archive in backups/ by the time in its name; whether it verified is in its record.
+function listedBackupRow(listing: string): Row {
+    const [newest] = parseServerArchiveNames(listing.split('\n'));
+    if (!newest) return { level: 'warn', label: 'Backup', value: 'none yet; ./eigen backup makes one' };
+    const value = `${newest.name}, ${BACKUP_LEVEL_NAMES[newest.level]}, ${formatTimeAgo(newest.at)}`;
+    return { level: 'ok', label: 'Backup', value };
+}
 
 // Without the API, the report holds what the launcher knows.
 function printReport(flags: StatusFlags, services: Service[], api: ControlStatus | null): void {
@@ -81,29 +129,16 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
         }),
     );
 
-    const snapshots = newestSnapshots((flags.snapshots ?? '').split('\n'));
-    const [snapshot = ''] = snapshots;
-    const groups = SNAPSHOT_NAME.exec(snapshot)?.groups;
-    const snapshotAt = groups && parseBackupStamp(groups);
-    const data: Row[] = [
-        snapshotAt
-            ? { level: 'ok', label: 'Last snapshot', value: `${snapshot}, ${formatTimeAgo(snapshotAt)}` }
-            : { level: 'warn', label: 'Last snapshot', value: 'none yet; ./eigen backup makes one' },
-    ];
-    const kb = Number(flags['snapshots-kb']);
-    if (snapshots.length && kb) {
-        data.push({
-            level: 'ok',
-            label: 'Snapshots',
-            value: `${snapshots.length} in snapshots/, ${formatFileSize(kb * 1024, 1)} on disk`,
-        });
-    }
+    const data: Row[] = api ? [] : [listedBackupRow(flags.backups ?? '')];
     if (api) {
-        data.unshift({
-            level: api.diskFree < api.diskTotal / 10 ? 'warn' : 'ok',
-            label: 'Disk',
-            value: `${formatFileSize(api.diskFree, 1)} free of ${formatFileSize(api.diskTotal, 1)}`,
-        });
+        data.push(
+            {
+                level: api.diskFree < api.diskTotal / 10 ? 'warn' : 'ok',
+                label: 'Disk',
+                value: `${formatFileSize(api.diskFree, 1)} free of ${formatFileSize(api.diskTotal, 1)}`,
+            },
+            backupRow(api.backup),
+        );
         if (api.certExpiresAt) {
             const days = Math.floor((new Date(api.certExpiresAt).getTime() - Date.now()) / DAY_MS);
             const until = formatDate(api.certExpiresAt);

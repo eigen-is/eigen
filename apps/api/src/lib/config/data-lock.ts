@@ -1,6 +1,6 @@
 import { Database, SQLiteError } from 'bun:sqlite';
 
-// In data/server/: the API holds it while it runs, and ./eigen backup and restore while they read or replace data/.
+// In data/server/: the API holds it while it runs, and the swap of ./eigen restore while it replaces data/.
 export const DATA_LOCK_FILE = 'instance.lock';
 
 // An open write transaction is a lock the OS drops on exit, however the holder ends. Null when another process holds it.

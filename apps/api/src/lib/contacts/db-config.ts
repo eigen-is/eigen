@@ -146,7 +146,8 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
         },
         {
             // The vCard bytes move into the `vcard` column, so every v4 row is dropped: the card files that
-            // held them are not adopted. Children before parents, because foreign_keys is ON.
+            // held them are not adopted, and init reseeds the emptied book rather than carry a converter.
+            // Children before parents, because foreign_keys is ON.
             version: 5,
             up: (db) =>
                 db.exec(`

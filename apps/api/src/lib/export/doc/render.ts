@@ -19,6 +19,7 @@ export function renderCodeBlockNode(
     const language = node.attrs.language || '';
     const code = node.textContent ?? '';
 
+    // Users rarely set a language, so highlightAuto is where nearly all export highlighting comes from.
     const highlighted =
         language && lowlight.registered(language)
             ? hastToHtml(lowlight.highlight(language, code))

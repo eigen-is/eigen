@@ -6,7 +6,7 @@
 # QUEUE_ALERT_THRESHOLD, POST the number to the API's localhost-only /internal/mail/queue-alert
 # route, which notifies the instance owner. One alert per crossing, repeated at most every
 # QUEUE_ALERT_COOLDOWN seconds while the backlog lasts, re-armed when the queue drops back under
-# the threshold. In the 2026-08-31 spam incident 17k queued messages went unnoticed for a day.
+# the threshold. A spam run can otherwise queue thousands of messages unnoticed.
 
 # Read one setting from the environment, falling back to the default unless it is a positive
 # integer. Garbage would make every [ -lt ] below fail, and the loop would then alert on every

@@ -1,6 +1,8 @@
 # Proposal: Backup, restore & migration
 
-> **Status — phase ② shipped 2026-09-10. Phases ③ and ④ not started.** This is the spec for phases ② (per-user backup/restore), ③ (whole-server backup) and ④ (migration) of the backup program agreed 2026-08-20 (see the ROADMAP's "Data integrity + verified backups" row). Phase ① (the admin Users page, the UI surface) shipped 2026-08-21. What phase ② built, and where it drifted from the design below, is in § As built; the operator's page is [BACKUP.md](../BACKUP.md).
+This proposal designs how Eigen backs up one user's data or the whole server, checks that the backup really restores, brings it back, and later moves it to another server or storage backend. The problem it answers: a backup has to run while Eigen keeps serving, has to be verified, because a faithful copy of a corrupt database is useless at restore time, and has to restore one user without touching the rest.
+
+> **Status: phases ② (per-home backup) and ③ (whole-server backup) are built; phase ④ (migration) is not started.** [BACKUP.md](../BACKUP.md) describes what exists and wins where this page differs. § As built (phase ②) and § As built (phase ③) list where the build left the design below.
 
 > **TLDR**: One primitive does all the work: `snapshotHome` produces a **self-contained, storage-independent archive of one home** — every SQLite database captured with `VACUUM INTO` (never a raw copy of a live WAL file), every S3 object downloaded into the archive, plus the user's auth rows and share-registry rows. Per-user backup is that primitive with a download button. Whole-server backup is a loop over all homes plus the server databases. Migration is a restore pointed at a different server or a different storage backend. Restore is replace-with-a-safety-net: the current home is moved aside, never deleted, until the restored home passes verification.
 
@@ -16,11 +18,23 @@ Phase ② followed a signed-off implementation spec that supersedes this text wh
 - **Restore input is the server-side artifact list**, with uploads under 1 GB accepted into it and larger archives copied in by hand. The route shape moved with it: `POST /admin/backup/artifacts/:name/restore` rather than one `POST /admin/backup/restore`, plus a delete and a restore for the safety copies.
 - **Safety copies are complete on S3 homes too.** A restore onto a remote mount gives every restored row a fresh storage key, so no bucket object is ever overwritten and the safety copy's `metadata.db` still points at its own objects. Deleting a copy deletes only the objects it alone references; restoring one makes the current home a new safety copy.
 - **The database checks run before any identity write.** Step 6 of § Restore below has the auth rows re-inserted before the result is verified; as built, `quick_check` and the schema-version gate run first, because a failed restore of a deleted user would otherwise leave a `users3.db` row that can sign in with no home behind it, and no rollback takes an auth row back.
-- **The user is not offline everywhere.** Every surface that resolves a home per request is refused for the duration, but Dovecot reads the Maildir out of the volume in its own container, so IMAP keeps serving and anything delivered in that window lands in the safety copy. Documented as a known window in [BACKUP.md](../BACKUP.md), with a ROADMAP row for the fix.
+- **The user is not offline everywhere.** Every surface that resolves a home per request is refused for the duration, but Dovecot reads the Maildir out of the volume in its own container, so IMAP keeps serving and what a mail client does in that window, a flag, a move or a saved message, lands in the safety copy. New mail waits in Postfix's queue until the restore ends. Documented as a known window in [BACKUP.md](../BACKUP.md), with a ROADMAP row for the fix.
+
+## As built (phase ③)
+
+Phase ③ was built from its own spec. Where it left § Phase ③ below:
+
+- **It runs inside the API.** `./eigen backup`, **Back up now** in Settings and the nightly schedule all start one job in the running API, which holds the per-home 409, the restore mark and the shutdown drain. Nobody is signed out and nothing stops.
+- **Three levels.** Full + S3, Full (an `s3` mount's file list and pending uploads, not its objects) and Light (databases and settings, no files and no mail). The schedule makes Full or Full + S3; `./eigen update` makes Light unless a release is breaking.
+- **The archive is a plain tar of home archives**, one `.tar.zst` per home, plus a server member, `.env.production`, the DKIM key and the mail TLS certificate, and a manifest last. A home archive taken out of it restores on its own when its manifest says it is complete.
+- **Guests are left out**, where step 1 below included them: their homes are disposable.
+- **No encryption**, which overrides open question B2 below: an archive has the same exposure as `data/`, and the backup bucket must be private.
+- **The upload goes to a bucket of its own**, under `<prefix>/<domain>/`, with its own count, and refuses any bucket or key a data mount uses.
+- **`./eigen restore` puts a server archive back offline**: it stages the archive while Eigen runs, then swaps `data/` with Eigen stopped, and on a new machine needs no setup first.
 
 ## Why
 
-Eigen's stated core weakness is "I would not yet trust it with data you cannot afford to lose". The whole-server backup is `./eigen backup`, an offline stop-and-tar of the whole `../../data` tree plus `.env.production`: it stops the stack, tars the quiesced tree with `-wal`/`-shm` intact (so the archive is crash-consistent), then restarts. That is safe but blunt: Eigen is down while it archives, nobody verifies the result, and it is whole-server only, with no per-home restore.
+Eigen's stated core weakness is "I would not yet trust it with data you cannot afford to lose". The whole-server backup this proposal replaced was `./eigen backup`, an offline stop-and-tar of the whole `../../data` tree plus `.env.production`: it stopped the stack, tarred the quiesced tree with `-wal`/`-shm` intact (so the archive was crash-consistent), then restarted. That was safe but blunt: Eigen was down while it archived, nobody verified the result, and it was whole-server only, with no per-home restore.
 
 We also know from three production incidents ([PROPOSAL_DATA_INTEGRITY.md](PROPOSAL_DATA_INTEGRITY.md)) that a backup nobody has verified is not a backup: a faithful copy of a corrupt database is a faithful backup of garbage, discovered at restore time, which is the worst possible time.
 
@@ -52,10 +66,10 @@ Each database copy is internally consistent (that's what `VACUUM INTO` guarantee
 
 ## The archive
 
-One directory, then tarred and gzipped into a single artifact:
+One directory, then packed into a single `.tar.zst` artifact:
 
 ```
-eigen-home-{ownerId}-{timestamp}/
+home-{ownerId}/
 ├── manifest.json      what this is, when, from where, and a content listing
 ├── auth.json          the user's rows from the auth database (users only, not teams)
 ├── shares.json        share-registry rows where this owner is the sharer
@@ -103,7 +117,7 @@ Share-registry rows (`../../data/server/eigen.db`) where this user is the sharer
 
 ### A warning about credentials
 
-`home/settings.json` contains mount configs, and for S3 mounts that includes the access key and secret. An archive is therefore a secret: it holds every file, every mail, and live storage credentials. Artifacts live in a server-side directory outside `../../data` (default `./backups`; `./eigen backup` writes its snapshots to `snapshots/` beside it), are admin-only to download, and should be treated like the `.env` file. We do not strip credentials from archives — a backup that cannot restore the mount config is not a complete backup — but the admin UI should say this plainly.
+`home/settings.json` contains mount configs, and for S3 mounts that includes the access key and secret. An archive is therefore a secret: it holds every file, every mail, and live storage credentials. Artifacts live in a server-side directory outside `../../data` (default `./backups`, which the whole-server backup shares), are admin-only to download, and should be treated like the `.env` file. We do not strip credentials from archives — a backup that cannot restore the mount config is not a complete backup — but the admin UI should say this plainly.
 
 ## Verification
 
@@ -153,14 +167,14 @@ UI lives where phase ① prepared for it: the admin Users page detail pane gets 
 
 With the primitive in place, whole-server backup is a loop plus scheduling:
 
-1. Snapshot every home — all users (including guests), all teams, the org home — with `snapshotHome` into one staging directory.
+1. Snapshot every home — all users but guests, all teams, the org home — with `snapshotHome` into one staging directory.
 2. Add the server-level data: `users3.db` and `eigen.db` via `VACUUM INTO`, plus `../../data/server`'s config and settings JSON files.
 3. Tar the staging directory into one artifact, verify it (same three checks, sampled semantics), apply retention (keep the last N, prune oldest), alert on failure.
 4. Register it as a scheduled job — `scheduleInterval('server-backup', …)` in the existing scheduler — with the schedule and retention count in server settings, and a "Back up now" button in an admin Settings § Backups section.
 
 Two operational notes. The backups directory must live **outside** `../../data` (it does — `./backups`) so a server backup can never recursively include itself. And a backup on the same disk as the data only protects against software failure — the real disaster-recovery story is shipping the artifact off the machine, so the settings should optionally take an S3 destination (endpoint, bucket, credentials — the existing `S3Config` type) to upload finished artifacts to. That destination should be a different bucket/provider than the one the data lives on.
 
-This phase swaps the engine under the offline `eigen backup`. It also supersedes PROPOSAL_DATA_INTEGRITY's open question D7 (which sketched keeping the whole-server backup a copy-then-tar script): the agreed direction is API-driven, scheduled, verified, with an admin UI. The ROADMAP note stands: eigen.is currently lives on the offline stop-and-tar script (unverified, whole-server, requires downtime, no per-home restore), so phase ③ must not slip far behind phase ②.
+This phase replaced the offline `eigen backup`. It also supersedes PROPOSAL_DATA_INTEGRITY's open question D7 (which sketched keeping the whole-server backup a copy-then-tar script): the direction built is API-driven, scheduled, verified, with an admin UI.
 
 Per-user restore from a server artifact falls out for free: a whole-server artifact contains one `snapshotHome` directory per home, so "restore just Alice from last night's server backup" is the phase-② restore fed from a different source.
 
@@ -182,20 +196,20 @@ The per-destination upload semaphores already exist precisely so that one user's
 
 - **Teams** are homes (`team_{teamId}`, Drive + Calendar only). The primitive treats them identically; a team backup carries no `auth.json` (a team has no credentials — membership rows travel with each member's user backup). The admin UI exposes team backup on the team detail view.
 - **A user's backup is their home only.** Team data a user can see belongs to the team's home and is captured by the team's backup — same ownership boundary the whole product uses. The Users page should say this next to the backup button so nobody thinks a personal backup covers their team's drive.
-- **Guests** have homes and are included in whole-server backups; per-guest backup is possible but pointless enough to hide in the UI.
+- **Guests** have homes, but no backup takes them: a guest home is disposable, and a guest keeps their account and starts a new one.
 - **User-added drives with their own S3 credentials** change nothing structurally: a mount is a mount, `snapshotHome` walks all of them, credentials ride in `settings.json`, and the per-destination semaphore paces each bucket independently. The one real consequence is size — a user mounting a 500 GB personal bucket makes "materialize everything" expensive. The manifest already records per-mount byte counts, so the backup UI can show the price up front; a per-mount include/exclude choice on the backup form is the escape hatch, with excluded mounts listed in the manifest as not-included so a restore is honest about what it can bring back.
 
 ## Open questions
 
 - **B1 — Quiesce the home during backup?** We could block writes for the duration to get a globally atomic snapshot. *Recommendation: no.* Per-database consistency is the honest, standard guarantee; blocking a user's whole account for a gigabytes-long S3 download is far worse than a mail landing mid-backup.
-- **B2 — Encrypt artifacts at rest?** They contain credentials and everything else. *Recommendation: not in phase ②* — the artifact directory has the same exposure as `../../data` itself on the same disk. Revisit when the off-server upload ships (phase ③): an artifact leaving the machine should support age/GPG-style encryption with a key stored in server config.
+- **B2 — Encrypt artifacts at rest?** They contain credentials and everything else. *Recommendation: not in phase ②* — the artifact directory has the same exposure as `../../data` itself on the same disk. Phase ③ decided against it: archives are not encrypted, and the backup bucket must be private ([BACKUP.md § An archive is as secret as data/ itself](../BACKUP.md#an-archive-is-as-secret-as-data-itself)).
 - **B3 — Restore into a different ownerId?** "Duplicate Alice's home into Bob's account" enables account-splitting tricks but complicates identity (every `ownerId` embedded in metadata rows must be rewritten). *Recommendation: defer;* single-user migration to another server (where the id keeps its meaning) covers the real need.
 - **B4 — Incremental backups?** Whole-archive every time is simple and matches the whole-file re-PUT philosophy of the sync pipeline, but nightly server backups of a large instance will hurt eventually. *Recommendation: ship full archives first;* the manifest's per-entry hashes are exactly what a later incremental mode needs (skip unchanged files against the previous manifest), so nothing here paints us into a corner.
 
 ## Phasing
 
 1. **Phase ② — per-user backup/restore (M).** `snapshotHome` + archive format + verify pass (shared `verifySnapshotDb`), job runner + admin routes, restore-in-place with the safety net, Backup section in the Users detail pane. Team backup from the team view rides along since the primitive is owner-kind-agnostic.
-2. **Phase ③ — whole-server backup (S–M on top of ②).** The all-homes loop + server DBs, scheduler job + retention + admin Settings section, optional off-server S3 upload of artifacts. Swaps the engine under the offline `eigen backup`. Must follow ② quickly.
+2. **Phase ③ — whole-server backup (S–M on top of ②).** The all-homes loop + server DBs, scheduler job + retention + admin Settings section, optional off-server S3 upload of artifacts. Replaced the offline `eigen backup`.
 3. **Phase ④ — migration (M).** Server-to-server restore polish (fresh-server bootstrap from a server artifact; single-user cross-server import) and the live mount storage-backend migration job.
 
 Each phase ships independently and each is useful on its own; nothing in ② needs rework for ③ or ④ — that is the point of making the archive self-contained and storage-independent.

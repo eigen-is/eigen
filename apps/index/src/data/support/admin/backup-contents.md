@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/back-up-home, admin/restore-home]
 order: 92
-updated: 2026-09-29
+updated: 2026-10-01
 ---
 
 A backup made from the **Backup** section in Admin is a single archive of one user or one team. This page lists what goes into that archive, what stays out, how Eigen checks it, and where the panel's limits are. To make or restore a backup, see [Back up a user or team](/support/admin/back-up-home) and [Restore a user or team](/support/admin/restore-home).
@@ -42,7 +42,7 @@ A team backup is the same shape as a user backup, minus the parts a team has no 
 |---|---|
 | Format | `.tar.zst`, a compressed tar archive you can open with standard tools (`tar --zstd`) |
 | Name | `home-<id>-<date>-<time>.tar.zst`, for example `home-a1b2c3-20260911-140322.tar.zst` |
-| Where it lands | The server's backups folder: `EIGEN_BACKUPS_DIR` if set, otherwise `backups/` next to the data directory |
+| Where it lands | The server's backups folder, `backups/` in the install folder |
 
 Files stored in an S3 bucket are downloaded and written into the archive, so a restore never depends on the bucket, its credentials, or the storage type staying the same.
 
@@ -74,17 +74,14 @@ Click **Verify** on any archive to run the checks again and update its badge.
 
 | Limit | Detail |
 |---|---|
-| Scheduling | None. Every backup is started by hand. |
-| Clean-up | None. Old archives and safety copies stay until you delete them. |
-| Whole server | The panel backs up one user or team, not the whole server. |
-| Concurrent jobs | One at a time per user or team. A second request is refused while one runs. |
+| Scheduling | None for one user or team. The nightly backup of the whole server holds every user and team. |
+| Clean-up | None. Archives of one user or team and safety copies stay until you delete them. |
+| Concurrent jobs | One at a time per user or team. A second request is refused while one runs, and while the whole-server backup copies that user or team. |
 | Restore target | An archive restores only to the same user or team it came from. |
 | Upload size | About 1 GB through **Upload backup**. For a larger archive, copy the file into the backups folder by hand. |
 
 ## Whole-server backup
 
-The panel covers one user or team at a time. To back up the whole server, run `./eigen backup` in the install folder on the server. It stops Eigen, saves the whole data directory plus the production environment file as one snapshot in the `snapshots/` folder of the install folder, and starts Eigen again. `./eigen backup --light` saves only the databases and settings, leaving out files and mail, and has `light` in its name. Then it deletes all but the three newest snapshots of that kind, so light ones never push out the last full one. Eigen is down while the snapshot is written, and the snapshot is not verified. Only the owner of the install folder can read a snapshot. It leaves out mail still waiting to be sent, the web server's certificates (which the server gets again), the `backups/` folder with the archives this panel makes, and `docker-compose.override.yml`. `./eigen restore` checks a snapshot before it stops Eigen, puts it back, and keeps the data it replaces aside. A light snapshot puts back only the databases and settings, and leaves files and mail as they are. After a restore, everything in the Trash stays there for the full **Trash Retention (days)** period, counted from the restore.
+The panel covers one user or team at a time. The owner backs up the whole server in [Settings](/support/admin/server-settings#backups), every night or by hand, or with `./eigen backup` on the server. It runs while Eigen runs, holds the server's own databases and settings as well, is checked the same way, and can go to a backup bucket off the server. See [Back up and restore the whole server](/support/self-hosting/back-up-and-restore).
 
-Files stored in an S3 bucket are not in a snapshot. It holds the list of those files, not the files themselves, so a restore brings the list back and leaves the bucket as it is now. A file changed since the snapshot shows its new content. A full snapshot does hold the changes that were still on their way to the bucket when it was taken. A restore uploads each of them, unless the install it replaces had already uploaded, replaced, or deleted it, and `./eigen restore` prints how many it left out. To keep older copies of those files, turn on versioning for the bucket, as described in [Make an S3 bucket safe for Eigen](/support/admin/s3-bucket-safety). When you need a copy with the files in it, use the **Backup** panel, which downloads them.
-
-Use `./eigen backup` for disaster recovery of the entire server. Use the **Backup** panel when you want a verified copy of a single user or team, or a restore that does not take the server down.
+A whole-server backup holds an archive of every user and team. Copied into the backups folder, one lists in that user's or team's **Backup** section like any other archive. An archive out of a **Light** backup holds no files and no mail, and one out of a **Full** backup holds no files of a drive in an S3 bucket. Neither restores on its own: the row says why and offers no **Restore**.

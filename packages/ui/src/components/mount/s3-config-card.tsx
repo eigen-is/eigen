@@ -5,8 +5,8 @@ import {
     S3_NONCURRENT_DAYS_DEFAULT,
     S3_NONCURRENT_DAYS_MAX,
 } from '@workspace/lib/constants/s3';
-import { isS3ConfigValid } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
+import { isS3ConfigValid } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
 import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, CheckCircle2, Copy, Loader2, ShieldCheck, Wifi } from 'lucide-react';
@@ -21,19 +21,29 @@ type S3ConfigCardProps = {
     value: S3Config;
     onChange: (config: S3Config) => void;
     onCheck: (config: S3Config) => Promise<S3CheckResult>;
-    onHarden: (config: S3Config, noncurrentDays: number) => Promise<S3HardenResult>;
+    // Without it the card has no Bucket safety panel: the backup bucket holds archives, not versioned files.
+    onHarden?: (config: S3Config, noncurrentDays: number) => Promise<S3HardenResult>;
     isEdit?: boolean;
     onCheckResult?: (result: S3CheckResult | null) => void;
+    secretSaved?: boolean;
 };
 
-export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onCheckResult }: S3ConfigCardProps) {
+export function S3ConfigCard({
+    value,
+    onChange,
+    onCheck,
+    onHarden,
+    isEdit,
+    onCheckResult,
+    secretSaved,
+}: S3ConfigCardProps) {
     const [result, setResult] = useState<S3CheckResult | null>(null);
     const [harden, setHarden] = useState<S3HardenResult | null>(null);
     const [checking, setChecking] = useState(false);
     const [confirming, setConfirming] = useState(false);
     const [days, setDays] = useState(S3_NONCURRENT_DAYS_DEFAULT);
 
-    const valid = isS3ConfigValid(value);
+    const valid = isS3ConfigValid(value, secretSaved);
 
     const updateField = (field: keyof S3Config, fieldValue: string) => {
         onChange({ ...value, [field]: fieldValue });
@@ -60,11 +70,6 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
         } finally {
             setChecking(false);
         }
-    };
-
-    const handleHarden = async () => {
-        // A refused request comes back as an ok:false result, so there is nothing to catch here.
-        setHarden(await onHarden(value, days));
     };
 
     // What the bucket says right now. Both fields are optional — a check that never got as far as the
@@ -137,7 +142,7 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
                         type="password"
                         value={value.secretAccessKey}
                         onChange={(e) => updateField('secretAccessKey', e.target.value)}
-                        placeholder="Enter the secret access key"
+                        placeholder={secretSaved ? 'Saved. Leave empty to keep it' : 'Enter the secret access key'}
                     />
                 </div>
             </div>
@@ -161,7 +166,14 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
                 )}
             </div>
 
-            {result?.ok && (
+            {result?.warning && (
+                <p className="text-sm text-warning flex items-center gap-1">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    {result.warning}
+                </p>
+            )}
+
+            {result?.ok && onHarden && (
                 <BucketSafetyPanel
                     config={value}
                     versioning={versioning}
@@ -172,40 +184,43 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
                 />
             )}
 
-            <ConfirmDialog
-                open={confirming}
-                onOpenChange={setConfirming}
-                title={changingRetention ? 'Change retention' : 'Make this bucket safe for Eigen'}
-                description={
-                    <span className="block space-y-2">
-                        {!changingRetention && (
-                            <span className="block">
-                                Turns on bucket versioning, so overwrites and deletes can be recovered. Versioning
-                                applies to the whole bucket.
+            {onHarden && (
+                <ConfirmDialog
+                    open={confirming}
+                    onOpenChange={setConfirming}
+                    title={changingRetention ? 'Change retention' : 'Make this bucket safe for Eigen'}
+                    description={
+                        <span className="block space-y-2">
+                            {!changingRetention && (
+                                <span className="block">
+                                    Turns on bucket versioning, so overwrites and deletes can be recovered. Versioning
+                                    applies to the whole bucket.
+                                </span>
+                            )}
+                            <span className="flex items-center gap-2">
+                                Expire old versions after
+                                <Input
+                                    type="number"
+                                    min={1}
+                                    max={S3_NONCURRENT_DAYS_MAX}
+                                    step={1}
+                                    className="h-8 w-20"
+                                    value={days}
+                                    onChange={(e) => setDays(clampDays(e.target.valueAsNumber))}
+                                />
+                                days
                             </span>
-                        )}
-                        <span className="flex items-center gap-2">
-                            Expire old versions after
-                            <Input
-                                type="number"
-                                min={1}
-                                max={S3_NONCURRENT_DAYS_MAX}
-                                step={1}
-                                className="h-8 w-20"
-                                value={days}
-                                onChange={(e) => setDays(clampDays(e.target.valueAsNumber))}
-                            />
-                            days
+                            <span className="block">
+                                Eigen re-uploads whole files on every save, so an often-edited document makes a lot of
+                                versions. More days means more to recover from, and more storage used.
+                            </span>
                         </span>
-                        <span className="block">
-                            Eigen re-uploads whole files on every save, so an often-edited document makes a lot of
-                            versions. More days means more to recover from, and more storage used.
-                        </span>
-                    </span>
-                }
-                onConfirm={handleHarden}
-                confirmText={changingRetention ? 'Update' : 'Enable'}
-            />
+                    }
+                    // A refused request comes back as an ok:false result, so there is nothing to catch here.
+                    onConfirm={async () => setHarden(await onHarden(value, days))}
+                    confirmText={changingRetention ? 'Update' : 'Enable'}
+                />
+            )}
         </div>
     );
 }

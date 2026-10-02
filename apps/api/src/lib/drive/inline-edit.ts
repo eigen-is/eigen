@@ -1,4 +1,4 @@
-import { getTextPreviewMode } from '@workspace/lib/constants';
+import { getBytesTextPreviewMode } from '@workspace/lib/constants';
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types';
 import type { DrivePath, FileEditorContent } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
@@ -22,7 +22,7 @@ function reattachFrontmatter(body: string, frontmatter: string | null): string {
 export async function getEditableContent(mount: Mount, path: DrivePath): Promise<FileEditorContent> {
     if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
 
-    const editMode = getTextPreviewMode(path.mimeType, path.name);
+    const editMode = getBytesTextPreviewMode(path.mimeType, path.name);
     if (!editMode) throw new ApiError(400, 'File type not supported for inline editing');
     if (path.size > MAX_INLINE_EDIT_SIZE) throw new ApiError(413, 'File too large for inline editing');
 
@@ -56,7 +56,7 @@ export function prepareSaveContent(
     if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
 
     // Same editability gate as getEditableContent, else a write collaborator could overwrite a binary (a container's data.db) with text
-    if (!getTextPreviewMode(path.mimeType, path.name)) {
+    if (!getBytesTextPreviewMode(path.mimeType, path.name)) {
         throw new ApiError(400, 'File type not supported for inline editing');
     }
 

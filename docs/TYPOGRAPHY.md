@@ -1,84 +1,67 @@
-# Typography & Self-Hosted Fonts
+# Typography and Self-Hosted Fonts
 
-> **TLDR**: Four self-hosted variable font families (Inter, Source Serif 4, JetBrains Mono, Excalifont) served as
-> Vite assets via `@font-face` declarations. A shared `EIGEN_FONTS` registry and `FontPicker` component provide
-> font selection in docs, the canvas apps, and sheets. No external CDNs.
+> **TLDR:** Four self-hosted font families (Inter, Source Serif 4, JetBrains Mono, Excalifont) ship as woff2 files in `packages/ui/src/assets/fonts/`, declared in `packages/ui/src/styles/fonts.css`, with no external CDN. `EIGEN_FONTS` (`packages/lib/src/constants/fonts.ts`) is the one list the pickers read. Its order is load-bearing, since a sheet cell can store a font as an index into it. Docs and the canvas store a font's name, never a CSS stack. A new font touches six places, because the canvas metrics, the export and the licenses page keep lists of their own.
 
-## Font Families
+This doc governs the fonts every app, editor and export uses, and the weight scale of the UI. Read it before you add a font, change a weight or touch how an editor stores a font choice. A font choice is part of a document: a doc's text, a sheet cell and a canvas text box each store theirs in the document's Yjs data ([COLLAB.md](COLLAB.md)), and an export embeds the same faces ([EXPORT.md](EXPORT.md)). So the font list is a stored format as much as a menu, and most of its rules follow from that.
 
-| Font               | Category   | Variable? | Weight Range | Usage                            |
-|--------------------|------------|-----------|--------------|----------------------------------|
-| **Inter**          | Sans-serif | Yes       | 100-900      | UI, body text, default font      |
-| **Source Serif 4** | Serif      | Yes       | 200-900      | Documents, formal content        |
-| **JetBrains Mono** | Monospace  | Yes       | 100-800      | Code blocks, inline code         |
-| **Excalifont**     | Hand-drawn | No        | 400 only     | Stickies, whiteboard, sketch     |
+## Four families ship with the app
 
-All fonts are OFL-licensed. Inter includes an italic variant; Source Serif 4 includes an italic variant.
+| Font | Category | Weights | Italic | Role |
+|---|---|---|---|---|
+| Inter | Sans-serif | 100 to 900, variable | Yes | The UI, prose, and the default in docs and sheets |
+| Source Serif 4 | Serif | 200 to 900, variable | Yes | A picker choice |
+| JetBrains Mono | Monospace | 100 to 800, variable | No | Code blocks and inline code |
+| Excalifont | Hand-drawn | 400 only | No | The canvas default |
 
-## CSS Architecture
+The files are Vite assets, so they are hashed and cached like any other. Nothing loads from a font CDN: a self-hosted server makes no request to a third party to render text. Every face uses `font-display: swap`, so text shows at once in the fallback and swaps when the font arrives.
 
-Font files live in `packages/ui/src/assets/fonts/` as Vite assets (hashed, cached automatically).
-`fonts.css` declares all `@font-face` rules and is imported by `globals.css`, which every app consumes.
+All four are licensed under the SIL Open Font License (OFL 1.1). The license asks that it travels with the font, so each font folder carries its `OFL.txt`, and the /licenses page of the index app lists every font.
 
-Tailwind theme tokens in `globals.css`:
+## CSS tokens name each category
 
-```css
---font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
---font-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
---font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
---font-hand: "Excalifont", "Comic Sans MS", cursive;
-```
+`globals.css` imports `fonts.css` and defines one token per category: `--font-sans`, `--font-serif`, `--font-mono` and `--font-hand`, each the bundled family followed by system fallbacks. They give the Tailwind utilities `font-sans`, `font-serif`, `font-mono` and `font-hand`. `eigen-prose.css` sets body text in `--font-sans` and code in `--font-mono`, so prose follows the tokens too.
 
-These enable Tailwind utilities: `font-sans`, `font-serif`, `font-mono`, `font-hand`.
+## The weight scale is lighter than Tailwind's
 
-`eigen-prose.css` uses `var(--font-sans)` for body text and `var(--font-mono)` for code. All fonts use
-`font-display: swap` (text visible immediately with fallback, swaps when loaded).
+One `@theme` block in `globals.css` sets `--font-weight-medium` to 450, `--font-weight-semibold` to 525 and `--font-weight-bold` to 600. So `font-bold` renders at 600, not 700. The body and the prose headings read these tokens, so the whole scale is tuned in that one block. The variable faces render the in-between weights exactly.
 
-## Font Registry
+## The registry's order is load-bearing
 
-`EIGEN_FONTS` in `packages/lib/src/constants/fonts.ts` is the single source of truth for available fonts.
-Each entry has `name`, `family` (CSS value with fallbacks), `category`, and `weights`. Inter is first in
-the array; there is no exported default-font constant.
+`EIGEN_FONTS` holds each font's name, CSS stack, category and weights. Each category has exactly one font. xlsx import picks the bundled font by category (`BUNDLED_FONT_BY_CATEGORY`), and a second font in a category would take its imports over, since the last entry wins. Its order matters for two reasons:
 
-`getFontFamily(fontName)` resolves a font name to its CSS `font-family` value, falling back to
-sans-serif for unknown names.
+- A sheet cell's `ff` may be an index into the list rather than a name. `packages/sheet/src/state/modules/fonts.ts` derives `FONT_ARRAY` and `FONT_INDEX_BY_NAME` (lowercased name to index) from `EIGEN_FONTS`, and a paste into a sheet stores such an index. Reordering or inserting changes the font of every stored index, so **a new font goes at the end**.
+- `EIGEN_FONTS[0]` is the fallback font in docs and sheets. There is no separate default-font constant for them. The canvas has its own default, `DEFAULT_FONT_FAMILY` (Excalifont), in `packages/lib/src/vector/types.ts`.
 
-## FontPicker Component
+## Docs and the canvas store a font name, never a CSS stack
 
-`packages/ui/src/components/media/font-picker.tsx` renders a dropdown menu of all `EIGEN_FONTS`.
-Each item previews in its own typeface. Props: `value` (font name), `onChange` (callback with font name).
+The name expands to CSS only where it renders. A sheet cell is looser: it stores a name or an index.
 
-Used in:
-- **Docs** (`apps/docs/src/components/docs/editor-toolbar.tsx`) -- via Tiptap `FontFamily` extension
-- **Canvas (slides + vector)** (`packages/ui/src/components/vector/canvas-properties-panel.tsx` and the rich-text kind's own section, `kinds/richtext.tsx`) -- via `fontFamily` on the element
-- **Sheets** (`packages/sheet/src/components/MenuBar/format-toolbar.tsx`) -- the same `FontPicker`, straight
-  in the engine's toolbar. The engine's own font lists are derived, not hand-written:
-  `packages/sheet/src/state/modules/fonts.ts` builds `FONT_ARRAY` and `FONT_INDEX_BY_NAME` from `EIGEN_FONTS`
-  (`FONT_INDEX_BY_NAME` maps lowercased name → index, because a cell's `ff` may be stored as an index into `FONT_ARRAY`)
+- The canvas reader accepts only a name from `EIGEN_FONT_NAMES` and falls back to its default (`fontFamily` in `packages/lib/src/vector/kinds/read-fields.ts`). The name ends up in a CSS declaration list, where a stray `;` would open a declaration of the writer's choosing.
+- The docs `textStyle` mark stores a name, and its node (`packages/lib/src/docs/eigendoc/nodes/font-family.ts`) renders it through `fontNameToCss` (`packages/lib/src/constants/fonts.ts`). A value that is already a stack passes through unchanged, and `normalizeFontFamilyMarks` in the docs editor collapses it to its name on an editable load. `getFontName` does the reverse lookup for paste and import.
+- `getFontFamily` wraps an unknown name as `'<name>', sans-serif`. `fontNameToCss` must not wrap, or a stored stack would be wrapped twice.
 
-## Adding a New Font
+## Foreign fonts map onto the bundled ones
 
-1. Add the `.woff2` file(s) to `packages/ui/src/assets/fonts/<font-name>/`
-2. Add `@font-face` declaration(s) to `packages/ui/src/styles/fonts.css`
-3. Add an entry to `EIGEN_FONTS` in `packages/lib/src/constants/fonts.ts`
-4. (Optional) Add a `--font-*` token to `globals.css` if the font fills a new category
-5. Nothing to do for sheets -- it picks the font up automatically from `EIGEN_FONTS`
+Only the bundled faces are embedded in an export, so a font Eigen doesn't ship would render in the browser's generic family and print differently. xlsx import maps a cell's Office font (Calibri, Arial, Times New Roman and the like) to the bundled font of the same category, and leaves `ff` unset for one it doesn't know (`FONT_CATEGORY_MAP` in `apps/api/src/lib/import/sheets/from-xlsx.ts`). Pasted HTML in docs does the same for common desktop fonts (`transformPastedHTML` in `apps/docs/src/components/docs/editor.tsx`).
 
-The `FontPicker` automatically picks up new entries from `EIGEN_FONTS`.
+## One picker serves every app
 
-## Key Files
+`FontPicker` (`packages/ui/src/components/media/font-picker.tsx`) lists `EIGEN_FONTS`, each item previewed in its own face. The docs toolbar and the sheets format toolbar use it directly. The canvas uses it through `FontRow` (`packages/ui/src/components/properties-panel/`) in the rich-text and arrow property sections. A new registry entry shows up in all of them.
 
-| File                                                          | Purpose                              |
-|---------------------------------------------------------------|--------------------------------------|
-| `packages/ui/src/assets/fonts/`                               | Self-hosted woff2 font files         |
-| `packages/ui/src/styles/fonts.css`                            | `@font-face` declarations            |
-| `packages/ui/src/styles/globals.css`                          | `--font-*` Tailwind theme tokens     |
-| `packages/ui/src/styles/eigen-prose.css`                      | Prose typography (body, headings)     |
-| `packages/lib/src/constants/fonts.ts`                         | `EIGEN_FONTS` registry, `getFontFamily()` |
-| `packages/ui/src/components/media/font-picker.tsx`     | Shared font picker component         |
-| `packages/sheet/src/state/modules/fonts.ts`                    | Sheets font list, derived from `EIGEN_FONTS` |
+## A new font touches six places
 
-## Future: CJK Support
+The registry drives the pickers and the sheet lists. The other places keep their own list of faces, so a new font touches six:
 
-Noto Sans/Serif fonts for Chinese, Japanese, and Korean are not yet bundled. Full CJK font files are ~16MB each,
-so they will require on-demand loading via `unicode-range` splitting in `@font-face` declarations.
+1. The woff2 files and the font's `OFL.txt` in `packages/ui/src/assets/fonts/<font-name>/`.
+2. Its `@font-face` rules in `fonts.css`.
+3. The entry in `EIGEN_FONTS`, appended at the end.
+4. `FONT_METRICS` in `packages/lib/src/vector/font-metrics.ts`. The canvas places SVG text baselines from each face's vertical metrics, and an unknown font gets Excalifont's.
+5. `FONT_FILES` in `apps/api/src/lib/export/fonts.ts`. Exports embed the faces as base64 `@font-face` rules ([EXPORT.md](EXPORT.md)), and a font missing there prints in a fallback.
+6. The `FONTS` list in `apps/index/scripts/build-licenses.ts`, which the /licenses page reads. A bundled font is not a package, so the license build does not find it on its own.
+
+A `--font-*` token in `globals.css` is needed only when the font fills a new category.
+
+## See also
+
+- [EXPORT.md](EXPORT.md): how exports embed the fonts
+- [SHEETS.md](SHEETS.md): the sheet engine that stores `ff`

@@ -77,7 +77,7 @@ type UseMailShortcutsOptions = {
 // auto-suppresses keys (and Shift combos) in inputs. Target priority is open conversation >
 // selection > cursor, except for the keys with a batch form (destructive, flag, mark), where a
 // selection naming anything but the open message outranks it (`openWins`); `[`/`]` and the reply
-// keys have no batch form and stay open-first. Landing rules per the Phase 3 brief.
+// keys have no batch form and stay open-first.
 export function useMailShortcuts({
     orderedEmails,
     cursorIndex,

@@ -137,8 +137,8 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    // DOCUMENT-TRANSFORMS.md § Observability: an overload has to leave a trace, and a
-    // job's record needs its format and Worker startup time (total minus the Worker's
+    // DOCUMENT-TRANSFORMS.md § The runner logs one line per job, overload included: an overload
+    // has to leave a trace, and a job's record needs its format and Worker startup time (total minus the Worker's
     // own transform time) to tell a slow document from a slow spawn.
     test('logs every refused admission with the queue state', async () => {
         const runner = makeRunner({ maxQueued: 1 });

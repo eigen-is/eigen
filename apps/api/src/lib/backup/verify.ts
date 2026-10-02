@@ -1,17 +1,28 @@
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import type { BackupVerifyRecord } from '@workspace/lib/types/backup';
+import type { BackupVerifyRecord, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { isCollabType } from '@workspace/lib/types/drive';
-import { parseBackupManifest } from '@workspace/lib/validation';
+import { parseBackupManifest, parseServerArchiveManifest } from '@workspace/lib/validation';
 import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
-import { PATHS } from '../core';
-import { hashFile } from '../storage';
+import { SERVER_DATABASES } from '../config/paths';
+import { PATHS } from '../core/constants';
+import { ApiError } from '../core/errors';
+import { hashFile } from '../storage/deadline';
+import { type ArchiveMember, readArchiveMember, readArchiveMembers } from './archive';
+import { checkArchivedPathRows, HOME_DATABASE_PATHS, listManagedDatabases, readMountPathRows } from './archive-layout';
 import { describeError } from './errors';
-import { ARCHIVE_HOME_DIR, ARCHIVE_MANIFEST_FILE, archiveHomePath, archiveMountPath, resolveInside } from './paths';
-import { HOME_DATABASE_PATHS, type SnapshotProgress } from './snapshot-home';
-import { checkArchivedPathRows, listManagedDatabases, readMountPathRows } from './snapshot-mount';
+import {
+    ARCHIVE_HOME_DIR,
+    ARCHIVE_MANIFEST_FILE,
+    archiveHomePath,
+    archiveMountPath,
+    archiveServerPath,
+    resolveInside,
+} from './paths';
+import type { SnapshotProgress } from './snapshot-home';
 
 // Stage 3 samples rather than decodes everything: the ten heaviest documents plus ten of the rest.
 const SAMPLE_LARGEST = 10;
@@ -19,7 +30,17 @@ const SAMPLE_REST = 10;
 // A wrecked archive can fail on every entry; the record is a sidecar and an SSE payload, not a log.
 const MAX_FAILURES = 100;
 // And how many of them a one-line message quotes: the record carries the whole list.
-export const FAILURES_IN_MESSAGE = 3;
+const FAILURES_IN_MESSAGE = 3;
+
+export function describeFailures(verify: Pick<BackupVerifyRecord, 'failures'>): string {
+    return verify.failures.slice(0, FAILURES_IN_MESSAGE).join('; ');
+}
+
+// The refusal of what does not verify, `name` being what was judged.
+export function requireVerified(verified: BackupVerifyRecord, name: string): void {
+    if (verified.status === 'verified') return;
+    throw new ApiError(400, `${name} did not verify: ${describeFailures(verified)}`);
+}
 
 // An Eigen-owned database inside the archive: the path the manifest speaks of, and the resolved
 // one that survived the containment check. `isYjsDocument` marks the data.db of a collab container
@@ -29,19 +50,28 @@ type ArchiveDatabase = { path: string; abs: string; isYjsDocument: boolean };
 // The folder's own files, walked with readdir's lstat-level types so a symlink is seen rather than
 // followed. packFolder writes files and directories only, so a link in an unpacked archive came
 // from somewhere else and has no business being read.
-function listFolderFiles(root: string, relDir: string, present: Set<string>, fail: (message: string) => void): void {
-    for (const entry of fs.readdirSync(path.join(root, relDir), { withFileTypes: true })) {
+async function listFolderFiles(
+    root: string,
+    relDir: string,
+    present: Set<string>,
+    fail: (message: string) => void,
+): Promise<void> {
+    for (const entry of await fsp.readdir(path.join(root, relDir), { withFileTypes: true })) {
         const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
         if (entry.isSymbolicLink()) fail(`${rel}: is a symbolic link`);
-        else if (entry.isDirectory()) listFolderFiles(root, rel, present, fail);
+        else if (entry.isDirectory()) await listFolderFiles(root, rel, present, fail);
         else if (entry.isFile()) present.add(rel);
     }
 }
 
 function listArchiveDatabases(root: string, fail: (message: string) => void): ArchiveDatabase[] {
     const found: ArchiveDatabase[] = [];
-    for (const relPath of HOME_DATABASE_PATHS) {
-        const relDatabase = archiveHomePath(relPath);
+    // A home folder holds the first, the server member the second; neither holds the other's.
+    const fixed = [
+        ...[...HOME_DATABASE_PATHS].map(archiveHomePath),
+        ...Object.values(SERVER_DATABASES).map(archiveServerPath),
+    ];
+    for (const relDatabase of fixed) {
         const abs = resolveInside(root, relDatabase);
         if (abs && fs.existsSync(abs)) found.push({ path: relDatabase, abs, isYjsDocument: false });
     }
@@ -133,7 +163,7 @@ export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): 
 
     // Stage 1 — transport: the manifest and the folder describe the same set of bytes.
     const present = new Set<string>();
-    listFolderFiles(root, '', present, fail);
+    await listFolderFiles(root, '', present, fail);
     present.delete(ARCHIVE_MANIFEST_FILE);
     for (const [index, entry] of manifest.entries.entries()) {
         const abs = resolveInside(root, entry.path);
@@ -204,4 +234,77 @@ export async function verifyFolder(dir: string, onProgress?: SnapshotProgress): 
 
     if (suppressed > 0) failures.push(`…and ${suppressed} more failures`);
     return { status: failures.length === 0 ? 'verified' : 'failed', checkedAt, failures };
+}
+
+// A whole-server archive as one read finds it: every member hashed, the manifest it closes with,
+// and the transport verdict. The manifest is null unless it parses; the members are what the read
+// got through before it failed.
+type ReadServerArchive = {
+    verify: BackupVerifyRecord;
+    members: ArchiveMember[];
+    manifest: ServerArchiveManifest | null;
+};
+
+// The transport check of a whole-server archive: its last member is the manifest, and every other
+// member is there with the bytes and sha256 the manifest names. No member is unpacked; each one
+// verifies on its own when it is extracted.
+export async function readServerArchive(archivePath: string): Promise<ReadServerArchive> {
+    const checkedAt = new Date();
+    const failed = (
+        failures: string[],
+        members: ArchiveMember[] = [],
+        manifest: ServerArchiveManifest | null = null,
+    ) => ({
+        verify: { status: 'failed' as const, checkedAt, failures },
+        members,
+        manifest,
+    });
+    let members: ArchiveMember[];
+    try {
+        members = await readArchiveMembers(archivePath);
+    } catch (error) {
+        // A cut-off or foreign tar is a verdict on the archive, not an error of the check.
+        return failed([describeError(error)]);
+    }
+    const last = members.at(-1);
+    if (last?.name !== ARCHIVE_MANIFEST_FILE)
+        return failed([`${ARCHIVE_MANIFEST_FILE} is not the last member`], members);
+    let text: string;
+    try {
+        text = new TextDecoder().decode(await readArchiveMember(last));
+    } catch (error) {
+        return failed([describeError(error)], members);
+    }
+    const manifest = parseServerArchiveManifest(text);
+    if (!manifest) {
+        return failed([`${ARCHIVE_MANIFEST_FILE} is not a version 1 server archive manifest`], members);
+    }
+
+    // A reader takes one of two same-named members and the manifest cannot say which, so their bytes do not matter.
+    const present = new Map<string, ArchiveMember>();
+    const duplicates = new Set<string>();
+    for (const member of members.slice(0, -1)) {
+        if (present.has(member.name)) duplicates.add(member.name);
+        present.set(member.name, member);
+    }
+    if (duplicates.size > 0) {
+        const failures = [...duplicates].map((name) => `${name}: appears more than once in the archive`);
+        return failed(failures, members, manifest);
+    }
+
+    const failures: string[] = [];
+    for (const entry of manifest.entries) {
+        const member = present.get(entry.path);
+        present.delete(entry.path);
+        if (!member) {
+            failures.push(`${entry.path}: missing from the archive`);
+        } else if (member.bytes !== entry.bytes) {
+            failures.push(`${entry.path}: ${member.bytes} bytes, the manifest says ${entry.bytes}`);
+        } else if (member.sha256 !== entry.sha256) {
+            failures.push(`${entry.path}: sha256 does not match the manifest`);
+        }
+    }
+    for (const extra of present.keys()) failures.push(`${extra}: not in the manifest`);
+    const status = failures.length === 0 ? 'verified' : 'failed';
+    return { verify: { status, checkedAt, failures }, members, manifest };
 }

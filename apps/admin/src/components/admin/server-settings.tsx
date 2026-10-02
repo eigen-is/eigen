@@ -6,13 +6,19 @@ import {
     useSendTestMail,
     useServerS3Config,
     useServerSettings,
+    useServerStatus,
     useUpdateOrgName,
     useUpdateServerS3Config,
     useUpdateServerSettings,
 } from '@workspace/lib/settings';
-import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
-import type { LandingLink, ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
+import { EMPTY_S3, isS3ConfigValid, keepsSavedSecret } from '@workspace/lib/types/mount';
+import type {
+    LandingLink,
+    ServerSettings,
+    ServerSettingsSaved,
+    ServerStorageType,
+} from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { LoadingState, SettingsFooter, SettingsSection, TooltipButton } from '@workspace/ui';
@@ -20,11 +26,12 @@ import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Separator } from '@workspace/ui/components/separator';
-import { Switch } from '@workspace/ui/components/switch';
 import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { ServerBackupSection } from './server-backup-section';
 import { ServerStatusSection } from './server-status-section';
 import { StorageTypePicker } from './storage-type-picker';
+import { SwitchRow } from './switch-row';
 
 type EmailFlag = keyof ServerSettings['notifications']['email'];
 
@@ -40,12 +47,14 @@ export function ServerSettingsPage() {
     const mailEnabled = useMailEnabled();
     const updateOrgName = useUpdateOrgName(config?.orgId);
     const sendTestMail = useSendTestMail();
+    const { data: status } = useServerStatus();
 
     const [draft, setDraft] = useState<DeepPartial<ServerSettings>>({});
     const [dirty, setDirty] = useState(false);
     const [s3Draft, setS3Draft] = useState<S3Config | null>(null);
     const [s3Dirty, setS3Dirty] = useState(false);
     const [orgNameDraft, setOrgNameDraft] = useState<string | null>(null);
+    const [backupNotice, setBackupNotice] = useState<Pick<ServerSettingsSaved, 'notice' | 'warning'> | null>(null);
 
     if (isLoading || !settings || !config) {
         return <LoadingState />;
@@ -63,6 +72,14 @@ export function ServerSettingsPage() {
         },
         landing: {
             links: draft.landing?.links ?? settings.landing?.links ?? [],
+        },
+        backups: {
+            schedule: { ...settings.backups.schedule, ...draft.backups?.schedule },
+            upload: {
+                ...settings.backups.upload,
+                ...draft.backups?.upload,
+                s3: { ...settings.backups.upload.s3, ...draft.backups?.upload?.s3 },
+            },
         },
     };
 
@@ -90,6 +107,19 @@ export function ServerSettingsPage() {
         setDraft((prev) => ({ ...prev, landing: { links } }));
     };
 
+    // Only the half the owner touched is sent: an upload part in the body runs the destination check.
+    const updateBackups = (patch: DeepPartial<ServerSettings['backups']>) => {
+        setDirty(true);
+        setDraft((prev) => ({
+            ...prev,
+            backups: {
+                ...prev.backups,
+                ...(patch.schedule && { schedule: { ...prev.backups?.schedule, ...patch.schedule } }),
+                ...(patch.upload && { upload: { ...prev.backups?.upload, ...patch.upload } }),
+            },
+        }));
+    };
+
     const patchLink = (index: number, patch: Partial<LandingLink>) =>
         updateLinks(current.landing.links.map((link, i) => (i === index ? { ...link, ...patch } : link)));
 
@@ -98,19 +128,29 @@ export function ServerSettingsPage() {
     const saving = updateSettings.isPending || updateS3Config.isPending || updateOrgName.isPending;
     // The test mail goes out from the saved sender, so an unsaved one would test the wrong thing.
     const senderDirty = draft.mail !== undefined || orgNameDraft !== null;
+    // Without mailboxes, mail goes out through the relay setup named, if any. Unknown until the status loads.
+    const relayHost = status?.relayHost;
+    const mailOff = !mailEnabled && relayHost === null;
     const senderAddressInvalid = current.mail.senderAddress !== '' && !validateEmailAddress(current.mail.senderAddress);
     const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
     const handleS3Harden = (config: S3Config, noncurrentDays: number) =>
         s3Harden.mutateAsync({ ...config, noncurrentDays });
+    const savedDestination = settings.backups.upload.s3;
+    const backupSecretSaved =
+        savedDestination.accessKeyId !== '' && keepsSavedSecret(current.backups.upload.s3, savedDestination);
 
     const handleSave = async () => {
         if (orgNameDraft !== null) await updateOrgName.mutateAsync(orgNameDraft.trim());
         if (s3Dirty && s3Draft && current.defaults.mount.storageType === 's3')
             await updateS3Config.mutateAsync(s3Draft);
-        if (dirty)
-            await updateSettings.mutateAsync(
+        if (dirty) {
+            const saved = await updateSettings.mutateAsync(
                 draft.landing ? { ...draft, landing: { links: normalizeLinks(draft.landing.links ?? []) } } : draft,
             );
+            // The notice comes once, for a new backup bucket: its keys are the one thing to keep off this server. The
+            // warning comes from the bucket check, which every save with the upload on runs, bucket changed or not.
+            if (saved.notice || saved.warning) setBackupNotice({ notice: saved.notice, warning: saved.warning });
+        }
         handleReset();
     };
 
@@ -175,7 +215,7 @@ export function ServerSettingsPage() {
                         )}
                     </div>
                 </div>
-                {!mailEnabled && (
+                {relayHost && (
                     <SwitchRow
                         label="Relay sends as users"
                         description={`Your relay allows sending from any address at ${config.mailDomain}. Off, mail on a user's behalf goes out as 'Name via ${orgName}' from the sender address.`}
@@ -183,19 +223,25 @@ export function ServerSettingsPage() {
                         onChange={(relaySendsAsUsers) => updateMail({ relaySendsAsUsers })}
                     />
                 )}
-                <div className="flex items-center gap-3">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => sendTestMail.mutate()}
-                        disabled={sendTestMail.isPending || senderDirty}
-                    >
-                        {sendTestMail.isPending ? 'Sending...' : 'Send test mail'}
-                    </Button>
+                {mailOff ? (
                     <p className="text-xs text-muted-foreground">
-                        {senderDirty ? 'Save first: the test uses the saved sender.' : 'Sends one mail to you.'}
+                        Mail is off: this server hosts no mailboxes and has no relay, so it sends no email.
                     </p>
-                </div>
+                ) : (
+                    <div className="flex items-center gap-3">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => sendTestMail.mutate()}
+                            disabled={sendTestMail.isPending || senderDirty}
+                        >
+                            {sendTestMail.isPending ? 'Sending...' : 'Send test mail'}
+                        </Button>
+                        <p className="text-xs text-muted-foreground">
+                            {senderDirty ? 'Save first: the test uses the saved sender.' : 'Sends one mail to you.'}
+                        </p>
+                    </div>
+                )}
             </SettingsSection>
 
             <Separator />
@@ -265,6 +311,17 @@ export function ServerSettingsPage() {
 
             <Separator />
 
+            <ServerBackupSection
+                value={current.backups}
+                onChange={updateBackups}
+                secretSaved={backupSecretSaved}
+                uploadSaved={settings.backups.upload.enabled}
+                saveNotice={backupNotice}
+                onDismissNotice={() => setBackupNotice(null)}
+            />
+
+            <Separator />
+
             <SettingsSection
                 title="Email notifications"
                 description="Send email when a notification fires. In-app notifications always fire regardless."
@@ -272,7 +329,7 @@ export function ServerSettingsPage() {
                 <div className="space-y-3">
                     <SwitchRow
                         label="Email guests when added to share"
-                        description="Guests have no in-app channel — without email they have no way to know."
+                        description="Guests have no in-app channel, so without email they have no way to know."
                         checked={current.notifications.email.guestOnAclAdd}
                         onChange={(v) => updateEmailFlag('guestOnAclAdd', v)}
                     />
@@ -344,7 +401,8 @@ export function ServerSettingsPage() {
                 disabled={
                     orgName.trim() === '' ||
                     senderAddressInvalid ||
-                    (current.defaults.mount.storageType === 's3' && !isS3ConfigValid(currentS3))
+                    (current.defaults.mount.storageType === 's3' && !isS3ConfigValid(currentS3)) ||
+                    (current.backups.upload.enabled && !isS3ConfigValid(current.backups.upload.s3, backupSecretSaved))
                 }
                 onSave={handleSave}
                 onReset={handleReset}
@@ -363,26 +421,4 @@ function normalizeLinks(links: LandingLink[]): LandingLink[] {
                 ? { ...l, url: scheme.toLowerCase() + l.url.slice(scheme.length) }
                 : { ...l, url: `https://${l.url}` };
         });
-}
-
-function SwitchRow({
-    label,
-    description,
-    checked,
-    onChange,
-}: {
-    label: string;
-    description: string;
-    checked: boolean;
-    onChange: (value: boolean) => void;
-}) {
-    return (
-        <div className="flex items-start justify-between gap-4">
-            <div className="space-y-0.5">
-                <div className="text-sm font-medium">{label}</div>
-                <div className="text-xs text-muted-foreground">{description}</div>
-            </div>
-            <Switch checked={checked} onCheckedChange={onChange} />
-        </div>
-    );
 }

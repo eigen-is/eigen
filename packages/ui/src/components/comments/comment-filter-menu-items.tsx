@@ -59,6 +59,7 @@ export function CommentFilterMenuItems({ filter, members, currentUserEmail, onCl
                             <DropdownMenuItem
                                 key={c.value}
                                 onClick={(e) => {
+                                    // Stay open: colors are a multi-toggle.
                                     e.preventDefault();
                                     filter.toggleColor(c.value);
                                 }}

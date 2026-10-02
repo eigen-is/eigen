@@ -6,8 +6,8 @@ import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase } from '../../lib/core';
 import type { ContentExtractor } from '../../lib/mount/content-reindex-queue';
-import { buildStorageKey } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
+import { buildStorageKey } from '../../lib/mount/names';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { getUploadSemaphore, setShutdownDrainDeadline } from '../../lib/sync';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
@@ -73,7 +73,7 @@ afterAll(() => {
     } catch {}
 });
 
-describe('Phase 1a — crash-recovery durability (Gap 1)', () => {
+describe('crash-recovery durability', () => {
     test('a temp surviving an unclean shutdown re-syncs its unsynced bytes on the next open+close', async () => {
         const mount = new Mount(
             OWNER_ID,
@@ -108,12 +108,12 @@ describe('Phase 1a — crash-recovery durability (Gap 1)', () => {
         await mount.openDatabase(docConfig, dataDbId);
         await mount.closeDatabase(dataDbId);
 
-        // Without Phase 1a's markDirty(), the reopened DB looked clean and cleanupTemp dropped row 2.
+        // Without the crash-recovery markDirty(), the reopened DB looked clean and cleanupTemp dropped row 2.
         expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(2);
     });
 });
 
-describe('Phase 1b — write-behind upload pipeline', () => {
+describe('write-behind upload pipeline', () => {
     test('upload is off the request/close path; a slow PUT does not block create or close', async () => {
         const { mount, fault } = createS3Mount('async-latency');
         await mount.init();
@@ -286,7 +286,7 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         expect(mount.pendingUploadCount).toBeGreaterThan(0); // left queued for boot replay
     });
 
-    test('§3 version snapshot captures current bytes from staging, not the stale stored object', async () => {
+    test('a version snapshot captures current bytes from staging, not the stale stored object', async () => {
         const { mount, fault } = createS3Mount('version-staging');
         await mount.init();
         const { containerId, dataDbId } = await provisionDoc(mount);
@@ -576,7 +576,7 @@ describe('per-destination upload concurrency', () => {
 });
 
 // The 2026-06-08 incident: an S3 read hiccup during a redeploy left an empty/0-byte temp, which
-// crash-recovery (Phase 1a) adopted and re-uploaded OVER the good stored object — wiping two live
+// crash recovery adopted and re-uploaded OVER the good stored object — wiping two live
 // stickies docs, then re-wiping on every later redeploy. Recovery must refuse an empty/invalid/
 // collapsed temp and re-fetch the authoritative object, never overwrite real data with an empty db.
 describe('data-loss guard — crash recovery must not overwrite a good object with an empty temp', () => {

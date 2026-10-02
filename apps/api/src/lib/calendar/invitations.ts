@@ -26,7 +26,7 @@ import type {
     ReceiveInvitationPayload,
 } from './types';
 
-// Inbound scheduling messages against this Home's copy of somebody else's event, guarded by revision so a replay is ordered out (docs/CALENDAR.md § Invitations).
+// Inbound scheduling messages against this Home's copy of somebody else's event, guarded by revision so a replay is ordered out (docs/CALENDAR.md § Revisions are ordered, and a redelivery is applied as one).
 
 // What the transport vouches for about an inbound REQUEST — never anything the body spells.
 type InvitationLink = {

@@ -5,8 +5,8 @@ import type { BackupArtifact } from '@workspace/lib/types/backup';
 import { BACKUP_ARTIFACT_EXTENSION, parseBackupArtifactName } from '@workspace/lib/validation';
 import { ApiError } from '../core';
 import { errnoOf, writeTempWithHash } from '../storage';
-import { readArtifactManifest, readSidecar, sidecarPath, writeSidecar } from './archive';
-import { backupsDirPath, getBackupTempPath } from './paths';
+import { readArtifactManifest, readSidecar, writeSidecar } from './archive';
+import { backupsDirPath, getBackupTempPath, sidecarPath } from './paths';
 
 // The artifacts in the backups folder: what the admin pane lists, where an upload lands, and what a
 // delete takes with it. The folders a restore leaves beside a home are safety-copy.ts.
@@ -29,9 +29,8 @@ export async function listArtifacts(ownerId: string): Promise<BackupArtifact[]> 
         } catch {
             continue; // deleted while this folder was being read
         }
-        // Missing, unreadable, or not a sidecar all say the same thing to the list: nothing is known
-        // about this archive yet, run a verify. One bad file must not blank the whole page.
-        const sidecar = await readSidecar(artifactPath).catch(() => null);
+        // Nothing known about this archive yet: run a verify. One bad file must not blank the whole page.
+        const sidecar = await readSidecar(artifactPath);
         const manifest = sidecar?.manifest;
         artifacts.push({
             name,
@@ -45,7 +44,9 @@ export async function listArtifacts(ownerId: string): Promise<BackupArtifact[]> 
                       name: manifest.name,
                       appVersion: manifest.appVersion,
                       counts: manifest.counts,
+                      level: manifest.level,
                       mounts: manifest.mounts,
+                      warnings: manifest.warnings,
                   }
                 : null,
             verify: sidecar?.verify ?? { status: 'unverified', failures: [] },

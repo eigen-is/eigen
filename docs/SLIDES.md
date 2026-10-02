@@ -1,59 +1,56 @@
-# Slides App
+# Slides
 
-> **TLDR**: Collaborative presentations on the canvas engine. A `.eigenslides` container's Y.Doc holds `elements`, `frames` and `meta` — one **frame** per slide, pinned 16:9 at 1920×1080 — and `apps/slides` is a thin shell over `CanvasEditor` in frame mode: the slide rail, present mode, the slide background panel, the counter. Everything else (the element model, the tools, the keymap, the clipboard, in-place rich text, comments, ⌘F, previews, export) is the engine's. See [CANVAS.md](CANVAS.md).
+> **TLDR:** A deck is a set of slides that people edit together and then present. Underneath, it is a canvas document whose pages are fixed 16:9 frames, drawn by the canvas engine ([CANVAS.md](CANVAS.md)). `apps/slides/src/components/slides/` is a thin shell over the engine's `CanvasEditor`: it adds the slide rail, present mode, the slide background panel and the slide counter.
 
-## The deck as a canvas
+A deck is a `.eigenslides` file. Each slide is a frame: one page of the canvas, stored in the `frames` map of the deck's Yjs document ([COLLAB.md](COLLAB.md)). Every element on the deck sits on one frame and stores its position relative to it. The shell mounts the canvas in frame mode, which shows only the active slide, fitted to the screen. Everything else (elements, tools, keymap, clipboard, rich text, comments, ⌘F, previews, export) is the engine's.
 
-A slide is a `VectorFrame`: `{ id, index, name, background }`, where `index` is a fractional index (the rail's drag rewrites exactly that one key) and `background` is a serialized `BackgroundFill` — the same codec an element's fill uses. Width and height are the `FRAME_WIDTH`/`FRAME_HEIGHT` constants, never stored.
+So the shell adds only what the engine has no word for: a deck as an ordered list of slides. Three things in it surprise people:
 
-An element belongs to a slide through its `frameId`, and its `x`/`y` are **relative to the frame origin**, so the frame's coordinate space *is* the canvas' scene space in frame mode — no translation anywhere. Elements may overhang; the frame clips them.
+- The first writer to open an empty deck seeds it, under fixed ids ([§ The first writer seeds an empty deck](#the-first-writer-seeds-an-empty-deck)).
+- A reorder rewrites one key ([§ A reorder rewrites one key](#a-reorder-rewrites-one-key)).
+- A background reaches other slides only through an explicit Apply ([§ A background reaches other slides only through Apply](#a-background-reaches-other-slides-only-through-apply)).
 
-Every element kind is available on a slide: rectangle, diamond, ellipse, image, rich text, freedraw, line, arrow. A deck's *style* differs from a drawing's only through `SLIDES_STYLE_DEFAULTS` (flat, solid, Inter) — the per-host table that decides how a NEW element looks, never which kinds exist.
+## A slide is a frame, and the shell adds only the deck's words
 
-## The shell
+A slide is a `VectorFrame` (`packages/lib/src/vector/frames.ts`): an id, a fractional `index`, a name and a serialized `BackgroundFill`. Its size is a constant, and its elements carry its `frameId` ([CANVAS.md](CANVAS.md#every-stored-field-is-a-scalar)). Every element kind works on a slide. `SLIDES_STYLE_DEFAULTS` (flat, solid, Inter) decides only how a new element looks.
 
-`apps/slides/src/components/slides/`:
+The shell mounts `CanvasEditor` with `viewport="frame"`, so the slide always fits its space, with no zoom and no free pan ([CANVAS.md](CANVAS.md#frame-mode-always-shows-the-whole-page)). It fills the shared `CanvasToolbar`'s two host slots: `insertItems` with New slide and `centerItems` with Present. The engine has no notion of slides, so the slide menu (New slide above or below, Duplicate, Delete) lives in the shell. It opens from a rail thumbnail and from a right-click on empty canvas (`onEmptyContextMenu`). The last slide can't be deleted. A phone gets the deck view-only, with no rail ([MOBILE.md](MOBILE.md)).
 
-- **`editor.tsx`** — the shell: the doc hook (`useCanvasDoc`), the active frame, tool + selection state, comments, ⌘F, presence, the slide ops. It mounts `CanvasEditor` with `viewport="frame"` — the slide always fits the space it is given, as a bordered card, with no zoom and no free pan ([CANVAS.md](CANVAS.md) § Viewport modes) — the rail on its left, `CanvasPropertiesPanel` (or the comments/activity `PanelColumn`) on its right, and a `Slide N of M` counter under the canvas. The toolbar it passes is the shared `CanvasToolbar`, whose two host slots carry the deck's own words: `insertItems` an Insert ▸ New slide entry, `centerItems` Present. It also owns the slide menu (New slide above / below, Duplicate, Delete; the last slide cannot be deleted), opened from a rail thumbnail and from `CanvasEditor`'s `onEmptyContextMenu`, a right-click on empty canvas.
-- **`slide-panel.tsx`** — the rail: `FrameThumbnail` per slide inside dnd-kit's sortable list; a drop calls `moveFrame(id, afterId)`, which rewrites one fractional index (so a peer's concurrent rename of either slide survives). Right-click / long-press opens the editor's slide menu. It slices the scene's elements once and hands each thumbnail its own frame's list, so a long deck does not re-filter per thumbnail per render.
-- **`present-mode.tsx`** — the fullscreen overlay: `FrameView` at container size, click forward (a click past the last slide exits), right-click back, a clicker's keys (Arrow / PageUp / PageDown / space), Escape, and a fading exit button. Links inside a rich-text box work because present mode is the one place the layers take pointer events, and `deckOwnsClick(target)` keeps a press that landed on one from also moving the deck — the left click that opens it, and the right click that asks for its own menu. `presentStep(index, count, delta)` is the pure step decision.
-- **`slide-background-panel.tsx`** + **`apply-to.ts`** — the shared `BackgroundFillBlock` plus the scope (this slide / this and following / all slides). It mounts in the engine panel's no-selection slot (`emptySection`); editing paints the current slide and the Apply button re-sends that paint at the chosen scope, so "all slides" is an explicit act rather than something a color drag does to the deck. `targetFrameIds` resolves the scope.
-- **`seed-deck.ts`** — `seedDeck(doc)`: a new deck's first slide.
-- **`hooks/use-slide-dnd.ts`** — dnd-kit state and the drop → `moveFrame` translation.
+## The first writer seeds an empty deck
 
-The active frame is `useActiveFrame` (`packages/ui`): it keeps the current slide while it exists and otherwise activates whatever now occupies its position, so an undo that removes a slide, or a peer deleting the one you are on, lands you on its neighbor instead of nowhere. It also owns the `index` the counter shows and the `step` the phone swipe drives.
+Nothing server-side writes a container's initial Yjs content, so the first writer to open an empty deck adds a title slide (`seed-deck.ts`). It writes in one transaction under its own origin, so ⌘Z can't empty the deck. It tests the live Y.Doc, not React state, so a second effect pass adds nothing. The frame and the title box use fixed ids, so two people opening the same empty deck at once converge on one title slide instead of two.
 
-**A new deck seeds itself.** Nothing server-side writes a container's initial Yjs content, so the first *writer* to open an empty deck adds one frame and a welcome title box — one transact under its own origin sentinel, so ⌘Z cannot empty the deck, and guarded on the live Y.Doc so a second pass (or a peer that seeded first) adds nothing. The frame and the title box are written under fixed ids, so two people opening the same empty deck at the same moment converge on one title slide rather than each contributing their own. A deck stored in the pre-engine shape is empty by this test: its old roots are never read, the reader finds no frames, and the first writer seeds a fresh title slide into it — the deck opens as a new one, which is the no-BC ruling for slides ([ROADMAP.md](ROADMAP.md)).
+The reader reads only `elements`, `frames` and `meta`. A deck with no frames is empty whatever other roots it holds, so a deck stored in an older format opens as a new one and gets seeded. That follows the pre-1.0 rule of no backward compatibility for stored formats ([ROADMAP.md](ROADMAP.md)).
 
-## Comments, search, presence
+## A reorder rewrites one key
 
-All three are the engine's, with the deck's vocabulary layered on:
+The rail (`slide-panel.tsx`) is a dnd-kit sortable list of `FrameThumbnail`s. A drop calls `moveFrame(id, afterId)`, which rewrites the moved frame's fractional `index` and nothing else, so a peer's concurrent rename of either slide survives. The rail groups the scene's elements by frame once per render and hands each thumbnail its own list, so a long deck doesn't filter the scene once per thumbnail.
 
-- **Comments** anchor to an element through `commentCardIds`; opening a card activates that element's slide first, then selects it. See [COMMENTS.md](COMMENTS.md).
-- **⌘F** searches the whole deck through `searchScene`, labeling each match with its slide ("Slide 3"); revealing a match switches slides and selects the element, and the rail rings the slides that hold one. See [IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md).
-- **Presence** publishes the peer's frame, so a cursor shows only on the slide its owner is on.
+## The active slide survives its own deletion
 
-**Layered Escape** (the shared discipline, [CANVAS.md](CANVAS.md)): present → in-place text edit → find bar → deselect. Present claims Escape in the capture phase because it is the outermost layer; every other layer is the canvas' own.
+`useActiveFrame` (`packages/ui/src/components/vector/hooks/`) keeps the current slide while it exists. When it vanishes, through an undo of its add or a peer's delete, the slide now at its position takes over, clamped to the ends. So the user lands on a neighbor, never on nothing. The hook also gives the counter its index and the phone swipe its step.
 
-**Limitation**: a rich-text box's `html` is one scalar field, so two people editing the same box at once resolve last-writer-wins for that box. Different boxes merge normally.
+## Revealing an element goes to its slide first
 
-## Phones
+The comment pane and ⌘F span the whole deck while the canvas shows one slide. So both reveal through one callback: activate the element's slide, then select the element. An element whose slide is gone is selected in place, because switching to a missing frame would empty the canvas. ⌘F labels each match with its slide and rings the rail thumbnails that hold one ([IN_DOCUMENT_SEARCH.md](IN_DOCUMENT_SEARCH.md), [COMMENTS.md](COMMENTS.md)). Presence carries the frame, so a peer's cursor shows only on the slide they are on.
 
-A phone gets the deck read-only (`canEdit = canWrite && !isMobile`): the frame-fit canvas, a one-finger swipe between slides, the counter, present mode, comments and the file menu. The rail and the properties panel are desktop surfaces. See [MOBILE.md](MOBILE.md).
+## Present mode replaces the editor
 
-## Backgrounds
+`present-mode.tsx` draws the slide with `FrameView`, the same read-only page the rail draws, so the presenter shows what the editor shows. The doc hook stays mounted above it, so leaving returns to the same slide and the unsynced-edits guard keeps working. Present claims Escape in the capture phase, as the outermost layer ([CANVAS.md](CANVAS.md#escape-is-layered-per-host-on-purpose)).
 
-A slide's background is a `BackgroundFill` (`packages/lib/src/types/background.ts`): solid, a two-stop linear gradient, or an image sized `cover`/`contain`. `getBackgroundStyle` turns it into CSS for the canvas, the thumbnails and present mode; `backgroundCss` does the same for the server compositor, so a gradient prints the way it renders. A background image is copied into the container's `media/` folder and stored by name — see [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md).
+A click moves forward and a right-click back, and a clicker's arrow, Page and space keys do the same. A click past the last slide leaves present mode. A right-click on the first slide stays put, because leaving on a backward mis-click would be a surprise. Links in a rich-text box work, because present mode is the one place the layers take pointer events. `deckOwnsClick` keeps a press on a link from also moving the deck.
 
-## Export, preview and search
+## A background reaches other slides only through Apply
 
-One compositor serves all of them: `sceneLayers` → positioned HTML layers, one page per frame.
+The background panel (`slide-background-panel.tsx`) mounts in the engine panel's no-selection slot (`emptySection`), because "this and following" is a slides idea the engine doesn't have. Editing paints the current slide. The Apply button sends that paint to this slide, this and following, or all slides (`targetFrameIds` in `apply-to.ts`). So recoloring the deck is an explicit act, never a side effect of a color drag. A stale slide id applies to nothing, never to the deck.
 
-| File | Purpose |
-|------|---------|
-| `apps/api/src/lib/export/canvas/render.ts` | `framePages(scene, resolveMedia)` — one `CanvasPage` per frame — and `renderCanvasPage(page, scale, resolveMedia?)` |
-| `apps/api/src/lib/export/canvas/transform.ts` | `renderEigenslidesExport` + `canvasHtmlDocument` — the standalone HTML/PDF document. A frame is 1920×1080 and a deck prints at scale 0.5, so the sheet stays 960 × 540 px (254mm × 142.875mm at 96 dpi) |
-| `apps/api/src/lib/preview/eigenslides-render.ts` | The first 8 slides as compositor pages, each rich-text body sanitized before the page is composed |
-| `apps/api/src/lib/search/extract-render.ts` | `collectCanvasText` — every kind's `searchText`, tag-free, in reading order |
+A background is a `BackgroundFill` (`packages/lib/src/types/background.ts`): solid, a two-stop linear gradient, or an image sized `cover` or `contain`. `getBackgroundStyle` renders it on the canvas, the rail and in present mode, and `backgroundCss` renders it on the server, so a gradient prints the way it looks. An image is copied into the container's `media/` folder and stored by name ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)).
 
-See [EXPORT.md](EXPORT.md), [PREVIEWS.md](PREVIEWS.md), [SEARCH.md](SEARCH.md).
+## Export and preview render the pages the canvas draws
+
+The server compositor (`apps/api/src/lib/export/canvas/`) turns each frame into one page of positioned layers, the boxes the live canvas gives each element. The HTML and PDF export print those pages at half scale ([EXPORT.md](EXPORT.md#a-deck-prints-each-frame-at-half-scale)), and the drive preview renders the first slides of the same pages ([PREVIEWS.md](PREVIEWS.md#an-eigen-document-previews-a-slice-off-the-event-loop)). Search indexes a deck through the canvas collector ([SEARCH.md](SEARCH.md)).
+
+## See also
+
+- [CANVAS.md](CANVAS.md): the engine, frame mode and the element model
+- [MOBILE.md](MOBILE.md): the view-only deck on a phone

@@ -97,6 +97,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             auth: true,
         },
     )
+    // A contact update or delete answers nothing: the list the SSE event invalidates is the result.
     .put(
         '/contacts/:ownerId/contacts/:id',
         async ({ params, body, user }): Promise<void> => {

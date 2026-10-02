@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Verify the outbound mail-relay hardening (2026-08-31 spam-incident fixes) against a scratch
+# Verify the outbound mail-relay hardening against a scratch
 # edge,mail install of this working tree: sender/login binding on the submission ports, the per-IP
-# SASL failure lockout, and the queue-backlog alert.
+# SASL failure lockout, the queue-backlog alert, DKIM signing with the key the server backup reads, and a TLS key
+# the server backup reads too.
 #
 # Usage:
 #   ./docker/test-mail-hardening.sh
@@ -11,7 +12,7 @@
 # Needs:  docker, openssl, nc, curl, git. The install is fresh, so the script creates the admin
 #         alice@eigen.test through the setup wizard's API and logs in as her.
 #
-# Probe 8 sets `defer_transports=smtp` and seeds queue files; the scratch stack goes away afterwards.
+# Probes 8 and 13 set `defer_transports=smtp` and seed queue files; the scratch stack goes away afterwards.
 #
 # No message is ever delivered: the submission dialogs stop at RCPT TO and never send DATA.
 #
@@ -85,11 +86,9 @@ RCPT_PROBE=rcpt-probe@example.com
 # One AUTH per connection, and QUIT only goes out after the reply has had time to arrive. Writing
 # the whole dialog in one shot (AUTH then QUIT, no pause) disconnects while the dovecot request is
 # still in flight, and postfix abandons it: dovecot logs "auth client disconnected with 1 pending
-# requests: EOF" and the attempt never reaches the API. Measured 15 of 60 lost that way, and the
-# loss scales with the spray, so no larger spray fixes it. The generator subshell holds the pipe
-# open across the pause; callers then count the 535s they actually got, so a lost attempt is
-# reported rather than quietly shrinking the spray. (A read-driven dialog would need `coproc`,
-# which macOS's stock bash 3.2 does not have.)
+# requests: EOF" and the attempt never reaches the API; the loss scales with the spray. The generator
+# subshell holds the pipe open across the pause; callers count the 535s they actually got, so a lost
+# attempt is reported. (A read-driven dialog would need `coproc`, which macOS's bash 3.2 lacks.)
 auth_once() {
     local auth="$1"
     {
@@ -194,9 +193,7 @@ ADMIN_EMAIL=$ALICE_EMAIL
 BASE="https://localhost:$PORT_HTTPS/eigen"
 JAR="$SCRATCH/session"
 if ! create_admin "$SCRATCH/setup.log" "$ALICE_PASSWORD"; then
-    fail "the setup link made no $ALICE_EMAIL who signs in"
-    header "Result"
-    probe_summary
+    abort "the setup link made no $ALICE_EMAIL who signs in"
 fi
 # A same-domain address the login does NOT own. It need not exist: the login/sender map is
 # consulted for the sender address, not the mailbox.
@@ -205,9 +202,7 @@ SENDER_FOREIGN="${SENDER_FOREIGN:-anne@pobox.com}"
 
 log "up (queue alert threshold $QUEUE_ALERT_THRESHOLD, checked every ${QUEUE_CHECK_INTERVAL}s)"
 if ! wait_smtps; then
-    fail "postfix never answered on :465 within 60s; look at: dc logs postfix"
-    header "Result"
-    probe_summary
+    abort "postfix never answered on :465 within 60s; look at: dc logs postfix"
 fi
 
 # Login probes. Probe 1 is what proves the credentials and sets HAVE_LOGIN, so it is not optional
@@ -238,7 +233,7 @@ else
 fi
 
 ##############################################################################
-header "Probe 2 — own sender is still accepted (regression guard)"
+header "Probe 2 — own sender is still accepted"
 ##############################################################################
 if should_run 2 && [ "$HAVE_LOGIN" = 1 ]; then
     probe_submission "AUTH $ALICE_EMAIL + MAIL FROM <$ALICE_EMAIL>" \
@@ -258,7 +253,7 @@ else
 fi
 
 ##############################################################################
-header "Probe 4 — foreign forged sender is rejected (the incident shape)"
+header "Probe 4 — foreign forged sender is rejected"
 ##############################################################################
 if should_run 4 && [ "$HAVE_LOGIN" = 1 ]; then
     probe_submission "AUTH $ALICE_EMAIL + MAIL FROM <$SENDER_FOREIGN>" \
@@ -447,9 +442,8 @@ header "Probe 11 — the client IP reaches the limiter through real SMTP AUTH"
 # The bucket is filled over HTTP rather than by spraying SMTP. A write-only SMTP spray cannot get
 # there on this host: postfix abandons an auth request that is still in flight when the client
 # disconnects, and the next connection on that smtpd then finds its cached dovecot connection dead,
-# so losses arrive in pairs. Only 28-36 of 60 attempts landed, and holding the connection 12s
-# instead of 2s bought one extra delivery — the loss is proportional, so no larger spray fixes it.
-# Probe 10 is the real-SASL-transport proof; this probe is the IP-threading proof.
+# so losses arrive in pairs, in proportion to the spray. Probe 10 is the real-SASL-transport proof;
+# this probe is the IP-threading proof.
 if should_run 11 && [ "$HAVE_LOGIN" = 1 ]; then
     log "restarting eigen-api for a clean failure-bucket baseline..."
     dc restart eigen-api >/dev/null 2>&1
@@ -484,10 +478,9 @@ if should_run 11 && [ "$HAVE_LOGIN" = 1 ]; then
         good=$(auth_plain "$ALICE_EMAIL" "$ALICE_PASSWORD")
         transcript=$(auth_once "$good")
         if printf '%s\n' "$transcript" | grep -qE '^(454|450)'; then
-            # 454 is a pre-existing quirk, unrelated to this branch: the first AUTH after an
-            # auth-server restart hits postfix's stale cached SASL connection, and postfix
-            # reconnects on the next attempt. A 450 would be postfix's own anvil cap answering, so
-            # give the window room before the retry.
+            # The first AUTH after an auth-server restart hits postfix's stale cached SASL
+            # connection (454), and postfix reconnects on the next attempt. A 450 would be postfix's
+            # own anvil cap answering, so give the window room before the retry.
             log "  $(printf '%s\n' "$transcript" | grep -E '^(454|450)' | head -1) on the first attempt; retrying once"
             anvil_reserve 2
             transcript=$(auth_once "$good")
@@ -514,11 +507,10 @@ fi
 ##############################################################################
 header "Probe 12 — mynetworks, OpenDKIM InternalHosts and the API trust range are scoped to the bridge subnet"
 ##############################################################################
-# Finding #19: the trust range must be loopback plus the actual docker bridge subnet, not the
-# whole 172.16.0.0/12. Postfix's mynetworks and OpenDKIM's TrustedHosts render from EIGEN_SUBNET in
-# the entrypoint, and compose derives the API's TRUSTED_NETWORKS from the same value; assert none
+# The trust range must be loopback plus the actual docker bridge subnet, not the whole
+# 172.16.0.0/12. Postfix's mynetworks and OpenDKIM's TrustedHosts render from EIGEN_SUBNET in the
+# entrypoint, and compose derives the API's TRUSTED_NETWORKS from the same value; assert none
 # still carries the /12 and all three carry the subnet.
-# Needs no login, so it runs whether or not ALICE_* are set.
 if should_run 12; then
     expect_subnet="${EIGEN_SUBNET:-172.20.0.0/24}"
     mynetworks=$(dc exec -T postfix postconf -h mynetworks | tr -d '\r' || true)
@@ -543,6 +535,67 @@ if should_run 12; then
     fi
 else
     skip "probe 12 not selected"
+fi
+
+##############################################################################
+header "Probe 13 — OpenDKIM signs with the key the API can read"
+##############################################################################
+# The server backup reads data/dkim as uid 1000, so the entrypoint gives the key group 1000 and mode 0640, which
+# OpenDKIM's RequireSafeKeys takes because the image has a member-less group 1000. defer_transports parks the probe's
+# message in the queue, where postcat shows whether the milter signed it. Needs no login.
+dkim_headers() {
+    dc exec -T -e SUBJECT="$1" postfix sh -c '
+for f in $(find /var/spool/postfix/incoming /var/spool/postfix/active /var/spool/postfix/deferred -type f); do
+    if postcat -h "$f" 2>/dev/null | grep -qx "Subject: $SUBJECT"; then postcat -h "$f"; fi
+done' | tr -d '\r' || true
+}
+
+if should_run 13; then
+    dkim_modes=$(dc exec -T postfix stat -c '%U:%g %a' /data/dkim /data/dkim/eigen.private | tr -d '\r' | tr '\n' ' ' || true)
+    api_key=$(dc exec -T eigen-api head -n 1 /app/data/dkim/eigen.private | tr -d '\r' || true)
+    subject="dkim-probe-$RUN"
+    dc exec -T postfix sh -c 'postconf -e defer_transports=smtp && postfix reload' >/dev/null 2>&1
+    dc exec -T -e FROM="postmaster@$MAIL_DOMAIN" -e SUBJECT="$subject" postfix sh -c \
+        'printf "From: %s\nTo: dkim-probe@example.com\nSubject: %s\n\nprobe\n" "$FROM" "$SUBJECT" | sendmail -f "$FROM" dkim-probe@example.com' \
+        >/dev/null 2>&1
+    signed=''
+    for _ in $(seq 1 30); do
+        signed=$(dkim_headers "$subject")
+        [ -n "$signed" ] && break
+        sleep 1
+    done
+    if [ "$dkim_modes" != "opendkim:1000 755 opendkim:1000 640 " ]; then
+        fail "data/dkim and its key are '$dkim_modes', expected opendkim:1000 with modes 755 and 640"
+    elif ! printf '%s' "$api_key" | grep -q '^-----BEGIN .*PRIVATE KEY-----$'; then
+        fail "eigen-api cannot read data/dkim/eigen.private: '$api_key'"
+    elif [ -z "$signed" ]; then
+        fail "the probe message never reached the queue; look at: dc logs postfix"
+    elif ! printf '%s\n' "$signed" | grep -q '^DKIM-Signature:' || ! printf '%s\n' "$signed" | grep -qF "d=$MAIL_DOMAIN;"; then
+        fail "OpenDKIM did not sign the probe message as $MAIL_DOMAIN: $(oneline "$signed")"
+    else
+        ok "the DKIM key is opendkim:1000 0640, eigen-api reads it, and OpenDKIM signs as $MAIL_DOMAIN with it"
+    fi
+else
+    skip "probe 13 not selected"
+fi
+
+##############################################################################
+header "Probe 14 — the API can read the mail server's TLS key"
+##############################################################################
+# The server backup reads data/certs as uid 1000. Caddy has no Let's Encrypt certificate for this install, so the key
+# is Dovecot's self-signed one, which its entrypoint gives group 1000 and mode 0640 like any other.
+if should_run 14; then
+    key_mode=$(dc exec -T dovecot stat -c '%g %a' /certs/key.pem | tr -d '\r' || true)
+    api_tls_key=$(dc exec -T eigen-api head -n 1 /app/data/certs/key.pem | tr -d '\r' || true)
+    if [ "$key_mode" != "1000 640" ]; then
+        fail "data/certs/key.pem is '$key_mode', expected group 1000 and mode 640"
+    elif ! printf '%s' "$api_tls_key" | grep -q '^-----BEGIN .*PRIVATE KEY-----$'; then
+        fail "eigen-api cannot read data/certs/key.pem: '$api_tls_key'"
+    else
+        ok "the TLS key is group 1000 0640 and eigen-api reads it"
+    fi
+else
+    skip "probe 14 not selected"
 fi
 
 ##############################################################################

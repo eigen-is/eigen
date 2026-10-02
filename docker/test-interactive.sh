@@ -2,7 +2,7 @@
 # What only a terminal shows of ./eigen, typed by expect: the launcher runs under BusyBox sh in the no-Bun docker:cli
 # container, reached with docker exec -it, so both it and the CLI see a terminal. On a scratch local build: Ctrl-C at
 # the first setup question, setup answering every question with hosted mail, reset-password typed twice, a restore
-# answered yes, Ctrl-C while a restore unpacks, and Ctrl-C under the build spinner. test-cli.sh runs the rest without a
+# answered yes, Ctrl-C while a restore stages, and Ctrl-C under the build spinner. test-cli.sh runs the rest without a
 # terminal. Asserts on exit codes, files and the stack.
 #
 # Usage:  ./docker/test-interactive.sh
@@ -144,9 +144,7 @@ if create_admin "$SCREEN" "$OLD_PASSWORD"; then
     ok "the link on screen makes $ADMIN_EMAIL"
     ROOT_ID=$(api GET "/drive/$ADMIN_ID/default/root" | first_id)
 else
-    fail "the setup link on screen made no admin"
-    header "Result"
-    probe_summary
+    abort "the setup link on screen made no admin"
 fi
 
 ##############################################################################
@@ -176,46 +174,47 @@ fi
 header "restore, answered on a terminal"
 ##############################################################################
 eigen backup
-SNAPSHOT=$(saved_snapshot)
-if [ "$CODE" = 0 ] && [ -n "$SNAPSHOT" ]; then
-    ok "./eigen backup saved $SNAPSHOT"
+ARCHIVE=$(saved_archive)
+if [ "$CODE" = 0 ] && [ -n "$ARCHIVE" ]; then
+    ok "./eigen backup saved $ARCHIVE"
 else
     fail "./eigen backup: exit $CODE"
     show
 fi
-folder "Made after the snapshot"
-type_into restore-yes restore "$SNAPSHOT" <<'EOF'
-question "Replace data/"
+folder "Made after the backup"
+type_into restore-yes restore "$ARCHIVE" <<'EOF'
+question "Stage "
 send -- "y"
 EOF
-if [ "$CODE" = 0 ] && stack_up && ! has_folder "Made after the snapshot" && [ "$(aside_count)" = 1 ]; then
-    ok "restore answered yes puts the snapshot back and keeps the old data aside"
+if [ "$CODE" = 0 ] && stack_up && ! has_folder "Made after the backup" && [ "$(aside_count)" = 1 ]; then
+    ok "restore answered yes puts the backup back and keeps the old data aside"
 else
     fail "restore answered yes: exit $CODE"
 fi
 
-# Big enough that the restore is still unpacking when Ctrl-C lands.
-scratch_run sh -c 'head -c 300000000 /dev/urandom >"$1"' sh "$INSTALL/data/ballast.bin"
+# Big enough that the stage is still unpacking when Ctrl-C lands.
+BALLAST="$INSTALL/data/home/$ADMIN_ID/ballast.bin"
+scratch_run sh -c 'head -c 300000000 /dev/urandom >"$1" && chown 1000:1000 "$1"' sh "$BALLAST"
 eigen backup
-BIG=$(saved_snapshot)
-scratch_run rm "$INSTALL/data/ballast.bin"
+BIG=$(saved_archive)
+scratch_run rm "$BALLAST"
 folder "Made before the interrupted restore"
 started=$(api_started)
 export BIG INSTALL
 type_into restore-cancel restore "$BIG" <<'EOF'
-question "Replace data/"
+question "Stage "
 send -- "y"
-for {set i 0} {$i < 600 && ![file isdirectory "$env(INSTALL)/.eigen/restore"]} {incr i} { after 100 }
+for {set i 0} {$i < 600 && ![file isdirectory "$env(INSTALL)/data/.restoring/data"]} {incr i} { after 100 }
 send -- "\003"
 EOF
 if [ "$CODE" = 130 ] && [ "$(api_started)" = "$started" ] && has_folder "Made before the interrupted restore" &&
-    [ ! -e "$INSTALL/data/ballast.bin" ] && [ "$(aside_count)" = 1 ] && [ ! -e "$INSTALL/.eigen/restore" ]; then
-    ok "Ctrl-C while the restore unpacks exits 130; Eigen ran on, on its data, and the unpacked copy is gone"
+    [ ! -e "$BALLAST" ] && [ "$(aside_count)" = 1 ] && [ ! -e "$INSTALL/data/.restoring" ]; then
+    ok "Ctrl-C while the restore stages exits 130; Eigen ran on, on its data, and the staged tree is gone"
 else
     fail "Ctrl-C during the restore: exit $CODE"
     screen_tail
 fi
-scratch_run rm "$INSTALL/snapshots/$BIG"
+scratch_run sh -c 'rm "$1"*' sh "$INSTALL/backups/$BIG"
 
 ##############################################################################
 header "Ctrl-C under the build spinner"

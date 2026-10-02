@@ -4,15 +4,17 @@ import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib
 import { BACKUP_OWNER_ID, parseBackupArtifactName } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { deleteArtifact, landUpload, listArtifacts, resolveArtifact } from '../lib/backup/artifacts';
+import { requireBackableHome } from '../lib/backup/home-dir';
 import {
     getBackupJob,
+    isServerJob,
     listBackupJobs,
     runArtifactVerify,
     runHomeBackup,
     startBackupJob,
     withBackupJobSlot,
 } from '../lib/backup/jobs';
-import { type BackableOwner, requireBackableHome } from '../lib/backup/paths';
+import type { BackableOwner } from '../lib/backup/paths';
 import { restoreHome, restoreSafetyCopy } from '../lib/backup/restore';
 import { deleteSafetyCopy, listSafetyCopies, resolveSafetyCopy } from '../lib/backup/safety-copy';
 import type { SnapshotProgress } from '../lib/backup/snapshot-home';
@@ -21,7 +23,7 @@ import { requireAdmin } from '../lib/core/access';
 import { contentDisposition } from '../lib/core/http';
 import { getHome } from '../lib/home';
 import { getTeam } from '../lib/team/team';
-import { getUserById } from '../lib/user';
+import { getOrgRole, getUserById } from '../lib/user';
 import { betterAuth } from './auth';
 
 // The ownerId ends up naming a home folder, so its shape is checked here, against the one class the
@@ -43,12 +45,15 @@ async function requireExistingHome(ownerId: string): Promise<void> {
     if (!(await getUserById(owner.id))) throw new ApiError(404, 'User not found');
 }
 
-// A restore ends with the home evicted. On a remote mount it also ends with every file in the
-// mount's staging folder and one `pending_uploads` row per file, and the queue that drains them is a
-// Mount member — nothing runs it until the home is next opened, so an admin who restores a home
-// nobody then visits leaves the bucket stale. Opening the home here is what starts it: Mount.init
-// stands up the UploadQueue and reconciles the persisted rows. Routes may call getHome; the job
-// bodies in lib/backup may not, which is why this lives here and not in jobs.ts.
+// A server backup's job is the owner's alone, as its routes are (server-backup.ts): it names the
+// archive and the homes that failed.
+async function jobsVisibleTo(userId: string): Promise<(job: BackupJob) => boolean> {
+    const owner = (await getOrgRole(userId)) === 'owner';
+    return (job) => owner || !isServerJob(job.kind);
+}
+
+// A restored home is opened at once, so a remote mount's upload queue (Mount.init) drains its staged files even when
+// nobody visits it. It reaches into another user's home, which belongs behind home-relay.ts once homes can move.
 function startRestoreJob(
     ownerId: string,
     adminId: string,
@@ -78,12 +83,8 @@ export const backupRouter = new Elysia({ name: 'backup' })
         async ({ params, user }): Promise<{ jobId: string }> => {
             await requireAdmin(user.id);
             await requireExistingHome(params.ownerId);
-            // Another user's home, resolved here and handed to the job: lib/backup never reaches for
-            // a home of its own. Phase ③ runs the job on the server that owns the home, and this
-            // lookup moves behind home-relay with it (ROADMAP, cheap wins).
-            const home = await getHome(params.ownerId);
             const job = startBackupJob('backup', params.ownerId, user.id, (started, onProgress) =>
-                runHomeBackup(home, started, onProgress),
+                runHomeBackup(params.ownerId, started, onProgress),
             );
             return { jobId: job.id };
         },
@@ -94,7 +95,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
         '/admin/backup/jobs',
         async ({ query, user }): Promise<BackupJob[]> => {
             await requireAdmin(user.id);
-            return listBackupJobs(query.ownerId);
+            return listBackupJobs(query.ownerId).filter(await jobsVisibleTo(user.id));
         },
         { auth: true, query: t.Object({ ownerId: t.Optional(t.String()) }) },
     )
@@ -104,7 +105,7 @@ export const backupRouter = new Elysia({ name: 'backup' })
         async ({ params, user }): Promise<BackupJob> => {
             await requireAdmin(user.id);
             const job = getBackupJob(params.id);
-            if (!job) throw new ApiError(404, 'Job not found');
+            if (!job || !(await jobsVisibleTo(user.id))(job)) throw new ApiError(404, 'Job not found');
             return job;
         },
         { auth: true },
@@ -216,9 +217,6 @@ export const backupRouter = new Elysia({ name: 'backup' })
             await requireRestorableHome(params.ownerId);
             const { folder, homeDir } = await resolveSafetyCopy(params.ownerId, params.name);
             if (!fs.existsSync(folder)) throw new ApiError(404, 'Safety copy not found');
-            // Synchronous, but it holds the home's one job slot for its whole duration: it decides
-            // what is garbage by reading the live home's storage keys, and a restore swapping that
-            // folder underneath it would turn the answer into "delete what the home now points at".
             await withBackupJobSlot(params.ownerId, () => deleteSafetyCopy(folder, homeDir));
             return { success: true };
         },

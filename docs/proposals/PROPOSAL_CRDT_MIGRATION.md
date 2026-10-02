@@ -1,15 +1,8 @@
 # Proposal: CRDT format migration
 
-> **Status — Proposal, written 2026-07-05, re-verified against code 2026-07-06 (post storage-audit
-> landings), not started.** Flagship P0 item from
-> [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) § Format-change work. Eigen is live and its Yjs document formats
-> (the root names and value shapes each app reads) are frozen. The day one of the four editors
-> needs to restructure its data — stickies grows swimlanes, sheets replaces its op log, docs
-> changes an attribute encoding — there is currently **no way to ship it**. This proposal designs
-> the system that makes such a change routine: a per-container format stamp, a per-type migration
-> registry, lazy migration on open plus a dormant-doc sweep, a WebSocket format handshake so stale
-> clients can't write old-shaped data, and a snapshot-first rollback story. The core primitive
-> already exists (`restoreYjsDoc`); everything on top is net-new.
+This proposal designs how Eigen changes the shape of a stored collab document without losing data. A collab document's format is the set of Yjs root names and value shapes its app reads. When an editor needs to restructure it (stickies grows swimlanes, sheets replaces its op log, docs changes an attribute encoding), every existing document has to move to the new shape, and there is no way to do that today. The design: a format stamp per container, a migration registry per document type, migration when a document opens plus a sweep for documents nobody opens, a WebSocket handshake so a stale client can't write the old shape, and a snapshot to roll back to.
+
+**Status:** not started. The core primitive exists (`restoreYjsDoc`); everything on top is new. Before 1.0 a format change is done outright, and from 1.0 every one needs this machinery, so it is the first row of [ROADMAP-POST-1.md § Format-change work](../ROADMAP-POST-1.md#format-change-work). Written 2026-07-05 and checked against the code on 2026-07-06.
 
 ## Problem
 

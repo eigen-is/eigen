@@ -73,7 +73,7 @@ export function CardDialog({
     if (!card) return null;
 
     // Missing entry = unseeded legacy thread, open and unassigned (matchesCommentFilter's rule);
-    // the first assign/resolve write seeds it server-side.
+    // its first message or assignment seeds it server-side.
     const chatName = card.chatName;
     const status = entry?.status ?? 'open';
     const assignee = entry?.assignee ?? null;

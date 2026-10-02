@@ -183,12 +183,6 @@ describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
 
     test('delivered messages use Maildir filename format', async () => {
         const eml = testEml('Filename Format Test');
-        await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/mailbox`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mailbox: 'TestFilenames' }),
-        });
-
         // Deliver via public endpoint
         const res = await ctx.app.handle(
             new Request(`http://localhost/mail/deliver/${ctx.charlie.user.email}`, {

@@ -1,8 +1,16 @@
 #!/bin/sh
-# Installs Eigen into the current folder, where its data will live: downloads the eigen command and runs ./eigen setup.
+# Installs Eigen into the current folder, where its data will live: downloads the eigen command and runs ./eigen setup,
+# or ./eigen restore, which sets Eigen up from a whole-server backup.
 #   curl -fsSL https://eigen.is/install | sh
 #   curl -fsSL https://eigen.is/install | sh -s -- --domain eigen.example.com --yes
+#   curl -fsSL https://eigen.is/install | sh -s -- restore /root/server-scheduled-full-20261001-020000.tar
 set -eu
+
+command=setup
+if [ "${1:-}" = restore ]; then
+    command=restore
+    shift
+fi
 
 if [ -e docker-compose.yml ] || [ -e .env.production ]; then
     echo "This folder already has an Eigen install. Run ./eigen setup to change it, or ./eigen update." >&2
@@ -37,6 +45,6 @@ fi
 chmod 755 eigen.tmp
 mv eigen.tmp eigen
 
-# Under curl | sh, stdin is the script; the setup questions need the terminal.
-if [ -c /dev/tty ] && (exec </dev/tty) 2>/dev/null; then exec ./eigen setup "$@" </dev/tty; fi
-exec ./eigen setup "$@"
+# Under curl | sh, stdin is the script; the questions need the terminal.
+if [ -c /dev/tty ] && (exec </dev/tty) 2>/dev/null; then exec ./eigen "$command" "$@" </dev/tty; fi
+exec ./eigen "$command" "$@"

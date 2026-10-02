@@ -17,6 +17,8 @@ header() { printf '\n=== %s ===\n' "$*"; }
 ok()     { log "✓ $*"; PASS=$((PASS+1)); }
 fail()   { log "✗ $*"; FAIL=$((FAIL+1)); FAIL_LINES+=("$*"); }
 skip()   { log "– skipped: $*"; SKIP=$((SKIP+1)); }
+# A failure the rest of the harness cannot run past.
+abort()  { fail "$@"; header "Result"; probe_summary; }
 
 REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 BUN_VERSION=$(cat "$REPO_ROOT/.bun-version")
@@ -194,7 +196,8 @@ EOF
 
 # in_cli_container [--stdin] [--user uid:gid] <command…>: runs in $INSTALL inside the no-Bun docker:cli image, with
 # the Docker socket, and the scratch folder at its own path so the bind mounts Compose creates resolve on the host. The
-# EIGEN_*_IMAGE variables and COMPOSE_PROFILES pass through when set.
+# EIGEN_*_IMAGE variables and COMPOSE_PROFILES pass through when set, and BUN_VERSION, which the Compose view of a local
+# build needs as the launcher sets it.
 # --stdin passes this script's stdin through, for a piped answer; without it the command reads nothing.
 in_cli_container() {
     local user=() stdin=()
@@ -208,7 +211,7 @@ in_cli_container() {
     fi
     docker run --rm ${stdin[@]+"${stdin[@]}"} --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
         -v /var/run/docker.sock:/var/run/docker.sock -v "$SCRATCH:$SCRATCH" -w "$INSTALL" ${IMAGE_FLAGS[@]+"${IMAGE_FLAGS[@]}"} \
-        -e NO_COLOR=1 -e HARNESS_PRUNE_LOG="$PRUNE_LOG" ${COMPOSE_PROFILES:+-e COMPOSE_PROFILES} \
+        -e NO_COLOR=1 -e HARNESS_PRUNE_LOG="$PRUNE_LOG" -e BUN_VERSION ${COMPOSE_PROFILES:+-e COMPOSE_PROFILES} \
         ${user[@]+"${user[@]}"} "$CLI_IMAGE" "$@"
 }
 
@@ -232,8 +235,8 @@ show() { printf '%s\n' "$OUT" | sed 's/^/    │ /'; }
 # says <text>: whether the last output holds this line fragment.
 says() { printf '%s\n' "$OUT" | grep -q -- "$1"; }
 
-# The snapshot the last ./eigen backup saved, from its output.
-saved_snapshot() { printf '%s\n' "$OUT" | grep -o 'eigen-\(light-\)\{0,1\}[0-9]\{8\}-[0-9]\{6\}\.tar\.gz' | head -n 1 || true; }
+# The archive the last ./eigen backup saved, from the archive= line that ends its output.
+saved_archive() { printf '%s\n' "$OUT" | sed -n 's/^archive=//p' | tail -n 1; }
 
 # run_setup <log> [--user uid:gid] <setup flags…>: ./eigen setup in the no-Bun container, its output in <log>. A
 # setup that fails shows that output and ends the harness.
@@ -249,15 +252,13 @@ run_setup() {
         ok "./eigen setup finished in $((SECONDS - started))s"
         return 0
     fi
-    fail "./eigen setup failed after $((SECONDS - started))s"
     sed 's/^/    /' "$log"
     dc logs --tail=30 2>&1 | sed 's/^/    /' || true
-    header "Result"
-    probe_summary
+    abort "./eigen setup failed after $((SECONDS - started))s"
 }
 
 # The harness's own view of the install's stack, with the files the launcher uses, from the no-Bun container as root:
-# a release install's .env.production is root's, mode 600, which the host user cannot read on Linux.
+# a release install's .env.production is root's, mode 640 for group 1000, which the host user may not read on Linux.
 dc() {
     local build=()
     assert_isolated
@@ -276,16 +277,42 @@ stack_up() {
 
 api_started() { docker inspect --format '{{.State.StartedAt}}' "$(dc ps -q eigen-api)"; }
 
+# The api image the install runs, by ID.
+api_image() { docker inspect --format '{{.Image}}' "$(dc ps -q eigen-api)"; }
+
+# check_env <operator uid:gid> <after what>: .env.production is the operator's, group 1000 and mode 640, or as configure
+# wrote it on Docker Desktop, where ./eigen leaves it; eigen-api alone mounts it, read-only, and reads what the
+# operator's file says.
+check_env() {
+    local want="${1%%:*}:1000 640" got mounts domain
+    if [ "$(docker info --format '{{.OperatingSystem}}')" = 'Docker Desktop' ]; then want="$1 600"; fi
+    got=$(owner_mode "$INSTALL/.env.production")
+    if [ "$got" = "$want" ]; then
+        ok "$2: .env.production is $want"
+    else
+        fail "$2: .env.production is '$got', expected '$want'"
+    fi
+    mounts=$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT" | xargs docker inspect \
+        --format '{{$name := .Name}}{{range .Mounts}}{{$name}} {{.Source}} {{.RW}}{{println}}{{end}}' |
+        grep '/\.env\.production ' || true)
+    if [ "$(printf '%s\n' "$mounts" | grep -c .)" = 1 ] && printf '%s\n' "$mounts" | grep -q "^/$PROJECT-eigen-api-1 .* false$"; then
+        ok "$2: eigen-api alone mounts .env.production, read-only"
+    else
+        fail "$2: the mounts of .env.production: '$(printf '%s' "$mounts" | tr '\n' '|')'"
+    fi
+    domain=$(dc exec -T eigen-api sh -c 'grep "^DOMAIN=" "$EIGEN_ENV_FILE"' | tr -d '\r' || true)
+    if [ -n "$domain" ] && [ "$domain" = "$(scratch_run grep '^DOMAIN=' "$INSTALL/.env.production")" ]; then
+        ok "$2: eigen-api reads .env.production at \$EIGEN_ENV_FILE ($domain)"
+    else
+        fail "$2: eigen-api reads '$domain' from \$EIGEN_ENV_FILE"
+    fi
+}
+
 # The last KEY= line of the install's .env.production.
 env_of() { scratch_run sed -n "s/^$1=//p" "$INSTALL/.env.production" | tail -n 1; }
 
 # How many data/ folders restores have kept aside.
-aside_count() { (cd "$INSTALL" && ls -d data.pre-restore-* 2>/dev/null | wc -l | tr -d ' '); }
-
-# The pre-update snapshots, space-separated; snapshots/ is root's alone.
-pre_updates() {
-    scratch_run sh -c 'cd "$1" 2>/dev/null && ls eigen-pre-update-*.tar.gz 2>/dev/null' sh "$INSTALL/snapshots" | tr '\n' ' '
-}
+aside_count() { (cd "$INSTALL" && { ls -d data.pre-restore-* 2>/dev/null || :; } | wc -l | tr -d ' '); }
 
 # setup_token <log>: the token of the last setup link in ./eigen setup output.
 setup_token() { grep -o 'setup=[A-Za-z0-9_-]*' "$1" | tail -n 1 | cut -d= -f2 || true; }
@@ -319,7 +346,7 @@ sign_in() {
 
 # admin_fields <password>: the /setup/complete fields that make $ADMIN_EMAIL, without the token.
 admin_fields() {
-    printf '"orgName":"Probe","storageType":"local-id","adminUsername":"%s","adminPassword":"%s","adminName":"Alice"' \
+    printf '"orgName":"Probe","storageType":"local-fullnames","adminUsername":"%s","adminPassword":"%s","adminName":"Alice"' \
         "${ADMIN_EMAIL%@*}" "$1"
 }
 
@@ -346,14 +373,15 @@ api() {
 first_id() { grep -o '"id":"[^"]*"' | head -n 1 | cut -d'"' -f4 || true; }
 
 # collab_tab <web server service> <its origin inside its container> <doc ID> <kept> <edit>: a browser tab on the
-# document over its collab WebSocket through that web server, as the admin in $JAR, from Bun in the API image. <kept>
-# is what an open tab holds, epoch:Y.Doc, or empty for a fresh tab; <edit> is typed before it connects, as while
-# offline. Prints "synced <kept> <text>" once the server has its state, or "closed <code> <reason>".
+# document over its collab WebSocket through that web server, as the admin in $JAR, from Bun in the image eigen-api
+# runs, which a release install pulled. <kept> is what an open tab holds, epoch:Y.Doc, or empty for a fresh tab; <edit>
+# is typed before it connects, as while offline. Prints "synced <kept> <text>" once the server has its state, or "closed <code> <reason>".
 collab_tab() {
     local cookie
     cookie=$(awk -F'\t' 'NF >= 7 && ($1 !~ /^#/ || $1 ~ /^#HttpOnly_/) { printf "%s=%s; ", $6, $7 }' "$JAR")
     docker run --rm --network "container:$(dc ps -q "$1")" --entrypoint bun -e COOKIE="$cookie" -e KEPT="$4" \
-        -e EDIT="$5" -e URL="$2/eigen/ws/collab/$ADMIN_ID/default/$3" "$EIGEN_API_IMAGE" -e '
+        -e EDIT="$5" -e URL="$2/eigen/ws/collab/$ADMIN_ID/default/$3" \
+        "$(api_image)" -e '
             const Y = require("yjs");
             const encoding = require("lib0/encoding");
             const decoding = require("lib0/decoding");
@@ -461,6 +489,130 @@ harness_cleanup() {
     docker image rm "$CLI_IMAGE" >/dev/null 2>&1 || true
     docker image prune -f --filter label=eigen.harness=1 >/dev/null 2>&1 || true
     return "$code"
+}
+
+# The registry publish.yml pushes to: REGISTRY in ./eigen, before .env.production can name another.
+PUBLISHED_REGISTRY=$(sed -n 's/^REGISTRY=\([^$]*\)$/\1/p' "$REPO_ROOT/eigen")
+
+# published_get <image> <path>: $PUBLISHED_REGISTRY's /v2/<repo of that image>/<path>, with an anonymous pull token.
+published_get() {
+    local host=${PUBLISHED_REGISTRY%%/*} repo=${PUBLISHED_REGISTRY#*/}/$1 token accept
+    token=$(curl -fsS "https://$host/token?scope=repository:$repo:pull" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p') ||
+        return 1
+    # A candidate is a manifest, a release an index.
+    accept='application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json'
+    accept="$accept, application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json"
+    curl -fsS -H "Authorization: Bearer $token" -H "Accept: $accept" "https://$host/v2/$repo/$2"
+}
+
+# published_releases: the x.y.z tags of its api image. Prereleases, main, latest and publish.yml's candidates are no
+# release an install runs by default. One page of 1000 tags: the Link header of a next page is not followed.
+published_releases() {
+    published_get api 'tags/list?n=1000' | { grep -o '"[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*"' || true; } | tr -d '"'
+}
+
+# release_install <folder name> <version> [registry] [--mirror]: $INSTALL, bootstrapped by root from the no-Bun
+# container from api:<version> of that registry, this run's by default, with the harness's ports. The folder name is
+# the Compose project, so it holds no dot. --mirror names the registry in .env.production first, as a mirror install
+# does. A bootstrap that fails shows its output and ends the harness.
+release_install() {
+    local log="$SCRATCH/bootstrap-$1.log"
+    register_install "$1" 0:0
+    scratch_run mkdir "$INSTALL"
+    if [ "${4:-}" = --mirror ]; then
+        scratch_run sh -c 'umask 077 && echo "EIGEN_REGISTRY=$1" >"$2"' sh "$3" "$INSTALL/.env.production"
+    fi
+    assert_isolated
+    if ! in_cli_container docker run --rm -v "$INSTALL:/out" "${3:-$REGISTRY}/api:$2" bootstrap >"$log" 2>&1; then
+        sed 's/^/    /' "$log"
+        abort "bootstrap of $2 failed"
+    fi
+    write_override
+    BASE="https://localhost:$PORT_HTTPS/eigen"
+}
+
+# registry_init: after scratch_init, a registry:2 of this run on a free port, REGISTRY its eigen-is/eigen, and a trap
+# that removes what the run pushed and pulled, the registry and its volume, before harness_cleanup.
+registry_init() {
+    free_port REGISTRY_PORT
+    REGISTRY="localhost:$REGISTRY_PORT/eigen-is/eigen"
+    REGISTRY_VOLUME="eigentest-registry-$RUN"
+    # Those here before this run are left alone.
+    PUBLISHED_BEFORE=$(published_images)
+    # set +e: under set -e the (exit $code) of a failed run would end the trap before harness_cleanup.
+    trap 'code=$?; set +e; registry_cleanup; (exit $code); harness_cleanup' EXIT
+    docker volume create --label eigen.harness=1 "$REGISTRY_VOLUME" >/dev/null
+    docker run -d --name "eigentest-registry-$RUN" --label eigen.harness=1 --label "eigen.harness.run=$RUN" \
+        -p "127.0.0.1:$REGISTRY_PORT:5000" -v "$REGISTRY_VOLUME:/var/lib/registry" registry:2 >/dev/null
+}
+
+# Every local image under $REGISTRY, by repository:tag or by ID.
+registry_images() {
+    docker image ls --all --format "{{.Repository}}:{{.Tag}} {{.ID}}" | awk -v repo="$REGISTRY/" 'index($1, repo) == 1'
+}
+
+# remove_registry_images: every local image under $REGISTRY, by ID, since a dangling one has no tag to name it by.
+remove_registry_images() {
+    local images
+    images=$(registry_images | awk '{ print $2 }' | sort -u)
+    if [ -n "$images" ]; then docker image rm -f $images >/dev/null 2>&1 || true; fi
+}
+
+# published_images: the IDs of the local images of $PUBLISHED_REGISTRY, one a line.
+published_images() {
+    local name
+    for name in $IMAGES; do docker image ls --all --format '{{.ID}}' "$PUBLISHED_REGISTRY/$name"; done | sort -u
+}
+
+# What this run pushed and pulled, the registry and its volume; harness_cleanup does the rest. The installs go first:
+# an image in use stays.
+registry_cleanup() {
+    local project pulled
+    if [ "${HARNESS_KEEP:-0}" = 1 ]; then return; fi
+    for project in $HARNESS_PROJECTS; do down_project "$project"; done
+    remove_registry_images
+    pulled=$(comm -13 <(printf '%s\n' "$PUBLISHED_BEFORE") <(published_images))
+    if [ -n "$pulled" ]; then docker image rm -f $pulled >/dev/null 2>&1 || true; fi
+    docker rm -f "eigentest-registry-$RUN" >/dev/null 2>&1 || true
+    docker volume rm "$REGISTRY_VOLUME" >/dev/null 2>&1 || true
+}
+
+# candidate_ready <candidate>: every image has that tag on $PUBLISHED_REGISTRY and, with CANDIDATE_CREATED set, the
+# annotation org.opencontainers.image.created publish.yml gives it in the run that stamped that time.
+candidate_ready() {
+    local name manifest
+    for name in $IMAGES; do
+        manifest=$(published_get "$name" "manifests/$1" 2>/dev/null) || return 1
+        if [ -n "${CANDIDATE_CREATED:-}" ] &&
+            ! printf '%s' "$manifest" | grep -q "\"org\.opencontainers\.image\.created\": *\"$CANDIDATE_CREATED\""; then
+            return 1
+        fi
+    done
+}
+
+# publish_failed: in a publish.yml run given GH_TOKEN, whether one of its publish jobs ended without success, so the
+# candidates it builds will not all come.
+publish_failed() {
+    if [ -z "${GH_TOKEN:-}" ] || [ -z "${GITHUB_RUN_ID:-}" ]; then return 1; fi
+    gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
+        --jq '.jobs[] | select(.name | startswith("publish ")) | .conclusion' 2>/dev/null |
+        grep -qx -e failure -e cancelled -e timed_out
+}
+
+# copy_candidate <candidate> <tag>: publish.yml's candidate images, the ones it promotes, in this run's registry under
+# <tag>, pulled and pushed as they are. They are built beside the harness, so it waits for them, 40 minutes at most,
+# and not at all once a build failed: a candidate of an earlier run of the same tag is not the one this run publishes.
+copy_candidate() {
+    local name waited=$SECONDS
+    until candidate_ready "$1"; do
+        if [ $((SECONDS - waited)) -ge 2400 ] || publish_failed; then return 1; fi
+        sleep 20
+    done
+    for name in $IMAGES; do
+        docker pull -q "$PUBLISHED_REGISTRY/$name:$1" >/dev/null
+        docker tag "$PUBLISHED_REGISTRY/$name:$1" "$REGISTRY/$name:$2"
+        docker push -q "$REGISTRY/$name:$2" >/dev/null 2>&1
+    done
 }
 
 # probe <what> <URL> <status> [body pattern]

@@ -1,5 +1,9 @@
 # Proposal: sheets as a real Yjs document
 
+This is a research answer more than a build plan. It asks whether sheets can keep its workbook in Yjs structures, the shared data types every other Eigen editor stores its document in, and recommends fixing sheets' current op log in place first. How sheets works today is in [SHEETS.md](../SHEETS.md).
+
+**Status:** nothing from it is built. The op-log fixes are the row "Sheets sync: make the op log honest" in [ROADMAP.md](../ROADMAP.md), and the full Yjs version with stable row and column ids waits in [ROADMAP-POST-1.md](../ROADMAP-POST-1.md).
+
 > **TLDR**: Sheets is the one Eigen editor whose document does not live in Yjs. It stores one JSON string plus a log of operations, and it has its own undo stack. Reinder asked whether sheets could work the way docs, slides, stickies and vector do, with Yjs structures as the truth and undo from `Y.UndoManager`. The answer is **yes, it is possible, but not with cells keyed by row and column**. A spreadsheet cell has no identity of its own. It is "the cell at row 5, column 2", and inserting a row renames every cell below it. Yjs is built for things with a stable identity. So the real Yjs version of sheets needs stable row and column ids, cells keyed by those ids, and formulas stored against ids. That is an engine-level change. Undo alone is not a reason to do it: `Y.UndoManager` and the engine's own stack are both in-memory per-tab stacks, and the two things Yjs undo does better can be added to the current stack for a fraction of the cost. **Recommendation: fix the operation log in place first**: live clients apply batches in the array's agreed order, rolling back and reapplying when a batch lands earlier than batches they already applied (this closes same-cell divergence and makes concurrent row inserts match what a joiner sees, without operational transform); a batch applies whole or not at all, on live clients as in the replay; the server compacts the log and becomes the only snapshot writer besides import and restore, so the tab flush goes; and the undo stack gets a value check, a shift on a peer's markers and a structural undo that applies its own ops. About three weeks of agent time. Yjs structures for `config` alone are not worth building. Keep the stable-id Yjs design as the direction for when the engine gets id-based addressing. **No backwards compatibility is required for sheets** (Reinder, 2026-09-03), so whichever route is taken needs no migration machinery.
 
 ## The question
@@ -8,7 +12,7 @@ Sheets stores its state as one serialized JSON snapshot in a `Y.Map` and a list 
 
 ## How sheets works today
 
-The full description is in [SHEETS.md § Yjs Sync](../SHEETS.md#yjs-sync). The short version:
+The full description is in [SHEETS.md](../SHEETS.md#an-edit-is-an-op-in-a-yarray). The short version:
 
 - A local edit runs inside an immer recipe. The patches immer produces become ops. One recipe is one batch, and one batch is pushed as one element on the `ops` array. Row and column inserts are not shipped as cell patches but as one small marker op plus the sheet's metadata; every client re-derives the cell shift itself.
 - A peer's batch is applied as patches. Peers never recalculate formulas. The client that made the edit recomputes the dependents and ships their new values in the same batch.
@@ -16,7 +20,7 @@ The full description is in [SHEETS.md § Yjs Sync](../SHEETS.md#yjs-sync). The s
 - On `beforeunload` (only while the socket is connected) and on unmount, the client encodes the whole workbook into `state.snapshot` and clears the array. A joiner decodes the snapshot and replays what is left in the array. The API reads the document the same way.
 - Undo is the engine's own stack of inverse immer patches, per tab, no depth limit. An undo is broadcast to peers as an ordinary batch. A peer's batch is not undoable. The paths in the stack are absolute row and column numbers.
 
-Four things found while grounding this proposal, all recorded in [SHEETS.md § Yjs Sync](../SHEETS.md#yjs-sync) and [SHEETS-TODO.md](../SHEETS-TODO.md):
+Four things found while grounding this proposal, all recorded in [SHEETS.md](../SHEETS.md) and [SHEETS-TODO.md](../SHEETS-TODO.md):
 
 1. **Undo after a peer inserts a row hits the wrong cell.** The stack is never corrected for a peer's changes: not for row or column shifts, and not for sheet deletions either. So after a peer inserts a row above your edit, your undo lands one row off.
 2. **Undoing your own row insert diverges from peers.** The undo applies the whole-sheet inverse locally, which wipes every peer edit on that sheet since the insert, but ships a delete marker, so the peers keep those edits.
@@ -108,7 +112,7 @@ Things the bench settled:
 - **Per-edit traffic is fine.** 85 bytes per cell, independent of size. That is the same class as one op today.
 - **Memory is the real cost.** About 0.6 to 0.9 KB per cell for the live document, and the API keeps every open document in memory. The big workbook is 200 MB on the server per open document, against roughly 13 MB for the string today.
 - **Re-keying is out.** A naive row insert on the 130k map ships 8.2 MB and scales with the sheet. This is why Shape 1 is a trap and Shape 2 needs ids.
-- **A map remembers every write.** Each set on a key leaves a permanent item skeleton of about 10 bytes, with the key string, once the key is written again. Writes to one key merge away to nothing; writes spread over many keys never merge. One million writes over 100 keys left 9.8 MB behind, and a reload does not reclaim it. Only a fresh document does (1.7 KB). Today's array items merge, so the op log does not pay this. It matters for formulas: a hub edit in the big workbook recomputes 8,700 dependents, so shipping computed values as map sets leaves about 90 KB per edit behind forever, until a squash. The alternative is to not store computed values and let every reader recalculate, which the preview and search readers deliberately do not do ([SHEETS.md § Server-side recalc](../SHEETS.md#server-side-recalc)).
+- **A map remembers every write.** Each set on a key leaves a permanent item skeleton of about 10 bytes, with the key string, once the key is written again. Writes to one key merge away to nothing; writes spread over many keys never merge. One million writes over 100 keys left 9.8 MB behind, and a reload does not reclaim it. Only a fresh document does (1.7 KB). Today's array items merge, so the op log does not pay this. It matters for formulas: a hub edit in the big workbook recomputes 8,700 dependents, so shipping computed values as map sets leaves about 90 KB per edit behind forever, until a squash. The alternative is to not store computed values and let every reader recalculate, which the preview and search readers deliberately do not do ([SHEETS.md](../SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)).
 - **Undo is cheap.** 0.4 ms for one cell, 97 ms to undo a 130k-key transaction.
 
 ## What we would gain

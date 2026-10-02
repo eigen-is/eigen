@@ -7,45 +7,6 @@ import { getS3Config } from '../config/server-settings';
 import { ApiError } from '../core';
 import { LocalStorage, S3Storage, type StorageBackend } from '../storage';
 
-// Reserved: any case variant of `.trash` aliases the real trash dir (Mount.trashDir) on path-based mounts.
-// Also checked on move (updatePath) so a legacy pre-guard row can't be re-parented onto the alias.
-// NFKC before folding: APFS equates compatibility characters ('.traſh' with U+017F IS '.trash'),
-// which plain toLowerCase misses.
-export function isReservedName(name: string): boolean {
-    return name.normalize('NFKC').toLowerCase() === '.trash';
-}
-
-// Control bytes (incl. NUL) are rejected in both names and WebDAV path segments — a name creatable
-// via the API must stay reachable over WebDAV, which rejects this range per RFC 4918.
-// biome-ignore lint/suspicious/noControlCharactersInRegex: matching control chars is the point
-export const CONTROL_CHARS = /[\x00-\x1f]/;
-
-// Filesystem ENAMETOOLONG is a byte limit, not a character limit.
-export const MAX_NAME_BYTES = 255;
-
-// One path segment and nothing else. Split out of validateName so an archived paths table can be
-// held to the same rule without throwing: a live row always passes (validateName wrote it), a row
-// that came in inside an uploaded archive has never been held to anything.
-export function isUsableName(name: string): boolean {
-    if (!name || name === '.' || name === '..') return false;
-    return !(name.includes('/') || name.includes('\\') || CONTROL_CHARS.test(name));
-}
-
-export function validateName(name: string): string {
-    if (!isUsableName(name)) {
-        throw new ApiError(400, `Invalid file or folder name: "${name}"`);
-    }
-    // Store NFC so a decomposed (NFD) name still matches the NFC-normalized getChildByName/resolvePath lookups.
-    const normalized = name.normalize('NFC');
-    if (isReservedName(normalized)) {
-        throw new ApiError(400, `"${name}" is a reserved name`);
-    }
-    if (Buffer.byteLength(normalized, 'utf8') > MAX_NAME_BYTES) {
-        throw new ApiError(400, `File or folder name too long (max ${MAX_NAME_BYTES} bytes)`);
-    }
-    return normalized;
-}
-
 // Subquery: ids of every eigendoc container (every EIGEN_DOC_TYPES row) and
 // every path descended from one. Embedded as `parentId NOT IN (…)` to filter out
 // container internals (data.db, media, embedded chats) — file rows the user
@@ -91,20 +52,9 @@ export function rethrowDuplicateActiveName(e: unknown, name: string): never {
     throw e;
 }
 
-export function buildStorageKey(id: string, name: string): string {
-    const dotIdx = name.lastIndexOf('.');
-    if (dotIdx > 0) {
-        const ext = name.slice(dotIdx + 1).toLowerCase();
-        if (ext.length > 0 && ext.length <= 12) {
-            return `${id}.${ext}`;
-        }
-    }
-    return id;
-}
-
 // A document working copy must be a real SQLite db. The 16-byte magic header is the cheapest proof;
 // a 0-byte or partial download (an empty/failed S3 GET) fails it. Used to refuse opening such a file
-// as a fresh empty doc and re-uploading it over good stored bytes (the 2026-06-08 data loss), and by
+// as a fresh empty doc and re-uploading it over good stored bytes, and by
 // the upload queue to refuse PUTting a corrupted staged copy over the good stored object.
 export function isSqliteFile(filePath: string): boolean {
     let fd: number | null = null;

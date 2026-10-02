@@ -38,15 +38,12 @@ import type { DocumentDbSlot } from './document-db';
 import * as documentDb from './document-db';
 import {
     ancestorIds,
-    buildStorageKey,
     buildUploadDestinationKey,
-    CONTROL_CHARS,
     createMountStorage,
     docContainerDescendantIds,
-    isReservedName,
     rethrowDuplicateActiveName,
-    validateName,
 } from './helpers';
+import { buildStorageKey, CONTROL_CHARS, isReservedName, validateName } from './names';
 import type * as schema from './schema';
 import { paths } from './schema';
 import * as searchIndex from './search-index';
@@ -76,7 +73,7 @@ export class Mount {
     private pathLocks: Map<string, Promise<void>> = new Map();
     private treeLock = new RWLock();
 
-    // Write-behind upload queue (Phase 1b) — only for isRemote (s3) mounts; undefined otherwise.
+    // Write-behind upload queue — only for isRemote (s3) mounts; undefined otherwise.
     uploadQueue?: UploadQueue; // internal — used by mount/*.ts + versioning/snapshot.ts
     // Set for an s3 mount only — see buildUploadDestinationKey, which is also the gate Mount.init
     // stands the upload queue up behind.
@@ -140,9 +137,8 @@ export class Mount {
         return path.join(this.baseDir, PATHS.DRIVE.TMP_DIR);
     }
 
-    // Frozen VACUUM INTO upload payloads (Phase 1b) live here, NOT in tmpDir — the
-    // cleanupStaleFiles sweep must never purge a staged copy whose PUT hasn't acked yet
-    // (invariant 2). Only used by isRemote mounts.
+    // Frozen VACUUM INTO upload payloads live here, NOT in tmpDir — the cleanupStaleFiles
+    // sweep must never purge a staged copy whose PUT hasn't acked yet. Only used by isRemote mounts.
     get stagingDir(): string {
         return path.join(this.baseDir, PATHS.DRIVE.STAGING_DIR);
     }
@@ -371,8 +367,8 @@ export class Mount {
     // SQLite's LOWER() folds ASCII only. On path-based mounts names are disk paths, and
     // case-insensitive filesystems (APFS, Windows) also alias non-ASCII case pairs to one file —
     // so those must compare equal too. JS toLowerCase() is the stricter fold; only consulted for
-    // non-ASCII names on path-based mounts, keeping ASCII lookups and id-keyed backends at
-    // today's exact semantics. The v7 unique index stays the ASCII race net.
+    // non-ASCII names on path-based mounts, so ASCII lookups and id-keyed backends keep SQLite's
+    // fold. The v7 unique index stays the ASCII race net.
     // An ASCII query never scans, so a stored-side-only alias (U+212A 'K') or an unfoldable pair (ſ/s) is not caught.
     private async findCaseFoldedChild(parentId: string, name: string): Promise<{ id: string } | null> {
         if (!this.isPathBased || !/\P{ASCII}/u.test(name)) return null;
@@ -640,8 +636,8 @@ export class Mount {
     }
 
     // On `local` a key is a name path: key-derived writes hold shared from resolve through the row
-    // write, directory renames exclusive. Order: path lock → tree lock → nothing; a holder never
-    // locks again (shared inside shared deadlocks once an exclusive is queued).
+    // write, directory renames exclusive. Order: path lock → document-db slot → tree lock → nothing;
+    // a holder never locks again (shared inside shared deadlocks once an exclusive is queued).
     // internal — used by mount/*.ts
     async withTreeShared<T>(fn: () => Promise<T>): Promise<T> {
         return this.isPathBased ? this.treeLock.shared(fn) : fn();
@@ -1079,7 +1075,7 @@ export class Mount {
         const sideId = randomUUID();
         let size: number;
         try {
-            ({ size } = await writeTempWithHash(this.getTempPath(sideId), source, this.downloads.signal));
+            ({ size } = await writeTempWithHash(this.getTempPath(sideId), source, { signal: this.downloads.signal }));
         } catch (err) {
             await this.cleanupTemp(sideId);
             throw err;
@@ -1162,7 +1158,7 @@ export class Mount {
         return this.reindexQueue?.drain() ?? Promise.resolve();
     }
 
-    // ---- Upload-queue facade (Phase 1b) — thin delegation to the per-mount UploadQueue ----
+    // ---- Upload-queue facade — thin delegation to the per-mount UploadQueue ----
 
     // Force a drain of this mount's pending uploads. The queue otherwise self-drives (on enqueue +
     // backoff), and process shutdown flushes via uploadQueue.drain() directly (see closeAllDatabases),
@@ -1171,7 +1167,7 @@ export class Mount {
         return this.uploadQueue?.drain(opts) ?? Promise.resolve();
     }
 
-    // Queue depth (observability, §9): how many uploads are awaiting an ack on this mount.
+    // Queue depth (observability): how many uploads are awaiting an ack on this mount.
     get pendingUploadCount(): number {
         return this.uploadQueue?.pendingCount ?? 0;
     }

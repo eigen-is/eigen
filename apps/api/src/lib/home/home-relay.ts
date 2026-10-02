@@ -2,6 +2,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import type { BackupLevel, BackupManifest } from '@workspace/lib/types/backup';
 import type {
     Attendee,
     CalendarEvent,
@@ -14,9 +15,10 @@ import type { NotificationPersistInput } from '@workspace/lib/types/notification
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import type { HomeSizeResponse, TeamSettings, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
+import { captureBytes, type SnapshotProgress, snapshotHome } from '../backup/snapshot-home';
 import { readCalendarTotalSize } from '../calendar/resource-store';
 import type { CreateEventArgs, InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/types';
-import { getAvatarsDir, getUserHomePath } from '../config/paths';
+import { getAvatarsDir, getDataRoot, getUserHomePath, homeDirUnder } from '../config/paths';
 import { resolveUserQuotas } from '../config/quota';
 import { readContactsTotalSize } from '../contacts/card-store';
 import { LocalFilesystem, PATHS } from '../core';
@@ -25,7 +27,7 @@ import { readMailTotalSize } from '../mail/maildir-store';
 import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, updateUser } from '../user';
-import { atHome, getHome, getTeamHome } from './get-home';
+import { atHome, getHome, getHomeForBackup, getTeamHome, isHomeOpen } from './get-home';
 
 export type HomeMessage =
     | { type: 'drive:acl-change'; path: DrivePath; acl: DriveACL[] | null; actorEmail?: string; actorName?: string }
@@ -200,6 +202,38 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
         drive: { default: { used: driveUsed, max: quotas.mountMax } },
         total: { used: dataUsed + driveUsed, max: quotas.homeDataMax + quotas.mountMax },
     };
+}
+
+// The idle a home a backup booted is left with: past the 15 s SSE and collab keepalives, so a user
+// who opened it meanwhile re-arms the full idle before it runs out.
+export const BACKUP_RELEASE_MS = 30_000;
+
+// A backup captures a home through here, and boots it only for about as long as the capture: a home
+// it found asleep gets the short release idle once it is written, so a nightly Full does not leave
+// every Home resident until its idle timer. Never an evict, and not even the short idle once a
+// request reached it after the capture started: a user may have opened it meanwhile.
+export async function pullHomeSnapshot(
+    ownerId: string,
+    targetDir: string,
+    options: { level?: BackupLevel; onProgress?: SnapshotProgress },
+): Promise<BackupManifest> {
+    const startedAt = Date.now();
+    const wasLoaded = isHomeOpen(ownerId);
+    const home = await getHomeForBackup(ownerId);
+    // A capture can outlast the idle with nobody connected, as one big file at 02:00 does: the timer would close
+    // the databases it reads.
+    const keepAlive = setInterval(() => home.touch(), 60_000);
+    try {
+        return await snapshotHome(home, targetDir, options);
+    } finally {
+        clearInterval(keepAlive);
+        if (!wasLoaded) home.touch(home.requestedAt < startedAt ? BACKUP_RELEASE_MS : undefined);
+    }
+}
+
+// The server backup's room check sizes every home through here, before it starts.
+export async function pullHomeBackupBytes(ownerId: string, level: BackupLevel): Promise<number> {
+    return captureBytes(homeDirUnder(getDataRoot(), ownerId), level);
 }
 
 export async function pullCalendarShares(

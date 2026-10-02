@@ -35,9 +35,8 @@ type PanelColumnProps = {
     activeComments?: ActiveComments;
     commentContextMenu: ReturnType<typeof useContextMenu<CommentContextMenuItem>>;
     onOpenCard: (cardId: string) => void;
-    // Document-level hosts (vector) create comments from the panel — cards anchor to the document, not
-    // to a selected object/text/cell, so there is no in-canvas add affordance. Absent for the
-    // content-anchored hosts (docs/slides/sheets/stickies), which add against their own anchor.
+    // The canvas (slides, vector) creates document-level comments from the panel, anchored to no
+    // element. Absent for docs/sheets/stickies, which add against their own anchor.
     onAddComment?: () => void;
 };
 

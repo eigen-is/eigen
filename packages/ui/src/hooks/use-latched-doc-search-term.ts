@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 // the editors defer their subtree until collab sync, so the DocSearchProvider mounts long after the
 // route resolves — a clear timed against the consumer's mount would race it and wipe q first.
 // Latched, the URL strip is timing-proof (replace: true → no history entry; the link still works on
-// the next visit). Latches per MOUNT: unreachable today (palette links full-reload via
+// the next visit). Latches per MOUNT: unreachable while palette links full-reload (via
 // window.location.href), but if CommandContext.navigate ever goes through the router, latch per pathId.
 //
 // Its own module, not part of use-eigen-doc-editor-route: `useNavigate` is typed against the calling

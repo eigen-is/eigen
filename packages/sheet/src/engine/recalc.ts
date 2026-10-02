@@ -1,11 +1,11 @@
 // Server-side full recalc of a workbook's formula cells.
 //
 // Turns a persisted `Sheet[]` (snapshot + replayed ops) into a `Sheet[]` whose
-// formula cells carry engine-computed `v` and `m`. The single target population
-// is docs the client never computed for us: xlsx-imported-never-opened files
-// and crash/race divergence (see docs/SHEETS.md § Server-side recalc). Live-
-// edited docs already persist fresh values as ops, so the read path gates this
-// off for them via `sheetsNeedRecalc`.
+// formula cells carry engine-computed `v` and `m`. The target population is
+// workbooks nobody computed: an xlsx import whose recalc failed, encoded
+// `computed: false` (see docs/SHEETS.md § The editor computes on write).
+// Live-edited docs persist fresh values as ops and carry `computed: true`, so
+// the read path gates them off via `sheetsNeedRecalc`.
 //
 // The dependency-graph builder is a faithful PORT of the state layer's
 // `setFormulaCellInfo`/`isFunctionRange` (state/modules/formula-cache.ts +
@@ -474,7 +474,7 @@ function hasNonErrorCachedValue(cell: Cell): boolean {
 // ── Formula-cell discovery + read-path gate ────────────────────────────────────
 
 // A doc needs server recalc when a sheet carries formula cells but no populated
-// calcChain — true exactly for imported-never-opened / crash-diverged docs.
+// calcChain — true exactly for an import whose recalc failed.
 // Editor-flushed snapshots (and docs recalc'd at import) carry calcChain, so the
 // gate stays off and the read path pays nothing.
 export function sheetsNeedRecalc(sheets: SheetWithCalcChain[]): boolean {

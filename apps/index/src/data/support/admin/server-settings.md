@@ -1,14 +1,14 @@
 ---
 title: "Server settings"
-description: "A reference for the Settings page in Admin, covering your organization name, the server status, the sender of Eigen's mail, storage quotas, default storage type, and email notifications."
+description: "A reference for the Settings page in Admin, covering your organization name, the server status, the sender of Eigen's mail, storage quotas, default storage type, backups of the whole server, email notifications, and the landing page buttons."
 type: reference
-tags: [admin, settings, quotas, storage, notifications, mail]
-related: [admin/get-started, admin/storage-quotas]
+tags: [admin, settings, quotas, storage, notifications, mail, backup]
+related: [admin/get-started, admin/storage-quotas, self-hosting/back-up-and-restore]
 order: 80
-updated: 2026-09-24
+updated: 2026-10-01
 ---
 
-The **Settings** page in Admin lets the server owner rename the organization, check on the server, set the sender of Eigen's own mail, and control storage limits, how new users' files are stored, and which events trigger email notifications. Only the server owner sees this page in the sidebar.
+The **Settings** page in Admin is where the server owner sets up the organization, mail, storage, backups, and notifications. Only the owner sees it in the sidebar.
 
 To open it, sign in to Eigen as the owner and go to [Admin](/admin), then click **Settings** in the sidebar.
 
@@ -40,17 +40,17 @@ The sender of the notifications, codes and invitations Eigen sends.
 
 Leave a field empty to use the default. A default name follows the organization name when you rename it.
 
-On a server without mailboxes, a **Relay sends as users** switch appears. Turn it on if your mail relay allows sending from any address on your mail domain. Mail someone causes, like a share notification, then comes from their own address. Off, it comes from the sender address with their name, for example "Ada via Acme", and replies go to them.
+On a server without mailboxes that sends through a relay, a **Relay sends as users** switch appears. Turn it on if your mail relay allows sending from any address on your mail domain. Mail someone causes, like a share notification, then comes from their own address. Off, it comes from the sender address with their name, for example "Ada via Acme", and replies go to them.
 
-**Send test mail** sends one email from you to you, the same way a share notification goes out. If it fails, Eigen shows the relay's answer. Save your changes first: the test uses the saved sender.
+**Send test mail** sends one email from you to you, the same way a share notification goes out. If it fails, Eigen shows the relay's answer. Save your changes first: the test uses the saved sender. A server with no mailboxes and no relay sends no email, so the section says mail is off instead.
 
 ## Storage quotas
 
-These four limits apply by default to every user. You can also set quota overrides per team from the Teams panel in Admin; when a user belongs to multiple teams, the most permissive limit wins.
+These four limits apply by default to every user. A changed **Default Mount (MB)** reaches drives created after the change: a user's existing drive keeps the limit it was created with. You can also set quota overrides per team from the Teams panel in Admin; when a user belongs to multiple teams, the most permissive limit wins.
 
 | Field | What it controls | Default |
 |---|---|---|
-| **Mail, Contacts & Calendar (MB)** | Combined storage for all a user's email, contacts, and calendars | 100 MB |
+| **Mail, Contacts & Calendar (MB)** | Combined storage for all a user's email, contacts, and calendars. On a server without mailboxes it reads **Contacts & Calendar (MB)**. | 100 MB |
 | **Default Mount (MB)** | Storage for a user's primary Drive | 500 MB |
 | **Max Upload (MB)** | Largest single file a user can upload | 35 MB |
 | **Trash Retention (days)** | How long deleted files stay in the Trash before being permanently removed | 30 days |
@@ -61,7 +61,7 @@ Enter a number in each field. The **Save** button appears at the bottom of the p
 
 ### Storage type
 
-**Storage Type** controls where new users' Drive files are written when their account is first created. Changing this setting does not move existing files; it affects only accounts created after the change.
+**Storage Type** controls where new users' Drive files are written. Eigen sets it the first time a new user's workspace opens, usually at their first sign-in. Changing it moves no one's files and reaches only users who have not signed in yet.
 
 | Option | Where files are stored |
 |---|---|
@@ -86,9 +86,34 @@ If the connection test reports that bucket versioning is off or suspended, click
 
 </div>
 
+## Backups
+
+A backup of the whole server: every user and team, and the server's own databases and settings. Backups are not encrypted. For how to use them, see [Back up and restore the whole server](/support/self-hosting/back-up-and-restore).
+
+| Field | What it controls | Default |
+|---|---|---|
+| **Back up every night** | A Full backup once a day, at the time below. Turned on after that time, the first one starts within a few minutes. | Off |
+| **Time** | When the nightly backup starts. The list shows your own time with UTC beside it. | 02:00 UTC |
+| **Nightly backups to keep** | How many good nightly backups stay on the server, up to 365. A night that failed never pushes out the last good one. | 7 |
+| **Include files in S3 buckets** | Only there when nightly backups are on and a user or team keeps a drive in an S3 bucket. On, the nightly backup copies every file of those drives. Off, it holds their file list and the bucket keeps the files. | Off |
+| **Upload to a backup bucket** | Sends each backup that verified to a private S3 bucket that holds nothing else of Eigen. Backups made before an update stay on this server. | Off |
+| **Backups to keep in the bucket** | How many nightly backups the bucket keeps, up to 365. It always keeps the newest one that holds every user and team, and backups made by hand stay. | 30 |
+
+With **Upload to a backup bucket** on, the same S3 fields appear as for the storage type, with **Test Connection**. The test refuses a bucket or an access key that Eigen keeps files with, and a bucket anyone can read. It warns when no rule cleans up uploads that were cut off halfway. The **Secret Access Key** is never shown again: leave it empty to keep the saved one. Once you save a new bucket, a notice asks you to write its details down somewhere other than this server, with any warning from the test.
+
+Below the settings, **Back up now** makes a backup at the level you pick: **Full**, **Light**, or **Full + S3** when a drive is in an S3 bucket. The section shows its progress while it runs. Each backup in the list shows:
+
+- Its date, level, and why it was made: **Scheduled**, **Manual**, or **Before an update**.
+- Its size, and whether it verified and reached the bucket.
+- Under **Not in this backup**, any user or team that failed.
+
+Hover over a row for **Upload to the bucket**, which sends a good backup again even if the bucket has it, and **Delete**.
+
+There is no download: a backup leaves the server by the bucket, or by a copy you make on the server, like `scp`.
+
 ## Email notifications
 
-These toggles control whether Eigen sends an email for each type of event, in addition to the in-app notification that always fires.
+These toggles control whether Eigen sends an email for each type of event. A user with an account gets the in-app notification either way.
 
 | Toggle | What triggers the email |
 |---|---|
@@ -98,3 +123,7 @@ These toggles control whether Eigen sends an email for each type of event, in ad
 | **Email owner on access request** | Someone requests access to a file the owner has locked. On by default. |
 
 Click the toggle to change a setting. Click **Reset** to discard all unsaved changes.
+
+## Landing page
+
+Extra buttons on the public landing page, each with a title and a web address. Click **Add button** for a new one, and **Remove** (the trash icon) to take one away. See [Add your own buttons to the landing page](/support/admin/landing-page-buttons).

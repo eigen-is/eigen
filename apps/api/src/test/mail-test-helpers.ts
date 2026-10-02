@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TEST_DATA_DIR } from './setup';
 
@@ -10,6 +10,14 @@ export const maildirOf = (userId: string) => join(mailRootOf(userId), 'Maildir')
 // The inbox is the Maildir root itself; every other mailbox is a Maildir++ `.Name` directory beside it.
 export const boxDir = (userId: string, mailbox: string) =>
     mailbox === '' ? maildirOf(userId) : join(maildirOf(userId), `.${mailbox}`);
+
+// Fabricates a Maildir++ folder the way Dovecot does: a dot-prefixed directory with cur/new/tmp and
+// the `maildirfolder` marker. Eigen itself makes no folder but the standard six.
+export function seedMaildirFolder(userId: string, mailbox: string): void {
+    const folder = boxDir(userId, mailbox);
+    for (const sub of ['cur', 'new', 'tmp']) mkdirSync(join(folder, sub), { recursive: true });
+    writeFileSync(join(folder, 'maildirfolder'), '');
+}
 
 export function makeEml(subject: string, opts: { from?: string; to?: string; body?: string } = {}): string {
     return [

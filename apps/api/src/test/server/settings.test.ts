@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
 import { type S3Config, teamOwnerId } from '@workspace/lib/types';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
@@ -17,6 +17,7 @@ import { user } from '../../../auth-schema';
 import { ensureAuthSchemaColumns, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
+import { updateServerSettings } from '../../lib/config/server-settings';
 import { atHome } from '../../lib/home/get-home';
 import { pullHomeSize } from '../../lib/home/home-relay';
 import * as s3Storage from '../../lib/storage/s3-storage';
@@ -310,7 +311,7 @@ describe('Team Mount Management', () => {
         const listRes = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mounts`);
         const mounts = await assertJson<Record<string, MountResponse>>(listRes);
         // Select by name, not Object.keys order — all-digit mount ids reorder the keys
-        // numerically, which used to surface a residual-disabled mount from an earlier test.
+        // numerically, which can surface a residual-disabled mount from an earlier test.
         const sharedId = Object.entries(mounts).find(([, m]) => m.name === 'Shared Files')![0];
         const archiveId = Object.entries(mounts).find(([, m]) => m.name === 'Archives')![0];
 
@@ -743,6 +744,11 @@ describe('S3 Config Persistence', () => {
 
     beforeAll(async () => {
         ctx = await getTestContext();
+    });
+
+    // The server settings are the whole suite's.
+    afterAll(async () => {
+        await updateServerSettings({ defaults: { mount: { s3Config: undefined } } });
     });
 
     test('GET /settings/s3config returns null when not configured', async () => {

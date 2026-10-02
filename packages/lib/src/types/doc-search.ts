@@ -21,8 +21,6 @@ export type DocSearchMatch = {
 // the palette `doc:` scope, and the `?q=` landing — three callers, one notion of a match.
 // Surfaces republish their controller when the document changes; the provider re-runs
 // the search on controller identity change.
-// v1 is search-only: the whole contract is these three methods. v1.5 (the replace plan)
-// extends it with optional canReplace/replace/replaceAll members — a non-breaking addition.
 export type DocSearchController = {
     search(query: string, opts: DocSearchOptions): DocSearchMatch[]; // PURE — no document side-effects
     // paint all; [] clears — always the immediately-preceding search()'s result, so impls may
@@ -35,9 +33,9 @@ export type DocSearchController = {
     // setTextSelection; never chain .focus()). Reveal centers the match so the bar can't cover it.
     reveal(matchId: string): void;
 
-    // v1.5 — replace (docs + sheets). Optional: slides/stickies leave these unset and stay
-    // search-only, so no existing v1 caller changes shape. canReplace = canWrite for the surface;
-    // unset/false → the bar hides the replace row and ⌥⌘F opens plain search.
+    // Replace, in docs and sheets; slides and stickies leave it unset and stay search-only.
+    // canReplace = canWrite for the surface; unset/false → the bar hides the replace row and ⌥⌘F
+    // opens plain search.
     canReplace?: boolean;
     // Both methods perform the edit AND return the FRESH post-edit match list, which the provider
     // ADOPTS — it never re-runs search() after an edit (sheets' React context is one render behind
@@ -71,9 +69,8 @@ export type DocSearchSession = {
     revealFromPalette(query: string, matchId: string): void;
 };
 
-// Phase 2 — async, server-backed comment-thread search (palette `doc:` scope only). id = the
-// thread's chatName; the client resolves chatName → cardId itself, so there is no cardId field —
-// nothing populates it server-side (no placeholder fields).
+// Async, server-backed comment-thread search (palette `doc:` scope only). id = the
+// thread's chatName; the client resolves chatName → cardId itself, so there is no cardId field.
 export type DocCommentMatch = {
     id: string;
     label: string; // FTS snippet of the matched message tail

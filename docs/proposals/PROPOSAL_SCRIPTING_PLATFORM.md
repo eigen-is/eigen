@@ -1,7 +1,9 @@
 # Proposal: Scripting platform
 
-> **Status — Proposal, not started.** Seams verified against main `e7cf8739b` on 2026-09-29. Tracked in [ROADMAP-POST-1.md](../ROADMAP-POST-1.md).
->
+This proposal lets a user automate their own work across Eigen's apps with scripts they write themselves, without leaving Eigen.
+
+**Status:** not started. Its claims about the code were checked on 2026-09-29 (commit `e7cf8739b`), and [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps its row.
+
 > **TLDR**: Server-side JavaScript automation in the spirit of Google Apps Script. A user writes a script in a new Scripts app, runs it by hand or from a side panel in Docs and Drive, and reaches Eigen through a typed `eigen` SDK that reads and writes Drive, Docs, Sheets, Slides, Mail, Calendar and Contacts. Every run is a fresh Deno subprocess with no filesystem, network, environment or Eigen credentials of its own; everything it does goes back over a framed stdin/stdout protocol to the API, which checks each call against the script's approved manifest **and** the user's ordinary ACLs, then runs it through the existing domain code. Document edits commit through the live collab document, guarded by a revision, so connected editors see them and a concurrent edit becomes a conflict instead of an overwrite. The first release is personal, manual and full read/write; team distribution, cron and event triggers come later on the same execution record and runtime. It is automation for trusted users on an operator-controlled instance, not a sandbox for hostile code.
 
 ## Goals

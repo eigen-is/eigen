@@ -115,6 +115,17 @@ describe('env file', () => {
         expect(readdirSync(dir)).toEqual(['.env.production']);
     });
 
+    test('leaves the file, its inode and its mode alone when the text is unchanged', () => {
+        const path = join(DIR, 'same.env');
+        writeFileSync(path, '# note\nA=1\n');
+        chmodSync(path, 0o640);
+        const inode = statSync(path).ino;
+        writeEnvFile(path, readEnvFile(path));
+        expect(statSync(path).ino).toBe(inode);
+        expect(statSync(path).mode & 0o777).toBe(0o640);
+        expect(readFileSync(path, 'utf8')).toBe('# note\nA=1\n');
+    });
+
     test('refuses a value Compose cannot hold on one line', () => {
         expect(() => writeEnvFile(join(DIR, 'multi.env'), new Map([['A', 'one\ntwo']]))).toThrow();
     });

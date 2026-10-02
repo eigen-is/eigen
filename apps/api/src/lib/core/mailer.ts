@@ -138,6 +138,7 @@ export function buildMailOptions(message: OutboundMail): Mail.Options {
     if (message.messageId) options.messageId = message.messageId;
     if (message.inReplyTo) options.inReplyTo = message.inReplyTo;
     if (message.references) options.references = message.references;
+    // nodemailer replaces the envelope rather than merging it: without `from` the reverse path is empty.
     if (message.envelope) options.envelope = { from: from.address, to: message.envelope.to };
     if (message.attachments?.length) options.attachments = message.attachments;
     if (message.icalEvent) {

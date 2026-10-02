@@ -1,20 +1,34 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import type { BackupSafetyCopy } from '@workspace/lib/types/backup';
-import { type ParsedOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
+import { formatFileSize } from '@workspace/lib/format';
+import type { BackupLevel, BackupReason, BackupSafetyCopy } from '@workspace/lib/types/backup';
+import type { ParsedOwnerId } from '@workspace/lib/types/owner';
 import {
     BACKUP_ARTIFACT_EXTENSION,
     BACKUP_HOME_PREFIX,
     BACKUP_STAMP_PATTERN,
     buildBackupStamp,
     FAILED_RESTORE_SUFFIX,
+    NO_CONTROL_PATTERN,
     PRE_RESTORE_SUFFIX,
     parseBackupStamp,
+    SERVER_ARCHIVE_EXTENSION,
+    SERVER_ARCHIVE_PREFIX,
 } from '@workspace/lib/validation';
-import { getDataRoot, getTeamDataPath, getUserHomePath } from '../config/paths';
-import { ApiError, PATHS } from '../core';
-import { getUserById } from '../user/user';
+import { CERT_FILES, CERTS_DIR, DKIM_DIR, getDataRoot, SERVER_DIR } from '../config/paths';
+import { PATHS } from '../core/constants';
+import { ApiError } from '../core/errors';
+
+// Why the disk of `dir` has no room for `needed` bytes, or null: the one wording of every backup's, stage's and
+// snapshot's room check.
+export function roomShortfall(what: string, needed: number, dir: string, where: string): string | null {
+    const { bavail, bsize } = fs.statfsSync(dir);
+    const free = bavail * bsize;
+    if (needed <= free) return null;
+    return `${what} needs up to ${formatFileSize(needed)}; ${where} has ${formatFileSize(free)} free`;
+}
 
 // Where backup artifacts live. Outside `data/` on purpose, so one wipe of the data directory can never
 // take the backups with it. In the container it is the `./backups` bind mount, named by EIGEN_BACKUPS_DIR.
@@ -31,10 +45,11 @@ export function getBackupsDir(): string {
     return dir;
 }
 
-// Every job's scratch space lives under one folder, wiped at boot: `.staging` is spelled here and
-// nowhere else.
+// Every job's scratch space lives under one folder in the backups folder, wiped at boot.
+export const STAGING_DIR = '.staging';
+
 export function getStagingRoot(): string {
-    return path.join(backupsDirPath(), '.staging');
+    return path.join(backupsDirPath(), STAGING_DIR);
 }
 
 export function getBackupStagingDir(jobId: string): string {
@@ -44,8 +59,8 @@ export function getBackupStagingDir(jobId: string): string {
 }
 
 // Everything one job staged: the unpacked archive, and the restoring marker if it got that far.
-export function wipeBackupStagingDir(jobId: string): void {
-    fs.rmSync(path.join(getStagingRoot(), jobId), { recursive: true, force: true });
+export async function wipeBackupStagingDir(jobId: string): Promise<void> {
+    await fsp.rm(path.join(getStagingRoot(), jobId), { recursive: true, force: true });
 }
 
 // Called on server start: a job interrupted by a restart leaves a half-written folder behind,
@@ -61,13 +76,7 @@ export function getBackupTempPath(suffix: string): string {
     return path.join(getBackupStagingDir('archive'), `${randomUUID()}${suffix}`);
 }
 
-function hasControlCharacter(text: string): boolean {
-    for (let index = 0; index < text.length; index++) {
-        const code = text.charCodeAt(index);
-        if (code < 0x20 || code === 0x7f) return true;
-    }
-    return false;
-}
+const NO_CONTROL = new RegExp(NO_CONTROL_PATTERN);
 
 // An archive comes from outside: its manifest, its mount trees and the settings.json of a folder it
 // left behind all name paths this server then reads, opens and deletes. Anything that would leave
@@ -76,7 +85,7 @@ function hasControlCharacter(text: string): boolean {
 // comparison holds on a macOS /var → /private/var temp folder too. One spelling for both sides:
 // verify judges an unpacked archive with it, and restore resolves every segment it is handed.
 export function resolveInside(root: string, relPath: string): string | null {
-    if (relPath === '' || path.isAbsolute(relPath) || hasControlCharacter(relPath)) return null;
+    if (relPath === '' || path.isAbsolute(relPath) || !NO_CONTROL.test(relPath)) return null;
     if (relPath.split(/[\\/]/).includes('..')) return null;
     const realRoot = fs.existsSync(root) ? fs.realpathSync(root) : root;
     const abs = path.resolve(realRoot, relPath);
@@ -134,10 +143,42 @@ export function buildArtifactName(ownerId: string, at: Date): string {
     return `${buildHomeFolderName(ownerId)}-${buildBackupStamp(at)}${BACKUP_ARTIFACT_EXTENSION}`;
 }
 
+// The layout of a whole-server archive beside its manifest.json: one per-home artifact per home, the
+// server folder packed like a home, and the install files the API may be unable to read.
+const SERVER_ARCHIVE_HOMES_DIR = 'homes';
+export const SERVER_ARCHIVE_SERVER_MEMBER = 'server.tar.zst';
+export const SERVER_ARCHIVE_ENV_MEMBER = '.env.production';
+
+// The install folders an archive carries beside its members, under the name they have in data/: the DKIM key with
+// whatever its folder holds, the TLS certificate as its two files or not at all. `field` is the manifest's flag.
+export const INSTALL_FOLDERS: { dir: string; field: 'dkim' | 'certs'; what: string; names?: readonly string[] }[] = [
+    { dir: DKIM_DIR, field: 'dkim', what: 'DKIM' },
+    { dir: CERTS_DIR, field: 'certs', what: 'TLS', names: Object.values(CERT_FILES) },
+];
+
+export function buildServerArchiveName(reason: BackupReason, level: BackupLevel, at: Date): string {
+    return `${SERVER_ARCHIVE_PREFIX}${reason}-${level}-${buildBackupStamp(at)}${SERVER_ARCHIVE_EXTENSION}`;
+}
+
+// The per-home artifact name with the archive's stamp, so a member copied out into the backups
+// folder is an ordinary artifact of that home.
+export function buildHomeMemberName(ownerId: string, at: Date): string {
+    return `${SERVER_ARCHIVE_HOMES_DIR}/${buildArtifactName(ownerId, at)}`;
+}
+
+// The single top-level folder inside server.tar.zst. It mirrors data/: `server/` and `org/`.
+export function buildServerFolderName(at: Date): string {
+    return `server-${buildBackupStamp(at)}`;
+}
+
+export function archiveServerPath(relPath: string): string {
+    return `${SERVER_DIR}/${relPath}`;
+}
+
 // The one collision rule these names have: a stamp is a second wide, and two of a home's artifacts
 // or safety copies can land inside one. The later one is stamped a second on, so every name in
 // both grammars keeps exactly one shape.
-function freeAt(at: Date, taken: (candidate: Date) => boolean): Date {
+export function freeAt(at: Date, taken: (candidate: Date) => boolean): Date {
     let candidate = at;
     while (taken(candidate)) candidate = new Date(candidate.getTime() + 1000);
     return candidate;
@@ -150,6 +191,30 @@ export function freeArtifactName(ownerId: string, at: Date): string {
         fs.existsSync(path.join(backupsDirPath(), buildArtifactName(ownerId, candidate))),
     );
     return buildArtifactName(ownerId, free);
+}
+
+// Beside the archive, so the list and retention never open one. A home artifact's caches its manifest
+// and last verify; a server archive's is its job's record, which a refused attempt leaves with no archive.
+const SIDECAR_SUFFIX = '.manifest.json';
+export const SERVER_SIDECAR_SUFFIX = '.json';
+// Beside a partial archive in the bucket, which may outlive this box's record of it.
+export const BUCKET_PARTIAL_SUFFIX = '.partial';
+
+export function sidecarPath(artifactPath: string): string {
+    return `${artifactPath}${SIDECAR_SUFFIX}`;
+}
+
+export function serverSidecarPath(archivePath: string): string {
+    return `${archivePath}${SERVER_SIDECAR_SUFFIX}`;
+}
+
+// The stamp a new whole-server archive takes, under the same rule; its members carry it too. A
+// refused attempt leaves only its sidecar, and that name is taken as well.
+export function freeServerArchiveAt(reason: BackupReason, level: BackupLevel, at: Date): Date {
+    return freeAt(at, (candidate) => {
+        const archivePath = path.join(backupsDirPath(), buildServerArchiveName(reason, level, candidate));
+        return fs.existsSync(archivePath) || fs.existsSync(serverSidecarPath(archivePath));
+    });
 }
 
 // `{homeFolderName}{suffix}{stamp}`. The caller compares `homeName` against the home it asked
@@ -201,22 +266,4 @@ export function requireBackableOwner(owner: ParsedOwnerId): asserts owner is Bac
     if (owner.type !== 'user' && owner.type !== 'team') {
         throw new ApiError(400, `Not a user or team home (${owner.type})`);
     }
-}
-
-// The owner an ownerId names, once it is one a backup can be of. The guest refusal needs the user
-// row, which is why this is the async half of requireBackableOwner; the routes and the folder
-// resolver both go through it, so the refusal is spelled once.
-export async function requireBackableHome(ownerId: string): Promise<BackableOwner> {
-    const owner = parseOwnerId(ownerId);
-    requireBackableOwner(owner);
-    if (owner.type === 'user' && (await getUserById(owner.id))?.role === 'guest') {
-        throw new ApiError(400, 'Guest homes are not backed up');
-    }
-    return owner;
-}
-
-// Where this owner's home folder lives.
-export async function resolveHomeDir(ownerId: string): Promise<string> {
-    const owner = await requireBackableHome(ownerId);
-    return owner.type === 'team' ? getTeamDataPath(owner.id) : getUserHomePath(owner.id);
 }

@@ -15,12 +15,13 @@ import { getCommentIndex } from '../lib/chat/comment-index';
 import { broadcastCommentIndexUpdated } from '../lib/chat/sse-events';
 import type CollabDocument from '../lib/collab/collabDocument';
 import { registerCollabConnection, unregisterCollabConnection } from '../lib/collab/connections';
-import { collabEpochMessage, getCollabEpoch } from '../lib/collab/epoch';
+import { collabEpochMessage } from '../lib/collab/epoch';
 import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import type { DriveLike } from '../lib/drive/get-drive';
-import { HomeRestoringError, touchHomeIfLoaded } from '../lib/home';
+import { touchHomeIfLoaded } from '../lib/home';
+import { getDataEpoch } from '../lib/home/data-epoch';
 import { sendToHome } from '../lib/home/home-relay';
 import { getUserByEmail } from '../lib/user';
 import { keepWebSocketAlive } from '../utils/websockets';
@@ -212,7 +213,7 @@ export const collabRouter = new Elysia({
                 // The tab loaded its document before a restore put other data back: its sync would merge what the
                 // restore undid.
                 const { epoch } = ws.data.query;
-                if (epoch !== undefined && epoch !== getCollabEpoch(ownerId)) {
+                if (epoch !== undefined && epoch !== getDataEpoch(ownerId)) {
                     ws.close(COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON);
                     return;
                 }
@@ -245,14 +246,10 @@ export const collabRouter = new Elysia({
                 );
             } catch (err) {
                 console.error('Error opening collab session:', err);
-                // A home being replaced by a restore and unreachable storage are both 503s with
-                // opposite orders for the client: reload without syncing (or this tab merges the
-                // document it still holds back over the restored copy), against keep the document and
-                // retry. So they never share a close code, and the first is a class of its own rather
-                // than a message this route would have to match on.
-                if (err instanceof HomeRestoringError) {
-                    ws.close(COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON);
-                } else if (err instanceof ApiError && err.status === 503) {
+                // A 503 retries, a home a restore is replacing too: the stale epoch the reconnect names
+                // after a finished restore reloads the tab, and a failed restore leaves the epoch, so the
+                // tab syncs the edits it holds.
+                if (err instanceof ApiError && err.status === 503) {
                     ws.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON);
                 } else if (err instanceof ApiError && err.status === 410) {
                     // Terminal: the stored object is gone, so the client stops retrying.

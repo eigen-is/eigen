@@ -9,6 +9,27 @@
 set -euo pipefail
 
 . "$(dirname "$0")/probe-lib.sh"
+ADMIN_EMAIL=alice@eigen.test
+
+# probe_large_body <origin>: a 2 MB request, past nginx's default 1 MB limit, reaches the API whole. The setup route
+# reads the whole body before it refuses the missing token with 403; a web server that caps the body answers 413.
+probe_large_body() {
+    local body="$SCRATCH/large-body.json" got_code
+    if [ ! -f "$body" ]; then
+        {
+            printf '{%s,"orgName":"' "$(admin_fields probe-password)"
+            head -c 2097152 /dev/zero | tr '\0' a
+            printf '"}'
+        } >"$body"
+    fi
+    got_code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 30 -X POST -H 'Content-Type: application/json' \
+        --data-binary "@$body" "$1/eigen/setup/complete" || echo 000)
+    if [ "$got_code" = 403 ]; then
+        ok "a 2 MB request body → 403 (the body reached the API)"
+    else
+        fail "a 2 MB request body → $got_code, expected 403"
+    fi
+}
 
 # run_proxy <name> <image> <snippet> <path in the image> [extra docker run args…]: one throwaway web server on the
 # install's network, serving the snippet ./eigen setup wrote with eigen-static as its target.
@@ -25,6 +46,7 @@ run_proxy() {
         sleep 1
     done
     probe_site "https://localhost:$PROXY_PORT"
+    probe_large_body "https://localhost:$PROXY_PORT"
     docker rm -f "eigentest-proxy-$name-$RUN" >/dev/null 2>&1
 }
 

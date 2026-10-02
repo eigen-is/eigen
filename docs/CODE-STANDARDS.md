@@ -1,16 +1,18 @@
 # Code Standards
 
-Code style and conventions. Architecture and file locations: [ARCHITECTURE.md](ARCHITECTURE.md). The reasoning and BAD/GOOD code behind every section here, plus the gate's metric list: [CODE-EXAMPLES.md](CODE-EXAMPLES.md).
+These are the rules for how code in Eigen is written: typing, style, imports, the patterns every hook and route follows, and the checklist a change passes before anyone calls it done. Read them before you write code, whether you are a person or an agent, and expect a reviewer to judge your change against them ([REVIEW-STANDARD.md](REVIEW-STANDARD.md)). The idea behind all of them is that new code looks like the code next to it.
+
+The rules are kept short on purpose. The reasoning and the BAD/GOOD code behind each section live in [CODE-EXAMPLES.md](CODE-EXAMPLES.md), under the same heading, and where files go is in [ARCHITECTURE.md](ARCHITECTURE.md). The rules a machine can count are enforced by Biome and a standards script, as [Standards Gates](#standards-gates) explains.
 
 ## Code Philosophy
 
 This codebase values **simplicity, directness, and consistency** over cleverness or abstraction. Code should be obvious at a glance. When in doubt, look at what already exists in the same directory and match it exactly.
 
-- **Flat and direct** — no service layers, no repository patterns, no dependency injection. Routes call domain classes directly. Domain classes query the database directly with Drizzle
-- **Don't extract single-use helpers** — a method that handles a complete workflow inline is better than several small methods you have to trace through. Only extract when logic is reused
-- **Trust the type system** — no defensive null checks on typed data, no fallback defaults for required fields. Validate at system boundaries (user input, external APIs), trust internal code everywhere else
-- **Consistency over originality** — new code must look like the code next to it. Same patterns, same naming, same structure. Don't invent new patterns when existing ones work
-- **Fewer lines beat more** — removing code is always a good idea when what remains is cleaner and easier to understand. Over-engineering (a flag threaded through layers, a prop every caller passes the same value for, a seam that closes a case that cannot happen) is a broken window: remove it on touch, and don't add it to close a nit
+- Flat and direct: no service layers, no repository patterns, no dependency injection. Routes call domain classes directly. Domain classes query the database directly with Drizzle
+- Don't extract single-use helpers: a method that handles a complete workflow inline is better than several small methods you have to trace through. Only extract when logic is reused
+- Trust the type system: no defensive null checks on typed data, no fallback defaults for required fields. Validate at system boundaries (user input, external APIs), trust internal code everywhere else
+- Consistency over originality: new code must look like the code next to it. Same patterns, same naming, same structure. Don't invent new patterns when existing ones work
+- Fewer lines beat more: removing code is always a good idea when what remains is cleaner and easier to understand. Over-engineering (a flag threaded through layers, a prop every caller passes the same value for, a seam that closes a case that cannot happen) is a broken window: remove it on touch, and don't add it to close a nit
 
 ## Review Hot Spots
 
@@ -20,26 +22,26 @@ Six slips recur in review here, each with BAD/GOOD code in [CODE-EXAMPLES.md § 
 
 Types flow end-to-end: Elysia route handler return type → Eden Treaty → hook → component. Don't break the chain. Reasoning per rule: [CODE-EXAMPLES.md § Typing](CODE-EXAMPLES.md#typing).
 
-- **No `as any`** — fix the type at the source (route handler return type, schema definition), never by casting in hooks
-- **No `as Type` on Eden Treaty responses** — add an explicit return type to the backend route handler or domain method, using the shared type from `packages/lib/src/types/`
-- **Shared types live in `packages/lib/src/types/[domain].ts`** — never redefine one; if it doesn't exist yet, add it there so FE and BE share it
-- **`type` over `interface`** — except when methods are needed
-- **Infer locally, annotate publicly** — no annotations where TypeScript infers; always explicit return types on backend route handlers, domain methods, and hooks
-- **`import type` for type-only imports** — separate from value imports
-- **Drizzle `.$inferSelect` for DB row types** — never redefine column types by hand
+- No `as any`: fix the type at the source (route handler return type, schema definition), never by casting in hooks
+- No `as Type` on Eden Treaty responses: add an explicit return type to the backend route handler or domain method, using the shared type from `packages/lib/src/types/`
+- Shared types live in `packages/lib/src/types/[domain].ts`: never redefine one; if it doesn't exist yet, add it there so FE and BE share it
+- `type` over `interface`, except when methods are needed
+- Infer locally, annotate publicly: no annotations where TypeScript infers; always explicit return types on backend route handlers, domain methods, and hooks
+- `import type` for type-only imports, separate from value imports
+- Drizzle `.$inferSelect` for DB row types: never redefine column types by hand
 
 ## Code Style
 
 Examples per rule: [CODE-EXAMPLES.md § Code Style](CODE-EXAMPLES.md#code-style).
 
-- **English everywhere** — code, comments, docs, commit messages
-- **No JSDoc** — code should be self-documenting
-- **Comments only for high-complexity code or functions whose use isn't obvious to a maintainer of this repo, and they explain WHY, never WHAT** — simplified technical English, concision over grammar. Most code needs zero comments; no comment beats slop, and reviewers flag comment slop the same as dead code
-- **Backend errors use `ApiError`** — `throw new ApiError(status, message)` for user-facing HTTP errors, never `throw new Error()`; internal invariants (db not open, missing config) may use `throw new Error()`
-- **Theme tokens, not colors** — `text-muted-foreground`, `bg-muted`, not `text-gray-500`; `selection-handle` for selection UI
-- **Use `cn()` for class merging** — from `@workspace/ui/lib/utils`, never raw `clsx`/`twMerge` or string concatenation
-- **Name for grep-ability; don't shadow libraries** — `use*`, `Eigen*`, `*Dialog`, `*Provider`, `invalidate*`, `*Keys`; never reuse a name a dependency owns (`useSearchQuery`, not `useSearch`) or give three helpers one name (`isMobile`)
-- **Z-index: app-level components don't set one, and anything above 50 needs a comment** — the scale and its rules: [LAYOUT.md § Z-Index / Layering](LAYOUT.md#z-index--layering)
+- English everywhere: code, comments, docs, commit messages
+- No JSDoc: code should be self-documenting
+- Comments only for high-complexity code or functions whose use isn't obvious to a maintainer of this repo, and they explain WHY, never WHAT: simplified technical English, concision over grammar. Most code needs zero comments; no comment beats slop, and reviewers flag comment slop the same as dead code
+- Backend errors use `ApiError`: `throw new ApiError(status, message)` for user-facing HTTP errors, never `throw new Error()`; internal invariants (db not open, missing config) may use `throw new Error()`
+- Theme tokens, not colors: `text-muted-foreground`, `bg-muted`, not `text-gray-500`; `selection-handle` for selection UI
+- Use `cn()` for class merging: from `@workspace/ui/lib/utils`, never raw `clsx`/`twMerge` or string concatenation
+- Name for grep-ability; don't shadow libraries: `use*`, `Eigen*`, `*Dialog`, `*Provider`, `invalidate*`, `*Keys`; never reuse a name a dependency owns (`useSearchQuery`, not `useSearch`) or give three helpers one name (`isMobile`)
+- Z-index: app-level components don't set one, and anything above 50 needs a comment. The scale and its rules: [LAYOUT.md § One z-index scale, and app code sets none](LAYOUT.md#one-z-index-scale-and-app-code-sets-none)
 
 ### Imports
 
@@ -47,7 +49,7 @@ Workspace imports resolve through each package's `exports` map, with no tsconfig
 
 | Specifier | What you get |
 |---|---|
-| `@workspace/ui` | Root barrel: the everyday components ([ARCHITECTURE.md § Frontend](ARCHITECTURE.md#frontend), *Everyday UI*), the layout system (app/sidebar/toolbar — not pages), generic leaf primitives |
+| `@workspace/ui` | Root barrel: the everyday components ([ARCHITECTURE.md § Frontend](ARCHITECTURE.md#frontend), *Everyday UI*), the layout system (app/sidebar/toolbar, not pages), generic leaf primitives |
 | `@workspace/ui/components/[area]` | Area barrel (drive, chat, comments, editor, media, user, …) |
 | `@workspace/ui/components/[leaf]` | Extensionless deep import for a component its barrel doesn't export (`@workspace/ui/components/search/doc-search-provider`) |
 | `@workspace/ui/components/layout/[dir]` | Layout system barrels: `app`, `pages`, `sidebar`, `toolbar` |
@@ -60,16 +62,16 @@ Workspace imports resolve through each package's `exports` map, with no tsconfig
 | `@workspace/lib/date` | Date formatting (`formatDate`, `formatTime`, `formatTimeAgo`) |
 | `@workspace/lib/validation` | Shared FE/BE validation schemas |
 
-**User-visible dates are day-month-year** — "5 January 2026", "5 Jan", "5 Jan 2026, 14:30", "Mon 5 Jan", never "January 5, 2026": format through `formatDayMonth` / `formatDate` in `@workspace/lib/date` (they assemble the order from the `'en'` locale's parts; `'en-GB'` spells a short September "Sept" in browsers), and write hand-built shapes as `d MMM yyyy`. Spelling everywhere else stays en-US.
+**User-visible dates are day-month-year**: "5 January 2026", "5 Jan", "5 Jan 2026, 14:30", "Mon 5 Jan", never "January 5, 2026". Format through `formatDayMonth` / `formatDate` in `@workspace/lib/date` (they assemble the order from the `'en'` locale's parts; `'en-GB'` spells a short September "Sept" in browsers), and write hand-built shapes as `d MMM yyyy`. Spelling everywhere else stays en-US.
 
 ## Key Patterns
 
 Worked examples: [CODE-EXAMPLES.md § Key Patterns](CODE-EXAMPLES.md#key-patterns).
 
-- **Query keys** — hierarchical per domain (`driveKeys.folder(ownerId, mountId, pathId)`) and always including `ownerId`, or personal and team contexts serve each other's stale cache. Every `useQuery` has: `queryKey` from the domain keys, `queryFn` with error checking, an `enabled` guard, an explicit `staleTime`
-- **API client (Eden Treaty)** — `driveApi({ ownerId })({ mountId }).folder({ pathId }).get()`; types flow directly from the Elysia route definitions, no manual type sync
-- **Error handling** — in hooks (`packages/lib/src/core/[domain]/hooks/`), never in app components: every `useMutation` has `onError` using `onMutationError` from `api-error.ts`; apps never add `try/catch` + `toast.error()`. Full pattern: [NOTIFICATIONS.md](NOTIFICATIONS.md)
-- **Invalidation functions** — export `invalidateFoo(queryClient, ...)` next to the query keys; apps call these, never `useQueryClient` + `invalidateQueries()` directly
+- **Query keys**: hierarchical per domain (`driveKeys.folder(ownerId, mountId, pathId)`) and always including `ownerId`, or personal and team contexts serve each other's stale cache. Every `useQuery` has: `queryKey` from the domain keys, `queryFn` with error checking, an `enabled` guard, an explicit `staleTime`
+- **API client (Eden Treaty)**: `driveApi({ ownerId })({ mountId }).folder({ pathId }).get()`; types flow directly from the Elysia route definitions, no manual type sync
+- **Error handling**: in hooks (`packages/lib/src/core/[domain]/hooks/`), never in app components: every `useMutation` has `onError` using `onMutationError` from `api-error.ts`; apps never add `try/catch` + `toast.error()`. Full pattern: [NOTIFICATIONS.md](NOTIFICATIONS.md)
+- **Invalidation functions**: export `invalidateFoo(queryClient, ...)` next to the query keys; apps call these, never `useQueryClient` + `invalidateQueries()` directly
 
 ## Self-Review Checklist
 
@@ -83,8 +85,8 @@ Before declaring any task complete, review every changed file against this list:
 - Did you avoid adding try-catch, null checks, or fallbacks for cases that can't happen?
 - Do new `useQuery` hooks have `enabled` guards and `staleTime`?
 - Does the new code match the patterns and naming of its neighbors?
-- Any new `z-index` set above 50? If yes, is it on the documented exceptions or does it have a `// Why:` comment? (See [LAYOUT.md § Z-Index / Layering](LAYOUT.md#z-index--layering))
+- Any new `z-index` set above 50? If yes, is it on the documented exceptions or does it have a `// Why:` comment? (See [LAYOUT.md § One z-index scale, and app code sets none](LAYOUT.md#one-z-index-scale-and-app-code-sets-none))
 
 ## Standards Gates
 
-The mechanical rules on this page are enforced, not just documented: Biome carries what it can express, and `bun scripts/check-standards.ts` (part of `bun run check`) counts twelve metrics over `apps/` and `packages/`: seven hard zeros and five ratcheting counts whose allowance in `scripts/standards-baseline.json` can fall but never rise (`bun run standards:update` after a cleanup). What each metric catches: [CODE-EXAMPLES.md § Standards Gates](CODE-EXAMPLES.md#standards-gates).
+The mechanical rules are enforced, not just documented: Biome carries what it can express, and `bun scripts/check-standards.ts` (part of `bun run check`) counts twelve metrics over `apps/` and `packages/`: seven hard zeros and five ratcheting counts whose allowance in `scripts/standards-baseline.json` can fall but never rise (`bun run standards:update` after a cleanup). What each metric catches: [CODE-EXAMPLES.md § Standards Gates](CODE-EXAMPLES.md#standards-gates).

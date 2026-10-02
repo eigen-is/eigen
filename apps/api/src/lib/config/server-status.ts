@@ -1,8 +1,9 @@
 import { X509Certificate } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { getServerBackupStatus, type ServerBackupStatus } from '../backup/server-archives';
 import { getRelayHost, isBundledCaddy, isMailEnabled } from './env';
-import { getDataRoot } from './paths';
+import { CERT_FILES, CERTS_DIR, getDataRoot } from './paths';
 import { getDomain, getPublicConfig, isSetupRequired } from './server-config';
 
 export type ControlStatus = {
@@ -18,16 +19,17 @@ export type ControlStatus = {
     certExpiresAt: string | null;
     certSelfSigned: boolean;
     bundledCaddy: boolean;
+    backup: ServerBackupStatus;
 };
 
-export function getServerStatus(): ControlStatus {
+export async function getServerStatus(): Promise<ControlStatus> {
     const config = getPublicConfig();
     const disk = fs.statfsSync(getDataRoot());
-    // Caddy's export-certs.sh copies its Let's Encrypt certificate here; without one, Postfix writes a self-signed stand-in.
+    // Caddy's export-certs.sh copies its Let's Encrypt certificate here; without one, Dovecot writes a self-signed stand-in.
     let certExpiresAt: string | null = null;
     let certSelfSigned = false;
     try {
-        const cert = new X509Certificate(fs.readFileSync(path.join(getDataRoot(), 'certs', 'cert.pem')));
+        const cert = new X509Certificate(fs.readFileSync(path.join(getDataRoot(), CERTS_DIR, CERT_FILES.cert)));
         certExpiresAt = new Date(cert.validTo).toISOString();
         certSelfSigned = cert.issuer === cert.subject;
     } catch {
@@ -46,5 +48,6 @@ export function getServerStatus(): ControlStatus {
         certExpiresAt,
         certSelfSigned,
         bundledCaddy: isBundledCaddy(),
+        backup: await getServerBackupStatus(),
     };
 }

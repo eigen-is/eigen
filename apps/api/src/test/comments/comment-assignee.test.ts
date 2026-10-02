@@ -262,6 +262,36 @@ describe('Comment assignee', () => {
         expect(row.assignee).toBe(ctx.bob.user.email);
     });
 
+    test('resolving a REAL chat whose index row was deleted heals it, so the resolve sticks', async () => {
+        await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${chatFolderId}/create/chat`,
+            { fileName: 'resolve-heal' },
+        );
+        const healName = 'resolve-heal.eigenchat';
+
+        const home = await getHome(ctx.alice.user.id);
+        const commentsDb = await home.drive.getChildByName(mountId, docId, 'comments.db');
+        const managed = await home.drive.openDatabase(mountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id);
+        await managed.db.delete(commentSchema.comments).where(eq(commentSchema.comments.chatName, healName));
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/collab/${ctx.alice.user.id}/${mountId}/${docId}/comments/${healName}/status`,
+            {
+                method: 'PATCH',
+                body: JSON.stringify({ status: 'resolved' }),
+                headers: { 'Content-Type': 'application/json' },
+            },
+        );
+        expect(res.status).toBe(200);
+
+        const row = findOrFail(await listComments(), (r: CommentEntry) => r.chatName === healName);
+        expect(row.status).toBe('resolved');
+    });
+
     test('assigning on a nonexistent chatName → 404, no row, no event, no notification', async () => {
         // No .eigenchat exists under this name, so it can't be healed — the write must 404 rather
         // than mint a phantom row + immutable 'assigned' event + dead-link notification.

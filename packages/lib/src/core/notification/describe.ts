@@ -28,7 +28,7 @@ export function describeNotification(
             case 'calendar-invite':
             case 'calendar-invite-updated':
                 // Formatted from the stored epoch so the viewer's timezone applies, not the server's —
-                // see docs/ACTIVITY-ROWS.md § Notification rows.
+                // see docs/ACTIVITY-ROWS.md § The client formats what depends on the viewer.
                 if ('startTime' in details) {
                     const at = new Date(details.startTime);
                     secondary = `${formatDayMonth(at, { year: true })}, ${at.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`;

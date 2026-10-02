@@ -50,6 +50,8 @@ export type S3LifecycleState = 'none' | 'foreign' | 'unknown' | { noncurrentDays
 export type S3CheckResult = {
     ok: boolean;
     message: string;
+    // Something the bucket lacks that does not stop it from working.
+    warning?: string;
     versioning?: S3VersioningState;
     lifecycle?: S3LifecycleState;
 };
@@ -123,7 +125,18 @@ export type ServerSettings = {
         // Without hosted mail, whether the relay accepts every address on the mail domain as a sender.
         relaySendsAsUsers: boolean;
     };
+    backups: {
+        // A Full once per UTC day from `hourUtc`, Full + S3 with `withS3`. Retention keeps `keep` good
+        // scheduled archives; manual ones are the owner's to delete.
+        schedule: { enabled: boolean; hourUtc: number; withS3: boolean; keep: number };
+        // The private bucket archives go to; `keep` is its own count there.
+        upload: { enabled: boolean; s3: S3Config; keep: number };
+    };
 };
+
+// What a save answers: the settings, a notice the owner must read once about what they just saved, and
+// what the backup bucket's check warned of.
+export type ServerSettingsSaved = ServerSettings & { notice?: string; warning?: string };
 
 export type MountResponse = {
     id: string;

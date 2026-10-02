@@ -1,74 +1,57 @@
 # Server-Sent Events (SSE)
 
-> **TLDR**: Real-time cache invalidation. The backend emits events via `home.broadcast()` → SSE stream → frontend
-> handlers invalidate the TanStack Query cache. Events carry only what invalidation needs — no display text, no full
-> domain objects. Toasts come exclusively from the notification center's own SSE event.
+> **TLDR:** The server tells open pages that data changed through an event stream. Every signed-in tab holds one, the stream of its user's own Home (`apps/api/src/lib/home/sse-stream.ts`, served by `apps/api/src/routes/sse.ts`), and `useSSE` (`packages/lib/src/core/sse/hooks/use-sse.ts`) hands each event to the domain handlers, which invalidate the TanStack Query cache so the page refetches. Not obvious from the code: an event carries only what invalidation needs, toasts come only from the notification center's event, the keepalive re-subscribes the stream to a Home that was evicted and rebuilt, and every stream announces the data epoch of the user's homes, an id that changes only when a restore replaces a home's data, so a tab reloads after a restore.
 
-## Flow
+Every app mounts the stream once, in `EigenApp`'s provider stack ([LAYOUT.md](LAYOUT.md#every-app-is-eigenapp-around-appshell)), so a tab holds one stream whichever app it shows. It carries the changes that are not collab edits: a new mail, a renamed file, a chat message, a changed calendar event, a notification. A collab document's own edits travel on the document's socket instead ([COLLAB.md](COLLAB.md)). Read this doc before you add an event type ([§ A new domain adds four pieces](#a-new-domain-adds-four-pieces)).
 
-```
-API Mutation → home.broadcast(event)  → SSE Stream → Client
-                                                        └── SSE Handler → QueryClient.invalidateQueries()
+## A stream belongs to one user's own Home
 
-Notification → home.notifications.persist({...})
-                 └── broadcasts notification:created SSE → toast + invalidate notification queries
-```
+A user subscribes to their own Home's stream, never to another's. An action that touches another home reaches its users through the relay: `sendToHome` with a `broadcast` message, or `relayEventToMembers` for every member of a team (`apps/api/src/lib/home/home-relay.ts`). The target Home then broadcasts to its own listeners. That keeps every stream on the server that owns its home, which is what sharding needs ([SCALABILITY.md](SCALABILITY.md)).
 
-SSE is personal-only — each user subscribes to their own Home's event stream. The SSE keepalive (every 15s)
-re-acquires the Home via `getHome()` (which calls `touch()`), preventing idle destruction and self-healing if the
-Home was destructed externally. An initial keepalive is sent immediately in `start()` to prevent Apache proxy
-timeouts. The frontend `useSSE` hook auto-reconnects after HTTP errors (e.g. 502) with exponential backoff
-(1s initial, doubling up to 30s max, with 20% jitter).
+## The keepalive keeps the stream on a live Home
 
-Events fall into two categories:
+The stream sends a keepalive at once when it opens and every 15 s after. The first one stops a proxy such as Apache from timing out a stream that has had nothing to say yet. Each later one calls `getHome()`, which touches the Home so it does not idle out under an open tab. When the Home was evicted and rebuilt meanwhile, the stream moves its listener to the new one, or it would go silent while the tab still looks connected.
 
-- **Cache invalidation**: domain events (drive, mail, calendar, chat, contacts) carry only IDs needed for
-  `queryClient.invalidateQueries()`. No toasts, no display text
-- **Notification**: `notification:created` carries the toast text plus the tag pair its View link needs (see Event
-  Design). Created by `NotificationCenter.persist()`, which also writes to the per-user notifications database
+`useSSE` reconnects after a stream closes on an HTTP error such as a 502, which `EventSource` does not do on its own: from 1 s, doubling up to 30 s, with up to 20% jitter so a restarted server is not hit by every tab at once.
 
-See [NOTIFICATIONS.md](NOTIFICATIONS.md) for the toast pattern, [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md)
-for the notification center architecture.
+## An event carries only what invalidation needs
 
-## Where the code lives
+An event holds ids, never display text or a domain object: a drive event its path's owner, mount, id and parent, a mail event its message and mailbox, and so on. The handler invalidates the queries those ids name and refetches the truth. A fat event would be a second copy of the data that drifts from the one the query returns. The shapes are in `packages/lib/src/types/sse.ts`. A whole-file contacts import sends one `contacts:changed` in place of one event per card, since a card change invalidates the whole list anyway ([CONTACTS.md](CONTACTS.md)).
 
-Types live in `packages/lib/src/types/sse.ts`. Per domain, the backend builder is
-`apps/api/src/lib/[domain]/sse-events.ts` and the frontend handler is
-`packages/lib/src/core/[domain]/sse-handlers.ts`, registered in `packages/lib/src/core/sse/hooks/use-sse.ts` (mounted
-by `packages/ui/src/components/sse-provider/sse-provider.tsx`). The stream itself is
-`apps/api/src/routes/sse.ts` plus `home.broadcast()` in `apps/api/src/lib/home/home.ts`.
+The backend builds each event in `apps/api/src/lib/[domain]/sse-events.ts` and emits it with `home.broadcast()`. The frontend handler is `packages/lib/src/core/[domain]/sse-handlers.ts`, registered in `useSSE`. Space and Team have event types and no emitter or handler.
 
-## Event Design
+## Toasts come only from the notification center
 
-Events are minimal — only what the frontend handler needs for cache invalidation:
+A domain handler never toasts. The toast comes from `notification:created`, which the notification center broadcasts after it writes the row, so a toast always has a row in the bell behind it ([NOTIFICATION-CENTER.md § Notifications and domain events are separate broadcasts](NOTIFICATION-CENTER.md#notifications-and-domain-events-are-separate-broadcasts), [NOTIFICATIONS.md](NOTIFICATIONS.md)).
 
-- Drive: `path.ownerId`, `path.mountId`, `path.id`, `path.parentId`, `path.mimeType`, optional `oldParentId`
-- Mail: `mail.messageId`, `mail.mailbox`, optional `mail.toMailbox`
-- Calendar: `ownerId`
-- Chat: `chat.chatId`, `chat.ownerId`, `chat.mountId`
-- Contacts: `contactId` or `labelId`; the batched `contacts:changed` a whole-file import sends in place of one
-  event per card carries neither — a card change invalidates the owner's whole list ([CONTACTS.md](CONTACTS.md))
-- Notification: `title`, optional `body`, optional `notificationType` + `tag` — the last two let the toast's **View**
-  action resolve the same deep link the bell uses (`resolveNotificationLink`), without shipping the whole row
-- Space: just the event type
-- Team: `teamId`
+## A backup job's event is only a nudge
 
-`notification:created` has a sibling, `notification:changed` (bare `{type}`), which tells the bell to refetch its
-count and list without toasting — emitted after a read or dismiss.
+`backup:job-updated` carries the job's id and its home's `ownerId`, nothing else. The job map in the API is the truth, and the admin pane refetches its job and artifact lists. An event for the org's `ownerId` refetches the server archive list, whose rows show the record a running upload rewrites. A home job's event goes to every admin, so a second admin watching the same pane follows along; a server backup's goes to the owner alone, who alone may see it ([BACKUP.md](BACKUP.md)).
 
-Type prefixes: `drive:`, `mail:`, `contacts:`, `chat:`, `calendar:`, `notification:`, `space:`, `team:`
+## A restore reloads every tab of the home
 
-## Adding SSE to a New Domain
+A restore puts other data under every open tab of the home, and each tab's caches describe the home as it was. The data epoch (`apps/api/src/lib/home/data-epoch.ts`) marks that moment. It has two parts: the server's, a random id in `data/server/data-epoch` drawn on first use, followed by the home's, from `data/server/home-data-epochs.json`. A per-home restore rotates the home's part once the new folder is whole, so no tab reloads onto the 503 of a restore still running, and a failed restore leaves it alone. A whole-server archive never holds either file (`SERVER_RUNTIME_FILES` in `apps/api/src/lib/config/paths.ts`), so after `./eigen restore` or `./eigen rollback` the server draws a new epoch and every tab reloads. A restart or an update keeps both files.
 
-1. **Define types** in `packages/lib/src/types/sse.ts` — add to `SSEventType`, create event type, add to `SSEvent` union
-2. **Create builder** at `apps/api/src/lib/[domain]/sse-events.ts` — `build[Domain]Event()` returning minimal data
-3. **Emit from business logic** — call `this.home.broadcast(buildEvent(...))`
-4. **Create handler** at `packages/lib/src/core/[domain]/sse-handlers.ts` — switch on event type, call invalidation
-   functions. Do NOT add toast calls — toasts come from the notification center
-5. **Register handler** in `packages/lib/src/core/sse/hooks/use-sse.ts`
+Every stream sends `home:data-epochs` when it opens and after every keepalive: the epoch of the user's own home and of each of their teams. `handleHomeSSEvent` (`packages/lib/src/core/home/sse-handlers.ts`) reloads through `reloadReplacedHome` when an epoch it holds changes. A home it has not heard of is new to it (a team joined), not replaced. One announcement covers every case with no push across homes: a tab connected through the restore hears it within 15 s of the end, and a tab that was offline, or any tab after a whole-server restore, hears it on reconnect.
 
-## Implemented Domains
+## A reload for a restore starts the epochs over
 
-Drive, Mail, Contacts, Chat, Calendar and Notification are complete: builder, handler, and backend emits. Space and
-Team have types and frontend handlers registered but no builder and no backend emit yet — the handlers are wired up
-in advance, so adding the emit is all that is needed.
+A tab keeps its epochs in sessionStorage, so the next page it loads still holds them. `reloadReplacedHome` drops them before it reloads. An editor tab reloads when its collab socket names an epoch the restore replaced, which can come before its stream announces the new one, and the page that comes back takes the first epochs it hears as its own. So no page reloads twice for one restore. Stay on the leave prompt ends the asking, because the tab already holds the epoch it asked for.
+
+## The owner and the team reload, a user with a share does not
+
+The owner reloads in every app, and so does every member of a restored team, because those are the homes a stream announces. A user who only has something shared from the home keeps their tabs. Their open documents of it reload through the collab socket ([COLLAB.md](COLLAB.md#home-replacement-closes-every-socket)).
+
+## A new domain adds four pieces
+
+1. The event type in `packages/lib/src/types/sse.ts`: its entry in `SSEventType` and its member of the `SSEvent` union.
+2. A builder in `apps/api/src/lib/[domain]/sse-events.ts` that returns only ids.
+3. `this.home.broadcast(buildEvent(...))` where the business logic changes the data.
+4. A handler in `packages/lib/src/core/[domain]/sse-handlers.ts` that invalidates, with no toast, registered in `useSSE`.
+
+## See also
+
+- [NOTIFICATIONS.md](NOTIFICATIONS.md): the toast pattern
+- [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md): the bell and its database
+- [COLLAB.md](COLLAB.md): the collab socket, which carries a document's own updates
+- [BACKUP.md](BACKUP.md): the restores that rotate the epoch

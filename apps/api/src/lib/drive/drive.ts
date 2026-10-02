@@ -46,7 +46,7 @@ import { composeCollaboratorsEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
-import { validateName } from '../mount/helpers';
+import { validateName } from '../mount/names';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
 import { type StorageFile, writeTempWithHash } from '../storage';
@@ -382,6 +382,7 @@ export default class Drive {
         // 404 an unknown thread: a status write must not record an event for a nonexistent chatName.
         await assertCommentChatExists(this, mountId, pathId, chatName);
         const index = await getCommentIndex(this, mountId, pathId);
+        await index.ensureComment(chatName);
         const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
         if (card) await index.setTitle(chatName, card);
         if (status === 'resolved') {
@@ -967,7 +968,7 @@ export default class Drive {
         const chatPath = await this.getPath(mountId, chatId);
         if (!chatPath) throw new ApiError(404, 'Chat not found');
 
-        // Walk up parents to find the container document (doc/stickies/slides/sheets).
+        // Walk up parents to find the container document (doc/stickies/slides/sheets/vector).
         // Standalone chats get null — ACL is set on the chat itself.
         const container = await this.findContainerPath(mountId, chatPath.parentId ?? '');
         const targetPath = container ?? chatPath;

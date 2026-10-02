@@ -30,3 +30,8 @@ export function isBundledCaddy(): boolean {
 export function getRelayHost(): string | undefined {
     return process.env['SMTP_RELAY_HOST'] || undefined;
 }
+
+// The install's .env.production, which Compose mounts read-only for the server backup; unset in `bun run dev`.
+export function getEnvFile(): string | undefined {
+    return process.env['EIGEN_ENV_FILE'] || undefined;
+}

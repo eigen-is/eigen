@@ -13,7 +13,7 @@ smtp      inet  n       -       n       -       -       smtpd
 # mismatch check would refuse the empty-sender bounces and auto-replies RFC 3834 asks for.
 # The auth rate limit below is per client IP (per anvil_rate_time_unit, 60s by default); the hard
 # error limit counts errors within one SMTP session.
-# Why these values: SETUP-GUIDE.md § Mail abuse hardening.
+# Why these values: docs/MAIL.md § Submission is held to the login's own address.
 submission inet n       -       n       -       -       smtpd
     -o syslog_name=postfix/submission
     -o smtpd_tls_security_level=encrypt

@@ -1,25 +1,35 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import { join } from 'node:path';
-import { COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON } from '@workspace/lib/constants/collab';
+import {
+    COLLAB_HOME_REPLACED_CLOSE,
+    COLLAB_HOME_REPLACED_REASON,
+    COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+    COLLAB_STORAGE_UNAVAILABLE_REASON,
+} from '@workspace/lib/constants/collab';
 import { teamOwnerId } from '@workspace/lib/types';
-import type { BackupManifest } from '@workspace/lib/types/backup';
+import type { BackupLevel, BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
 import { apikey as apikeyScheme, user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
+import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
 import * as pathsModule from '../../lib/backup/paths';
 import { ARCHIVE_AVATAR_DIR, buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
-import { getCollabEpoch } from '../../lib/collab/epoch';
 import { getAvatarsDir } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { avatarNameOf } from '../../lib/contacts/card-store';
+import type { Home } from '../../lib/home';
+import { getDataEpoch } from '../../lib/home/data-epoch';
 import { getHome } from '../../lib/home/get-home';
+import { createSSEStream } from '../../lib/home/sse-stream';
 import { createMountConfig } from '../../lib/mount';
 import { paths } from '../../lib/mount/schema';
 import { getEigenDb } from '../../lib/share/db';
@@ -43,6 +53,7 @@ import {
     TEST_PNG_BYTES,
     type TestUser,
 } from '../setup';
+import { expectRealShape, expectRealShapeServed, realShapeHome, waitForJob } from './backup-test-helpers';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -59,16 +70,18 @@ const LOCAL_MOUNT_ID = 'restore-local';
 // One artifact of the home as it stands now, in the backups folder restoreHome reads from.
 // `patch` doctors the unpacked folder before it is packed, which is how a restore is made to fail
 // after the move-aside — the manifest itself is not hashed, so a doctored file only has to restate
-// its own entry (restateEntry) to get past verify and be judged by the step under test.
+// its own entry (restateEntry) to get past verify and be judged by the step under test. `level` is
+// a capture mode of the whole-server archive; left out, it is the per-home backup the pane runs.
 async function backup(
     userId: string,
     at: Date,
     patch?: (manifest: BackupManifest, folder: string) => Promise<void> | void,
+    level?: BackupLevel,
 ): Promise<string> {
     const home = await getHome(userId);
     const staging = mkdtempSync(join(TEST_DATA_DIR, 'restore-backup-'));
     const folder = join(staging, buildHomeFolderName(userId));
-    const manifest = await snapshotHome(home, staging);
+    const manifest = await snapshotHome(home, staging, { level });
     if (patch) {
         await patch(manifest, folder);
         writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
@@ -119,6 +132,21 @@ async function stampSchemaVersion(manifest: BackupManifest, folder: string, relP
         db.close();
     }
     await restateEntry(manifest, folder, relPath);
+}
+
+// One open tab's event stream. `announced` reads on to the next data epochs it announces: the one it opens with, then
+// one per keepalive, which the fake timers of the tests below bring forward.
+async function openEventStream(userId: string) {
+    const reader = createSSEStream(await getHome(userId)).getReader();
+    return {
+        announced: async (): Promise<Record<string, string>> => {
+            for (;;) {
+                const { value } = await reader.read();
+                if (value && 'type' in value && value.type === SSEventType.HOME_DATA_EPOCHS) return value.epochs;
+            }
+        },
+        close: () => reader.cancel(),
+    };
 }
 
 function safetyCopies(userId: string, suffix: string): string[] {
@@ -442,7 +470,21 @@ describe('Backup restoreHome', () => {
         expect(mailSubjectsIn(join(TEST_DATA_DIR, 'home', preRestore))).toContain('After the backup');
     });
 
-    test('an open collab socket is closed with 1012 home-replaced', async () => {
+    // How a collab socket opened now, naming `query`, is closed.
+    function collabClose(query: string): Promise<{ code: number; reason: string }> {
+        const ws = new WebSocket(`ws://localhost:${port}/ws/collab/${target.id}/${mountId}/${docId}${query}`, {
+            headers: { cookie: `better-auth.session_token=${target.sessionToken}` },
+        } as unknown as string[]);
+        return new Promise((resolve, reject) => {
+            ws.onclose = (event) => resolve({ code: event.code, reason: event.reason });
+            ws.onerror = (event) => reject(event);
+        });
+    }
+
+    // The socket retries through the restore; the reconnect after it names the old epoch, so only a restore that
+    // finished reloads the tab, once, and one that failed lets it sync the edits it still holds.
+    test('an open collab socket is closed with the retry close, and its reconnect after the restore with 1012', async () => {
+        const epoch = getDataEpoch(target.id);
         const ws = new WebSocket(`ws://localhost:${port}/ws/collab/${target.id}/${mountId}/${docId}`, {
             headers: { cookie: `better-auth.session_token=${target.sessionToken}` },
         } as unknown as string[]);
@@ -457,31 +499,63 @@ describe('Backup restoreHome', () => {
 
         await restoreHome(artifact, target.id, `restore-ws-${Date.now()}`);
 
-        expect(await closed).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: COLLAB_HOME_REPLACED_REASON });
+        expect(await closed).toEqual({
+            code: COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+            reason: COLLAB_STORAGE_UNAVAILABLE_REASON,
+        });
+        expect(await collabClose(`?epoch=${epoch}`)).toEqual({
+            code: COLLAB_HOME_REPLACED_CLOSE,
+            reason: COLLAB_HOME_REPLACED_REASON,
+        });
     });
 
-    // A tab offline through the restore holds no socket to close; its reconnect names the epoch it loaded under.
-    test('draws a new collab epoch for this home alone, so only its tabs that were offline reload', async () => {
-        const before = getCollabEpoch(target.id);
-        const other = getCollabEpoch(ctx.alice.user.id);
+    // Every tab of this home reloads on the new epoch, connected or offline through the restore; no other home's does.
+    test('draws a new data epoch for this home alone, so only its tabs reload', async () => {
+        const before = getDataEpoch(target.id);
+        const other = getDataEpoch(ctx.alice.user.id);
         await restoreHome(artifact, target.id, `restore-epoch-${Date.now()}`);
-        expect(getCollabEpoch(target.id)).not.toBe(before);
-        expect(getCollabEpoch(ctx.alice.user.id)).toBe(other);
+        expect(getDataEpoch(target.id)).not.toBe(before);
+        expect(getDataEpoch(ctx.alice.user.id)).toBe(other);
     });
 
-    test('a socket that connects while the mark is set is closed 1012, never 1013', async () => {
+    // Every tab of the owner reloads, whatever app it shows: one that stayed connected on its next keepalive, one that
+    // was offline through the restore when it reconnects. Nobody else's stream names the home at all.
+    test("the owner's streams announce the new epoch, and another user's never name the home", async () => {
+        jest.useFakeTimers();
+        const owner = await openEventStream(target.id);
+        const other = await openEventStream(ctx.alice.user.id);
+        try {
+            const before = await owner.announced();
+            const otherBefore = await other.announced();
+            expect(Object.keys(otherBefore)).not.toContain(target.id);
+
+            await restoreHome(artifact, target.id, `restore-sse-${Date.now()}`);
+            jest.advanceTimersByTime(15_000);
+
+            const after = await owner.announced();
+            expect(after[target.id]).not.toBe(before[target.id]);
+            expect(after[target.id]).toBe(getDataEpoch(target.id));
+            expect(await other.announced()).toEqual(otherBefore);
+            const reconnected = await openEventStream(target.id);
+            expect(await reconnected.announced()).toEqual(after);
+            await reconnected.close();
+        } finally {
+            jest.useRealTimers();
+            await owner.close();
+            await other.close();
+        }
+    });
+
+    test('a socket that connects while the mark is set is closed with the retry close, never 1012', async () => {
         const { markHomeRestoring, clearHomeRestoring } = await import('../../lib/home/get-home');
+        const epoch = getDataEpoch(target.id);
         markHomeRestoring(target.id);
         try {
-            const ws = new WebSocket(`ws://localhost:${port}/ws/collab/${target.id}/${mountId}/${docId}`, {
-                headers: { cookie: `better-auth.session_token=${target.sessionToken}` },
-            } as unknown as string[]);
-            const closed = await new Promise<{ code: number; reason: string }>((resolve, reject) => {
-                ws.onclose = (event) => resolve({ code: event.code, reason: event.reason });
-                ws.onerror = (event) => reject(event);
+            // 1012 would reload the tab onto the 503 of the restore, and throw away its edits if the restore fails.
+            expect(await collabClose(`?epoch=${epoch}`)).toEqual({
+                code: COLLAB_STORAGE_UNAVAILABLE_CLOSE,
+                reason: COLLAB_STORAGE_UNAVAILABLE_REASON,
             });
-            // 1013 would make this tab keep its document and retry — straight back over the restore.
-            expect(closed).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: COLLAB_HOME_REPLACED_REASON });
         } finally {
             clearHomeRestoring(target.id);
         }
@@ -523,6 +597,30 @@ describe('Backup restoreHome', () => {
         rmSync(join(getBackupsDir(), artifactV7), { force: true });
     });
 
+    test('an empty path-based folder whose name and file differ comes back where its mount renames it from', async () => {
+        const home = await getHome(target.id);
+        const localMount = home.drive.getMounts().find((m) => m.id === LOCAL_MOUNT_ID)!;
+        const folder = await drivePost(target.sessionToken, target.id, LOCAL_MOUNT_ID, `folder/${localRootId}`, {
+            folderName: 'Deduplicated',
+        });
+        await localMount.db.update(paths).set({ name: 'Deduplicated (1)' }).where(eq(paths.id, folder.id));
+
+        const artifactV7 = await backup(target.id, new Date(Date.now() + 180_000));
+        await restoreHome(artifactV7, target.id, `restore-renamed-folder-${Date.now()}`);
+
+        const rename = await authedRequest(
+            target.sessionToken,
+            `/drive/${target.id}/${LOCAL_MOUNT_ID}/path/${folder.id}/rename`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ newName: 'Kept' }),
+            },
+        );
+        expect(rename.status).toBe(200);
+        rmSync(join(getBackupsDir(), artifactV7), { force: true });
+    });
+
     test('the home is refused while the mark is set and served again once it clears', async () => {
         const { markHomeRestoring, clearHomeRestoring } = await import('../../lib/home/get-home');
         markHomeRestoring(target.id);
@@ -549,7 +647,7 @@ describe('Backup restoreHome', () => {
     // held off here to look at what was written.
     test('a finished restore leaves its completion note beside the marker', async () => {
         const jobId = `restore-sentinel-${Date.now()}`;
-        const spy = spyOn(pathsModule, 'wipeBackupStagingDir').mockImplementation(() => {});
+        const spy = spyOn(pathsModule, 'wipeBackupStagingDir').mockImplementation(async () => {});
         try {
             await restoreHome(artifact, target.id, jobId);
         } finally {
@@ -570,7 +668,12 @@ describe('Backup restoreHome', () => {
             manifest.mounts.push({ id: 'ghost-mount', storageType: 'local', files: 0, bytes: 0 });
         });
 
+        const epoch = getDataEpoch(target.id);
+
         await expect(restoreHome(doctored, target.id, `restore-ghost-${Date.now()}`)).rejects.toThrow(/ghost-mount/);
+
+        // The home as it was is back, so a tab that held it has nothing to reload for.
+        expect(getDataEpoch(target.id)).toBe(epoch);
 
         expect(safetyCopies(target.id, FAILED_RESTORE_SUFFIX).length).toBe(1);
         expect(existsSync(join(TEST_DATA_DIR, 'home', target.id))).toBe(true);
@@ -856,6 +959,11 @@ describe('Backup restore of a team home', () => {
         artifact = await backup(ownerId, new Date());
     });
 
+    // Every test below restores this one artifact, so it goes once they are all done, whichever of them ran.
+    afterAll(() => {
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
     test('round-trips the team home, files and all', async () => {
         const token = ctx.alice.user.sessionToken;
         await driveUpload(
@@ -880,7 +988,31 @@ describe('Backup restore of a team home', () => {
         const teamRoot = join(TEST_DATA_DIR, 'team');
         const copies = readdirSync(teamRoot).filter((name) => name.startsWith(`${ownerId.slice('team_'.length)}.`));
         expect(copies.length).toBe(1);
-        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
+    // A member's stream is their own home's, which the restore never touched: the team's epoch rides along with it.
+    test("a member's stream announces the team's new epoch, and a non-member's never names the team", async () => {
+        jest.useFakeTimers();
+        const member = await openEventStream(ctx.alice.user.id);
+        const outsider = await openEventStream(ctx.bob.user.id);
+        try {
+            const before = await member.announced();
+            const outsiderBefore = await outsider.announced();
+            expect(before[ownerId]).toBe(getDataEpoch(ownerId));
+            expect(Object.keys(outsiderBefore)).not.toContain(ownerId);
+
+            await restoreHome(artifact, ownerId, `restore-team-sse-${Date.now()}`);
+            jest.advanceTimersByTime(15_000);
+
+            const after = await member.announced();
+            expect(after[ownerId]).not.toBe(before[ownerId]);
+            expect(after[ctx.alice.user.id]).toBe(before[ctx.alice.user.id]);
+            expect(await outsider.announced()).toEqual(outsiderBefore);
+        } finally {
+            jest.useRealTimers();
+            await member.close();
+            await outsider.close();
+        }
     });
 });
 
@@ -1102,5 +1234,134 @@ describe('Backup restore of a disabled mount', () => {
         rmSync(join(getBackupsDir(), artifact), { force: true });
 
         expect(existsSync(join(mountDir, 'tmp'))).toBe(false);
+    });
+});
+
+describe('Backup restore refuses a member that is not a complete home', () => {
+    // A Light or Full member of a whole-server archive leaves out what only a restore of that whole
+    // archive puts back. restoreHome refuses one from its manifest before it touches the home.
+    const S3_MOUNT_ID = 'restore-partial-s3';
+    const S3_BACKING = join(TEST_DATA_DIR, 'restore-partial-backing');
+    let user: TestUser;
+    let mountId: string;
+    let rootId: string;
+
+    beforeAll(async () => {
+        await getTestContext();
+        user = await createTestUser('restore-partial@test.eigen.is', PASSWORD, 'Restore Partial');
+        const mounts = await assertJson<{ id: string }[]>(
+            await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`),
+        );
+        mountId = mounts[0].id;
+        rootId = (
+            await assertJson<DrivePath>(await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/root`))
+        ).id;
+        await driveUpload(
+            user.sessionToken,
+            user.id,
+            mountId,
+            rootId,
+            new File([TEST_PNG_BYTES], 'live.png', { type: 'image/png' }),
+        );
+    });
+
+    // Never evicted, nothing moved aside or parked, no tab told to reload, the home serving what it served.
+    async function expectUntouched(home: Home, before: string[], epoch: string): Promise<void> {
+        expect(await getHome(user.id)).toBe(home);
+        expect(safetyCopies(user.id, PRE_RESTORE_SUFFIX)).toEqual([]);
+        expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX)).toEqual([]);
+        expect(getDataEpoch(user.id)).toBe(epoch);
+        expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(before);
+    }
+
+    test('a Light member is refused by its level and the live home is untouched', async () => {
+        const home = await getHome(user.id);
+        const before = await rootNames(user.sessionToken, user.id, mountId, rootId);
+        const epoch = getDataEpoch(user.id);
+        const artifact = await backup(user.id, new Date(), undefined, 'light');
+
+        await expect(restoreHome(artifact, user.id, `restore-light-${Date.now()}`)).rejects.toThrow(
+            `${artifact} is a light backup`,
+        );
+
+        await expectUntouched(home, before, epoch);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
+    test('a Full member of a home without s3 mounts is complete and restores', async () => {
+        const artifact = await backup(user.id, new Date(Date.now() + 60_000), undefined, 'full');
+        await restoreHome(artifact, user.id, `restore-full-${Date.now()}`);
+        expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toContain('live.png');
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+        for (const name of safetyCopies(user.id, PRE_RESTORE_SUFFIX)) {
+            rmSync(join(TEST_DATA_DIR, 'home', name), { recursive: true, force: true });
+        }
+    });
+
+    test('a metadata-only mount is refused by name and the live home is untouched', async () => {
+        const home = await getHome(user.id);
+        const { mount } = createHomeFaultMount(home, S3_MOUNT_ID, S3_BACKING);
+        await mount.init();
+        registerFaultMount(home.drive, mount);
+        try {
+            const s3Root = (await mount.getRootFolder())!.id;
+            await mount.createFile(s3Root, 'remote.png', 'image/png', TEST_PNG_BYTES.byteLength, TEST_PNG_BYTES);
+            await mount.drainPendingUploads({ flushNow: true });
+            const before = await rootNames(user.sessionToken, user.id, mountId, rootId);
+            const epoch = getDataEpoch(user.id);
+            const artifact = await backup(user.id, new Date(Date.now() + 120_000), undefined, 'full');
+
+            await expect(restoreHome(artifact, user.id, `restore-metadata-${Date.now()}`)).rejects.toThrow(
+                `${artifact} holds only the metadata of mount ${S3_MOUNT_ID}`,
+            );
+
+            await expectUntouched(home, before, epoch);
+            rmSync(join(getBackupsDir(), artifact), { force: true });
+        } finally {
+            unregisterFaultMount(home.drive, S3_MOUNT_ID);
+            await mount.closeAllDatabases().catch(() => {});
+            rmSync(S3_BACKING, { recursive: true, force: true });
+        }
+    });
+});
+
+describe('Backup round trip of a home that stores files by name', () => {
+    async function backUp(userId: string): Promise<string> {
+        const job = await waitForJob(
+            startBackupJob('backup', userId, undefined, (started, onProgress) =>
+                runHomeBackup(userId, started, onProgress),
+            ).id,
+        );
+        expect(job.error).toBeUndefined();
+        return job.artifact!;
+    }
+
+    test('the per-home backup verifies and its restore puts every renamed, trashed and versioned item back', async () => {
+        const shape = await realShapeHome();
+        const { user } = shape;
+        await restoreHome(await backUp(user.id), user.id, `restore-real-shape-${Date.now()}`);
+        expectRealShape(join(TEST_DATA_DIR, 'home', user.id), shape);
+        await expectRealShapeServed(shape);
+    });
+
+    test('the home moves in through a copy when the backups folder is another disk than data/', async () => {
+        const shape = await realShapeHome();
+        const { user } = shape;
+        const artifact = await backUp(user.id);
+        const homeDir = join(TEST_DATA_DIR, 'home', user.id);
+        const rename = fsp.rename;
+        let crossed = false;
+        const spy = spyOn(fsp, 'rename').mockImplementation(async (from, to) => {
+            if (to !== homeDir) return rename(from, to);
+            crossed = true;
+            throw Object.assign(new Error('cross-device link not permitted'), { code: 'EXDEV' });
+        });
+        try {
+            await restoreHome(artifact, user.id, `restore-cross-device-${Date.now()}`);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(crossed).toBe(true);
+        expectRealShape(homeDir, shape);
     });
 });

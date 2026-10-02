@@ -59,6 +59,8 @@ export const SSEventType = {
     LABEL_DELETED: 'contacts:label-deleted',
     // Backup events (admin only)
     BACKUP_JOB_UPDATED: 'backup:job-updated',
+    // Home events
+    HOME_DATA_EPOCHS: 'home:data-epochs',
 } as const;
 
 // --- Event data types (minimal — only what frontend handlers need for cache invalidation) ---
@@ -117,13 +119,21 @@ type SSEventSpace = {
     type: typeof SSEventType.SPACE_SETTINGS_UPDATED;
 };
 
-// Sent to every admin on every state or progress change, because any of them can have the pane open.
+// Sent on every state or progress change: a home job's to every admin, since any of them can have the pane open,
+// and a server job's to the owner alone.
 // The payload is a poke: the pane refetches the job and artifact lists, which the server answers from
 // the job map.
 type SSEventBackup = {
     type: typeof SSEventType.BACKUP_JOB_UPDATED;
     jobId: string;
     ownerId: string;
+};
+
+// Sent when a stream opens and with every keepalive: the data epoch of the user's own home and of each of their
+// teams, keyed by owner id. Only a restore changes one, so a tab reloads when an epoch it already holds changes.
+type SSEventHomeDataEpochs = {
+    type: typeof SSEventType.HOME_DATA_EPOCHS;
+    epochs: Record<string, string>;
 };
 
 type SSEventTeam = {
@@ -140,6 +150,7 @@ export type SSEvent =
     | SSEventChat
     | SSEventContact
     | SSEventContactsChanged
+    | SSEventHomeDataEpochs
     | SSEventLabel
     | SSEventNotificationCreated
     | SSEventNotificationChanged
@@ -153,6 +164,7 @@ export type {
     SSEventContact,
     SSEventContactsChanged,
     SSEventDrive,
+    SSEventHomeDataEpochs,
     SSEventLabel,
     SSEventMail,
     SSEventNotificationChanged,

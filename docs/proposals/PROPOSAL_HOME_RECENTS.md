@@ -1,5 +1,9 @@
 # Proposal: Per-Home Recents
 
+This proposal has Eigen remember what a user recently used, the addresses they mailed and the files they opened, so that autosuggest and the command palette can offer those first.
+
+**Status:** not built: there is no `eigen.recents/recents.db`. [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps its row, since nothing is blocked on it.
+
 > **TLDR**: A per-user `home.recents` module records "implicit usage" — recently used
 > email addresses and recently opened files — so the data feeds autosuggest and the
 > command palette the next time the user reaches for them. **One typed Drizzle table

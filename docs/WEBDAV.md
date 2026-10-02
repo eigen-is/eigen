@@ -1,198 +1,113 @@
-# WebDAV Drive Mount
+# WebDAV
 
-> **TLDR**: Each mount is exposed at `/webdav/<ownerId>/<mountId>/` over HTTP Basic auth. Class 1 +
-> Class 2 (RFC 4918) — `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE`, `MKCOL`, `MOVE`, `COPY`,
-> `PROPPATCH`, `LOCK`, `UNLOCK`. Eigen container files (`.eigendoc`, `.eigensheets`, `.eigenvector`, ...) appear as
-> plain folders containing `data.db` + `media/`; reads pass through, writes inside are blocked (423).
-> Locks are in-memory. Litmus 0.17 baseline: **101/105**. Verified against Windows Explorer (works
-> well), macOS Finder, Cyberduck, Mountain Duck.
->
-> No discovery endpoint: `/webdav/` and `/webdav/<ownerId>/` return 404. The Space **Integrations**
-> page lists one URL per accessible mount for users to copy.
+> **TLDR:** WebDAV lets a computer open a Drive mount as a network folder. Each mount is one WebDAV share (RFC 4918, Class 1 and 2) at `/webdav/<ownerId>/<mountId>/`, over HTTP Basic with the same app passwords as IMAP, CalDAV and CardDAV. Every handler goes through `SharedDrive`, so a WebDAV client gets exactly the permissions the REST API gives. The code is `apps/api/src/lib/webdav/`. Not obvious from the code: nothing above a mount answers, an Eigen document shows as a plain folder that is read-only inside, locks live in memory only, and the ETag is the content hash because Finder loops on an unstable one. CalDAV and CardDAV are a separate service under `/dav/` ([CALDAV.md](CALDAV.md), [CARDDAV.md](CARDDAV.md)).
 
-## URL scheme
+People mount a drive in Finder or Windows Explorer, sync it with rclone or Mountain Duck, or save straight from Word and Excel. The Integrations page (`apps/space/src/routes/_auth.services.tsx`) lists one URL per mount the user can reach and makes the app passwords. A mount is one drive of a Home: a table of paths over one storage backend ([STORAGE.md § A mount is a paths table](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)).
+
+The one idea is that WebDAV is a thin protocol layer over Drive. Files, folders, sharing, trash and quota all come from Drive ([ACL.md](ACL.md), [SOFT-DELETE.md](SOFT-DELETE.md), [QUOTA.md](QUOTA.md)), so a WebDAV `DELETE` goes to the trash like a delete in the Drive app. WebDAV's own state is only its locks and the properties a client stores on a file.
+
+## A mount is one share and nothing above it answers
 
 ```
-/webdav/                              → 404 (intentional)
-/webdav/<ownerId>/                    → 404 (intentional)
-/webdav/<ownerId>/<mountId>/          → root collection of a mount
-/webdav/<ownerId>/<mountId>/<path>    → file or folder by hierarchical name
+/webdav/                              404
+/webdav/<ownerId>/                    404
+/webdav/<ownerId>/<mountId>/          the mount's root folder
+/webdav/<ownerId>/<mountId>/<path>    a file or folder by name
 ```
 
-`<ownerId>` is a raw UUID for users, `team_<teamId>` for teams. Each mount becomes one network volume
-in the client. Sub-path mounts are not supported. Cross-mount / cross-owner `MOVE` and `COPY` are
-rejected with `502` — clients must download + re-upload to move bytes between mounts. URL paths and the
-`Destination` header are percent-decoded per segment; a malformed escape (`bad%E0`) is `400`.
+`<ownerId>` is the user's id, or `team_<teamId>` for a team drive. Each mount is one volume in the client, and a share of a sub-folder is not possible. The levels above a mount answer 404 on purpose: there is no discovery, and the Integrations page (`apps/space/src/routes/_auth.services.tsx`) lists one URL per mount the user can reach. So a client that walks up from a mount URL gets nothing. Windows' **Add a network location** wizard does exactly that and rejects the URL, which is why the help center sends users to **Map network drive** instead.
 
-## Authentication
+A trailing slash is stripped, so `/foo/` and `/foo` name one row. The path and the `Destination` header are percent-decoded per segment, and a malformed escape (`bad%E0`) is a 400.
 
-HTTP Basic, validated by `verifyProtocolAuth()` (`apps/api/src/lib/auth/protocol-auth.ts`):
+## Basic auth needs TLS
 
-1. Tries app passwords (better-auth API keys) first.
-2. Falls back to the user's primary password — only if 2FA is disabled on the account.
+Every request carries HTTP Basic, checked by `verifyProtocolAuth` ([IMAP.md § Dovecot asks the API whether a password is right](IMAP.md#dovecot-asks-the-api-whether-a-password-is-right)). The failure limiter keys on the `X-Real-IP` Caddy sets on the `/webdav` route. TLS is mandatory in practice: Windows' WebClient sends Basic only over HTTPS (`BasicAuthLevel = 1`), Windows 11 included.
 
-App passwords are generated from the **Integrations** page in Space. **TLS is mandatory**: Windows
-Explorer's WebClient defaults to `BasicAuthLevel = 1` (HTTPS-only Basic) since Vista, including
-Windows 11.
+## Every handler resolves through SharedDrive
 
-## Method mapping
+Each handler starts with `getSharedDrive(ownerId, user)`, so WebDAV enforces the same grants as the REST API ([ACL.md](ACL.md)). The drive methods it needs (`resolvePath`, `copyPath`, `readRange`, `updatePathDetails`, `lockManager`) live on `Drive` with a matching `SharedDrive` wrapper.
 
-Every mutating method goes through `assertWritable()` (lock check) and the container-internals guard
-(`enclosingDocumentContainer()` over the breadcrumb).
+`resolvePath` checks read access only. So LOCK checks `canWrite` before it issues a token: a lock announces writes to come, and a reader must not pin one.
 
-| Method | Class | Drive method | Notes |
-|---|---|---|---|
-| `OPTIONS` | – | `apps/api/src/app.ts` | Advertises `DAV: 1, 2` and the `Allow` list. Handled before CORS. |
-| `PROPFIND` | 1 | `Drive.resolvePath`, `Drive.getFolderContents` | Depth 0/1 supported. Depth ∞ returns `403` with `<DAV:propfind-finite-depth>` (RFC 4918 §9.1). |
-| `GET` / `HEAD` | 1 | `Drive.readFile` (or `readRange` for `Range:`) | `bytes=N-M`, open-ended `bytes=N-`, suffix `bytes=-N` all supported — the 416/206/200 shape itself is the shared `rangeResponse` (`lib/core/http.ts`), which REST `serveFile` and the mail part routes answer with too. `If-Match` / `If-None-Match` honored in RFC 7232 §6 order. Bodies carry `X-Content-Type-Options: nosniff` (plus a sandbox CSP for html/xhtml/svg), matching REST `serveFile`. |
-| `PUT` | 1 | `Drive.createFileFromData` (new) / `Drive.writeFileContent` (overwrite) | Both stage the body to a tmp file with hashing before the insert. Quota pre-check via `Content-Length`. Thumbnails regenerate on overwrite. |
-| `DELETE` | 1 | `Drive.deletePath` (soft) | Goes to trash. `resolvePath` skips trashed rows so subsequent `GET`/`PROPFIND` returns 404. |
-| `MKCOL` | 1 | `Drive.createFolder` | Bodied `MKCOL` returns `415` (RFC 4918 §9.3.1). |
-| `MOVE` | 1 | `Drive.movePath` + `renamePath` | Same-mount only. `Overwrite: F` → `412` if target exists. Same source and destination URL → `403` (RFC 4918 §9.9.4), checked before anything is trashed. |
-| `COPY` | 1 | `Drive.copyPath` | Same-mount only. Server-side copy — does not round-trip bytes through HTTP. `Depth: 0` on a collection copies the folder without members (RFC 4918 §9.8.3). Same source and destination URL → `403`. Exempt from the server-wide `idleTimeout` (`server.timeout(request, 0)`), so a deep copy past 200s still answers instead of dropping the connection. |
-| `PROPPATCH` | 1 | `Drive.updatePathDetails` | Live properties (`getcontentlength`, `getetag`, ...) return `403`. Unknown dead properties (e.g. `Z:Win32CreationTime`) persist in `DrivePath.details.webdavProps`. 207 multistatus; a malformed body or a property name that is not an XML name is `400` before anything persists (the name is echoed as an element in every later PROPFIND). |
-| `LOCK` / `UNLOCK` | 2 | `Drive.lockManager` | In-memory tokens. Default TTL 600 s, capped at 24 h. Depth-infinity locks gate writes on descendants. Released on `DELETE`. |
+## A document container is a folder that is read-only inside
 
-PROPFIND/PROPPATCH/LOCK request bodies are capped at 64 KB to keep `fast-xml-parser`'s synchronous
-path off the event loop. PROPFIND and PROPPATCH validate with `XMLValidator` before parsing; LOCK reads
-its two elements (`owner`, `lockscope`) by regex because the owner is opaque client XML echoed back as-is.
+An Eigen document (every type `isDocumentType` names) is a drive folder holding `data.db` and `media/` ([STORAGE.md](STORAGE.md)). Over WebDAV it lists as a folder with its real children, and `GET Report.eigendoc/data.db` returns the SQLite file byte for byte. So rclone or rsync backs up every document losslessly.
 
-## Container files (raw mode)
+A write inside one is a `423 Locked`: PUT, MKCOL, DELETE and PROPPATCH on anything inside, a MOVE from or to inside, and a COPY into one. The drive layer owns that state, and a client write would corrupt it or orphan its rows. The container as a whole moves, renames, copies and trashes like any folder. `enclosingDocumentContainer` (`container-guard.ts`) makes the call over the breadcrumb each handler fetches anyway for the lock check. `container-guard.test.ts` pins every method.
 
-Eigen container files (`.eigendoc`, `.eigensheets`, `.eigenstickies`, `.eigenslides`, `.eigenvector`, `.eigenchat`)
-are drive folders containing `data.db` + optional `media/` (see [Eigen container pattern in Drive
-storage](STORAGE.md)). Over WebDAV they appear as folders with their real children. `GET
-Report.eigendoc/data.db` returns the SQLite blob byte-for-byte — backups via rclone / rsync /
-Mountain Duck capture every container losslessly.
+There is no export view: a document is never offered as `.docx` or `.xlsx` over WebDAV, so editing one goes through the web app. The converters that could back such a view are in [EXPORT.md](EXPORT.md).
 
-The container is **read-only inside**: `PUT`, `MKCOL`, `DELETE`, `MOVE` (source or dest),
-`PROPPATCH` targeting any path *inside* a container return `423 Locked`. The container as a whole
-can be moved, renamed, or deleted as a unit through the normal Drive code path. `enclosingDocumentContainer()`
-in `webdav/container-guard.ts` runs over a single pre-fetched breadcrumb to make that decision.
+## MOVE and COPY stay inside one mount
 
-Reads (`GET`, `PROPFIND`, `COPY`-out) are unaffected. An `export` mode that surfaces eigen documents
-as `.docx`/`.xlsx`/`.pdf` was scoped in the original proposal but **not implemented** — round-tripping
-through Office is currently a web-app workflow.
+A `Destination` in another mount or under another owner is a 502. The client downloads and re-uploads instead. COPY runs server-side through `Drive.copyPath`, so the bytes never cross HTTP. It is exempt from the server's idle timeout (`server.timeout(request, 0)`), because a deep copy stays silent until it lands. `Depth: 0` on a folder copies the folder without its members (RFC 4918 §9.8.3).
 
-## Properties
+An overwrite trashes the target first. So a request whose source and destination are one resource is a 403, checked before anything is trashed, or the source itself would go to the trash. `Overwrite: F` on an existing target is a 412.
 
-| Property | Source |
-|---|---|
-| `displayname` | `path.name` |
-| `resourcetype` | `<collection/>` for folders, empty for files |
-| `creationdate` | `path.createdAt` (ISO 8601) |
-| `getlastmodified` | `path.updatedAt` (RFC 1123, **always UTC** — Apple's `webdavfs` assumes UTC) |
-| `getcontentlength` | `path.size` (files only) |
-| `getcontenttype` | `path.mimeType` (files only) |
-| `getetag` | `"<sha-256>"` of the file body. DQUOTE-wrapped, content-derived (RFC 7232 §2.1) — Finder enters re-download loops on unstable validators. Synthetic `id-mtime-size` fallback only for legacy rows missing a hash. |
-| `quota-used-bytes` / `quota-available-bytes` | Mount root only, via `getMountQuotaState()` |
-| `supportedlock` | Static: an exclusive and a shared `<lockentry>`, both `<write/>` |
-| `lockdiscovery` | Live tokens from `LockManager.listForPath()` |
-| Dead properties | Persisted on `DrivePath.details.webdavProps` |
+## Locks live in memory
 
-## Locks
+`LockManager` (`apps/api/src/lib/drive/lock-manager.ts`) keeps one table per `Drive`, keyed by path id. Memory is enough: collab editing never relies on WebDAV locks, Office refreshes its locks about every 10 minutes whatever `Timeout` the server answers, and a restart that drops every lock is correct. A second node would need a shared store ([SCALABILITY.md](SCALABILITY.md)).
 
-`LockManager` (`apps/api/src/lib/drive/lock-manager.ts`) keeps tokens in-memory keyed by `pathId`;
-depth-infinity coverage is computed per write by walking the caller's breadcrumb (`coveringLocks`). Each lock is owned by the
-authenticated `userId`; another user's `If: (<token>)` on a write returns `423`.
+- A lock belongs to the user who took it. A write with another user's token is a 423. Their UNLOCK is a 403.
+- A depth-infinity lock on a folder gates writes on everything below it. Each write walks its breadcrumb for covering locks (`coveringLocks`).
+- The TTL is 600 s unless the client asks, and never over 24 h, so a client can't pin lock state for years.
+- DELETE and an overwrite release the replaced path's locks.
+- LOCK reads its two elements (`owner`, `lockscope`) by regex, not a parser: the owner is opaque client XML that must echo back as sent.
 
-In-memory because: collab editing never relies on WebDAV locks, Office refreshes its locks every
-~10 minutes (it ignores the server's `Timeout`), and a server restart correctly drops everything.
-Persistence and multi-node coordination are deferred to whenever `home-relay.ts` learns to shard
-homes (see [SCALABILITY.md](SCALABILITY.md)).
+## PUT stages the body before the row
 
-## Code architecture
+A create and an overwrite both stream the body to a temp file while hashing it, then write the row. The hash becomes the ETag. An empty PUT succeeds, because Finder reserves a new name with a 0-byte PUT before it sends the content. A PUT over a folder is a 409. The MIME type comes from the name's extension, and an overwrite regenerates the thumbnail.
 
-```
-apps/api/src/lib/webdav/
-  webdav-router.ts      # Elysia routes, body size cap, path decoding
-  resource.ts           # GET / HEAD / PUT / DELETE / MKCOL
-  propfind.ts           # PROPFIND on resources (single + listing)
-  proppatch.ts          # PROPPATCH — 207 multistatus + dead-prop persistence
-  move-copy.ts          # MOVE / COPY (same-mount only)
-  locks.ts              # LOCK / UNLOCK handlers + assertWritable()
-  container-guard.ts    # enclosingDocumentContainer() over breadcrumb
-  container-overlay.ts  # AppleDouble + Office-tempfile filename filter
-  path.ts               # encodeHref / decodeHref / splitParentAndName — client path ↔ drive name
-  xml.ts                # multistatus / propstat / prop serialization
-```
+**The size checks trust `Content-Length`.** Before any bytes move, a PUT meets the per-file upload cap a Drive upload meets (`enforceMaxUploadSize`, `quotas.maxUploadSizeMB`), which is a 413, and the mount's quota, which is a 507. A chunked upload sends no `Content-Length`, so nothing is checked, and one upload can pass both. The client is authenticated, so this chunked-PUT gap is a noisy-user problem, not an attack. How a mount's quota resolves is in [QUOTA.md](QUOTA.md).
 
-Shared with CalDAV and CardDAV from `apps/api/src/lib/dav/`: `XML_CONTENT_TYPE` and `davError` (`xml.ts`),
-`isNcName` (`propfind.ts`) and the `fast-xml-parser` node narrowing `asNode`/`isXmlNode` (`xml-node.ts`).
-The multistatus builders are deliberately WebDAV's own: the dav ones declare the CalDAV/CardDAV
-namespaces and emit no newlines.
+## The ETag is the content hash
 
-`computeEtag` is not a WebDAV concern — it is imported from `lib/core/http` and shared with the REST routes, so the same file reports the same validator on both paths. The preconditions come from the same module: `matchesIfMatch` (strong, RFC 7232 §3.1) and `matchesIfNoneMatch` (weak, §3.2) are the API's only two etag comparisons, shared with CalDAV, CardDAV and the REST file routes. Both take the etag in its quoted wire form, so a surface storing a bare hash quotes it at the call.
+`getetag` is the file's SHA-256, quoted (RFC 7232 §2.1). It is content-derived because Finder re-downloads in a loop when a validator changes without the content changing. A row with no hash falls back to an id, mtime and size triple. `computeEtag` lives in `lib/core/http.ts` and the REST routes use it too, so one file has one validator on both paths.
 
-Route entry points always go through `getSharedDrive(ownerId, user)`, so cross-owner ACL is enforced
-the same way as the REST API. The drive-side helpers (`resolvePath`, `copyPath`, `readRange`,
-`updatePathDetails`, `lockManager`) live on `Drive` with matching `SharedDrive` wrappers.
+GET honors `If-Match` before `If-None-Match` (RFC 7232 §6), through the same `matchesIfMatch` and `matchesIfNoneMatch` the REST file routes and CalDAV and CardDAV use. Byte ranges, open-ended and suffix ones included, go through the shared `rangeResponse`. Every body carries `X-Content-Type-Options: nosniff`, plus a sandbox CSP for html, xhtml and svg, as REST `serveFile` does: a disguised upload opened in a browser must not run script with the viewer's session.
 
-## Filename quirks
+## Properties are derived and dead ones persist
 
-`isHiddenName()` in `container-overlay.ts` silently accepts but hides from listings:
+PROPFIND serves Depth 0 and 1. Depth infinity, which is also what a missing `Depth` header means, is a 403 with `propfind-finite-depth`. Every row carries a fixed set of properties, whatever the body asks for ([ROADMAP.md](ROADMAP.md)). `getlastmodified` is always UTC, which Apple's `webdavfs` assumes. The requested folder also carries the mount's `quota-used-bytes` and `quota-available-bytes`, and its children don't.
 
-- AppleDouble: `.DS_Store`, `._*` (Finder)
-- Office Windows lock files: `~$*` 
-- Office Mac save-temps: `.~WRD*` (Word for Mac on Sequoia 15.1+ surfaces these as visible)
-- Office Windows save-temps: `~WRD####.tmp`
+PROPPATCH answers a 207. A live property (`getetag`, `getcontentlength`, `displayname` and the rest) is a 403 in its propstat, since a stored copy would shadow the real value. Any other property persists in `DrivePath.details.webdavProps`, such as Finder's tags or Office's `Win32CreationTime`. A property name that is not an XML name is a 400 before anything persists, because every later PROPFIND echoes it as an element.
 
-Names are normalized to NFC on write; resolution accepts both NFC and NFD on read (Finder sends NFD).
-URL paths are URL-decoded per-segment, so `My%20Folder` matches the row stored as `My Folder`.
+PROPFIND, PROPPATCH and LOCK bodies are capped at 64 KB (413 over it), which keeps an authenticated user from parking megabytes on `fast-xml-parser`'s synchronous path. PROPFIND and PROPPATCH validate the body with `XMLValidator` first, since the parser still yields ops from a truncated body.
 
-## Clients
+## Client junk files are accepted and hidden
 
-Verified working as of 2026-05:
+`isHiddenName` (`container-overlay.ts`) accepts these on PUT and leaves them out of PROPFIND listings:
 
-| Client | Platform | Notes |
-|---|---|---|
-| **Windows Explorer** ("Add a network drive") | Win 10/11 | Works really well in practice. Requires HTTPS (Basic auth default). 50 MB upload cap unless registry tweak is applied. Service `WebClient` must be running. |
-| **Mountain Duck** | macOS, Win | Recommended commercial pick on macOS — Mountain Duck 5+ uses native File Provider / CfAPI. |
-| **rclone-mount** | macOS, Win, Linux | Recommended free / scriptable pick. User installs FUSE-T (Mac) or WinFsp (Win). |
-| **Cyberduck** | macOS, Win | Browse-and-transfer, no mount; the test bed during development. |
-| **macOS Finder** (`webdavfs`) | macOS | Supported but not blessed — slow on large folders, aggressive metadata caching. Prefer Mountain Duck or rclone. |
-| **Word / Excel** (Mac + Win) | – | LOCK/PUT/MOVE save-dance verified. AutoSave is disabled on WebDAV mounts (Microsoft, M365 v2306+) — saves are manual. |
-| **iOS Files.app** | iOS | Native WebDAV is intermittent; use a third-party shim (FileBrowser, Documents, Owlfiles). |
+- AppleDouble: `.DS_Store` and `._*` (Finder)
+- Office lock files on Windows: `~$*`
+- Office save temps: `.~WRD*` (Word for Mac, visible since macOS 15.1) and `~WRD####.tmp` (Windows)
 
-## Limits
+Clients break if they can't write them, and they are noise in a listing.
 
-Conformance baseline: Litmus 0.17 scores **101/105** against this server.
+Names are stored in NFC. Lookups normalize to NFC too, so a Finder path in NFD finds the row.
 
-- **Per-mount quota**: `MountConfig.maxSizeMB`. Pre-checked against `Content-Length` on `PUT`; `507`
-  on overrun.
-- **Per-user upload size**: `getUploadMaxSize()` — same value the regular Drive route enforces.
-- **PROPFIND/PROPPATCH/LOCK body**: 64 KB.
-- **Lock TTL**: 600 s default, 24 h cap.
-- **Rate limits**: defer to the global Elysia rate limiter; no protocol-specific limits.
+## The multistatus builders are WebDAV's own
 
-Two gaps are known and open:
+WebDAV shares a few pieces with CalDAV and CardDAV from `apps/api/src/lib/dav/`: `XML_CONTENT_TYPE` and `davError`, `isNcName`, and the `fast-xml-parser` narrowing `asNode` and `isXmlNode`. The multistatus builders stay its own in `webdav/xml.ts`. The dav ones declare the CalDAV and CardDAV namespaces and emit no newlines, and switching changes every multistatus, which needs a round of real clients first ([ROADMAP.md](ROADMAP.md)).
 
-1. **Unbounded chunked PUT bypasses the quota projection.** A chunked upload sends no `Content-Length`, so
-   there is nothing to pre-check and the mount can be pushed one upload past its cap. The client is
-   authenticated, so this is a noisy-user problem rather than an attack vector.
-2. **Litmus trips the rate cap.** Litmus fires requests back-to-back and hits the global 300 req/min limit, so
-   a full conformance run needs the limiter relaxed first.
-3. **Dead properties and shared locks per path are unbounded** across requests for an authenticated user
-   (same noisy-user class as 1). Row in [ROADMAP.md](ROADMAP.md) § Cheap wins.
+## Real clients set the bar
 
-## File reference
+Litmus 0.17 scores 101/105 against this server. Litmus fires requests back to back and can hit the global rate limiter in `apps/api/src/app.ts`, so relax it for a full run. The tests are `apps/api/src/test/webdav/`.
 
-| Path | Status |
-|---|---|
-| `apps/api/src/lib/webdav/*.ts` | router + handlers |
-| `apps/api/src/lib/drive/lock-manager.ts` | in-memory lock store |
-| `apps/api/src/lib/auth/protocol-auth.ts` | `authenticateBasic` + `verifyProtocolAuth` |
-| `apps/api/src/app.ts` | OPTIONS handler, router mount, DAV header |
-| `apps/space/src/routes/_auth.services.tsx` | per-mount URL listing on the Integrations page |
-| `apps/api/src/test/webdav/*.test.ts` | integration tests |
+Client behavior the server has to live with:
+
+- Windows Explorer works well. It needs HTTPS and the `WebClient` service, and caps uploads at 50 MB unless a registry value is raised.
+- Finder works, but is slow on large folders and caches metadata hard. Mountain Duck and rclone are the recommended mounts.
+- Word and Excel save by LOCK, PUT and MOVE, which is verified. Microsoft turns AutoSave off on WebDAV mounts, so saves are manual.
+- iOS Files' own WebDAV is intermittent. A third-party app works better.
+- Cyberduck browses and transfers without mounting, and is the test bed during development.
+
+How a user connects each client is in the help center: [mount-drive-on-your-computer](../apps/index/src/data/support/connect/mount-drive-on-your-computer.md) and [advanced-webdav](../apps/index/src/data/support/connect/advanced-webdav.md).
 
 ## See also
 
-- [STORAGE.md](STORAGE.md) — Mount + StorageBackend internals; Eigen container layout
-- [EXPORT.md](EXPORT.md) — eigen* → docx/xlsx/pdf pipeline (would back a future `export` mode)
-- [IMAP.md](IMAP.md) — analogous protocol bridge over Maildir, same auth pattern
-- [ACL.md](ACL.md) — permission model the WebDAV layer enforces
-- [SCALABILITY.md](SCALABILITY.md) — locks become per-Home if homes ever shard across machines
-- RFC 4918 — HTTP Extensions for WebDAV
-- RFC 7232 — Conditional Requests (ETag, If-Match)
-- [sabre.io/dav clients reference](https://sabre.io/dav/clients/) — best practitioner reference for Finder / Office / Windows WebDAV behavior
+- [STORAGE.md](STORAGE.md): mounts, backends and the container layout
+- [ACL.md](ACL.md): the permission model every handler enforces
+- [QUOTA.md](QUOTA.md): the mount quota a PUT is checked against
+- [CALDAV.md](CALDAV.md) and [CARDDAV.md](CARDDAV.md): the DAV service under `/dav/`
+- [IMAP.md](IMAP.md): the other protocol bridge on the same app passwords
+- RFC 4918 (WebDAV), RFC 7232 (conditional requests), and [sabre.io/dav clients](https://sabre.io/dav/clients/), the best practitioner reference for Finder, Office and Windows behavior

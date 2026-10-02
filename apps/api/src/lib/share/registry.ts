@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { getEigenDb } from './db';
 import { shareRegistry } from './schema';
 
@@ -7,18 +7,6 @@ export async function addRegistryEntry(fromUserId: string, targetIdentifier: str
     db.insert(shareRegistry)
         .values({ fromUserId, targetIdentifier: targetIdentifier.toLowerCase() })
         .onConflictDoNothing()
-        .run();
-}
-
-export async function removeRegistryEntries(fromUserId: string, targetIdentifier: string): Promise<void> {
-    const db = await getEigenDb();
-    db.delete(shareRegistry)
-        .where(
-            and(
-                eq(shareRegistry.fromUserId, fromUserId),
-                eq(shareRegistry.targetIdentifier, targetIdentifier.toLowerCase()),
-            ),
-        )
         .run();
 }
 

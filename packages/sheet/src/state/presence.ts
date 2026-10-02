@@ -11,8 +11,8 @@ export type PeerPresence = {
 
 // Peers that have published both an identity and a cursor become `Presence` rows.
 // The local TAB is already absent (useAwarenessPeers omits the local client), so a
-// same-user entry here is the user's other window — shown like any peer, unified
-// with the other apps (Reinder ruling 2026-08-24: you see yourself across windows).
+// same-user entry here is the user's other window — shown like any peer, as in the
+// other apps: you see yourself across windows.
 export function presencesFromPeers(peers: PeerPresence[]): Presence[] {
     const result: Presence[] = [];
     for (const { user, selection } of peers) {

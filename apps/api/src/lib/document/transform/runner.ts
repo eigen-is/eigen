@@ -15,7 +15,7 @@ import {
 // dynamically imports. Deliberately a "runner", not a scheduler: lib/scheduler/
 // owns periodic jobs; the closest sibling shape is ContentReindexQueue.
 //
-// Policy (docs/DOCUMENT-TRANSFORMS.md § Worker lifecycle): one active Worker so a
+// Policy (docs/DOCUMENT-TRANSFORMS.md § A Worker serves one job, then dies): one active Worker so a
 // single ExcelJS/Yjs heap exists at a time, a bounded queue with two priorities, one-shot
 // Workers terminated after every outcome, and NEVER a main-thread fallback — an
 // overloaded or failing runner must not reintroduce the event-loop freeze it
@@ -187,8 +187,8 @@ export class DocumentTransformRunner {
         }
     }
 
-    // Overload is an outcome too (DOCUMENT-TRANSFORMS.md § Observability): a 503 flood
-    // must be visible in the logs, with the queue state that caused it.
+    // Overload is an outcome too (DOCUMENT-TRANSFORMS.md § The runner logs one line per job,
+    // overload included): a 503 flood must be visible in the logs, with the queue state that caused it.
     private refuse(priority: TransformPriority, reason: string, predictedWaitMs?: number): never {
         console.warn(
             `[transform] admission refused reason=${reason} priority=${priority} ` +

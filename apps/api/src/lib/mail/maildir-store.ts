@@ -215,23 +215,11 @@ export class MaildirStore implements MailStore {
         return mailboxes;
     }
 
-    async mailboxCreate(mailbox: string): Promise<void> {
-        if (await this.mailboxDirExists(mailbox)) {
-            throw new ApiError(409, `Mailbox '${mailbox}' already exists`);
-        }
-        await this.createMailboxDir(mailbox);
-    }
-
-    async mailboxExists(mailbox: string): Promise<MaildirMailbox | false> {
-        if (!(await this.mailboxDirExists(mailbox))) return false;
-        return this.getMailboxInfo(mailbox, await this.listMailboxPaths());
-    }
-
     async listMessages(
         mailbox: string,
         opts: { limit: number; before?: { date: Date; id: string } },
     ): Promise<EmailSummary[]> {
-        if (!(await this.mailboxDirExists(mailbox))) {
+        if (!(await this.mailboxExists(mailbox))) {
             throw new ApiError(404, `Mailbox '${mailbox}' not found`);
         }
         // Only the first open blocks: afterwards the DB answers at once and the sync's SSE events carry what changed.
@@ -358,7 +346,7 @@ export class MaildirStore implements MailStore {
             const email = this.db.getEmail(messageId);
             if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
 
-            if (!(await this.mailboxDirExists(targetMailbox))) {
+            if (!(await this.mailboxExists(targetMailbox))) {
                 throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
             }
 
@@ -692,7 +680,7 @@ export class MaildirStore implements MailStore {
         await this.storage.writeAtomic(path.join(this.basePath, 'subscriptions'), subscriptions);
     }
 
-    private async mailboxDirExists(mailbox: string): Promise<boolean> {
+    async mailboxExists(mailbox: string): Promise<boolean> {
         return this.storage.dirExists(this.mailboxDir(mailbox));
     }
 
@@ -700,7 +688,7 @@ export class MaildirStore implements MailStore {
     private async listMailboxPaths(): Promise<string[]> {
         const standard: string[] = [];
         for (const name of STANDARD_MAILBOXES) {
-            if (await this.mailboxDirExists(name)) standard.push(name);
+            if (await this.mailboxExists(name)) standard.push(name);
         }
 
         const custom: string[] = [];

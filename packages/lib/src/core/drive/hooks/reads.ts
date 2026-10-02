@@ -241,8 +241,8 @@ export function useTextPreview(
 }
 
 // GET VCARD PREVIEW — the contact cards a .vcf holds, parsed server-side (PREVIEWS.md). The quick look
-// and the drive hero read the same query. `updatedAt` is in the key, so a new version is a new entry and
-// the cards never go stale; the query stays off a file the import ceiling would refuse anyway.
+// and the drive hero read the same query. The 30 s window is useTextPreview's: a new version may first be
+// answered with the previous one's cards; the query stays off a file the import ceiling would refuse anyway.
 export function useVCardPreview(ownerId: string, mountId: string, pathId: string, updatedAt: Date, size: number) {
     return useQuery({
         queryKey: driveKeys.vcardPreview(ownerId, mountId, pathId, updatedAt),
@@ -256,7 +256,7 @@ export function useVCardPreview(ownerId: string, mountId: string, pathId: string
             return response.data;
         },
         enabled: !!ownerId && !!mountId && !!pathId && size <= VCARD_MAX_BYTES,
-        staleTime: Infinity,
+        staleTime: STALE_TIME.THIRTY_SECONDS,
         retry: retryWhenTransformBusy,
     });
 }
@@ -275,7 +275,7 @@ export function useEmlPreview(ownerId: string, mountId: string, pathId: string, 
             return response.data;
         },
         enabled: !!ownerId && !!mountId && !!pathId && size <= EML_MAX_BYTES,
-        staleTime: Infinity,
+        staleTime: STALE_TIME.THIRTY_SECONDS,
         retry: retryWhenTransformBusy,
     });
 }
@@ -293,7 +293,7 @@ export function useIcsPreview(ownerId: string, mountId: string, pathId: string, 
             return response.data;
         },
         enabled: !!ownerId && !!mountId && !!pathId && size <= ICS_MAX_BYTES,
-        staleTime: Infinity,
+        staleTime: STALE_TIME.THIRTY_SECONDS,
         retry: retryWhenTransformBusy,
     });
 }

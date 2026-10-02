@@ -1,160 +1,99 @@
 # Quotas
 
-> **TLDR**: Two independent quota buckets per user: **home data** (mail + contacts + calendar) and **drive mount**.
-> Effective quota = `max(server default, ...team overrides)` — teams can only elevate, never restrict. Enforcement
-> happens at upload time with a soft limit (no file-level locking). Exhausting a quota throws **507 Insufficient
-> Storage**; 413 is only the per-file size cap.
+> **TLDR:** Every user has two kinds of budget: one for their home data, and one per Drive mount. `apps/api/src/lib/config/quota.ts` resolves the limits and `enforcement.ts` holds every check, without cache or reservation. Not obvious from the code: a team override only raises a limit, and a mount write takes the overrides of the user writing, not the mount's owner. A user's default mount cap is stamped the first time their home opens, usually at first sign-in, so changing the server default after that moves no existing user. A full home-data budget still lets its owner shrink, delete and make small edits. A 507 means a full budget, but a streamed upload that outgrows what is left is cut with a 413.
 
-## Quota Buckets
+Quotas keep one user from filling the server's disk or bucket. The owner sets the server defaults and the per-file cap in the Admin app ([SERVER-SETTINGS.md](SERVER-SETTINGS.md)), an org admin can raise them for a team's members on the team's page, and the app sidebars show each user their usage.
 
-| Bucket      | What it covers                              | Server default |
-|-------------|---------------------------------------------|----------------|
-| Home data   | Combined mail, contacts and calendar storage | 100 MB         |
-| Drive mount | Per-mount storage (each mount independent)  | 500 MB         |
+The two budgets follow what a Home holds. A Home is the data folder of one user or team ([STORAGE.md § A Home is loaded on demand](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)). Its mail, contacts and calendar databases share the home-data budget, and each Drive mount, one drive with its own storage backend, has a budget of its own ([STORAGE.md § A mount is a paths table](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)). The checks in `enforcement.ts` sit on the writes a person starts: an upload, copy or save into a mount, a contact card or photo, a calendar resource, an imported message and an attachment staged for a draft, from the web apps, WebDAV, CalDAV and CardDAV alike. Mail that arrives, drafts, sent copies, messages an IMAP client appends, and edits to a collab document or a chat room are counted but never refused. The one idea is that a limit is soft: it refuses growth and never deletes, and writes at the same moment may overshoot it a little ([§ Over quota](#over-quota-keeps-the-data-and-refuses-growth)).
 
-These are separate because they have different growth patterns. An email-heavy user is not blocked from uploading
-files, and vice versa.
+## Two budgets, because they grow differently
 
-The calendar half is the stored bytes of every resource, `SUM(length(ics))` over `calendar.db`, which `Calendar.size()` answers from the in-memory `eventsBytes` counter init seeds with that sum and every write, delete and calendar delete moves by delta. Every code symbol says `homeData`, `HomeSizeResponse.homeData` included; only the persisted setting is still spelled `mailAndContactsMaxMB`, because an admin's configured quotas are not rebuildable.
+| Budget | What it covers | Server setting |
+|---|---|---|
+| Home data | Mail, contacts and calendar of one Home, together | `quotas.mailAndContactsMaxMB` |
+| Drive mount | One mount; each mount has its own | `quotas.defaultMountMaxSizeMB` |
 
-## Resolution
+An email-heavy user is not blocked from uploading files, and a file-heavy user can still receive mail. Every code symbol says `homeData`, `HomeSizeResponse.homeData` included. Only the persisted settings, the server's and a team's override, keep the name `mailAndContactsMaxMB`, because stored quotas cannot be rebuilt after a rename. The settings themselves are in [SERVER-SETTINGS.md](SERVER-SETTINGS.md).
 
-`resolveUserQuotas(mountConfig, teamIds)` computes a user's effective quotas by gathering candidates from the
-server default, the mount's own config, and all team memberships, then taking the maximum. Its data half,
-`resolveHomeDataMax(teamIds)`, resolves on its own too: a team Home has no `default` mount, and its calendar is
-metered against the server default (a team is in no teams, so no override elevates it).
+## Teams can only raise a limit
 
 ```
-homeDataMax = max(server default, ...team overrides where set)
-mountMax    = max(mountConfig.maxSizeMB ?? server default, ...team overrides where set)
+homeDataMax = max(server default, ...team overrides that are set)
+mountMax    = max(mount's maxSizeMB ?? server default, ...team overrides that are set)
 ```
 
-Rules:
+A team sets `TeamSettings.memberOverrides` (`packages/lib/src/types/settings.ts`), and an unset field means inherit, so it adds no candidate. A user in no team gets the server default. `resolveUserQuotas` returns both limits in bytes. Its data half, `resolveHomeDataMax`, also stands alone, because a team Home has no `default` mount yet meters its calendar. A team is in no teams, so its calendar meters against the server default.
 
-- Teams can elevate members' quotas, never restrict below server default
-- `undefined` in `TeamSettings.memberOverrides` means "inherit" (no contribution to max)
-- User in no teams gets the server default
-- A mount's own `maxSizeMB` (from `MountConfig`) takes precedence over the server default when set
-- Team overrides are read through `pullTeamQuotaOverrides` (`lib/home/home-relay.ts`), which calls
-  `getTeamHome()`. That opens the team home if it is not cached — a `TeamHome` idles out after 30 minutes
-  (`TEAM_HOME_IDLE_MS`, its own override on the 5 minutes every other home takes, because a team home has no
-  SSE keep-alive pinning it), so it is not guaranteed to be in memory
+Nothing is cached, so every upload resolves again. The overrides come through `pullTeamQuotaOverrides` (`apps/api/src/lib/home/home-relay.ts`), one relay read per team, which opens a team Home that is not in memory. That Home then stays loaded for a team home's longer idle window ([STORAGE.md § A Home is loaded on demand and dropped when idle](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)).
 
-`ResolvedQuotas` returns values in bytes:
+## A mount write takes the writer's overrides
 
-```typescript
-type ResolvedQuotas = {
-    homeDataMax: number;   // bytes
-    mountMax: number;      // bytes
-};
-```
+`getMountQuotaState(ownerId, userId, mountId)` reads the mount from the owner's Home but the team overrides from `userId`, the user writing. So the cap an upload meets depends on who uploads. A member writing into a team mount lifts it to their own teams' overrides, that team's override included. A user writing into a folder another user shared with them brings their own overrides to the owner's mount, and the owner's are not counted. The home-data budget takes the owner's teams (`getHomeDataQuotaState`), so it does not vary by writer.
 
-## Team Member Overrides
+## A mount keeps what it was stamped with
 
-Teams configure member quota elevations in `TeamSettings.memberOverrides`:
+A user's `default` mount is written into their settings at the first `UserHome.init()`, the first time the home opens, with the server's current storage type and `maxSizeMB` set to `defaultMountMaxSizeMB`. That is usually the first sign-in, and at signup only when shares are waiting for the new user (`reconcileSharesForNewUser` opens the home to deliver them). So a change to the defaults before the home first opens reaches that user. A change after it does not: the stamped `maxSizeMB` wins over the server default in the `mountMax` formula ([Teams can only raise a limit](#teams-can-only-raise-a-limit)), and no route edits a user's mount. A team mount is stamped when an admin adds it, and its `maxSizeMB` stays editable per mount (`TeamHome.updateMount`, which pushes the change onto the live mount).
 
-```typescript
-memberOverrides?: {
-    mailAndContactsMaxMB?: number;   // undefined = inherit
-    defaultMountMaxSizeMB?: number;  // undefined = inherit
-};
-```
+A mount's `storageType` never changes after it is made, since its bytes live in that backend: `updateMount` does not accept it. A mount is enabled or disabled, never deleted, so its data is kept.
 
-These are independent from the team's own drive storage. A team's own mount quota comes from its per-mount
-`MountSettings.maxSizeMB` (or server default if unset).
+## 507 is a full budget, 413 a file too large
 
-## Enforcement
+`enforcement.ts` answers 507 `Insufficient Storage` when a budget is full or a projected write would overfill it. It answers 413 when one file is larger than it may be. The per-file cap is `quotas.maxUploadSizeMB` (`enforceMaxUploadSize`).
 
-Everything lives in `apps/api/src/lib/config/enforcement.ts`. Each function resolves quotas on the fly
-(stateless, no cache).
+The two meet in `getUploadMaxSize`, which returns `min(per-file cap, what is left of the mount)` and throws 507 up front when nothing is left, so a full mount is refused before any bytes move. A streamed Drive upload hands that number to `streamFilesToTemp` (`apps/api/src/lib/drive/streaming.ts`) as the ceiling per file, and a file that runs past it mid-transfer is a 413, whichever of the two was smaller.
 
-**Two different status codes, and they mean different things:**
+Every other route that brings a whole file into a mount takes the same number and answers 413 above it: a Drive copy and a conversion check the source's size, an import into a document bounds the body it reads (`apps/api/src/routes/drive.ts`), and saving mail attachments to Drive checks each attachment (`apps/api/src/lib/mail/mail.ts`). WebDAV `PUT` checks the per-file cap and the quota against the `Content-Length` the client sends, before any bytes move, so a chunked PUT that sends none meets neither ([WEBDAV.md](WEBDAV.md#put-stages-the-body-before-the-row)).
 
-- **507 `Insufficient Storage`** — the quota bucket is full. Thrown by every quota check.
-- **413 `File exceeds max upload size`** — the single file is bigger than the server's per-file cap
-  (`maxUploadSizeMB`, default 35 MB). Only `enforceMaxUploadSize` (and `enforceAvatarUpload`, which calls it)
-  throws this.
+## A write that knows its size is checked on the projection
 
-### `getUploadMaxSize(ownerId, userId, mountId)`
+`enforceMountQuota(ownerId, userId, mountId, addBytes, creditExisting)` throws 507 when `used + addBytes - creditExisting > max`. `creditExisting` is the size of the file being overwritten, so saving a document is charged only its growth. The editor save and WebDAV `PUT` use it. WebDAV only checks when the client sends `Content-Length` ([WEBDAV.md](WEBDAV.md)). `getMountQuotaState` reports `{ used, max }` without refusing, for WebDAV's quota properties.
 
-Returns the maximum allowed upload size in bytes for a single streaming upload:
-`min(maxUploadSize, remainingQuota)` where `remainingQuota = mountMax - currentUsage`. Throws 507 up front if
-the mount is already at or over quota, so a full mount is rejected without reading the request body. The drive
-route passes this max to the streaming upload handler, which enforces it mid-transfer.
+A team avatar calls the bare `enforceMaxUploadSize` (`apps/api/src/routes/team.ts`), because a team logo must not consume the uploading admin's own home-data budget.
 
-### `enforceMountQuota(ownerId, userId, mountId, addBytes, creditExisting)`
+## Home data has one gate with an edit grace
 
-Up-front projected-write check for callers that know the byte count before writing. Throws 507 when
-`used + addBytes - creditExisting > max`. `creditExisting` is the size of the file being overwritten, so
-saving a document does not double-count its current bytes.
+A contact card, an imported `.eml` and a calendar resource are all written through `enforceHomeDataQuota(ownerId, addBytes, creditBytes)`: `Contacts.writeCard`, `Mail.messageImport` and `Calendar.writeResource`. `creditBytes` is the size of the stored resource the write replaces, and 0 for a create.
 
-### `getMailUploadMaxSize(userId)`
+- A rewrite that does not grow (`addBytes <= creditBytes`) is never refused, however far over the budget the Home is. Shrinking and cleaning up must always work.
+- A rewrite that grows by at most `HOME_DATA_EDIT_GRACE_BYTES` (1 KiB) passes while the Home stays within `HOME_DATA_EDIT_HEADROOM_BYTES` (1 MiB) over its budget. A title fix, an RSVP or a cancelled occurrence lands at a full budget, on REST and CalDAV alike, and all such edits together overshoot by at most the headroom.
+- Past the headroom those edits answer 507 too. Lowering a budget, the owner's server default or an admin's team override, therefore freezes a Home's growth, while its owner can still shrink and delete.
+- A create, and a rewrite that grows by more than the grace, are checked on the plain projection.
+- A delete is metered by nothing. Neither is a move between calendars, which re-points one row.
 
-The attachment ceiling: `min(maxUploadSize, 25 MB)` intersected with what is left of the home data quota.
-Throws 507 when that bucket is already full.
+Each ingress turns the 507 into its own answer: a CalDAV `PUT` gets the typed `quota` result (`dav-store.ts`), and an `.ics` import stops with a 507 that names how many events went in (`calendar/transfer.ts`). An inbound invitation has nobody to answer, so it is dropped while its mail still lands ([CALENDAR.md](CALENDAR.md)).
 
-The mail half of that bucket is the index sum plus the staging directory: `SUM(emails.size)` over the message index and the bytes of the draft attachments staged in `draft-attachments/` (`readDraftStagingSize` in `maildir-store.ts`, a walk of that one small directory). So a staged attachment is charged from the moment it lands until the draft save or the 24 h sweep removes it, and staging is refused once the bucket is full. Bytes no reconcile ever indexed and outside staging do not count: Dovecot's own per-folder index files and the `draft-meta/` sidecars. The welcome mail is not one of them — `skipReconcile` only keeps the append from reconciling INBOX on the spot, and the first pass over that mailbox indexes it like any other message, so it counts. `MaildirStore.size()` answers both parts from in-memory byte counters, the way `Contacts.size()` does: they are seeded at `init` (one `SUM` query, one staging walk) and adjusted wherever the index gains or loses a row — the sync's own insert and delete phases included, so a Dovecot expunge lands in them too — and by a re-walk of the staging directory whenever its contents change. Nothing is memoized, so every write is charged to the very next check in both directions, and a metered CardDAV sync costs no query per card. A staged attachment is the one write charged only once it lands: the ceiling is read before its bytes stream in, so uploads in flight at the same moment each see the same room and can jointly overshoot the bucket by what they carry. The admin Users page sizes homes nobody has loaded, so it reads the same two parts from the home's own files through `pullHomeSize` (`readMailTotalSize` in `maildir-store.ts`, the one reader mail exports, over the index sum and the same `readDraftStagingSize`), and both surfaces report the same number.
+A Home that `atHome()` does not know, such as a test harness or a seeding script, is not metered, because the quota lookup goes through `getHome` and would boot a second Home over the same files. Contacts turns metering on only at the end of its init ([CONTACTS.md](CONTACTS.md)).
 
-### `enforceAvatarUpload(userId, fileSize)`
+Mail attachments and contact avatars take their own checks. `getMailUploadMaxSize` returns `min(per-file cap, 25 MB, what is left of home data)` and throws 507 when nothing is left. `enforceAvatarUpload` runs the per-file cap and then `used + fileSize > max`, with no credit and no grace ([ROADMAP.md](ROADMAP.md)).
 
-Runs `enforceMaxUploadSize` (413 on an oversized file), then checks the combined home data usage against
-`homeDataMax` (507).
+## What the home-data budget counts
 
-### `getMountQuotaState(ownerId, userId, mountId)`
+Each domain answers `size()` from in-memory byte counters, seeded at init and moved wherever a row is gained or lost. Nothing is memoized on top, so every write is charged to the very next check, both ways, and a device sync costs no query per resource.
 
-Read-only `{ used, max }`. Used for reporting rather than blocking.
+- **Contacts**: the stored vCards plus the `avatars/` folder ([CONTACTS.md](CONTACTS.md)).
+- **Calendar**: the stored bytes of every resource, `SUM(length(ics))` over `calendar.db` ([CALENDAR.md](CALENDAR.md)).
+- **Mail**: `SUM(emails.size)` over the message index, plus the draft attachments staged in `draft-attachments/` (`MaildirStore.size()`). The sync's own insert and delete phases move the index counter, so a Dovecot expunge counts too. Dovecot's index files and the `draft-meta/` sidecars are not counted. The welcome mail is: `skipReconcile` only delays its indexing to the first pass over the inbox.
 
-**Callers.** Drive uploads and copy go through `routes/drive.ts`; contact avatars through `routes/contacts.ts`;
-team avatars call the bare `enforceMaxUploadSize` in `routes/team.ts` (a team logo must not consume a member's
-personal data quota). WebDAV `PUT` calls `enforceMountQuota` in `lib/webdav/resource.ts`, and WebDAV `PROPFIND`
-reports quota-used / quota-available from `getMountQuotaState` in `lib/webdav/propfind.ts`. Editor saves call
-`enforceMountQuota` in `routes/editor.ts`, crediting the size of the file being replaced. Mail draft
-attachments and mail-to-drive saves use `getMailUploadMaxSize` / `getUploadMaxSize` in `lib/mail/mail.ts`.
+A staged attachment is charged from the moment it lands until the draft saves or the 24-hour sweep removes it, and staging is refused once the budget is full. It is the one write charged only after it lands: the ceiling is read before its bytes stream in, so uploads running at the same moment each see the same room and can overshoot together by what they carry.
 
-Contact-card writes, `.eml` imports and calendar resource writes share one gate on the data half of the budget, `enforceHomeDataQuota(ownerId, addBytes, creditBytes)`: `Contacts.writeCard` (`lib/contacts/contacts.ts`), `Mail.messageImport` (`lib/mail/mail-domain.ts`) and `Calendar.writeResource` (`lib/calendar/calendar.ts`) all run it before writing, 507 on a projection over budget. `creditBytes` is the size of the stored resource the write replaces, 0 for a create. One rule covers every edit at a full budget, and it bounds the total. A rewrite (`creditBytes > 0`) that does not grow what it replaces (`addBytes <= creditBytes`) is never refused, however far `used` sits above `max`: shrinking and cleaning up must work at any usage. A rewrite that grows it by at most `HOME_DATA_EDIT_GRACE_BYTES` (1 KiB) passes while the Home stays within `HOME_DATA_EDIT_HEADROOM_BYTES` (1 MiB) above its budget — `used + addBytes - creditBytes <= max + HOME_DATA_EDIT_HEADROOM_BYTES` — so a title fix, an RSVP, an exclusion, a cancelled override or a truncated RRULE lands on REST and CalDAV alike at a full budget, and the overshoot every such edit adds up to is at most the headroom. Past the headroom those edits answer 507 too, so an admin who lowers the budget freezes a Home's growth, while its owner still shrinks rewrites and deletes whole events and calendars (a delete is metered by nothing). A create and a rewrite that grows by more than the grace are metered on the projection as before.
+## A cold read reports what a live Home reports
 
-The calendar's one write seam is `Calendar.writeResource`, which stores the bytes `prepareResource` produced and is where `EVENT_MAX_BYTES` is bounded: inside the write lock and before the commit, crediting the stored resource's size so every rewrite goes through the edit grace above. Every ingress inherits it — a REST create, update or override raises the 507; a CalDAV PUT and an import take it as the typed `quota` result of `PutResourceResult`, which `davPutResponse` turns into a 507 and `importEvents` into a 507 naming how many events it managed. A move between calendars re-points one row, so it adds no bytes and a full budget never refuses it; a whole event and a whole calendar are deletes of rows, metered by nothing. An inbound write (an iMIP `REQUEST`, `CANCEL` or `REPLY`, the relayed `calendar:invitation*` and `calendar:rsvp` messages) has nobody to answer a 507 to: it is dropped and logged, the remaining VEVENTs of the message still file, and the mail it rode in on still lands. Metering is `meteredIngest = atHome(...)`, set at the end of `Calendar.init` the way contacts sets its own: a home nobody registered — a test harness, a seeding script — stays unmetered, because its quota lookup goes through `getHome` and would boot a second Home over the same files. Contacts needs the END of its init, where the calendar does not: seeding the owner contact writes through the metered seam, and the lookup would there await the very init doing the write. The calendar's init writes no resource at all; it only seeds its counter and, for a Home with no calendars, the default calendar row.
+The admin Users page sizes homes nobody has loaded, through `pullHomeSize` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#the-users-page-sizes-homes-without-booting-them)). It reads each part from the home's own files with the query its counter is seeded from, so the page and a live Home report the same number.
 
-The admin Users page sizes homes nobody has loaded, so `pullHomeSize` reads the calendar half without booting the Home (`readCalendarTotalSize` in `lib/calendar/resource-store.ts`): it opens `calendar.db` and runs the same `SUM(length(ics))` the booted counter is seeded from. The contacts half reads the same way (`readContactsTotalSize` in `lib/contacts/card-store.ts`: `SUM(length(vcard))` plus the `avatars/` directory). Both go through one reader, `readBlobTableSize` (`lib/core/blob-store.ts`), which sizes a missing database as 0 and a database whose stamp is **not** the config's `currentVersion` as 0 too — a stamp a newer build wrote counts as not-current, and so does a stamp table that is not there at all. The pending migration drops those bytes anyway, and the column the reader would sum may not exist yet or may no longer mean the same bytes, so a cold read of a home that has not opened since the upgrade reports no cards and no events rather than dropping the user off the page. Past that, both surfaces answer with the very query the counter starts from, so a cold read and a live Home report the same number.
+- Mail: `readMailTotalSize` (`maildir-store.ts`), the index sum plus the same `readDraftStagingSize` walk.
+- Contacts and calendar: `readContactsTotalSize` (`card-store.ts`, plus the `avatars/` folder) and `readCalendarTotalSize` (`resource-store.ts`), both through `readBlobTableSize` (`apps/api/src/lib/core/blob-store.ts`).
 
-## Over-Quota Behavior
+`readBlobTableSize` sizes a missing database as 0. It also sizes as 0 a database whose schema stamp is not this build's `currentVersion`, a newer stamp and a missing stamp table included. The column it would sum may not exist yet or may mean other bytes, and the pending migration drops those bytes anyway. So a home not opened since an upgrade reports no cards and no events rather than dropping the user off the page.
 
-When an admin lowers a quota below current usage (or team membership changes):
+## Over quota keeps the data and refuses growth
 
-- Existing data is never deleted
-- New uploads are rejected with 507
-- UI shows over-quota state
-- User must delete files to get back under quota
+When the owner lowers a server quota or an admin a team override below what a user has, or the user leaves the team that raised it, nothing is deleted. New writes answer 507 until the user deletes enough. The usage bar (`packages/ui/src/components/home/usage.tsx`) clamps at full and turns red above 85%.
 
-Concurrent uploads may slightly exceed quota (soft limit). This is by design -- the overage is small and
-self-correcting on the next upload attempt.
+The limits are soft. Every check reads usage and writes after, with no reservation, so concurrent uploads, several files in one request and chunked WebDAV `PUT`s can each pass and together overshoot. That is by design: the overage is small, and the next write sees it.
 
-## Mount Settings
+## See also
 
-Mount configuration is shared between users and teams via `MountSettings`:
-
-```typescript
-type MountSettings = {
-    storageType: 'local' | 'local-key' | 's3';
-    maxSizeMB?: number;     // falls back to server default if unset
-    enabled: boolean;
-    name?: string;
-    s3Config?: S3Config;
-};
-```
-
-- Users always have a `default` mount, stamped from server settings at first home init
-- Teams start with no mounts; admins add them explicitly
-- Mounts can be enabled/disabled but never deleted (data preservation)
-- `storageType` is immutable after creation
-
-Stamping happens at first `UserHome.init()`, not at signup. If an admin changes defaults between signup and first
-login, the user gets the latest defaults.
-
-Server settings use a different storage-type vocabulary: `ServerStorageType` is
-`'local-id' | 'local-fullnames' | 's3'`, translated to the `MountSettings` values above by `mapStorageType`
-(`packages/lib/src/types/settings.ts`).
-
-Quota resolution itself lives in `apps/api/src/lib/config/quota.ts`, server defaults in
-`server-settings.ts`, and the shared types (`ServerSettings`, `MountSettings`,
-`TeamSettings.memberOverrides`) in `packages/lib/src/types/settings.ts`.
+- [SERVER-SETTINGS.md](SERVER-SETTINGS.md): the quota settings and the admin usage view
+- [STORAGE.md](STORAGE.md): mounts and what their size counts; [SOFT-DELETE.md](SOFT-DELETE.md): trashed bytes count until purged
+- [CONTACTS.md](CONTACTS.md), [CALENDAR.md](CALENDAR.md), [WEBDAV.md](WEBDAV.md): the metered write paths
+- The help center: [Storage quotas](../apps/index/src/data/support/admin/storage-quotas.md)

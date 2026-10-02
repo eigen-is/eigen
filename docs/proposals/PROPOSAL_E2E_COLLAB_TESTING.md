@@ -1,8 +1,9 @@
 # Proposal: E2E multi-user collab test suite
 
-> **Status — Proposal, written 2026-07-05, not started.** Design for the P0 roadmap row
-> "E2E multi-user collab test suite" ([ROADMAP.md](../ROADMAP.md)): *"Playwright, multiple concurrent
-> clients, CI. Must be reliable from the start — flaky suites get abandoned."*
+This proposal designs a committed browser test suite for real-time collaboration: two users in two browsers edit one document, and the test checks that their edits meet. Collaboration is Eigen's core promise, and no committed test drives it end to end today.
+
+**Status:** not started. It is the design for the P0 row "E2E multi-user collab test suite" in [ROADMAP.md](../ROADMAP.md), which asks for Playwright, several concurrent clients and CI, and a suite that is reliable from the start, because a flaky suite gets abandoned. Written 2026-07-05.
+
 > **TLDR**: industrialize the ad-hoc browser-verification recipe in [the verify-in-browser skill](../../.claude/skills/verify-in-browser/SKILL.md)
 > into a committed Playwright suite that boots a throwaway Eigen instance, signs in two users as two
 > isolated browser contexts in one test, and asserts real-time convergence through the DOM. One shared

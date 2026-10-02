@@ -1,6 +1,6 @@
 # AI Integration Research for Eigen
 
-> Research into local, privacy-preserving AI capabilities that align with Eigen's self-hosted philosophy.
+This is research, not a build plan. It surveys AI features that could run on the user's own browser or server, so that no prompt or document leaves the instance, and sketches how Eigen could add them. The problem it answers: the AI features in mainstream workspaces send user data to a cloud provider, which runs against what Eigen is for. Nothing in it is built. [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps its row and says why it waits.
 
 ## Why AI Belongs in Eigen
 

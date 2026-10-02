@@ -23,6 +23,7 @@ import {
     handleCellAreaMouseDown,
     handleOverlayMouseMove,
     handleOverlayMouseUp,
+    isAllowEdit,
     overlayRegionForCell,
     selectAll,
     showLinkCard,
@@ -372,8 +373,8 @@ export const SheetOverlay: React.FC = () => {
 
     const computedCellValue = cellValue();
 
-    // Pane regions replace the per-element freeze clamps (RENDERING.md
-    // § Scrolling): the passive visuals render into every region and each
+    // One overlay region per frozen pane (RENDERING.md § Scrolling): the
+    // passive visuals render into every region and each
     // region's clip shows exactly its portion; stateful singletons render into
     // the single region containing their anchor cell.
     const freeze = refs.globalCache.freezen?.[context.currentSheetId];
@@ -434,8 +435,8 @@ export const SheetOverlay: React.FC = () => {
                         cursor: context.cellSelectExtending
                             ? 'crosshair'
                             : context.filterButtonHover != null ||
-                                context.cellGlyphHover === 'dropdown' ||
-                                context.cellGlyphHover === 'checkbox'
+                                (isAllowEdit(context) &&
+                                    (context.cellGlyphHover === 'dropdown' || context.cellGlyphHover === 'checkbox'))
                               ? 'pointer'
                               : 'default',
                     }}

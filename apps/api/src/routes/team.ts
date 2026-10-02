@@ -1,4 +1,4 @@
-import { parseOwnerId } from '@workspace/lib/types';
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
 import { enforceMaxUploadSize } from '../lib/config/enforcement';
@@ -12,6 +12,7 @@ import { betterAuth } from './auth';
 
 function teamId(ownerId: string): string {
     const parsed = parseOwnerId(ownerId);
+    if (parsed.type !== 'team') throw new ApiError(400, 'Invalid teamId format');
     return parsed.id;
 }
 
@@ -20,7 +21,7 @@ export const teamRouter = new Elysia({ name: 'team' })
 
     .get(
         '/team/:ownerId/members',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<{ userId: string; email: string; name: string }[]> => {
             await requireTeamAccess(user.id, teamId(params.ownerId));
             const members = await getTeamMembers(teamId(params.ownerId));
             return members.map((m) => ({ userId: m.user.id, email: m.user.email, name: m.user.name }));
@@ -79,7 +80,7 @@ export const teamRouter = new Elysia({ name: 'team' })
 
     .post(
         '/team/:ownerId/mount',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<{ id: string } & MountSettings> => {
             await requireTeamAdmin(user.id, teamId(params.ownerId));
             const home = await getTeamHome(params.ownerId);
             return home.addMount(body);
@@ -106,7 +107,7 @@ export const teamRouter = new Elysia({ name: 'team' })
 
     .put(
         '/team/:ownerId/mount/:mountId',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<MountSettings> => {
             await requireTeamAdmin(user.id, teamId(params.ownerId));
             const home = await getTeamHome(params.ownerId);
             return home.updateMount(params.mountId, body);

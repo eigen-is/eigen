@@ -1,5 +1,5 @@
 import { isContainerType } from '@workspace/lib/types/drive';
-import { enforceMountQuota } from '../config/enforcement';
+import { enforceMaxUploadSize, enforceMountQuota } from '../config/enforcement';
 import { ApiError } from '../core/errors';
 import { computeEtag, matchesIfMatch, matchesIfNoneMatch, rangeResponse, scriptableInlineHeaders } from '../core/http';
 import { getSharedDrive } from '../drive/get-drive';
@@ -115,10 +115,11 @@ export async function handlePut(args: {
         return new Response(null, { status: 412 });
     }
 
-    // Pre-check Content-Length against quota — cheap reject for honest clients.
-    // A client that lies (or omits Content-Length) can exceed quota by one PUT;
+    // Pre-check Content-Length against the upload cap and quota — cheap reject for honest clients.
+    // A client that lies (or omits Content-Length) can exceed them by one PUT;
     // they're authenticated, so noisy-user not attack-vector.
     if (contentLength !== null) {
+        enforceMaxUploadSize(contentLength);
         await enforceMountQuota(ownerId, user.id, mountId, contentLength, existing?.size ?? 0);
     }
 

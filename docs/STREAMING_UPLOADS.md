@@ -1,77 +1,45 @@
-# Streaming Uploads for Drive
+# Streaming Uploads
 
-> **TLDR**: All file uploads (single and multi-file) go through one endpoint and our own streaming multipart
-> parser (`apps/api/src/lib/multipart/`). Each file streams from the network to a mount temp file in constant
-> memory — body bytes are hashed and written chunk-by-chunk as they arrive on the wire — then moved to storage.
-> Memory use is independent of file size; `maxUploadSizeMB` is a policy knob, not a memory knob.
+> **TLDR:** Every Drive upload, one file or many, is one `POST /drive/:ownerId/:mountId/file/:pathId` whose body Eigen's own streaming multipart parser reads (`apps/api/src/lib/multipart/`). Each file streams from the wire into a mount temp file, hashed chunk by chunk as it arrives, and then moves into storage. Memory stays constant whatever the file size, so `maxUploadSizeMB` is a policy knob, not a memory knob. The size limit holds per file and cuts the request off mid-stream.
 
-## Architecture
+Uploads come from Drive's upload dialog and drag and drop, from an image an editor puts in its document's `media/` folder ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)), and from chat and comment attachments. Each lands in a mount, one drive of a Home over local disk or an S3 bucket ([STORAGE.md § A mount is a paths table](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)). On its way in, an upload meets the quota, which sets how large each file may be ([QUOTA.md](QUOTA.md)), and file history, which tells the folder's watchers ([FILE-HISTORY.md](FILE-HISTORY.md)).
 
-### Single Endpoint
+## Elysia never reads the upload body
 
-`POST /drive/:ownerId/:mountId/file/:pathId` — handles 1 or more files.
+The route declares `parse: 'none'`, so Elysia leaves the request body alone and `Drive.uploadFiles` hands it to the parser. The client appends every file as a `file` field of one `FormData` and posts it once, with XHR for progress in the upload dialog. Before any byte is read, the route computes the size limit with `getUploadMaxSize` ([QUOTA.md](QUOTA.md)). A mount that is already full answers 507 without reading the body.
 
-Frontend always appends files as `'file'` fields in FormData. Backend uses `parse: 'none'` so Elysia does not consume
-the request body, then `parseMultipartRequest()` iterates over file parts.
+Mail draft attachments (`Mail.uploadDraftAttachment`, `apps/api/src/lib/mail/mail-domain.ts`) use the same parser.
 
-```
-Frontend: FormData.append('file', file) for each file → XHR POST (progress tracking works as before)
-    ↓
-Route: parse: 'none' → getUploadMaxSize() → drive.uploadFiles(mountId, parentId, request, maxSize)
-    ↓
-Drive.uploadFiles():
-  → streamFilesToTemp(mount, request, maxSize) — consumes parser events, streaming each file's
-    body chunks into mount tmp/ with an incremental sha256 as they arrive
-  → for each result: finalizeUpload() (lib/drive/upload.ts):
-    → deduplicate filename against siblings
-    → mount.createFileFromTemp() — move temp→storage, insert DB row
-    → store originalName, emit SSE, then background: generate thumbnail + cleanupTemp()
-  → return DrivePath[]
-```
+## Each file part streams to a temp file
 
-### Where the code lives
+The parser yields flat events: `part` with the parsed headers, `chunk` with body bytes as they arrive, and `end` with the part's size. `streamFilesToTemp` (`apps/api/src/lib/drive/streaming.ts`) writes each file part's chunks into the mount's `tmp/` under a random UUID and feeds an incremental sha256 on the way. A chunk is a view into the network buffer, so it must be consumed before the next event.
 
-The route is a thin handler in `apps/api/src/routes/drive.ts`; the upload path itself lives in
-`apps/api/src/lib/drive/` (`streaming.ts` streams parts to temp, `drive.ts`/`sharedDrive.ts` do the parent and
-ACL checks, `upload.ts` finalizes each file) on top of the parser in `apps/api/src/lib/multipart/` and
-`createFileFromTemp()` plus stale-temp cleanup in `apps/api/src/lib/mount/`. Quota and size limits come from
-`apps/api/src/lib/config/enforcement.ts`.
+Memory is constant. Each upload in flight holds one 256 KB `FileSink` buffer. The parser holds back at most a part's headers (8 KiB at most) and a possible partial boundary at a chunk's tail.
 
-### Size Enforcement
+Then `finalizeUpload` (`apps/api/src/lib/drive/upload.ts`) moves each temp into storage and writes its row. It records one history row per file, but `Drive.uploadFiles` notifies watchers once per batch, tagged with the parent folder, so a hundred files are one notification ([FILE-HISTORY.md](FILE-HISTORY.md)). The thumbnail runs in the background and removes the temp when it is done. When one file fails, its temp and those of every file after it are removed.
 
-Per-file size limit is enforced by the parser's `maxFileSize` option during parsing: the request is aborted the
-moment a part's body exceeds the limit, mid-stream, before further bytes are read. The limit is
-`min(serverMaxUploadSize, remainingMountQuota)`, computed in `getUploadMaxSize()` before streaming starts. If the mount
-is already full, the request is rejected immediately (507) without reading the body.
+## The size limit holds per file and cuts the request off mid-stream
 
-### Memory Profile
+The parser's `maxFileSize` throws before it yields the chunk that would cross the limit, so no more of the body is read. The request answers 413 and every temp of that request is removed. It answers 413 even when the limit came from the remaining quota rather than the server's cap.
 
-Constant, independent of file size. The parser yields body bytes as events while the part is still arriving; the
-only bytes ever held back are a potential partial boundary at a network chunk's tail (at most a few dozen bytes).
-Each in-flight upload holds one 256 KB `FileSink` write buffer. `maxUploadSizeMB` (default 35 MB) is purely a
-policy knob, not a memory knob.
+The limit is per file part. Every part of a multi-file upload may use the whole remaining quota, so a batch can end past the mount's quota: quotas are a soft limit ([QUOTA.md](QUOTA.md)). The server's own `maxRequestBodySize` is the larger backup-upload ceiling (`BACKUP_UPLOAD_MAX_BYTES`), a backstop under the parser.
 
-### Crash Recovery
+An upload is not resumable. A dropped connection starts over.
 
-`Mount.init()` cleans up temp files older than 1 hour from `tmp/` on startup. This handles server crashes that leave
-partial uploads behind.
+## A crashed upload's temp is swept at the next mount init
 
-### S3 and Non-Local Mounts
+The mount's startup `tmp/` sweep ([SYNC.md § A crash temp is adopted and re-synced](SYNC.md#a-crash-temp-is-adopted-and-re-synced)) clears the partials an interrupted upload leaves behind. Upload temps have random names, so the sweep's one exception, a document's crash temp named after its row, never covers them.
 
-`createFileFromTemp()` calls `mount.uploadFromTemp(storageKey, tempId)` which calls
-`storage.write(storageKey, Bun.file(tempPath))`. The `StorageBackend.write()` interface accepts
-`Buffer | Uint8Array | ArrayBuffer | BunFile` on all backends. No new interface methods needed.
+## A plain file goes to the bucket in the request
 
-## Parser
+`createFileFromTemp` calls `uploadFromTemp`, which PUTs the temp file (`storage.write(key, Bun.file(tempPath))`) on every backend. Unlike a container database it takes no queue, so on an `s3` mount the request waits for the bucket, with no ceiling on that PUT ([ROADMAP.md](ROADMAP.md)). Bun's `S3Client` sends a body over 5 MiB as a multipart upload. An interrupted one stays in the bucket until the lifecycle rule's abort of incomplete uploads removes it ([SYNC.md](SYNC.md#the-bucket-needs-versioning-and-a-noncurrent-version-expiry-rule)).
 
-`apps/api/src/lib/multipart/` — our own streaming parser, derived from `@mjackson/multipart-parser` (MIT) but
-reshaped to yield flat `part` (parsed headers) / `chunk` (body bytes) / `end` (total size) events instead of
-buffering whole parts. Upstream buffers deliberately (its earlier per-part `body` stream deadlocked with its sync
-generator design); the event shape sidesteps that. Zero dependencies; supports exactly our use case:
-browser/fetch-generated `multipart/form-data` read from a web `ReadableStream` on Bun. Mail draft attachments
-(`MailDomain.uploadDraftAttachment`) use the same parser.
+## The parser is ours
 
-## Out of Scope
+`apps/api/src/lib/multipart/` derives from `@mjackson/multipart-parser` (MIT) but yields body bytes as events instead of buffering each part whole. Upstream buffers on purpose, because its earlier per-part body stream deadlocked with its synchronous generator design. The flat event shape sidesteps that. It has no dependencies and supports exactly one case: a browser- or fetch-generated `multipart/form-data` body read from a web `ReadableStream` on Bun.
 
-- **Resumable uploads** (tus protocol) — can be layered on later.
-- **S3 multipart upload API** of our own. Bun's `S3Client` already sends a body over 5 MiB as a multipart upload; an interrupted one stays in the bucket until the `AbortIncompleteMultipartUpload` rule that "Enable safe defaults" writes removes it.
+## See also
+
+- [QUOTA.md](QUOTA.md): how the upload limit is computed
+- [SYNC.md](SYNC.md): the queued uploads of container databases
+- [STORAGE.md](STORAGE.md): mounts and backends

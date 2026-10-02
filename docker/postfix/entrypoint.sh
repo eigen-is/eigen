@@ -23,15 +23,6 @@ echo "Trust range: ${MAIL_TRUST_NETWORKS}"
 envsubst '$DOMAIN $MAIL_DOMAIN $MAIL_TRUST_NETWORKS' < /etc/postfix/main.cf.template > /etc/postfix/main.cf
 envsubst '$DOMAIN $MAIL_DOMAIN' < /etc/postfix/master.cf.template > /etc/postfix/master.cf
 
-# --- TLS cert fallback ---
-if [ ! -f /certs/cert.pem ]; then
-    echo "No TLS certificate found. Generating self-signed cert for ${DOMAIN:-localhost}..."
-    openssl req -x509 -newkey rsa:2048 \
-        -keyout /certs/key.pem -out /certs/cert.pem \
-        -days 365 -nodes -subj "/CN=${DOMAIN:-localhost}" 2>/dev/null
-    echo "Self-signed certificate generated."
-fi
-
 # --- SMTP relay (optional) ---
 # The keys and rules the API follows when Eigen hosts no mail: port 465 is implicit TLS, any other port
 # STARTTLS, and credentials only go over TLS.
@@ -61,14 +52,23 @@ if [ ! -f "/data/dkim/eigen.private" ]; then
     echo "============================================"
     echo "=== Add this DNS TXT record for DKIM:    ==="
     echo "=== Host: eigen._domainkey.${MAIL_DOMAIN}"
+    echo "=== Value, one line:"
     echo "============================================"
-    cat /data/dkim/eigen.txt
+    # eigen.txt splits the value into quoted parts in BIND's format; a DNS panel takes it joined.
+    grep -o '"[^"]*"' /data/dkim/eigen.txt | tr -d '"\n'
+    echo ""
     echo "============================================"
     echo ""
 fi
 
-# Ensure correct ownership for OpenDKIM
-chown opendkim:opendkim /data/dkim /data/dkim/eigen.private /data/dkim/eigen.txt 2>/dev/null || true
+# OpenDKIM owns the key, and group 1000 reads it: the API, uid 1000 through data/, for the server backup. No process
+# in this image runs with gid 1000. The DNS record in eigen.txt is public, for the operator to open. A key brought from
+# another server may come without its eigen.txt. A data folder root may not chown, as NFS with root_squash: Postfix
+# runs on, and OpenDKIM says below whether it can use the key.
+{ chown -R opendkim:1000 /data/dkim && chmod 0755 /data/dkim &&
+    find /data/dkim -type f -name '*.private' -exec chmod 0640 {} + &&
+    find /data/dkim -type f -name '*.txt' -exec chmod 0644 {} +; } ||
+    echo "WARNING: could not give the DKIM key to OpenDKIM and group 1000; the server backup may leave it out."
 
 # Hosts whose mail OpenDKIM signs (rather than just verifying). Must include the
 # docker bridge subnet — eigen-api submits SMTP from 172.20.0.x, and OpenDKIM's
@@ -87,6 +87,8 @@ mkdir -p /etc/opendkim
 # AuthservID fixes that header's authserv-id to our mail domain (default would be the container
 # hostname); RemoveARFrom strips any pre-existing Authentication-Results claiming our authserv-id
 # before delivery, so an attacker can't forge one — the header the API reads is only ever ours.
+# RequireSafeKeys, on by default, takes the 0640 key because group 1000 exists in the image and has no members (the
+# Dockerfile); it still refuses the key at 0644 ("can be read or written by other users").
 cat > /etc/opendkim.conf <<EOF
 Syslog              yes
 LogWhy              yes
@@ -115,6 +117,18 @@ fi
 # Queue-backlog alerting — the API can't see the queue itself, so the probe runs here.
 echo "Starting queue monitor (tune with QUEUE_CHECK_INTERVAL, QUEUE_ALERT_THRESHOLD, QUEUE_ALERT_COOLDOWN)..."
 /usr/local/bin/queue-monitor.sh &
+
+# On a first boot without Caddy's certificate Dovecot makes one, and an smtpd started before it serves without TLS.
+waited=0
+until [ -f /certs/cert.pem ] && [ -f /certs/key.pem ]; do
+    if [ "$waited" = 0 ]; then echo "Waiting for the TLS certificate in /certs..."; fi
+    if [ "$waited" -ge 30 ]; then
+        echo "WARNING: no TLS certificate in /certs after 30 seconds; Postfix starts without TLS."
+        break
+    fi
+    sleep 1
+    waited=$((waited + 1))
+done
 
 echo "Starting Postfix..."
 exec postfix start-fg

@@ -1,6 +1,6 @@
 ---
 name: verify-in-browser
-description: Use when a change must be proven in the running Eigen dev app rather than only in tests — driving it headless with Playwright or Chrome, taking and reading screenshots, pixel-gating a refactor, creating a throwaway test user or injecting an auth cookie, uploading and converting real documents, verifying on mobile viewports or touch, or whenever you start, check or stop the dev stack (API on :8000, vite apps). Also use when the dev app shows a blank page, a spinner that never ends, a `SQLITE_IOERR_VNODE` or `useContext` of null crash during verification.
+description: Use when a change must be proven in the running Eigen dev app rather than only in tests: driving it headless with Playwright or Chrome, taking and reading screenshots, pixel-gating a refactor, creating a throwaway test user or injecting an auth cookie, uploading and converting real documents, verifying on mobile viewports or touch, or whenever you start, check or stop the dev stack (API on :8000, vite apps). Also use when the dev app shows a blank page, a spinner that never ends, a `SQLITE_IOERR_VNODE` or `useContext` of null crash during verification.
 ---
 
 # Verify in the browser
@@ -49,7 +49,7 @@ How to prove a change works in the real product, not just in tests. Written for 
 
 ## Mobile and touch
 
-Screenshot at 390×844 and 360×800 and pair pixel verdicts with behavioral probes (tap, long-press, scroll, reload). Page-level overflow probes report 0 on portalled layers and `overflow:hidden` clips, so pixel review is mandatory. Long-press needs real CDP touch synthesis. Seeded account and per-phase checks: [MOBILE.md § Verification](../../../docs/MOBILE.md#verification-every-phase).
+Screenshot at 390×844 and 360×800 and pair pixel verdicts with behavioral probes (tap, long-press, scroll, reload). Page-level overflow probes report 0 on portalled layers and `overflow:hidden` clips, so pixel review is mandatory. Long-press needs real CDP touch synthesis. The seeded `mobile-audit@eigen.is` account, its password and the fresh-cookie recipe sit in the header of the gitignored `docs/superpowers/mobile-audit/phase1-verify/scripts/helper.ts`. The real-device checks still owed are in the Mobile row of [ROADMAP.md](../../../docs/ROADMAP.md).
 
 ## Sheet editor
 

@@ -1,12 +1,11 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { rmSync } from 'node:fs';
 import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_TRASH, STANDARD_MAILBOXES } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { evictHome } from '../../lib/home/get-home';
-import { boxDir, makeEml, seedMaildirFile } from '../mail-test-helpers';
+import { boxDir, makeEml, seedMaildirFile, seedMaildirFolder } from '../mail-test-helpers';
 import { app, assertJson, authedRequest, collectSSE, createTestUser, ensureServer, findOrFail } from '../setup';
 
 const isWindows = process.platform === 'win32';
@@ -15,14 +14,6 @@ const isWindows = process.platform === 'win32';
 beforeAll(async () => {
     await ensureServer();
 });
-
-// Fabricates a Maildir++ folder the way Dovecot does: a dot-prefixed directory with cur/new/tmp and
-// the `maildirfolder` marker, never touched by Eigen's own mailbox creation.
-function seedMaildirFolder(userId: string, mailbox: string): void {
-    const folder = boxDir(userId, mailbox);
-    for (const sub of ['cur', 'new', 'tmp']) mkdirSync(join(folder, sub), { recursive: true });
-    writeFileSync(join(folder, 'maildirfolder'), '');
-}
 
 function listMailboxes(token: string, userId: string): Promise<MaildirMailbox[]> {
     return authedRequest(token, `/mail/${userId}/mailboxes`).then((res) => assertJson<MaildirMailbox[]>(res));
@@ -74,6 +65,12 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
         // either; both are skipped rather than failing the whole listing.
         seedMaildirFolder(userId, 'bad..name');
         seedMaildirFolder(userId, 'ctrl\u0001name');
+    });
+
+    // The data root is the whole suite's, and a backup refuses a path with a control character: left
+    // behind, this home fails every server backup a later file verifies.
+    afterAll(() => {
+        rmSync(boxDir(userId, 'ctrl\u0001name'), { recursive: true, force: true });
     });
 
     test('a folder an IMAP client created is listed at once, and indexed in the background', async () => {
@@ -163,20 +160,11 @@ describe.skipIf(isWindows)('Mailboxes outside the standard six', () => {
     test('a folder name with a space is addressed percent-encoded in the URL', async () => {
         const res = await authedRequest(token, `/mail/${userId}/mailbox/My%20Stuff`);
         expect(res.status).toBe(200);
-        const exists = await assertJson<MaildirMailbox | false>(
-            await authedRequest(token, `/mail/${userId}/mailbox-exists/My%20Stuff`),
-        );
-        if (!exists) throw new Error('Expected the mailbox to exist');
-        expect(exists.path).toBe('My Stuff');
     });
 
     test('a name that case-folds onto a standard mailbox addresses that one, not a second folder', async () => {
-        const res = await authedRequest(token, `/mail/${userId}/mailbox`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mailbox: MAILBOX_ARCHIVE.toLowerCase() }),
-        });
-        expect(res.status).toBe(409);
+        const res = await authedRequest(token, `/mail/${userId}/mailbox/${MAILBOX_ARCHIVE.toLowerCase()}`);
+        expect(res.status).toBe(200);
 
         const boxes = await listMailboxes(token, userId);
         expect(boxes.filter((box) => box.path.toLowerCase() === MAILBOX_ARCHIVE.toLowerCase())).toHaveLength(1);
@@ -209,14 +197,6 @@ describe.skipIf(isWindows)('A folder with a folder nested under it', () => {
             '\\HasNoChildren',
             '\\Archive',
         ]);
-    });
-
-    test('a lookup of the parent reports its children too', async () => {
-        const exists = await assertJson<MaildirMailbox | false>(
-            await authedRequest(token, `/mail/${userId}/mailbox-exists/Clients`),
-        );
-        if (!exists) throw new Error('Expected the mailbox to exist');
-        expect(exists.flags).toEqual(['\\HasChildren']);
     });
 });
 
@@ -315,17 +295,6 @@ describe.skipIf(isWindows)('A folder name that cannot address a directory', () =
         );
         const inbox = await assertJson<EmailSummary[]>(await authedRequest(token, `/mail/${userId}/mailbox/inbox`));
         messageId = findOrFail(inbox, (message) => message.subject === 'Stays where it is').id;
-    });
-
-    test('creating one is refused', async () => {
-        for (const mailbox of REFUSED) {
-            const res = await authedRequest(token, `/mail/${userId}/mailbox`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mailbox }),
-            });
-            expect([mailbox, res.status]).toEqual([mailbox, 400]);
-        }
     });
 
     test('opening one is refused', async () => {

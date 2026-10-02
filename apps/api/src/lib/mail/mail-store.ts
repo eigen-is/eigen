@@ -41,16 +41,15 @@ export type DraftMeta = {
 
 export type MailFlag = 'seen' | 'replied' | 'flagged' | 'draft' | 'trashed' | 'forwarded';
 
-// Change stream surfaced by the store's own discovery (sync + fs.watch today; JMAP push or
-// IMAP IDLE for a remote backend). The Mail domain turns these into SSE + notifications.
+// Change stream surfaced by the store's own discovery (sync + fs.watch for Maildir). The Mail
+// domain turns these into SSE + notifications.
 export type MailStoreEvents = {
     received: (email: Email, isNew: boolean) => void;
     flagsChanged: (messageId: string, mailbox: string) => void;
     deleted: (messageId: string, mailbox: string) => void;
 };
 
-// The swappable mail storage contract held by the Mail domain class. MaildirStore
-// (+ MailDB) is the only implementation today.
+// The mail storage contract held by the Mail domain class, implemented by MaildirStore (+ MailDB).
 export interface MailStore {
     // Resolves true when a fresh (empty) store was created.
     init(events: MailStoreEvents): Promise<boolean>;
@@ -61,8 +60,7 @@ export interface MailStore {
     search(opts: MailSearchOptions): EmailSummary[];
 
     mailboxesList(): Promise<MaildirMailbox[]>;
-    mailboxCreate(mailbox: string): Promise<void>;
-    mailboxExists(mailbox: string): Promise<MaildirMailbox | false>;
+    mailboxExists(mailbox: string): Promise<boolean>;
     listMessages(
         mailbox: string,
         opts: { limit: number; before?: { date: Date; id: string } },

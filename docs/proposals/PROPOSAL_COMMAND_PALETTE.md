@@ -1,21 +1,13 @@
 # Command Palette (⌘K) — remaining work
 
-> **Status — v1 shipped on `main`.** Code in `../../packages/lib/src/core/command-palette` +
-> `../../packages/ui/src/components/layout/app/command-palette`, mounted by `AppShell.PaletteRunner`;
-> the shipped design is documented in [ARCHITECTURE.md](../ARCHITECTURE.md) § Frontend (the command palette row) and in the code itself.
-> The palette does jumps, creates, contacts, smart parses (email / URL), selection-aware
-> actions, mail / file / in-document / comment / help search, prefix scopes
-> (`mail:` / `file:` / `doc:` / `>` / `@` / `?`) and the Tab scope chip. Search depth grows on
-> its own as [SEARCH.md](../SEARCH.md) indexes more content — document **body**
-> hits already flow in through the file provider since the drive content index
-> shipped, with zero palette changes.
->
-> This document now lists only what's left to build.
+The command palette is the ⌘K dialog of Eigen's apps: one keyboard entry point to jump somewhere, create something, or search mail, files and help. This page lists what is left to build on it.
+
+**Status:** the first version is built. Its code is in `../../packages/lib/src/core/command-palette` and `../../packages/ui/src/components/layout/app/command-palette`, mounted by `AppShell.PaletteRunner`, and [ARCHITECTURE.md](../ARCHITECTURE.md) § Frontend has its row. It does jumps, creates, contacts, smart parses (email, URL), actions on the current selection, search over mail, files, the open document, comments and help, prefix scopes (`mail:`, `file:`, `doc:`, `>`, `@`, `?`) and the Tab scope chip. Its search grows by itself as [SEARCH.md](../SEARCH.md) indexes more content: document body hits reach it through the file provider without any palette change. None of the items below is built.
 
 | # | Item                                        | Effort | Blocked on                                    |
 |---|---------------------------------------------|--------|-----------------------------------------------|
 | 1 | Sub-action sheet (`→`)                      | S      | — buildable now                               |
-| 2 | `event:` / `chat:` result kinds + prefixes  | S      | SEARCH.md § Remaining (no backend yet)        |
+| 2 | `event:` / `chat:` result kinds + prefixes  | S      | ROADMAP.md search rows (no backend yet)       |
 | 3 | Per-user recents                            | S      | PROPOSAL_HOME_RECENTS (still a proposal)      |
 | 4 | Content-aware input (paste / drop / image URLs) | M  | — global-helper half buildable now            |
 | 5 | Smart-parser growth (datetime, math, units) | M      | telemetry showing demand                      |
@@ -55,7 +47,7 @@ follow.
 
 ## 2. `event:` / `chat:` result kinds + prefixes
 
-Blocked: calendar and chat indexing sit in [SEARCH.md](../SEARCH.md) § Remaining (calendar
+Blocked: calendar and chat indexing sit in [ROADMAP.md](../ROADMAP.md) (calendar
 `events_fts`, per-room `messages_fts`), still deferred there — there is no backend to consume.
 Once either lands, the palette work mirrors the file kind:
 

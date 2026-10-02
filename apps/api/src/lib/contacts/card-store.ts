@@ -7,7 +7,7 @@ import type { ParsedCard } from '../vcard/types';
 import { CONTACTS_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 
-// The card-shaped half of the store over `core/blob-store.ts`. See docs/CONTACTS.md § Storage model.
+// The card-shaped half of the store over `core/blob-store.ts`. See docs/CONTACTS.md § A contact is its vCard bytes.
 
 export type Tx = DatabaseTx<typeof schema>;
 

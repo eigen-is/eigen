@@ -19,12 +19,13 @@ if ! grep -q '^EIGEN_DEMO=1$' .env.production; then
     exit 1
 fi
 
-# The launcher's lock (see lock() in ./eigen), so a reset never wipes data/ under a backup or an update.
+# The launcher's lock (see lock() in ./eigen), so a reset never wipes data/ under an update, a restore or a setup. A
+# backup takes no lock.
 mkdir -p .eigen
 if ! mkdir .eigen/lock 2>/dev/null; then
     pid=$(cat .eigen/lock/pid 2>/dev/null || :)
-    # The lock of a process that is gone is taken over.
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    # No pid yet is a launcher between its mkdir and its echo; the lock of a process that is gone is taken over.
+    if [ -z "$pid" ] || kill -0 "$pid" 2>/dev/null; then
         echo "[demo-reset] Refusing: an ./eigen command holds .eigen/lock. The next hourly run retries." >&2
         exit 1
     fi

@@ -1,194 +1,138 @@
-# Storage & Mount System
+# Storage and Mounts
 
-> **TLDR**: Home is the per-user singleton managing DB connections + domain services. Drive uses Mounts with pluggable
-> storage backends (LocalStorage, S3). Mail, Contacts and Calendar use LocalFilesystem directly. Data lives in
-> `data/home/{userId}/`, teams in `data/team/{teamId}/`, orgs in `data/org/{orgId}/`.
+> **TLDR:** A Home is the per-owner object that holds an owner's databases and domain services (`apps/api/src/lib/home/`). Drive stores files through Mounts (`apps/api/src/lib/mount/`). A Mount is one storage root of an owner's Drive, with its own settings in the home's `settings.json`: a user has a default one, and a team has one per team drive. It is a `metadata.db` paths table over one storage backend, `local`, `local-key` or `s3` (`apps/api/src/lib/storage/`). Four things are not obvious from the code. On `local` a storage key is the name path, so every key-derived write holds the tree lock, one reader/writer lock over the mount's whole tree, and every rename takes it exclusively. Every storage read has a 30 s idle deadline, and a gone object answers 410 where an outage answers 503. Containers name users by email only, so they survive copy and restore anywhere. Folder sizes are a lazy cache, so a plain listing can write.
 
-## Architecture
+Drive is the file tree under every app. The Drive app shows it, WebDAV serves it to desktop clients ([WEBDAV.md](WEBDAV.md)), and every doc, sheet, deck, drawing, stickies board and chat lives in it as a container: a folder named like a file, such as `Notes.eigendoc`, that holds the document's databases and media ([ARCHITECTURE.md § Eigen file types](ARCHITECTURE.md#eigen-file-types)). A request reaches a file through four layers: the route, `SharedDrive`, which checks access when the caller is not the owner ([ACL.md](ACL.md)), `Drive`, which spans the owner's mounts, and the `Mount` ([ARCHITECTURE.md § Drive Architecture](ARCHITECTURE.md#drive-architecture)).
 
-```
-Home (per-user singleton)
-├── Drive → Mount(s) → StorageBackend + metadata.db
-├── Mail → LocalFilesystem + mail.db
-├── Contacts → contacts.db (vCard bytes in the row) + LocalFilesystem (avatars)
-├── Calendar → calendar.db (VCALENDAR bytes in the row)
-└── Notifications → notifications.db
-```
+The idea underneath is that the mount's paths table is the tree and the backend holds only bytes. A row gives a file its name, its parent, its type and its sharing. The storage key is derived from the row: the name path on `local`, the id on the other two backends ([§ A mount is a paths table](#a-mount-is-a-paths-table-over-one-of-three-backends)).
 
-**Home** (`apps/api/src/lib/home/home.ts`): Manages DB connections, SSE broadcasting, domain class lifecycle.
-Lazy-initializes services via `init()`. Auto-destructs after inactivity via `touch()` — 5 min for `UserHome`,
-30 min for `TeamHome` (`TEAM_HOME_IDLE_MS`, `apps/api/src/lib/home/team-home.ts`: team homes have no SSE
-keep-alive pin, so they need the longer window). Awaits graceful shutdown before removing from factory cache.
+## A Home is loaded on demand and dropped when idle
 
-**Subclasses**: `UserHome` (full services: Drive, Mail, Contacts, Calendar, Notifications),
-`TeamHome` (Drive + Calendar), `OrgHome` (minimal — filesystem only).
+`getHome(ownerId)` (`apps/api/src/lib/home/get-home.ts`) builds the Home on first use and caches it. Each domain getter calls `touch()`, and a Home nobody touches for its idle window shuts down and closes its databases. A user home idles out after 5 minutes. A team home gets 30 (`TEAM_HOME_IDLE_MS` overrides it), because no event stream keeps it alive. `evictHome` shuts one down on purpose (user deletion, backup restore), `shutdownAllHomes` all of them at exit.
 
-**Lifecycle** (`apps/api/src/lib/home/get-home.ts`):
+| Home | Folder | Services |
+|---|---|---|
+| `UserHome` | `data/home/{userId}/` | Drive, Mail, Contacts, Calendar, Notifications |
+| `TeamHome` | `data/team/{teamId}/` | Drive, Calendar ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md)) |
+| `OrgHome` | `data/org/{orgId}/` | Only its filesystem |
+| `GuestHome` | `data/guest/{userId}/` | Drive, Notifications ([GUEST-ACCESS.md](GUEST-ACCESS.md)) |
 
-- `getHome(ownerId)` — lazily constructs and caches Home instances as async singletons (resolves user/team/org via `parseOwnerId()`)
-- `evictHome(ownerId)` — explicitly shuts down a cached Home and removes it (used for user deletion)
-- `shutdownAllHomes()` — gracefully shuts down all cached Home instances (used on server exit)
-- `shutdown()` — instance method to close all databases and clear the inactivity timer
+A Home serves its own owner. Another owner's data goes through `home-relay.ts` ([SCALABILITY.md](SCALABILITY.md)).
 
-## Storage Backends
-
-All in `apps/api/src/lib/storage/`:
-
-| Backend           | File                   | Use Case                       | Pattern                  |
-|-------------------|------------------------|--------------------------------|--------------------------|
-| `LocalStorage`    | `local-storage.ts`     | Drive mounts (`local` + `local-key`) | Directory hierarchy (`local`) or flat `data/{uuid}.ext` (`local-key`) |
-| `S3Storage`       | `s3-storage.ts`        | Remote storage (`s3`)          | S3-compatible objects    |
-
-**Path safety**: `LocalStorage` and `LocalFilesystem` validate resolved paths against traversal (`..`) via the
-shared `resolveWithinBase` guard (`apps/api/src/lib/core/path-utils.ts`). `S3Storage` validates key segments to
-prevent escaping the configured prefix.
-
-**`StorageFile` type** (`types.ts`): `BunFile | S3File` — a lazy file reference. `read()` returns a `StorageFile`
-without reading data into memory. Callers stream it (an `S3File` goes to a `Response` as `file.stream()`, never as itself)
-or read it whole through `readStorageFile` (`Mount.readBytes` for a file of a mount). This keeps large file serving zero-copy on local storage.
-
-**Deadlines** (`deadline.ts`): Bun's `S3Client` takes no timeout or signal, and gives up on a silent request only after about 360 s. Eigen's own bound is `STORAGE_TIMEOUT_MS` (30 s; `setStorageTimeoutMs` in tests). `S3Storage` races `exists` and `size` against it, and a timeout answers `ApiError(503)`; it races `delete` too, and a timeout returns `false` like any failed delete (a missing key or a missing bucket returns `true`). Every storage read the server consumes itself runs through `streamStorageFile`, the storage-read form of the one stream loop `consumeStream`, which carries the idle deadline: a read that delivers no byte for that long, or whose signal aborts, is cancelled with a 503 that carries no `cause`; a read that fails answers 503 with the provider's error or the local errno as its `cause`. `writeTempWithHash` uses it for a `StorageFile` (downloads, copy, backup capture, version snapshots; a request body streamed through it has no such bound), `readStorageFile` for a body read whole into memory (thumbnails, import from Drive), `Mail.stageDriveAttachment` for a mail attachment from Drive, and `Mount.readBytes`, the freshest-first whole read of a file (previews, import, inline edit, transforms, content extraction), which passes the mount's `downloads` signal. `Mount.replaceTempFrom(tempId, source)` streams a source into a `tmp/<uuid>` side file and renames it onto the working-copy path on success, under the same signal; `Mount.downloadKeyToTemp` uses it for the stored object and maps any failure to 503 except a GET whose body says `NoSuchKey` (s3) or `ENOENT` (local), which answers 410 (`isMissingObjectCause`, `storageGone`). A container database's open reaches that GET only after the crash temp and the staged copy were checked, and a version restore then replaces the bytes; on a `local-key` mount the open does not GET but stats `data.db`, which answers 410 only on `ENOENT` and 503 on any other failure. `Mount.downloadToTemp` serves a pending staged copy first, so a version saved during an outage restores from it; a staged copy the queue's ack unlinks mid-read falls through to the stored object. The staged-copy crash recovery in `mount/document-db.ts` uses it for a pending staged copy. `closeAllDatabases` and `Drive.destruct` abort it, so no teardown waits on a download or an extraction read. Copy and version snapshots run without it, since a close-time snapshot runs after the abort, and a close during process shutdown skips the version prune, so a stalled DELETE cannot eat the drain budget (the next snapshot prunes). A file served to a client (`/download` and `/embed` in `serve-file.ts`, WebDAV GET in `webdav/resource.ts`) is the exception: its `file.stream()` goes straight into the Response, so a stalled body there is bounded only by the server's 200 s `idleTimeout`. It holds no lock and no Home while it waits.
-
-**`StorageBackend` interface** (`types.ts`):
-
-| Method      | Returns             | Notes                                        |
-|-------------|---------------------|----------------------------------------------|
-| `read`      | `StorageFile`       | Lazy reference (BunFile or S3File); `.slice(start, end)` is a ranged read (a Range GET on S3), which `Mount.readRange` serves inside the shared `rangeResponse` (`lib/core/http.ts`) |
-| `write`     | `Promise<number>`   | Accepts Buffer, Uint8Array, ArrayBuffer, BunFile |
-| `delete`    | `Promise<boolean>`  | `true` once the key is gone, a missing key included; `false` only when the call failed |
-| `exists`    | `Promise<boolean>`  |                                               |
-| `size`      | `Promise<number \| null>` |                                         |
-| `getPath?`  | `string`            | Local backends only — absolute filesystem path |
-| `mkdir?`    | `Promise<void>`     | LocalStorage only                            |
-| `rename?`   | `Promise<void>`     | LocalStorage only                            |
-| `deleteDir?`| `Promise<boolean>`  | LocalStorage only; `true` once the directory is gone, a missing one included; `false` only when the call failed |
-
-**LocalFilesystem** (`apps/api/src/lib/core/local-filesystem.ts`): Separate class for Mail, Contacts and Calendar,
-with the fs methods those domains need — `list`, `readdir`, `stat`, `dirSize`, `dirExists`, `watch`, and the
-durability family `writeAtomic` / `writeDurable` / `renameDurable` / `moveDurable` / `unlinkDurable` /
-`sweepAtomicTemps`. Exposed as `home.fs`.
-
-## Mount System
-
-A Mount bundles Drive file storage (`apps/api/src/lib/mount/mount.ts`):
-
-| Component        | Purpose                                         |
-|------------------|-------------------------------------------------|
-| `metadata.db`    | Paths, labels (Drizzle ORM)                     |
-| `data/`          | File storage via StorageBackend                 |
-| `thumbs/`        | Thumbnails (always local, WebP)                 |
-| `tmp/`           | Temp files for remote sync + interrupted uploads |
-| `staging/`       | Frozen `VACUUM INTO` upload payloads, S3 mounts only. Deliberately outside `tmp/` so the stale sweep can't purge an un-acked copy |
-| `data/.trash/`   | Soft-deleted files (path-based storage only)     |
-| `tmp/previews/`  | Cached file previews (cleaned after 7 days)      |
-
-Eigen containers keep one more directory of their own: `versions/`, inside the container, holding the
-file-level snapshots described below. Both collab docs and chats opt into it.
-
-**Locks.** Writes to an existing row run under its path lock (`Mount.withPathLock(pathId)`, one entry per row id): overwrites, renames and moves, trash and restore, version snapshots on the container, the chat-restore replace; a create takes none, the unique index on the name closes its race. A `local` mount adds one reader/writer lock for the whole tree (`Mount.withTreeShared` / `Mount.withTreeExclusive`, backed by `utils/rw-lock.ts`), because there a row's storage key is its name path and `LocalStorage.write` recreates a directory that moved away (`createPath: true`). Every write to a key resolved from the paths table holds the shared side from the key resolution through the storage call and the row write, so the row and the bytes agree: `writeFile`, `writeFileFromTemp`, `createFile`, `createFileFromTemp`, `createFolder`, the file branch of `deletePath`, and a managed database's `onSync` (copy and version snapshots reach these and take nothing of their own). Every storage rename, of a file or a directory, and every directory removal holds the exclusive side around its key resolution, the storage call and the row write: the rename/move branch of `updatePath`, `trashPath`, `restorePath` (which re-checks the restored name under the lock before the rename, since a storage rename replaces an existing destination) and the folder branch of `deletePath`. Waiters are served in arrival order, so a rename queued behind a stream of saves runs after the saves in flight and before the saves that arrived after it. `s3` and `local-key` keys are id-stable, and both methods pass straight through on those backends. Lock order is path lock → document-db slot → tree lock, and a tree-lock holder takes no lock at all (a shared region inside a shared region deadlocks once an exclusive is queued); `closeCachedDbsUnder`, whose final syncs take the shared side, runs before either lock in trash and delete. Reads take nothing: a read racing a move answers a transient 404, a document-db open a 503.
-
-**Document types**: `folder`, `file`, `doc`, `stickies`, `slides`, `sheets`, `vector`, `chat`
-
-**Thumbnails** (`apps/api/src/lib/shared/thumbnails.ts`): Generated on upload for images **and videos** (video
-frame grab), each in a Worker that loads sharp, capped by a semaphore so a large export can't spawn one worker
-per file. Supports JPEG, PNG, WebP, GIF, TIFF, HEIC (via heic-convert fallback), and exiftool embedded preview
-extraction. Stored as WebP.
-
-## Creating a container
-
-`Drive.create` (`apps/api/src/lib/drive/drive.ts`) is atomic. It creates the container folder, then provisions it (`ChatRoom.create` or `CollabDocument.create`, plus the comment row a card chat seeds). When provisioning throws, the container row is removed with `mount.deletePath` and the error propagates. That delete is the silent one: the row was never announced, so no SSE goes out, and on a remote mount it cancels the container's queued uploads, so a staged PUT cannot resurrect the object. The name is free again, so an immediate retry with the same name starts clean. A rollback that itself fails is logged and leaves a container nobody has seen; that leftover is what the integrity sweep's orphaned-container scan is for ([PROPOSAL_DATA_INTEGRITY.md](proposals/PROPOSAL_DATA_INTEGRITY.md)).
-
-The stem gets the mount's name rule before the extension goes on: `validateName` (`apps/api/src/lib/mount/helpers.ts`) rejects an empty, `.`, `..`, slash-bearing or control-character name, any case or compatibility variant of `.trash`, and anything over `MAX_NAME_BYTES` (255), and stores the rest NFC — so an empty stem cannot become a nameless `.eigendoc`, the same rule the rename route applies. Every dedup (copy, upload, chat `dedupeName`, trash restore) compares the requested name in NFC against its siblings, and `getUniqueFileName` trims the stem so the ` (n)` suffix still fits the byte limit.
-
-### Create reconcile
-
-Storage that has gone slow can make a create look failed when it is not: the request times out or 503s while the server keeps writing, and the row lands seconds later. The two create hooks (`useCreateDriveItem` for the drive dialog, comment cards and stickies boards, and `useCreateChatRoom` for the chat wizard) post through `createWithReconcile` (`packages/lib/src/core/drive/reconcile-create.ts`) with a 15 s abort signal. Before posting, the hook lists the folder once and keeps the ids it sees. On an indeterminate failure (abort, network error, 5xx) it polls that listing 3 times, 5 s apart, for the name it sent (the chat wizard can create without naming a parent — the route resolves the lazily-created `chats` folder, an id no client endpoint hands out — so it polls the mount-scoped chat listing instead). A row matches when it carries the expected name and an id the snapshot did not hold: that is exactly "created by this request, or by a concurrent create of the same name", with no clock on either side. A same-name sibling that predates the create is in the snapshot, so it can never pass for ours. A match resolves the mutation as a success. Both the snapshot and the polls run with retries off — the poll loop is the retry, and the listing query's own retry would double the requests against storage that is already struggling. If the snapshot itself fails there is no honest anchor, so reconcile is skipped. A 4xx is never reconciled either: it is the server's definitive no (409 duplicate name). A miss throws `CreateUnconfirmedError`, whose message is the toast copy `onMutationError` shows.
-
-The chat wizard has one honest miss. Its `dedupeName` creates let the server suffix a colliding name (`Name (2)`), so the row that lands is not the name the client sent and no poll could find it. Those creates pass no `expectedName`, so they take no snapshot and run no polls — only the error classification still applies: a 4xx surfaces exactly as the server returned it, and anything indeterminate becomes `CreateUnconfirmedError`, so a chat that may well be in the list reads as slow storage rather than a raw timeout.
-
-## User Data Layout
+## Every owner's data lives under one folder
 
 ```
 data/home/{userId}/
 ├── settings.json
 ├── mounts/
-│   ├── default/
-│   │   ├── metadata.db
-│   │   ├── data/
-│   │   ├── thumbs/
-│   │   ├── staging/          (S3 mounts only)
-│   │   └── tmp/
-│   │       └── previews/
-│   └── shared.db
-├── eigen.mail/
-│   ├── mail.db
-│   └── Maildir/
-├── eigen.contacts/
-│   ├── contacts.db           (the cards themselves, one vCard BLOB per row, + the sync/label metadata)
-│   └── avatars/              (the photo rendition the web UI serves + staged uploads)
-├── eigen.calendar/
-│   └── calendar.db           (the resources themselves, one VCALENDAR BLOB per row, + the calendar metadata)
-└── eigen.notifications/
-    └── notifications.db
+│   ├── shared.db           paths others shared into this home (ACL.md)
+│   └── {mountId}/          metadata.db, data/, thumbs/, tmp/, staging/ (s3 only)
+├── eigen.mail/             mail.db, Maildir/
+├── eigen.contacts/         contacts.db, avatars/
+├── eigen.calendar/         calendar.db
+└── eigen.notifications/    notifications.db
 ```
 
-Contacts keep the cards themselves in `contacts.db`: a row's `vcard` BLOB is the truth, and the columns beside it — names, the `data` JSON, the etag, label membership from each card's `CATEGORIES` — are a projection that rebuilds from those bytes, while what no card carries lives only here: label ids + colors, the book `ctag`/`syncGen`/`ownerSeeded`, and the tombstones. `avatars/` holds one hashed webp per card photo, the rendition the web UI serves, alongside staged uploads a contact form hasn't saved yet; it is a second source of truth rather than a cache, because a promoted webp comes from the pristine upload. See [CONTACTS.md](CONTACTS.md).
+The names come from `PATHS` in `apps/api/src/lib/core/constants.ts`. Mail, Contacts and Calendar reach their folders through `home.fs`, a `LocalFilesystem` with the atomic and durable write family those domains need. Contacts and calendar events live as BLOBs in their databases, with columns projected from them ([CONTACTS.md](CONTACTS.md), [CALENDAR.md](CALENDAR.md)). `staging/` sits outside `tmp/` so the stale-temp sweep can never purge an upload the bucket has not acknowledged ([SYNC.md](SYNC.md)).
 
-Calendar follows the same model: a `resources` row's `ics` BLOB holds one UID's master, its overrides and the VTIMEZONEs they reference — the bytes a CalDAV GET serves back — and the `events` rows beside it are the projection. What no resource carries lives only in the database: the calendar's name, color, visibility and default flag, its shares, its `ctag`/`syncGen`, the tombstones and the recipient-side share list. See [CALENDAR.md](CALENDAR.md).
+## Containers name users by email, never by id
 
-Team data: `data/team/{teamId}/` — Drive + Calendar only, plus `settings.json` for mount/calendar config.
-Org data: `data/org/{orgId}/` — minimal (filesystem only, no domain services).
+A container (`.eigendoc`, `.eigenchat` and their siblings) is the portable unit. It is copied, moved and version-restored as a self-contained set of files. So its databases reference users by email only: chat authors, comment authors, assignees and mentions. Home-level databases (`metadata.db`, `contacts.db`, `calendar.db`, `notifications.db`) sit beside their owner and may hold user ids. Because containers carry no ids, a copy or a backup restore keeps every user reference intact on any server and in any id space.
 
-### Users by email inside containers
+## A mount is a paths table over one of three backends
 
-A container (`.eigenchat`, `.eigendoc`, …) is the portable unit — copied, moved, and version-restored as a self-contained blob — so its databases reference users by email only, never by user id. Home-level databases (`metadata.db`, `contacts.db`, `calendar.db`, `notifications.db`) sit next to their owner's `ownerId` and may hold user ids. Because containers carry no ids, backup and restore preserve every user reference verbatim: an email survives a copy or a restore regardless of which server or id space it lands in.
+Every Drive row lives in the mount's `paths` table (`apps/api/src/lib/mount/schema.ts`). The bytes live in a `StorageBackend` (`apps/api/src/lib/storage/types.ts`):
 
-## Key Types
+| Type | Where a file's bytes live |
+|---|---|
+| `local` | `data/` under the file's name path, so the tree on disk mirrors Drive |
+| `local-key` | `data/{id}.{ext}`, flat |
+| `s3` | `{prefix}/{id}.{ext}` in a bucket: a plain file is PUT in its request, a container database is written behind by the upload queue ([SYNC.md](SYNC.md)) |
 
-- `DrivePath` (`packages/lib/src/types/drive.ts`) — file/folder metadata (id, mountId, name, type, parentId,
-  ownerId, mimeType, size, thumbnail, acl, visibility, sharingRestricted, details, hash, createdAt, updatedAt)
-- `DriveACL` — access control entry (`{id, read, write}`)
-- `MountConfig` (`packages/lib/src/types/mount.ts`) — mount settings (id, name, storageType, isDefault, s3Config)
-- `StorageFile` (`apps/api/src/lib/storage/types.ts`) — `BunFile | S3File`, lazy file reference returned by `read()`
-- `StorageBackend` — interface implemented by both storage backends
+An id key never moves, so on `local-key` and `s3` a rename, a move or a trash changes only the row. On `local` the same operations rename files and directories on disk. That difference drives the [tree lock](#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree) and the `.trash/` directory ([SOFT-DELETE.md](SOFT-DELETE.md#only-local-moves-bytes-into-trash)).
 
-## Folder Sizes (lazy cache)
+`read()` returns a `StorageFile`, a lazy `BunFile` or `S3File` that holds no bytes yet. A local file goes into a `Response` as is, which keeps serving zero-copy. An `S3File` goes in as `file.stream()`, since it takes no `ResponseInit` options. Both local backends resolve every key through `resolveWithinBase` (`apps/api/src/lib/core/path-utils.ts`), and `S3Storage` validates key segments, so no key escapes its base.
 
-Folder rows cache their recursive size in `paths.size`; `NULL` means "stale". Mutations don't
-recompute — they NULL the whole ancestor chain (`invalidateSizesFrom`, or `invalidateAncestorsOf`
-for content writes). The next read that hydrates the folder (`toDrivePath`) recomputes the subtree
-bottom-up inside one transaction and writes the totals back (`computeAndCacheFolderSize`), reusing
-any still-cached descendant totals. Two consequences worth knowing: **GET paths perform writes**
-(a listing after a deep invalidation recomputes and caches synchronously — relevant for any future
-read-replica idea), and the first listing after a large move/delete pays the recompute; every later
-read is a plain column read. Trash-view rows (`trashedFrom IS NOT NULL`) are excluded from parent
-totals, but trashed bytes still count toward the quota via `getTotalSize`.
+## Writes to one row serialize on its path lock
 
-## Soft Delete (Trash)
+A write to an existing row runs under `Mount.withPathLock(pathId)`: an overwrite, a rename or move, a trash or restore, a version snapshot on the container, the chat restore. A backup holds a file's path lock while it copies the file, because `LocalStorage.write` rewrites a local file in place, so a read beside an overwrite would end short ([BACKUP.md](BACKUP.md#a-home-archive-holds-every-database-file-and-auth-row)). A create takes no lock. The partial unique index on `(parentId, LOWER(name))` over untrashed rows closes the race between two creates of one name, and the loser gets a 409. On `local` both creates write the same name path before either row lands, so the surviving row can hold the loser's bytes ([ROADMAP.md](ROADMAP.md)).
 
-Delete operations are soft — items are moved to trash instead of being permanently deleted. Two columns on
-`paths`: `trashedAt` (timestamp) and `trashedFrom` (original parentId). On trash, items are reparented to
-the mount root. Path-based (`local`) storage moves files to `data/.trash/{pathId}.ext`; key-based and S3
-need no file movement. Trash counts toward quota. Auto-purge after configurable retention (default 30 days).
+## On `local` a key is a name path, so renames lock the whole tree
 
-See: [SOFT-DELETE.md](SOFT-DELETE.md) for full design.
+`LocalStorage.write` recreates any missing directory (`createPath: true`). So a save that resolved its key before a folder rename would rebuild the old folder and orphan the save. A `local` mount therefore has one reader/writer lock over its whole tree (`Mount.withTreeShared` / `withTreeExclusive`, `apps/api/src/utils/rw-lock.ts`). On `s3` and `local-key` both methods pass straight through.
 
-## File Versioning
+- **Shared:** every write whose key comes from the paths table, from the key resolution through the storage call and the row write, so the row and the bytes agree. That covers file writes and creates, folder creates, a file delete and a managed database's sync.
+- **Exclusive:** every storage rename of a file or a directory and every directory removal: rename and move, trash, restore and folder delete.
 
-File-level snapshots live in `<container>/versions/<iso-ts>.db` (`apps/api/src/lib/versioning/`). Trigger: opt-in `snapshot` config fires `ManagedDatabase.snapshotIfDue()` from `tick()`/`close()`. Mechanics in `versioning/snapshot.ts` — plain functions over the mount, `Mount` keeps the facades: `snapshotContainerDataDb` is self-locked on the container (save/pre-restore paths block on the lock), while the timer/close paths go through `trySnapshotContainerDataDb` (skip-if-contended, so a close can never park on a held container lock). The manual save, the pre-restore snapshot, the backup's `open-handle-first` copy and the pre-copy `Mount.flushContainerDb` wait on the data.db's `documentDbs` slot, so an in-flight open or close lands first; the tick/close path reads the slot's live db without waiting, since it runs inside that very close. `replaceContainerDataDb` overwrites chat `data.db` bytes in place. Restore orchestration in `versioning/restore.ts`: grab the target into the OS temp dir, take a pre-restore snapshot, then Yjs surgery (collab docs) vs chat byte-overwrite — no lock held across steps, nothing staged inside the container. Routes live in the drive router (`routes/drive.ts`): `/drive/:o/:m/file/:p/versions[/save | /:name/restore]`.
+Waiters are served in arrival order. A rename queued behind a stream of saves runs after the saves in flight and before the saves that arrive after it. The lock order is path lock, then document-db slot, then tree lock. A tree-lock holder takes no further lock, because a shared region inside a shared region deadlocks once an exclusive is queued. Most reads take no lock, and one that races a move answers a transient 404, a document-db open a 503. A Drive copy and the download of a document or a version into a temp file read under the shared tree lock. A backup's copy of a file holds the shared tree lock and the file's path lock. `apps/api/src/test/storage/overwrite-ancestor-move.test.ts` pins the races.
 
-## Copy / Move
+## Every storage read has a 30 s idle deadline
 
-Move stays in-mount (`Drive.movePath`). Copy goes anywhere (`apps/api/src/lib/drive/copy-across.ts`):
-same owner+mount uses the fast same-storage `Drive.copyPath` → `Mount.copyPath` (recursive,
-container-aware); cross-mount/owner uses the recursive bridge `copyPathAcross` (download +
-`createFileFromData` per node, `createFolder` typed for containers). Containers copy safely by
-design — eigen-doc containers reference internal children by NAME, not pathId, so a byte copy is a
-valid independent doc; copy flushes the live `data.db` first and skips the `versions/` snapshot
-folder. A copied file carries the source's media facts (`details.width/height/duration`) and, when its file still exists, its thumbnail, copied as `<thumbsDir>/<thumbnail>` under the new id; `originalName` and `webdavProps` stay with the source. The bridge re-uploads and gets a fresh thumbnail from the upload path. Route `POST /drive/:o/:m/path/:p/copy` (body `{targetOwnerId, targetMountId, targetParentId,
-name?}`) picks fast-path vs bridge, dedups the destination name at the route level (kept out of
-`Drive.copyPath` so WebDAV COPY keeps overwrite/409 semantics), and rejects copying a folder
-into its own subtree via `Mount.isSelfOrDescendant`. A move rejects it inside `Mount.updatePath`, where the ancestry walk and the row update share one synchronous SQLite transaction, so two concurrent moves cannot form a cycle between the check and the write (a cycle would spin every recursive walk over the tree). That route and WebDAV COPY both stream nothing while the tree copies, so each exempts its request from the server-wide `idleTimeout` with `server.timeout(request, 0)`; otherwise a copy past 200s reaches the client as an empty reply it would retry into a duplicate tree. Cross-mount MOVE is deferred — it would change
-`ownerId/mountId/pathId`, breaking shares, links, and history.
+Bun's `S3Client` takes no timeout and no signal, and gives up on a silent request only after about 360 s. Eigen's own bound is `STORAGE_TIMEOUT_MS` (30 s, `apps/api/src/lib/storage/deadline.ts`). `S3Storage` races `exists`, `size` and `delete` against it. A timed-out `exists` or `size` answers 503, a timed-out `delete` returns `false` like any failed delete.
 
-See: [DATABASE.md](DATABASE.md) for schema details, [ACL.md](ACL.md) for permissions
+Every storage read the server consumes itself runs through `streamStorageFile`, the storage form of the one stream loop `consumeStream`. A read that delivers no byte for 30 s is cancelled with a 503.
+
+On a warm local file `consumeStream` never gives up the event loop, so a read that does not hold the file's path lock ends before an overwrite that arrives during it can start. That matters because a local write goes into the same file, not into a temp file renamed over it, so a reader of a live file and an overwrite must not interleave. The cost is that such a read holds the API for its length ([ROADMAP.md](ROADMAP.md)). Only the backup passes `yields`, which gives a turn every 2 MB: it holds the path lock of each drive file it copies, and nothing rewrites its own staged copies.
+
+Most reads also pass the mount's `downloads` signal. `closeAllDatabases` and `Drive.destruct` abort it first, so no teardown waits on a stalled download or extraction read. Copy and version snapshots read without it, because a close-time snapshot runs after that abort.
+
+A file served to a client (`/download`, `/embed`, WebDAV GET) is the exception. Its stream goes straight into the Response, so a stalled body there is bounded only by the server's 200 s `idleTimeout`. It holds no lock and no Home while it waits.
+
+## A gone object answers 410, an outage 503
+
+Only the GET body tells a missing object from a sick bucket: `NoSuchKey` on S3, `ENOENT` on disk (`isMissingObjectCause`). `Mount.downloadKeyToTemp` answers that with 410 (`storageGone`) and every other failure with 503. A 410 tells the client to stop retrying, a 503 to retry ([COLLAB.md](COLLAB.md#each-close-code-tells-the-tab-what-to-do)).
+
+A container database's open reads the freshest copy first: the crash temp, then the staged copy of an unacknowledged upload, then the stored object ([SYNC.md](SYNC.md)). So a 410 means no copy exists anywhere, and a version restore is the way back. On a `local-key` mount the open does not GET but stats `data.db`, and answers 410 only on `ENOENT`.
+
+## Creating a container is all or nothing
+
+`Drive.create` (`apps/api/src/lib/drive/drive.ts`) creates the container folder, then provisions it (`ChatRoom.create` or `CollabDocument.create`, plus the comment row a card chat seeds). When provisioning throws, `mount.deletePath` removes the row and the error propagates. That delete sends no SSE, because the row was never announced. On a remote mount it cancels the container's queued uploads, so a staged PUT cannot bring the object back. The name is free again, so an immediate retry with the same name starts clean. A rollback that itself fails is logged and the container stays: a row nobody has seen, which holds the name and fails every open. No scan finds it: the orphaned-container scan is open work in the "Data integrity + verified backups" row of [ROADMAP.md](ROADMAP.md).
+
+The stem passes the mount's name rule (`validateName`, `apps/api/src/lib/mount/names.ts`) before the extension goes on, so an empty stem cannot become a nameless `.eigendoc`. Names are stored NFC. Every dedup (copy, upload, chat `dedupeName`, trash restore) compares in NFC, and `getUniqueFileName` trims the stem so the ` (n)` suffix still fits the 255-byte limit.
+
+## A create that timed out may still have landed
+
+Slow storage can make a create look failed when it is not: the request times out or answers 503 while the server keeps writing, and the row lands seconds later. So the two create hooks (`useCreateDriveItem` and `useCreateChatRoom`) post through `createWithReconcile` (`packages/lib/src/core/drive/reconcile-create.ts`) with a 15 s timeout.
+
+Before posting, the hook lists the folder once and keeps the ids it sees. After an abort, a network error or a 5xx it polls that listing for the name it sent. A row matches when it has that name and an id the snapshot did not hold. That means created by this request or by a concurrent create of the same name, with no clock on either side. A same-name sibling that existed before is in the snapshot, so it never passes for ours. A match resolves the mutation as a success, and a miss throws `CreateUnconfirmedError`, whose message is the toast.
+
+- A 4xx is never reconciled: it is the server's definitive no (409 duplicate name).
+- A failed snapshot skips reconcile, since there is no honest anchor.
+- The chat wizard can create without a parent. The route then resolves the lazily created `chats` folder, which no client endpoint names, so the hook polls the mount's chat listing instead.
+- A chat create through `dedupeName` lets the server suffix the name (`Name (2)`), so no poll could find it. It passes no `expectedName` and runs no polls. An indeterminate failure still becomes `CreateUnconfirmedError`, so a chat that may well exist reads as slow storage rather than a raw timeout.
+
+`packages/lib/src/test/core/drive/reconcile-create.test.ts` pins the contract.
+
+## Folder sizes are a lazy cache, so a listing can write
+
+A folder row caches its recursive size in `paths.size`, and `NULL` means stale. A mutation does not recompute. It NULLs the whole ancestor chain (`invalidateSizesFrom`, or `invalidateAncestorsOf` for a content write). The next read that hydrates the folder (`toDrivePath`) recomputes the subtree bottom-up in one transaction and writes the totals back, reusing every descendant total still cached.
+
+So a GET can write, which matters for any read-replica idea. The first listing after a large move or delete pays the recompute, and every later read is a column read. A trashed item hangs under the mount root and is left out of the totals ([SOFT-DELETE.md](SOFT-DELETE.md)).
+
+## Version snapshots live inside the container
+
+A container that opts in (collab documents and chats, the `snapshot` key in their database config) keeps file-level snapshots of its `data.db` in `<container>/versions/<iso-ts>.db` (`apps/api/src/lib/versioning/`). `ManagedDatabase` takes one every 100 writes and on close, and each snapshot prunes by the retention policy.
+
+- A manual save and the pre-restore snapshot block on the container's path lock, because an explicit user action must never skip.
+- The timer and close path try-locks and skips when the lock is held (`trySnapshotContainerDataDb`). It runs inside a close that a lock holder may be waiting on, and a skip loses one history entry, never bytes.
+- A restore first copies the chosen snapshot to a temp file, since the pre-restore snapshot prunes and could delete it. It then replays the snapshot into the live Y.Doc for a collab document ([COLLAB.md](COLLAB.md#a-version-restore-rewrites-an-open-document-in-one-transaction)) or overwrites the chat's `data.db` bytes (`replaceContainerDataDb`). No lock is held across the steps.
+
+## Copy goes anywhere, a move stays in its mount
+
+A copy within one owner and mount takes the fast path `Drive.copyPath` → `Mount.copyPath`. Any other copy takes the bridge `copyPathAcross` (`apps/api/src/lib/drive/copy-across.ts`), which downloads and re-uploads each file and recreates each container typed. A byte copy of a container is a valid independent document, because its internal children reference each other by name, not by path id. A copy flushes the live `data.db` first and leaves `versions/` behind, so the copy starts with a clean history. A copied file keeps the source's media facts and thumbnail. `originalName` and the WebDAV dead properties stay with the source.
+
+The copy route (`POST /drive/:ownerId/:mountId/path/:pathId/copy`) dedups the destination name itself, not in `Drive.copyPath`, so WebDAV COPY keeps its overwrite and 409 behavior. `Drive.copyPath` refuses to copy a folder into its own subtree for both callers, since the copy would otherwise recurse forever. A move makes the same check inside `Mount.updatePath`, in one synchronous transaction with the row write, so two opposite moves cannot form a cycle between check and write. A cycle would spin every recursive walk over the tree.
+
+The copy route and WebDAV COPY send nothing while a deep tree copies, so both lift the server's 200 s `idleTimeout` for their request (`server.timeout(request, 0)`). Otherwise the client would see an empty reply and retry into a duplicate tree.
+
+A move never crosses mounts. It would change the row's owner, mount and id, and that breaks shares, links and history.
+
+## See also
+
+- [SOFT-DELETE.md](SOFT-DELETE.md): trash and restore
+- [FILE-HISTORY.md](FILE-HISTORY.md): the event log and watches in `metadata.db`
+- [SYNC.md](SYNC.md): the upload queue, staged copies and freshest-first reads on `s3`
+- [DATABASE.md](DATABASE.md): schemas and migrations
+- [ACL.md](ACL.md): permissions and `shared.db`
+- [PREVIEWS.md](PREVIEWS.md): thumbnails and cached previews in `thumbs/` and `tmp/previews/`
+- [QUOTA.md](QUOTA.md): what counts toward a mount's size

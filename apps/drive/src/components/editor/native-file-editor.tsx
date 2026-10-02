@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants';
 import { downloadDriveFile } from '@workspace/lib/download';
 import { useCheckPermissions, useTextPreview } from '@workspace/lib/drive';
 import { invalidateEditorContent, useFileContent } from '@workspace/lib/editor';
@@ -24,7 +25,13 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
     const canWrite = permissions?.canWrite ?? false;
     const queryClient = useQueryClient();
     const { isMobile } = useLayout();
-    const { data: preview } = useTextPreview(path.ownerId, path.mountId, path.id, path.updatedAt, !editing);
+    const { data: preview, isError: previewFailed } = useTextPreview(
+        path.ownerId,
+        path.mountId,
+        path.id,
+        path.updatedAt,
+        !editing,
+    );
 
     const handleReload = () => {
         invalidateEditorContent(queryClient, path.ownerId, path.mountId, path.id);
@@ -64,6 +71,14 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
                         <div className="w-full px-12 py-6 max-w-4xl mx-auto">
                             {preview?.body ? (
                                 <div className="eigen-prose" dangerouslySetInnerHTML={{ __html: preview.body }} />
+                            ) : previewFailed ? (
+                                <ErrorState
+                                    message={
+                                        path.size > TEXT_PREVIEW_MAX_BYTES
+                                            ? 'This file is too large to preview.'
+                                            : undefined
+                                    }
+                                />
                             ) : (
                                 <LoadingState />
                             )}

@@ -9,6 +9,7 @@ import * as decoding from 'lib0/decoding';
 import { type RefObject, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
+import { reloadReplacedHome } from '../../home/reload-replaced-home';
 
 // All five hosts want the same provider behavior, so the options live here rather than per app. Sibling tabs sync over
 // BroadcastChannel only once the server named its data epoch, on a channel of that epoch (see the epoch handler).
@@ -174,10 +175,9 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
             if (event?.code === COLLAB_HOME_REPLACED_CLOSE) {
                 // A restore replaced the document on the server. Reconnecting would sync the copy
                 // this tab still holds in memory back over it and silently undo the restore, so the
-                // provider stays down and the page reloads onto the restored document. No editor
-                // persists to IndexedDB, so a reload is a clean slate. Unsynced edits are dropped
-                // with it — they belong to a document that no longer exists, and leaving the guard
-                // armed would put a "leave without saving?" prompt in front of the reload.
+                // provider stays down and the page reloads onto the restored document. Unsynced edits
+                // are dropped with it — they belong to a document that no longer exists, and leaving
+                // the guard armed would put a "leave without saving?" prompt in front of the reload.
                 pendingUpdateRef.current = false;
                 setUnsyncedEdits(false);
                 nextProvider.disconnect();
@@ -234,7 +234,7 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
 
     // After the commit that disarmed UnsyncedEditsGuard: a reload inside the close handler would still meet its prompt.
     useEffect(() => {
-        if (homeReplaced) window.location.reload();
+        if (homeReplaced) reloadReplacedHome();
     }, [homeReplaced]);
 
     return {

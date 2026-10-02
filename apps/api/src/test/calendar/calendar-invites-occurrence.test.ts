@@ -1,7 +1,7 @@
 // One occurrence of an invited series, over the Home relay: the organizer's "this event" edit must reach
 // the guest as an exception on their linked series — never as an update of the whole series — and the
 // same for a second edit, a cancellation and a guest's RSVP. Driven through the routes the calendar app
-// calls (docs/CALENDAR.md § Invitations).
+// calls (docs/CALENDAR.md § An occurrence message names the series).
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { getHome } from '../../lib/home';

@@ -75,7 +75,7 @@ describe('Team Avatar', () => {
     });
 
     test('org admin uploading to a nonexistent team id gets 404 (no orphan file written)', async () => {
-        const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId('does-not-exist')}/avatar`, {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId('0'.repeat(32))}/avatar`, {
             method: 'POST',
             body: avatarForm(),
         });
@@ -83,7 +83,7 @@ describe('Team Avatar', () => {
     });
 
     test('org admin deleting the avatar of a nonexistent team gets 404', async () => {
-        const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId('does-not-exist')}/avatar`, {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId('0'.repeat(32))}/avatar`, {
             method: 'DELETE',
         });
         expect(res.status).toBe(404);

@@ -11,8 +11,14 @@ export type S3Config = {
 
 export const EMPTY_S3: S3Config = { endpoint: '', bucket: '', prefix: '', accessKeyId: '', secretAccessKey: '' };
 
-export function isS3ConfigValid(config: S3Config): boolean {
-    return !!(config.endpoint && config.bucket && config.accessKeyId && config.secretAccessKey);
+export function isS3ConfigValid(config: S3Config, secretSaved = false): boolean {
+    return !!(config.endpoint && config.bucket && config.accessKeyId && (config.secretAccessKey || secretSaved));
+}
+
+// The backup bucket's secret reaches no browser, so its form sends it blank. That keeps the saved one only for the
+// same key, endpoint and bucket: sent anywhere else, it would reach whoever runs that endpoint.
+export function keepsSavedSecret(next: S3Config, saved: S3Config): boolean {
+    return next.accessKeyId === saved.accessKeyId && next.endpoint === saved.endpoint && next.bucket === saved.bucket;
 }
 
 export type MountConfig = {

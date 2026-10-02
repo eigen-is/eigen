@@ -1,5 +1,9 @@
 # Proposal: Single Sign-On (SSO) for organizations
 
+This proposal lets an organization's people sign in to Eigen with the identity provider the organization already runs, instead of a separate Eigen password.
+
+**Status:** not built: `@better-auth/sso` is not installed. [ROADMAP.md](../ROADMAP.md) keeps its row, and [PROPOSAL_EXTERNAL_MAIL_PROVIDER.md](PROPOSAL_EXTERNAL_MAIL_PROVIDER.md) builds on it.
+
 > **TLDR**: Let an organization that already runs an identity provider (Keycloak, Authentik,
 > Microsoft Entra, Okta, Google Workspace, Zitadel…) log into Eigen with it, instead of a separate
 > Eigen password. Use better-auth's `sso` plugin (`@better-auth/sso`, versioned in lockstep with

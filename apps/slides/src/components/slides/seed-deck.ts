@@ -1,7 +1,7 @@
 // A deck always has at least one slide. Nothing server-side writes a new container's Yjs content
 // (Drive.create provisions data.db, comments.db, media/ and chat/ and nothing else), so the first
 // writer to open an empty deck seeds it. One transact, so a fresh deck arrives as one atom; under a
-// non-null origin, so ⌘Z cannot empty it (docs/CANVAS.md § Sealing discipline). The frame record goes
+// non-null origin, so ⌘Z cannot empty it (docs/CANVAS.md § One discrete op is one undo step). The frame record goes
 // through the editor's own writers, so a seeded deck cannot drift from an authored one. Its two ids
 // are FIXED rather than fresh: two peers can open the same empty deck at the same moment and both
 // seed it, and the same keys make those two writes converge on one title slide instead of two.

@@ -713,7 +713,7 @@
    resize grips, one visual for every editor. */
 .eigen-selection-ring {
     outline: 1px solid var(--selection-handle);
-    /* Excalidraw's breathing room: the ring floats off the object (SCOUT-M2 §9). */
+    /* Excalidraw's breathing room: the ring floats off the object. */
     outline-offset: 4px;
 }
 
@@ -806,7 +806,7 @@
     opacity: 0;
 }
 
-/* Two coincident vertices merge into one dot drawn at 2× size (D9(d)). */
+/* Two coincident vertices merge into one dot drawn at 2× size. */
 .eigen-point-handle-doubled {
     @apply h-6 w-6;
 }

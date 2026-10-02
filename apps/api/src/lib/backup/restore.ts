@@ -1,37 +1,36 @@
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { parseBackupArtifactName } from '@workspace/lib/validation';
+import { incompleteReason, parseBackupArtifactName } from '@workspace/lib/validation';
 import { closeCollabConnectionsForHome } from '../collab/connections';
-import { rotateHomeCollabEpoch } from '../collab/epoch';
 import { ApiError, PATHS } from '../core';
+import { rotateHomeDataEpoch } from '../home/data-epoch';
 import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-home';
 import { getTeam } from '../team/team';
 import { getUserById } from '../user/user';
 import { extractArtifact, readUnpackedHome } from './archive';
+import { resolveHomeDir } from './home-dir';
+import { restoreAuthRows, restoreAvatar, restoreShares } from './materialize';
 import {
     checkRestoredDatabases,
     containerDatabasesIn,
     materializeMount,
-    movePath,
-    restoreAuthRows,
-    restoreAvatar,
-    restoreShares,
+    movePathAsync,
     type VersionedDatabase,
-} from './materialize';
+} from './materialize-mount';
 import {
     ARCHIVE_HOME_DIR,
     buildSafetyCopyName,
     freeSafetyCopyStamp,
     getBackupStagingDir,
     getBackupsDir,
-    resolveHomeDir,
     wipeBackupStagingDir,
 } from './paths';
 import { markRestoreComplete, writeRestoringMarker } from './recovery';
 import { forgetSafetyCopySize, resolveSafetyCopy } from './safety-copy';
 import type { SnapshotProgress } from './snapshot-home';
-import { FAILURES_IN_MESSAGE, verifyFolder } from './verify';
+import { requireVerified, verifyFolder } from './verify';
 
 // A safety copy of a home whose owner is gone is a delete candidate, not a restore: the folder on
 // its own leaves a home nobody can sign in to. Restoring a deleted user goes through an artifact,
@@ -47,14 +46,9 @@ async function requireOwnerExists(ownerId: string): Promise<void> {
 // the work that judged it.
 type InstallHome = (stamp: string) => Promise<void>;
 
-// The moves every restore is made of, in one place: take the home away from everyone holding it,
-// put the folder as it stands aside as a safety copy, install the replacement, and on any failure
-// put both folders back. `prepare` runs under the mark, before a byte is touched. `parkOnFailure`
-// names where the folder in place goes if the install throws. Nothing is ever deleted, and the
-// marker written here is the only thing that tells the next boot an interrupted restore happened —
-// one writer, so recoverInterruptedRestores covers every kind of restore. Two words, two
-// mechanisms: the mark is the in-memory flag every surface refuses the home on, the marker is the
-// note on disk the next boot reads.
+// The moves every restore is made of: take the home from everyone, put its folder aside, install the replacement,
+// and on a failure put both folders back, deleting nothing. The marker written here is the only note the next boot
+// reads of an interrupted restore, so recoverInterruptedRestores covers every kind.
 async function replaceHomeFolder(
     ownerId: string,
     homeDir: string,
@@ -68,31 +62,26 @@ async function replaceHomeFolder(
         const install = await prepare();
 
         // Sessions are untouched: the user stays signed in, every request just meets the 503 until
-        // the mark clears. A tab offline now has no socket to close: the home's epoch reloads it on its
-        // next reconnect.
+        // the mark clears.
         closeCollabConnectionsForHome(ownerId);
-        rotateHomeCollabEpoch(ownerId);
         await evictHome(ownerId);
 
         // There is no home folder to move aside on a restore after the user was deleted.
         const stamp = freeSafetyCopyStamp(homeDir, new Date());
         const movedAside = fs.existsSync(homeDir) ? buildSafetyCopyName(homeDir, 'pre-restore', stamp) : null;
-        // Always, and before the move: a process killed between here and the install leaves a home
-        // folder that is either gone or half written, and only this note tells the next boot which
-        // it is — the folders' presence alone means nothing (a deleted user's safety copies outlive
-        // them, and an install writes the home folder early).
+        // Before the move: a process killed from here on leaves a home folder gone or half written, and which one
+        // only this note tells the next boot.
         writeRestoringMarker(jobId, { ownerId, homeDir, preRestoreName: movedAside && path.basename(movedAside) });
         if (movedAside) fs.renameSync(homeDir, movedAside);
 
         try {
             await install(stamp);
-            // The home folder is whole from here: everything after this only lets go of it. A crash
-            // before this line leaves a half-written folder that only the next boot can judge, and
-            // the absence of this note is what tells it so.
+            // Every tab of the home reloads, once the folder is whole and before the completion note: a crash
+            // between the two costs an extra reload, never a stale tab over the new home.
+            await rotateHomeDataEpoch(ownerId);
             markRestoreComplete(jobId);
         } catch (error) {
-            // Nothing is deleted, ever: the folder in place keeps a name of its own and the home as
-            // it was goes back. A failure while putting it back must not hide the original one.
+            // A failure while putting the home back must not hide the one that brought us here.
             try {
                 if (fs.existsSync(homeDir)) fs.renameSync(homeDir, parkOnFailure(stamp));
                 if (movedAside) fs.renameSync(movedAside, homeDir);
@@ -106,19 +95,16 @@ async function replaceHomeFolder(
         // may throw over the failure that brought us here.
         clearHomeRestoring(ownerId);
         try {
-            wipeBackupStagingDir(jobId);
+            await wipeBackupStagingDir(jobId);
         } catch (error) {
             console.error(`[backup] could not clear the staging folder of job ${jobId}:`, error);
         }
     }
 }
 
-// Replaces one home with the copy inside an artifact. Nothing is ever deleted: the home as it stands
-// is renamed aside as `{id}.pre-restore-{ts}`, and a failure after that point leaves the incomplete
-// folder as `{id}.failed-restore-{ts}` and puts the original back. The home is refused on every
-// surface for the duration (markHomeRestoring, which is also the lock against a second restore) and
-// its collab sockets are told to reload; the first load after the mark clears runs migrations, reseeds
-// each domain's byte counters from the restored rows and refreshes shared-with-me.
+// Replaces one home with the copy inside an artifact: the home as it stands goes aside as `{id}.pre-restore-{ts}`,
+// and a failed install as `{id}.failed-restore-{ts}`. The first load after the restore runs migrations and reseeds
+// each domain's byte counters from the restored rows.
 export async function restoreHome(
     artifactName: string,
     ownerId: string,
@@ -143,22 +129,22 @@ export async function restoreHome(
             const unpackDir = path.join(getBackupStagingDir(jobId), 'restore');
             // A retry of a job whose id was reused would otherwise extract over the last attempt's
             // tree, and stage 1 fails an archive on a file the manifest does not list.
-            fs.rmSync(unpackDir, { recursive: true, force: true });
+            await fsp.rm(unpackDir, { recursive: true, force: true });
             onProgress?.('extract', 0, 1);
             await extractArtifact(artifactPath, unpackDir);
             onProgress?.('extract', 1, 1);
             const { folder, manifest } = readUnpackedHome(unpackDir, ownerId, artifactName);
-            const verified = await verifyFolder(folder, onProgress);
-            if (verified.status !== 'verified') {
-                const failures = verified.failures.slice(0, FAILURES_IN_MESSAGE).join('; ');
-                // The whole list is in the record; a few of them are enough for a message.
-                throw new ApiError(400, `${artifactName} did not verify: ${failures}`);
-            }
+            // A member of a whole-server archive that left out what only a restore of that archive
+            // puts back. Refused here, before the home is moved aside: after that, a refusal would
+            // already have cost the user their open pages.
+            const incomplete = incompleteReason(manifest);
+            if (incomplete) throw new ApiError(400, `${artifactName} ${incomplete}`);
+            requireVerified(await verifyFolder(folder, onProgress), artifactName);
 
             return async (stamp) => {
                 // The archive's `home/` IS the home folder, one for one.
                 onProgress?.('home files', 0, 1);
-                movePath(path.join(folder, ARCHIVE_HOME_DIR), homeDir);
+                await movePathAsync(path.join(folder, ARCHIVE_HOME_DIR), homeDir);
                 onProgress?.('home files', 1, 1);
                 // A mount the backup skipped carries nothing: it stays disabled in the restored
                 // settings.json and its folder is simply not there (snapshot-home.ts).
@@ -169,11 +155,7 @@ export async function restoreHome(
                     onProgress?.('mounts', index + 1, carried.length);
                 }
 
-                // What landed is still a database this server can open. Before the identity write,
-                // not after it (the spec has these the other way around): the rollback moves folders,
-                // and nothing takes a users3.db row back. A restore of a deleted user that failed
-                // this check after re-inserting would leave a user who can sign in with no home —
-                // and whose retry would find that user and skip the insert for good.
+                // Before the identity write: the rollback moves folders, and nothing takes a users3.db row back.
                 checkRestoredDatabases(
                     homeDir,
                     carried.map((summary) => summary.id),

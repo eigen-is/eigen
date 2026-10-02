@@ -1,9 +1,11 @@
 import { type ParseArgsConfig, parseArgs } from 'node:util';
+import { BACKUP_OPTIONS, BACKUP_USAGE, backup } from './backup';
 import { BOOTSTRAP_OPTIONS, BOOTSTRAP_USAGE, bootstrap } from './bootstrap';
 import { CONFIGURE_OPTIONS, CONFIGURE_USAGE, configure } from './configure';
 import { RESET_PASSWORD_OPTIONS, RESET_PASSWORD_USAGE, resetPassword } from './reset-password';
+import { RESTORE_OPTIONS, RESTORE_USAGE, restore } from './restore';
 import { setupLink } from './setup-link';
-import { RESTORE_OPTIONS, RESTORE_USAGE, restore, SNAPSHOT_OPTIONS, SNAPSHOT_USAGE, snapshot } from './snapshot';
+import { SNAPSHOT_OPTIONS, SNAPSHOT_USAGE, snapshot } from './snapshot';
 import { STATUS_OPTIONS, STATUS_USAGE, status } from './status';
 import { UPDATE_CHECK_OPTIONS, UPDATE_CHECK_USAGE, updateCheck } from './update-check';
 
@@ -50,6 +52,7 @@ const COMMANDS = new Map<string, (args: string[]) => Promise<void>>([
         },
     ],
     ['setup-link', setupLink],
+    ['backup', (args) => backup(parseFlags(args, BACKUP_OPTIONS, BACKUP_USAGE).values)],
     ['snapshot', (args) => snapshot(parseFlags(args, SNAPSHOT_OPTIONS, SNAPSHOT_USAGE).values)],
     [
         'restore',
@@ -69,8 +72,9 @@ Commands:
   status           Report on the running server (run by ./eigen status)
   reset-password   Set a new password for an account and sign it out everywhere
   setup-link       Print a fresh one-time setup link, or where to sign in once set up
-  snapshot         Write data/, or its databases alone, and .env.production into snapshots/ (run by ./eigen backup)
-  restore          Put what a snapshot holds of data/ and .env.production back (run by ./eigen restore)
+  backup           Back up the whole server into backups/ while Eigen runs
+  snapshot         Check the room for a snapshot (run by the ./eigen update of Eigen 0.3.0)
+  restore          Put a whole-server archive back (run by ./eigen restore)
   update-check     Print what changed since a version, and ask about breaking changes (run by ./eigen update)`;
 
 const [command = '', ...args] = process.argv.slice(2);

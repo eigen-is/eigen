@@ -308,7 +308,7 @@ describe('unchanged paths', () => {
         expect(await countStoredRows(mount, dataDbId)).toBe(2);
     });
 
-    test('crash-recovery adoption with NO registered close still works (Phase 1a)', async () => {
+    test('crash-recovery adoption with NO registered close still works', async () => {
         const { mount } = await createGatedLocalMount('crash-adopt');
         const { dataDbId, managed } = await provisionDoc(mount, docConfig);
 

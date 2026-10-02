@@ -36,6 +36,7 @@ export class LocalFilesystem {
     }
 
     // A rename or unlink reaches the platter only once its directory is fsynced, and a mount that refuses the fsync must not fail it.
+    // On macOS fsync here and in writeDurable only reaches the drive's cache (no F_FULLFSYNC), so a power loss can still lose a write.
     async syncDir(dirPath: string): Promise<void> {
         try {
             const handle = await fsPromises.open(this.getFilePath(dirPath), 'r');

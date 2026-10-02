@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { driveGet, driveUpload, getTestContext, TEST_PNG_BYTES, type TestContext } from '../setup';
+import { driveGet, driveUpload, getTestContext, setMaxUploadSizeMB, TEST_PNG_BYTES, type TestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
 describe('WebDAV GET/HEAD', () => {
@@ -136,6 +136,21 @@ describe('WebDAV PUT', () => {
         expect(putEtag).toMatch(/^".+"$/);
         const getRes = await webdavRequest(ctx.alice.user.email, 'HEAD', url);
         expect(getRes.headers.get('ETag')).toBe(putEtag);
+    });
+
+    test('PUT over the max upload size → 413', async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-too-big.txt`;
+        const body = 'x'.repeat(2 * 1024 * 1024);
+        await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 1);
+        try {
+            const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
+                body,
+                headers: { 'Content-Length': String(body.length) },
+            });
+            expect(res.status).toBe(413);
+        } finally {
+            await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
+        }
     });
 });
 

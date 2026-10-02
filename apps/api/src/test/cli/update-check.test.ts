@@ -126,6 +126,19 @@ describe('update-check', () => {
         }
     });
 
+    test('--level prints only level=full when a release since --from is breaking, else level=light', async () => {
+        expect(await eigen('update-check', '--from', '0.1.1', '--level')).toEqual({
+            stdout: 'level=full\n',
+            stderr: '',
+            code: 0,
+        });
+        expect(await eigen('update-check', '--from', version, '--level')).toEqual({
+            stdout: 'level=light\n',
+            stderr: '',
+            code: 0,
+        });
+    });
+
     test('refuses a --from that is no version, and a missing one', async () => {
         expect((await eigen('update-check', '--from', 'latest')).stderr).toContain('■  --from takes a version');
         expect((await eigen('update-check')).stderr).toContain('■  --from takes a version');

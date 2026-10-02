@@ -6,7 +6,7 @@ import { getAuthDrizzleDb } from '../auth/auth';
 // The keys auth.json is written and read under. A union, not a string: restore branches on the key
 // (`user` gets a role, `member` a single membership), and a typo would read as a table nobody
 // archived.
-export type AuthArchiveKey = 'user' | 'account' | 'two_factor' | 'apikey' | 'member' | 'team_member';
+type AuthArchiveKey = 'user' | 'account' | 'two_factor' | 'apikey' | 'member' | 'team_member';
 
 // A users3.db table one user's archive carries: the key it has in auth.json, the column that scopes
 // its rows to that user, and — for a membership — the row it would be an orphan without.

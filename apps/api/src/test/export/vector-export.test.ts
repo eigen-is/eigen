@@ -258,7 +258,7 @@ describe('Eigenvector export — the pdf-html document (what WeasyPrint is hande
         const html = await pdfHtml();
         expect(html).toContain('<linearGradient');
         expect(html).toContain('#e60076');
-        // Phase 0: url(#id) across two <svg> elements renders NOTHING in WeasyPrint. Each gradient
+        // url(#id) across two <svg> elements renders NOTHING in WeasyPrint. Each gradient
         // must therefore be defined in the same <svg> that references it.
         const svgs = html.split('<svg ');
         const withGradient = svgs.filter((chunk) => chunk.includes('<linearGradient'));

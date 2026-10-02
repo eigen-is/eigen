@@ -220,6 +220,24 @@ export async function eventually<T>(read: () => Promise<T | undefined>, what = '
     throw new Error(`Timed out waiting for ${what}`);
 }
 
+// Counts event-loop turns with a setImmediate chain rather than time, so a slow disk or a busy machine changes nothing.
+export function countLoopTurns(): { read: () => number; stop: () => void } {
+    let turns = 0;
+    let running = true;
+    const turn = () => {
+        if (!running) return;
+        turns++;
+        setImmediate(turn);
+    };
+    setImmediate(turn);
+    return {
+        read: () => turns,
+        stop: () => {
+            running = false;
+        },
+    };
+}
+
 export function driveUrl(ownerId: string, mountId: string, ...parts: string[]) {
     return `/drive/${ownerId}/${mountId}/${parts.join('/')}`;
 }

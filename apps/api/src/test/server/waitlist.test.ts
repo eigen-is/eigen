@@ -25,10 +25,8 @@ describe('Waitlist', () => {
     // -- DB singleton cold-start race --
 
     // Runs FIRST, before anything else touches the waitlist DB, so its lazy singleton is still
-    // cold. Two concurrent first-callers used to race: the initializer assigned the
-    // ManagedDatabase synchronously, then awaited open(); a second caller saw the non-null
-    // instance and read `.db` before open() resolved → "Database not open". createAsyncSingleton
-    // memoizes the init PROMISE so both callers await the same open().
+    // cold: a second first-caller must await the same open() (createAsyncSingleton memoizes the init
+    // promise), not read `.db` before it resolves.
     test('concurrent first waitlist calls do not race the DB singleton (cold start)', async () => {
         const { submitWaitlist, listWaitlist } = await import('../../lib/waitlist/waitlist');
         await Promise.all([submitWaitlist('race-a@example.com', ''), submitWaitlist('race-b@example.com', '')]);
@@ -408,8 +406,7 @@ describe('Waitlist', () => {
 
     test('welcomeMail encodes non-ASCII names in headers per RFC 2047', async () => {
         // nodemailer's MailComposer should wrap non-ASCII in `=?UTF-8?...?=` encoded-words
-        // for headers (To, Subject, etc). Hand-rolled RFC822 used to skip this and the raw
-        // bytes ended up in the headers, which strict parsers reject.
+        // for headers (To, Subject, etc): raw bytes in a header are what strict parsers reject.
         await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Installs Eigen as a stranger does, with ./eigen in a docker:cli container that has no Bun, and runs the operator
-# commands against it: status, the control socket, the setup link, reset-password, full and light backups and restores
-# with their refusals and retention, stop, and what status and reset-password say with Eigen stopped. The main install
-# is edge,mail as uid 1001 in a folder whose name has capitals and a space; a second one is edge only, as root.
+# commands against it: status, the control socket, the setup link, reset-password, full and light backups on the running
+# API and restores of them with their refusals and an interrupt, stop, and what status, backup and reset-password say
+# with Eigen stopped. The main install is edge,mail as uid 1001 in a folder whose name has capitals and a space; a
+# second one is edge only, as root.
 #
 # Usage:  ./docker/test-cli.sh
 # Needs:  docker, curl, git. Builds every image in Docker (a few minutes on a cold cache).
@@ -18,7 +19,7 @@ OPERATOR=1001:1001
 
 # check_install <operator uid:gid>: the stack, the files and the Docker socket of a fresh install.
 check_install() {
-    local operator="$1" base="https://localhost:$PORT_HTTPS" status mounts env_stat data_stat backups_stat
+    local operator="$1" base="https://localhost:$PORT_HTTPS" status mounts data_stat backups_stat
     probe "/eigen/health" "$base/eigen/health" 200 "OK"
     probe "/ (landing)" "$base/" 200
     probe "/admin/" "$base/admin/" 200 '"/admin/assets/'
@@ -34,14 +35,9 @@ check_install() {
     else
         fail "no network ${PROJECT}_eigen"
     fi
-    env_stat=$(owner_mode "$INSTALL/.env.production")
+    check_env "$operator" 'after setup'
     data_stat=$(owner_mode "$INSTALL/data")
     backups_stat=$(owner_mode "$INSTALL/backups")
-    if [ "$env_stat" = "$operator 600" ]; then
-        ok ".env.production is $operator, mode 600"
-    else
-        fail ".env.production is '$env_stat', expected '$operator 600'"
-    fi
     case "$data_stat $backups_stat" in
         "1000:1000 "*" 1000:1000 "*) ok "data/ and backups/ are 1000:1000" ;;
         *) fail "data/ is '$data_stat' and backups/ is '$backups_stat', expected 1000:1000" ;;
@@ -57,14 +53,6 @@ check_install() {
 
 # The distinct owners under data/.
 data_owners() { scratch_run sh -c 'find "$1" -exec stat -c "%u:%g" {} + | sort -u' sh "$INSTALL/data" | tr '\n' ' '; }
-
-# craft <name> <version> <commands run in its data/>: a snapshot in snapshots/, made as root.
-craft() {
-    scratch_run sh -c 'cd "$(mktemp -d)" && mkdir data &&
-        echo "{\"version\":\"$2\",\"createdAt\":\"2020-01-01T00:00:00.000Z\"}" >eigen-snapshot.json &&
-        echo DOMAIN=crafted.example.org >.env.production && echo x >data/a && (cd data && eval "$3") &&
-        tar -czf "$1" eigen-snapshot.json .env.production data' sh "$INSTALL/snapshots/$1" "$2" "$3"
-}
 
 # tab <kept> <edit>: collab_tab on $COLLAB_DOC through Caddy.
 tab() { collab_tab caddy wss://localhost "$COLLAB_DOC" "$@"; }
@@ -97,7 +85,7 @@ for service in $(dc config --services); do
     if says "  $service  *running"; then ok "status lists $service as running"; else fail "status does not list $service as running"; fi
 done
 for row in 'Setup  *not finished' 'Disk  *[0-9]*\.[0-9] [KMGT]B free of [0-9]*\.[0-9] [KMGT]B$' \
-    'Last snapshot  *none yet' 'Mail queue  *empty'; do
+    'Backup  *none yet' 'Mail queue  *empty'; do
     if says "$row"; then ok "status: $row"; else fail "status lacks: $row"; fi
 done
 # A local build has no update to check for.
@@ -189,6 +177,7 @@ if [ "${after:0:${#before}}" = "$before" ]; then
 else
     fail ".env.production changed on rerun: $(diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") | tr '\n' ' ')"
 fi
+check_env "$OPERATOR" 'after the rerun'
 SECOND_TOKEN=$(setup_token "$SCRATCH/setup-again.log")
 if [ "${#SECOND_TOKEN}" = 43 ] && [ "$SECOND_TOKEN" != "$FIRST_TOKEN" ]; then
     ok "the rerun prints a fresh link"
@@ -199,9 +188,7 @@ read -r code _ <<<"$(setup_post complete "$ADMIN_FIELDS,\"setupToken\":\"$FIRST_
 if [ "$code" = 403 ]; then ok "the first link no longer works (403)"; else fail "the first link → $code, expected 403"; fi
 read -r code _ <<<"$(setup_post complete "$ADMIN_FIELDS,\"setupToken\":\"$SECOND_TOKEN\"")"
 if [ "$code" != 200 ]; then
-    fail "creating $ADMIN_EMAIL through the fresh link answered $code"
-    header "Result"
-    probe_summary
+    abort "creating $ADMIN_EMAIL through the fresh link answered $code"
 fi
 ok "the fresh link creates $ADMIN_EMAIL"
 for route in complete s3check; do
@@ -264,8 +251,8 @@ code=$(sign_in "$NEW_PASSWORD" "$JAR")
 ADMIN_ID=$(session_user)
 FOLDER="/drive/$ADMIN_ID/default/folder"
 root_id=$(api GET "/drive/$ADMIN_ID/default/root" | first_id)
-api POST "$FOLDER/$root_id" '{"folderName":"Kept by the snapshot"}' >/dev/null
-if [ "$code" = 200 ] && api GET "$FOLDER/$root_id" | grep -q '"Kept by the snapshot"'; then
+api POST "$FOLDER/$root_id" '{"folderName":"Kept by the backup"}' >/dev/null
+if [ "$code" = 200 ] && api GET "$FOLDER/$root_id" | grep -q '"Kept by the backup"'; then
     ok "the admin made a folder over HTTPS"
 else
     fail "could not make a folder to back up (sign-in $code, admin '$ADMIN_ID', root '$root_id')"
@@ -279,102 +266,109 @@ else
 fi
 OWNERS=$(data_owners)
 
-started=$SECONDS
+started=$(api_started)
 eigen backup
 show
-SNAPSHOT=$(saved_snapshot)
-if [ "$CODE" = 0 ] && [ -n "$SNAPSHOT" ] && says "Saved snapshots/$SNAPSHOT (full, "; then
-    ok "./eigen backup saved snapshots/$SNAPSHOT, a full snapshot, in $((SECONDS - started))s"
+ARCHIVE=$(saved_archive)
+if [ "$CODE" = 0 ] && [ -n "$ARCHIVE" ] && scratch_run test -f "$INSTALL/backups/$ARCHIVE" &&
+    [ "$(api_started)" = "$started" ]; then
+    ok "./eigen backup saved backups/$ARCHIVE while Eigen ran on"
 else
     fail "./eigen backup exited $CODE"
 fi
-if stack_up; then ok "the stack is back up after the backup"; else fail "the stack is not up after the backup"; fi
-# Typed while the backup had Eigen stopped: the restart keeps the epoch, so the tab's reconnect keeps the edit.
-read -r status kept text <<<"$(tab "$TAB" ' after')"
-read -r _ fresh after <<<"$(tab '' '')"
-if [ "$status" = synced ] && [ "$after" = 'before after' ] && [ "${fresh%%:*}" = "${TAB%%:*}" ]; then
-    ok "the tab's edit made while Eigen was stopped syncs when it reconnects"
-    TAB=$kept
+case $ARCHIVE in
+    server-manual-full-*.tar) ok "it is a manual Full archive" ;;
+    *) fail "the archive is named '$ARCHIVE'" ;;
+esac
+eigen backup --light --s3
+if [ "$CODE" = 2 ] && says 'A light backup holds no files, so it takes no --s3.'; then
+    ok "backup --light --s3 is refused with its usage (exit 2)"
 else
-    fail "the tab's reconnect after the backup: $status $text, the server has '$after'"
+    fail "backup --light --s3: exit $CODE"
 fi
-got="$(owner_mode "$INSTALL/snapshots") / $(owner_mode "$INSTALL/snapshots/$SNAPSHOT")"
-if [ "$got" = "$OPERATOR 700 / $OPERATOR 600" ]; then
-    ok "snapshots/ is the operator's, mode 700, and so is the snapshot, mode 600"
-else
-    fail "snapshots/ and the snapshot are '$got'"
-fi
-members=$(scratch_run tar -tzf "$INSTALL/snapshots/$SNAPSHOT" | awk 'NR <= 3' | tr '\n' ' ')
-if [ "$members" = 'eigen-snapshot.json .env.production data/ ' ]; then
-    ok "the snapshot starts with eigen-snapshot.json, .env.production, data/"
-else
-    fail "the snapshot starts with: $members"
-fi
-if dc config --format json | grep -q 'snapshots'; then
-    fail "a service of Eigen mounts snapshots/"
-else
-    ok "no service of Eigen mounts snapshots/"
-fi
-# Older by its time, newer by its name: status must pick by the time.
-scratch_run touch "$INSTALL/snapshots/eigen-pre-update-20200101-000000.tar.gz"
 eigen status
-if says "Last snapshot  *$SNAPSHOT, " && says 'Snapshots  *2 in snapshots/, [0-9.]* [KMG]B on disk'; then
-    ok "status names the newest snapshot by its time, and counts the snapshots and their size"
+if says "Backup  *$ARCHIVE, "; then
+    ok "status names the newest backup"
 else
-    fail "status names another snapshot, or does not count them"
+    fail "status does not name $ARCHIVE"
     show
 fi
-scratch_run rm "$INSTALL/snapshots/eigen-pre-update-20200101-000000.tar.gz"
 
-api POST "$FOLDER/$root_id" '{"folderName":"Made after the snapshot"}' >/dev/null
-started=$(api_started)
-eigen restore "$SNAPSHOT"
-if [ "$CODE" != 0 ] && says '--yes' && [ "$(api_started)" = "$started" ]; then
+api POST "$FOLDER/$root_id" '{"folderName":"Made after the backup"}' >/dev/null
+aside=$(aside_count)
+# unchanged: Eigen was not stopped, nothing went aside, and nothing is left staged or half swapped.
+unchanged() {
+    [ "$(api_started)" = "$started" ] && [ "$(aside_count)" = "$aside" ] &&
+        ! scratch_run test -e "$INSTALL/data/.restoring" && ! scratch_run test -e "$INSTALL/.eigen/restore-swap"
+}
+eigen restore "$ARCHIVE"
+if [ "$CODE" != 0 ] && says '--yes' && unchanged; then
     ok "restore without a terminal asks for --yes and stops nothing (exit $CODE)"
 else
     fail "restore without --yes: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
 fi
-eigen_piped n restore "$SNAPSHOT"
-if [ "$CODE" = 0 ] && says 'Nothing was changed.' && [ "$(api_started)" = "$started" ]; then
+eigen_piped n restore "$ARCHIVE"
+if [ "$CODE" = 0 ] && says 'Nothing was changed.' && unchanged; then
     ok "a no to the restore question exits 0 and stops nothing"
 else
     fail "restore answered no: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
 fi
 eigen restore --help
-if [ "$CODE" = 0 ] && says '^Usage: ./eigen restore <snapshot> \[--yes\]' && ! says '--check'; then
-    ok "restore --help prints its usage, without the launcher's --check"
+if [ "$CODE" = 0 ] && says '^Usage: ./eigen restore <archive> \[--yes\] \[--s3-from-archive\]' && ! says '--stage'; then
+    ok "restore --help prints its usage, without the stage and swap the launcher runs"
 else
     fail "restore --help: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
 fi
 CODE=0
-OUT=$(EIGEN_API_IMAGE="eigentest-none:$RUN" in_cli_container --user "$OPERATOR" ./eigen restore "$SNAPSHOT" 2>&1) || CODE=$?
-if [ "$CODE" = 1 ] && says '■  Eigen is not built yet.' && says '└  Run ./eigen setup first, then ./eigen restore <snapshot>.'; then
+OUT=$(EIGEN_API_IMAGE="eigentest-none:$RUN" in_cli_container --user "$OPERATOR" ./eigen restore "$ARCHIVE" 2>&1) || CODE=$?
+if [ "$CODE" = 1 ] && says '■  Eigen is not built yet.' && says '└  Run ./eigen setup first, then ./eigen restore <archive>.'; then
     ok "restore without the image says Eigen is not built yet"
 else
     fail "restore without the image: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
 fi
 
-started=$SECONDS
-eigen restore "$INSTALL/snapshots/$SNAPSHOT" --yes
+# A cut archive is refused by the stage, while Eigen runs.
+CUT=server-manual-full-20200101-000000.tar
+scratch_run sh -c 'head -c $(($(stat -c %s "$1/$2") / 2)) "$1/$2" >"$1/$3"' sh "$INSTALL/backups" "$ARCHIVE" "$CUT"
+eigen restore "$CUT" --yes
+scratch_run rm "$INSTALL/backups/$CUT"
+if [ "$CODE" = 1 ] && says "$CUT" && unchanged; then
+    ok "a cut archive is refused before anything stops"
+else
+    fail "the restore of a cut archive: exit $CODE"
+    show
+fi
+# A broken override: Compose cannot run the stage, and nothing stops.
+scratch_run sh -c 'cp -p "$1" "$1.bak" && printf "x-broken: [\n" >>"$1"' sh "$INSTALL/docker-compose.override.yml"
+eigen restore "$ARCHIVE" --yes
+scratch_run mv "$INSTALL/docker-compose.override.yml.bak" "$INSTALL/docker-compose.override.yml"
+if [ "$CODE" != 0 ] && unchanged; then
+    ok "a restore whose Compose files do not read stops nothing (exit $CODE)"
+else
+    fail "the restore with a broken override: exit $CODE"
+    show
+fi
+
+started_at=$SECONDS
+eigen restore "$INSTALL/backups/$ARCHIVE" --yes
 show
-if [ "$CODE" = 0 ]; then ok "./eigen restore --yes finished in $((SECONDS - started))s"; else fail "./eigen restore exited $CODE"; fi
+if [ "$CODE" = 0 ]; then ok "./eigen restore --yes finished in $((SECONDS - started_at))s"; else fail "./eigen restore exited $CODE"; fi
 if stack_up; then ok "the stack is up after the restore"; else fail "the stack is not up after the restore"; fi
 if curl -sk -b "$JAR" "$BASE/auth/get-session" | grep -q "\"$ADMIN_EMAIL\""; then
-    ok "the session from before the backup outlives the restarts"
+    ok "the session from before the backup is there after the restore"
 else
-    fail "the session from before the backup was signed out by the restarts"
+    fail "the session from before the backup was signed out by the restore"
 fi
 listing=$(api GET "$FOLDER/$root_id")
-if printf '%s' "$listing" | grep -q '"Kept by the snapshot"' && ! printf '%s' "$listing" | grep -q '"Made after the snapshot"'; then
-    ok "the drive is as it was at the snapshot"
+if printf '%s' "$listing" | grep -q '"Kept by the backup"' && ! printf '%s' "$listing" | grep -q '"Made after the backup"'; then
+    ok "the drive is as it was at the backup"
 else
     fail "the drive after the restore: $listing"
 fi
-got=$(owner_mode "$INSTALL/.env.production")
-if [ "$got" = "$OPERATOR 600" ]; then ok ".env.production is the operator's, mode 600"; else fail ".env.production is '$got', expected '$OPERATOR 600'"; fi
+check_env "$OPERATOR" 'after the restore'
 eigen status
 if [ "$CODE" = 0 ]; then ok "the operator runs ./eigen on the restored .env.production"; else fail "status after the restore: exit $CODE"; show; fi
-# The tab still holds 'before after' from before the restore.
+# The tab still holds 'before' from before the restore.
 read -r status code reason <<<"$(tab "$TAB" '')"
 if [ "$status $code $reason" = 'closed 1012 home-replaced' ]; then
     ok "the tab that loaded the document before the restore is closed 1012 when it reconnects, so it reloads"
@@ -383,7 +377,7 @@ else
 fi
 read -r status fresh text <<<"$(tab '' '')"
 if [ "$status" = synced ] && [ "$text" = before ] && [ "${fresh%%:*}" != "${TAB%%:*}" ]; then
-    ok "the document is as it was at the snapshot, under a new epoch"
+    ok "the document is as it was at the backup, under a new epoch"
 else
     fail "the document after the restore: $status '$text' (epoch ${fresh%%:*}, was ${TAB%%:*})"
 fi
@@ -393,97 +387,27 @@ if [ "$got" = "$OWNERS" ] && [ "$(printf '%s' "$OWNERS" | wc -w)" -gt 1 ]; then
 else
     fail "owners under data/: '$got', were '$OWNERS'"
 fi
-aside=$(cd "$INSTALL" && ls -d data.pre-restore-* .env.production.pre-restore-* 2>/dev/null | tr '\n' ' ' || true)
-case $aside in
-    data.pre-restore-*' '.env.production.pre-restore-*|.env.production.pre-restore-*' 'data.pre-restore-*)
-        ok "the replaced data is kept aside: $aside" ;;
-    *) fail "kept aside: '$aside'" ;;
-esac
-if [ ! -e "$INSTALL/.eigen/restore" ]; then ok "nothing is left in .eigen/restore"; else fail ".eigen/restore is left behind"; fi
+# The archive's .env.production is this one, byte for byte, so an aside of it would keep nothing.
+kept=$(cd "$INSTALL" && ls -d data.pre-restore-* .env.production.pre-restore-* 2>/dev/null | tr '\n' ' ' || true)
+if [[ $kept =~ ^data\.pre-restore-[0-9-]+\ $ ]]; then
+    ok "the replaced data is kept aside, and the unchanged .env.production is not: $kept"
+else
+    fail "kept aside: '$kept'"
+fi
+if ! scratch_run test -e "$INSTALL/data/.restoring" && ! scratch_run test -e "$INSTALL/.eigen/restore-swap"; then
+    ok "nothing is left staged, and no swap is marked"
+else
+    fail "data/.restoring or .eigen/restore-swap is left behind"
+fi
 
-scratch_run mkdir "$INSTALL/snapshots/.eigen-snapshot.partial"
+# Big enough that the stage is still unpacking when the interrupt lands.
+scratch_run sh -c 'head -c 300000000 /dev/urandom >"$1" && chown 1000:1000 "$1"' sh "$INSTALL/data/home/$ADMIN_ID/ballast.bin"
 eigen backup
-show
-if [ "$CODE" != 0 ] && says '■  Could not write the snapshot:' &&
-    ! scratch_run test -e "$INSTALL/snapshots/.eigen-snapshot.partial"; then
-    ok "a snapshot that cannot be written fails, says so and leaves no partial file (exit $CODE)"
-else
-    fail "the blocked snapshot: exit $CODE"
-fi
-if says 'Eigen is running' && stack_up; then
-    ok "the stack is back up after the failed snapshot"
-else
-    fail "the stack is not up after the failed snapshot"
-fi
-
-NEWER=eigen-20990101-000000.tar.gz
-craft "$NEWER" 999.0.0 :
-started=$(api_started)
-aside=$(aside_count)
-eigen restore "$NEWER" --yes
-show
-if [ "$CODE" != 0 ] && says '999.0.0' && says 'Update first, then restore'; then
-    ok "a snapshot of a newer Eigen is refused (exit $CODE)"
-else
-    fail "the newer snapshot: exit $CODE"
-fi
-if [ "$(api_started)" = "$started" ] && [ "$(aside_count)" = "$aside" ] &&
-    ! scratch_run grep -q crafted.example.org "$INSTALL/.env.production"; then
-    ok "the refusal stopped nothing and changed nothing"
-else
-    fail "the refused restore changed something"
-fi
-scratch_run rm "$INSTALL/snapshots/$NEWER"
-
-# Unpacked by root with GNU tar while Eigen runs, each is refused before anything stops: by what find sees in the
-# unpacked copy, or by tar itself, which links only to what it unpacked and fails where the file share cannot hold a
-# device.
-n=0
-for crafted in 'ln ../eigen-snapshot.json leak|leak' 'mknod null c 1 3|null' 'chmod 4755 a|is setuid or setgid' \
-    'ln -s /etc/passwd passwd|is a link that leads out of data/'; do
-    name="eigen-20200101-00000$((++n)).tar.gz"
-    craft "$name" "$VERSION" "${crafted%%|*}"
-    # Docker Desktop's file share drops the bit as root's tar unpacks it: then there is nothing to refuse.
-    if [ "${crafted%%|*}" = 'chmod 4755 a' ] && [ "$(docker run --rm -v "$SCRATCH:$SCRATCH" --entrypoint sh \
-        "$EIGEN_API_IMAGE" -c 'mkdir "$1.probe" && tar --numeric-owner -xzpf "$1" -C "$1.probe" data/a &&
-        stat -c %a "$1.probe/data/a"; rm -rf "$1.probe"' sh "$INSTALL/snapshots/$name")" != 4755 ]; then
-        skip "a setuid file: this file share drops the bit on unpack (the unit tests cover the refusal)"
-        scratch_run rm "$INSTALL/snapshots/$name"
-        continue
-    fi
-    started=$(api_started)
-    eigen restore "$name" --yes
-    if [ "$CODE" = 1 ] && { says "■  $name cannot be restored: .*${crafted#*|}" ||
-        says "■  Unpacking failed: .*${crafted#*|}"; } && [ "$(api_started)" = "$started" ] &&
-        [ "$(aside_count)" = "$aside" ] && [ ! -e "$INSTALL/.eigen/restore" ] &&
-        ! scratch_run grep -q crafted.example.org "$INSTALL/.env.production"; then
-        ok "a snapshot where data/ holds '${crafted%%|*}' is refused before anything stops"
-    else
-        fail "the snapshot with '${crafted%%|*}': exit $CODE"
-        show
-    fi
-done
-
-# A broken override: the check passes, Compose cannot stop Eigen, and root's unpacked copy must not stay behind.
-started=$(api_started)
-scratch_run sh -c 'cp -p "$1" "$1.bak" && printf "x-broken: [\n" >>"$1"' sh "$INSTALL/docker-compose.override.yml"
-eigen restore "$SNAPSHOT" --yes
-scratch_run mv "$INSTALL/docker-compose.override.yml.bak" "$INSTALL/docker-compose.override.yml"
-if [ "$CODE" = 1 ] && says '■  Could not stop Eigen' && [ ! -e "$INSTALL/.eigen/restore" ] &&
-    [ "$(api_started)" = "$started" ] && [ "$(aside_count)" = "$aside" ]; then
-    ok "a restore whose stop fails leaves Eigen running and removes the unpacked copy"
-else
-    fail "the restore with a failing stop: exit $CODE"
-    show
-fi
-
-# Big enough that the restore is still unpacking when the interrupt lands.
-scratch_run sh -c 'head -c 300000000 /dev/urandom >"$1"' sh "$INSTALL/data/ballast.bin"
-eigen backup
-BIG=$(saved_snapshot)
-scratch_run rm "$INSTALL/data/ballast.bin"
+BIG=$(saved_archive)
+scratch_run rm "$INSTALL/data/home/$ADMIN_ID/ballast.bin"
 api POST "$FOLDER/$root_id" '{"folderName":"Made before the interrupted restore"}' >/dev/null
 started=$(api_started)
+aside=$(aside_count)
 (
     eigen restore "$BIG" --yes
     printf '%s\n' "$OUT" >"$SCRATCH/interrupted.log"
@@ -491,10 +415,10 @@ started=$(api_started)
 ) &
 waiter=$!
 for _ in $(seq 1 600); do
-    if [ -d "$INSTALL/.eigen/restore" ]; then break; fi
+    if scratch_run test -d "$INSTALL/data/.restoring/data"; then break; fi
     sleep 0.1
 done
-# Ctrl-C without a terminal: the signal reaches the launcher's docker client, which passes it to the CLI.
+# Ctrl-C without a terminal: the signal reaches the launcher's Compose client, which passes it to the stage.
 launcher=$(docker ps --filter "label=eigen.harness.run=$RUN" --filter "ancestor=$CLI_IMAGE" \
     --format '{{.ID}} {{.Names}}' | awk -v box="$SCRATCH_BOX" '$2 != box { print $1 }')
 docker exec "$launcher" kill -INT -1 || true
@@ -502,123 +426,56 @@ CODE=0
 wait "$waiter" || CODE=$?
 OUT=$(cat "$SCRATCH/interrupted.log")
 show
-if [ "$CODE" = 130 ] && says 'Cancelled. Nothing was changed.'; then
-    ok "a restore interrupted while it unpacks says it was cancelled (exit 130)"
+if [ "$CODE" != 0 ]; then
+    ok "a restore interrupted while it stages ends (exit $CODE)"
 else
-    fail "the interrupted restore: exit $CODE"
+    fail "the interrupted restore exited 0"
 fi
 listing=$(api GET "$FOLDER/$root_id")
-if [ "$(api_started)" = "$started" ] && printf '%s' "$listing" | grep -q '"Made before the interrupted restore"' &&
-    [ ! -e "$INSTALL/data/ballast.bin" ] && [ "$(aside_count)" = "$aside" ] && [ ! -e "$INSTALL/.eigen/restore" ]; then
-    ok "Eigen ran on throughout, nothing is kept aside, and the unpacked copy is gone"
+if printf '%s' "$listing" | grep -q '"Made before the interrupted restore"' && unchanged &&
+    ! scratch_run test -e "$INSTALL/data/home/$ADMIN_ID/ballast.bin"; then
+    ok "Eigen ran on throughout, nothing is kept aside, and the staged tree is gone"
 else
     fail "after the interrupted restore: $listing"
 fi
-scratch_run rm "$INSTALL/snapshots/$BIG"
-
-# The launcher runs these as a restore's --check, then asks for what it checked.
-checked=$(docker run --rm --user 0 -e NO_COLOR=1 -v "$INSTALL:/install" -w /install "$EIGEN_API_IMAGE" \
-    sh -c 'cli=/app/docker/api/entrypoint.sh; $cli restore "$1" --check --yes >/dev/null && $cli restore "$1" --checked
-        rm -rf .eigen/restore' sh "$SNAPSHOT" 2>&1 || true)
-if [ "$checked" = "$(printf 'version=%s\nkind=full' "$VERSION")" ]; then
-    ok "restore --checked answers version=$VERSION and kind=full for what --check unpacked"
-else
-    fail "restore --checked answered: $checked"
-fi
+scratch_run sh -c 'rm "$1"*' sh "$INSTALL/backups/$BIG"
 
 ##############################################################################
-header "./eigen backup --light, retention, and a light restore"
+header "./eigen backup --light, and a light restore"
 ##############################################################################
-started=$(api_started)
-eigen backup --keep two
-if [ "$CODE" = 1 ] && says '--keep takes a number of snapshots' && [ "$(api_started)" = "$started" ]; then
-    ok "backup --keep two is refused before anything stops"
-else
-    fail "backup --keep two: exit $CODE"
-    show
-fi
-scratch_run sh -c 'cd "$1" && touch eigen-pre-update-20200101-000000.tar.gz eigen-light-20100101-000000.tar.gz \
-    eigen-light-20100101-000001.tar.gz eigen-light-20100101-000002.tar.gz' sh "$INSTALL/snapshots"
-full_before=$(scratch_run sh -c 'cd "$1" && ls eigen-2*.tar.gz' sh "$INSTALL/snapshots" | tr '\n' ' ')
-# Folders the API could make, named like tar patterns that would leave out data/server or the mount's database.
-MOUNT="$INSTALL/data/home/$ADMIN_ID/mounts/default"
-scratch_run sh -c 'mkdir "$1/$(printf "evil\nserver")" "$1/*" && chown 1000:1000 "$1/$(printf "evil\nserver")" "$1/*"' \
-    sh "$MOUNT"
 eigen backup --light
 show
-LIGHT=$(saved_snapshot)
-if [ "$CODE" = 0 ] && [ -n "$LIGHT" ] && says "Saved snapshots/$LIGHT (light: databases and config, " && stack_up; then
-    ok "./eigen backup --light saved snapshots/$LIGHT, named for its kind, and the stack is back up"
-else
-    fail "./eigen backup --light exited $CODE"
-fi
-full_size=$(scratch_run stat -c %s "$INSTALL/snapshots/$SNAPSHOT")
-light_size=$(scratch_run stat -c %s "$INSTALL/snapshots/$LIGHT")
+LIGHT=$(saved_archive)
+case "$CODE $LIGHT" in
+    "0 server-manual-light-"*.tar) ok "./eigen backup --light saved backups/$LIGHT" ;;
+    *) fail "./eigen backup --light: exit $CODE, '$LIGHT'" ;;
+esac
+full_size=$(scratch_run stat -c %s "$INSTALL/backups/$ARCHIVE")
+light_size=$(scratch_run stat -c %s "$INSTALL/backups/$LIGHT")
 log "full $full_size bytes, light $light_size bytes: $(awk -v l="$light_size" -v f="$full_size" 'BEGIN { printf "%.1f%%", 100 * l / f }') of the full one"
-light=$(scratch_run sh -c 'cd "$1" && ls eigen-light-*.tar.gz' sh "$INSTALL/snapshots" | tr '\n' ' ')
-full=$(scratch_run sh -c 'cd "$1" && ls eigen-2*.tar.gz' sh "$INSTALL/snapshots" | tr '\n' ' ')
-if [ "$light" = "eigen-light-20100101-000001.tar.gz eigen-light-20100101-000002.tar.gz $LIGHT " ] &&
-    [ "$full" = "$full_before" ] && [ -z "${full##*"$SNAPSHOT "*}" ] &&
-    scratch_run test -e "$INSTALL/snapshots/eigen-pre-update-20200101-000000.tar.gz"; then
-    ok "backup --light keeps the newest three light snapshots, and no full or pre-update one counts"
-else
-    fail "light snapshots kept: '$light'; full ones '$full', before '$full_before'"
-fi
-scratch_run rm "$INSTALL/snapshots/eigen-pre-update-20200101-000000.tar.gz"
-members=$(scratch_run tar -tzf "$INSTALL/snapshots/$LIGHT" || true)
-if printf '%s\n' "$members" | grep -q '^data/server/users3.db$' &&
-    printf '%s\n' "$members" | grep -q "^data/home/$ADMIN_ID/mounts/default/metadata.db$" &&
-    ! printf '%s\n' "$members" | grep -q '/mounts/default/data/'; then
-    ok "the light snapshot holds data/server and the mount's database beside the planted folders, and no drive file"
-else
-    fail "the light snapshot holds: $(printf '%s\n' "$members" | grep -v '^data/server/' | tr '\n' ' ')"
-fi
 
-# The drive keeps its files by id: what is on disk is the files, what the listing shows is its database. A document's
-# file is written by the time Eigen stops; its -wal and -shm go when it closes.
+# What is on disk is the files, what the listing shows is the drive's database.
 files() {
     { scratch_run ls "$INSTALL/data/home/$ADMIN_ID/mounts/default/data" 2>/dev/null || true; } |
-        grep -v -e '-wal$' -e '-shm$' | tr '\n' ' ' || true
+        grep -v -e '-wal$' -e '-shm$' || true
 }
 before=$(files)
-api POST "$FOLDER/$root_id/create/doc" '{"fileName":"Made after the light snapshot"}' >/dev/null
+api POST "$FOLDER/$root_id/create/doc" '{"fileName":"Made after the light backup"}' >/dev/null
 aside=$(aside_count)
-# As a snapshot from before setup always wrote the resolver address: a local build's Compose has no default for it.
-# Not the subnet, whose backfilled default another stack on this host may hold.
-unbound=$(scratch_run sed -n 's/^EIGEN_UNBOUND_IP=//p' "$INSTALL/.env.production")
-docker run --rm --user 0 -v "$SCRATCH:$SCRATCH" --entrypoint sh "$EIGEN_API_IMAGE" -c 'dir=$(mktemp -d) &&
-    tar --numeric-owner -xzpf "$1" -C "$dir" && sed -i "/^EIGEN_UNBOUND_IP=/d" "$dir/.env.production" &&
-    tar --numeric-owner -czf "$1" -C "$dir" eigen-snapshot.json .env.production data && rm -rf "$dir"' \
-    sh "$INSTALL/snapshots/$LIGHT"
 eigen restore "$LIGHT" --yes
 show
 listing=$(api GET "$FOLDER/$root_id")
-if [ -n "$unbound" ] && says '.env.production has what Eigen needs' &&
-    [ "$(scratch_run sed -n 's/^EIGEN_UNBOUND_IP=//p' "$INSTALL/.env.production")" = "$unbound" ]; then
-    ok "the restore adds the resolver address the snapshot's .env.production lacked: $unbound"
-else
-    fail "after the restore, .env.production holds: $(scratch_run grep '^EIGEN_' "$INSTALL/.env.production" | tr '\n' ' ')"
-fi
-if scratch_run test -d "$MOUNT/$(printf 'evil\nserver')" && scratch_run test -d "$MOUNT/*"; then
-    ok "the planted folders are left as they are, like every file folder a light restore does not hold"
-else
-    fail "a planted folder is gone after the light restore"
-fi
-scratch_run sh -c 'rm -r "$1/$(printf "evil\nserver")" "$1/*"' sh "$MOUNT"
-if [ "$CODE" = 0 ] && says "Restored $LIGHT, a light snapshot of Eigen $VERSION: databases and config restored; files and mail kept as they are" &&
-    stack_up && ! printf '%s' "$listing" | grep -q '"Made after the light snapshot"'; then
+if [ "$CODE" = 0 ] && stack_up && ! printf '%s' "$listing" | grep -q '"Made after the light backup"'; then
     ok "a light restore puts the databases back: the document made since is out of the drive"
 else
     fail "the light restore: exit $CODE, listing $listing"
 fi
-after=$(files)
-kept=1
-for file in $before; do case " $after" in *" $file "*) ;; *) kept=0 ;; esac; done
-if [ "$kept" = 1 ] && [ "$(printf '%s' "$after" | wc -w)" -gt "$(printf '%s' "$before" | wc -w)" ] &&
-    [ "$(aside_count)" = $((aside + 1)) ]; then
-    ok "and keeps the files as they are, the document's too, with what it replaced kept aside"
+# Names hold spaces, so they compare line by line.
+lost=$(printf '%s\n' "$before" | grep -vxF -e "$(files)" || true)
+if [ -z "$lost" ] && [ "$(aside_count)" = $((aside + 1)) ]; then
+    ok "and leaves the files on disk as they are, with what it replaced kept aside"
 else
-    fail "files after the light restore: '$after', before the document '$before'; kept aside $(aside_count), was $aside"
+    fail "files after the light restore: lost '$lost'; kept aside $(aside_count), was $aside"
 fi
 
 ##############################################################################
@@ -639,10 +496,17 @@ if [ "$CODE" = 1 ] && says '■  Eigen is not running.' && says '└  Run ./eige
 else
     fail "status with Eigen stopped: exit $CODE"
 fi
-if says '■  eigen-api  *exited' && says "Last snapshot  *$LIGHT"; then
-    ok "status still lists the services and the last snapshot"
+if says '■  eigen-api  *exited' && says "Backup  *$LIGHT, Light, "; then
+    ok "status still lists the services, and the newest backup from what backups/ holds"
 else
-    fail "status does not list eigen-api as exited, or the last snapshot"
+    fail "status does not list eigen-api as exited, or the newest backup"
+fi
+eigen backup
+if [ "$CODE" = 1 ] && says '■  Eigen is not running, and a backup runs on the running server.' &&
+    says 'With Eigen stopped, a copy of data/ and .env.production is a backup too.'; then
+    ok "backup with Eigen stopped says a copy of the quiet data/ is a backup too (exit $CODE)"
+else
+    fail "backup with Eigen stopped: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
 fi
 eigen reset-password --help
 if [ "$CODE" = 0 ] && says '^Usage: ./eigen reset-password <email>'; then

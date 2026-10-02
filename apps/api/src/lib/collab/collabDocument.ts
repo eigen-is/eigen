@@ -52,11 +52,10 @@ const MAX_DOC_SNAPSHOTS = 1;
 const TOUCH_THROTTLE_MS = 60_000;
 // Grace between the last unsubscribe and teardown: an instant reconnect (tab
 // reload, y-websocket's retry loop) reattaches to the loaded doc instead of
-// re-paying S3 download + Yjs materialization — the amplification half of the
-// 2026-08-04 reconnect spiral.
+// re-paying S3 download + Yjs materialization.
 const CLOSE_LINGER_MS = 60_000;
 // One 'edited' history row per user per window. Per-instance state, so a doc
-// close+reopen within the window records an extra row — accepted spec trade-off.
+// close+reopen within the window records an extra row, which is cheaper than persisting it.
 const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
 
 class DbProvider {
@@ -161,8 +160,8 @@ function isConnection(origin: unknown): origin is ServerWebSocket<unknown> {
 }
 
 // A client may publish presence for itself only: an awareness `user` field must carry the session
-// user's id, so a reader can't paint another person's name/color. A state with no `user` field (the
-// initial empty handshake state) carries no identity to spoof.
+// user's id, so a reader can't publish under another user's id. The display name stays client-set.
+// A state with no `user` field (the initial empty handshake state) carries no identity to spoof.
 function awarenessIdentityMatches(state: unknown, userId: string): boolean {
     if (!isRecord(state)) return true;
     const identity = state['user'];

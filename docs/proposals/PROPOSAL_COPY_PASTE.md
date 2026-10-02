@@ -1,5 +1,9 @@
 # Proposal: Cross-App Copy-Paste System (ECP v2)
 
+This proposal grows Eigen's clipboard into a typed protocol, so that a table, a slide object or a card keeps its structure when it is pasted into another Eigen app, and still pastes as useful text and HTML anywhere else.
+
+**Status:** the first version is built and [CLIPBOARD.md](../CLIPBOARD.md) describes it: `EigenClipboardData`, the `data-eigen-clipboard` HTML marker, the `application/eigen-clipboard` MIME and the cross-document media re-upload path. Read that first. This page covers what v2 adds on top, which is not built, plus the one v1 residual in Phase 0, which is still open. [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps the v2 row and [ROADMAP.md](../ROADMAP.md) the Phase 0 row.
+
 ## TLDR
 
 Upgrade Eigen's clipboard from a two-type (text/image) system to a multi-type protocol that preserves
@@ -7,11 +11,6 @@ structure across all apps. Use HTML attribute smuggling as the universal transpo
 Sheets), add a BroadcastChannel bus for cut coordination and large payloads, and implement cross-app
 content converters incrementally. The current system is a solid foundation -- this is an evolution, not
 a rewrite.
-
-**As built (v1):** the shipped clipboard -- `EigenClipboardData`, the `data-eigen-clipboard` HTML
-marker, the `application/eigen-clipboard` MIME, and the cross-document media re-upload path -- is
-documented in [CLIPBOARD.md](../CLIPBOARD.md). Read that first; this proposal only covers what v2 adds
-on top, plus the one v1 residual in Phase 0.
 
 ## Design rationale
 

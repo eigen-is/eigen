@@ -10,49 +10,21 @@ import {
     useVerifyBackup,
 } from '@workspace/lib/admin';
 import { getBackupArtifactUrl } from '@workspace/lib/api';
-import { formatDateTime } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
-import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib/types/backup';
-import { BACKUP_ARTIFACT_EXTENSION } from '@workspace/lib/validation';
+import type { BackupArtifact, BackupSafetyCopy } from '@workspace/lib/types/backup';
+import { BACKUP_ARTIFACT_EXTENSION, incompleteReason } from '@workspace/lib/validation';
 import { DeleteDialog, ErrorState, LoadingState, TooltipButton } from '@workspace/ui';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
-import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
-import { Progress } from '@workspace/ui/components/progress';
-import { cn } from '@workspace/ui/lib/utils';
-import { AlertTriangle, Archive, Download, RotateCcw, ShieldCheck, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, Archive, Download, RotateCcw, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
-
-const JOB_LABEL: Record<BackupJob['kind'], string> = {
-    backup: 'Creating backup',
-    verify: 'Verifying archive',
-    restore: 'Restoring home',
-};
-
-const JOB_DONE_LABEL: Record<BackupJob['kind'], string> = {
-    backup: 'Backup created',
-    verify: 'Archive verified',
-    restore: 'Home restored',
-};
-
-// The two things a row shows about itself are server words; these are the ones an admin reads.
-const VERIFY_LABEL: Record<BackupArtifact['verify']['status'], string> = {
-    verified: 'Verified',
-    failed: 'Failed',
-    unverified: 'Not verified',
-};
+import { BackupArtifactRow, VerifyBadge, VerifyFailures } from './backup-artifact-row';
+import { BackupJobStatus } from './backup-job-status';
 
 const SAFETY_COPY_LABEL: Record<BackupSafetyCopy['kind'], string> = {
-    'pre-restore': 'The home before a restore',
+    'pre-restore': 'The account before a restore',
     'failed-restore': 'A restore that did not finish',
 };
-
-function VerifyBadge({ artifact }: { artifact: BackupArtifact }) {
-    const label = VERIFY_LABEL[artifact.verify.status];
-    if (artifact.verify.status === 'verified') return <Badge variant="secondary">{label}</Badge>;
-    if (artifact.verify.status === 'failed') return <Badge variant="destructive">{label}</Badge>;
-    return <Badge variant="outline">{label}</Badge>;
-}
 
 // The four confirmations this pane asks for. One dialog is mounted for all of them — a dialog that
 // unmounts on close skips its own closing animation — and the choice keeps its name and kind until
@@ -65,9 +37,9 @@ type BackupConfirm =
 
 const CONFIRM_COPY: Record<BackupConfirm['kind'], { title: string; description: string; action: string }> = {
     'restore-artifact': {
-        title: 'Restore this home',
+        title: 'Restore this account',
         description:
-            'This replaces every file, mail and database of the home with the archive. The home is unavailable while the restore runs and open editors reload, and the state it is in now is kept beside it as a safety copy. Restore the home of',
+            'This replaces every file, mail and database of the account with the archive. The account is unavailable while the restore runs, every open page of it reloads, and the state it is in now is kept beside it as a safety copy. Restore the account of',
         action: 'Restore',
     },
     'delete-artifact': {
@@ -78,13 +50,13 @@ const CONFIRM_COPY: Record<BackupConfirm['kind'], { title: string; description: 
     'restore-copy': {
         title: 'Restore this safety copy',
         description:
-            "The home goes back to the state this copy holds, and the state it is in now becomes a new safety copy beside it. Drive files on a remote mount are restored from the copy's own bucket objects. Restore the copy",
+            "The account goes back to the state this copy holds, and the state it is in now becomes a new safety copy beside it. Drive files on a remote mount are restored from the copy's own bucket objects. Restore the copy",
         action: 'Restore',
     },
     'delete-copy': {
         title: 'Delete safety copy',
         description:
-            'A safety copy is the only record of the home as it was at that moment, and on a remote mount its own bucket objects are deleted with it. Permanently delete',
+            'A safety copy is the only record of the account as it was at that moment, and on a remote mount its own bucket objects are deleted with it. Permanently delete',
         action: 'Delete',
     },
 };
@@ -114,7 +86,6 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
     // Newest first, and the server allows one job per home — so the newest job is the whole story.
     const latest = jobs[0];
     const running = latest?.state === 'running' ? latest : undefined;
-    const result = latest && latest.state !== 'running' && latest.id !== dismissedJobId ? latest : undefined;
     const rowCount = data ? data.artifacts.length + data.safetyCopies.length : 0;
 
     const ask = (next: BackupConfirm) => {
@@ -173,56 +144,23 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
                 <Alert variant="warning">
                     <AlertTriangle className="h-4 w-4" />
                     <AlertDescription>
-                        An archive holds everything in this home — files, mail, calendars and the stored storage
-                        credentials. It is a secret; keep it somewhere safe.
+                        An archive holds everything in this account: files, mail, calendars and the stored storage
+                        credentials. It is a secret, so keep it somewhere safe.
                     </AlertDescription>
                 </Alert>
             )}
 
-            {running && (
-                <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">
-                        {JOB_LABEL[running.kind]} · {running.progress.step}
-                        {running.progress.total > 0 && ` (${running.progress.done}/${running.progress.total})`}
-                    </p>
-                    {running.progress.total > 0 && (
-                        <Progress value={(running.progress.done / running.progress.total) * 100} />
-                    )}
-                </div>
+            {latest && latest.id !== dismissedJobId && (
+                <BackupJobStatus job={latest} onDismiss={() => setDismissedJobId(latest.id)} />
             )}
-            {result && (
-                <div className="flex items-start gap-1">
-                    <p
-                        className={cn(
-                            'text-xs flex-1',
-                            result.state === 'failed' ? 'text-destructive' : 'text-muted-foreground truncate',
-                        )}
-                    >
-                        {result.state === 'failed' ? (
-                            <>
-                                {JOB_LABEL[result.kind]} failed: {result.error}
-                            </>
-                        ) : (
-                            <>
-                                {JOB_DONE_LABEL[result.kind]}
-                                {result.artifact && ` · ${result.artifact}`}
-                            </>
-                        )}
-                    </p>
-                    <TooltipButton
-                        icon={X}
-                        tooltipText="Dismiss"
-                        className="h-5 w-5 shrink-0"
-                        onClick={() => setDismissedJobId(result.id)}
-                    />
-                </div>
+            {jobsFailed && (
+                <p className="text-xs text-destructive">Could not load the jobs running for this account.</p>
             )}
-            {jobsFailed && <p className="text-xs text-destructive">Could not load the jobs running for this home.</p>}
 
             {isLoading ? (
                 <LoadingState />
             ) : isError || !data ? (
-                <ErrorState message="Could not load the backups of this home." />
+                <ErrorState message="Could not load the backups of this account." />
             ) : rowCount === 0 ? (
                 <p className="text-sm text-muted-foreground">No backups yet.</p>
             ) : (
@@ -285,18 +223,18 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
     // A mount the home had turned off whose storage could not be read: the archive holds nothing for
     // it, and the row says so rather than letting the admin assume it is in there.
     const skipped = artifact.manifest?.mounts.filter((mount) => mount.skipped) ?? [];
+    // A Light or metadata-only member of a whole-server archive: restoreHome refuses it, so the
+    // row says why instead of offering it.
+    const incomplete = artifact.manifest && incompleteReason(artifact.manifest);
+    // Without a manifest (an archive copied in by hand) nothing is known of what it holds. A verify writes one.
+    const restorable = artifact.manifest !== null && artifact.verify.status !== 'failed' && !incomplete;
     return (
-        <div className="group flex flex-col gap-1 p-3 border rounded-lg">
-            <div className="flex items-center gap-3">
-                <Archive className="h-4 w-4 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                    <div className="text-sm truncate">{formatDateTime(artifact.createdAt)}</div>
-                    <div className="text-xs text-muted-foreground truncate">
-                        {formatFileSize(artifact.bytes)} · {artifact.name}
-                    </div>
-                </div>
-                <VerifyBadge artifact={artifact} />
-                <div className="flex items-center invisible group-hover:visible pointer-coarse:visible">
+        <BackupArtifactRow
+            createdAt={artifact.createdAt}
+            detail={`${formatFileSize(artifact.bytes)} · ${artifact.name}`}
+            badges={<VerifyBadge verify={artifact.verify} />}
+            actions={
+                <>
                     <TooltipButton
                         icon={Download}
                         tooltipText="Download"
@@ -310,8 +248,8 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
                         disabled={busy}
                         onClick={onVerify}
                     />
-                    {/* An archive that failed its verify is not offered for restore — the failures below say why. */}
-                    {artifact.verify.status !== 'failed' && (
+                    {/* The lines below say why an archive is not offered. */}
+                    {restorable && (
                         <TooltipButton
                             icon={RotateCcw}
                             tooltipText="Restore"
@@ -327,21 +265,28 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
                         disabled={busy}
                         onClick={onDelete}
                     />
-                </div>
-            </div>
+                </>
+            }
+        >
+            {!artifact.manifest && (
+                <p className="text-xs text-muted-foreground pl-7">
+                    Verify first: nothing is known about this archive until then.
+                </p>
+            )}
+            {incomplete && <p className="text-xs text-muted-foreground pl-7">This archive {incomplete}.</p>}
             {skipped.map((mount) => (
                 <p key={mount.id} className="text-xs text-muted-foreground pl-7 truncate">
                     Skipped mount {mount.id}: {mount.skipped}
                 </p>
             ))}
-            {artifact.verify.status === 'failed' && (
-                <ul className="text-xs text-destructive max-h-24 overflow-y-auto pl-7 list-disc">
-                    {artifact.verify.failures.map((failure) => (
-                        <li key={failure}>{failure}</li>
-                    ))}
-                </ul>
-            )}
-        </div>
+            {/* Still restorable: what it lacks, the live home cannot serve either. */}
+            {artifact.manifest?.warnings?.map((warning) => (
+                <p key={warning} className="text-xs text-warning pl-7">
+                    {warning}
+                </p>
+            ))}
+            <VerifyFailures verify={artifact.verify} />
+        </BackupArtifactRow>
     );
 }
 
@@ -353,38 +298,35 @@ type SafetyCopyRowProps = {
 };
 
 function SafetyCopyRow({ copy, busy, onRestore, onDelete }: SafetyCopyRowProps) {
+    // Measuring a whole home stops after a cap, so the number is a floor.
+    const size = `${copy.truncated ? 'at least ' : ''}${formatFileSize(copy.bytes)}`;
     return (
-        <div className="group flex items-center gap-3 p-3 border rounded-lg">
-            <RotateCcw className="h-4 w-4 text-muted-foreground shrink-0" />
-            <div className="flex-1 min-w-0">
-                <div className="text-sm truncate">{formatDateTime(copy.createdAt)}</div>
-                <div className="text-xs text-muted-foreground truncate">
-                    {/* Measuring a whole home stops after a cap, so the number is a floor. Saying so
-                        beats showing 52 MB for a 284 MB copy. */}
-                    {SAFETY_COPY_LABEL[copy.kind]} · {copy.truncated ? 'at least ' : ''}
-                    {formatFileSize(copy.bytes)}
-                </div>
-            </div>
-            <div className="flex items-center invisible group-hover:visible pointer-coarse:visible">
-                {/* Only a pre-restore copy is a home this can put back; a failed-restore folder is a
-                    half-written one, which the route refuses. */}
-                {copy.kind === 'pre-restore' && (
+        <BackupArtifactRow
+            icon={RotateCcw}
+            createdAt={copy.createdAt}
+            detail={`${SAFETY_COPY_LABEL[copy.kind]} · ${size}`}
+            actions={
+                <>
+                    {/* Only a pre-restore copy is a home this can put back; a failed-restore folder is a
+                        half-written one, which the route refuses. */}
+                    {copy.kind === 'pre-restore' && (
+                        <TooltipButton
+                            icon={RotateCcw}
+                            tooltipText="Restore this copy"
+                            className="h-7 w-7"
+                            disabled={busy}
+                            onClick={onRestore}
+                        />
+                    )}
                     <TooltipButton
-                        icon={RotateCcw}
-                        tooltipText="Restore this copy"
+                        icon={Trash2}
+                        tooltipText="Delete safety copy"
                         className="h-7 w-7"
                         disabled={busy}
-                        onClick={onRestore}
+                        onClick={onDelete}
                     />
-                )}
-                <TooltipButton
-                    icon={Trash2}
-                    tooltipText="Delete safety copy"
-                    className="h-7 w-7"
-                    disabled={busy}
-                    onClick={onDelete}
-                />
-            </div>
-        </div>
+                </>
+            }
+        />
     );
 }

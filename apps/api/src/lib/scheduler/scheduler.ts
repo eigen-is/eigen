@@ -1,18 +1,18 @@
-// Tiny in-process scheduler for periodic background work — wraps setInterval with
-// kick-off-at-startup semantics, error isolation, and central shutdown.
-//
-// Future: recent Bun added in-process Bun.cron(schedule, handler) that runs the
-// callback inside the current process with shared state — we could switch to it
-// when we want wall-clock schedules (e.g. "every day at 03:00 UTC") instead of
-// the millisecond intervals + kick-at-startup pattern this file gives us.
+// In-process scheduler for periodic background work: setInterval with an optional run at start, error
+// isolation, and one shutdown for all of it.
 
 const timers: Timer[] = [];
 
-// Runs fn immediately, then every intervalMs. fn can return anything (sync or
+// Runs fn immediately unless `atStart` is false, then every intervalMs. fn can return anything (sync or
 // Promise) — the return value is discarded and rejections are caught + logged so
 // one bad sweep never breaks the schedule. A slow async fn is never re-entered:
 // a tick that fires while the previous sweep is still running is skipped.
-export function scheduleInterval(name: string, intervalMs: number, fn: () => unknown): void {
+export function scheduleInterval(
+    name: string,
+    intervalMs: number,
+    fn: () => unknown,
+    { atStart = true }: { atStart?: boolean } = {},
+): void {
     let running = false;
     const run = async () => {
         if (running) return;
@@ -25,7 +25,7 @@ export function scheduleInterval(name: string, intervalMs: number, fn: () => unk
             running = false;
         }
     };
-    run();
+    if (atStart) run();
     const timer = setInterval(run, intervalMs);
     timer.unref(); // periodic work must never hold the process open at shutdown
     timers.push(timer);

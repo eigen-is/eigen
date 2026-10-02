@@ -208,17 +208,25 @@ if (CANONICAL_MIMES.size === 0) {
 
 const ROUTE_FILE = /^apps\/api\/src\/routes\/[^/]+\.ts$/;
 // The home-independent surfaces that deliberately carry no `:ownerId` (docs/ARCHITECTURE.md § Pitfalls):
-// first-run setup, server-wide admin config, the unauthenticated public surface, and the admin backup
-// routes — server-wide too, gated by `requireAdmin` in every handler rather than by home ownership.
-const OWNER_ID_EXEMPT = new Set(['setup.ts', 'settings.ts', 'waitlist.ts', 'public.ts', 'backup.ts']);
+// first-run setup, server-wide admin config, the unauthenticated public surface, and the backup routes,
+// server-wide too: `backup.ts` gated by `requireAdmin` in every handler, `server-backup.ts` by `requireOwner`.
+const OWNER_ID_EXEMPT = new Set([
+    'setup.ts',
+    'settings.ts',
+    'waitlist.ts',
+    'public.ts',
+    'backup.ts',
+    'server-backup.ts',
+]);
 // One chunk per route: from its `.method('/…` to the next one.
 const ROUTE_START = /\.(?:get|post|put|patch|delete|ws|head|options|all)\(\s*['"]\//;
 // `/ws` is a transport prefix rather than a path segment — the collab socket's `:ownerId` sits behind it.
 const TRANSPORT_PREFIX = /^\/ws(?=\/)/;
 
-// docs/LAYOUT.md § Hover-Only Icons: an affordance hidden until hover must rest visible on touch, which has
-// no hover. Only a hidden element is at risk — a decorative `group-hover:scale-105` reveals nothing —
-// so the trigger is a hiding utility plus a revealing `group-hover:` in the same class string.
+// docs/LAYOUT.md § Hover-revealed affordances rest visible on touch: an affordance hidden until hover must
+// rest visible on touch, which has no hover. Only a hidden element is at risk — a decorative
+// `group-hover:scale-105` reveals nothing — so the trigger is a hiding utility plus a revealing
+// `group-hover:` in the same class string.
 // `pointer-fine:group-hover:` declares the hover desktop-only on purpose and is not a gap.
 const STRING_LITERAL = /'[^'\n]*'|"[^"\n]*"|`[^`]*`/g;
 const HIDDEN_BASE = /(?<![\w-])(?:invisible|hidden|opacity-0)(?![\w-])/;

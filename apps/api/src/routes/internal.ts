@@ -1,8 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { verifyProtocolAuth } from '../lib/auth/protocol-auth';
 import { requireLocalhost } from '../lib/core/access';
-import { sendToHome } from '../lib/home/home-relay';
-import { getOrgOwner } from '../lib/user';
+import { alertOwner } from '../lib/user/alert-owner';
 
 export const internalRouter = new Elysia({ name: 'internal' })
     .post(
@@ -10,7 +9,7 @@ export const internalRouter = new Elysia({ name: 'internal' })
         async ({ body, request, server }) => {
             requireLocalhost(request, server);
             // `ip` is the mail client's address, forwarded by eigen-checkpassword from dovecot's
-            // `IP`. Without it the limiter only ever sees the docker bridge peer.
+            // `TCPREMOTEIP`. Without it the limiter only ever sees the docker bridge peer.
             const user = await verifyProtocolAuth(body.email, body.password, body.ip);
             return { userId: user.id, email: user.email };
         },
@@ -30,19 +29,13 @@ export const internalRouter = new Elysia({ name: 'internal' })
         '/internal/mail/queue-alert',
         async ({ body, request, server }) => {
             requireLocalhost(request, server);
-            const owner = await getOrgOwner();
-            if (!owner) return { notified: false };
-            await sendToHome(owner.id, {
-                type: 'notification',
-                notification: {
-                    type: 'admin-alert',
-                    title: 'Mail queue backlog',
-                    body: `${body.queued} messages queued`,
-                    tag: 'mail-queue-backlog',
-                    coalesce: true,
-                },
-            });
-            return { notified: true };
+            return {
+                notified: await alertOwner(
+                    'Mail queue backlog',
+                    `${body.queued} messages queued`,
+                    'mail-queue-backlog',
+                ),
+            };
         },
         {
             body: t.Object({

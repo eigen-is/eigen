@@ -8,7 +8,8 @@ import {
 } from '@workspace/lib/constants/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as decoding from 'lib0/decoding';
-import { COLLAB_EPOCH_FILE, getCollabEpoch, rotateHomeCollabEpoch } from '../../lib/collab/epoch';
+import { SERVER_RUNTIME_FILES } from '../../lib/config/paths';
+import { getDataEpoch, rotateHomeDataEpoch } from '../../lib/home/data-epoch';
 import { driveGet, drivePost, getTestContext, TEST_DATA_DIR } from '../setup';
 
 // A tab that loaded a document before ./eigen restore holds state the restored data lacks, and its sync would merge it
@@ -72,18 +73,18 @@ afterAll(() => {
 describe('Collab data epoch', () => {
     test('is kept in data/server/, so it outlives a restart', () => {
         // The first use draws it and writes the file, so read the file after.
-        const epoch = getCollabEpoch(ownerId);
-        expect(epoch).toStartWith(readFileSync(join(TEST_DATA_DIR, 'server', COLLAB_EPOCH_FILE), 'utf8'));
+        const epoch = getDataEpoch(ownerId);
+        expect(epoch).toStartWith(readFileSync(join(TEST_DATA_DIR, 'server', SERVER_RUNTIME_FILES.epoch), 'utf8'));
     });
 
     test('an open hands it out before the sync', async () => {
         const opened = await open();
         expect(opened.synced).toBe(true);
-        expect(opened.epoch).toBe(getCollabEpoch(ownerId));
+        expect(opened.epoch).toBe(getDataEpoch(ownerId));
     });
 
     test('a reconnect with the same epoch syncs, so an offline edit survives a restart', async () => {
-        const opened = await open(`?epoch=${getCollabEpoch(ownerId)}`);
+        const opened = await open(`?epoch=${getDataEpoch(ownerId)}`);
         expect(opened.synced).toBe(true);
         expect(opened.close?.code).not.toBe(COLLAB_HOME_REPLACED_CLOSE);
     });
@@ -95,21 +96,21 @@ describe('Collab data epoch', () => {
     });
 
     test("a restore of another home leaves this home's epoch, so its tabs sync on", async () => {
-        const before = getCollabEpoch(ownerId);
-        rotateHomeCollabEpoch(ctx.bob.user.id);
-        expect(getCollabEpoch(ownerId)).toBe(before);
+        const before = getDataEpoch(ownerId);
+        await rotateHomeDataEpoch(ctx.bob.user.id);
+        expect(getDataEpoch(ownerId)).toBe(before);
         const opened = await open(`?epoch=${before}`);
         expect(opened.synced).toBe(true);
     });
 
     test('a restore of this home rotates its epoch, so a tab from before reloads', async () => {
-        const before = getCollabEpoch(ownerId);
-        rotateHomeCollabEpoch(ownerId);
-        expect(getCollabEpoch(ownerId)).not.toBe(before);
+        const before = getDataEpoch(ownerId);
+        await rotateHomeDataEpoch(ownerId);
+        expect(getDataEpoch(ownerId)).not.toBe(before);
         const stale = await open(`?epoch=${before}`);
         expect(stale.synced).toBe(false);
         expect(stale.close).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: COLLAB_HOME_REPLACED_REASON });
-        const fresh = await open(`?epoch=${getCollabEpoch(ownerId)}`);
+        const fresh = await open(`?epoch=${getDataEpoch(ownerId)}`);
         expect(fresh.synced).toBe(true);
     });
 });

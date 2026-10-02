@@ -141,7 +141,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     // inliner. For the async menu-copy path only, build a foreign-visible `<img src="data:svg…">` whose
     // images are inlined as base64 data URIs, so a plain contenteditable pastes the drawing as an image.
     // Bytes come from the credentialed media resolver; over the soft cap (or on inline failure) we skip
-    // the flavor and write today's payload. The sync ⌘C path stays byte-free (a copy event can't fetch).
+    // the flavor. The sync ⌘C path stays byte-free (a copy event can't fetch).
     const fetchMediaBlob = useCallback(
         async (name: string): Promise<Blob | null> => {
             const url = resolveMediaUrl(name);
@@ -190,9 +190,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                     if (!mediaFolderId) continue;
                     const { width, height } = box;
                     const index = plan.partials.length;
-                    // No source folder on the wire is forged or incomplete: re-upload it like any
-                    // cross-mount item rather than trust a name that resolves against nothing here.
-                    const crossMount = !item.sourceParentId || needsReUpload(item.sourceParentId, mediaFolderId);
+                    const crossMount = needsReUpload(item.sourceParentId, mediaFolderId);
                     plan.partials.push({
                         type: 'image',
                         ...placeAt(width, height),
@@ -510,7 +508,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     };
     const onMenuPaste = () => {
         // The keyboard sibling is gated on canEdit; so is this one. The object menu only opens when
-        // canEdit today, but a clipboard write must never depend on a caller remembering that.
+        // canEdit, but a clipboard write must never depend on a caller remembering that.
         if (!canEdit) return;
         (async () => {
             const data = await readEigenClipboardAsync();

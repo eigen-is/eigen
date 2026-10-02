@@ -1,12 +1,10 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
+import { readdirSync } from 'node:fs';
 import type { Email, EmailDraft, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import { MaildirStore } from '../../lib/mail/maildir-store';
 // Static import of '../lib/core/mailer' would trigger server-config module evaluation
 // before './setup' sets EIGEN_DATA_ROOT. Dynamic-import it inside the test instead.
-import { maildirOf, mailRootOf } from '../mail-test-helpers';
+import { mailRootOf, seedMaildirFolder } from '../mail-test-helpers';
 import { app, assertJson, authedRequest, findOrFail, getTestContext } from '../setup';
 
 const isWindows = process.platform === 'win32';
@@ -26,69 +24,25 @@ describe.skipIf(isWindows)('Mail', () => {
         expect(inbox.flags).toContain('\\Inbox');
     });
 
-    test('create custom mailbox', async () => {
-        const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mailbox: 'Projects' }),
-        });
-        expect(res.status).toBe(200);
-    });
-
-    test('mailbox-exists returns mailbox metadata for created mailbox', async () => {
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/mail/${ctx.alice.user.id}/mailbox-exists/Projects`,
-        );
-        const data = await assertJson<MaildirMailbox | false>(res);
-        expect(data).not.toBe(false);
-        expect((data as MaildirMailbox).path).toBe('Projects');
-
-        // A standard name answers in any case, under its canonical spelling.
-        const sent = await assertJson<MaildirMailbox | false>(
-            await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox-exists/sent`),
-        );
-        expect(sent).not.toBe(false);
-        expect((sent as MaildirMailbox).path).toBe(MAILBOX_SENT);
-        expect((sent as MaildirMailbox).flags).toContain('\\Sent');
-    });
-
-    test('mailbox-exists returns false for unknown mailbox', async () => {
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/mail/${ctx.alice.user.id}/mailbox-exists/does-not-exist`,
-        );
-        expect(res.status).toBe(200);
-        const data = await res.json();
-        expect(data).toBe(false);
-    });
-
-    test('create mailbox with invalid name returns 400', async () => {
-        const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mailbox: 'Bad..Name' }),
-        });
+    test('open mailbox with invalid name returns 400', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox/Bad..Name`);
         expect(res.status).toBe(400);
         expect(await res.text()).toContain('Invalid mailbox');
     });
 
-    test('create duplicate mailbox returns 409', async () => {
-        const res1 = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mailbox: 'Duplicate' }),
-        });
-        expect(res1.status).toBe(200);
-
-        const res2 = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mailbox: 'Duplicate' }),
-        });
-        expect(res2.status).toBe(409);
-        const body = await res2.text();
-        expect(body).toContain('already exists');
+    // The name check behind every mailbox route refuses these; without it they read as a folder that is missing.
+    test.each([
+        ['a .. traversal', '..%2F..%2Fetc'],
+        ['a leading separator', '%2Fetc'],
+        ['a control character', 'test%00mailbox'],
+        ['an empty segment', 'Projects%2F%2F2026'],
+    ])('open mailbox with %s returns 400', async (_name, mailboxPath) => {
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/mail/${ctx.alice.user.id}/mailbox/${mailboxPath}`,
+        );
+        expect(res.status).toBe(400);
+        expect(await res.text()).toContain('Invalid mailbox');
     });
 
     test('get unknown mailbox returns 404', async () => {
@@ -213,11 +167,7 @@ describe.skipIf(isWindows)('Mail', () => {
 
         test('move message to different mailbox', async () => {
             const targetMailbox = `MoveTarget-${Date.now()}`;
-            await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mailbox: targetMailbox }),
-            });
+            seedMaildirFolder(ctx.alice.user.id, targetMailbox);
 
             const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/move`, {
                 method: 'PUT',
@@ -278,16 +228,8 @@ describe.skipIf(isWindows)('Mail', () => {
             sourceMailbox = `Source-${Date.now()}`;
             targetMailbox = `Target-${Date.now()}`;
 
-            await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mailbox: sourceMailbox }),
-            });
-            await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mailbox: targetMailbox }),
-            });
+            seedMaildirFolder(ctx.alice.user.id, sourceMailbox);
+            seedMaildirFolder(ctx.alice.user.id, targetMailbox);
 
             const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
                 method: 'PUT',
@@ -392,100 +334,8 @@ describe.skipIf(isWindows)('Mail', () => {
         });
 
         test('ownerId spoofing is rejected with 403', async () => {
-            const createRes = await authedRequest(ctx.bob.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mailbox: 'BobOnlyMailbox' }),
-            });
-            expect(createRes.status).toBe(403);
-        });
-    });
-
-    describe('Regression: Path traversal in mailbox names', () => {
-        test('create mailbox with .. traversal is rejected', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mailbox: '../../etc' }),
-            });
-            expect(res.status).not.toBe(200);
-        });
-
-        test('create mailbox with path separator traversal is rejected', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mailbox: '../../../etc/passwd' }),
-            });
-            expect(res.status).not.toBe(200);
-        });
-
-        test('mailbox-exists with traversal characters is rejected', async () => {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/mail/${ctx.alice.user.id}/mailbox-exists/..%2F..%2Fetc%2Fpasswd`,
-            );
-            // Should either return false or error, not leak file information
-            if (res.status === 200) {
-                const data = await res.json();
-                expect(data).toBe(false);
-            } else {
-                expect(res.status).toBeGreaterThanOrEqual(400);
-            }
-        });
-
-        test('create mailbox with control characters is rejected', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mailbox: 'test\x00mailbox' }),
-            });
-            expect(res.status).not.toBe(200);
-        });
-
-        test('create mailbox with an empty path segment is rejected', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mailbox: 'Projects//2026' }),
-            });
-            expect(res.status).toBe(400);
-        });
-
-        test('a nested mailbox is one Maildir++ folder, addressed by either delimiter', async () => {
-            const createRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mailbox: 'Clients/Acme/2026' }),
-            });
-            expect(createRes.status).toBe(200);
-
-            // `.Clients.Acme.2026` on disk, so the dotted path a Maildir++ listing reports resolves to it.
-            expect(existsSync(join(maildirOf(ctx.alice.user.id), '.Clients.Acme.2026'))).toBe(true);
-            const existsRes = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/mail/${ctx.alice.user.id}/mailbox-exists/Clients.Acme.2026`,
-            );
-            const data = await assertJson<MaildirMailbox | false>(existsRes);
-            expect(data).not.toBe(false);
-            expect((data as MaildirMailbox).path).toBe('Clients.Acme.2026');
-        });
-
-        test('valid mailbox still works after rejected traversal attempts', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mailbox: 'ValidAfterTraversal' }),
-            });
-            expect(res.status).toBe(200);
-
-            const existsRes = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/mail/${ctx.alice.user.id}/mailbox-exists/ValidAfterTraversal`,
-            );
-            const data = await assertJson<MaildirMailbox | false>(existsRes);
-            expect(data).not.toBe(false);
-            expect((data as MaildirMailbox).path).toBe('ValidAfterTraversal');
+            const res = await authedRequest(ctx.bob.user.sessionToken, `/mail/${ctx.alice.user.id}/mailboxes`);
+            expect(res.status).toBe(403);
         });
     });
 

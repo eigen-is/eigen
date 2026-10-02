@@ -1,7 +1,7 @@
 import { useCheckSetupS3, useCompleteSetup, useHardenSetupS3 } from '@workspace/lib/admin';
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
-import { EMPTY_S3 } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
+import { EMPTY_S3 } from '@workspace/lib/types/mount';
 import type { ServerStorageType, SetupStatus } from '@workspace/lib/types/settings';
 import { MIN_PASSWORD_LENGTH, validateEmailAddress, validateUsername } from '@workspace/lib/validation';
 import { EigenLoader, EmptyState } from '@workspace/ui';

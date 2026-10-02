@@ -10,6 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gettext-base \
     && rm -rf /var/lib/apt/lists/*
 
+# Group 1000, with no members, is the API's: it reads the DKIM key for the server backup. With this entry OpenDKIM's
+# RequireSafeKeys takes the key at 0640; without it, it refuses the key with an empty reason.
+RUN groupadd --gid 1000 eigen
+
 COPY main.cf.template /etc/postfix/main.cf.template
 COPY master.cf.template /etc/postfix/master.cf.template
 COPY sender_login.regexp /etc/postfix/sender_login.regexp

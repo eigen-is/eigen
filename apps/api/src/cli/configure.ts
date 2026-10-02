@@ -4,9 +4,10 @@ import type { parseArgs } from 'node:util';
 import { APP_URLS } from '@workspace/lib/constants/app-urls';
 import { DEFAULT_RELAY_PORT } from '@workspace/lib/constants/mail';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import { SERVER_DIR } from '../lib/config/paths';
+import { SERVER_DIR, SERVER_FILES } from '../lib/config/paths';
+import { PIN_KEYS } from '../lib/config/release';
 import { readEnvFile, writeEnvFile } from './env-file';
-import { DATA, ENV_PATH, installOwner, ownAs, PIN_KEYS, ROOT } from './install';
+import { DATA, ENV_PATH, installOwner, ownAs, ROOT } from './install';
 import { createUi, type Ui } from './ui';
 
 export type ConfigureAnswers = {
@@ -125,8 +126,8 @@ function validateRelay(value: string): string | undefined {
     }
 }
 
-// config.json is what lib/config/server-config.ts names its JsonStore; that module exports no constant for it.
-const SERVER_CONFIG = join(DATA, SERVER_DIR, 'config.json');
+// The server config setup wrote, read here without loading lib/config/server-config.ts, which opens its store.
+const SERVER_CONFIG = join(DATA, SERVER_DIR, SERVER_FILES.config);
 
 // Setup records the domain every account's address was made on; an unreadable data folder leaves the check to the
 // API's boot.
@@ -335,7 +336,7 @@ export async function configure(
     const currentHost = existing.get('SMTP_RELAY_HOST');
     const relayAnswer = await answer(
         {
-            message: 'Which mail relay should Eigen send through, as host:port? (optional)',
+            message: 'Which mail relay should Eigen send through, as host:port?',
             help: mail
                 ? 'Useful when your provider blocks port 25. Leave it empty to send directly.'
                 : 'Eigen needs one to send sign-in codes, invitations and notifications.',
@@ -372,7 +373,7 @@ export async function configure(
                     message: current
                         ? "What is the relay's password? (empty keeps the current one)"
                         : "What is the relay's password?",
-                    help: `Saved in ${ENV_PATH}, which only its owner can read.`,
+                    help: `Saved in ${ENV_PATH}, readable by its owner and by group 1000, the group Eigen runs as.`,
                     validate: (value) => (value || current ? validateText(value) : 'Enter the relay password.'),
                     flag: `--relay-password-env <VAR>${keep}`,
                 })) || current;
@@ -436,7 +437,12 @@ export async function configure(
         return;
     }
 
-    if (!mail && !relay) ui.note('No relay', ['Eigen sends no email. Run ./eigen setup again to add a relay.']);
+    if (!mail && !relay) {
+        ui.warn('No relay', [
+            'Eigen sends no email: no sign-in codes, invitations or notifications.',
+            'Run ./eigen setup again to add a relay.',
+        ]);
+    }
 
     if (behindProxy) {
         const [bindHost, bindPort] = staticAddress.split(':');

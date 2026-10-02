@@ -147,7 +147,7 @@ export type NewDraft = {
 export type DraftInput = Pick<NewDraft, 'to' | 'cc' | 'bcc' | 'subject' | 'text' | 'html' | 'inReplyTo' | 'references'>;
 
 // Sent with a draft save: staged uploads to embed, parsed attachments to keep, and whether to force
-// the EML rebuild (MAIL.md § Compose, drafts, and send).
+// the EML rebuild (MAIL.md § A draft skips the rebuild until its attachments change).
 export type DraftUpdateOptions = {
     tempAttachmentIds?: string[];
     keepAttachmentIndexes?: number[];

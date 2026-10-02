@@ -80,8 +80,9 @@ export function PresentMode({ frame, elements, onNext, onPrev, onExit }: Present
             tabIndex={0}
             onKeyDown={onKeyDown}
             // Why z-[100]: present mode must cover the whole app shell, so it sits at the documented
-            // full-screen tier (CODE-STANDARDS.md § Z-Index, the tier FilePreview uses), not the
-            // portal tier — at z-50 it would only tie with the app's own dropdowns and popovers.
+            // full-screen tier, the one FilePreview uses (LAYOUT.md § One z-index scale, and app code
+            // sets none). At the portal tier (z-50) it would only tie with the app's own dropdowns
+            // and popovers.
             className={cn(
                 'fixed inset-0 z-[100] flex items-center justify-center bg-black',
                 !controlsVisible && 'cursor-none',

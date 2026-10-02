@@ -15,6 +15,7 @@ export type Ui = {
     select(question: Question & { options: Choice[]; initial: boolean }): Promise<boolean>;
     password(question: Question & { validate: Validate }): Promise<string>;
     note(title: string, lines: string[]): void;
+    warn(title: string, lines: string[]): void;
     outro(message: string): void;
     fail(message: string, next: string): never;
 };
@@ -102,6 +103,7 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
                     }),
                 ),
             note: (title, lines) => clack.note(lines.join('\n'), title),
+            warn: (title, lines) => clack.log.warn([title, ...lines].join('\n')),
             outro: (message) => clack.outro(message),
             fail: (message, next) => {
                 clack.log.error(message);
@@ -178,6 +180,12 @@ export async function createUi(flagsGiven: boolean): Promise<Ui> {
         note: (title, lines) =>
             console.log(
                 [glyphLine('bar', ''), glyphLine('ok', title), ...lines.map((line) => glyphLine('bar', line))].join(
+                    '\n',
+                ),
+            ),
+        warn: (title, lines) =>
+            console.log(
+                [glyphLine('bar', ''), glyphLine('warn', title), ...lines.map((line) => glyphLine('bar', line))].join(
                     '\n',
                 ),
             ),

@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, quotas, storage, settings]
 related: [admin/server-settings, admin/teams]
 order: 60
-updated: 2026-09-21
+updated: 2026-10-01
 ---
 
 Storage quotas control how much space each user and team can use. You set server-wide defaults on the [**Settings**](/admin/settings) page, and you can raise those defaults for specific teams without changing the server-wide values. Only the server owner can access the **Settings** page.
@@ -15,7 +15,7 @@ Storage quotas control how much space each user and team can use. You set server
 1. Sign in to Eigen as the server owner and open [Admin](/admin).
 2. In the sidebar, click **Settings**.
 3. Under **Storage Quotas**, update the fields you want to change:
-   - **Mail, Contacts & Calendar (MB)**: the combined storage limit for each user's email, contacts, and calendars.
+   - **Mail, Contacts & Calendar (MB)**: the combined storage limit for each user's email, contacts, and calendars. On a server without mailboxes, this field is **Contacts & Calendar (MB)**.
    - **Default Mount (MB)**: the storage limit for each user's primary Drive.
    - **Max Upload (MB)**: the largest single file any user can upload.
    - **Trash Retention (days)**: how long deleted files stay in the Trash before they are permanently removed.
@@ -25,13 +25,13 @@ The **Save** and **Reset** buttons appear only when you have unsaved changes. Cl
 
 <div class="eigen-callout">
 
-These limits apply to all users by default. A user in a team with a higher override gets the higher limit. A user in multiple teams with different overrides gets the highest limit across all their teams.
+These limits apply to all users by default. A changed **Default Mount (MB)** applies to drives created after the change: a user's existing drive keeps the limit it was created with. A user in a team with a higher override gets the higher limit. A user in multiple teams with different overrides gets the highest limit across all their teams.
 
 </div>
 
 ## Set the default storage type for new users
 
-The **Storage Type** setting under **Defaults** on the same **Settings** page controls where new users' Drive files are written the first time they sign in. Changing this setting has no effect on existing users' files.
+The **Storage Type** setting under **Defaults** on the same **Settings** page controls where new users' Drive files are written. Eigen sets it the first time a new user's workspace opens, usually at their first sign-in. Changing it moves no one's files and reaches only users who have not signed in yet.
 
 1. In [Admin Settings](/admin/settings), scroll to **Defaults**.
 2. Open the **Storage Type** dropdown and choose one of the following:
@@ -43,7 +43,7 @@ The **Storage Type** setting under **Defaults** on the same **Settings** page co
 
 ## Override quotas for a team
 
-You can raise both limits above the server default for everyone in a specific team. This lets you give certain groups more space without changing the server-wide defaults for everyone else.
+You can raise the **Mail, Contacts & Calendar (MB)** and **Default Mount (MB)** limits above the server default for everyone in a specific team. This lets you give certain groups more space without changing the server-wide defaults for everyone else.
 
 1. Open [Admin](/admin) and click the team's name in the sidebar.
 2. Click **Edit** at the top of the detail panel.

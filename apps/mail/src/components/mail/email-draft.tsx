@@ -1,4 +1,5 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
+import { wasToasted } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import { checkPathAccess } from '@workspace/lib/drive';
@@ -252,7 +253,7 @@ export function EmailDraft({
 
     // Both send entry points funnel here (the Send button via handleSendEmail, and the no-subject
     // ConfirmDialog). When the draft links documents, offer recipients who need it view access before
-    // sending; otherwise send exactly as today.
+    // sending.
     const sendWithFreshDraft = async () => {
         if (sendingRef.current) return;
         sendingRef.current = true;
@@ -272,7 +273,7 @@ export function EmailDraft({
 
             // Probe each reference for the current recipient set. A failed check (stale 404, network)
             // makes that reference non-checkable — excluded from the dialog entirely, so the mail
-            // sends as-is with whatever access already exists (the link may be dead, exactly as today).
+            // sends as-is with whatever access already exists (the link may be dead).
             const checks = await Promise.all(
                 refs.map((ref) =>
                     checkPathAccess(ref.ownerId, ref.mountId, ref.id, emails)
@@ -340,7 +341,13 @@ export function EmailDraft({
             setConfirmNoSubject(true);
             return;
         }
-        await sendWithFreshDraft();
+        // A rejected send was toasted by its hook and the draft stays open; the dialog entry points
+        // need the rejection to stay open, so only this one swallows it.
+        try {
+            await sendWithFreshDraft();
+        } catch (error) {
+            if (!wasToasted(error)) throw error;
+        }
     };
 
     // ⌘/Ctrl+Enter sends from subject, recipients, or body. Mod+Enter is a modifier

@@ -136,17 +136,25 @@ beforeAll(async () => {
 });
 
 // Corrupt only the newest update — the base write must survive so the transform
-// still has content to render.
-async function corruptNewestUpdate(mount: Mount, drivePath: DrivePath): Promise<void> {
-    const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
-    const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath!.id);
-    const last = managedDb.db.select({ id: collabSchema.docUpdates.id }).from(collabSchema.docUpdates).all().at(-1);
-    if (!last) throw new Error(`${drivePath.name}: no update to corrupt`);
-    managedDb.db
-        .update(collabSchema.docUpdates)
-        .set({ updateData: GARBAGE })
-        .where(eq(collabSchema.docUpdates.id, last.id))
-        .run();
+// still has content to render. Returns the repair: the home is the whole suite's, and
+// a server backup in a later file fails a home holding a document it cannot read.
+async function corruptNewestUpdate(mount: Mount, drivePath: DrivePath): Promise<() => Promise<void>> {
+    const setNewestUpdate = async (updateData: Buffer): Promise<Buffer> => {
+        const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
+        const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath!.id);
+        const last = managedDb.db.select().from(collabSchema.docUpdates).all().at(-1);
+        if (!last) throw new Error(`${drivePath.name}: no update to corrupt`);
+        managedDb.db
+            .update(collabSchema.docUpdates)
+            .set({ updateData })
+            .where(eq(collabSchema.docUpdates.id, last.id))
+            .run();
+        return last.updateData;
+    };
+    const original = await setNewestUpdate(GARBAGE);
+    return async () => {
+        await setNewestUpdate(original);
+    };
 }
 
 async function seedDoc(fileName: string): Promise<DrivePath> {
@@ -213,7 +221,7 @@ describe('document transform (eigensheets preview)', () => {
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
 
-        await corruptNewestUpdate(mount, path);
+        const repair = await corruptNewestUpdate(mount, path);
 
         const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
         try {
@@ -230,6 +238,7 @@ describe('document transform (eigensheets preview)', () => {
             expect(previewBody(response).length).toBeGreaterThan(0);
         } finally {
             errorSpy.mockRestore();
+            await repair();
         }
     }, 60_000);
 
@@ -977,7 +986,7 @@ describe('document transform (eigenslides)', () => {
         const { mount, path } = await seedGoldenDocument('worker-deck-corrupt', 'slides', (doc) =>
             editGoldenDeckTitle(doc, 'a later edit'),
         );
-        await corruptNewestUpdate(mount, path);
+        const repair = await corruptNewestUpdate(mount, path);
 
         const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
         try {
@@ -999,6 +1008,7 @@ describe('document transform (eigenslides)', () => {
             expect(html).not.toContain('a later edit');
         } finally {
             errorSpy.mockRestore();
+            await repair();
         }
     }, 120_000);
 });

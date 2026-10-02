@@ -26,6 +26,7 @@ import { mailRouter } from './routes/mail';
 import { notificationRouter } from './routes/notification';
 import { publicRouter } from './routes/public';
 import { searchRouter } from './routes/search';
+import { serverBackupRouter } from './routes/server-backup';
 import { settingsRouter } from './routes/settings';
 import { setupRouter } from './routes/setup';
 import { spaceRouter } from './routes/space';
@@ -122,6 +123,7 @@ export const app = new Elysia({
     .use(teamRouter)
     .use(settingsRouter)
     .use(backupRouter)
+    .use(serverBackupRouter)
     .use(waitlistRouter)
     .use(spaceRouter)
     .use(publicRouter)

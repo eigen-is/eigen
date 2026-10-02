@@ -1,3 +1,5 @@
+import type { BytesTextPreviewMode } from '../constants/preview';
+
 export type DriveACL = {
     id: string;
     read: boolean;
@@ -328,7 +330,14 @@ export const CODE_EXTENSIONS = new Set([
 
 const INLINE_EDITABLE_EXTENSIONS = new Set([...CODE_EXTENSIONS, '.md', '.markdown', '.txt']);
 
+// A vCard, a calendar and a saved message are text, but the server previews them as the cards, events and
+// message they hold, not as their raw lines, and has no edit mode for them.
+export function isStructuredTextFile(mimeType: string, name: string): boolean {
+    return isVCardFile(mimeType, name) || isIcsFile(mimeType, name) || isEmlFile(mimeType, name);
+}
+
 export function isInlineEditable(mimeType: string, name: string): boolean {
+    if (isStructuredTextFile(mimeType, name)) return false;
     if (INLINE_EDITABLE_MIMES.has(mimeType)) return true;
     const dot = name.lastIndexOf('.');
     if (dot === -1) return false;
@@ -471,7 +480,7 @@ export type InviteResult = {
 };
 
 export type FileEditorContent = {
-    editMode: string;
+    editMode: BytesTextPreviewMode;
     content: string;
     frontmatter: string | null;
     mimeType: string;

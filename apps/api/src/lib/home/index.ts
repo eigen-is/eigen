@@ -3,7 +3,6 @@ export {
     getHome,
     getTeamHome,
     getUserHome,
-    HomeRestoringError,
     shutdownAllHomes,
     touchHomeIfLoaded,
 } from './get-home';

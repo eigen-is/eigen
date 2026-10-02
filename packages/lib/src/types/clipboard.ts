@@ -104,7 +104,7 @@ export type EigenClipboardData = {
     // embedded in a `<metadata>` block. eigen-aware hosts that can't place the typed items (docs, sheets)
     // render it as an image; a canvas reads the typed `items` and ignores it. A TEXT-ONLY selection omits
     // it, so a copied text box lands in docs as styled editable text rather than a picture of itself, and
-    // so does a selection too big to put a multi-MB string on the clipboard. The producer policy and the
-    // Chromium-flavor reason live in CLIPBOARD.md.
+    // so does a selection too big to put a multi-MB string on the clipboard. The producer policy lives in
+    // CLIPBOARD.md.
     svg?: string;
 };

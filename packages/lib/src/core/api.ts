@@ -92,6 +92,7 @@ export const settingsApi = api.settings;
 export const setupApi = api.setup;
 export const waitlistApi = api.waitlist;
 export const backupApi = api.admin.backup;
+export const serverBackupApi = api.admin['server-backup'];
 
 // An env file from before an app existed lacks its key: unset is a same-origin relative link, what production serves.
 export const SPACE_APP_URL = import.meta.env.VITE_APP_SPACE_URL ?? '';
@@ -254,7 +255,7 @@ function getDocumentUrl(path: DriveItemRef): string | undefined {
     return undefined;
 }
 
-// Same tab always. See LAYOUT.md § Opening Items and Links.
+// Same tab always. See LAYOUT.md § Buttons navigate here, links in content open a new tab.
 export function openDocument(path: DriveItemRef) {
     const url = getDocumentUrl(path);
     if (!url) {

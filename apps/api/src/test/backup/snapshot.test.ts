@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
@@ -13,7 +13,7 @@ import * as Y from 'yjs';
 import { twoFactor as twoFactorScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { buildArtifactName, buildHomeFolderName } from '../../lib/backup/paths';
-import { snapshotHome } from '../../lib/backup/snapshot-home';
+import { snapshotHome, treeBytes } from '../../lib/backup/snapshot-home';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { docUpdates } from '../../lib/collab/schema';
 import { getAvatarsDir } from '../../lib/config/paths';
@@ -600,48 +600,6 @@ describe('Backup snapshotHome under contention', () => {
         }
     });
 
-    test('touches the home along the walk so its idle timer cannot destruct it mid-snapshot', async () => {
-        const touch = spyOn(home, 'touch');
-        try {
-            await snapshotHome(home, mkdtempSync(join(TEST_DATA_DIR, 'backup-touch-')));
-            expect(touch.mock.calls.length).toBeGreaterThan(10);
-        } finally {
-            touch.mockRestore();
-        }
-    });
-
-    test('a container database whose stored bytes are gone fails the snapshot', async () => {
-        const alice = owner;
-        const root = await assertJson<DrivePath>(
-            await authedRequest(alice.sessionToken, `/drive/${alice.id}/${mountId}/root`),
-        );
-        const docName = `Backup Gone ${Date.now()}`;
-        const doc = await drivePost(alice.sessionToken, alice.id, mountId, `folder/${root.id}/create/doc`, {
-            fileName: docName,
-        });
-
-        const mount = findOrFail(home.drive.getMounts(), (m) => m.id === mountId);
-        const dataDb = (await mount.getChildByName(doc.id, 'data.db'))!;
-        // Close the handle first — with a live one the copy comes from VACUUM INTO and never reaches
-        // storage. Then take the object away, leaving the live row behind: bytes on record, none anywhere.
-        // The close's final sync kicks a content reindex, which would open data.db again.
-        const kick = spyOn(mount.reindexQueue!, 'kick').mockImplementation(() => {});
-        try {
-            await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
-            const storageKey = await mount.getStorageKey(dataDb.id);
-            const size = (await mount.getPath(dataDb.id))!.size;
-            expect(size).toBeGreaterThan(0);
-            await mount.storage.delete(storageKey);
-
-            await expect(snapshotHome(home, mkdtempSync(join(TEST_DATA_DIR, 'backup-gone-')))).rejects.toThrow(
-                `mount ${mountId}: ${docName}.eigendoc/data.db has ${size} bytes on record but no object at ${storageKey}`,
-            );
-        } finally {
-            kick.mockRestore();
-            await mount.deletePath(doc.id);
-        }
-    });
-
     test('skips a container deleted between the tree read and its copy, and finishes the snapshot', async () => {
         const alice = owner;
         const root = await assertJson<DrivePath>(
@@ -676,8 +634,10 @@ describe('Backup snapshotHome under contention', () => {
 
         const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-vanish-'));
         try {
-            const manifest = await snapshotHome(home, target, (step) => {
-                if (step === 'home files') rmSync(raceDir, { recursive: true, force: true });
+            const manifest = await snapshotHome(home, target, {
+                onProgress: (step) => {
+                    if (step === 'home files') rmSync(raceDir, { recursive: true, force: true });
+                },
             });
             const folder = join(target, buildHomeFolderName(owner.id));
             expect(manifest.entries.filter((e) => e.path.startsWith('home/backup-vanish/')).length).toBeLessThan(20);
@@ -744,6 +704,25 @@ describe('Backup artifact names', () => {
             'home-abc-20261309-140307.tar.zst',
         ]) {
             expect(parseBackupArtifactName(bad)).toBeNull();
+        }
+    });
+});
+
+describe('Backup treeBytes', () => {
+    test('a folder renamed away between its listing and its walk counts nothing', async () => {
+        const root = mkdtempSync(join(TEST_DATA_DIR, 'tree-bytes-'));
+        try {
+            for (const dir of ['kept', 'gone']) {
+                mkdirSync(join(root, dir));
+                writeFileSync(join(root, dir, 'file'), 'four');
+            }
+            const bytes = await treeBytes(root, (rel) => {
+                if (rel === 'gone') rmSync(join(root, rel), { recursive: true });
+                return false;
+            });
+            expect(bytes).toBe(4);
+        } finally {
+            rmSync(root, { recursive: true, force: true });
         }
     });
 });

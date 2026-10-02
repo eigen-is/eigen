@@ -1469,8 +1469,8 @@ describe('Sheets xlsx conversion fidelity', () => {
     test('convert maps internal #location links onto cellrange and sheet link types', async () => {
         // exceljs round-trips a {text, hyperlink: '#…'} cell as an external rel with
         // the verbatim #-prefixed target. Excel-AUTHORED internal links (a location
-        // attr without a rel) are dropped by exceljs's reconcile and never surface
-        // on the cell — recorded in docs/SHEETS.md § accepted xlsx round-trip drifts.
+        // attr without a rel) are dropped by exceljs's reconcile, so from-xlsx.ts
+        // re-reads them from the raw sheet XML (readLocationHyperlinks).
         const workbook = new ExcelJS.Workbook();
         const ws = workbook.addWorksheet('Sheet1');
         workbook.addWorksheet('Sheet2');

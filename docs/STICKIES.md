@@ -1,70 +1,76 @@
 # Stickies (Kanban Board)
 
-> **TLDR**: Collaborative Kanban board using Yjs for real-time sync + @dnd-kit for drag-drop. Stored as
-> `.eigenstickies` Drive folders. All mutations go through Yjs first, React state derives from it.
-> Cards are the shared `CommentCard` — the board only owns columns and their order.
-> Each card gets an embedded chat room (eigenchat) for comments.
+> **TLDR:** A collaborative Kanban board in `apps/stickies/src/components/stickies/`, stored as an `.eigenstickies` Drive folder whose Yjs doc is the source of truth. The board owns only columns and their order: a card is the shared `CommentCard` with its own chat, so most of the board is the comment machinery. Three things are not obvious. Stickies data stays readable in every shape that ever shipped. A concurrent merge can put a card in two columns or none, so a shared repair ranks columns by `columnOrder`. A drag writes to Yjs once, on drop.
 
-## Architecture
+A Stickies board is a file in Drive with columns of cards, which people drag from column to column as work moves along. Everyone the file is shared with can open it at the same time and sees the others' changes live, with an outline on the card someone is editing or dragging.
 
-- **Yjs Document** (source of truth) → **React State** (derived, for rendering) → **Hooks** (controller)
-- All changes go through Yjs first, then observers update React state
-- Multiple users collaborate via WebSocket provider
+A board is a collab document, like a doc, a sheet or a slide deck, so it runs on the same Yjs backend ([COLLAB.md](COLLAB.md)). Yjs is a library for shared data that merges concurrent edits. The `.eigenstickies` file is a container, a Drive folder named like a file. Its `data.db` keeps the board's Yjs updates and snapshots, and one WebSocket per open board relays every change to the other peers. Saving, live sync, presence, access checks and version history all come from that shared code through `useCollabDoc`. Stickies only decides what goes into the doc.
 
-## Yjs Data Model
+A card is a comment, the same record the comments pane shows in a doc or a sheet ([COMMENTS.md](COMMENTS.md)). It has the same title, description, color, attachments and creator, and the same hooks and dialogs open, edit, resolve and assign it. Two things differ. The cards live in a Yjs map called `tasks`, where the other apps use `comments`. And a card is anchored by a column that lists its id, where a doc comment hangs on a run of text.
+
+Each comment, and so each card, gets its own chat for its replies. That chat is an `.eigenchat` room in the board's `chat/` folder, with its own database of messages, served by the chat routes like any other room ([CHAT.md](CHAT.md#a-chat-inside-a-document-is-a-comment-thread)). The card holds only the room's name. A card's status and assignee are not in Yjs. The server keeps them in the board's `comments.db`.
+
+## The Yjs doc is the source of truth
+
+Every change goes into the Yjs doc first. Observers then rebuild the React state (`hooks/use-board.ts` for columns, the shared comment hooks for cards), so a local edit and a peer's edit take the same path to the screen. The doc has three roots:
 
 ```
-Y.Map            "tasks"        → cardId → Y.Map (shared CommentCard shape)
-Y.Map            "columns"      → columnId → Y.Map { id, title, taskIds: Y.Array<string>, creator, createdAt }
-Y.Array<string>  "columnOrder"  → ordered column IDs
+Y.Map            "tasks"        cardId → Y.Map { id, title, description, color?, chatName?, creator?, createdAt?, attachments? }
+Y.Map            "columns"      columnId → Y.Map { id, title, taskIds: Y.Array<string>, creator, createdAt }
+Y.Array<string>  "columnOrder"  ordered column ids
 ```
 
-The `tasks` entries are **not** a stickies-specific type. They are written with the shared
-`writeCardToDoc(doc, 'tasks', card)` and read back through `useCommentLifecycle({ ..., mapName: 'tasks' })`,
-so the board and the comment infrastructure agree on one card shape. The undo manager tracks all three
-roots, so a card add/remove and its column reference undo as one step.
+The undo manager tracks all three roots. So a card and its column reference undo as one step, and so does a column and its place in `columnOrder`.
 
-## Data Types
+## Stickies data stays readable in every shape that shipped
 
-Cards are `CommentCard` from `packages/lib/src/types/comments.ts` — `id`, `title`, `description`, `color?`,
-`chatName?`, `creator?`, `createdAt?`, `attachments?`. There is no board-local card type.
+Real boards live on eigen.is, so stickies are the exception to the pre-1.0 format policy in [ROADMAP.md](ROADMAP.md): the readers keep handling every stickies shape that ever shipped. They default a field an older board lacks rather than assume it. The root name `tasks` stays for the same reason, although its entries are cards.
 
-`apps/stickies/src/components/stickies/types.ts` holds only what the board itself owns:
+What a reader tolerates is the contract:
 
-- **ColumnItem**: `id`, `title`, `taskIds` (ordered array), `creator`, `createdAt`
-- **BoardData**: `columns` (Record), `columnOrder` (array)
+- A card is read by `readCards` (`packages/lib/src/core/comments/hooks/use-comment-cards.ts`). `title` and `description` default to '', and the description is sanitized. `color`, `chatName`, `creator`, `createdAt` and `attachments` are optional, and a value of the wrong type reads as absent. An `attachments` list keeps only its string and object elements.
+- A column is read in `hooks/use-board.ts`. A missing `title` or `creator` reads as '', a missing `createdAt` as 0, and a missing `taskIds` as an empty list. The add-card dialog creates the list before it inserts.
+- A card's id and a column's id are their keys in `tasks` and `columns`. The stored `id` field is written but never read.
+- Every entry of `tasks` and `columns` is a map. Both readers call `.get` on each entry, so a scalar entry breaks the board.
 
-A card is "in" the board when some column's `taskIds` references it — that set is also what the lifecycle
-hook treats as the active cards. Cards link to an eigenchat room via `chatName`; the chat is created at
-card creation, and the thread opens in the shared card dialog when the card is clicked.
+## A card is a shared CommentCard
 
-## Shared Comment Infrastructure
+The `tasks` entries are not a stickies type. They are written with the shared `writeCardToDoc(doc, 'tasks', card)` and read through `useCommentLifecycle({ mapName: 'tasks' })`, so the board and the comment layer agree on one card shape ([COMMENTS.md](COMMENTS.md)). `types.ts` holds only what the board owns: `ColumnItem` and `BoardData`.
 
-Most of `board.tsx` is wiring the shared comment modules rather than board-specific code — see
-[COMMENTS.md](COMMENTS.md) for the card model, hooks and components:
+A card is on the board when some column's `taskIds` lists it. That set is also what the lifecycle hook treats as the active cards. `createCard` creates the card's `.eigenchat` room first, stores its name as `chatName`, and writes the card and its column reference in one transaction; clicking the card opens that thread in the shared card dialog. Deleting a card removes it from its column and from `tasks` in one transaction, so there is no orphan reference and ⌘Z restores both. The chat and its `comments.db` row stay, so undo and a version revert bring the thread back with the card.
 
-- **`useCommentLifecycle`** — cards, comment entries, members, create/open/assign/resolve, plus
-  `CommentLifecycleDialogs` for the card dialog, edit form, resolve and delete flows
-- **`PanelColumn`** — the shared comments/activity pane. Stickies uses it for the **activity** panel and
-  only on desktop; the toolbar hides the toggle on mobile, where the panel has nowhere to render
-- **Comment filters** — `useCommentFilter` + `matchesCommentFilter` drive column contents. The board
-  defaults to `status: 'all'` (resolved cards stay visible); the toolbar adds `CommentFilterMenuItems`,
-  a color-swatch row and a `FilterSummary` chip
-- **Card context menu** — one `useContextMenu` instance, opened by right-click and by long-press on touch
-  (cards are `touch-none`, so there is no native context menu)
-- **In-board doc search** — `DocSearchProvider` + `useStickiesDocSearch` highlight matching cards and
-  columns and scroll them into view; the palette's comment-search half reveals a card by `chatName`
+## A concurrent merge can leave a card in two columns, or none
 
-## Drag-and-Drop
+Two peers moving the same card at once can leave it in two columns' `taskIds`, or in none. `normalizeBoard` repairs that with the shared `normalizeParentChildRefs` (`packages/lib/src/core/collab/normalize-refs.ts`). It runs on the first sync and inside the transaction of every drop on a target that is not an Alt duplicate, a drop that moves nothing included. A card in several columns keeps the last one. A card in no column joins the first.
 
-Two-phase: visual feedback during drag (no state mutation), commit to Yjs on drag end. Supports both card
-reordering (within and across columns) and column reordering.
+**First and last come from `columnOrder`, not from Y.Map key order.** Key order is each peer's local integration order, so peers would disagree and could delete each other's survivor. A column missing from `columnOrder` ranks before every listed one, so it never receives a re-homed card: the board doesn't render it. Only when `columnOrder` lists no existing column does the repair fall back to key order. `packages/lib/src/test/core/collab/normalize-refs.test.ts` pins these cases.
 
-## Key Files
+The repair is idempotent. Run on sync it writes under `NORMALIZE_ORIGIN`, which no undo manager tracks, so it syncs to peers but ⌘Z can't restore the corruption. Inside a drag it joins the drag's undo step. Stickies is its only caller. The canvas needs no such repair, because an element names its own `frameId` and a frame holds no id list ([CANVAS.md](CANVAS.md#the-reader-is-the-trust-boundary)).
 
-The board lives in `apps/stickies/src/components/stickies/` — `board.tsx` (composition, drag-drop, dialogs),
-`column.tsx` + `sortable-note-card.tsx` (rendering), `hooks/use-board.ts` (Yjs setup, card/column creation),
-`hooks/use-drag-and-drop.ts`, `normalize-board.ts`, `search-board.ts` and the column dialogs.
+## Roots are read through typed accessors
 
-Everything card-shaped comes from the shared modules: `@workspace/lib/comments` (hooks, `writeCardToDoc`,
-filters) and `@workspace/ui` (`NoteCard`, `CardFormDialog`, `CommentLifecycleDialogs`, `PanelColumn`).
+The board reads its roots and id lists through `getItemMapRoot`, `getIdArrayRoot` and `getIdArray` (`packages/lib/src/core/collab/yjs-utils.ts`) instead of casting. A root needs no runtime check: `doc.get` upgrades the `AbstractType` root that `Y.applyUpdate` leaves on the server, and throws only on a real mismatch. A nested list is checked with `instanceof Y.Array`, which is sound because nested types always decode with their real constructors. `getIdArray` returns undefined for a missing list, which is how an older column without `taskIds` stays readable.
+
+The server reads a board for search indexing in `apps/api/src/lib/document/stickies.ts`. It imports `getItemMapRoot` through the React-free `@workspace/lib/collab/yjs-utils` subpath, because the backend never imports a `core/` domain barrel.
+
+## A drag writes to Yjs once, on drop
+
+`hooks/use-drag-and-drop.ts` (on @dnd-kit) writes nothing while a card or column is in flight. On drop it commits the move and runs `normalizeBoard` in one transaction, bracketed by `stopCapturing`. So peers see one move, not every hover, and the move is one undo step that can't merge into the previous edit.
+
+Holding Alt at the drop duplicates the card instead of moving it. The copy goes through `createCard`, so it gets a fresh `chatName`: a chat room belongs to one card, so a copy never shares the original's thread. dnd-kit reports no modifier keys on drop, so the hook tracks Alt itself and resets it when the window loses focus. Otherwise an Alt+Tab would swallow the keyup and make the next plain drag a duplicate.
+
+## The board reuses the comment UI
+
+Most of `board.tsx` wires shared comment modules rather than board code:
+
+- `CommentLifecycleDialogs` for the card dialog, edit form, resolve and delete flows.
+- `useCommentFilter({ status: 'all' })` drives column contents, so resolved cards stay on the board. The toolbar adds the filter menu, a color row and a summary chip.
+- `PanelColumn` shows the activity panel on desktop only. On mobile the toolbar hides its toggle, because the panel has nowhere to render.
+- One `useContextMenu` opens on right-click and on long-press. Cards are `touch-none` for the drag sensor, which suppresses the native context menu on touch.
+- `DocSearchProvider` with `useStickiesDocSearch` highlights matching cards and columns. The palette's comment search reveals a card by its `chatName`.
+
+## See also
+
+- [COMMENTS.md](COMMENTS.md): the card model, lifecycle hooks and shared components
+- [COLLAB.md](COLLAB.md): the Yjs server, `useCollabDoc` and version restore
+- [CANVAS.md](CANVAS.md): how the canvas repairs a merge in its reader instead

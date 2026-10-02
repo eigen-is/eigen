@@ -1,14 +1,20 @@
-import type { S3Config } from '@workspace/lib/types/mount';
+import { EMPTY_S3, type S3Config } from '@workspace/lib/types/mount';
 import type { ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { JsonStore } from '../core/json-store';
 import { LocalFilesystem } from '../core/local-filesystem';
-import { getServerDataPath } from './paths';
+import { getServerDataPath, SERVER_FILES } from './paths';
 
 export { mapStorageType } from '@workspace/lib/types/settings';
 
+// A server with no backup set up, and what an admin who is not the owner reads of the backup settings.
+export const DEFAULT_BACKUPS: ServerSettings['backups'] = {
+    schedule: { enabled: false, hourUtc: 2, withS3: false, keep: 7 },
+    upload: { enabled: false, s3: EMPTY_S3, keep: 30 },
+};
+
 const serverFs = new LocalFilesystem(getServerDataPath());
-const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
+const settingsStore = new JsonStore<ServerSettings>(serverFs, SERVER_FILES.settings, {
     quotas: {
         mailAndContactsMaxMB: 100,
         defaultMountMaxSizeMB: 500,
@@ -55,16 +61,8 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
         senderAddress: '',
         relaySendsAsUsers: false,
     },
+    backups: DEFAULT_BACKUPS,
 });
-
-let loaded = false;
-
-async function ensureLoaded() {
-    if (!loaded) {
-        await settingsStore.load();
-        loaded = true;
-    }
-}
 
 export function getServerSettings(): ServerSettings {
     return settingsStore.get();
@@ -86,4 +84,4 @@ export function getS3Config(): S3Config | undefined {
     return getServerSettings().defaults.mount.s3Config;
 }
 
-await ensureLoaded();
+await settingsStore.load();

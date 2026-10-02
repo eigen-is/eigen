@@ -14,7 +14,7 @@ import {
 } from '../../lib/collab/yjs-loader';
 import { ManagedDatabase } from '../../lib/core';
 
-// Unit tests for the capture/materialize split (proposal Phase 1). The capture
+// Unit tests for the capture/materialize split. The capture
 // transaction only SELECTs and copies blobs; materialization decompresses and
 // applies them — on the main thread (loadYjsState) or inside a transform Worker.
 // The corrupt-snapshot cases pin the update-pruning invariant the capture relies

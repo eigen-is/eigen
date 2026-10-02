@@ -6,19 +6,11 @@ import pkg from '../../../../package.json' with { type: 'json' };
 export const ROOT = join(import.meta.dir, '../../../..');
 export const ENV_PATH = '.env.production';
 export const DATA = 'data';
+export const BACKUPS = 'backups';
 export const VERSION = pkg.version;
 // The exit code of a question the operator said no to, which the launcher ends as a plain exit; DECLINED in ./eigen.
 export const DECLINED = 3;
 export const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/;
-// IMAGES in ./eigen.
-export const IMAGE_NAMES = ['api', 'frontend', 'postfix', 'dovecot', 'unbound'] as const;
-// The keys of the pins the launcher resolves on the host, where the Docker socket is; PINS in ./eigen holds them as
-// key=value lines.
-export const PIN_KEYS = [
-    'EIGEN_REGISTRY',
-    'EIGEN_VERSION',
-    ...IMAGE_NAMES.map((name) => `EIGEN_${name.toUpperCase()}_IMAGE`),
-];
 
 type Owner = { uid: number; gid: number };
 

@@ -21,7 +21,7 @@ export function eventPillStateClasses(
     );
 }
 
-// All-day bounds are midnight UTC with an exclusive end (docs/CALENDAR.md § All-day events, intervals and zone-less rendering).
+// All-day bounds are midnight UTC with an exclusive end (docs/CALENDAR.md § An all-day event is midnight UTC with an exclusive end).
 export function buildEventTimes(
     allDay: boolean,
     startDate: string,
