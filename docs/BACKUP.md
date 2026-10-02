@@ -358,10 +358,6 @@ Setup would write an `.env.production` and an org the restore throws away, so a 
 
 With Eigen stopped the update refuses, since the backup runs on the running server. `--no-backup` makes none and clears `.eigen/last-update`, so a rollback has nothing to go back to.
 
-## An update from 0.3.0 hands over to that image's snapshot
-
-The 0.3.0 launcher makes no pre-update backup and passes no archive. It asks the new image `snapshot --check` (`apps/api/src/cli/snapshot.ts`, which serves that call alone), which answers `kind=full` for a breaking update, and passes that on as `--full`. The new launcher's `update_apply` then saves a snapshot with the 0.3.0 image after the stop, in `snapshots/`, and records that image beside it in `.eigen/last-update`. A retry of an update from 0.3.0 that failed after the new version's files were written does the same, since the running 0.3.0 CLI has no `backup`. Only 0.3.0 can put such a snapshot back, so `./eigen rollback` prints three commands: bring back 0.3.0's launcher, restore the snapshot with it, and clear what the new version recorded.
-
 ## An archive holds what the API can read
 
 The backup runs in the API, whose container mounts `data/`, `backups/` and `.env.production` and nothing else of the install. So `caddy-data/`, `docker-compose.override.yml` and the Postfix queue, a Docker volume of its own, are not in an archive, and `backups/` would hold itself. Caddy gets its certificates again. A restored TLS certificate is only as fresh as the archive: Caddy exports its own again, and behind another web server the certbot hook runs on the next renewal. The bucket's keys are inside the archives only ([Upload goes to a bucket of its own](#upload-goes-to-a-bucket-of-its-own)). What the operator keeps by hand, in their words: the help center's [What a backup leaves out](https://eigen.is/support/self-hosting/back-up-and-restore#what-a-backup-leaves-out).

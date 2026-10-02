@@ -909,12 +909,8 @@ status() {
 
     runner=cli
     case $services in *"eigen-api${tab}running$tab"*) runner=api_cli ;; esac
-    # The status of Eigen 0.3.0, which runs on after an update that failed past its files, refuses --backups.
-    backups=''
-    if "$runner" status --help </dev/null 2>/dev/null | grep -q -- --backups; then
-        backups="--backups=$(ls backups 2>/dev/null || :)"
-    fi
-    set -- --install="$PWD" --services="$services" --mail-queue="$queue" ${backups:+"$backups"} ${newer:+"$newer"}
+    set -- --install="$PWD" --services="$services" --mail-queue="$queue" --backups="$(ls backups 2>/dev/null || :)" \
+        ${newer:+"$newer"}
     bundle=$(stale_bundle)
     if [ -n "$bundle" ]; then
         files=$(describe "$bundle")
@@ -1009,7 +1005,7 @@ restore() {
 }
 
 update() {
-    target='' check=0 accept='' pulled=0 full='' light=--light saved='' no_backup='' previous=''
+    target='' check=0 accept='' pulled=0 full='' saved='' no_backup='' previous=''
     help_flag update "$@"
     for arg in "$@"; do
         case $previous in --saved)
@@ -1020,10 +1016,10 @@ update() {
         case $arg in
             --check) check=1 ;;
             --accept-breaking) accept=--accept-breaking ;;
-            --full) full=--full light='' ;;
+            --full) full=--full ;;
             --no-backup) no_backup=--no-backup ;;
             # The handover from the launcher that got the new version to the one that came with it, with the backup
-            # it made, or --no-backup. Eigen 0.3.0's passes neither.
+            # it made, or --no-backup.
             --pulled) pulled=1 ;;
             --saved) ;;
             -*) refuse update "$arg" ;;
@@ -1101,20 +1097,9 @@ update_get() {
     checked=0
     cli update-check --from "$old_version" $accept || checked=$?
     case $checked in 0) ;; "$DECLINED") exit 0 ;; *) exit "$checked" ;; esac
-    # A retry of an update from Eigen 0.3.0 that failed past its files finds 0.3.0 running, whose CLI has no backup: its
-    # image saves a snapshot after the stop, as 0.3.0's own handover has it do. Asked of the CLI, since a build of
-    # main may carry either under one version.
-    handover='' old_cli=''
-    if [ -n "$no_backup" ]; then
-        handover=--no-backup
-    else
-        case $(with_image "$(image api)" cli backup --help 2>&1 </dev/null || :) in
-            *'Unknown command "backup"'*) old_cli=1 ;;
-        esac
-        if [ -z "$old_cli" ] && ! api_running; then
-            die "Eigen is not running, and the backup an update makes first runs on the running server." \
-                "Start it with ./eigen restart, then run ./eigen update again. Or copy data/ and .env.production somewhere safe, then run ./eigen update --no-backup."
-        fi
+    if [ -z "$no_backup" ] && ! api_running; then
+        die "Eigen is not running, and the backup an update makes first runs on the running server." \
+            "Start it with ./eigen restart, then run ./eigen update again. Or copy data/ and .env.production somewhere safe, then run ./eigen update --no-backup."
     fi
     step "Downloading Eigen $new" "Eigen $new downloaded" "Could not download Eigen $new" pull_images "$tag"
     downloaded=$(describe "$REGISTRY/api:$tag")
@@ -1130,9 +1115,8 @@ update_get() {
         levels=$(cli update-check --from "$old_version" --level </dev/null)
         level=$(answer level "$levels")
     fi
-    if [ -n "$old_cli" ]; then
-        if [ "$level" = full ]; then handover=--full; fi
-    elif [ -z "$no_backup" ]; then
+    handover=--no-backup
+    if [ -z "$no_backup" ]; then
         NEXT="Eigen $current runs on as it was. Fix what it says, then run ./eigen update again. Or copy data/ and .env.production somewhere safe, then run ./eigen update --no-backup."
         step "Backing up Eigen $current, $level" "Backed up Eigen $current" "Could not back up Eigen $current" \
             api_cli backup --level "$level" --reason pre-update --wait
@@ -1172,23 +1156,10 @@ update_apply() {
     # From the stop on, whatever ends the update starts Eigen again.
     AT_EXIT=restart
     stop
-    # The launcher of Eigen 0.3.0 hands over without a backup: its image saves a snapshot, which only it can put
-    # back, so .eigen/last-update names that image too, for the way back ./eigen rollback prints.
-    if [ -z "$saved" ] && [ -z "$no_backup" ]; then
-        kind=full
-        if [ -n "$light" ]; then kind=light; fi
-        step "Saving a $kind snapshot" "Snapshot saved" "Could not save the snapshot" \
-            with_image "$old_image" cli_as 0 snapshot --pre-update $light
-        echo "$old_image" >>.eigen/last-update
-    fi
     step "Switching to Eigen $new" "Switched to Eigen $new" "Could not write Eigen $new into .env.production" \
         with_pins cli configure --backfill
     # Only a switch makes the backup the way back; an update without one leaves none to an older build.
-    if [ -n "$saved" ]; then
-        echo "$saved" >.eigen/last-update
-    elif [ -n "$no_backup" ]; then
-        rm -f .eigen/last-update
-    fi
+    if [ -n "$saved" ]; then echo "$saved" >.eigen/last-update; else rm -f .eigen/last-update; fi
     AT_EXIT=''
     restart "Fix what it says, then run ./eigen restart, or ./eigen rollback to go back to Eigen $old."
     step "Removing old images" "Old images removed" "Could not remove the old images" prune_images $old_pins
@@ -1196,11 +1167,8 @@ update_apply() {
     if [ -n "$saved" ]; then
         say "$GRAY" '│' "Saved before the update: backups/$saved"
         say "$GRAY" '└' "./eigen rollback goes back to Eigen $old."
-    elif [ -n "$no_backup" ]; then
-        say "$GRAY" '└' "No backup was made before the update, so ./eigen rollback has nothing to go back to."
     else
-        say "$GRAY" '│' "Saved before the update: snapshots/$(sed -n 1p .eigen/last-update), a $kind snapshot"
-        say "$GRAY" '└' "./eigen rollback says how to go back to Eigen $old."
+        say "$GRAY" '└' "No backup was made before the update, so ./eigen rollback has nothing to go back to."
     fi
 }
 
@@ -1226,17 +1194,6 @@ rollback() {
         die "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
     fi
     archive=$(sed -n 1p .eigen/last-update)
-    case $archive in eigen-*)
-        # The snapshot of the update from Eigen 0.3.0: only its launcher, with its image, puts it back.
-        back=$(sed -n 2p .eigen/last-update)
-        say "$ACCENT" '◆' "The update from Eigen 0.3.0 saved snapshots/$archive, which Eigen 0.3.0 puts back. Run:"
-        say "$GRAY" '│' "docker run --rm -v \"\$PWD:/install\" $back bootstrap --force --out /install"
-        say "$GRAY" '│' "EIGEN_API_IMAGE=$back ./eigen restore $archive"
-        say "$GRAY" '│' "rm -f .eigen/last-update .eigen/bundle"
-        say "$GRAY" '└' "The first brings back the launcher of Eigen 0.3.0, the second its data and version, the third clears what this version recorded."
-        exit 0
-        ;;
-    esac
     lock
     api_here
     current=$(describe "$(image api)")

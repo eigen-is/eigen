@@ -21,8 +21,8 @@ import { CERT_FILES, CERTS_DIR, DKIM_DIR, getDataRoot, SERVER_DIR } from '../con
 import { PATHS } from '../core/constants';
 import { ApiError } from '../core/errors';
 
-// Why the disk of `dir` has no room for `needed` bytes, or null: the one wording of every backup's, stage's and
-// snapshot's room check.
+// Why the disk of `dir` has no room for `needed` bytes, or null: the one wording of every backup's and stage's room
+// check.
 export function roomShortfall(what: string, needed: number, dir: string, where: string): string | null {
     const { bavail, bsize } = fs.statfsSync(dir);
     const free = bavail * bsize;

@@ -56,8 +56,6 @@ After the update, two files of 0.3.0 may be left over: `data/server/collab-epoch
 
 Does cron run `./eigen backup` for you? Check its line. The `--keep` option of 0.3.0 is gone: with it, `./eigen backup` stops with exit 2 and makes no backup. A stop before the backup has to go too, since the backup needs Eigen running. Backups made with `./eigen backup` stay until you delete them. To have Eigen keep a set number, turn on the nightly backup in **Settings → Backups** instead: it is off until the owner turns it on. See [Back up every night](/support/self-hosting/back-up-and-restore#back-up-every-night).
 
-Eigen 0.3.0 made its own kind of backup, a snapshot in `snapshots/`, and the update from 0.3.0 saves one the same way, with Eigen stopped. Only Eigen 0.3.0 can put it back. `./eigen rollback` then prints three commands instead: the first brings back the `eigen` command of 0.3.0, the second restores the snapshot with it, and the third clears what the newer version noted. Without a terminal, like in a script, add `--yes` to the second.
-
 ## What 1.0 means for your data
 
 Eigen is not 1.0 yet. Until then, a release can change how Eigen stores something, and it does not keep the old way working. It converts what you have once, or that data does not open after the update. Stickies boards are the exception: they keep working across releases.
