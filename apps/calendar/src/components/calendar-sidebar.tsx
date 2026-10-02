@@ -206,7 +206,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                     />
                 </SidebarSection>
 
-                <div className="overflow-auto flex-1">
+                <div className="app-gutter-bleed overflow-auto flex-1">
                     <SidebarSection
                         condensed={condensed}
                         title="My Calendars"

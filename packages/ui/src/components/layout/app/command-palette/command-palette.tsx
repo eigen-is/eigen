@@ -2,7 +2,6 @@ import { parseQuery, useCommandPalette, useCommandResults } from '@workspace/lib
 import type { CommandContext, PaletteResult, PaletteScope, Sections } from '@workspace/lib/types/command-palette';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandList } from '@workspace/ui/components/command';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@workspace/ui/components/dialog';
-import { cn } from '@workspace/ui/lib/utils';
 import type { KeyboardEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CommandFooter } from './command-footer';
@@ -144,10 +143,10 @@ export function CommandPalette({ ctx }: Props) {
                     shouldFilter={false}
                     value={selectedValue}
                     onValueChange={setSelectedValue}
-                    className={cn('rounded-md')}
+                    className="[&_[data-slot=command-input-wrapper]]:px-(--app-gutter-x)"
                 >
                     {scope && (
-                        <div className="flex items-center gap-2 px-3 pt-2">
+                        <div className="flex items-center gap-2 app-gutter-x pt-2">
                             <span className="rounded bg-muted px-2 py-0.5 text-xs">{SCOPE_CHIPS[scope]}</span>
                         </div>
                     )}
@@ -158,15 +157,19 @@ export function CommandPalette({ ctx }: Props) {
                         placeholder="Search and jump anywhere…"
                     />
                     {/* Fixed height keeps the dialog from jumping as the result set shrinks/grows. */}
-                    <CommandList ref={listRef} className="h-[420px] max-h-[420px]">
+                    {/* The gutter sits inside the scroller so results clear the overlay scrollbar; each group
+                        reaches back out by its items' px-2, so item text lines up with the search icon. */}
+                    <CommandList ref={listRef} className="h-[420px] max-h-[420px] app-gutter-x">
                         <CommandEmpty>
                             {docScopeNoDoc ? 'Open a document to search inside it' : 'No results.'}
                         </CommandEmpty>
                         {sections.topHit && (
-                            <CommandGroup heading="Top Hit">{renderResult(sections.topHit)}</CommandGroup>
+                            <CommandGroup heading="Top Hit" className="-mx-2 px-0">
+                                {renderResult(sections.topHit)}
+                            </CommandGroup>
                         )}
                         {sections.groups.map((g) => (
-                            <CommandGroup key={g.id} heading={g.heading}>
+                            <CommandGroup key={g.id} heading={g.heading} className="-mx-2 px-0">
                                 {g.items.map(renderResult)}
                             </CommandGroup>
                         ))}

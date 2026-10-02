@@ -30,7 +30,7 @@ export function ContactsSidebar({ condensed = false, onAssignLabel }: ContactsSi
                 renderTrigger={(content) => <Link to="/new">{content}</Link>}
             />
 
-            <div className="overflow-auto flex-1">
+            <div className="app-gutter-bleed overflow-auto flex-1">
                 <SidebarSection condensed={condensed}>
                     <SidebarItem
                         icon={<UsersRound className="h-4 w-4" />}
