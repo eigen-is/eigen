@@ -10,6 +10,7 @@ import { getMailDomain, isSetupRequired, updateServerConfig } from '../config/se
 import { updateServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { storedSender } from '../core/mailer';
+import { findDefaultTeamId } from '../org';
 import { checkS3Connection } from '../storage/s3-storage';
 import { clearSetupToken } from './setup-token';
 
@@ -324,6 +325,7 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
         await updateServerConfig({
             orgName: input.orgName,
             orgId: org.id,
+            defaultTeamId: findDefaultTeamId(org.id),
             setupCompleted: true,
             setupCompletedAt: new Date().toISOString(),
             mailDomain: getMailDomain(),

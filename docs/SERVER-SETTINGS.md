@@ -26,7 +26,7 @@ At boot `assertMailDomainUnchanged()` compares `MAIL_DOMAIN` with the recorded v
 
 ## Renaming the organization renames its default team
 
-`orgName` is the one identity field that changes after setup (`PUT /settings/organization`, `renameOrganization` in `apps/api/src/lib/org/org.ts`). The rename writes `config.json` and the better-auth organization. It also renames the team that still carries the old name, which is the default team setup made. A team renamed by hand keeps its name. The web address and the mail domain stay. `useUpdateOrgName` invalidates the public config, which carries the name to every app, and the team lists and the admin users list, which carry the default team's.
+`orgName` is the one identity field that changes after setup (`PUT /settings/organization`, `renameOrganization` in `apps/api/src/lib/org/org.ts`). The rename writes `config.json` and the better-auth organization. It also renames the default team, found by its pinned `defaultTeamId` ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#every-new-user-joins-the-default-team)), while it still carries the old name. A default team renamed by hand keeps its name, and so does every other team, even one named like the org. The web address and the mail domain stay. `useUpdateOrgName` invalidates the public config, which carries the name to every app, and the team lists and the admin users list, which carry the default team's.
 
 ## JsonStore merges onto defaults and fails closed
 

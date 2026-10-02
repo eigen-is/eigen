@@ -179,9 +179,9 @@ describe('Delete user', () => {
         const teamId = await createTeam(ctx, orgId, 'Delete User Team');
         await addMember(ctx, teamId, userId);
 
-        // The user-create hook auto-added the user to the default org
+        // The user-create hook auto-added the user to the default org and its default team
         expect(db.select().from(member).where(eq(member.userId, userId)).all()).toHaveLength(1);
-        expect(db.select().from(teamMember).where(eq(teamMember.userId, userId)).all()).toHaveLength(1);
+        expect(db.select().from(teamMember).where(eq(teamMember.userId, userId)).all()).toHaveLength(2);
 
         const delRes = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${userId}`, {
             method: 'DELETE',

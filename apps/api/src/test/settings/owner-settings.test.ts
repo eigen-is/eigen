@@ -461,8 +461,13 @@ describe('owner-only settings', () => {
             expect(org?.name).toBe('Acme Renamed');
         });
 
-        test('the team setup named after the organization follows the rename, and a team named by hand keeps its name', async () => {
-            const orgId = getServerConfig()?.orgId ?? '';
+        const nameOf = (id: string) =>
+            getAuthDrizzleDb().select({ name: teamSchema.name }).from(teamSchema).where(eq(teamSchema.id, id)).get()
+                ?.name;
+
+        test('the pinned default team follows the rename, and a team named like the organization by hand keeps its name', async () => {
+            const config = getServerConfig();
+            const orgId = config?.orgId ?? '';
             const current = getAuthDrizzleDb()
                 .select({ name: organizationSchema.name })
                 .from(organizationSchema)
@@ -477,18 +482,38 @@ describe('owner-only settings', () => {
                     body: JSON.stringify({ name: 'Acme Teams' }),
                 });
                 expect(res.status).toBe(200);
-                const nameOf = (id: string) =>
-                    getAuthDrizzleDb()
-                        .select({ name: teamSchema.name })
-                        .from(teamSchema)
-                        .where(eq(teamSchema.id, id))
-                        .get()?.name;
-                expect(nameOf(named.id)).toBe('Acme Teams');
+                expect(nameOf(config?.defaultTeamId ?? '')).toBe('Acme Teams');
+                expect(nameOf(named.id)).toBe(current?.name);
                 expect(nameOf(design.id)).toBe('Design');
             } finally {
                 getAuthDrizzleDb()
                     .delete(teamSchema)
                     .where(inArray(teamSchema.id, [named.id, design.id]))
+                    .run();
+            }
+        });
+
+        test('a default team renamed by hand keeps its name', async () => {
+            const defaultTeamId = getServerConfig()?.defaultTeamId ?? '';
+            getAuthDrizzleDb()
+                .update(teamSchema)
+                .set({ name: 'Everyone' })
+                .where(eq(teamSchema.id, defaultTeamId))
+                .run();
+            try {
+                const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/organization', {
+                    method: 'PUT',
+                    headers: JSON_HEADERS,
+                    body: JSON.stringify({ name: 'Acme Everyone' }),
+                });
+                expect(res.status).toBe(200);
+                expect(nameOf(defaultTeamId)).toBe('Everyone');
+            } finally {
+                // Named after the organization again, so the suite's closing rename takes it back too.
+                getAuthDrizzleDb()
+                    .update(teamSchema)
+                    .set({ name: getOrgName() })
+                    .where(eq(teamSchema.id, defaultTeamId))
                     .run();
             }
         });
