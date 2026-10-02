@@ -370,6 +370,16 @@ export function EmailDraft({
                     e.preventDefault();
                     handleSendEmail();
                 }}
+                // Enter in a field would submit the form, which sends; Shift+Enter too. Mod+Enter is the
+                // send hotkey's. ContactAutosuggest's own Enter, picking a suggestion, runs on the input first.
+                onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || e.metaKey || e.ctrlKey) return;
+                    if (e.nativeEvent.isComposing || !(e.target instanceof HTMLInputElement)) return;
+                    e.preventDefault();
+                    if (e.target.id === 'subject') {
+                        e.currentTarget.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
+                    }
+                }}
             >
                 <div className="space-y-1 app-gutter-x py-2 shrink-0">
                     <div className="grid grid-cols-[4rem_1fr] items-center border-b">

@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, email, compose, send]
 related: [mail/read-and-reply, mail/get-started]
 order: 90
-updated: 2026-06-08
+updated: 2026-10-02
 ---
 
 Composing a message in Mail takes a few seconds: add who it's going to, write a subject and a message, and click
@@ -38,7 +38,7 @@ you don't need them.
 
 ## Write your subject and message
 
-Click the **Subject** field and type a short summary of what the email is about.
+Click the **Subject** field and type a short summary of what the email is about. Press Enter to move on to the message.
 
 Click in the large area below and write your message. If you've set up an email signature, it's added to the
 bottom of the message for you. You can format the text, add lists, and insert links from the toolbar in the message

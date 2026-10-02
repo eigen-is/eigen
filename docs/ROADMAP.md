@@ -197,7 +197,6 @@ The product's stated core weakness ("I would not yet trust it with data you cann
 | Opening a document without editing changes its Modified time | XS | `destruct()` in `apps/api/src/lib/collab/collabDocument.ts:298` calls `touchUpdatedAt` whenever the last viewer leaves, so a document that was only read shows a new Modified time in Drive. Touch it only when an update arrived since the open. |
 | An IMAP login with the account password logs an INVALID_API_KEY error | XS | `verifyProtocolAuth` (`apps/api/src/lib/auth/protocol-auth.ts:48`) tries every password as an API key first, and Better Auth logs the miss as `ERROR [Better Auth] … INVALID_API_KEY` before the password check passes. Skip the key check for a password that cannot be a key, or keep its failure out of the log. |
 | A user created in Admin → Users joins the organization but not its team | S | The `user.create.after` hook's `authEnsureDefaultOrgMembership` (`apps/api/src/lib/auth/auth.ts:281-303`) adds an org member with no team, and nothing else adds new users to the team setup made, so only the setup admin is in it. Add every new org member to that team. |
-| Enter in Mail's To field submits the draft form | XS | The To field's `ContactAutosuggest` (`apps/mail/src/components/mail/email-draft.tsx:379`) gets no `onSubmit`, so an Enter with no suggestion open falls through to the form's `onSubmit` (:366-373), and an empty draft is saved. Have Enter in the field confirm the address, not submit. |
 
 ## Focused audits (future-proofing reviews)
 
