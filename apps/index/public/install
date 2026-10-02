@@ -13,7 +13,12 @@ if [ "${1:-}" = restore ]; then
 fi
 
 if [ -e docker-compose.yml ] || [ -e .env.production ]; then
-    echo "This folder already has an Eigen install. Run ./eigen setup to change it, or ./eigen update." >&2
+    # ./eigen restore needs no setup first: a folder whose .env.production has no DOMAIN restores as a new machine.
+    if [ "$command" = restore ]; then
+        echo "This folder already has an Eigen install. Run ./eigen restore <archive> in it." >&2
+    else
+        echo "This folder already has an Eigen install. Run ./eigen setup to change it, or ./eigen update." >&2
+    fi
     exit 1
 fi
 case $PWD in "${HOME:-}" | /)
