@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, storage, s3, settings, backup]
 related: [admin/storage-quotas, admin/server-settings]
 order: 70
-updated: 2026-09-13
+updated: 2026-10-02
 ---
 
 When Eigen stores files in an S3 bucket, it writes the whole file again on every save. If the bucket has no versioning, the previous copy is replaced and nothing can bring it back. The **Bucket safety** panel tells you where the bucket stands and can set it right for you.
@@ -15,7 +15,7 @@ Only the server owner can reach these settings.
 ## Open the panel
 
 1. Sign in as the owner and go to [Admin](/admin), then click **Settings** in the sidebar.
-2. Under **Defaults**, set **Storage Type** to **S3 Bucket**. The **S3 Configuration** form appears.
+2. Under **Defaults**, set **Storage Type** to **S3 bucket**. The **S3 Configuration** form appears.
 3. Fill in **Endpoint**, **Bucket**, **Region**, **Access Key ID**, and **Secret Access Key**. Fill in **Prefix** as well if your files live under a path inside the bucket.
 4. Click **Test Connection**.
 5. When the test reports that the connection worked, the **Bucket safety** panel appears below the form.
