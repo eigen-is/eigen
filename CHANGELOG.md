@@ -3,36 +3,41 @@
 All notable user-visible changes to Eigen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com).
 
-## [0.3.1] - 2026-10-01
+## [0.3.1] - 2026-10-02
 
-Whole-server backup and restore. Eigen backs up the whole server every night while it runs, can keep a copy in a bucket of its own, and puts a backup back with `./eigen restore`, on the same machine or a new one. Close every open document before you update from 0.3.0: an edit that has not reached the server is lost, offline edits included.
+Whole-server backup and restore. Eigen backs up the whole server every night while it runs, can copy each backup to a bucket of its own, and puts one back with `./eigen restore`, on the same machine or a new one. The steps are in the help center's [Self-hosting section](https://eigen.is/support/self-hosting/get-started). Close every open document before you update from 0.3.0: an edit that has not reached the server is lost, offline edits included.
 
 ### Added
 
-- **Nightly whole-server backup** — the owner turns it on in Settings → Backups: every user and team, the server's own databases and settings, `.env.production`, the DKIM key and the mail server's certificate, backed up at the hour you pick (in UTC) while Eigen runs, and the newest seven good ones kept (you set the count). **Back up now** makes one at any level, and backups made by hand stay until you delete them. A failed night notifies the owner and turns the Backup row of `./eigen status` red. A user or team with files gone from their disk or bucket is backed up without them, with a warning that notifies the owner and turns the row yellow; such a night never pushes out the last complete backup. Admins who are not the owner do not see the backup settings
-- **Backup bucket** — each backup that verifies uploads to a private S3 bucket of its own, which keeps its own count and always the newest complete backup. Eigen refuses a bucket or key it keeps files with, and a public bucket, and never shows the secret again. Keep the bucket's endpoint, name and keys somewhere other than the server: a new machine starts from them
-- **Whole-server restore** — `./eigen restore <backup>` unpacks and checks a whole-server backup while Eigen runs, then stops Eigen for the swap and starts it on the version the backup was made with. What it replaces is kept aside as `data.pre-restore-<date>-<time>`. A Light backup holds no files and no mail: its restore puts back the accounts, settings and databases, files added since drop out of Drive, and on drives that store files by name, files renamed, moved or trashed since do not open
-- **Restore on a new machine** — `curl -fsSL https://eigen.is/install | sh -s -- restore <backup>` sets Eigen up from a whole-server backup, with the version, settings and DKIM key it was made with, and no setup first
-- **One user or team from a server backup** — each server backup holds a per-home archive of every user and team under `homes/`. Copied into `backups/`, one restores from its Admin page
-- **Self-hosting help** — the help center has a Self-hosting section: install, update, back up and restore, move to another server, host your mail, and troubleshooting
-- **Release gate** — before a release is published, the previous published release is updated to it and rolled back, with a seeded document, sheet, event, contact and chat message checked after each step. A release with breaking changes publishes only when it says so, and a release tag publishes only when this file has a section for its version
-- **Font licenses** — the bundled fonts (Inter, Source Serif 4, JetBrains Mono and Excalifont) ship with their OFL 1.1 license text, and the licenses page lists them
+- **Nightly whole-server backup** — the owner turns it on in Settings → Backups: every user and team, the settings and databases, `.env.production` and the mail keys, newest seven kept. **Back up now** makes one by hand
+- **Backup bucket** — each backup can also go to a private S3 bucket of its own. Keep its keys off the server: a new machine starts from them
+- **Backup alerts** — the owner is notified, and `./eigen status` shows it, when a backup fails, misses the bucket or has warnings. A user or team with files gone from storage is backed up without them
+- **Restore** — `./eigen restore <backup>` puts a server backup back and keeps the old data aside. On a new machine, run `curl -fsSL https://eigen.is/install | sh -s -- restore <backup>`. Settings → Backups shows both
+- **One user or team** — restores from their Admin page out of a server backup
+- **Download original image** — on every image in docs, sheets, slides and vector, for viewers too. Images in documents take comments
+- **Font licenses** — the licenses page lists the bundled fonts with their OFL 1.1 text
 
 ### Changed
 
-- **Whole-server backups (breaking)** — `./eigen backup` backs up the running server into `backups/` instead of `snapshots/`: Full by default, `--light` without files and mail, `--s3` with the files in S3 buckets. It needs Eigen running, so a cron job that stops Eigen before it backs up now fails: drop the stop. `--keep` is gone: a cron line that passes it exits 2 and makes no backup. Backups made with `./eigen backup` stay until you delete them; the nightly backup in Settings → Backups keeps the count you set, and it is off until the owner turns it on. It exits 4 when the backup is good but did not reach the bucket. Eigen can no longer restore the snapshots in `snapshots/`
-- **Update and rollback** — `./eigen update` backs up the running server first and refuses with Eigen stopped: a Light backup, or a Full one when a release since yours lists a breaking change or with `--full`. `--no-backup` skips the backup. The two newest stay on the server and never go to the backup bucket. `./eigen rollback` puts that backup back with the version it names; after a Light one, files fare as after a Light restore, and mail stays as it is. After the update from 0.3.0, `./eigen rollback` prints the commands that go back to 0.3.0's snapshot
-- **Updating from 0.3.0** — close every open document first: every edit not yet on the server is lost, offline edits included. Open documents reload once when Eigen is back. A Drive, Mail, Calendar or Contacts tab keeps its old page until you reload it. `data/server/collab-epoch` and `data/server/collab-home-epochs.json` may be left over, and you can delete them
-- **One reload after a restore** — every open tab of a restored user or team reloads once, whatever app it shows
-- **`.env.production` permissions** — `.env.production` becomes readable by group 1000 (0640), so the API can put it in a backup. Docker Desktop is left as it is
-- **Mail containers** — Dovecot and Postfix start with a warning, instead of failing, when they cannot share the TLS key or the DKIM key with group 1000. A backup then leaves that key out
+- **Backups (breaking)** — `./eigen backup` writes to `backups/` instead of `snapshots/` and needs Eigen running: drop any cron step that stops Eigen, and drop `--keep`, which now makes no backup. Snapshots in `snapshots/` no longer restore
+- **Update and rollback** — `./eigen update` backs up first and refuses while Eigen is stopped. `./eigen rollback` puts that backup back with its version. After a restore, open tabs reload once
+- **Setup** — answer the mail domain question with the domain you already have email on. With mail off and no relay, setup warns that sign-in codes and invitations cannot go out
+- **Mail containers** — Dovecot and Postfix warn instead of failing when they cannot share the TLS or DKIM key with group 1000. The DKIM record prints on one line
+- **`.env.production`** — becomes mode 0640 for group 1000, so a backup can hold it
+- **Slides** — a slide menu on each thumbnail and on empty canvas replaces the + button. `9` opens the image picker in slides and vector
+- **Imports and exports** — every one shows a progress dialog
+- **Mail** — the list takes the full width while no mail is open
 - **Chat** — a guest can no longer invite people to a chat
 
 ### Fixed
 
-- **Backups with trashed files** — a file in the Trash of a drive that stores files by name, the default, no longer fails a backup. A user or team backup that failed to verify for that reason passes after **Verify**
-- **WebDAV uploads** — a WebDAV upload that states its size is held to the max upload size
-- **Mail** — a send with no recipients is refused with "Add at least one recipient" instead of a server error
+- **Backups** — a file renamed, moved, trashed or deleted during a backup no longer fails it, nor does a trashed file on a drive that stores files by name. **Verify** now passes such a backup
+- **Storage** — a save that races a folder rename is no longer lost, a stalled S3 bucket times out, and a document whose stored data is gone says so and offers version history
+- **Mail** — a send with no recipients says "Add at least one recipient" and keeps the draft open. A link to a deleted mail says "Email not found"
+- **Copy and paste** — a pasted image loads in docs and sheets, a vector or slides text box keeps its fonts in docs, and a refused copy says why
+- **Previews** — a text file over 1 MiB says it is too large instead of spinning, a `.vcf`, `.ics` or `.eml` stored as text opens, and quick look keeps its keys over a stickies card
+- **Uploads** — WebDAV holds an upload to the max upload size, and the help center's nginx snippet no longer caps uploads at 1 MB
+- **Small fixes** — a resolved comment thread stays resolved, Postfix waits for its certificate on a first boot, and a sheet viewer gets no hand cursor over a dropdown it cannot use
 
 ## [0.3.0] - 2026-09-25
 

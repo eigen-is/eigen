@@ -89,6 +89,8 @@ A row's state is a class in `packages/ui/src/styles/globals.css`, painted in the
 | `eigen-list-item-selected` | multi-selected | wash |
 | `eigen-tile` (`-active`, `-selected`) | grid tiles | a full border, because a stripe and wash on a tile's label strip read as stray chrome |
 
+A row keeps its right-hand text clear of the scroller's edge: `PersonList` and Mail's rows pad `pr-6`, Drive's date cell `pr-4` inside `app-gutter-x`. A macOS overlay scrollbar takes no layout width, so `scrollbar-gutter` can't reserve room for it, and its hover track paints over the row's last 16px or so.
+
 `ContextMenuAnchor` portals its zero-size trigger into `document.body`. The trigger sits at viewport coordinates, and a transformed ancestor (a dialog's centering translate) would otherwise become its containing block and open the menu somewhere else.
 
 ## Reordering uses dnd-kit, moving between lists uses native drag
