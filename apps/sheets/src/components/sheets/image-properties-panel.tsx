@@ -38,7 +38,7 @@ export function ImagePropertiesPanel({
                 onAspectLockChange={canWrite ? onAspectLockChange : undefined}
             />
             {canWrite && (
-                <div className="px-3 py-3">
+                <div className="app-gutter">
                     <Button variant="destructive" size="sm" className="w-full" onClick={onDelete}>
                         <Trash2 className="h-3.5 w-3.5 mr-1.5" />
                         Delete image

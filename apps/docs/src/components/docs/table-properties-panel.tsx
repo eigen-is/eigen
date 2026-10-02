@@ -97,7 +97,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                 </Button>
             </PropertySection>
 
-            <div className="px-3 py-3">
+            <div className="app-gutter">
                 <Button
                     variant="destructive"
                     size="sm"

@@ -98,7 +98,7 @@ export function CommentPanel({
                 </div>
             ) : (
                 <>
-                    <div className="space-y-2 p-2">
+                    <div className="space-y-2 app-gutter-x py-2">
                         {visible.map(({ card, entry }) => (
                             <PanelCard
                                 key={card.id}
@@ -113,7 +113,7 @@ export function CommentPanel({
                         ))}
                     </div>
                     {hidden > 0 && (
-                        <div className="px-3 pb-3 text-center text-[11px] text-muted-foreground">
+                        <div className="app-gutter-x pb-3 text-center text-[11px] text-muted-foreground">
                             {hidden} hidden ·{' '}
                             <button type="button" className="text-primary hover:underline" onClick={filter.clear}>
                                 Clear filters
