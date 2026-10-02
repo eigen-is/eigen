@@ -6,6 +6,7 @@ import {
     useStartServerBackup,
     useUploadServerArchive,
 } from '@workspace/lib/admin';
+import { getIndexAppUrl } from '@workspace/lib/api';
 import { BACKUP_KEEP_MAX, BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatTime } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
@@ -241,6 +242,20 @@ export function ServerBackupSection({
                 Backups stay in the backups folder of your Eigen install. Copy one off the server with{' '}
                 <code>{'scp you@server:/opt/eigen/backups/<name> .'}</code> Each file under homes/ in a backup is the
                 backup of one user or team: extract it into the backups folder to restore that one from its page.
+            </p>
+            <p className="text-xs text-muted-foreground">
+                A restore replaces the server this page runs on, so it runs on the command line. In the install folder,{' '}
+                <code>{'./eigen restore <name>'}</code> checks and unpacks a backup while Eigen runs, then stops Eigen,
+                swaps the data in and starts the version that made the backup. On a new machine, with nothing set up:{' '}
+                <code>{'curl -fsSL https://eigen.is/install | sh -s -- restore <name>'}</code>.{' '}
+                <code>./eigen rollback</code> puts back the backup the last update made. See{' '}
+                <a
+                    href={getIndexAppUrl('support/self-hosting/back-up-and-restore#put-a-backup-back')}
+                    className="text-link hover:underline"
+                >
+                    Put a backup back
+                </a>{' '}
+                in the help center.
             </p>
 
             <DeleteDialog
