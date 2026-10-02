@@ -134,7 +134,7 @@ PK: `(fromUserId, targetIdentifier)`. No share data, just the pair. Reconciliati
 
 - **Account created**: `databaseHooks.user.create.after` in `apps/api/src/lib/auth/auth.ts` (not for guests)
 - **Guest signs in**: every successful OTP verification ([GUEST-ACCESS.md](GUEST-ACCESS.md))
-- **Team member added**: `organizationHooks.afterAddTeamMember` on the `organization()` plugin in `apps/api/src/lib/auth/auth.ts`
+- **Team member added**: `organizationHooks.afterAddTeamMember` on the `organization()` plugin in `apps/api/src/lib/auth/auth.ts`, and the org join itself for the default team, since `addMember` skips that hook ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#every-new-user-joins-the-default-team))
 
 On new user, `reconcileSharesForNewUser()` (`apps/api/src/lib/share/reconciliation.ts`) runs, per source:
 
