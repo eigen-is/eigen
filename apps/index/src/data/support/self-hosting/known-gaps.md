@@ -6,7 +6,7 @@ category: Basics
 tags: [self-hosting, limits, roadmap, sso, backup]
 related: [self-hosting/get-started, self-hosting/update]
 order: 140
-updated: 2026-10-01
+updated: 2026-10-02
 ---
 
 Eigen is not 1.0 yet, and it is built by one person. The core works, but some things you may expect are not there. This page lists the ones people ask about, so you can decide before you install. No need to report these as bugs.
@@ -28,7 +28,7 @@ Eigen is not 1.0 yet, and it is built by one person. The core works, but some th
 | Missing | What there is today |
 |---|---|
 | Single sign-on (OIDC or SAML, like Authentik, Keycloak, or Microsoft) | Eigen's own accounts, with two-factor sign-in and app passwords |
-| The Mail app for mail hosted somewhere else | Keep your mail where it is and use your own mail app. Eigen then has no Mail app. See [Keep your existing mail](/support/self-hosting/keep-your-mail). |
+| The Mail app for mail hosted somewhere else | Leave your mail with your current provider (Proton Mail, Google Workspace, Microsoft 365, Fastmail…) and use your own mail app. Eigen then has no Mail app. See [Keep your existing mail](/support/self-hosting/keep-your-mail). |
 | Answers to calendar invitations from outside, without hosted mail | The answer lands in the organizer's own mailbox, and the guest's status on the event stays as it was |
 | Mail filters, out-of-office replies, and sending later | Not yet |
 

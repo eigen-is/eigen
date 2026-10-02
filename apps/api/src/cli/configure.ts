@@ -266,7 +266,7 @@ export async function configure(
                     message: 'Which mail domain will you use?',
                     help:
                         'Everyone signs in with an address on it, like jane@example.com.\n' +
-                        'Mailboxes live on this server or wherever its email is hosted now.',
+                        'Already have email on a domain? Answer it, so everyone signs in with that address.',
                     flag: '--mail-domain',
                 },
                 givenMailDomain,

@@ -10,7 +10,7 @@ An install is one folder, `/opt/eigen` in the quick start, that holds the `eigen
 - 10 GB of disk for the images, plus your data and its backups
 - Docker, with the Docker Compose plugin 2.20 or newer. Nothing else: no Bun, no Node
 - A domain you control
-- A mail relay when you keep your existing mail. When Eigen hosts your mail, only when your provider blocks outgoing port 25
+- A mail relay when your mail stays with your current provider. When Eigen hosts your mail, only when your provider blocks outgoing port 25
 
 Memory, disk and ports per setup, with the measurements behind them: [What you need to run Eigen](https://eigen.is/support/self-hosting/requirements). Two numbers the article leaves out: the api image is 2.6 GB of the images, and Docker's containerd image store, which keeps the downloaded layers too, takes 3.8 GB, 4.3 GB with mail. An update keeps the previous release's images for `./eigen rollback`, so there can be two sets.
 
@@ -149,4 +149,4 @@ ufw allow 587/tcp    # SMTP submission
 ufw allow 993/tcp    # IMAP
 ```
 
-Ports 25, 465, 587 and 993 are for hosted mail. Keeping your mail, leave them closed. Behind your own web server, 80 and 443 are that server's.
+Ports 25, 465, 587 and 993 are for hosted mail. If your mail stays with your current provider, leave them closed. Behind your own web server, 80 and 443 are that server's.

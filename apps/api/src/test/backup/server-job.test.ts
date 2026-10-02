@@ -257,6 +257,9 @@ describe('Server backup job', () => {
             db.run('PRAGMA foreign_keys = OFF');
             db.run('DELETE FROM paths WHERE id = ?', [folderId]);
             db.close();
+            const goodBefore = (await getServerBackupStatus()).newestGoodFullAt;
+            // Archive times have a resolution of one second, so this one cannot share the good one's.
+            await Bun.sleep(1_000);
             try {
                 const { job, archivePath } = await runJob({ reason: 'scheduled' });
                 expect(job.error).toBeUndefined();
@@ -275,7 +278,8 @@ describe('Server backup job', () => {
                 const status = await getServerBackupStatus();
                 expect(status.warned?.name).toBe(basename(archivePath));
                 expect(status.warned?.error).toBe('Warned');
-                expect(status.newestGoodFullAt).not.toBe(status.warned?.createdAt);
+                // A warned Full is no good one: the newest good Full stays where it was.
+                expect(status.newestGoodFullAt).toBe(goodBefore);
             } finally {
                 await deleteUserCompletely(damaged.id, null);
             }
@@ -522,10 +526,10 @@ describe('Server backup job', () => {
         async () => {
             quietRelay();
             spies.push(spyOn(homeRelay, 'pullHomeBackupBytes').mockResolvedValue(0));
-            // Sparse: a petabyte on paper, no disk behind it.
+            // Sparse: 8 TiB on paper, no disk behind it. ext4 refuses a file of 16 TiB.
             const stray = getServerDataPath('stray.bin');
             writeFileSync(stray, '');
-            truncateSync(stray, 2 ** 50);
+            truncateSync(stray, 2 ** 43);
             try {
                 const { job } = await runJob();
                 expect(job.error).toBeUndefined();

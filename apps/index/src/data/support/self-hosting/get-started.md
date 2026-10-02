@@ -7,7 +7,7 @@ tags: [self-hosting, install, server, getting-started]
 related: [self-hosting/requirements, self-hosting/install, self-hosting/update, self-hosting/back-up-and-restore]
 crossSections: [admin]
 order: 10
-updated: 2026-09-30
+updated: 2026-10-02
 ---
 
 You can run Eigen on a server of your own, with your own domain. Everything runs in Docker, and one command, `./eigen`, installs it, updates it, and backs it up. This page shows the way through the articles in this section.
@@ -17,7 +17,7 @@ You can run Eigen on a server of your own, with your own domain. Everything runs
 Check [what you need](/support/self-hosting/requirements): a Linux server, Docker, and a domain you control. Then decide two things, because the setup asks about them:
 
 - **Who handles HTTPS.** Eigen can take ports 80 and 443 and get its own certificate. If your server already runs a web server for other sites, let that one forward to Eigen instead. See [Run Eigen behind your own web server](/support/self-hosting/behind-your-web-server).
-- **Where your mail lives.** Eigen can host your mailboxes, or leave your mail where it is, at Gmail, Fastmail, Google Workspace, or your own mail server. Both are a full install. See [Host your mail on Eigen](/support/self-hosting/host-your-mail) and [Keep your existing mail](/support/self-hosting/keep-your-mail).
+- **Where your mail lives.** Eigen can host your mailboxes, or leave your mail where it is, at Proton Mail, Gmail, Google Workspace, Fastmail, or your own mail server. Both are a full install. See [Host your mail on Eigen](/support/self-hosting/host-your-mail) and [Keep your existing mail](/support/self-hosting/keep-your-mail).
 
 ## Install
 

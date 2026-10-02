@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
     COLLAB_EPOCH_MESSAGE,
@@ -10,6 +10,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import * as decoding from 'lib0/decoding';
 import { SERVER_RUNTIME_FILES } from '../../lib/config/paths';
 import { getDataEpoch, rotateHomeDataEpoch } from '../../lib/home/data-epoch';
+import { waitFor } from '../fault-storage-helpers';
 import { driveGet, drivePost, getTestContext, TEST_DATA_DIR } from '../setup';
 
 // A tab that loaded a document before ./eigen restore holds state the restored data lacks, and its sync would merge it
@@ -71,10 +72,12 @@ afterAll(() => {
 });
 
 describe('Collab data epoch', () => {
-    test('is kept in data/server/, so it outlives a restart', () => {
-        // The first use draws it and writes the file, so read the file after.
+    test('is kept in data/server/, so it outlives a restart', async () => {
+        // The first use draws it and writes the file without waiting, so wait for the file.
         const epoch = getDataEpoch(ownerId);
-        expect(epoch).toStartWith(readFileSync(join(TEST_DATA_DIR, 'server', SERVER_RUNTIME_FILES.epoch), 'utf8'));
+        const file = join(TEST_DATA_DIR, 'server', SERVER_RUNTIME_FILES.epoch);
+        await waitFor(() => existsSync(file));
+        expect(epoch).toStartWith(readFileSync(file, 'utf8'));
     });
 
     test('an open hands it out before the sync', async () => {

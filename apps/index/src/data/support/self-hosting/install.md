@@ -6,7 +6,7 @@ category: Install
 tags: [self-hosting, install, setup, docker, dns]
 related: [self-hosting/requirements, admin/get-started, self-hosting/host-your-mail, self-hosting/keep-your-mail]
 order: 30
-updated: 2026-09-30
+updated: 2026-10-02
 ---
 
 This takes you from an empty server to your first sign-in. The install itself is two lines. Check [what you need](/support/self-hosting/requirements) first. If your server already runs a web server for other sites, read [Run Eigen behind your own web server](/support/self-hosting/behind-your-web-server) before you start.
@@ -66,10 +66,10 @@ Name a version instead of `latest`, like `api:0.3.0`, to install a specific rele
 Setup asks five questions and suggests an answer for each. Press Enter to keep the suggestion.
 
 1. **Where will Eigen be hosted?** Your web address, like `eigen.example.com`.
-2. **Which mail domain will you use?** Everyone's address and sign-in is on it, like `jane@example.com`. It defaults to the web address. Keeping your mail? Answer the domain your addresses are on now. You cannot change it later, because every account is made on it.
+2. **Which mail domain will you use?** Every account's email address and sign-in ends in it, like `jane@example.com`. It defaults to the web address. If your mail stays with your current provider (Proton Mail, Google Workspace, Microsoft 365, Fastmail…), answer the domain your addresses are on now: everyone then signs in to Eigen with the email address they already have. You cannot change it later, because every account is made on it.
 3. **How do people reach Eigen over HTTPS?** Pick **Eigen handles it on ports 80 and 443**, and setup asks which email address Let's Encrypt may use. Or pick **My web server forwards to Eigen**, and setup asks where Eigen should listen for it.
 4. **Host email on this server?** Yes means Eigen hosts the mailboxes. No means your mail stays where it is. Both are a full install.
-5. **Which mail relay should Eigen send through?** Keeping your mail, you need one, or Eigen sends no email at all. Hosting mail, leave it empty unless your provider blocks outgoing port 25. See [Choose a mail relay](/support/self-hosting/mail-relay).
+5. **Which mail relay should Eigen send through?** If your mail stays with your current provider, you need a relay, or Eigen sends no email at all. If Eigen hosts your mail, leave it empty unless your provider blocks outgoing port 25. See [Choose a mail relay](/support/self-hosting/mail-relay).
 
 Then setup saves your answers, lists the DNS records to add, and starts Eigen. Run `./eigen setup` again whenever you want to change an answer. It keeps the others. `./eigen setup --help` lists the flags for a run without questions.
 
@@ -83,7 +83,7 @@ Lost the link? Run `./eigen setup` again for a fresh one.
 
 ## 7. Finish the mail
 
-- Hosting mail: add the mail DNS records in [Host your mail on Eigen](/support/self-hosting/host-your-mail).
-- Keeping your mail: check the relay and the sender in [Keep your existing mail](/support/self-hosting/keep-your-mail).
+- If Eigen hosts your mail, add the mail DNS records in [Host your mail on Eigen](/support/self-hosting/host-your-mail).
+- If your mail stays with your current provider, check the relay and the sender in [Keep your existing mail](/support/self-hosting/keep-your-mail).
 
 Then set up a nightly backup: [Back up and restore the whole server](/support/self-hosting/back-up-and-restore).
