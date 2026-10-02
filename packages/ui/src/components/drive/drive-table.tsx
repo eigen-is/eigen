@@ -244,7 +244,7 @@ export function DriveTable({
                             dir={sortDir}
                             onClick={() => onSortHeader('modified')}
                             align="right"
-                            className="hidden @[600px]:flex pl-2 pr-4"
+                            className="hidden @[600px]:flex px-2"
                         />
                     )}
                     {!hideActions && <div className={coarse ? 'block' : 'hidden @[800px]:block'} />}

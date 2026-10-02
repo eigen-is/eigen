@@ -136,7 +136,7 @@ export function DriveRow({
                 {formatFileSize(item.size)}
             </div>
             {!hideModified && (
-                <div className="hidden @[600px]:flex items-center justify-end pl-2 pr-4 py-1.5 whitespace-nowrap text-xs text-muted-foreground">
+                <div className="hidden @[600px]:flex items-center justify-end px-2 py-1.5 whitespace-nowrap text-xs text-muted-foreground">
                     {itemDate ? formatDateTime(itemDate) : 'Unknown'}
                 </div>
             )}

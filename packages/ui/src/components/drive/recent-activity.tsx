@@ -14,8 +14,8 @@ export function RecentActivity({ path }: RecentActivityProps) {
     return (
         <>
             <h3 className="eigen-section-label mt-6 mb-2">Recent activity</h3>
-            {/* -mx-3 cancels the panel gutter so each row's px-3 hover fill bleeds full-width while its content stays gutter-aligned. */}
-            <div className="-mx-3">
+            {/* Cancels the pane's gutter so each row's hover fill bleeds full-width; the row pads its content back in. */}
+            <div className="-mx-(--app-gutter-x)">
                 <ActivityEventList path={path} events={events} />
             </div>
         </>

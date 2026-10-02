@@ -226,7 +226,7 @@ export function DriveBrowser({
             onContextMenu={showNewFolder ? (e) => newFolderMenu.handleContextMenu(e, true) : undefined}
         >
             {!hideToolbar && (
-                <div className="flex items-center gap-2 h-10 px-3 border-b shrink-0">
+                <div className="flex items-center gap-2 h-10 app-gutter-x border-b shrink-0">
                     <DriveBreadcrumb
                         paths={breadcrumbPaths}
                         mountLabel={mountLabel}

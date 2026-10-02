@@ -36,7 +36,7 @@ export function ActivityRow({
     className,
 }: ActivityRowProps) {
     const rowClassName = cn(
-        'flex items-start gap-3 px-3 py-2.5 transition-colors',
+        'flex items-start gap-3 app-gutter-x py-2.5 transition-colors',
         (href || onOpen) && 'cursor-pointer hover:bg-muted/50',
         unread && 'bg-primary/5',
         className,
