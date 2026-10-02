@@ -963,8 +963,11 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: rollback after a swap cut off: exit $CODE, steps '$(steps)', '$ERR'"
     fi
+    # An aside there before the command, which the swap does not name, is not one it kept: finish_swap leaves it out.
     : >"$FIX/release/.eigen/restore-swap"
+    mkdir "$FIX/release/$kept"
     STUB_FAIL=compose-up launch release stop
+    rm -rf "${FIX:?}/release/$kept"
     if [ "$CODE" = 0 ] && [ "$(steps)" = 'restore --swap (ghcr.io/eigen-is/eigen/api:local)|stop|' ] &&
         [ ! -e "$FIX/release/.eigen/restore-swap" ] &&
         [ "$(printf '%s\n' "$OUT" | tail -n 2 | head -n 1)" = '└  Check that all is well.' ]; then
