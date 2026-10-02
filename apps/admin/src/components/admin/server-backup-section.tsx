@@ -243,20 +243,27 @@ export function ServerBackupSection({
                 <code>{'scp you@server:/opt/eigen/backups/<name> .'}</code> Each file under homes/ in a backup is the
                 backup of one user or team: extract it into the backups folder to restore that one from its page.
             </p>
-            <p className="text-xs text-muted-foreground">
-                A restore replaces the server this page runs on, so it runs on the command line. In the install folder,{' '}
-                <code>{'./eigen restore <name>'}</code> checks and unpacks a backup while Eigen runs, then stops Eigen,
-                swaps the data in and starts the version that made the backup. On a new machine, with nothing set up:{' '}
-                <code>{'curl -fsSL https://eigen.is/install | sh -s -- restore <name>'}</code>.{' '}
-                <code>./eigen rollback</code> puts back the backup the last update made. See{' '}
-                <a
-                    href={getIndexAppUrl('support/self-hosting/back-up-and-restore#put-a-backup-back')}
-                    className="text-link hover:underline"
-                >
-                    Put a backup back
-                </a>{' '}
-                in the help center.
-            </p>
+            <div className="space-y-1.5 text-xs text-muted-foreground">
+                <p>
+                    <strong>Restore</strong> runs on the server, not here: it replaces the server this page runs on. In
+                    the install folder:
+                </p>
+                <pre className="bg-muted rounded p-2 overflow-x-auto">{'./eigen restore <name>'}</pre>
+                <p>On a new machine, with nothing set up:</p>
+                <pre className="bg-muted rounded p-2 overflow-x-auto">
+                    {'curl -fsSL https://eigen.is/install | sh -s -- restore <name>'}
+                </pre>
+                <p>
+                    <code>./eigen rollback</code> puts back the backup the last update made.{' '}
+                    <a
+                        href={getIndexAppUrl('support/self-hosting/back-up-and-restore#put-a-backup-back')}
+                        className="text-link hover:underline"
+                    >
+                        Put a backup back
+                    </a>{' '}
+                    in the help center.
+                </p>
+            </div>
 
             <DeleteDialog
                 open={deleteOpen}
