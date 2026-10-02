@@ -1,6 +1,6 @@
 ---
 title: "Keep your existing mail"
-description: "Run Eigen while your mail stays at Gmail, Fastmail, Google Workspace, or your own mail server, and check that Eigen's own mail goes out through your relay."
+description: "Run Eigen while your mail stays at Proton Mail, Gmail, Google Workspace, Fastmail, or your own mail server, and check that Eigen's own mail goes out through your relay."
 type: how-to
 category: Mail
 tags: [self-hosting, mail, relay, sender, settings]
