@@ -649,11 +649,9 @@ stage_archive() {
     # The CLI says how an interrupt ended it, so the launcher waits for it.
     trap : INT TERM
     staged=0
-    # Without Compose's lines on the container it makes; its errors still print. A Compose without it ignores it.
-    export COMPOSE_PROGRESS=quiet
-    dc run --rm --no-deps $tty -e TERM -e NO_COLOR ${ARCHIVE_MOUNT:+-v} ${ARCHIVE_MOUNT:+"$ARCHIVE_MOUNT"} \
+    # Without Compose's lines on the container it makes; its errors still print.
+    dc --progress quiet run --rm --no-deps $tty -e TERM -e NO_COLOR ${ARCHIVE_MOUNT:+-v} ${ARCHIVE_MOUNT:+"$ARCHIVE_MOUNT"} \
         eigen-api restore "$STAGE_ARG" --stage $yes $s3 || staged=$?
-    unset COMPOSE_PROGRESS
     trap 'exit 130' INT TERM
     case $staged in
         0) ;;

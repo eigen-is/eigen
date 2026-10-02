@@ -75,7 +75,7 @@ case $1 in
     compose)
         shift
         while :; do
-            case $1 in --env-file | -f) shift 2 ;; *) break ;; esac
+            case $1 in --env-file | -f | --progress) shift 2 ;; *) break ;; esac
         done
         fails "compose-$1"
         case $1 in
