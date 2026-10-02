@@ -1,4 +1,5 @@
 import { useCheckSetupS3, useCompleteSetup, useHardenSetupS3 } from '@workspace/lib/admin';
+import { getAdminAppUrl } from '@workspace/lib/api';
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3 } from '@workspace/lib/types/mount';
@@ -102,7 +103,7 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <Button className="w-full" onClick={() => (window.location.href = '/')}>
+                        <Button className="w-full" onClick={() => (window.location.href = getAdminAppUrl('login'))}>
                             Go to Login
                         </Button>
                     </CardContent>
