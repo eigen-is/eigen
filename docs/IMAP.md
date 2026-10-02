@@ -132,7 +132,7 @@ How an operator turns mail on (DNS records, ports, certificates, fail2ban) is in
 
 ## Dovecot asks the API whether a password is right
 
-Dovecot's passdb runs `docker/dovecot/eigen-checkpassword`, which posts to `/internal/auth/verify`. That route is localhost-only and calls `verifyProtocolAuth`, the check CalDAV, CardDAV and WebDAV share: an app password first, then the primary password unless the account has 2FA. Postfix submission logins take the same path through Dovecot's auth listener.
+Dovecot's passdb runs `docker/dovecot/eigen-checkpassword`, which posts to `/internal/auth/verify`. That route is localhost-only and calls `verifyProtocolAuth`, the check CalDAV, CardDAV and WebDAV share: an app password first, then the primary password unless the account has 2FA. Only a value shaped like an app password, `APP_PASSWORD_LENGTH` ASCII letters (`apps/api/src/lib/auth/auth.ts`), is looked up as one, because Better Auth logs every missed lookup as an error. Postfix submission logins take the same path through Dovecot's auth listener.
 
 **The exit code tells a wrong password from a broken server.** A 401, 403 or 429 exits 1, Dovecot's "auth failed": the client gets `535` and asks for the password. A connection failure or any other status exits 111, "temporary failure": Postfix answers `454 4.7.0` and clients retry. A 200 with no `userId` is 111 too, because an answer the script can't read is a broken API, and never an open door. That is why the script reads the HTTP status instead of using `curl -f`, which exits the same way for a 401 as for a 500. A refused password mapped to 111 would also lose failures: Dovecot re-runs or drops the helper, so some attempts would never reach the failure limiter.
 
