@@ -1,10 +1,12 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import * as fs from 'node:fs';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
+import { createArchiveWriter } from '../../lib/backup/archive';
 import { buildServerFolderName } from '../../lib/backup/paths';
-import { snapshotServer } from '../../lib/backup/snapshot-server';
+import { appendInstallFiles, snapshotServer } from '../../lib/backup/snapshot-server';
 import { verifyFolder } from '../../lib/backup/verify';
 import {
     getAvatarsDir,
@@ -125,5 +127,27 @@ describe('Backup snapshotServer', () => {
         const record = await verifyFolder(copy);
         expect(record.status).toBe('failed');
         expect(record.failures.some((f) => f.startsWith(`${rel}: quick_check`))).toBe(true);
+    });
+});
+
+describe('Backup appendInstallFiles', () => {
+    test('a .env.production replaced under its mount fails the backup, naming ./eigen stop and restart', async () => {
+        const dir = mkdtempSync(join(TEST_DATA_DIR, 'install-files-'));
+        const envFile = join(dir, 'env.production');
+        process.env['EIGEN_ENV_FILE'] = envFile;
+        // Docker Desktop's view of a one-file mount whose host file got a new inode: access() passes, the read
+        // fails ENOENT.
+        const access = fs.accessSync;
+        const spy = spyOn(fs, 'accessSync').mockImplementation((file, mode) => {
+            if (file !== envFile) access(file, mode);
+        });
+        const writer = await createArchiveWriter(join(dir, 'archive.tar'));
+        try {
+            await expect(appendInstallFiles(writer)).rejects.toThrow('Run ./eigen stop, then ./eigen restart.');
+        } finally {
+            spy.mockRestore();
+            delete process.env['EIGEN_ENV_FILE'];
+            await writer.abort();
+        }
     });
 });

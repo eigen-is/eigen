@@ -7,6 +7,7 @@ import { stageAuthDbCopy } from '../auth/auth';
 import { getEnvFile } from '../config/env';
 import { getDataRoot, getServerDataPath, ORG_HOMES_DIR, SERVER_DATABASES, SERVER_FILES } from '../config/paths';
 import { getOrgName, getPublicConfig } from '../config/server-config';
+import { isEnoent } from '../core';
 import { stageEigenDbCopy } from '../share/db';
 import { stageWaitlistDbCopy } from '../waitlist/waitlist';
 import type { ArchiveWriter } from './archive';
@@ -108,6 +109,21 @@ function isReadable(filePath: string): boolean {
     }
 }
 
+// eigen-api mounts the one file, so it keeps the inode it started with: a .env.production an editor or `sed -i`
+// wrote anew since reads stale on Linux, and on Docker Desktop access() passes and the read fails ENOENT. Read, not
+// access(), so the second names itself.
+function readsEnvFile(envFile: string): boolean {
+    try {
+        fs.readFileSync(envFile);
+        return true;
+    } catch (error) {
+        if (!isEnoent(error)) return false;
+        throw new Error(
+            '.env.production was replaced since Eigen started, so the API cannot read it. Run ./eigen stop, then ./eigen restart.',
+        );
+    }
+}
+
 // `names` in `dir` when every one of them is readable, else none: a key without its DNS record or its
 // certificate restores nothing.
 function readableFiles(dir: string, names: readonly string[]): readonly string[] {
@@ -132,7 +148,7 @@ export async function appendInstallFiles(
     writer: ArchiveWriter,
 ): Promise<{ envFile: boolean; dkim: boolean; certs: boolean }> {
     const envFile = getEnvFile();
-    const hasEnvFile = envFile !== undefined && isReadable(envFile);
+    const hasEnvFile = envFile !== undefined && readsEnvFile(envFile);
     if (hasEnvFile) await writer.appendFile(SERVER_ARCHIVE_ENV_MEMBER, envFile);
     const held = { dkim: false, certs: false };
     for (const { dir, field, names } of INSTALL_FOLDERS) {

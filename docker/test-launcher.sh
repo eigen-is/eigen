@@ -5,7 +5,8 @@
 # refused in a local build, a failing compose config, stop, what update asks the CLI and names the builds, on a release
 # and on the main channel, the tags it refuses, a build whose images differ, a tag that moves during an update, a pinned
 # api image that is not here, the files an unfinished update left, the backup an update makes on the running API before
-# it writes anything and hands over, typed on a terminal too, update --no-backup with Eigen stopped, what setup
+# it writes anything and hands over, typed on a terminal too, update --no-backup with Eigen stopped, an update refused
+# while eigen-api reads a .env.production replaced since it started, what setup
 # downloads with and without pins and the build it records, backup on the running API, restore's stage and swap and
 # what each failure leaves, an archive uid 1000 cannot read, a running server backup waited out before the stop, an
 # update interrupted in that wait that stops and restarts nothing, a swap
@@ -39,7 +40,8 @@ trap 'rm -rf "$FIX"' EXIT
 # says so, as the CLI does. A run of bootstrap writes a Compose file into this folder, the starter keys into
 # .env.production when it names no release, keeping the registry it names, and a launcher that prints STUB_LAUNCHER on
 # stderr. Compose ps names eigen-api as running unless STUB_RUNNING=0, compose run (the stage) exits STUB_STAGE, and
-# compose exec of backup prints archive=STUB_ARCHIVE and exits STUB_EXEC. With a -t among a run's arguments,
+# compose exec of backup prints archive=STUB_ARCHIVE and exits STUB_EXEC, and one that reads $EIGEN_ENV_FILE prints
+# STUB_MOUNTED, the file eigen-api mounts, else .env.production. With a -t among a run's arguments,
 # update-check --level ends its line in \r\n, as Docker's pty does. A run of restore --env refuses a folder with a
 # .env.production.
 mkdir "$FIX/bin"
@@ -65,6 +67,7 @@ case $1 in
             ps) if [ "${STUB_RUNNING:-1}" = 1 ]; then echo eigen-api; fi ;;
             run) exit "${STUB_STAGE:-0}" ;;
             exec)
+                case " $* " in *' cat "$EIGEN_ENV_FILE" '*) cat "${STUB_MOUNTED:-.env.production}" ;; esac
                 case " $* " in *" backup "*)
                     echo "archive=${STUB_ARCHIVE-server-pre-update-light-20260101-000000.tar}"
                     exit "${STUB_EXEC:-0}"
@@ -190,7 +193,7 @@ launch() {
     : >"$FIX/calls.log"
     for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_REVISION STUB_LABEL_VERSION \
         STUB_LABEL_REVISION STUB_LABEL_REVISION_DOVECOT STUB_MOVED STUB_DIGEST STUB_RUN_FAIL STUB_CHECKED STUB_LEVEL \
-        STUB_SWAP_CUT STUB_SWAP_SLOW STUB_SWAP_KEPT STUB_RUNNING STUB_STAGE STUB_ARCHIVE STUB_EXEC; do
+        STUB_SWAP_CUT STUB_SWAP_SLOW STUB_SWAP_KEPT STUB_RUNNING STUB_STAGE STUB_ARCHIVE STUB_EXEC STUB_MOUNTED; do
         if [ -n "${!name+set}" ]; then vars+=("$name=${!name}"); fi
     done
     CODE=0
@@ -666,6 +669,21 @@ for SHELL_NAME in dash busybox host; do
         ok "$SHELL_NAME: update with Eigen stopped says how to update without the backup"
     else
         fail "$SHELL_NAME: update with Eigen stopped names no way on: '$ERR'"
+    fi
+    # eigen-api mounts .env.production by inode, here a hard link: a file written anew beside it is not what it reads.
+    ln "$FIX/release/.env.production" "$FIX/mounted.env"
+    { cat "$FIX/release/.env.production"; echo '# edited'; } >"$FIX/release/.env.new"
+    mv "$FIX/release/.env.new" "$FIX/release/.env.production"
+    STUB_MOUNTED=$FIX/mounted.env STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
+    rm "$FIX/mounted.env"
+    reset_release
+    if [ "$CODE" = 1 ] &&
+        printf '%s\n' "$ERR" | grep -q '■  .env.production was replaced since Eigen started, and Eigen still reads the old one.' &&
+        printf '%s\n' "$ERR" | grep -q '└  Run ./eigen stop, then ./eigen restart, then ./eigen update again.' &&
+        ! printf '%s\n' "$CALLS" | grep -Eq ' backup | bootstrap | stop$| up -d' && [ ! -e "$FIX/release/.eigen/last-update" ]; then
+        ok "$SHELL_NAME: update refuses before its backup while eigen-api reads a .env.production replaced since it started"
+    else
+        fail "$SHELL_NAME: update with a replaced .env.production: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     echo server-pre-update-light-20250101-000000.tar >"$FIX/release/.eigen/last-update"
     STUB_RUNNING=0 STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update --no-backup

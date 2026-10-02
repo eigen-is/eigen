@@ -1097,9 +1097,18 @@ update_get() {
     checked=0
     cli update-check --from "$old_version" $accept || checked=$?
     case $checked in 0) ;; "$DECLINED") exit 0 ;; *) exit "$checked" ;; esac
-    if [ -z "$no_backup" ] && ! api_running; then
-        die "Eigen is not running, and the backup an update makes first runs on the running server." \
-            "Start it with ./eigen restart, then run ./eigen update again. Or copy data/ and .env.production somewhere safe, then run ./eigen update --no-backup."
+    if [ -z "$no_backup" ]; then
+        if ! api_running; then
+            die "Eigen is not running, and the backup an update makes first runs on the running server." \
+                "Start it with ./eigen restart, then run ./eigen update again. Or copy data/ and .env.production somewhere safe, then run ./eigen update --no-backup."
+        fi
+        # eigen-api mounts the one file, so it keeps the inode it started with: a .env.production an editor or sed -i
+        # wrote anew since is not the one it reads, and the backup would hold the old one, or fail. Only a start of the
+        # container mounts the new one, and an up recreates it only when the values changed.
+        if [ "$(dc exec -T eigen-api sh -c 'cat "$EIGEN_ENV_FILE"' 2>/dev/null | cksum)" != "$(cksum <.env.production)" ]; then
+            die ".env.production was replaced since Eigen started, and Eigen still reads the old one." \
+                "Run ./eigen stop, then ./eigen restart, then ./eigen update again."
+        fi
     fi
     step "Downloading Eigen $new" "Eigen $new downloaded" "Could not download Eigen $new" pull_images "$tag"
     downloaded=$(describe "$REGISTRY/api:$tag")
