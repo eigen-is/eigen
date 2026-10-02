@@ -216,9 +216,11 @@ export function EmailList({
                                     className="absolute inset-x-0 top-0"
                                     style={{ transform: `translateY(${vi.start}px)` }}
                                 >
+                                    {/* pr-6, as PersonList: a macOS overlay scrollbar takes no layout width and
+                                        paints its track over the row's right edge, so the date must clear it. */}
                                     <div
                                         className={cn(
-                                            'flex items-start gap-2.5 py-2 pl-4 pr-3 eigen-list-item',
+                                            'flex items-start gap-2.5 py-2 pl-4 pr-6 eigen-list-item',
                                             index > 0 && 'border-t border-border',
                                             // Open row: full active treatment (stripe + wash).
                                             isOpen && 'eigen-list-item-active',
