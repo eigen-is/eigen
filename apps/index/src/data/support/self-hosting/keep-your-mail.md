@@ -6,7 +6,7 @@ category: Mail
 tags: [self-hosting, mail, relay, sender, settings]
 related: [self-hosting/mail-relay, self-hosting/host-your-mail, admin/server-settings]
 order: 50
-updated: 2026-09-30
+updated: 2026-10-02
 ---
 
 When you answer no to **Host email on this server?**, your addresses and mailboxes stay where they are. Eigen hosts no mail. It still sends its own mail, like sign-in codes, invitations, and share notifications, through a relay you name at setup. This page covers what that looks like and how to check that the mail goes out.
@@ -14,7 +14,7 @@ When you answer no to **Host email on this server?**, your addresses and mailbox
 ## What changes without hosted mail
 
 - There is no Mail app. It disappears from the app switcher and the command palette, and so do the "Mail to…" actions and the IMAP card on the **Integrations** page. Opening `/mail` shows **Mail is turned off on this server**.
-- People still sign in with their address on your mail domain. Their mailboxes live wherever that domain's mail is hosted, so they keep using the mail app they have.
+- When setup asks **Which mail domain will you use?**, answer the domain your addresses are on now. Everyone then signs in to Eigen with the email address they already have: `jane@example.com` at Proton Mail is `jane@example.com` in Eigen too. Their mailboxes live wherever that domain's mail is hosted, so they keep using the mail app they have.
 - Calendar and Contacts work as on any Eigen, calendar and contacts apps included.
 - When someone outside Eigen answers a calendar invitation, the answer lands in the organizer's own mailbox. Eigen does not update that guest's status on the event.
 

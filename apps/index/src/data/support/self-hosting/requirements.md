@@ -6,7 +6,7 @@ category: Basics
 tags: [self-hosting, install, requirements, server, memory, ports]
 related: [self-hosting/install, self-hosting/get-started]
 order: 20
-updated: 2026-10-01
+updated: 2026-10-02
 ---
 
 Eigen runs in Docker on one server. This page lists what that server needs before you [install Eigen](/support/self-hosting/install).
@@ -31,7 +31,7 @@ These are the numbers for a small install, measured with one person signing in, 
 
 | Setup | Idle | Highest seen | Minimum | Recommended |
 |---|---|---|---|---|
-| You keep your existing mail | About 200 MB | About 850 MB | 2 GB | 4 GB |
+| Your mail stays with your current provider (Proton Mail, Google Workspace, Microsoft 365, Fastmail…) | About 200 MB | About 850 MB | 2 GB | 4 GB |
 | Eigen hosts your mail | About 250 MB | About 850 MB | 2 GB | 4 GB |
 
 Exports use the most memory. One sheet exported to PDF took Eigen to about 600 MB, and five PDF exports at once to about 850 MB. Hosting mail adds about 50 MB. The rest of the minimum is for the operating system and Docker.
@@ -65,8 +65,8 @@ Which ports must be open to the internet depends on two setup answers.
 | Eigen handles HTTPS | 80 and 443 (TCP) |
 | Your web server forwards to Eigen | None for Eigen. It listens on `127.0.0.1:8080` by default, and your web server keeps 80 and 443. |
 | Eigen hosts your mail | 25, 465, 587, and 993 (TCP) |
-| You keep your existing mail | None |
+| Your mail stays with your current provider | None |
 
 Leave SSH (22) open too, or whatever port you use for it.
 
-Hosting mail also needs outgoing port 25, so Eigen can deliver to other mail servers. Some providers block it on new accounts. Then you send through a relay, which also covers the case where you keep your mail. See [Choose a mail relay](/support/self-hosting/mail-relay).
+Hosting mail also needs outgoing port 25, so Eigen can deliver to other mail servers. Some providers block it on new accounts. Then you send through a relay, which you also need when your mail stays with your current provider. See [Choose a mail relay](/support/self-hosting/mail-relay).
