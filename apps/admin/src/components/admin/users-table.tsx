@@ -3,9 +3,8 @@ import { formatFileSize } from '@workspace/lib/format';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
 import type { SortDir } from '@workspace/ui';
-import { EmptyState, nextSortDir, SearchBar, SortHeader } from '@workspace/ui';
+import { EmptyState, nextSortDir, SearchBar, SortHeader, TooltipButton } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
-import { Button } from '@workspace/ui/components/button';
 import { UserAvatar } from '@workspace/ui/components/user';
 import { useListDrag } from '@workspace/ui/hooks/use-list-drag';
 import { useListSelection } from '@workspace/ui/hooks/use-list-selection';
@@ -45,9 +44,12 @@ export function AdminUsersToolbar({
                 maxWidth="full"
                 inputClassName="h-8 bg-background"
             />
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onShowCreateDialog(true)}>
-                <Plus className="h-4 w-4" />
-            </Button>
+            <TooltipButton
+                icon={Plus}
+                tooltipText="Create User"
+                className="shrink-0"
+                onClick={() => onShowCreateDialog(true)}
+            />
             <CreateUserDialog
                 open={showCreateDialog}
                 onOpenChange={onShowCreateDialog}
