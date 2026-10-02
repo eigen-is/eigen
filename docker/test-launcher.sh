@@ -36,7 +36,8 @@ trap 'rm -rf "$FIX"' EXIT
 # digest of every local image; a docker run with STUB_RUN_FAIL among its arguments fails, and one with --staged also
 # prints STUB_CHECKED, one of update-check --level prints level=STUB_LEVEL, one of snapshot --pre-update writes
 # .eigen/last-update, one of restore --env writes a .env.production that pins sha256:eee, and one of restore --swap
-# removes .eigen/restore-swap, or with STUB_SWAP_CUT=1 leaves one and fails, after 3 s with STUB_SWAP_SLOW=1. A run of bootstrap writes a Compose
+# removes .eigen/restore-swap, or with STUB_SWAP_CUT=1 leaves one and fails, after 3 s with STUB_SWAP_SLOW=1; with
+# STUB_SWAP_KEPT=<folder> it keeps that folder aside and says so, as the CLI does. A run of bootstrap writes a Compose
 # file into this folder, the starter keys into .env.production when it names no release, keeping the registry it
 # names, and a launcher that prints STUB_LAUNCHER on stderr. Compose ps names eigen-api as running unless
 # STUB_RUNNING=0, compose run (the stage) exits STUB_STAGE, and compose exec of backup prints archive=STUB_ARCHIVE and
@@ -138,6 +139,10 @@ case $1 in
                 exit 1
             fi
             rm -f .eigen/restore-swap
+            if [ -n "${STUB_SWAP_KEPT:-}" ]; then
+                mkdir -p "$STUB_SWAP_KEPT"
+                echo "◇  Kept aside: $STUB_SWAP_KEPT"
+            fi
             case ${STUB_CHECKED:-} in *EIGEN_API_IMAGE=*)
                 printf 'DOMAIN=eigen.example.com\n%s\n' "$STUB_CHECKED" >.env.production
                 ;;
@@ -211,7 +216,7 @@ launch() {
     : >"$FIX/calls.log"
     for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_REVISION STUB_LABEL_VERSION \
         STUB_LABEL_REVISION STUB_LABEL_REVISION_DOVECOT STUB_MOVED STUB_DIGEST STUB_RUN_FAIL STUB_CHECKED STUB_LEVEL \
-        STUB_SWAP_CUT STUB_SWAP_SLOW STUB_RUNNING STUB_STAGE STUB_ARCHIVE STUB_EXEC STUB_OLD_CLI; do
+        STUB_SWAP_CUT STUB_SWAP_SLOW STUB_SWAP_KEPT STUB_RUNNING STUB_STAGE STUB_ARCHIVE STUB_EXEC STUB_OLD_CLI; do
         if [ -n "${!name+set}" ]; then vars+=("$name=${!name}"); fi
     done
     CODE=0
@@ -907,12 +912,17 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: a swap cut off: exit $CODE, steps '$(steps)', '$ERR'"
     fi
-    launch local restart
+    # Cut off after its first rename, the swap had set data/ aside before the command that finishes it.
+    kept=data.pre-restore-20260101-000000
+    mkdir "$FIX/local/$kept"
+    STUB_SWAP_KEPT=$kept launch local restart
+    rm -rf "${FIX:?}/local/$kept"
     if [ "$CODE" = 0 ] && [ "$(steps)" = 'restore --swap (ghcr.io/eigen-is/eigen/api:local)|configure ghcr.io/eigen-is/eigen/api:local|share|up|share|up|' ] &&
-        [ ! -e "$FIX/local/.eigen/restore-swap" ]; then
-        ok "$SHELL_NAME: the next command finishes the swap first and starts Eigen, then does what it does"
+        [ ! -e "$FIX/local/.eigen/restore-swap" ] &&
+        [ "$(printf '%s\n' "$OUT" | tail -n 2 | head -n 1)" = '└  Check that all is well, then delete what was kept aside.' ]; then
+        ok "$SHELL_NAME: the next command finishes the swap first, starts Eigen, says to delete what the swap kept aside, then does what it does"
     else
-        fail "$SHELL_NAME: the next command after a swap cut off: exit $CODE, steps '$(steps)'"
+        fail "$SHELL_NAME: the next command after a swap cut off: exit $CODE, steps '$(steps)', '$OUT'"
     fi
     : >"$FIX/release/.eigen/restore-swap"
     echo ghcr.io/eigen-is/eigen/api@sha256:bbb >"$FIX/release/.eigen/bundle"
@@ -956,10 +966,11 @@ for SHELL_NAME in dash busybox host; do
     : >"$FIX/release/.eigen/restore-swap"
     STUB_FAIL=compose-up launch release stop
     if [ "$CODE" = 0 ] && [ "$(steps)" = 'restore --swap (ghcr.io/eigen-is/eigen/api:local)|stop|' ] &&
-        [ ! -e "$FIX/release/.eigen/restore-swap" ]; then
-        ok "$SHELL_NAME: stop finishes a swap that was cut off without starting Eigen, then stops it"
+        [ ! -e "$FIX/release/.eigen/restore-swap" ] &&
+        [ "$(printf '%s\n' "$OUT" | tail -n 2 | head -n 1)" = '└  Check that all is well.' ]; then
+        ok "$SHELL_NAME: stop finishes a swap that was cut off without starting Eigen, says it kept nothing aside, then stops it"
     else
-        fail "$SHELL_NAME: stop after a swap cut off: exit $CODE, steps '$(steps)', '$ERR'"
+        fail "$SHELL_NAME: stop after a swap cut off: exit $CODE, steps '$(steps)', '$OUT', '$ERR'"
     fi
     # Cut off between its two renames of .env.production, a swap leaves none: still an install, whose swap goes on.
     rm "$FIX/release/.env.production"

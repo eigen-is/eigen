@@ -747,8 +747,13 @@ finish_swap() {
     step "Finishing the restore that was cut off" "The restore that was cut off is finished" \
         "The restore that was cut off cannot be finished" with_image "$swapper" cli_as 0 restore --swap
     NEXT=''
+    # A swap cut off after a rename set its aside before this run, so its Kept aside line tells, read before the next
+    # step overwrites $LOG. An empty kept makes check_kept count every aside as kept.
+    kept=$(kept_aside)
+    if grep -q 'Kept aside: ' "$LOG"; then kept=''; fi
     after_swap "$swapper"
     if [ "$COMMAND" != stop ]; then restart; fi
+    check_kept
 }
 
 # The IDs of the mail containers, stopped ones too: fail2ban's jails follow their logs by container ID.
