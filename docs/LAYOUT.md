@@ -25,7 +25,7 @@ The toolbar is the `toolbar` prop of a `Column`, never part of the page content.
 
 ## Every horizontal inset is the one gutter
 
-**Every list, toolbar, header and pane takes its horizontal inset from `--app-gutter-x`**, through the `app-gutter-x` class, or `app-gutter` where it pads both axes (`packages/ui/src/styles/globals.css`). The gutter is 12px below the `sm` breakpoint (640px) and 20px from `sm` up. No component hand-rolls its own inset, so a row, its header and the toolbar above it share one left edge, and a Drive tile lines up with the toolbar's first item.
+**Every list, toolbar, header and pane takes its horizontal inset from `--app-gutter-x`**, through the `app-gutter-x` class, or `app-gutter` where it pads both axes (`packages/ui/src/styles/globals.css`). The gutter is 16px below the `sm` breakpoint (640px), wide enough for Mail's unread dot to sit centered in it clear of the sender, and 20px from `sm` up. No component hand-rolls its own inset, so a row, its header and the toolbar above it share one left edge, and a Drive tile lines up with the toolbar's first item.
 
 20px is what clears a macOS overlay scrollbar. It takes no layout width, so `scrollbar-gutter` can't reserve room for it, and its hover track paints over a scroller's last 16px or so. A scroller inside a padded parent (a dialog, a sidebar body) takes `app-gutter-bleed`: it reaches out by one gutter and pads its content back in, so the content keeps its edge and still clears the track. Whatever cancels the gutter (a hover fill that bleeds to the pane's edge) cancels it with the variable, `-mx-(--app-gutter-x)`, never a literal, so it follows the breakpoint.
 

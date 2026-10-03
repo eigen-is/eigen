@@ -346,7 +346,7 @@
         /* The one content gutter. Every list, toolbar, header and pane takes its
            horizontal inset from --app-gutter-x, which widens from the sm breakpoint
            up (below). */
-        --app-gutter-x: 0.75rem;
+        --app-gutter-x: 1rem;
         --app-gutter-y: 0.75rem;
 
         /* Topbar chrome tokens — a neutral background bar that follows the
