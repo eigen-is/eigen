@@ -6,6 +6,9 @@ import { EigenLoader } from '../braket/eigen-loader';
 import { MailComposeLink } from './mail-compose-link';
 import { OwnerInfoPopover } from './owner-info-popover';
 
+// AlphabeticalList sizes its letter box with this, so the letter centers over the avatar.
+export const USER_ITEM_AVATAR_SIZE = 'size-8';
+
 export type UserItemProps = Omit<HTMLAttributes<HTMLDivElement>, 'popover'> & {
     name?: string;
     email?: string;
@@ -39,7 +42,7 @@ export function UserItem({
 
     const row = (
         <div className={cn('flex min-w-0 items-center', className)} {...props}>
-            <Avatar className={'h-8 w-8 print-exact select-none'}>
+            <Avatar className={cn(USER_ITEM_AVATAR_SIZE, 'print-exact select-none')}>
                 <AvatarImage src={avatarSrc} alt={displayName} />
             </Avatar>
 
