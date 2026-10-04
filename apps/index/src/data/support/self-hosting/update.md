@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, update, rollback, release, breaking]
 related: [self-hosting/back-up-and-restore, self-hosting/commands-and-files]
 order: 80
-updated: 2026-10-02
+updated: 2026-10-04
 ---
 
 An update is one command, and so is going back. Eigen backs itself up before every update, so a rollback puts back the old version with the accounts, settings, and databases it had.
@@ -51,6 +51,8 @@ After a Full backup, a rollback puts back everything, files and mail included. A
 After a Light backup, the usual kind, a rollback puts back the accounts, settings, databases, and `.env.production`. The files and the mail stay on disk as they are now, but Drive lists only what it held before the update. Files and documents made since no longer show in Drive, and on drives that store files by their names, files renamed, moved, or put in the Trash since do not open. Calendars and contacts go back to before the update, and mail stays as it is. Nothing is deleted from disk. See [A Light backup leaves the files where they are](/support/self-hosting/back-up-and-restore#a-light-backup-leaves-the-files-where-they-are). To be able to go back with the files too, update with `./eigen update --full`.
 
 ### After the update from 0.3.0
+
+An install on 0.3.0 updates to 0.3.1 first: run `./eigen update 0.3.1`, then `./eigen update`.
 
 Close every open document before you update from 0.3.0. When Eigen comes back, an open document reloads, and every edit it had not sent to the server is lost, edits made while it was offline included. A Drive, Mail, Calendar, or Contacts tab opened on 0.3.0 does not reload by itself: it keeps the page it had until you reload it.
 
