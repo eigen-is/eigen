@@ -1129,7 +1129,7 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     for flags in '--light|light' '|full' '--full|full' '--s3|full-s3' '--s3 --wait|full-s3 --wait'; do
         # shellcheck disable=SC2086
         launch local backup ${flags%|*}
-        if [ "$CODE" != 0 ] || [ "$(printf '%s\n' "$CALLS" | grep ' exec ' | sed 's/^.* exec //')" != "-T -e TERM -e NO_COLOR eigen-api /app/docker/api/entrypoint.sh backup --level ${flags#*|}" ] ||
+        if [ "$CODE" != 0 ] || [ "$(printf '%s\n' "$CALLS" | grep ' exec .*/entrypoint.sh ' | sed 's/^.* exec //')" != "-T -e TERM -e NO_COLOR eigen-api /app/docker/api/entrypoint.sh backup --level ${flags#*|}" ] ||
             printf '%s\n' "$CALLS" | grep -Eq ' (stop|up)( |$)'; then
             failed="$failed '${flags%|*}' ($CODE)"
         fi
