@@ -273,7 +273,7 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
 }
 
 export function Topbar({ rootRoute }: TopbarProps) {
-    const { appName, documentTitle, isMobile } = useLayout();
+    const { appName, documentTitle, isMobile, sidebarMode } = useLayout();
     const auth = useAuth();
     const isGuest = useIsGuest();
     const { data: unreadCount = 0 } = useUnreadNotificationCount(auth.user?.id ?? '');
@@ -291,7 +291,13 @@ export function Topbar({ rootRoute }: TopbarProps) {
             {/* 1fr·auto·1fr grid keeps the title / command palette at the bar's true
                 center, independent of the left (logo) and right (actions) block widths */}
             <div className="grid h-12 items-center" style={{ gridTemplateColumns: '1fr auto 1fr' }}>
-                <div className="flex items-center app-gutter-x">
+                {/* Each block takes the inset of the column below it: the left one shares the sidebar's edge */}
+                <div
+                    className={cn(
+                        'flex items-center app-gutter-x',
+                        !isMobile && sidebarMode !== 'none' && 'app-gutter-sidebar',
+                    )}
+                >
                     {auth.isAuthenticated ? (
                         <AppSwitcher isGuest={isGuest} />
                     ) : (

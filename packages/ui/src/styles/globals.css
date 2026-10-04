@@ -415,6 +415,12 @@
         padding-inline: var(--app-gutter-x);
     }
 
+    /* The navigation sidebar's gutter beside the content: its items are padded
+       pills. The topbar's left block takes it too, to share the sidebar's edge. */
+    .app-gutter-sidebar {
+        --app-gutter-x: 0.75rem;
+    }
+
     /* The fit box a server-composed canvas page is scaled in. renderFittedPage
        (apps/api/src/lib/export/canvas/render.ts) emits the wrapper and its size as
        custom properties, so a 16:9 slide and a drawing of any ratio fit the same
