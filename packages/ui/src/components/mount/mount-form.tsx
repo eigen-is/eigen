@@ -1,4 +1,4 @@
-import { STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
+import { isStorageType, STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
@@ -86,7 +86,7 @@ export function MountForm({
                 <Label>Storage Type</Label>
                 <Select
                     value={storageType}
-                    onValueChange={(value) => setStorageType(value as MountFormValues['storageType'])}
+                    onValueChange={(value) => isStorageType(value) && setStorageType(value)}
                     disabled={isEdit}
                 >
                     <SelectTrigger>

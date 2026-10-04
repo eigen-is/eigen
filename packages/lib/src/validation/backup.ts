@@ -1,4 +1,4 @@
-import { STORAGE_TYPE_LABELS } from '../constants/mount';
+import { isStorageType } from '../constants/mount';
 import {
     BACKUP_JOB_STATES,
     BACKUP_KINDS,
@@ -122,10 +122,6 @@ function parseJson(text: string): unknown {
 
 function isKind(value: unknown): value is BackupManifest['kind'] {
     return BACKUP_KINDS.some((kind) => kind === value);
-}
-
-function isStorageType(value: string): value is MountConfig['storageType'] {
-    return Object.hasOwn(STORAGE_TYPE_LABELS, value);
 }
 
 // An unknown level is refused rather than read as complete: a restore trusts this field to say so.

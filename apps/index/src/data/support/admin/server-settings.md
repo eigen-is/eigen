@@ -5,7 +5,7 @@ type: reference
 tags: [admin, settings, quotas, storage, notifications, mail, backup]
 related: [admin/get-started, admin/storage-quotas, self-hosting/back-up-and-restore]
 order: 80
-updated: 2026-10-01
+updated: 2026-10-02
 ---
 
 The **Settings** page in Admin is where the server owner sets up the organization, mail, storage, backups, and notifications. Only the owner sees it in the sidebar.
@@ -65,11 +65,11 @@ Enter a number in each field. The **Save** button appears at the bottom of the p
 
 | Option | Where files are stored |
 |---|---|
-| **Local (Full names)** | On the server's local disk, using each file's real name |
+| **Local (full names)** | On the server's local disk, using each file's real name |
 | **Local (ID-based)** | On the server's local disk, using internal identifiers |
-| **S3 Bucket** | In an S3-compatible object storage bucket |
+| **S3 bucket** | In an S3-compatible object storage bucket |
 
-When you select **S3 Bucket**, an **S3 Configuration** form appears. Fill in all the fields below, then click **Test Connection** to confirm Eigen can reach the bucket before saving.
+When you select **S3 bucket**, an **S3 Configuration** form appears. Fill in all the fields below, then click **Test Connection** to confirm Eigen can reach the bucket before saving.
 
 | Field | What to enter |
 |---|---|

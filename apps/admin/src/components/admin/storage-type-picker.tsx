@@ -1,5 +1,7 @@
+import { STORAGE_TYPE_HINTS, STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult, ServerStorageType } from '@workspace/lib/types/settings';
+import { isServerStorageType, mapStorageType, SERVER_STORAGE_TYPES } from '@workspace/lib/types/settings';
 import { Label } from '@workspace/ui/components/label';
 import { S3ConfigCard } from '@workspace/ui/components/mount';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
@@ -41,16 +43,22 @@ export function StorageTypePicker({
         <div className="space-y-4">
             <div className="space-y-1.5">
                 <Label>Storage Type</Label>
-                <Select value={storageType} onValueChange={(v) => handleStorageTypeChange(v as ServerStorageType)}>
+                <Select
+                    value={storageType}
+                    onValueChange={(value) => isServerStorageType(value) && handleStorageTypeChange(value)}
+                >
                     <SelectTrigger className="w-48">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="local-id">Local (ID-based)</SelectItem>
-                        <SelectItem value="local-fullnames">Local (Full names)</SelectItem>
-                        <SelectItem value="s3">S3 Bucket</SelectItem>
+                        {SERVER_STORAGE_TYPES.map((type) => (
+                            <SelectItem key={type} value={type}>
+                                {STORAGE_TYPE_LABELS[mapStorageType(type)]}
+                            </SelectItem>
+                        ))}
                     </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">{STORAGE_TYPE_HINTS[mapStorageType(storageType)]}</p>
             </div>
 
             {isS3 && (

@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1603 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1607 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -888,7 +888,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (751)
+## Utilities & constants (755)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1119,6 +1119,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isLightColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `isSearchableTextFile` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `isStandardMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `isStorageType` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `lightenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `MAIL_PREVIEW_CHARS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MAILBOX_ARCHIVE` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
@@ -1147,6 +1148,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `specialMailboxFromFlags` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `STALE_TIME` | `@workspace/lib/constants` | packages/lib/src/constants/stale-time.ts |
 | `STANDARD_MAILBOXES` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `STORAGE_TYPE_HINTS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `STORAGE_TYPE_LABELS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `TEXT_PREVIEW_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `userColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
@@ -1313,6 +1315,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isInlineEditable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isOpenable` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isS3ConfigValid` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
+| `isServerStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `isStructuredTextFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `isVCardFile` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `keepsSavedSecret` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
@@ -1321,6 +1324,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mountStorageIdentity` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `orgOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `parseOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `SERVER_STORAGE_TYPES` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SSEventType` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `stripEigenExtension` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `teamOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |

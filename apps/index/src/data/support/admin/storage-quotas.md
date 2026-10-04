@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, quotas, storage, settings]
 related: [admin/server-settings, admin/teams]
 order: 60
-updated: 2026-10-01
+updated: 2026-10-02
 ---
 
 Storage quotas control how much space each user and team can use. You set server-wide defaults on the [**Settings**](/admin/settings) page, and you can raise those defaults for specific teams without changing the server-wide values. Only the server owner can access the **Settings** page.
@@ -36,9 +36,9 @@ The **Storage Type** setting under **Defaults** on the same **Settings** page co
 1. In [Admin Settings](/admin/settings), scroll to **Defaults**.
 2. Open the **Storage Type** dropdown and choose one of the following:
    - **Local (ID-based)**: files are stored on disk using internal identifiers rather than names.
-   - **Local (Full names)**: files are stored on the server's local disk using their original filenames.
-   - **S3 Bucket**: files are stored in an S3-compatible object storage bucket.
-3. If you select **S3 Bucket**, fill in the **S3 Configuration** fields (endpoint, bucket, prefix, region, access key ID, and secret access key) and click **Test Connection** to verify the credentials before saving.
+   - **Local (full names)**: files are stored on the server's local disk using their original filenames.
+   - **S3 bucket**: files are stored in an S3-compatible object storage bucket.
+3. If you select **S3 bucket**, fill in the **S3 Configuration** fields (endpoint, bucket, prefix, region, access key ID, and secret access key) and click **Test Connection** to verify the credentials before saving.
 4. Click **Save**.
 
 ## Override quotas for a team
