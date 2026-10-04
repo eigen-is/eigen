@@ -40,7 +40,7 @@ Per collection it writes one `<slug>.json` body (`{ html, mediaGrids }`) and one
 
 On the client, `mountReactApp` picks `hydrateRoot` when the container already has markup, and `main.tsx` renders `RouterClient` when `$_TSR` is present. The dev server has no bootstrap, so it falls back to a plain `RouterProvider`. Hydration reuses the prerendered DOM instead of rendering twice.
 
-Each page also gets its `<title>`, description and OG tags, and an article page gets a minimal `Article` JSON-LD block. The dehydration script differs per page, so `withInlineScriptHashes` (`vite.security-headers.ts` at the repo root) writes that page's script hashes into its CSP meta.
+Each page also gets its `<title>`, description and OG tags, and an article page gets a minimal `Article` JSON-LD block. The dehydration script differs per page, so `withInlineScriptHashes` (`vite.security-headers.ts` at the repo root) writes that page's script hashes into its CSP meta. It hashes each script as the browser parses it, NUL as U+FFFD and CR or CRLF as LF, because TanStack's dehydration writes NUL into match ids and a hash of the raw text would block the script.
 
 ## The canonical URL and the sitemap need `DOMAIN`
 
