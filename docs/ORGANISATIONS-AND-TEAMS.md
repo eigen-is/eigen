@@ -12,7 +12,7 @@ Every new non-guest user joins as `member` in `databaseHooks.user.create.after`,
 
 ## Every new user joins the default team
 
-`createOrganization` also makes a team named after the org, the default team, and setup pins its id as `defaultTeamId` in the server config. It is the team everyone is in, because the ACL has no entry for the whole org ([ACL.md](ACL.md)). Renaming the org renames it by that id ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#renaming-the-organization-renames-its-default-team)).
+`createOrganization` also makes a team named after the org, the default team, and setup pins its id as `defaultTeamId` in the server config. It is the team every new user joins, because the ACL has no entry for the whole org ([ACL.md](ACL.md)). Renaming the org renames it by that id ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#renaming-the-organization-renames-its-default-team)).
 
 The org join adds the user to the default team in the same `addMember` call, then runs `reconcileSharesForNewTeamMember` itself, because `addMember` skips `afterAddTeamMember`. That delivers what was shared with the team before the user existed. `addMember` refuses a team that is gone before it writes anything, org join included, so the hook first checks that the team still exists: a deleted default team never keeps a user out of the org. Its undo covers only a failure after the member row is written, such as a team member limit. The team join runs only with the org join, so a member an admin later removes from the team stays out.
 
