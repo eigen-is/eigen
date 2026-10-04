@@ -6,7 +6,7 @@ import { settingsApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
 import { authClient } from '../../auth/hooks/use-auth-client';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
-import { adminKeys, invalidateAdminMembers, invalidateAdminUsers } from './keys';
+import { adminKeys, invalidateAdminMembers, invalidateAdminTeams, invalidateAdminUsers } from './keys';
 
 const MEMBERS_PAGE_SIZE = 100;
 
@@ -130,6 +130,7 @@ export function useCreateUser(organizationId?: string) {
         },
         onSuccess: () => {
             invalidateAdminMembers(queryClient, organizationId ?? '');
+            invalidateAdminTeams(queryClient, organizationId ?? '');
             invalidateAdminUsers(queryClient);
         },
         onError: onMutationError,
