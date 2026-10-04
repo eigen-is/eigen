@@ -27,7 +27,7 @@ export function FilterSummary({ filter, onClear, inline = false }: FilterSummary
             className={
                 inline
                     ? 'flex items-center gap-2 text-[11px] text-muted-foreground'
-                    : 'flex items-center justify-between gap-2 border-b bg-primary/5 px-3 py-1 text-[11px] text-primary'
+                    : 'flex items-center justify-between gap-2 border-b bg-primary/5 app-gutter-x py-1 text-[11px] text-primary'
             }
         >
             <span className="truncate">{parts.join(' · ')}</span>

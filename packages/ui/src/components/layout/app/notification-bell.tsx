@@ -104,7 +104,7 @@ export function NotificationBell() {
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-80 sm:w-96 p-0" align="end">
-                <div className="flex items-center justify-between px-3 py-2 border-b">
+                <div className="flex items-center justify-between app-gutter-x py-2 border-b">
                     <span className="text-sm font-medium">Notifications</span>
                     {count > 0 && (
                         <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => markAllRead.mutate()}>

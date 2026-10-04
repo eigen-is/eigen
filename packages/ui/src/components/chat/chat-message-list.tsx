@@ -245,7 +245,7 @@ export function ChatMessageList({
                 const actionProps = hasActions ? bind(message) : {};
                 // Desktop-only hover affordance (fine pointer); touch has none — long-press opens the same menu.
                 const hoverActions = hasActions ? (
-                    <div className="absolute right-2 top-1 z-10 flex items-center rounded-md border bg-background shadow-sm invisible pointer-fine:group-hover:visible">
+                    <div className="absolute right-(--app-gutter-x) top-1 z-10 flex items-center rounded-md border bg-background shadow-sm invisible pointer-fine:group-hover:visible">
                         {actions.canSaveAttachments && (
                             <TooltipButton
                                 icon={Download}

@@ -41,7 +41,7 @@ export function DriveAccessList({ path, className, onShareClick, scrollable }: D
 
     return (
         <div className={cn('flex flex-col min-h-0', className)}>
-            <div className={cn(scrollable && 'min-h-0 overflow-y-auto')}>
+            <div className={cn(scrollable && 'app-gutter-bleed min-h-0 overflow-y-auto')}>
                 <CollapsibleUserList
                     title={title}
                     summaryLines={summary ? [summary] : undefined}

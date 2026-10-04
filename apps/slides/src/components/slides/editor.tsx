@@ -424,7 +424,7 @@ function SlideEditorInner({
                             onSwipeFrame={canEdit ? undefined : stepFrame}
                         />
                     </div>
-                    <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
+                    <div className="h-8 bg-muted border-t flex items-center justify-between app-gutter-x text-xs text-muted-foreground">
                         <span>
                             Slide {frameIndex + 1} of {doc.frames.length}
                         </span>

@@ -9,7 +9,7 @@ This doc governs how the apps behave on a phone, a tablet and a touch screen. Re
 | Width | Hook | Layout |
 |---|---|---|
 | up to 768px | `useIsMobile` | one column at a time; the sidebar is a full column |
-| 769 to 1024px | `useIsTablet` | the sidebar is a `w-16` rail (`SidebarProps.condensed`) |
+| 769 to 1024px | `useIsTablet` | the sidebar is a `w-20` rail (`SidebarProps.condensed`) |
 | from 1025px | `useIsDesktop` | the full `w-64` sidebar and every column side by side |
 
 An editor toolbar folds its format rows into a kebab on its own, wider gate, `useIsCompactToolbar` (1200px, docs 1400px). It is density only and says nothing about touch.

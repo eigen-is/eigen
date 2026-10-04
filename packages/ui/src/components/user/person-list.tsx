@@ -103,7 +103,7 @@ export function PersonList<T>({
                     renderItem={(item, flatIndex) => (
                         <div
                             className={cn(
-                                'flex items-center gap-3 px-6 py-3 eigen-list-item',
+                                'flex items-center gap-3 app-gutter-x py-3 eigen-list-item',
                                 renderMenuItems && 'group',
                                 (activeId === getId(item) || selectedIndex === flatIndex) && 'eigen-list-item-active',
                                 selectable && selection.isSelected(getSelectionId(item)) && 'eigen-list-item-selected',

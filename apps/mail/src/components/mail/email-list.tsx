@@ -216,11 +216,9 @@ export function EmailList({
                                     className="absolute inset-x-0 top-0"
                                     style={{ transform: `translateY(${vi.start}px)` }}
                                 >
-                                    {/* pr-6, as PersonList: a macOS overlay scrollbar takes no layout width and
-                                        paints its track over the row's right edge, so the date must clear it. */}
                                     <div
                                         className={cn(
-                                            'flex items-start gap-2.5 py-2 pl-4 pr-6 eigen-list-item',
+                                            'relative flex items-start py-2 app-gutter-x eigen-list-item',
                                             index > 0 && 'border-t border-border',
                                             // Open row: full active treatment (stripe + wash).
                                             isOpen && 'eigen-list-item-active',
@@ -238,16 +236,18 @@ export function EmailList({
                                         {...longPress.bind(email)}
                                         {...drag.getDragProps(email)}
                                     >
-                                        {/* Reserved dot gutter — fixed width so read/unread rows don't shift. */}
-                                        <div className="w-1.5 shrink-0 mt-2">
-                                            {!email.isRead && (
+                                        {/* Centered in the row's left gutter, so the text keeps the list's one left edge. */}
+                                        {!email.isRead && (
+                                            <span
+                                                aria-hidden
+                                                className="absolute left-0 top-4 flex w-(--app-gutter-x) justify-center"
+                                            >
                                                 <span
-                                                    aria-hidden
-                                                    className="block h-1.5 w-1.5 rounded-full"
+                                                    className="h-1.5 w-1.5 rounded-full"
                                                     style={{ backgroundColor: 'var(--app-current-color)' }}
                                                 />
-                                            )}
-                                        </div>
+                                            </span>
+                                        )}
                                         <div className="flex-1 min-w-0">
                                             {/* items-center (not items-baseline): the flag star is a non-text child, and
                                                 under baseline alignment its presence shifts the date up. Centering keeps
