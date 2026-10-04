@@ -236,6 +236,7 @@ export type SetupInput = {
     orgName: string;
     storageType: ServerStorageType;
     s3Bucket?: string;
+    s3Prefix?: string;
     s3Region?: string;
     s3AccessKeyId?: string;
     s3SecretAccessKey?: string;
@@ -267,7 +268,7 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
             s3Config = {
                 endpoint: input.s3Endpoint ?? '',
                 bucket: input.s3Bucket,
-                prefix: '',
+                prefix: input.s3Prefix ?? '',
                 accessKeyId: input.s3AccessKeyId,
                 secretAccessKey: input.s3SecretAccessKey,
                 region: input.s3Region,
