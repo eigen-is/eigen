@@ -8,6 +8,7 @@ import type {
     ServerSettings,
     ServerSettingsSaved,
 } from '@workspace/lib/types/settings';
+import { SERVER_STORAGE_TYPES } from '@workspace/lib/types/settings';
 import { eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, session, team, teamMember, user } from '../../auth-schema';
@@ -100,9 +101,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                     t.Object({
                         mount: t.Optional(
                             t.Object({
-                                storageType: t.Optional(
-                                    t.Union([t.Literal('local-id'), t.Literal('local-fullnames'), t.Literal('s3')]),
-                                ),
+                                storageType: t.Optional(t.UnionEnum(SERVER_STORAGE_TYPES)),
                             }),
                         ),
                     }),

@@ -1,8 +1,8 @@
 import type { DriveViewPreferences } from './drive';
-import type { S3Config } from './mount';
+import type { MountStorageType, S3Config } from './mount';
 
 export type MountSettings = {
-    storageType: 'local' | 'local-key' | 's3';
+    storageType: MountStorageType;
     maxSizeMB?: number;
     enabled: boolean;
     name?: string;

@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { S3Config } from '@workspace/lib/types/mount';
-import type { SetupResult, SetupStatus } from '@workspace/lib/types/settings';
+import type { ServerStorageType, SetupResult, SetupStatus } from '@workspace/lib/types/settings';
 import { validateEmailAddress, validateUsername } from '@workspace/lib/validation';
 import { auth } from '../auth/auth';
 import { getServerDataPath, SERVER_DATABASES } from '../config/paths';
@@ -234,7 +234,7 @@ async function resetAuthDatabase(): Promise<void> {
 
 export type SetupInput = {
     orgName: string;
-    storageType: 'local-fullnames' | 'local-id' | 's3';
+    storageType: ServerStorageType;
     s3Bucket?: string;
     s3Region?: string;
     s3AccessKeyId?: string;
