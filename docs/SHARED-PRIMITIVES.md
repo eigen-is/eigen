@@ -17,7 +17,6 @@ rather than inlining `queryClient.invalidateQueries`.
 |------|-------------|------|
 | `AboutDialog` | `@workspace/ui` | packages/ui/src/components/layout/app/about-dialog.tsx |
 | `ActivityRow` | `@workspace/ui` | packages/ui/src/components/activity-row.tsx |
-| `AlphabeticalList` | `@workspace/ui` | packages/ui/src/components/alphabetical-list.tsx |
 | `AppLogo` | `@workspace/ui` | packages/ui/src/components/layout/app/app-logo.tsx |
 | `AppShell` | `@workspace/ui` | packages/ui/src/components/layout/app/app-shell.tsx |
 | `AppSidebar` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
@@ -171,6 +170,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FindInDocumentButton` | `@workspace/ui/components/search` | packages/ui/src/components/search/find-in-document-button.tsx |
 | `FindInDocumentMenuItem` | `@workspace/ui/components/search` | packages/ui/src/components/search/find-in-document-button.tsx |
 | `UploadContainer` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-container.tsx |
+| `AlphabeticalList` | `@workspace/ui/components/user` | packages/ui/src/components/user/alphabetical-list.tsx |
 | `CollapsibleUserList` | `@workspace/ui/components/user` | packages/ui/src/components/user/collapsible-user-list.tsx |
 | `ContactDetailCard` | `@workspace/ui/components/user` | packages/ui/src/components/user/contact-detail-card.tsx |
 | `OwnerInfoPopover` | `@workspace/ui/components/user` | packages/ui/src/components/user/owner-info-popover.tsx |
@@ -1597,7 +1597,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `validateOrderKey` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `VECTOR_STYLE_DEFAULTS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/kind.ts |
 | `VERTICAL_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `alphaGroupKey` | `@workspace/ui` | packages/ui/src/components/alphabetical-list.tsx |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
 | `nextSortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
@@ -1637,6 +1636,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `buildDocSearchQuery` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 | `searchFlashKey` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 | `uploadWithProgress` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-with-progress.tsx |
+| `alphaGroupKey` | `@workspace/ui/components/user` | packages/ui/src/components/user/alphabetical-list.tsx |
 | `USER_ITEM_AVATAR_SIZE` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-item.tsx |
 | `isVectorFontLoaded` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
 | `loadVectorFont` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |

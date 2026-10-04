@@ -1,6 +1,6 @@
 import { cn } from '@workspace/ui/lib/utils';
 import { Fragment, type ReactNode } from 'react';
-import { USER_ITEM_AVATAR_SIZE } from './user/user-item';
+import { USER_ITEM_AVATAR_SIZE } from './user-item';
 
 // Group initial for person lists: diacritics fold (É → E), anything non-A–Z buckets under '#'.
 export function alphaGroupKey(label: string): string {

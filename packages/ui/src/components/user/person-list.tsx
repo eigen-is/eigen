@@ -6,8 +6,8 @@ import { useSelectableContextMenu } from '@workspace/ui/hooks/use-selectable-con
 import { cn } from '@workspace/ui/lib/utils';
 import { MoreVertical } from 'lucide-react';
 import { type ReactNode, useMemo, useRef } from 'react';
-import { AlphabeticalList, alphaGroupKey } from '../alphabetical-list';
 import { ContextMenuAnchor } from '../context-menu';
+import { AlphabeticalList, alphaGroupKey } from './alphabetical-list';
 
 type PersonListProps<T> = {
     items: T[];
