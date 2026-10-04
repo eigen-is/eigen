@@ -85,28 +85,32 @@ describe('a new user joins the default team', () => {
                 body: JSON.stringify({ folderName: `everyone-${randomUUID()}` }),
             }),
         );
-        const shared = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/default/path/${folder.id}/acl`,
-            {
+        const setAcl = (body: object) =>
+            authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/default/path/${folder.id}/acl`, {
                 method: 'PUT',
                 headers: JSON_HEADERS,
-                body: JSON.stringify({ add: [{ id: teamOwnerId(setupTeamId), read: true, write: false }] }),
-            },
-        );
+                body: JSON.stringify(body),
+            });
+        const shared = await setAcl({ add: [{ id: teamOwnerId(setupTeamId), read: true, write: false }] });
         expect(shared.status).toBe(200);
+        try {
+            const user = await adminCreatesUser('late-joiner');
+            const signIn = await auth.api.signInEmail({
+                returnHeaders: true,
+                body: { email: user.email, password: PASSWORD },
+            });
+            const token = signIn.headers.get('set-cookie')?.match(/better-auth\.session_token=([^;]+)/)?.[1] ?? '';
 
-        const user = await adminCreatesUser('late-joiner');
-        const signIn = await auth.api.signInEmail({
-            returnHeaders: true,
-            body: { email: user.email, password: PASSWORD },
-        });
-        const token = signIn.headers.get('set-cookie')?.match(/better-auth\.session_token=([^;]+)/)?.[1] ?? '';
-
-        await eventually(async () => {
-            const paths = await assertJson<DrivePath[]>(await authedRequest(token, `/drive/${user.id}/shared/with-me`));
-            return paths.find((p) => p.id === folder.id);
-        }, 'the team share in the new user’s Shared with me');
+            await eventually(async () => {
+                const paths = await assertJson<DrivePath[]>(
+                    await authedRequest(token, `/drive/${user.id}/shared/with-me`),
+                );
+                return paths.find((p) => p.id === folder.id);
+            }, 'the team share in the new user’s Shared with me');
+        } finally {
+            // A share left to the default team boots a Home for every user a later file creates.
+            expect((await setAcl({ remove: [teamOwnerId(setupTeamId)] })).status).toBe(200);
+        }
     });
 
     test('a member removed from the default team stays out after signing in again', async () => {
