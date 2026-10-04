@@ -1203,6 +1203,10 @@ rollback() {
         die "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
     fi
     archive=$(sed -n 1p .eigen/last-update)
+    if [ ! -f "backups/$archive" ]; then
+        die "The backup the last update made, backups/$archive, is gone." \
+            "./eigen rollback has nothing to go back to. To put back another backup: ./eigen restore <archive>"
+    fi
     lock
     api_here
     current=$(describe "$(image api)")

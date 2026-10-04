@@ -150,6 +150,7 @@ export async function pruneLocalArchives(): Promise<void> {
             archives.push({
                 ...record,
                 good: isGood(sidecar),
+                done: sidecar.state === 'done',
                 build: sidecar.manifest?.images[API_IMAGE_KEY],
             });
         } else unread.push(record.name);

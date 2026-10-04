@@ -1063,6 +1063,16 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
 
     echo server-pre-update-light-20260101-000000.tar >"$FIX/release/.eigen/last-update"
     STUB_CHECKED=$checked launch release rollback --yes
+    if [ "$CODE" = 1 ] &&
+        printf '%s\n' "$ERR" | grep -q '■  The backup the last update made, backups/server-pre-update-light-20260101-000000.tar, is gone.' &&
+        [ -z "$(steps)" ] && [ -e "$FIX/release/.eigen/last-update" ]; then
+        ok "$SHELL_NAME: rollback whose archive is gone says so before it stages anything"
+    else
+        fail "$SHELL_NAME: rollback without its archive: exit $CODE, steps '$(steps)', '$ERR'"
+    fi
+    : >"$FIX/release/backups/server-pre-update-light-20260101-000000.tar"
+    STUB_CHECKED=$checked launch release rollback --yes
+    rm "$FIX/release/backups/server-pre-update-light-20260101-000000.tar"
     if [ "$CODE" = 0 ] &&
         printf '%s\n' "$OUT" | grep -q '◆  Back from Eigen 0.2.99 (abc1234) to the backup the last update made' &&
         [ "$(steps)" = 'share|stage eigen-api restore server-pre-update-light-20260101-000000.tar --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|bootstrap ghcr.io/eigen-is/eigen/api@sha256:bbb|share|up|' ] &&

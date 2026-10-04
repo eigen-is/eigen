@@ -253,7 +253,7 @@ A home backed up with warnings has its member, and its entry carries the member'
 | Reason | Kept |
 |---|---|
 | scheduled | The newest `keep` good ones, whose job ended done on a complete archive, plus up to `keep` others newer than the newest good one: failed, or backed up with warnings |
-| pre-update | The same rule with a `keep` of two, plus the newest good one made by another build than the one running |
+| pre-update | The same rule with a `keep` of two, plus the newest one whose job ended done, warnings or not, made by another build than the one running |
 | manual | All of them; the owner deletes them |
 
 That last pre-update archive is the one `./eigen rollback` restores. `.eigen/last-update` names it, and the API cannot read that file. An update that failed after its backup leaves a newer archive, which must not push it out.
