@@ -36,7 +36,7 @@ It is named `server-pre-update-<level>-<date>-<time>.tar`. Eigen keeps the two n
 
 The backup runs on the running server, so with Eigen stopped `./eigen update` refuses. Start Eigen with `./eigen restart`, or copy `data/` and `.env.production` somewhere safe and run `./eigen update --no-backup`. Without a backup, `./eigen rollback` has nothing to go back to.
 
-It refuses too when you edited `.env.production` since Eigen started and Eigen still reads the file as it was. Run `./eigen restart`, then `./eigen update` again.
+On 0.3.2 and later, it refuses too when you edited `.env.production` since Eigen started and Eigen still reads the file as it was. Run `./eigen restart`, then `./eigen update` again.
 
 ## Go back with a rollback
 
