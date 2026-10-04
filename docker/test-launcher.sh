@@ -6,7 +6,8 @@
 # and on the main channel, the tags it refuses, a build whose images differ, a tag that moves during an update, a pinned
 # api image that is not here, the files an unfinished update left, the backup an update makes on the running API before
 # it writes anything and hands over, typed on a terminal too, update --no-backup with Eigen stopped, an update refused
-# while eigen-api reads a .env.production replaced since it started, what setup
+# while eigen-api reads a .env.production replaced since it started or cannot be asked, and backup refused and restart
+# stopping eigen-api first then, what setup
 # downloads with and without pins and the build it records, backup on the running API, restore's stage and swap and
 # what each failure leaves, an archive uid 1000 cannot read, a running server backup waited out before the stop, an
 # update interrupted in that wait that stops and restarts nothing, a swap
@@ -40,8 +41,8 @@ trap 'rm -rf "$FIX"' EXIT
 # says so, as the CLI does. A run of bootstrap writes a Compose file into this folder, the starter keys into
 # .env.production when it names no release, keeping the registry it names, and a launcher that prints STUB_LAUNCHER on
 # stderr. Compose ps names eigen-api as running unless STUB_RUNNING=0, compose run (the stage) exits STUB_STAGE, and
-# compose exec of backup prints archive=STUB_ARCHIVE and exits STUB_EXEC, and one that reads $EIGEN_ENV_FILE prints
-# STUB_MOUNTED, the file eigen-api mounts, else .env.production. With a -t among a run's arguments,
+# compose exec of backup prints archive=STUB_ARCHIVE and exits STUB_EXEC, and one that checksums $EIGEN_ENV_FILE
+# that of STUB_MOUNTED, the file eigen-api mounts, else .env.production. With a -t among a run's arguments,
 # update-check --level ends its line in \r\n, as Docker's pty does. A run of restore --env refuses a folder with a
 # .env.production.
 mkdir "$FIX/bin"
@@ -67,7 +68,10 @@ case $1 in
             ps) if [ "${STUB_RUNNING:-1}" = 1 ]; then echo eigen-api; fi ;;
             run) exit "${STUB_STAGE:-0}" ;;
             exec)
-                case " $* " in *' cat "$EIGEN_ENV_FILE" '*) cat "${STUB_MOUNTED:-.env.production}" ;; esac
+                case " $* " in *'cksum <"$EIGEN_ENV_FILE"'*)
+                    cksum <"${STUB_MOUNTED:-.env.production}" 2>/dev/null || echo unreadable
+                    ;;
+                esac
                 case " $* " in *" backup "*)
                     echo "archive=${STUB_ARCHIVE-server-pre-update-light-20260101-000000.tar}"
                     exit "${STUB_EXEC:-0}"
@@ -397,8 +401,8 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: mode detection: local '$local_calls', release '$CALLS'"
     fi
-    if shared release; then
-        ok "$SHELL_NAME: restart gives .env.production group 1000 and mode 0640, as root in a container, right before the start"
+    if shared release && ! printf '%s\n' "$CALLS" | grep -q ' stop eigen-api$'; then
+        ok "$SHELL_NAME: restart gives .env.production group 1000 and mode 0640, as root in a container, right before the start, and stops nothing"
     else
         fail "$SHELL_NAME: restart does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
@@ -692,15 +696,40 @@ for SHELL_NAME in dash busybox host; do
     { cat "$FIX/release/.env.production"; echo '# edited'; } >"$FIX/release/.env.new"
     mv "$FIX/release/.env.new" "$FIX/release/.env.production"
     STUB_MOUNTED=$FIX/mounted.env STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
-    rm "$FIX/mounted.env"
-    reset_release
     if [ "$CODE" = 1 ] &&
         printf '%s\n' "$ERR" | grep -q '■  .env.production was replaced since Eigen started, and Eigen still reads the old one.' &&
-        printf '%s\n' "$ERR" | grep -q '└  Run ./eigen stop, then ./eigen restart, then ./eigen update again.' &&
+        printf '%s\n' "$ERR" | grep -q '└  Run ./eigen restart, then ./eigen update again.' &&
         ! printf '%s\n' "$CALLS" | grep -Eq ' backup | bootstrap | stop$| up -d' && [ ! -e "$FIX/release/.eigen/last-update" ]; then
         ok "$SHELL_NAME: update refuses before its backup while eigen-api reads a .env.production replaced since it started"
     else
         fail "$SHELL_NAME: update with a replaced .env.production: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    STUB_MOUNTED=$FIX/mounted.env launch release backup
+    if [ "$CODE" = 1 ] &&
+        printf '%s\n' "$ERR" | grep -q '■  .env.production was replaced since Eigen started, and Eigen still reads the old one.' &&
+        printf '%s\n' "$ERR" | grep -q '└  Run ./eigen restart, then ./eigen backup again.' &&
+        ! printf '%s\n' "$CALLS" | grep -q ' backup '; then
+        ok "$SHELL_NAME: backup refuses while eigen-api reads a .env.production replaced since it started"
+    else
+        fail "$SHELL_NAME: backup with a replaced .env.production: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    # Only a start of eigen-api mounts the file anew, and an up starts a running one only when a value changed.
+    STUB_MOUNTED=$FIX/mounted.env launch release restart
+    if [ "$CODE" = 0 ] &&
+        [ "$(printf '%s\n' "$CALLS" | sed -n -e 's/^compose .* \(stop eigen-api\)$/\1/p' -e 's/^compose .* \(up -d --wait\)$/\1/p' |
+            tr '\n' '|')" = 'stop eigen-api|up -d --wait|' ]; then
+        ok "$SHELL_NAME: restart stops eigen-api before the start while it reads a .env.production replaced since it started"
+    else
+        fail "$SHELL_NAME: restart with a replaced .env.production: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    rm "$FIX/mounted.env"
+    reset_release
+    STUB_FAIL=compose-exec STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
+    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Could not ask eigen-api which .env.production it reads.' &&
+        ! printf '%s\n' "$CALLS" | grep -Eq ' bootstrap | stop$| up -d'; then
+        ok "$SHELL_NAME: update says so when eigen-api cannot be asked which .env.production it reads"
+    else
+        fail "$SHELL_NAME: update with a failed exec: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     echo server-pre-update-light-20250101-000000.tar >"$FIX/release/.eigen/last-update"
     STUB_RUNNING=0 STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update --no-backup
@@ -758,9 +787,9 @@ for SHELL_NAME in dash busybox host; do
     LAUNCH_TERM='ps --status running --services' STUB_DIGEST=ddd \
         launch release update --pulled 0.2.99 --saved server-pre-update-full-20260101-000000.tar
     rm -r "$FIX/release/data" "$FIX/release/backups"
-    if [ "$CODE" = 130 ] && ! printf '%s\n' "$CALLS" | grep -Eq ' (stop|up -d --wait)$' &&
+    if [ "$CODE" = 130 ] && ! printf '%s\n' "$CALLS" | grep -Eq ' (stop|up -d --wait)$| configure --backfill$' &&
         [ ! -e "$FIX/release/.eigen/lock" ] && [ ! -e "$FIX/release/.eigen/last-update" ]; then
-        ok "$SHELL_NAME: an interrupt while an update waits for a running server backup neither stops nor restarts Eigen"
+        ok "$SHELL_NAME: an interrupt while an update waits for a running server backup neither stops nor restarts Eigen, nor writes .env.production"
     else
         fail "$SHELL_NAME: an update interrupted in the backup wait: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi

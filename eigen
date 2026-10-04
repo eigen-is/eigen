@@ -518,12 +518,37 @@ start() {
     dc up -d --wait
 }
 
+# eigen-api mounts the one file, so it keeps the inode it started with: a .env.production an editor or sed -i wrote anew
+# since is not the one it reads. Only a start of the container mounts the new one, and an up recreates it only when a
+# value changed. Returns 1 when it reads another file, or none, as on Docker Desktop, and 2 when it cannot be asked.
+env_mounted() {
+    mounted=$(dc exec -T eigen-api sh -c 'cksum <"$EIGEN_ENV_FILE" 2>/dev/null || echo unreadable') || return 2
+    [ "$mounted" = "$(cksum <.env.production)" ]
+}
+
+# A backup on the running API would hold the old file, or fail.
+need_env_mounted() {
+    mounted_code=0
+    env_mounted || mounted_code=$?
+    case $mounted_code in
+        1)
+            die ".env.production was replaced since Eigen started, and Eigen still reads the old one." \
+                "Run ./eigen restart, then ./eigen $COMMAND again."
+            ;;
+        2) die "Could not ask eigen-api which .env.production it reads." "Run ./eigen logs eigen-api to see why." ;;
+    esac
+}
+
 # restart [what to do on failure]: once a command has stopped Eigen or changed it, running it again would repeat that,
 # so a failed start points at ./eigen restart.
 restart() {
     NEXT=${1:-Fix what it says, then run ./eigen restart.}
     project
     mail=$(mail_containers)
+    if api_running && ! env_mounted; then
+        step "Stopping eigen-api, which reads an older .env.production" "eigen-api stopped" "Could not stop eigen-api" \
+            dc stop eigen-api
+    fi
     step "Starting Eigen" "Eigen is running" "Eigen did not start; ./eigen logs shows why" start
     if [ "$(mail_containers)" != "$mail" ]; then refresh_fail2ban; fi
 }
@@ -948,6 +973,7 @@ backup() {
         die "Eigen is not running, and a backup runs on the running server." \
             "Start it with ./eigen restart. With Eigen stopped, a copy of data/ and .env.production is a backup too."
     fi
+    need_env_mounted
     api_cli backup --level "$level" $wait
 }
 
@@ -1102,13 +1128,7 @@ update_get() {
             die "Eigen is not running, and the backup an update makes first runs on the running server." \
                 "Start it with ./eigen restart, then run ./eigen update again. Or copy data/ and .env.production somewhere safe, then run ./eigen update --no-backup."
         fi
-        # eigen-api mounts the one file, so it keeps the inode it started with: a .env.production an editor or sed -i
-        # wrote anew since is not the one it reads, and the backup would hold the old one, or fail. Only a start of the
-        # container mounts the new one, and an up recreates it only when the values changed.
-        if [ "$(dc exec -T eigen-api sh -c 'cat "$EIGEN_ENV_FILE"' 2>/dev/null | cksum)" != "$(cksum <.env.production)" ]; then
-            die ".env.production was replaced since Eigen started, and Eigen still reads the old one." \
-                "Run ./eigen stop, then ./eigen restart, then ./eigen update again."
-        fi
+        need_env_mounted
     fi
     step "Downloading Eigen $new" "Eigen $new downloaded" "Could not download Eigen $new" pull_images "$tag"
     downloaded=$(describe "$REGISTRY/api:$tag")
@@ -1162,10 +1182,11 @@ update_apply() {
     old_pins=$(pinned_refs)
 
     API_IMAGE=$new_image
+    before_stop
+    # After the wait, which an interrupt may end: a backfill that adds a key writes .env.production anew, which the
+    # running eigen-api would not read. Before the stop, so a failure leaves Eigen running.
     step "Adding what is new to .env.production" ".env.production has what Eigen $new needs" \
         "Could not update .env.production" cli configure --backfill
-
-    before_stop
     # From the stop on, whatever ends the update starts Eigen again.
     AT_EXIT=restart
     stop

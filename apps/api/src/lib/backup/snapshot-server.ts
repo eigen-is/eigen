@@ -119,7 +119,7 @@ function readsEnvFile(envFile: string): boolean {
     } catch (error) {
         if (!isEnoent(error)) return false;
         throw new Error(
-            '.env.production was replaced since Eigen started, so the API cannot read it. Run ./eigen stop, then ./eigen restart.',
+            '.env.production was replaced since Eigen started, so the API cannot read it. Run ./eigen restart.',
         );
     }
 }

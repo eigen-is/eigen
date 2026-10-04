@@ -143,7 +143,7 @@ describe('Backup appendInstallFiles', () => {
         });
         const writer = await createArchiveWriter(join(dir, 'archive.tar'));
         try {
-            await expect(appendInstallFiles(writer)).rejects.toThrow('Run ./eigen stop, then ./eigen restart.');
+            await expect(appendInstallFiles(writer)).rejects.toThrow('Run ./eigen restart.');
         } finally {
             spy.mockRestore();
             delete process.env['EIGEN_ENV_FILE'];
