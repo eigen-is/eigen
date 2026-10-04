@@ -28,10 +28,9 @@ export function SidebarContainer({ sidebar }: SidebarContainerProps) {
     return (
         <div
             className={cn(
-                // Items are padded pills, so beside the content the sidebar narrows the gutter to 12px;
-                // the w-16 rail is the 40px primary button plus that gutter on each side.
+                // The w-16 rail is the 40px primary button plus the sidebar gutter on each side.
                 'border-r h-full overflow-y-auto overflow-x-hidden bg-sidebar',
-                !isMobile && '[--app-gutter-x:0.75rem]',
+                !isMobile && 'app-gutter-sidebar',
                 isMobile ? (sidebarColumnShown ? 'block w-full' : 'hidden') : isTablet ? 'block w-16' : 'block w-64',
             )}
         >
