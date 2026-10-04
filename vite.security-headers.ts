@@ -87,7 +87,7 @@ export function withInlineScriptHashes(html: string): string {
     const hashes: string[] = [];
     for (const [, attrs, body] of html.matchAll(INLINE_SCRIPT)) {
         if (NON_JS_TYPE.test(attrs)) continue;
-        const parsed = body.replace(/\r\n?/g, '\n').replaceAll('\0', '�');
+        const parsed = body.replace(/\r\n?/g, '\n').replaceAll('\0', '\uFFFD');
         hashes.push(`'sha256-${createHash('sha256').update(parsed).digest('base64')}'`);
     }
     return html.replace(/(<meta http-equiv="Content-Security-Policy" content="[^"]*?script-src[^;"]*)/, (directive) => {
