@@ -1147,6 +1147,10 @@ update_get() {
 
 # The part the launcher of the new version runs: stop, switch and start.
 update_apply() {
+    # 0.3.1's launcher hands over the backup it made, or --no-backup; one older than that made none and says neither.
+    if [ -z "$saved" ] && [ -z "$no_backup" ]; then
+        die "This update was started by a launcher older than 0.3.1." "Run ./eigen update 0.3.1 first, then ./eigen update."
+    fi
     domain=$(env_value DOMAIN)
     if [ ! -d data ]; then die "There is no data/ in $PWD." "Run ./eigen update in the install folder."; fi
     pin_images "$target"

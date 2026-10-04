@@ -734,6 +734,15 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: a failed switch: exit $CODE, '$ERR', last-update '$(cat "$FIX/release/.eigen/last-update" 2>&1)'"
     fi
+    # A launcher older than 0.3.1 hands over with neither the backup nor --no-backup.
+    STUB_DIGEST=ddd launch release update --pulled 0.2.99
+    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  This update was started by a launcher older than 0.3.1.' &&
+        printf '%s\n' "$ERR" | grep -q '└  Run ./eigen update 0.3.1 first, then ./eigen update.' &&
+        ! printf '%s\n' "$CALLS" | grep -Eq ' configure | stop$| up -d' && [ ! -e "$FIX/release/.eigen/lock" ]; then
+        ok "$SHELL_NAME: a handover with neither a backup nor --no-backup is refused before it changes anything"
+    else
+        fail "$SHELL_NAME: a handover from an older launcher: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
     STUB_DIGEST=ddd launch release update --pulled 0.2.99 --saved server-pre-update-full-20260101-000000.tar
     rm -r "$FIX/release/data"
     if [ "$CODE" = 0 ] && [ "$(cat "$FIX/release/.eigen/last-update")" = server-pre-update-full-20260101-000000.tar ]; then
