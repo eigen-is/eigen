@@ -110,14 +110,15 @@ function isReadable(filePath: string): boolean {
 }
 
 // eigen-api mounts the one file, so it keeps the inode it started with: a .env.production an editor or `sed -i`
-// wrote anew since reads stale on Linux, and on Docker Desktop access() passes and the read fails ENOENT. Read, not
-// access(), so the second names itself.
-function readsEnvFile(envFile: string): boolean {
+// wrote anew since reads stale on Linux, and on Docker Desktop access() passes and the open fails ENOENT. Open, not
+// access(), so the second names itself. A server backup asks before its homes, so it fails before an hour of them.
+export function assertEnvFileMounted(): void {
+    const envFile = getEnvFile();
+    if (envFile === undefined) return;
     try {
-        fs.readFileSync(envFile);
-        return true;
+        fs.closeSync(fs.openSync(envFile, 'r'));
     } catch (error) {
-        if (!isEnoent(error)) return false;
+        if (!isEnoent(error)) return;
         throw new Error(
             '.env.production was replaced since Eigen started, so the API cannot read it. Run ./eigen restart.',
         );
@@ -147,8 +148,9 @@ function listFiles(dir: string): string[] {
 export async function appendInstallFiles(
     writer: ArchiveWriter,
 ): Promise<{ envFile: boolean; dkim: boolean; certs: boolean }> {
+    assertEnvFileMounted();
     const envFile = getEnvFile();
-    const hasEnvFile = envFile !== undefined && readsEnvFile(envFile);
+    const hasEnvFile = envFile !== undefined && isReadable(envFile);
     if (hasEnvFile) await writer.appendFile(SERVER_ARCHIVE_ENV_MEMBER, envFile);
     const held = { dkim: false, certs: false };
     for (const { dir, field, names } of INSTALL_FOLDERS) {
