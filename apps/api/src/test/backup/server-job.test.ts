@@ -424,6 +424,27 @@ describe('Server backup job', () => {
         JOB_TIMEOUT_MS,
     );
 
+    test(
+        'a .env.production replaced under its mount fails the job before it captures a home',
+        async () => {
+            quietRelay();
+            const capture = spyOn(homeRelay, 'pullHomeSnapshot');
+            spies.push(capture);
+            // Docker Desktop's view of a one-file mount whose host file got a new inode: the read fails ENOENT.
+            process.env['EIGEN_ENV_FILE'] = join(getBackupsDir(), 'replaced.env.production');
+            try {
+                const started = await startServerBackup({ level: 'full', reason: 'manual' });
+                const job = await waitForJob(started.id);
+                expect(job.state).toBe('failed');
+                expect(job.error).toContain('Run ./eigen restart.');
+                expect(capture).not.toHaveBeenCalled();
+            } finally {
+                delete process.env['EIGEN_ENV_FILE'];
+            }
+        },
+        JOB_TIMEOUT_MS,
+    );
+
     test('marks a record a restart left running as failed at boot, and alerts the owner once', async () => {
         const relay = quietRelay();
         const dir = getBackupsDir();

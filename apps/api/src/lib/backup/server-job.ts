@@ -47,7 +47,7 @@ import {
 } from './paths';
 import { pruneLocalArchives, readServerSidecar, writeServerSidecar } from './server-archives';
 import { type SnapshotProgress, treeBytes } from './snapshot-home';
-import { appendInstallFiles, snapshotServer } from './snapshot-server';
+import { appendInstallFiles, assertEnvFileMounted, snapshotServer } from './snapshot-server';
 import { backupKey, uploadServerArchive } from './upload';
 import { readServerArchive, requireVerified, verifyFolder } from './verify';
 
@@ -146,6 +146,7 @@ async function writeServerArchive(
     const tempPath = getBackupTempPath(SERVER_ARCHIVE_EXTENSION);
     const writer = await createArchiveWriter(tempPath);
     try {
+        assertEnvFileMounted();
         await snapshotServer(staging, at, (_step, done, total) => onProgress('server', done, total));
         const serverFolder = path.join(staging, buildServerFolderName(at));
         requireVerified(await verifyFolder(serverFolder), SERVER_ARCHIVE_SERVER_MEMBER);

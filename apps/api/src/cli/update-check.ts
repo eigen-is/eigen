@@ -57,13 +57,8 @@ export function releaseNotes(changelog: string, from: string, to: string): Relea
         .sort((a, b) => Bun.semver.order(a.version, b.version));
 }
 
-// What changed since `from` up to this image.
-export function notesSince(from: string): ReleaseNote[] {
-    return releaseNotes(readFileSync(CHANGELOG, 'utf8'), from, VERSION);
-}
-
 // A breaking release may convert what a Light backup leaves out, so only a Full one could bring it back.
-export function hasBreaking(notes: ReleaseNote[]): boolean {
+function hasBreaking(notes: ReleaseNote[]): boolean {
     return notes.some(({ breaking }) => breaking.length > 0);
 }
 
@@ -80,7 +75,8 @@ export async function updateCheck(
         );
     }
 
-    const notes = notesSince(from);
+    // What changed since `from` up to this image.
+    const notes = releaseNotes(readFileSync(CHANGELOG, 'utf8'), from, VERSION);
     if (flags.level) {
         console.log(`level=${hasBreaking(notes) ? 'full' : 'light'}`);
         return;
