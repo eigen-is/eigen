@@ -1,4 +1,5 @@
 import type { S3CheckResult, S3HardenResult, SetupResult, SetupStatus } from '@workspace/lib/types/settings';
+import { SERVER_STORAGE_TYPES } from '@workspace/lib/types/settings';
 import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { completeSetup, getSetupStatus } from '../lib/setup/setup';
@@ -35,8 +36,9 @@ export const setupRouter = new Elysia({ name: 'setup' })
             body: t.Object({
                 setupToken: t.Optional(t.String()),
                 orgName: t.String({ minLength: 1 }),
-                storageType: t.Union([t.Literal('local-fullnames'), t.Literal('local-id'), t.Literal('s3')]),
+                storageType: t.UnionEnum(SERVER_STORAGE_TYPES),
                 s3Bucket: t.Optional(t.String()),
+                s3Prefix: t.Optional(t.String()),
                 s3Region: t.Optional(t.String()),
                 s3AccessKeyId: t.Optional(t.String()),
                 s3SecretAccessKey: t.Optional(t.String()),

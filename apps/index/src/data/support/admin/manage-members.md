@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, members, users, roles, password]
 related: [admin/teams, admin/guests]
 order: 20
-updated: 2026-10-02
+updated: 2026-10-04
 ---
 
 Members are the people with full accounts on your Eigen server. You manage them from the [**Users**](/admin/users) page in Admin. You need an admin or owner role to do any of this.
@@ -18,7 +18,7 @@ Members are the people with full accounts on your Eigen server. You manage them 
 4. Set the **Role**: **Member** for a regular account, or **Admin** to give the person admin access.
 5. Click **Create**.
 
-The account is ready immediately. The new member joins the [team](/support/admin/teams) named after your organization and gets what was shared with that team. Share the email address and the temporary password with the new person so they can sign in. They can change their password after logging in.
+The account is ready immediately. The new member joins the [team](/support/admin/teams) named after your organization, if your server has one, and gets what was shared with that team. A server set up before Eigen had teams has no such team. Share the email address and the temporary password with the new person so they can sign in. They can change their password after logging in.
 
 ## Change a member's role
 

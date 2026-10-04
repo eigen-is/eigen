@@ -1,5 +1,5 @@
 import { isStorageType, STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
-import type { S3Config } from '@workspace/lib/types/mount';
+import type { MountStorageType, S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
 import { useState } from 'react';
@@ -12,7 +12,7 @@ import { S3ConfigCard } from './s3-config-card';
 
 export type MountFormValues = {
     name: string;
-    storageType: 'local' | 'local-key' | 's3';
+    storageType: MountStorageType;
     maxSizeMB: number;
     s3Config?: S3Config;
 };

@@ -81,6 +81,7 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                     ? {
                           s3Endpoint: s3Config.endpoint,
                           s3Bucket: s3Config.bucket,
+                          s3Prefix: s3Config.prefix,
                           s3Region: s3Config.region ?? '',
                           s3AccessKeyId: s3Config.accessKeyId,
                           s3SecretAccessKey: s3Config.secretAccessKey,

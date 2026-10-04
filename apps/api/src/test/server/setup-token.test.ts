@@ -2,12 +2,15 @@ import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { S3Config } from '@workspace/lib/types/mount';
 import { getServerDataPath } from '../../lib/config/paths';
 import { getDomain } from '../../lib/config/server-config';
 import type { SetupLink } from '../../lib/setup/setup-token';
 import { clearSetupToken, createSetupToken, verifySetupToken } from '../../lib/setup/setup-token';
+import { LocalStorage } from '../../lib/storage/local-storage';
 import { runCli } from '../cli-test-helpers';
 import { restoreEnvAfterEach } from '../env-test-helpers';
+import { FakeS3Server } from '../fake-s3-server';
 import { TEST_DATA_DIR } from '../setup';
 
 // The routes answer differently only while setup is pending, which this worker's own server is past as soon as
@@ -95,6 +98,9 @@ describe('the /setup routes before setup', () => {
         accessKeyId: 'key',
         secretAccessKey: 'secret',
     };
+    // The bucket the setup that goes through stores files in.
+    const bucket = new FakeS3Server(new LocalStorage(join(RUN_DIR, 'bucket')));
+    let bucketConfig: S3Config;
     const admin = {
         orgName: 'Setup Token',
         storageType: 'local-id',
@@ -166,7 +172,9 @@ describe('the /setup routes before setup', () => {
     beforeAll(async () => {
         mkdirSync(join(dataRoot, 'server'), { recursive: true });
         mkdirSync(join(dataRoot, 'home'), { recursive: true });
+        mkdirSync(join(RUN_DIR, 'bucket'), { recursive: true });
         writeFileSync(logPath, '');
+        bucketConfig = await bucket.start();
         await startApi();
     }, LISTEN_TIMEOUT_MS + 5_000);
 
@@ -176,6 +184,7 @@ describe('the /setup routes before setup', () => {
         // A killed API leaves its socket file, which a later listen on the path would find in use.
         rmSync(SOCKET, { force: true });
         s3.stop(true);
+        await bucket.stop();
     });
 
     test('a development boot logs an absolute link to the admin app', () => {
@@ -240,7 +249,7 @@ describe('the /setup routes before setup', () => {
         expect(s3Requests).toBeGreaterThan(before);
     });
 
-    test('a newer link replaces the older one, survives a failed attempt, and works once', async () => {
+    test('a newer link replaces the older one, survives a failed attempt, and works once, keeping the S3 prefix', async () => {
         secretBeforeSetup = storedSecret();
         const older = await freshToken();
         const newer = await freshToken();
@@ -262,7 +271,16 @@ describe('the /setup routes before setup', () => {
         // Two parallel requests, either may arrive first; exactly one wins.
         // The wizard prefills the sender address with the default, which stays empty, so it follows the domain.
         const sender = { senderName: 'Acme Mail', senderAddress: `noreply@${MAIL_DOMAIN}` };
-        const body = { ...admin, ...sender, domain: 'elsewhere.example', setupToken: newer };
+        const storage = {
+            storageType: 's3',
+            s3Endpoint: bucketConfig.endpoint,
+            s3Bucket: bucketConfig.bucket,
+            s3Prefix: 'eigen-data',
+            s3Region: bucketConfig.region,
+            s3AccessKeyId: bucketConfig.accessKeyId,
+            s3SecretAccessKey: bucketConfig.secretAccessKey,
+        };
+        const body = { ...admin, ...sender, ...storage, domain: 'elsewhere.example', setupToken: newer };
         const [done, twice] = (await Promise.all([post('complete', body), post('complete', body)])).sort(
             (a, b) => a.status - b.status,
         );
@@ -273,6 +291,7 @@ describe('the /setup routes before setup', () => {
         expect(storedConfig().mailDomain).toBe(MAIL_DOMAIN);
         const storedSettings = JSON.parse(readFileSync(join(dataRoot, 'server/settings.json'), 'utf8'));
         expect(storedSettings.mail).toMatchObject({ senderName: 'Acme Mail', senderAddress: '' });
+        expect(storedSettings.defaults.mount).toMatchObject({ storageType: 's3', s3Config: { prefix: 'eigen-data' } });
         expect(existsSync(join(dataRoot, 'server/setup-token'))).toBe(false);
 
         expect((await post('complete', { ...admin, setupToken: newer })).status).toBe(403);

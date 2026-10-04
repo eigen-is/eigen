@@ -241,6 +241,7 @@ export const auth = betterAuth({
         // (see apps/api/src/lib/waitlist), which is why no `sendInvitationEmail` hook is wired
         // here. Existing users get auto-added to the default org via the user-create hook
         // above, and to teams via `auth.api.addMember` (admin UI), which both bypass invites.
+        // The hook's org join also adds them to the default team.
         organization({
             // Single-org app: product code never calls /organization/create (the plugin is used
             // only for its data model). Block user-initiated creation so a normal user can't spin
