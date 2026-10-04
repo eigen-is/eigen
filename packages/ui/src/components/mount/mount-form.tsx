@@ -1,4 +1,4 @@
-import { isStorageType, STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
+import { isStorageType, STORAGE_TYPE_HINTS, STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
 import type { MountStorageType, S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
@@ -100,6 +100,7 @@ export function MountForm({
                         ))}
                     </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">{STORAGE_TYPE_HINTS[storageType]}</p>
             </div>
 
             <div className="space-y-1.5">
