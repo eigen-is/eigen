@@ -6,7 +6,7 @@ category: Basics
 tags: [admin, setup, getting-started, configuration]
 related: [admin/manage-members, admin/server-settings]
 order: 10
-updated: 2026-10-02
+updated: 2026-10-04
 ---
 
 The setup wizard creates your admin account and gets the server ready for everyone else. It opens from the setup link that `./eigen setup` prints when it finishes. This page walks you through what to expect.
@@ -21,7 +21,7 @@ The link works once, so nobody who finds your server before you can claim it. Op
 
 **Organization Name** is the display name for your organization. It appears in the interface and in emails sent to members.
 
-**Sender name** and **Sender address** are who Eigen's own emails come from. Leave **Sender name** empty to send as your organization name, which the field shows in grey. **Sender address** starts as `noreply@` your mail domain. As the form says: "Notifications, codes and invitations are sent from this address. Your mail relay must be allowed to send from it." You can change both later on the **Settings** page.
+**Sender name** and **Sender address** are who Eigen's own emails come from. Leave **Sender name** empty to send as your organization name, which the field shows in gray. **Sender address** starts as `noreply@` your mail domain. As the form says: "Notifications, codes and invitations are sent from this address. Your mail relay must be allowed to send from it." You can change both later on the **Settings** page.
 
 **Storage Type** controls where Eigen stores user files. Three options are available:
 
