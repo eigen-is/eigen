@@ -546,6 +546,7 @@ restart() {
     project
     mail=$(mail_containers)
     if api_running && ! env_mounted; then
+        before_stop
         step "Stopping eigen-api, which reads an older .env.production" "eigen-api stopped" "Could not stop eigen-api" \
             dc stop eigen-api
     fi
@@ -584,7 +585,7 @@ running_backup() { running_records ! -mmin +"$BACKUP_STALE_MINUTES" | head -n 1;
 
 wait_backup() { while [ -n "$(running_backup)" ]; do sleep 2; done; }
 
-# before_stop: a restore or an update waits for the server backup that runs, which the stop would kill, and the night it
+# before_stop: a restore, an update or a restart that stops eigen-api waits for the server backup that runs, which the stop would kill, and the night it
 # was would have no backup. A stale record is named and passed. An interrupt here leaves Eigen running as it was.
 before_stop() {
     if ! api_running; then return 0; fi
@@ -1169,7 +1170,7 @@ update_get() {
 update_apply() {
     # 0.3.1's launcher hands over the backup it made, or --no-backup; one older than that made none and says neither.
     if [ -z "$saved" ] && [ -z "$no_backup" ]; then
-        die "This update was started by a launcher older than 0.3.1." "Run ./eigen update 0.3.1 first, then ./eigen update."
+        die "This update was started by a launcher older than 0.3.1." "Run ./eigen update 0.3.1 --no-backup first, then ./eigen update."
     fi
     domain=$(env_value DOMAIN)
     if [ ! -d data ]; then die "There is no data/ in $PWD." "Run ./eigen update in the install folder."; fi

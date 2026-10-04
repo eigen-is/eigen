@@ -762,7 +762,7 @@ for SHELL_NAME in dash busybox host; do
     # A launcher older than 0.3.1 hands over with neither the backup nor --no-backup.
     STUB_DIGEST=ddd launch release update --pulled 0.2.99
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  This update was started by a launcher older than 0.3.1.' &&
-        printf '%s\n' "$ERR" | grep -q '└  Run ./eigen update 0.3.1 first, then ./eigen update.' &&
+        printf '%s\n' "$ERR" | grep -q '└  Run ./eigen update 0.3.1 --no-backup first, then ./eigen update.' &&
         ! printf '%s\n' "$CALLS" | grep -Eq ' configure | stop$| up -d' && [ ! -e "$FIX/release/.eigen/lock" ]; then
         ok "$SHELL_NAME: a handover with neither a backup nor --no-backup is refused before it changes anything"
     else
