@@ -15,6 +15,8 @@ import { CheckCircle2, KeyRound } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { StorageTypePicker } from './storage-type-picker';
 
+const ORG_NAME_PLACEHOLDER = 'My Organization';
+
 export function SetupWizard({ status, setupToken }: { status: SetupStatus; setupToken: string | undefined }) {
     if (!setupToken) {
         return (
@@ -134,7 +136,7 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                                     id="orgName"
                                     value={orgName}
                                     onChange={(e) => setOrgName(e.target.value.trimStart())}
-                                    placeholder="My Organization"
+                                    placeholder={ORG_NAME_PLACEHOLDER}
                                     required
                                     className="mt-1.5"
                                 />
@@ -148,7 +150,7 @@ function SetupForm({ status, setupToken }: { status: SetupStatus; setupToken: st
                                             id="senderName"
                                             value={senderName}
                                             onChange={(e) => setSenderName(e.target.value)}
-                                            placeholder={orgName.trim() || 'My Organization'}
+                                            placeholder={orgName.trim() || ORG_NAME_PLACEHOLDER}
                                             maxLength={100}
                                             className="mt-1.5"
                                         />

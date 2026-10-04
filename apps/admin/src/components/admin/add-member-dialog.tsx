@@ -43,7 +43,7 @@ export function AddMemberDialog({ open, onOpenChange, availableMembers, onAdd }:
                     onChange={(e) => setSearch(e.target.value)}
                     autoFocus
                 />
-                <div className="max-h-64 overflow-y-auto -mx-2">
+                <div className="app-gutter-bleed max-h-64 overflow-y-auto">
                     {filtered.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-4">
                             {availableMembers.length === 0

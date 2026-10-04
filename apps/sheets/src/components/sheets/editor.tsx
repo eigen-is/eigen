@@ -355,7 +355,7 @@ function SheetEditorInner({
                 {/* Persistent read-only signal — a decode failure leaves a blank sheet otherwise
                     indistinguishable from data loss (a dismissible toast was not enough). */}
                 {loadFailed && (
-                    <div className="flex shrink-0 items-center justify-center gap-2 border-b bg-destructive/10 px-4 py-1.5 text-xs text-destructive">
+                    <div className="flex shrink-0 items-center justify-center gap-2 border-b bg-destructive/10 app-gutter-x py-1.5 text-xs text-destructive">
                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                         <span>
                             This spreadsheet could not be loaded. It is shown read-only so nothing gets overwritten.
