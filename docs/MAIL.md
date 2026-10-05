@@ -12,7 +12,7 @@ The sections run from the store through reading, the mailbox names and the list,
 
 Every user route in `apps/api/src/routes/mail.ts` is `requireSelf`: a mailbox belongs to one user and has no ACL. The route hands off to the user's `Mail` (`mail-domain.ts`), which talks to a `MailStore`. `MaildirStore` is the only one. The interface is where a second backend plugs in ([JMAP](proposals/PROPOSAL_STALWART_MAIL.md), or [the user's own provider over IMAP](proposals/PROPOSAL_EXTERNAL_MAIL_PROVIDER.md)), so no file name crosses into the domain or the routes.
 
-The `emails` row is the `EmailSummary` the list returns, unmapped except that the list cuts `textShort` to its preview length (`MAIL_PREVIEW_CHARS`). A full message is re-parsed from its `.eml`.
+The `emails` row is the `EmailSummary` the list and the search return, unmapped except that both cut `textShort` to its preview length (`MAIL_PREVIEW_CHARS`): the row keeps the whole body for the full-text index. A full message is re-parsed from its `.eml`.
 
 ## The Maildir is the truth and the index follows it
 

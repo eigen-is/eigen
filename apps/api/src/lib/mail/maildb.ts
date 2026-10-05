@@ -31,6 +31,13 @@ export function readMailIndexSize(dbPath: string): number {
 // Mailboxes excluded from default mail search — users can still search them explicitly.
 const SEARCH_EXCLUDED_MAILBOXES = [MAILBOX_TRASH, MAILBOX_JUNK];
 
+// A list or search response carries the preview only; the FULL textShort stays in the DB for FTS5.
+function cutPreview(row: typeof schema.emails.$inferSelect): EmailSummary {
+    return row.textShort.length > MAIL_PREVIEW_CHARS
+        ? { ...row, textShort: row.textShort.slice(0, MAIL_PREVIEW_CHARS) }
+        : row;
+}
+
 export default class MailDB {
     private home: Home;
     private managedDb!: ManagedDatabase<typeof schema>;
@@ -227,10 +234,7 @@ export default class MailDB {
             .orderBy(desc(schema.emails.date), desc(schema.emails.id))
             .limit(opts.limit)
             .all();
-        // Cap the list-view preview at the response seam — the FULL textShort stays in the DB for FTS5.
-        return rows.map((r) =>
-            r.textShort.length > MAIL_PREVIEW_CHARS ? { ...r, textShort: r.textShort.slice(0, MAIL_PREVIEW_CHARS) } : r,
-        );
+        return rows.map(cutPreview);
     }
 
     searchMail(opts: MailSearchOptions): EmailSummary[] {
@@ -275,7 +279,8 @@ export default class MailDB {
                 .where(and(inArray(schema.emails.id, candidateIds), mailboxCond))
                 .orderBy(desc(schema.emails.date), desc(schema.emails.id))
                 .limit(opts.limit)
-                .all();
+                .all()
+                .map(cutPreview);
         }
 
         let mailboxFilter = sql``;
@@ -319,7 +324,7 @@ export default class MailDB {
         // the id-keyed map.
         const ids = ranked.map((r) => r.id);
         const rows = this.db.select().from(schema.emails).where(inArray(schema.emails.id, ids)).all();
-        const byId = new Map(rows.map((r) => [r.id, r]));
+        const byId = new Map(rows.map((r) => [r.id, cutPreview(r)]));
         return ids.map((id) => byId.get(id)).filter((r): r is NonNullable<typeof r> => r !== undefined);
     }
 
