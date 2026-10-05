@@ -329,6 +329,22 @@ describe('iMIP Outbound Email Composition', () => {
             ORIGINAL_SLOT,
         );
     });
+
+    // RFC 5546 § 3.2.5: a CANCEL lists the attendees it cancels. A cancelled occurrence's row holds no guest list,
+    // and a removed guest is no longer on the event's.
+    test('a CANCEL names exactly the guests it goes to', () => {
+        const attendeeLines = (ics: string) => ics.split('\r\n').filter((line) => line.startsWith('ATTENDEE'));
+        const exclusion: CalendarEvent = { ...MOVED_OCCURRENCE, status: 'cancelled', data: null };
+        const occurrence = attendeeLines(unfold(composeCancelEmail(exclusion, organizer, [attendee], RECURRING_EVENT)));
+        expect(occurrence).toHaveLength(1);
+        expect(occurrence[0]).toEndWith(':mailto:bob@external.com');
+
+        const carol = { ...attendee, email: 'carol@external.com', name: 'Carol' };
+        const remaining: CalendarEvent = { ...MOCK_EVENT, data: { ...MOCK_EVENT.data, attendees: [carol] } };
+        const removal = attendeeLines(unfold(composeCancelEmail(remaining, organizer, [attendee])));
+        expect(removal).toHaveLength(1);
+        expect(removal[0]).toEndWith(':mailto:bob@external.com');
+    });
 });
 
 describe("iMIP mail on a user's behalf", () => {

@@ -213,7 +213,7 @@ Receivers never raise. A message over `EVENT_MAX_BYTES` or the storage budget is
 
 `imip.ts` composes REQUEST (with an "updated" banner for an update), CANCEL and REPLY. `serializeEventForImip` builds a fresh VCALENDAR from the rows, so no Eigen stamp can leak, and strips them anyway. A series travels whole: one VCALENDAR with the master, an `EXDATE` per cancelled occurrence and an override per edited one (RFC 5546). A message about one occurrence carries that occurrence alone.
 
-**No `VALARM` ever travels.** The organizer's reminders are their own, and an email reminder would ship as `ACTION:EMAIL` naming the organizer, so every guest's client would mail the organizer at the trigger. The `URL` stays, since guests seeing the link is the point. A REQUEST asks each guest to reply (`RSVP=TRUE`) and lists the organizer as an accepted attendee. An override with no guests of its own goes out with the organizer as its only attendee ([ROADMAP.md](ROADMAP.md)).
+**No `VALARM` ever travels.** The organizer's reminders are their own, and an email reminder would ship as `ACTION:EMAIL` naming the organizer, so every guest's client would mail the organizer at the trigger. The `URL` stays, since guests seeing the link is the point. A REQUEST asks each guest to reply (`RSVP=TRUE`) and lists the organizer as an accepted attendee. A CANCEL lists as its attendees exactly the guests it goes to (RFC 5546 § 3.2.5), because a cancelled occurrence holds no guest list and a removed guest is no longer on the event's. An override with no guests of its own goes out with the organizer as its only attendee ([ROADMAP.md](ROADMAP.md)).
 
 ## Inbound iMIP acts only on a sender our own MTA verified
 
