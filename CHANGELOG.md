@@ -3,6 +3,26 @@
 All notable user-visible changes to Eigen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.3.2] - 2026-10-05
+
+Fixes from a restore drill, and one inset across the apps. An install still on 0.3.0 updates to 0.3.1 first: `./eigen update 0.3.1`, then `./eigen update`.
+
+### Changed
+
+- **Layout** — lists, toolbars and panes share one inset, wider from tablet size up, so dates and menus clear the scrollbar. The sidebar and the app switcher keep a narrower one, and Contacts' letters sit over the avatars
+- **Setup** — **Complete Setup** stays clickable, so the browser names a missing field. Each storage choice says what it means, and the sender name shows the organization name until you type one
+- **Admin** — a user created on the Users page joins the team named after the organization and gets what was shared with it. The create button is labelled **Create User**
+- **`.env.production`** — `./eigen restart` picks up an edit made while Eigen runs. Until then, `./eigen update` and `./eigen backup` refuse, since the backup would hold the old file
+
+### Fixed
+
+- **Mail** — Enter in To, Cc, Bcc or Subject no longer sends the mail; in Subject it moves on to the message
+- **Drive** — opening a document without editing it leaves its Modified time alone
+- **Setup** — the S3 prefix is kept, where files went to the bucket's root, and **Go to Login** opens the sign-in page
+- **Rollback** — the backup `./eigen rollback` restores is kept when it was made with warnings
+- **Restore** — it offers to delete what it kept aside only when it kept something, and the installer, run with `restore` in a folder that has an install, says to run `./eigen restore` there
+- **Small fixes** — the landing page no longer logs a Content-Security-Policy error, an IMAP or DAV sign-in with the account password no longer logs an API key error, and update notes show links as text
+
 ## [0.3.1] - 2026-10-02
 
 Whole-server backup and restore. Eigen backs up the whole server every night while it runs, can copy each backup to a bucket of its own, and puts one back with `./eigen restore`, on the same machine or a new one. The steps are in the help center's [Self-hosting section](https://eigen.is/support/self-hosting/get-started). Close every open document before you update from 0.3.0: an edit that has not reached the server is lost, offline edits included.
