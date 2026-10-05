@@ -3,12 +3,14 @@ import { describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { eq } from 'drizzle-orm';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
 import { restoreHome } from '../../lib/backup/restore';
 import { verifyFolder } from '../../lib/backup/verify';
 import { getStorageType, updateServerSettings } from '../../lib/config/server-settings';
 import { getHome } from '../../lib/home/get-home';
 import { Mount } from '../../lib/mount/mount';
+import { paths } from '../../lib/mount/schema';
 import {
     assertJson,
     authedRequest,
@@ -211,6 +213,20 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         } finally {
             warn.mockRestore();
         }
+    });
+
+    test('a file row with no hash on record and its folder sizes are archived as they are', async () => {
+        const user = await raceUser('local-fullnames');
+        const { projects } = await seed(user);
+        const mount = await defaultMount(user);
+        const [first] = await driveGetList(user.sessionToken, user.id, M, `folder/${projects.id}`);
+        await mount.db.update(paths).set({ hash: null }).where(eq(paths.id, first!.id));
+        mount.markContentIndexed(first!.id);
+        // Reading the folder caches its size, which the archived metadata.db copy then carries.
+        const { size } = (await mount.getPath(projects.id))!;
+        const { folder } = await snapshotInto(await getHome(user.id), 'full');
+        expect(archivedRow(folder, first!.id)).toMatchObject({ hash: null, contentDirty: 0 });
+        expect(archivedRow(folder, projects.id)?.size).toBe(size);
     });
 
     test('a file trashed during the capture', async () => {
