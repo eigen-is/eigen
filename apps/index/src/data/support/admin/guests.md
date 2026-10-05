@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, guests, sharing, access]
 related: [admin/get-started, drive/share-a-file]
 order: 50
-updated: 2026-09-21
+updated: 2026-10-05
 ---
 
 Guest access lets people outside your organization view files you have shared with them. Guests sign in
@@ -51,12 +51,9 @@ again later, their access is restored automatically.
 
 ## Review and remove guest accounts
 
-The [**Guests**](/admin/guests) page lists all current guest accounts. You can search by name or email
-address.
+The [**Guests**](/admin/guests) page lists all current guest accounts in the same table as the **Users** page, with each guest's name, email address and when they were last active. You can search by name or email address, and click a column header to sort by it.
 
-Click a guest's name to open their detail panel. To remove a guest immediately, click the delete icon
-in the toolbar and confirm the deletion. This removes the account, not the share, so if you shared
-something with that person before, they could sign in again and their access would be restored.
+Click a guest to open their detail panel, which shows when they were last active and when they joined. To remove a guest immediately, click **Delete user** at the bottom of the panel and confirm the deletion. This removes the account, not the share, so if you shared something with that person before, they could sign in again and their access would be restored.
 
 ## Email notifications for guests
 

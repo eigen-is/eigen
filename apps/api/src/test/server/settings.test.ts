@@ -1041,6 +1041,38 @@ describe('GET /settings/users', () => {
     });
 });
 
+describe('GET /settings/users/guests', () => {
+    test('403 for non-admin', async () => {
+        const ctx = await getTestContext();
+        const res = await authedRequest(ctx.bob.user.sessionToken, '/settings/users/guests');
+        expect(res.status).toBe(403);
+    });
+
+    // The Users list's row shape, so the guests page draws the same table: no role, membership or teams.
+    test('lists guests as user rows with when they were last active, and only guests', async () => {
+        const ctx = await getTestContext();
+        const db = getAuthDrizzleDb();
+        const now = new Date();
+        await db.insert(user).values({
+            id: 'guest-row-id',
+            name: 'Guest Row',
+            email: 'guest-list@test.eigen.is',
+            emailVerified: true,
+            createdAt: now,
+            updatedAt: now,
+            lastLoginAt: now,
+            role: 'guest',
+        });
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/users/guests');
+        const rows = await assertJson<AdminUserRow[]>(res);
+        const guest = rows.find((r) => r.id === 'guest-row-id');
+        expect(guest).toMatchObject({ name: 'Guest Row', memberId: null, role: null, teams: [] });
+        expect(guest?.lastActiveAt).not.toBeNull();
+        expect(rows.find((r) => r.email === 'alice@test.eigen.is')).toBeUndefined();
+        await db.delete(user).where(eq(user.id, 'guest-row-id'));
+    });
+});
+
 describe('GET /settings/users/usage', () => {
     test('403 for non-admin', async () => {
         const ctx = await getTestContext();

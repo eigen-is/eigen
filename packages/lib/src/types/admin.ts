@@ -1,11 +1,3 @@
-export type AdminUser = {
-    id: string;
-    email: string;
-    name: string;
-    role: string | null;
-    createdAt: Date;
-};
-
 export type AdminUserRow = {
     id: string;
     name: string;

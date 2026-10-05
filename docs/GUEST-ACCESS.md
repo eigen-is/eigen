@@ -118,7 +118,7 @@ The sweep calls `deleteUserCompletely(userId, null)`, the system mode that goes 
 
 ## Guests have two Admin pages, and one is the org owner's
 
-The Admin app has two guest pages. **Guests** (`/guests`) is every admin's: every `role: 'guest'` account from `GET /settings/users/guests`, with a detail view and delete. **Guest access** (`/guest-settings`) holds the `guests.openSignup` toggle and the `guests.inactivityDays` threshold, and only the org owner sees it, because it is server settings ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#the-owner-holds-server-settings-and-admins-manage-people)). No endpoint turns a guest into a regular user ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)).
+The Admin app has two guest pages. **Guests** (`/guests`) is every admin's: every `role: 'guest'` account from `GET /settings/users/guests`, drawn by the Users page's own table and detail (`AdminUsersTable`, `UserDetail` with `guest`). The route returns the Users row shape, so a guest comes back with no role and no teams. The table keeps name, email and last active, and the detail drops role, teams, storage, backup and the password reset: a guest has none of them, and `GuestHome.size()` is zero. **Guest access** (`/guest-settings`) holds the `guests.openSignup` toggle and the `guests.inactivityDays` threshold, and only the org owner sees it, because it is server settings ([ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md#the-owner-holds-server-settings-and-admins-manage-people)). No endpoint turns a guest into a regular user ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)).
 
 ## See also
 
