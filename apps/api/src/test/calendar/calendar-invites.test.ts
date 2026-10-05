@@ -381,8 +381,8 @@ describe('Calendar Invites', () => {
             expect(selfInviteCopies).toHaveLength(0);
         });
 
-        // The event lands in the owner's own calendar, so the owner attends it rather than being invited to it.
-        test("a collaborator inviting the calendar's owner marks the owner accepted", async () => {
+        // The event lands in the owner's own calendar, so the owner gets no copy, and the answer stays theirs to give.
+        test("a collaborator inviting the calendar's owner leaves the owner's answer open", async () => {
             const home = await getHome(ctx.alice.user.id);
             const shared = await home.calendar.createCalendar({ name: 'Shared with Bob', color: '#ccbbaa' });
             await home.calendar.updateCalendar(shared.id, {
@@ -410,15 +410,19 @@ describe('Calendar Invites', () => {
                     }),
                 },
             );
-            expect(res.status).toBe(200);
-
-            const stored = await aliceEvent(
-                (e) =>
-                    e.title === 'Owner Invited By Bob' &&
-                    !!e.data?.attendees?.some((a) => a.email === ctx.alice.user.email && a.status === 'accepted'),
+            const created = await assertJson<CalendarEvent>(res);
+            // The owner comes first on the list, so Charlie's copy means the fan-out went past them.
+            const charlie = await getHome(ctx.charlie.user.id);
+            await eventually(
+                async () => ((await charlie.calendar.getEventsByUid(created.uid)).length ? true : undefined),
+                "Charlie's copy",
             );
-            expect(stored.calendarId).toBe(shared.id);
-            expect((await aliceEvents()).filter((e) => e.title === 'Owner Invited By Bob')).toHaveLength(1);
+
+            const stored = (await aliceEvents()).filter((e) => e.title === 'Owner Invited By Bob');
+            expect(stored).toHaveLength(1);
+            expect(stored[0].calendarId).toBe(shared.id);
+            const owner = findOrFail(stored[0].data?.attendees ?? [], (a) => a.email === ctx.alice.user.email);
+            expect(owner.status).toBe('pending');
         });
     });
 
