@@ -1,11 +1,11 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import { authedRequest, driveGet, drivePost, getTestContext } from '../setup';
 
-// Trashing an open eigendoc must tear the collab document down BEFORE trashedAt lands —
-// the teardown walks listFolderAll, which no longer sees the trashed rows.
+// Trashing an open eigendoc tears the collab document down, so no live session keeps editing a
+// trashed document and no open database syncs its data.db to the pre-trash key.
 describe('trash closes open collab documents', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let home: Home;
@@ -36,6 +36,30 @@ describe('trash closes open collab documents', () => {
             { method: 'DELETE' },
         );
         expect(res.status).toBe(200);
+        expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
+    });
+
+    // The path stays active until trashPath writes trashedAt, so a socket can open the doc after the
+    // first close. The trash closes it again once the row is trashed.
+    test('a doc opened between the collab close and the trash write is closed too', async () => {
+        const doc = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/doc`,
+            { fileName: 'trash-reopen' },
+        );
+        const { mount } = await home.drive.resolveFile(mountId, doc.id);
+        const trashPath = mount.trashPath.bind(mount);
+        const spy = spyOn(mount, 'trashPath').mockImplementation(async (pathId) => {
+            await home.drive.getCollabDocument(mountId, doc.id);
+            return trashPath(pathId);
+        });
+        try {
+            await home.drive.deletePath(mountId, doc.id);
+        } finally {
+            spy.mockRestore();
+        }
         expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
     });
 });

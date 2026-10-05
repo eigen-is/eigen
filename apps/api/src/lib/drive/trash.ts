@@ -29,6 +29,8 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
     }
 
     const trashedItem = await mount.trashPath(item.id);
+    // A socket opening during the fan-out above still found the path active.
+    if (isContainerType(item.type)) await closeCollabDocumentsRecursively(drive, mount, item.id);
     drive.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined);
     if (user) {
         mount.history.record({ pathId: item.id, eventType: 'trashed', actor: user });

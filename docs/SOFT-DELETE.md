@@ -30,7 +30,7 @@ Any case or compatibility variant of `.trash` is a reserved name on every mount,
 
 ## Trash closes what is open under the item first
 
-Before any column changes, `Drive.deletePath` closes every collab document under the item and `Mount.trashPath` flushes and closes every cached database. A still-open database would otherwise keep syncing its `data.db` to the old key: a folder rebuilt outside `.trash/` on `local`, a revived object on `s3`. A collab socket that opens between the collab close and the trash write still gets the document, because `getActivePath` passes until `trashedAt` is set.
+Before any column changes, `Drive.deletePath` closes every collab document under the item and `Mount.trashPath` flushes and closes every cached database. A still-open database would otherwise keep syncing its `data.db` to the old key: a folder rebuilt outside `.trash/` on `local`, a revived object on `s3`. A collab socket that opens between the collab close and the trash write still gets the document, because `getActivePath` passes until `trashedAt` is set. So the trash closes the collab documents under the item a second time once the row is trashed, which ends any session opened in that window.
 
 ## Trash revokes every share, and restore re-shares without an email
 
