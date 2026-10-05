@@ -167,7 +167,8 @@ export async function snapshotMountData(
         } else {
             // The path lock for the whole copy: an overwrite rewrites the file in place, so it and the copy wait for
             // each other. The shared tree lock only until the file is open, so no rename moves the bytes between the
-            // key and the open, and a rename after it waits for no copy: captureFile opens before its first await.
+            // key and the open, and a rename after it waits for no copy: captureFile opens before its first await
+            // (capture-race.test.ts moves the bytes as the lock releases).
             const entry = await mount.withPathLock(row.id, async () => {
                 const opened = await mount.withTreeShared(async () => {
                     const live = await mount.getPath(row.id);
