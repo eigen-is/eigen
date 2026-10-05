@@ -10,6 +10,7 @@ import {
 import type { Attachment, DraftAttachmentUpload, Email, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
+import { isMailAppEnabled } from '../config/env';
 import { ApiError, isEnoent, isSafePathSegment, LocalFilesystem, PATHS } from '../core';
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes, parseEmlForReader } from './mail-parse';
@@ -21,7 +22,7 @@ import {
     buildRecipientSummary,
     createUniqueMessageId,
     getMailIDfromFileName,
-    mailboxDir,
+    maildirFolder,
     parseFlagsFromFilename,
     rebuildFlagsSuffix,
 } from './mailutils';
@@ -106,6 +107,12 @@ export class MaildirStore implements MailStore {
 
     async init(events: MailStoreEvents): Promise<boolean> {
         this.events = events;
+        // With mail off the store builds no Maildir and opens no index, yet the mail kept on disk still counts.
+        if (!isMailAppEnabled()) {
+            this.indexBytes = readMailIndexSize(this.home.fs.absolutePath(PATHS.MAIL.DB));
+            await this.recountStaged();
+            return false;
+        }
         const isNew = !(await this.exists());
         if (isNew) {
             await this.createStandardMailboxes();
@@ -284,9 +291,7 @@ export class MaildirStore implements MailStore {
         return parsed.attachments;
     }
 
-    async getModifiedAt(messageId: string): Promise<number> {
-        const email = this.db.getEmail(messageId);
-        if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
+    async getModifiedAt(email: EmailSummary): Promise<number> {
         const filePath = path.join(this.mailboxDir(email.mailbox), PATHS.MAIL.CUR, email.filename);
         // A flag change from Dovecot renames the file before the index hears of it: answer "changed", never a 500.
         return this.storage.stat(filePath).then(
@@ -789,7 +794,7 @@ export class MaildirStore implements MailStore {
 
     private mailboxDir(mailbox: string): string {
         if (!isValidMailboxPath(mailbox)) throw new ApiError(400, `Invalid mailbox name: ${mailbox}`);
-        return mailboxDir(this.basePath, mailbox);
+        return maildirFolder(this.basePath, mailbox);
     }
 
     // -- Private helpers --

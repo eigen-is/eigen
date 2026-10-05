@@ -1,5 +1,5 @@
-import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/backup';
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
+import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
 import { useHomeDataLabel, useMailEnabled, usePublicConfig } from '@workspace/lib/public';
 import {
     useCheckS3Connection,

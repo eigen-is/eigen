@@ -28,7 +28,7 @@ Nothing is cached, so every upload resolves again. The overrides come through `p
 
 ## A mount's cap takes its owner's overrides
 
-`getMountQuotaState(ownerId, userId, mountId)` reads the mount and the team overrides from the owner, as `getHomeDataQuotaState` does for home data. So a mount has one cap, whoever uploads into it and whoever reads WebDAV's quota properties. A user writing into a folder another user shared with them meets the owner's cap, lifted by the owner's teams and never by their own. A team is in no teams, so a team mount's cap is its own `maxSizeMB`, and a member's override never lifts it.
+`getMountQuotaState(ownerId, mountId)` reads the mount and the team overrides from the owner, as `getHomeDataQuotaState` does for home data. So a mount has one cap, whoever uploads into it and whoever reads WebDAV's quota properties. A user writing into a folder another user shared with them meets the owner's cap, lifted by the owner's teams and never by their own. A team is in no teams, so a team mount's cap is its own `maxSizeMB`, and a member's override never lifts it.
 
 ## A mount keeps what it was stamped with
 
@@ -38,7 +38,7 @@ A mount's `storageType` never changes after it is made, since its bytes live in 
 
 ## 507 is a full budget, 413 a file too large
 
-`enforcement.ts` answers 507 `Insufficient Storage` when a budget is full or a projected write would overfill it. It answers 413 when one file is larger than it may be. The per-file cap is `quotas.maxUploadSizeMB` (`enforceMaxUploadSize`). The settings route takes it up to `UPLOAD_CAP_MAX_MB` (1023, `packages/lib/src/constants/backup.ts`): the API's `maxRequestBodySize` is 1 GiB for every route, and a multipart body's framing puts a 1 GiB file just over it. `getMaxUploadSize` caps a value saved above it too.
+`enforcement.ts` answers 507 `Insufficient Storage` when a budget is full or a projected write would overfill it. It answers 413 when one file is larger than it may be. The per-file cap is `quotas.maxUploadSizeMB` (`enforceMaxUploadSize`). The settings route takes it up to `UPLOAD_CAP_MAX_MB` (1023, `packages/lib/src/constants/mount.ts`): the API's `maxRequestBodySize` is `MAX_REQUEST_BODY_BYTES` beside it, 1 GiB for every route, and a multipart body's framing puts a 1 GiB file just over it. `getMaxUploadSize` caps a value saved above it too.
 
 The two meet in `getUploadMaxSize`, which returns `min(per-file cap, what is left of the mount)` and throws 507 up front when nothing is left, so a full mount is refused before any bytes move. A streamed Drive upload hands that number to `streamFilesToTemp` (`apps/api/src/lib/drive/streaming.ts`) as the ceiling per file, and a file that runs past it mid-transfer is a 413, whichever of the two was smaller.
 
@@ -46,7 +46,7 @@ Every other route that brings a whole file into a mount takes the same number an
 
 ## A write that knows its size is checked on the projection
 
-`enforceMountQuota(ownerId, userId, mountId, addBytes, creditExisting)` throws 507 when `used + addBytes - creditExisting > max`. `creditExisting` is the size of the file being overwritten, so saving a document is charged only its growth. The editor save and WebDAV `PUT` use it. WebDAV only checks when the client sends `Content-Length` ([WEBDAV.md](WEBDAV.md)). `getMountQuotaState` reports `{ used, max }` without refusing, for WebDAV's quota properties.
+`getMountRoom(ownerId, mountId, creditExisting)` is what a write may add: `max - used + creditExisting`, where `creditExisting` is the size of the file being overwritten, so saving a document is charged only its growth. `enforceMountQuota(ownerId, mountId, addBytes, creditExisting)` throws 507 when `addBytes` is more than that, for the editor save. WebDAV `PUT` takes the room itself, because it checks a `Content-Length` against it and counts a chunked body against it as it streams ([WEBDAV.md](WEBDAV.md#put-stages-the-body-before-the-row)). `getMountQuotaState` reports `{ used, max }` without refusing, for WebDAV's quota properties.
 
 A team avatar calls the bare `enforceMaxUploadSize` (`apps/api/src/routes/team.ts`), because a team logo must not consume the uploading admin's own home-data budget.
 
@@ -80,7 +80,7 @@ A staged attachment is charged from the moment it lands until the draft saves or
 
 The admin Users page sizes homes nobody has loaded, through `pullHomeSize` ([SERVER-SETTINGS.md](SERVER-SETTINGS.md#the-users-page-sizes-homes-without-booting-them)). It reads each part from the home's own files with the query its counter is seeded from, so the page and a live Home report the same number.
 
-- Mail: `readMailTotalSize` (`maildir-store.ts`), the index sum plus the same `readDraftStagingSize` walk. On a server with mail turned off a live Home opens no mail store, so `Mail.init` takes this same read once and `Mail.size()` answers it: the mail kept from before still counts toward storage.
+- Mail: `readMailTotalSize` (`maildir-store.ts`), the index sum plus the same `readDraftStagingSize` walk. On a server with mail turned off, `MaildirStore.init` opens no index and seeds its byte counter from these same two reads instead, so the mail kept from before still counts toward storage.
 - Contacts and calendar: `readContactsTotalSize` (`card-store.ts`, plus the `avatars/` folder) and `readCalendarTotalSize` (`resource-store.ts`), both through `readBlobTableSize` (`apps/api/src/lib/core/blob-store.ts`).
 
 `readBlobTableSize` sizes a missing database as 0. It also sizes as 0 a database whose schema stamp is not this build's `currentVersion`, a newer stamp and a missing stamp table included. The column it would sum may not exist yet or may mean other bytes, and the pending migration drops those bytes anyway. So a home not opened since an upgrade reports no cards and no events rather than dropping the user off the page.

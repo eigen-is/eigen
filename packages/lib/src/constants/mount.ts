@@ -1,5 +1,12 @@
 import type { MountSettings } from '../types/settings';
 
+// The API's maxRequestBodySize, for every route: the largest body the server reads.
+export const MAX_REQUEST_BODY_BYTES = 1024 * 1024 * 1024;
+
+// The highest per-file upload cap the server can honor. A multipart body carries framing past the
+// file, so the cap stays 1 MB under the request bound.
+export const UPLOAD_CAP_MAX_MB = MAX_REQUEST_BODY_BYTES / 1024 ** 2 - 1;
+
 // What a storage backend is called on screen: the three the mount form offers, and the one a mount
 // row in the admin pane reads back. One spelling, so the pane and the form can never disagree about
 // what a mount is.

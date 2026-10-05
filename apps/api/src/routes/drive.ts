@@ -147,7 +147,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/file/:pathId',
         async ({ params, request, user }) => {
-            const maxSize = await getUploadMaxSize(params.ownerId, user.id, params.mountId);
+            const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
             const drive = await getSharedDrive(params.ownerId, user);
             return await drive.uploadFiles(params.mountId, params.pathId, request, maxSize, user);
         },
@@ -177,7 +177,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const src = await sourceDrive.getPath(params.mountId, params.pathId);
             if (!src) throw new ApiError(404, 'Source not found');
 
-            const maxSize = await getUploadMaxSize(body.targetOwnerId, user.id, body.targetMountId);
+            const maxSize = await getUploadMaxSize(body.targetOwnerId, body.targetMountId);
             if (src.size > maxSize) throw new ApiError(413, 'Source file too large');
 
             const sameMount = params.ownerId === body.targetOwnerId && params.mountId === body.targetMountId;
@@ -247,7 +247,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             // The stored file is buffered whole for parsing, and the upload limit that
             // applied when it landed may have been higher — bound it here too.
-            if (path.size > (await getUploadMaxSize(params.ownerId, user.id, params.mountId))) {
+            if (path.size > (await getUploadMaxSize(params.ownerId, params.mountId))) {
                 throw new ApiError(413, 'Source file too large');
             }
             // Deliberately no abort signal: a page reload aborts every in-flight fetch,
@@ -268,7 +268,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
                 throw new ApiError(403, 'No write permission');
             }
-            const maxSize = await getUploadMaxSize(params.ownerId, user.id, params.mountId);
+            const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
             // Bounded reader: Content-Length over the ceiling is refused before any read, a lying stream is cancelled as it crosses it.
             const bytes = await readBoundedBodyBytes(request, maxSize);
             if (bytes === null) throw new ApiError(413, 'Upload too large');
@@ -294,7 +294,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
                 throw new ApiError(403, 'No write permission');
             }
-            const maxSize = await getUploadMaxSize(params.ownerId, user.id, params.mountId);
+            const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
             // Any plain file is a candidate: importIntoDocument's transform is what validates the bytes.
             const bytes = await readImportSourceBytes(user, body, {
                 accepts: () => true,

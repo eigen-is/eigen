@@ -4,7 +4,7 @@ import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
 import { type DrivePath, type EffectiveMember, stripEigenExtension } from '@workspace/lib/types/drive';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import { and, desc, eq, isNull, lt, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ApiError } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';
@@ -308,35 +308,21 @@ export class ChatRoom {
     }
 
     private async getMessages(limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
-        let rows: ChatMessage[];
-        // createdAt is whole seconds: rowid breaks the tie, so a page edge inside a second skips nothing.
-        if (beforeId) {
-            const beforeMsg = await this.db
-                .select({ createdAt: schema.messages.createdAt, rowid: sql<number>`rowid` })
-                .from(schema.messages)
-                .where(eq(schema.messages.id, beforeId))
-                .get();
-            if (!beforeMsg) return [];
-            rows = await this.db
-                .select()
-                .from(schema.messages)
-                .where(
-                    or(
-                        lt(schema.messages.createdAt, beforeMsg.createdAt),
-                        and(eq(schema.messages.createdAt, beforeMsg.createdAt), lt(sql`rowid`, beforeMsg.rowid)),
-                    ),
-                )
-                .orderBy(desc(schema.messages.createdAt), desc(sql`rowid`))
-                .limit(limit)
-                .all();
-        } else {
-            rows = await this.db
-                .select()
-                .from(schema.messages)
-                .orderBy(desc(schema.messages.createdAt), desc(sql`rowid`))
-                .limit(limit)
-                .all();
-        }
+        const before = beforeId
+            ? await this.db
+                  .select({ createdAt: schema.messages.createdAt, rowid: sql<number>`rowid` })
+                  .from(schema.messages)
+                  .where(eq(schema.messages.id, beforeId))
+                  .get()
+            : undefined;
+        if (beforeId && !before) return [];
+        const rows = await this.db
+            .select()
+            .from(schema.messages)
+            .where(before && schema.olderThan(before))
+            .orderBy(...schema.NEWEST_FIRST)
+            .limit(limit)
+            .all();
 
         return rows.map((r) => this.toMessage(r)).reverse();
     }

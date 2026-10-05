@@ -85,7 +85,7 @@ export async function handleResourcePropfind(args: {
     const responses: string[] = [];
 
     if (isCollection) {
-        const { used, max } = await getMountQuotaState(ownerId, user.id, mountId);
+        const { used, max } = await getMountQuotaState(ownerId, mountId);
         responses.push(
             rowResponse(`${baseHref}${encodeHref(withTrailingSlash(pathStr))}`, path, used, Math.max(0, max - used)),
         );

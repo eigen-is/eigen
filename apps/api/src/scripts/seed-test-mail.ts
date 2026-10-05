@@ -37,7 +37,7 @@ import {
 } from '@workspace/lib/constants/mailboxes';
 import { SERVER_DATABASES, SERVER_DIR } from '../lib/config/paths';
 import { PATHS } from '../lib/core/constants';
-import { buildMaildirFilename, createUniqueMessageId, mailboxDir } from '../lib/mail/mailutils';
+import { buildMaildirFilename, createUniqueMessageId, maildirFolder } from '../lib/mail/mailutils';
 
 // Data root: honor EIGEN_DATA_ROOT (as the server does), else the repo's ./data resolved from
 // this file's location so the script works regardless of the cwd it's launched from.
@@ -177,7 +177,7 @@ function rfc822(i: number, mailbox: string, extAddr: string): string {
 const ensured = new Set<string>();
 function ensureMailbox(mailbox: string) {
     if (ensured.has(mailbox)) return;
-    const dir = mailboxDir(maildirRoot, mailbox);
+    const dir = maildirFolder(maildirRoot, mailbox);
     for (const sub of [PATHS.MAIL.NEW, PATHS.MAIL.CUR, PATHS.MAIL.TMP])
         mkdirSync(path.join(dir, sub), { recursive: true });
     ensured.add(mailbox);
@@ -198,12 +198,12 @@ for (let i = 1; i <= count; i++) {
     let filename: string;
     if (toNew) {
         // new/ files carry no ":2," info section — the store promotes them to cur/ on sync.
-        dir = path.join(mailboxDir(maildirRoot, mailbox), PATHS.MAIL.NEW);
+        dir = path.join(maildirFolder(maildirRoot, mailbox), PATHS.MAIL.NEW);
         filename = `${uid},S=${size}`;
     } else {
         // cur/ files carry flags: mostly Seen; ~8% Flagged; Drafts get the Draft flag.
         const flags = { seen: rand() > 0.2, flagged: rand() < 0.08, draft: mailbox === MAILBOX_DRAFTS };
-        dir = path.join(mailboxDir(maildirRoot, mailbox), PATHS.MAIL.CUR);
+        dir = path.join(maildirFolder(maildirRoot, mailbox), PATHS.MAIL.CUR);
         filename = buildMaildirFilename(uid, flags, size);
     }
     writeFileSync(path.join(dir, filename), body);

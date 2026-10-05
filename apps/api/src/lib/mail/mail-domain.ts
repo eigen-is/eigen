@@ -32,7 +32,6 @@ import { grantAccessForReferences } from './access-grants';
 import { verifyImipSender } from './imip-auth';
 import { type PartHeaders, parseMail, splitMime } from './mail-parser';
 import type { DraftMeta, DraftMetaAttachment, MailSearchOptions, MailStore } from './mail-store';
-import { readMailTotalSize } from './maildir-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
 import { createUniqueMessageId } from './mailutils';
 import { MAX_PERSONALISED_SEND_BYTES } from './recipients';
@@ -63,9 +62,6 @@ function appendReferenceLinks(html: string, refs: AttachmentReference[], recipie
 }
 
 export class Mail {
-    // With mail off the store stays closed, yet the mail kept on disk still counts, as a cold read counts it.
-    private keptSize?: number;
-
     constructor(
         private home: Home,
         private store: MailStore,
@@ -76,11 +72,6 @@ export class Mail {
     }
 
     async init(): Promise<void> {
-        // Every user Home carries a Mail; with mail off it builds no Maildir and watches nothing.
-        if (!isMailAppEnabled()) {
-            this.keptSize = await readMailTotalSize(this.home.fs);
-            return;
-        }
         const isNew = await this.store.init({
             received: (email, isNewMessage) => {
                 this.emit(SSEventType.MAIL_RECEIVED, { messageId: email.id, mailbox: email.mailbox });
@@ -102,6 +93,8 @@ export class Mail {
             flagsChanged: (messageId, mailbox) => this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId, mailbox }),
             deleted: (messageId, mailbox) => this.emit(SSEventType.MAIL_DELETED, { messageId, mailbox }),
         });
+        // Every user Home carries a Mail; with mail off it seeds, watches and cleans nothing.
+        if (!isMailAppEnabled()) return;
         if (isNew) {
             const welcome = await welcomeMail(this.home.user.name, this.home.user.email);
             // Seeded, not delivered: the first sync indexes it without announcing new mail.
@@ -112,7 +105,7 @@ export class Mail {
     }
 
     async size(): Promise<number> {
-        return this.keptSize ?? this.store.size();
+        return this.store.size();
     }
 
     search(opts: MailSearchOptions): EmailSummary[] {
@@ -225,8 +218,8 @@ export class Mail {
         return this.store.getSummary(messageId);
     }
 
-    messageGetModifiedAt(messageId: string): Promise<number> {
-        return this.store.getModifiedAt(messageId);
+    messageGetModifiedAt(summary: EmailSummary): Promise<number> {
+        return this.store.getModifiedAt(summary);
     }
 
     async messageGetAttachment(messageId: string, index: number): Promise<Attachment> {

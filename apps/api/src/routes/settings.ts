@@ -1,4 +1,5 @@
-import { BACKUP_KEEP_MAX, UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/backup';
+import { BACKUP_KEEP_MAX } from '@workspace/lib/constants/backup';
+import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/mount';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type {
@@ -98,7 +99,7 @@ function adminUserRows(where: SQL | undefined): AdminUserRow[] {
             name: u.name,
             email: u.email,
             memberId: m?.id ?? null,
-            role: (m?.role as AdminUserRow['role']) ?? null,
+            role: m?.role ?? null,
             createdAt: u.createdAt,
             lastActiveAt,
             teams: teamsByUser.get(u.id) ?? [],

@@ -22,7 +22,7 @@ Then `finalizeUpload` (`apps/api/src/lib/drive/upload.ts`) moves each temp into 
 
 The parser's `maxFileSize` throws before it yields the chunk that would cross the limit, so no more of the body is read. The request answers 413 and every temp of that request is removed. It answers 413 even when the limit came from the remaining quota rather than the server's cap.
 
-The limit is per file part. Every part of a multi-file upload may use the whole remaining quota, so a batch can end past the mount's quota: quotas are a soft limit ([QUOTA.md](QUOTA.md)). The server's own `maxRequestBodySize` is the larger backup-upload ceiling (`BACKUP_UPLOAD_MAX_BYTES`), a backstop under the parser.
+The limit is per file part. Every part of a multi-file upload may use the whole remaining quota, so a batch can end past the mount's quota: quotas are a soft limit ([QUOTA.md](QUOTA.md)). The server's own `maxRequestBodySize` is `MAX_REQUEST_BODY_BYTES` (1 GiB, `packages/lib/src/constants/mount.ts`), a backstop under the parser.
 
 An upload is not resumable. A dropped connection starts over.
 

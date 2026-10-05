@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
-import type { OrgMember } from '@workspace/lib/types/admin';
+import type { OrgMember, OrgRole } from '@workspace/lib/types/admin';
 import { toast } from 'sonner';
 import { settingsApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
@@ -43,7 +43,7 @@ export function useMembers(organizationId?: string) {
 
 async function setMemberRole(
     organizationId: string | undefined,
-    { memberId, userId, role }: { memberId: string; userId: string; role: 'admin' | 'member' | 'owner' },
+    { memberId, userId, role }: { memberId: string; userId: string; role: OrgRole },
 ) {
     const { data, error } = await authClient.organization.updateMemberRole({
         memberId,
@@ -59,7 +59,7 @@ async function setMemberRole(
 export function useUpdateMemberRole(organizationId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: (member: { memberId: string; userId: string; role: 'admin' | 'member' | 'owner' }) =>
+        mutationFn: (member: { memberId: string; userId: string; role: OrgRole }) =>
             setMemberRole(organizationId, member),
         onSuccess: () => {
             invalidateAdminMembers(queryClient, organizationId ?? '');

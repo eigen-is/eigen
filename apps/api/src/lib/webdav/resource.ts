@@ -1,5 +1,5 @@
 import { isContainerType } from '@workspace/lib/types/drive';
-import { enforceMaxUploadSize, getMountQuotaState } from '../config/enforcement';
+import { enforceMaxUploadSize, getMountRoom } from '../config/enforcement';
 import { ApiError } from '../core/errors';
 import { computeEtag, matchesIfMatch, matchesIfNoneMatch, rangeResponse, scriptableInlineHeaders } from '../core/http';
 import { getSharedDrive } from '../drive/get-drive';
@@ -110,9 +110,8 @@ export async function handlePut(args: {
         return new Response(null, { status: 412 });
     }
 
-    // An overwrite is charged only its growth, as enforceMountQuota charges it.
-    const { used, max } = await getMountQuotaState(ownerId, user.id, mountId);
-    const room = max - used + (existing?.size ?? 0);
+    // A 0-byte PUT (Finder's name reservation) adds nothing, so it skips the quota lookup.
+    const room = contentLength === 0 ? 0 : await getMountRoom(ownerId, mountId, existing?.size ?? 0);
     const withinLimits = (bytes: number) => {
         enforceMaxUploadSize(bytes);
         if (bytes > room) throw new ApiError(507, 'Insufficient Storage');

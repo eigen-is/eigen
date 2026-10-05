@@ -197,6 +197,25 @@ describe('WebDAV PUT', () => {
         expect(await (await webdavRequest(ctx.alice.user.email, 'GET', url)).text()).toBe('kept');
     });
 
+    test("a 0-byte PUT (Finder's name reservation) lands even in a mount past its cap", async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-empty-over-quota.txt`;
+        const filler = `/webdav/${ctx.alice.user.id}/${mountId}/put-empty-filler.txt`;
+        expect((await webdavRequest(ctx.alice.user.email, 'PUT', filler, { body: 'filler' })).status).toBe(201);
+        const home = await getHome(ctx.alice.user.id);
+        const snapshot = { ...home.drive.getMountConfig(mountId) };
+        const usedMB = (await home.drive.size(mountId)) / (1024 * 1024);
+        await home.drive.updateMount({ ...snapshot, maxSizeMB: usedMB / 2 }, true);
+        try {
+            const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
+                body: '',
+                headers: { 'Content-Length': '0' },
+            });
+            expect(res.status).toBe(201);
+        } finally {
+            await home.drive.updateMount(snapshot, true);
+        }
+    });
+
     test('a chunked PUT within both bounds lands whole', async () => {
         const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-chunked-ok.txt`;
         const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: chunked(200 * 1024) });

@@ -85,7 +85,7 @@ export async function saveAttachmentsToDrive(
 
     const mail = await getMailClient(user);
     const drive = await getSharedDrive(targetOwnerId, user);
-    const maxSize = await getUploadMaxSize(targetOwnerId, user.id, targetMountId);
+    const maxSize = await getUploadMaxSize(targetOwnerId, targetMountId);
 
     // Indexes refer to positions in the raw parsed EML attachment list (including calendar parts).
     // Parse the EML once and index into the result — avoids re-parsing on every iteration.

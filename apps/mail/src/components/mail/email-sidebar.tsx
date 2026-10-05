@@ -114,12 +114,7 @@ export function EmailSidebar({
 
             <SidebarSection condensed={condensed} loading={isLoading}>
                 {standardMailboxList.map((item) => (
-                    <MailboxRow
-                        key={item.path || item.name}
-                        item={item}
-                        condensed={condensed}
-                        onMoveToFolder={onMoveToFolder}
-                    />
+                    <MailboxRow key={item.path} item={item} condensed={condensed} onMoveToFolder={onMoveToFolder} />
                 ))}
             </SidebarSection>
 
