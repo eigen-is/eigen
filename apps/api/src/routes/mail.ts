@@ -248,6 +248,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             requireSelf(params.ownerId, user.id);
             return await (await getMailClient(user)).messageSend(body.mail, {
                 grantAccessRefIds: body.grantAccessRefIds,
+                repliedToId: body.repliedToId,
             });
         },
         {
@@ -255,6 +256,8 @@ export const mailRouter = new Elysia({ name: 'mail' })
             body: t.Object({
                 mail: MailDraftSchema,
                 grantAccessRefIds: t.Optional(t.Array(t.String(), { maxItems: MAX_SEND_REFERENCES })),
+                // The message this one answers, marked replied once the send succeeds.
+                repliedToId: t.Optional(t.String()),
             }),
         },
     )

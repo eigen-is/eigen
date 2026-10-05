@@ -540,7 +540,7 @@ export class Mail {
 
     async messageSend(
         mailToSend: NewDraft | EmailDraft,
-        options?: { grantAccessRefIds?: string[] },
+        options?: { grantAccessRefIds?: string[]; repliedToId?: string },
     ): Promise<SentMailResult> {
         // Full EML rebuild so attachment content is available for SMTP.
         const mail = await this.draftFullSave(mailToSend, draftIdOf(mailToSend), {});
@@ -629,6 +629,15 @@ export class Mail {
         await this.store.setFlags(mail.id, { draft: false });
         this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId: mail.id, mailbox: MAILBOX_SENT });
         this.emit(SSEventType.MAIL_SENT, { messageId: mail.id, mailbox: MAILBOX_SENT });
+
+        // The mail is out: a reply mark that fails to stick must not fail the send, or a retry sends it twice.
+        const original = options?.repliedToId ? this.store.getSummary(options.repliedToId) : undefined;
+        if (original) {
+            await this.store.setFlags(original.id, { replied: true }).then(
+                () => this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId: original.id, mailbox: original.mailbox }),
+                (err) => console.error('mail: marking the answered message failed', err),
+            );
+        }
 
         return failedRecipients.length ? { ...mail, failedRecipients } : mail;
     }

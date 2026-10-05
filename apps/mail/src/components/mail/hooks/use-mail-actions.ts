@@ -128,8 +128,8 @@ export function useMailActions() {
         navigateToList();
     };
 
-    const handleSendEmail = async (mail: NewDraft, grantAccessRefIds?: string[]) => {
-        await sendDraftMutation.mutateAsync({ draft: mail, grantAccessRefIds });
+    const handleSendEmail = async (mail: NewDraft, grantAccessRefIds?: string[], repliedToId?: string) => {
+        await sendDraftMutation.mutateAsync({ draft: mail, grantAccessRefIds, repliedToId });
         navigateToList();
     };
 
@@ -138,12 +138,12 @@ export function useMailActions() {
     // POST only fires once the user actually edits (triggering the auto-save). The fresh
     // composeSessionKey remounts any composer that was already open (so clicking Reply
     // while typing a different message gives a clean composer with the new quoted body).
-    const openPrefilledCompose = (prefillDraft: NewDraft) => {
+    const openPrefilledCompose = (prefillDraft: NewDraft, repliedToId?: string) => {
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },
             search: { mode: 'compose' },
-            state: { prefillDraft, composeSessionKey: crypto.randomUUID() },
+            state: { prefillDraft, repliedToId, composeSessionKey: crypto.randomUUID() },
         });
     };
 
@@ -359,6 +359,7 @@ export function useMailActions() {
                 html: formatEmailQuote(email),
                 ...replyThreadingHeaders(email),
             }),
+            email.id,
         );
     };
 
@@ -385,6 +386,7 @@ export function useMailActions() {
                 html: formatEmailQuote(email),
                 ...replyThreadingHeaders(email),
             }),
+            email.id,
         );
     };
 

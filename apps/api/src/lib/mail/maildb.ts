@@ -158,22 +158,6 @@ export default class MailDB {
         this.db.update(schema.emails).set({ mailbox }).where(eq(schema.emails.id, id)).run();
     }
 
-    setRead(id: string, isRead: boolean) {
-        this.db.update(schema.emails).set({ isRead }).where(eq(schema.emails.id, id)).run();
-    }
-
-    setFlagged(id: string, isFlagged: boolean) {
-        this.db.update(schema.emails).set({ isFlagged }).where(eq(schema.emails.id, id)).run();
-    }
-
-    setDraft(id: string, isDraft: boolean) {
-        this.db.update(schema.emails).set({ isDraft }).where(eq(schema.emails.id, id)).run();
-    }
-
-    setFilename(id: string, filename: string) {
-        this.db.update(schema.emails).set({ filename }).where(eq(schema.emails.id, id)).run();
-    }
-
     updateFlags(
         id: string,
         flags: { isRead: boolean; isFlagged: boolean; isDraft: boolean; isReplied: boolean },

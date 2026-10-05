@@ -44,10 +44,16 @@ async function updateDraftEmail(
     return response.data;
 }
 
-async function sendDraftEmail(draft: NewDraft, ownerId: string, grantAccessRefIds?: string[]): Promise<SentMailResult> {
+async function sendDraftEmail(
+    draft: NewDraft,
+    ownerId: string,
+    grantAccessRefIds?: string[],
+    repliedToId?: string,
+): Promise<SentMailResult> {
     const response = await mailApi({ ownerId }).message.send.post({
         mail: draft,
         grantAccessRefIds,
+        repliedToId,
     });
     if (response.error) throw new AppError(response);
     return response.data;
@@ -118,8 +124,15 @@ export function useSendDraft() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ draft, grantAccessRefIds }: { draft: NewDraft; grantAccessRefIds?: string[] }) =>
-            sendDraftEmail(draft, ownerId, grantAccessRefIds),
+        mutationFn: ({
+            draft,
+            grantAccessRefIds,
+            repliedToId,
+        }: {
+            draft: NewDraft;
+            grantAccessRefIds?: string[];
+            repliedToId?: string;
+        }) => sendDraftEmail(draft, ownerId, grantAccessRefIds, repliedToId),
         onSuccess: (data) => {
             invalidateMailboxes(queryClient, ownerId);
             queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, MAILBOX_DRAFTS) });

@@ -373,12 +373,15 @@ export class MaildirStore implements MailStore {
 
             if (newFilename !== email.filename) {
                 await this.renameInCur(email.mailbox, email.filename, newFilename);
-                this.db.setFilename(messageId, newFilename);
             }
 
-            if (changes.seen !== undefined) this.db.setRead(messageId, changes.seen);
-            if (changes.flagged !== undefined) this.db.setFlagged(messageId, changes.flagged);
-            if (changes.draft !== undefined) this.db.setDraft(messageId, changes.draft);
+            // The row mirrors the filename's letters, so no flag can be written to one and not the other.
+            const flags = parseFlagsFromFilename(newFilename);
+            this.db.updateFlags(
+                messageId,
+                { isRead: flags.seen, isFlagged: flags.flagged, isDraft: flags.draft, isReplied: flags.replied },
+                newFilename,
+            );
         });
     }
 
