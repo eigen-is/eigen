@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { LABEL_NAME_MAX_LENGTH } from '@workspace/lib/constants/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, inArray, sql } from 'drizzle-orm';
@@ -11,6 +12,8 @@ import type { Contacts } from './contacts';
 import * as schema from './schema';
 
 // Membership truth lives in each card's CATEGORIES, so a rename or delete rewrites every member card. See docs/CONTACTS.md § Label membership lives in the card's CATEGORIES.
+
+const LABEL_NAME_TOO_LONG = `A label name takes at most ${LABEL_NAME_MAX_LENGTH} characters`;
 
 // bun:sqlite names the column in the violation ("UNIQUE constraint failed: labels.nameKey"), so an id collision still surfaces as a real error.
 function rethrowDuplicateLabelName(e: unknown): never {
@@ -117,7 +120,7 @@ function rewriteCardCategories(
 
 // Everything a fan-out owes the world once its transaction has committed.
 function settleFanOut(contacts: Contacts, fanout: FanOut): void {
-    // Unmetered by decision: each member card grows by one label name at most. See docs/QUOTA.md.
+    // Unmetered by decision: each member card grows by one typed label name at most. See docs/QUOTA.md.
     contacts.cardsBytes += fanout.bytes;
     for (const id of fanout.createdLabelIds) contacts.emitLabel(SSEventType.LABEL_CREATED, id);
     for (const id of fanout.contactIds) contacts.announce(SSEventType.CONTACT_UPDATED, id);
@@ -127,6 +130,8 @@ export async function addLabel(contacts: Contacts, label: Omit<Label, 'id'>): Pr
     // syncCardLabels skips an empty key, so such a label would drop every membership while the save reported success.
     const nameKey = normalizeLabelName(label.name);
     if (!nameKey) throw new ApiError(400, 'Label name is required');
+    const name = label.name.trim();
+    if (name.length > LABEL_NAME_MAX_LENGTH) throw new ApiError(422, LABEL_NAME_TOO_LONG);
 
     return contacts.writeLock.run(async () => {
         const labelId = randomUUID();
@@ -134,7 +139,7 @@ export async function addLabel(contacts: Contacts, label: Omit<Label, 'id'>): Pr
         try {
             await contacts.db.insert(schema.labels).values({
                 id: labelId,
-                name: label.name.trim(),
+                name,
                 nameKey,
                 color: label.color,
                 createdAt: sql`unixepoch()`,
@@ -165,6 +170,8 @@ export async function updateLabel(contacts: Contacts, id: string, label: Omit<La
         // Only a display-name change touches cards — the color never appears in a vCard.
         const newName = label.name.trim();
         const renamed = before.name !== newName;
+        // Only a typed name is capped: keeping a long name a card's CATEGORIES minted must still save.
+        if (renamed && newName.length > LABEL_NAME_MAX_LENGTH) throw new ApiError(422, LABEL_NAME_TOO_LONG);
         const members = renamed ? labelMemberIds(contacts, [id]) : [];
 
         let fanout = NO_FAN_OUT;

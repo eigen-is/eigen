@@ -64,7 +64,7 @@ Each ingress turns the 507 into its own answer: a CalDAV `PUT` gets the typed `q
 
 A Home that `atHome()` does not know, such as a test harness or a seeding script, is not metered, because the quota lookup goes through `getHome` and would boot a second Home over the same files. Contacts turns metering on only at the end of its init ([CONTACTS.md](CONTACTS.md)).
 
-Mail attachments and contact avatars take their own checks. `getMailUploadMaxSize` returns `min(per-file cap, 25 MB, what is left of home data)` and throws 507 when nothing is left. `enforceAvatarUpload` runs the per-file cap and then `used + fileSize > max`, with no credit and no grace ([ROADMAP.md](ROADMAP.md)). A label rename is unmetered by decision: it rewrites every member card's `CATEGORIES` with no ceiling in front, but each card grows by one label name at most, and the delta settles into `cardsBytes` after the commit (`settleFanOut`, `contacts/labels.ts`).
+Mail attachments and contact avatars take their own checks. `getMailUploadMaxSize` returns `min(per-file cap, 25 MB, what is left of home data)` and throws 507 when nothing is left. `enforceAvatarUpload` runs the per-file cap and then `used + fileSize > max`, with no credit and no grace ([ROADMAP.md](ROADMAP.md)). A label rename is unmetered by decision: it rewrites every member card's `CATEGORIES` with no ceiling in front, but a typed name is capped at `LABEL_NAME_MAX_LENGTH` (100 characters), so each card grows by at most one such name, and the delta settles into `cardsBytes` after the commit (`settleFanOut`, `contacts/labels.ts`).
 
 ## What the home-data budget counts
 

@@ -84,4 +84,26 @@ describe('the REST contact bounds against what a CardDAV PUT stores', () => {
         });
         expect(await assertJson<Label>(res)).toEqual({ id: label.id, name: LONG_TEXT, color: '#ff0000' });
     });
+
+    // A rename writes the name into every member card past the per-card check, so a typed name stays short.
+    test('a typed label name is capped, on create and on rename', async () => {
+        const typed = 'y'.repeat(101);
+        const created = await authedRequest(user.sessionToken, `/contacts/${user.id}/labels`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: typed, color: '#00ff00' }),
+        });
+        expect(created.status).toBe(422);
+
+        const label = findOrFail(
+            await assertJson<Label[]>(await authedRequest(user.sessionToken, `/contacts/${user.id}/labels`)),
+            (l) => l.name === LONG_TEXT,
+        );
+        const renamed = await authedRequest(user.sessionToken, `/contacts/${user.id}/labels/${label.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...label, name: typed }),
+        });
+        expect(renamed.status).toBe(422);
+    });
 });
