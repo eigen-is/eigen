@@ -115,7 +115,7 @@ A wizard chat is born shared. If the ACL step fails, the route trashes and purge
 
 ### Wizard chats land in a `chats` folder resolved by name
 
-`CHATS_FOLDER_NAME` (`packages/lib/src/types/chat.ts`) is the default parent. `Mount.ensureRootFolder` seeds it only on a default personal mount, when it first creates the root. `Drive.ensureChatsFolder` finds it by name on every use (`getChildByName` folds case) and recreates it when it is missing, so it stays an ordinary folder that you can rename, move or delete, never pinned by id. A concurrent create's 409 adopts the winner's folder, and a non-folder with that name makes the chat land in the root. A legacy `Chats` folder is renamed to `chats` in place on the next resolve.
+`CHATS_FOLDER_NAME` (`packages/lib/src/types/chat.ts`) is the default parent. `Mount.ensureRootFolder` seeds it only on a default personal mount, when it first creates the root. `Drive.ensureChatsFolder` finds it by name on every use (`getChildByName` folds case) and recreates it when it is missing, so it stays an ordinary folder that you can rename, move or delete, never pinned by id. A concurrent create's 409 adopts the winner's folder, and a non-folder with that name makes the chat land in the root. A legacy `Chats` folder is renamed to `chats` in place on the next resolve, through `Drive.renamePath`, so open drive lists and shared mirrors see the new name at once.
 
 ### Adding someone to a chat sends no share email
 

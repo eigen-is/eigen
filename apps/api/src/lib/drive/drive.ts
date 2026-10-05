@@ -1173,7 +1173,7 @@ export default class Drive {
         const existing = await mount.getChildByName(root.id, CHATS_FOLDER_NAME);
         if (existing) {
             if (existing.type !== DRIVE_TYPE_FOLDER) return root.id;
-            if (existing.name !== CHATS_FOLDER_NAME) await mount.updatePath(existing.id, { name: CHATS_FOLDER_NAME });
+            if (existing.name !== CHATS_FOLDER_NAME) await this.renamePath(mountId, existing.id, CHATS_FOLDER_NAME);
             return existing.id;
         }
 

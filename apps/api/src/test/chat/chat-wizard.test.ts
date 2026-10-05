@@ -4,6 +4,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { ChatMatch } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
@@ -14,6 +15,7 @@ import {
     addTeamMount,
     assertJson,
     authedRequest,
+    collectSSE,
     createTeam,
     driveDelete,
     driveGet,
@@ -102,8 +104,14 @@ describe('Chat wizard — chats folder', () => {
         const home = await getHome(u.id);
         await home.drive.renamePath(mountId, seeded!.id, 'Chats');
 
+        // The rename reaches open drive lists like any other.
+        const sse = await collectSSE(u.id);
         const migratedId = await home.drive.ensureChatsFolder(mountId);
+        sse.stop();
         expect(migratedId).toBe(seeded!.id); // renamed in place, not recreated
+        expect(sse.events.some((e) => e.type === SSEventType.DRIVE_PATH_RENAMED && e.path.id === seeded!.id)).toBe(
+            true,
+        );
 
         const after = await driveGetList(u.token, u.id, mountId, `folder/${root.id}`);
         expect(after.find((c) => c.id === seeded!.id)?.name).toBe('chats');
