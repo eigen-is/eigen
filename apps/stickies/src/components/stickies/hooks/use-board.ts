@@ -28,10 +28,9 @@ function sameColumn(a: ColumnItem, b: ColumnItem): boolean {
     );
 }
 
-export function readColumns(columnsMap: Y.Map<Y.Map<unknown>>): Record<string, ColumnItem> {
+export function readColumns(columnsMap: Y.Map<unknown>): Record<string, ColumnItem> {
     const columns: Record<string, ColumnItem> = {};
     for (const [id, columnMap] of columnsMap) {
-        // A peer can write anything into the map; one scalar entry must not take the board down.
         if (!(columnMap instanceof Y.Map)) continue;
         const title = columnMap.get('title');
         const creator = columnMap.get('creator');

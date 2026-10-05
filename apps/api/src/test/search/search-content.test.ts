@@ -145,6 +145,22 @@ describe('Drive content-index', () => {
         expect((await searchFile('flibberdesc')).file.some((h) => h.id === stk.id)).toBe(true);
     });
 
+    test("a peer's scalar entry does not keep a STICKIES board out of search", async () => {
+        const stk = await home.drive.create(mountId, rootId, 'rt-stickies-scalar', 'stickies');
+        const collab = await home.drive.getCollabDocument(mountId, stk.id);
+        collab.doc.transact(() => {
+            const tasks = collab.doc.getMap('tasks');
+            const card = new Y.Map();
+            card.set('title', 'wobblecard');
+            tasks.set('t1', card);
+            tasks.set('t2', 'not-a-card');
+            collab.doc.getMap('columns').set('c1', 7);
+        });
+        await home.drive.flushContainerDb(mountId, stk.id);
+        await home.drive.flushContentReindex();
+        expect((await searchFile('wobblecard')).file.some((h) => h.id === stk.id)).toBe(true);
+    });
+
     // Chat flush decision: chatPost writes to the chat's data.db via ChatRoom.init() →
     // drive.openDatabase(), which caches the ManagedDatabase in mount.documentDbs. A
     // subsequent flushContainerDb finds the cached db and flushes it, triggering onSync →
