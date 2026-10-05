@@ -1,4 +1,4 @@
-import { CONTROL_CHAR_PATTERN } from '@workspace/lib/validation';
+import { CONTROL_CHARS } from '@workspace/lib/validation';
 import { and, eq, gt, inArray, or } from 'drizzle-orm';
 import type ICAL from 'ical.js';
 import {
@@ -153,9 +153,8 @@ export async function getResource(
 
 // A UID travels into etags and sync deltas, so an unprintable or endless one is refused rather than stored.
 const MAX_UID_LENGTH = 255;
-const CONTROL_CHAR = new RegExp(CONTROL_CHAR_PATTERN);
 function isStorableUid(uid: string): boolean {
-    return uid.length <= MAX_UID_LENGTH && !CONTROL_CHAR.test(uid);
+    return uid.length <= MAX_UID_LENGTH && !CONTROL_CHARS.test(uid);
 }
 
 // A copy of somebody else's event: the server's own organizer stamp says so, where the ORGANIZER address is the client's to spell.

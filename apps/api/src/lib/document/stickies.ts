@@ -1,6 +1,6 @@
 import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type * as Y from 'yjs';
+import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
 import { loadYjsState } from '../collab/yjs-loader';
 import type { Mount } from '../mount';
@@ -26,12 +26,13 @@ export async function readStickiesContent(mount: Mount, drivePath: DrivePath): P
 
     const tasks: StickiesContent['tasks'] = [];
     for (const [, card] of getItemMapRoot(doc, 'tasks')) {
-        tasks.push({ title: stringField(card, 'title'), description: stringField(card, 'description') });
+        if (card instanceof Y.Map)
+            tasks.push({ title: stringField(card, 'title'), description: stringField(card, 'description') });
     }
 
     const columns: StickiesContent['columns'] = [];
     for (const [, column] of getItemMapRoot(doc, 'columns')) {
-        columns.push({ title: stringField(column, 'title') });
+        if (column instanceof Y.Map) columns.push({ title: stringField(column, 'title') });
     }
 
     return { tasks, columns };

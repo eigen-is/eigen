@@ -29,9 +29,9 @@ Real boards live on eigen.is, so stickies are the exception to the pre-1.0 forma
 What a reader tolerates is the contract:
 
 - A card is read by `readCards` (`packages/lib/src/core/comments/hooks/use-comment-cards.ts`). `title` and `description` default to '', and the description is sanitized. `color`, `chatName`, `creator`, `createdAt` and `attachments` are optional, and a value of the wrong type reads as absent. An `attachments` list keeps only its string and object elements.
-- A column is read by `readColumns` (`hooks/use-board.ts`). A `title` or `creator` that is missing or not a string reads as '', a `createdAt` that is not a number as 0, and a missing `taskIds` as an empty list. The add-card dialog creates the list before it inserts.
+- A column is read by `readBoard` (`hooks/use-board.ts`). A `title` or `creator` that is missing or not a string reads as '', a `createdAt` that is not a number as 0, and a missing `taskIds` as an empty list. The add-card dialog creates the list before it inserts.
 - A card's id and a column's id are their keys in `tasks` and `columns`. The stored `id` field is written but never read.
-- Every entry of `tasks` and `columns` is written as a map. Both readers and the ref repair (`normalizeParentChildRefs`) skip an entry that is not one, so a peer's scalar entry drops out instead of breaking the board.
+- Every entry of `tasks` and `columns` is written as a map. Every reader, the server's search reader included, and the ref repair (`normalizeParentChildRefs`) skip an entry that is not one, so a peer's scalar entry drops out instead of breaking the board. `readBoard` also drops an id from `columnOrder` or a column's `taskIds` when it names no readable entry, because the board looks up every id it lists.
 
 ## A card is a shared CommentCard
 
@@ -49,7 +49,7 @@ The repair is idempotent. Run on sync it writes under `NORMALIZE_ORIGIN`, which 
 
 ## Roots are read through typed accessors
 
-The board reads its roots and id lists through `getItemMapRoot`, `getIdArrayRoot` and `getIdArray` (`packages/lib/src/core/collab/yjs-utils.ts`) instead of casting. A root needs no runtime check: `doc.get` upgrades the `AbstractType` root that `Y.applyUpdate` leaves on the server, and throws only on a real mismatch. A nested list is checked with `instanceof Y.Array`, which is sound because nested types always decode with their real constructors. `getIdArray` returns undefined for a missing list, which is how an older column without `taskIds` stays readable.
+The board reads its roots and id lists through `getItemMapRoot`, `getIdArrayRoot` and `getIdArray` (`packages/lib/src/core/collab/yjs-utils.ts`) instead of casting. `getItemMapRoot` types its entries `unknown`, because a peer can write a scalar where a map belongs, so the compiler makes every reader check for a `Y.Map` first. A root needs no runtime check: `doc.get` upgrades the `AbstractType` root that `Y.applyUpdate` leaves on the server, and throws only on a real mismatch. A nested list is checked with `instanceof Y.Array`, which is sound because nested types always decode with their real constructors. `getIdArray` returns undefined for a missing list, which is how an older column without `taskIds` stays readable.
 
 The server reads a board for search indexing in `apps/api/src/lib/document/stickies.ts`. It imports `getItemMapRoot` through the React-free `@workspace/lib/collab/yjs-utils` subpath, because the backend never imports a `core/` domain barrel.
 

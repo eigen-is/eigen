@@ -13,7 +13,7 @@ installHappyDom();
 
 function cardWithDescription(html: string): CommentCard {
     const doc = new Y.Doc();
-    const tasks = doc.getMap<Y.Map<unknown>>('tasks');
+    const tasks = doc.getMap<unknown>('tasks');
     doc.transact(() => {
         const c = new Y.Map<unknown>();
         c.set('id', 'c1');
@@ -27,7 +27,7 @@ function cardWithDescription(html: string): CommentCard {
 describe('readCards (BC for legacy stickies cards)', () => {
     test('preserves legacy creator/createdAt fields', () => {
         const doc = new Y.Doc();
-        const tasks = doc.getMap<Y.Map<unknown>>('tasks');
+        const tasks = doc.getMap<unknown>('tasks');
         doc.transact(() => {
             const c = new Y.Map<unknown>();
             c.set('id', 'legacy-1');
@@ -54,7 +54,7 @@ describe('readCards (BC for legacy stickies cards)', () => {
 
     test('new cards have creator/createdAt undefined', () => {
         const doc = new Y.Doc();
-        const tasks = doc.getMap<Y.Map<unknown>>('tasks');
+        const tasks = doc.getMap<unknown>('tasks');
         doc.transact(() => {
             const c = new Y.Map<unknown>();
             c.set('id', 'new-1');
@@ -73,7 +73,7 @@ describe('readCards (BC for legacy stickies cards)', () => {
 
     test('parses attachments and ignores malformed values', () => {
         const doc = new Y.Doc();
-        const tasks = doc.getMap<Y.Map<unknown>>('tasks');
+        const tasks = doc.getMap<unknown>('tasks');
         const reference: AttachmentReference = {
             type: 'reference',
             ownerId: 'o1',
@@ -114,7 +114,7 @@ describe('readCards (BC for legacy stickies cards)', () => {
 
     test('mixed legacy + new cards both project correctly', () => {
         const doc = new Y.Doc();
-        const tasks = doc.getMap<Y.Map<unknown>>('tasks');
+        const tasks = doc.getMap<unknown>('tasks');
         doc.transact(() => {
             const legacy = new Y.Map<unknown>();
             legacy.set('id', 'legacy');

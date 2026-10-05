@@ -1348,7 +1348,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BACKUP_STAMP_PATTERN` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `buildBackupStamp` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `canUploadServerArchive` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
-| `CONTROL_CHAR_PATTERN` | `@workspace/lib/validation` | packages/lib/src/validation/text.ts |
+| `CONTROL_CHARS` | `@workspace/lib/validation` | packages/lib/src/validation/text.ts |
 | `EMAIL_FIND_REGEX` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `FAILED_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `incompleteReason` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |

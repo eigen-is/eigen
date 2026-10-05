@@ -31,12 +31,13 @@ type TeamSettingsSectionProps = {
 
 // The team's header with its avatar and name, and the settings it shows or edits below it.
 export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectionProps) {
+    const ownerId = teamOwnerId(team.id);
     const [showSettingsForm, setShowSettingsForm] = useState(false);
     // This page always requests the avatar with a fresh ?v=timestamp (stamped per mount and after
     // upload/remove): the editing surface must never show the up-to-24h browser-cached copy of the
     // team's stable /p/avatar URL. Other surfaces accept that TTL. The route mounts the team detail
     // with key={team.id}, so switching teams remounts and re-stamps naturally.
-    const [avatarUrl, setAvatarUrl] = useState(() => `p/avatar/${teamOwnerId(team.id)}?v=${Date.now()}`);
+    const [avatarUrl, setAvatarUrl] = useState(() => `p/avatar/${ownerId}?v=${Date.now()}`);
 
     const [draftName, setDraftName] = useState(team.name);
     const [draftCalEnabled, setDraftCalEnabled] = useState(true);
@@ -46,7 +47,6 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
 
     const updateTeam = useUpdateTeam(organizationId);
 
-    const ownerId = teamOwnerId(team.id);
     const { data: calendars = [] } = useCalendars(ownerId);
     const updateCalendar = useUpdateCalendar(ownerId);
     const { data: settings } = useTeamSettings(team.id);
@@ -56,14 +56,13 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
     const removeAvatar = useRemoveTeamAvatar(team.id);
 
     const defaultCal = calendars.find((c) => c.isDefault);
-    const teamTarget = teamOwnerId(team.id);
     const calendarEnabled = settings?.calendar?.enabled !== false;
 
     const calendarPermission = useMemo(() => {
         if (!defaultCal?.shares) return 'read';
-        const share = defaultCal.shares.find((s) => s.targetId === teamTarget);
+        const share = defaultCal.shares.find((s) => s.targetId === ownerId);
         return share?.permission || 'read';
-    }, [defaultCal, teamTarget]);
+    }, [defaultCal, ownerId]);
 
     const openSettingsForm = () => {
         setDraftName(team.name);
@@ -86,13 +85,13 @@ export function TeamSettingsSection({ team, organizationId }: TeamSettingsSectio
             },
         });
         if (defaultCal && draftCalEnabled) {
-            const existingShares = (defaultCal.shares || []).filter((s) => s.targetId !== teamTarget);
+            const existingShares = (defaultCal.shares || []).filter((s) => s.targetId !== ownerId);
             const shares =
                 draftCalPermission === 'read'
                     ? existingShares.length > 0
                         ? existingShares
                         : null
-                    : [...existingShares, { targetId: teamTarget, permission: draftCalPermission }];
+                    : [...existingShares, { targetId: ownerId, permission: draftCalPermission }];
             await updateCalendar.mutateAsync({ id: defaultCal.id, shares });
         }
         setShowSettingsForm(false);

@@ -10,7 +10,7 @@
 // of escapeXml's characters, so the SVG stores the token verbatim and rewrite/strip are exact-token
 // string replaces, never a parse-and-reserialize.
 
-import { CONTROL_CHAR_PATTERN } from '../validation';
+import { CONTROL_CHARS } from '../validation/text';
 
 export const EIGEN_MEDIA_SCHEME = 'eigen-media:';
 
@@ -40,12 +40,10 @@ export function parseEigenMediaHref(href: string): string | null {
     return isSafeMediaName(name) ? name : null;
 }
 
-const CONTROL_CHAR = new RegExp(CONTROL_CHAR_PATTERN);
-
 // The traversal/injection guard on a media name: no `/`, no `\`, no control character, not empty. One
 // definition, so a frame background's stored name is exactly as safe as a ref parsed out of an SVG.
 export function isSafeMediaName(name: string): boolean {
-    return name !== '' && !name.includes('/') && !name.includes('\\') && !CONTROL_CHAR.test(name);
+    return name !== '' && !name.includes('/') && !name.includes('\\') && !CONTROL_CHARS.test(name);
 }
 
 // The distinct, safe media names an SVG references, in first-seen order. Forged/unsafe refs are

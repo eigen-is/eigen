@@ -46,7 +46,7 @@ export function RequestAccessView({ ownerId, mountId, pathId }: RequestAccessVie
             </div>
 
             {isGuest ? (
-                <p className="text-sm text-muted-foreground">Ask {owner?.name || 'the owner'} to share it with you.</p>
+                <p className="text-sm text-muted-foreground">Ask the owner to share it with you.</p>
             ) : (
                 <div className="flex flex-col items-center gap-3 w-full max-w-sm">
                     {showMessage ? (
