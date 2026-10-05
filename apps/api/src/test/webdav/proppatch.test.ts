@@ -99,6 +99,26 @@ describe('WebDAV PROPPATCH', () => {
         expect(res.status).toBe(413);
     });
 
+    test('dead properties past 64KB on one path → 507, nothing persisted', async () => {
+        const url = `${baseHref}/proppatch-full.txt`;
+        await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
+        const setProp = (name: string) =>
+            webdavRequest(ctx.alice.user.email, 'PROPPATCH', url, {
+                body: `<?xml version="1.0"?>
+<D:propertyupdate xmlns:D="DAV:" xmlns:Z="urn:eigen-test">
+  <D:set><D:prop><Z:${name}>${'a'.repeat(40_000)}</Z:${name}></D:prop></D:set>
+</D:propertyupdate>`,
+                headers: { 'Content-Type': 'application/xml; charset=utf-8' },
+            });
+        expect((await setProp('First')).status).toBe(207);
+        expect((await setProp('Second')).status).toBe(507);
+
+        const find = await webdavRequest(ctx.alice.user.email, 'PROPFIND', url, { headers: { Depth: '0' } });
+        const xml = await find.text();
+        expect(xml).toContain('First');
+        expect(xml).not.toContain('Second');
+    });
+
     test('PROPPATCH with a truncated body → 400, nothing persisted', async () => {
         await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-trunc.txt`, { body: 'a' });
         const res = await webdavRequest(ctx.alice.user.email, 'PROPPATCH', `${baseHref}/proppatch-trunc.txt`, {

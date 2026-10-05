@@ -19,6 +19,8 @@ export type Lock = {
 };
 
 export const LOCK_DEFAULT_TTL_MS = 600_000;
+// Shared locks stack without conflict, so cap them per path or a client grows this table without bound.
+const MAX_LOCKS_PER_PATH = 32;
 
 export class LockManager {
     private locks = new Map<string, Lock>();
@@ -59,6 +61,9 @@ export class LockManager {
             if (conflicts && !hasAuthorizingToken) {
                 throw new ApiError(423, 'Locked');
             }
+        }
+        if ((this.byPath.get(args.pathId)?.size ?? 0) >= MAX_LOCKS_PER_PATH) {
+            throw new ApiError(423, 'Too many locks');
         }
         const token = `urn:uuid:${randomUUID()}`;
         const lock: Lock = {

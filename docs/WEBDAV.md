@@ -50,6 +50,7 @@ An overwrite trashes the target first. So a request whose source and destination
 - A lock belongs to the user who took it. A write with another user's token is a 423. Their UNLOCK is a 403.
 - A depth-infinity lock on a folder gates writes on everything below it. Each write walks its breadcrumb for covering locks (`coveringLocks`).
 - The TTL is 600 s unless the client asks, and never over 24 h, so a client can't pin lock state for years.
+- One path holds at most 32 locks. Shared locks stack without conflict, so past that a LOCK is a 423 and a client can't grow the table without bound.
 - DELETE and an overwrite release the replaced path's locks.
 - LOCK reads its two elements (`owner`, `lockscope`) by regex, not a parser: the owner is opaque client XML that must echo back as sent.
 
@@ -69,7 +70,7 @@ GET honors `If-Match` before `If-None-Match` (RFC 7232 §6), through the same `m
 
 PROPFIND serves Depth 0 and 1. Depth infinity, which is also what a missing `Depth` header means, is a 403 with `propfind-finite-depth`. Every row carries a fixed set of properties, whatever the body asks for ([ROADMAP.md](ROADMAP.md)). `getlastmodified` is always UTC, which Apple's `webdavfs` assumes. The requested folder also carries the mount's `quota-used-bytes` and `quota-available-bytes`, and its children don't.
 
-PROPPATCH answers a 207. A live property (`getetag`, `getcontentlength`, `displayname` and the rest) is a 403 in its propstat, since a stored copy would shadow the real value. A PROPPATCH is all or nothing (RFC 4918 §9.2), so one 403 saves none of the request and answers every other op 424. Any other property persists in `DrivePath.details.webdavProps`, such as Finder's tags or Office's `Win32CreationTime`. A property name that is not an XML name is a 400 before anything persists, because every later PROPFIND echoes it as an element.
+PROPPATCH answers a 207. A live property (`getetag`, `getcontentlength`, `displayname` and the rest) is a 403 in its propstat, since a stored copy would shadow the real value. A PROPPATCH is all or nothing (RFC 4918 §9.2), so one 403 saves none of the request and answers every other op 424. Any other property persists in `DrivePath.details.webdavProps`, such as Finder's tags or Office's `Win32CreationTime`. One path stores at most 64 KB of them, the same cap as a request body. A PROPPATCH that would pass it is a 507 and saves nothing. A property name that is not an XML name is a 400 before anything persists, because every later PROPFIND echoes it as an element.
 
 PROPFIND, PROPPATCH and LOCK bodies are capped at 64 KB (413 over it), which keeps an authenticated user from parking megabytes on `fast-xml-parser`'s synchronous path. PROPFIND and PROPPATCH validate the body with `XMLValidator` first, since the parser still yields ops from a truncated body.
 

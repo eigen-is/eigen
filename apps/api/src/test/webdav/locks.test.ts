@@ -116,6 +116,19 @@ describe('WebDAV LOCK/UNLOCK', () => {
         expect((await webdavRequest(ctx.alice.user.email, 'GET', url)).status).toBe(404);
     });
 
+    test('a 33rd shared lock on one path → 423', async () => {
+        const url = `${baseHref}/lock-shared-cap.txt`;
+        await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
+        const lockShared = () =>
+            webdavRequest(ctx.alice.user.email, 'LOCK', url, {
+                body: `<?xml version="1.0" encoding="utf-8" ?>
+<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:shared/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`,
+                headers: { 'Content-Type': 'application/xml; charset=utf-8' },
+            });
+        for (let i = 0; i < 32; i++) expect((await lockShared()).status).toBe(200);
+        expect((await lockShared()).status).toBe(423);
+    });
+
     test('LOCK body over 64KB → 413', async () => {
         const url = `${baseHref}/lock-big-body.txt`;
         await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
