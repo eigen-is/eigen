@@ -60,7 +60,7 @@ function uidMatcher(textMatch: TextMatch): ((uid: string) => boolean) | null {
     return null;
 }
 
-// Only VCALENDAR > VEVENT can match. A UID text-match is answered from the index; any other prop-filter or text-match is ignored rather than refused: RFC 4791 § 9.7 grammar rides on every UID lookup.
+// Only VCALENDAR > VEVENT can match. A UID text-match narrows the rows the report reads; any other prop-filter or text-match is ignored rather than refused: RFC 4791 § 9.7 grammar rides on every UID lookup.
 function readFilter(filter: CompFilter | undefined): {
     matchesEvents: boolean;
     timeRange?: { start: Date; end: Date };
