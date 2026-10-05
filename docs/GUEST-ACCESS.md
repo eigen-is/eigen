@@ -86,7 +86,7 @@ On a closed-signup server, the drive `access-check` (`checkAccessForEmails`, use
 
 Every document app (docs, stickies, slides, sheets, vector) renders `<RequestAccessView>` from `EigenDocEditorRoute` when `useCollabDocumentInfo()` says `!canRead`. Drive shows it when the folder listing fails with a 403 `AppError`, chat when `useCheckPermissions()` says `!canRead`.
 
-A guest sees the same screen, but `POST .../request-access` rejects guests with 403 (`requireNonGuest`).
+A guest sees the same screen without the request form, told to ask the owner to share: `POST .../request-access` rejects guests with 403 (`requireNonGuest`).
 
 ## An access request notifies the owner and never reveals the path
 

@@ -6,7 +6,7 @@ category: Sharing
 tags: [drive, sharing, permissions, access]
 related: [drive/share-a-file]
 order: 100
-updated: 2026-06-08
+updated: 2026-10-05
 ---
 
 When you follow a link to a file you do not have access to, Eigen shows a "You need access" screen instead
@@ -37,6 +37,9 @@ Once the owner has shared the file with you, open the link again. The file will 
 
 You must be signed in to Eigen to request access. If you are signed in as the wrong account, sign out first
 and sign back in with the account you want to use.
+
+If you signed in as a guest, with a one-time code sent to your email address, the screen has no
+**Request access** button. Ask the owner to share the file with you instead.
 
 </div>
 
