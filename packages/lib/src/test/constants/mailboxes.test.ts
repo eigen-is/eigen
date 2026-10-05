@@ -4,7 +4,6 @@ import {
     isStandardMailbox,
     MAILBOX_ARCHIVE,
     MAILBOX_INBOX,
-    MAILBOX_INBOX_KEY,
     MAILBOX_SENT,
     mailboxDisplayName,
     mailboxListFlags,
@@ -17,10 +16,10 @@ describe('canonicalMailbox', () => {
         expect(canonicalMailbox('SENT')).toBe(MAILBOX_SENT);
     });
 
-    test('INBOX in any case is the inbox, which has no name at all', () => {
-        expect(canonicalMailbox('INBOX')).toBe(MAILBOX_INBOX);
-        expect(canonicalMailbox('inbox')).toBe(MAILBOX_INBOX);
-        expect(canonicalMailbox(MAILBOX_INBOX)).toBe(MAILBOX_INBOX);
+    test('INBOX in any case is the inbox, spelled the way IMAP spells it', () => {
+        expect(canonicalMailbox('inbox')).toBe('INBOX');
+        expect(canonicalMailbox('Inbox')).toBe('INBOX');
+        expect(canonicalMailbox(MAILBOX_INBOX)).toBe('INBOX');
     });
 
     test('a folder outside the standard set keeps its own name', () => {
@@ -50,11 +49,8 @@ describe('isStandardMailbox', () => {
 });
 
 describe('mailboxRouteSegment', () => {
-    test('the inbox travels as its key', () => {
-        expect(mailboxRouteSegment(MAILBOX_INBOX)).toBe(MAILBOX_INBOX_KEY);
-    });
-
     test('a standard mailbox lowercases, because the server case-folds it back', () => {
+        expect(mailboxRouteSegment(MAILBOX_INBOX)).toBe('inbox');
         expect(mailboxRouteSegment(MAILBOX_SENT)).toBe('sent');
     });
 

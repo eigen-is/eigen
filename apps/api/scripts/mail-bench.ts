@@ -13,12 +13,13 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
+import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import { type DatabaseConfig, openLocalDatabase, type SchemaType } from '../src/lib/core/managed-database';
 import type { Home } from '../src/lib/home/home';
 import type MailDB from '../src/lib/mail/maildb';
 import { MaildirStore } from '../src/lib/mail/maildir-store';
-import { buildMaildirFilename, createUniqueMessageId } from '../src/lib/mail/mailutils';
+import { buildMaildirFilename, createUniqueMessageId, mailboxDir } from '../src/lib/mail/mailutils';
 
 const BENCH_ROOT = process.env['BENCH_ROOT'] ?? path.join(tmpdir(), 'eigen-mail-bench');
 const HOME_DIR = path.join(BENCH_ROOT, 'home');
@@ -83,24 +84,22 @@ function rfc822(i: number, mailbox: string, extAddr: string, to: string): string
         `Date: ${dateHdr}\r\n` +
         `Message-ID: <seed-${i}-${createUniqueMessageId()}@seed.eigen.test>\r\n` +
         `Content-Type: text/plain; charset=utf-8\r\n\r\n` +
-        `Seeded ${mailbox === '' ? 'inbox' : mailbox.toLowerCase()} message ${i} for stress testing. ` +
+        `Seeded ${mailbox.toLowerCase()} message ${i} for stress testing. ` +
         `Lorem ipsum dolor sit amet, consectetur adipiscing elit. Delete all [SEED] mail when done.\r\n`
     );
 }
 
 const USER_EMAIL = 'bench@eigen.test';
-function mailboxDir(mailbox: string): string {
-    return mailbox === '' ? MAILDIR : path.join(MAILDIR, `.${mailbox}`);
-}
 function ensureMailbox(mailbox: string) {
-    for (const sub of ['cur', 'new', 'tmp']) mkdirSync(path.join(mailboxDir(mailbox), sub), { recursive: true });
+    for (const sub of ['cur', 'new', 'tmp'])
+        mkdirSync(path.join(mailboxDir(MAILDIR, mailbox), sub), { recursive: true });
 }
 
 let gid = 0;
 function generate(mailbox: string, n: number, onlyNew = false) {
     ensureMailbox(mailbox);
-    const curDir = path.join(mailboxDir(mailbox), 'cur');
-    const newDir = path.join(mailboxDir(mailbox), 'new');
+    const curDir = path.join(mailboxDir(MAILDIR, mailbox), 'cur');
+    const newDir = path.join(mailboxDir(MAILDIR, mailbox), 'new');
     for (let k = 0; k < n; k++) {
         gid++;
         const extAddr = `${pick(firstNames)} ${pick(lastNames)} <seed${gid}@seed.eigen.test>`;
@@ -140,12 +139,12 @@ const results: Record<string, string> = {};
 // Init store (creates standard mailbox dirs + fresh mail.db)
 const store = new MaildirStore(fakeHome);
 // Reach past `private` for the internals the benchmark times directly.
-const internals = store as unknown as { syncMailbox(mailbox: string): Promise<void>; db: MailDB };
+const internals = store as unknown as { reconcileMailbox(mailbox: string): Promise<void>; db: MailDB };
 await store.init(noopEvents);
 
 // 1) Generate (timed separately, not a result)
 const genT = await ms(() => {
-    generate('', INBOX);
+    generate(MAILBOX_INBOX, INBOX);
     generate('Archive', ARCHIVE);
 });
 const total = INBOX + ARCHIVE;
@@ -154,8 +153,8 @@ console.log(
 );
 
 // 2) Cold sync (full index of both mailboxes)
-const coldInbox = await ms(() => internals.syncMailbox(''));
-const coldArchive = await ms(() => internals.syncMailbox('Archive'));
+const coldInbox = await ms(() => internals.reconcileMailbox(MAILBOX_INBOX));
+const coldArchive = await ms(() => internals.reconcileMailbox('Archive'));
 const coldTotal = coldInbox + coldArchive;
 results[`cold-sync (${fmt(total)}, both)`] =
     `${(coldTotal / 1000).toFixed(1)}s  |  ${fmt(Math.round(total / (coldTotal / 1000)))} msg/s`;
@@ -163,29 +162,29 @@ console.log(
     `[cold] inbox ${(coldInbox / 1000).toFixed(1)}s  archive ${(coldArchive / 1000).toFixed(1)}s  total ${(coldTotal / 1000).toFixed(1)}s  (${fmt(Math.round(total / (coldTotal / 1000)))} msg/s)`,
 );
 
-const dbCount = internals.db.getEmailsCount('') + internals.db.getEmailsCount('Archive');
+const dbCount = internals.db.getEmailsCount(MAILBOX_INBOX) + internals.db.getEmailsCount('Archive');
 console.log(
-    `[cold] indexed rows: inbox ${fmt(internals.db.getEmailsCount(''))}  archive ${fmt(internals.db.getEmailsCount('Archive'))}  (total ${fmt(dbCount)})\n`,
+    `[cold] indexed rows: inbox ${fmt(internals.db.getEmailsCount(MAILBOX_INBOX))}  archive ${fmt(internals.db.getEmailsCount('Archive'))}  (total ${fmt(dbCount)})\n`,
 );
 
 // 3) Warm no-op sync (nothing changed) — median of 3, on Inbox
 const warm: number[] = [];
-for (let i = 0; i < 3; i++) warm.push(await ms(() => internals.syncMailbox('')));
+for (let i = 0; i < 3; i++) warm.push(await ms(() => internals.reconcileMailbox(MAILBOX_INBOX)));
 results[`warm no-op sync (${fmt(INBOX)} inbox)`] =
     `${median(warm).toFixed(1)} ms  (runs: ${warm.map((x) => x.toFixed(0)).join('/')})`;
 console.log(`[warm] no-op inbox sync median ${median(warm).toFixed(1)} ms`);
 
 // 4) Incremental sync (add N new mails to inbox new/, re-sync)
-generate('', INCREMENTAL, true);
-const incT = await ms(() => internals.syncMailbox(''));
+generate(MAILBOX_INBOX, INCREMENTAL, true);
+const incT = await ms(() => internals.reconcileMailbox(MAILBOX_INBOX));
 results[`incremental sync (+${fmt(INCREMENTAL)} new)`] =
     `${incT.toFixed(0)} ms  (${fmt(Math.round(INCREMENTAL / (incT / 1000)))} new-msg/s)`;
 console.log(
-    `[incr] +${fmt(INCREMENTAL)} new synced in ${incT.toFixed(0)} ms  (inbox now ${fmt(internals.db.getEmailsCount(''))})\n`,
+    `[incr] +${fmt(INCREMENTAL)} new synced in ${incT.toFixed(0)} ms  (inbox now ${fmt(internals.db.getEmailsCount(MAILBOX_INBOX))})\n`,
 );
 
 // 5) List query (every row of the inbox, the shape the list had before keyset pagination) + payload size
-const wholeInbox = () => internals.db.listMessages('', { limit: Number.MAX_SAFE_INTEGER });
+const wholeInbox = () => internals.db.listMessages(MAILBOX_INBOX, { limit: Number.MAX_SAFE_INTEGER });
 const listTimes: number[] = [];
 let listRows: EmailSummary[] = [];
 for (let i = 0; i < 3; i++) {
@@ -201,12 +200,12 @@ console.log(`[list] whole inbox median ${median(listTimes).toFixed(1)} ms, ${fmt
 console.log(
     `[list] JSON.stringify payload ${(payload / 1024 / 1024).toFixed(2)} MB  (${(payload / listRows.length).toFixed(0)} B/row)`,
 );
-// listMessages() (what the route ACTUALLY calls) = syncMailbox + one keyset page read
+// listMessages() (what the route ACTUALLY calls) = reconcileMailbox + one keyset page read
 const listMsgFull = await ms(async () => {
-    await store.listMessages('', { limit: 200 });
+    await store.listMessages(MAILBOX_INBOX, { limit: 200 });
 });
 results['listMessages() page (route path)'] = `${listMsgFull.toFixed(0)} ms  (includes a no-op sync)`;
-console.log(`[list] listMessages('') route path ${listMsgFull.toFixed(0)} ms (sync + page read)\n`);
+console.log(`[list] listMessages(INBOX) route path ${listMsgFull.toFixed(0)} ms (sync + page read)\n`);
 
 // 6) Single mutations at full DB size — median of 3 each
 const moveTimes: number[] = [];

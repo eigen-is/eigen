@@ -283,7 +283,7 @@ function rollbackMailMutation(queryClient: QueryClient, context: MailMutationCon
     if (context) for (const [key, data] of context.snapshot) queryClient.setQueryData(key, data);
 }
 
-// Patch a row by id across every cached list (sidesteps the ''/'inbox'/case mailbox-key pitfalls).
+// Patch a row by id across every cached list, whatever mailbox key it sits under.
 // Lists are infinite queries, so patch each loaded page and keep refs stable when unchanged.
 function patchEmailInLists(queryClient: QueryClient, ownerId: string, messageId: string, patch: EmailListPatch): void {
     queryClient.setQueriesData<InfiniteData<EmailSummary[]>>({ queryKey: emailKeys.lists(ownerId) }, (data) => {

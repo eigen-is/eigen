@@ -33,12 +33,11 @@ import {
     MAILBOX_SENT,
     MAILBOX_TRASH,
     mailboxRouteSegment,
-    SPECIAL_MAILBOXES,
     STANDARD_MAILBOXES,
 } from '@workspace/lib/constants/mailboxes';
 import { SERVER_DATABASES, SERVER_DIR } from '../lib/config/paths';
 import { PATHS } from '../lib/core/constants';
-import { buildMaildirFilename, createUniqueMessageId } from '../lib/mail/mailutils';
+import { buildMaildirFilename, createUniqueMessageId, mailboxDir } from '../lib/mail/mailutils';
 
 // Data root: honor EIGEN_DATA_ROOT (as the server does), else the repo's ./data resolved from
 // this file's location so the script works regardless of the cwd it's launched from.
@@ -78,10 +77,7 @@ const account: UserRow = resolved;
 if (!values.user) console.log(`No --user given — seeding the first account: ${account.email} (${account.id})`);
 const userFrom = `${(account.name || account.email).replace(/[<>]/g, '')} <${account.email}>`;
 
-// Maildir root for the user: <data>/home/<id>/eigen.mail/Maildir  (Inbox = root; others = .<Name>).
 const maildirRoot = path.join(DATA_ROOT, 'home', account.id, PATHS.MAIL.ROOT, PATHS.MAIL.MAILDIR);
-const mailboxDir = (mailbox: string) =>
-    mailbox === MAILBOX_INBOX ? maildirRoot : path.join(maildirRoot, `.${mailbox}`);
 
 // Relative weights for how the messages spread across mailboxes (Inbox heaviest, like a real account).
 const WEIGHTS: Record<string, number> = {
@@ -181,7 +177,7 @@ function rfc822(i: number, mailbox: string, extAddr: string): string {
 const ensured = new Set<string>();
 function ensureMailbox(mailbox: string) {
     if (ensured.has(mailbox)) return;
-    const dir = mailboxDir(mailbox);
+    const dir = mailboxDir(maildirRoot, mailbox);
     for (const sub of [PATHS.MAIL.NEW, PATHS.MAIL.CUR, PATHS.MAIL.TMP])
         mkdirSync(path.join(dir, sub), { recursive: true });
     ensured.add(mailbox);
@@ -202,19 +198,18 @@ for (let i = 1; i <= count; i++) {
     let filename: string;
     if (toNew) {
         // new/ files carry no ":2," info section — the store promotes them to cur/ on sync.
-        dir = path.join(mailboxDir(mailbox), PATHS.MAIL.NEW);
+        dir = path.join(mailboxDir(maildirRoot, mailbox), PATHS.MAIL.NEW);
         filename = `${uid},S=${size}`;
     } else {
         // cur/ files carry flags: mostly Seen; ~8% Flagged; Drafts get the Draft flag.
         const flags = { seen: rand() > 0.2, flagged: rand() < 0.08, draft: mailbox === MAILBOX_DRAFTS };
-        dir = path.join(mailboxDir(mailbox), PATHS.MAIL.CUR);
+        dir = path.join(mailboxDir(maildirRoot, mailbox), PATHS.MAIL.CUR);
         filename = buildMaildirFilename(uid, flags, size);
     }
     writeFileSync(path.join(dir, filename), body);
     perMailbox[mailbox] = (perMailbox[mailbox] ?? 0) + 1;
 }
 
-const label = (mb: string) => (mb === MAILBOX_INBOX ? SPECIAL_MAILBOXES[MAILBOX_INBOX].label : mb);
 console.log(`Seeded ${count} messages for ${account.email} in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-for (const mb of STANDARD_MAILBOXES) console.log(`  ${label(mb).padEnd(8)} ${perMailbox[mb] ?? 0}`);
+for (const mb of STANDARD_MAILBOXES) console.log(`  ${mb.padEnd(8)} ${perMailbox[mb] ?? 0}`);
 console.log('Open the account (or reload) to sync them in. Clean up later by deleting the [SEED] mail.');

@@ -1,11 +1,18 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { rmSync } from 'node:fs';
-import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_TRASH, STANDARD_MAILBOXES } from '@workspace/lib/constants/mailboxes';
+import { mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import {
+    MAILBOX_ARCHIVE,
+    MAILBOX_INBOX,
+    MAILBOX_JUNK,
+    MAILBOX_TRASH,
+    STANDARD_MAILBOXES,
+} from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { evictHome } from '../../lib/home/get-home';
-import { boxDir, makeEml, seedMaildirFile, seedMaildirFolder } from '../mail-test-helpers';
+import { boxDir, maildirOf, makeEml, seedMaildirFile, seedMaildirFolder } from '../mail-test-helpers';
 import { app, assertJson, authedRequest, collectSSE, createTestUser, ensureServer, findOrFail } from '../setup';
 
 const isWindows = process.platform === 'win32';
@@ -346,15 +353,15 @@ describe.skipIf(isWindows)('A .INBOX folder is the Maildir root, not a mailbox o
         expect(delivered.status).toBe(200);
 
         // Dovecot never makes this folder, but a restore or a stray client can leave one behind.
-        seedMaildirFolder(userId, 'INBOX');
+        mkdirSync(join(maildirOf(userId), '.INBOX', 'cur'), { recursive: true });
     });
 
-    test('listing twice leaves the inbox holding its message and lists no INBOX folder', async () => {
+    test('listing twice leaves the inbox holding its message and lists no second INBOX', async () => {
         const first = await listMailboxes(token, userId);
-        expect(first.some((box) => box.path === 'INBOX')).toBe(false);
+        expect(first.filter((box) => box.path === MAILBOX_INBOX)).toHaveLength(1);
 
         const second = await listMailboxes(token, userId);
-        expect(second.some((box) => box.path === 'INBOX')).toBe(false);
+        expect(second.filter((box) => box.path === MAILBOX_INBOX)).toHaveLength(1);
 
         const inbox = await assertJson<EmailSummary[]>(await authedRequest(token, `/mail/${userId}/mailbox/inbox`));
         expect(inbox.map((message) => message.subject)).toContain('Delivered to the real inbox');

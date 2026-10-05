@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { AddressObject, EmailDraft, SentMailResult } from '@workspace/lib/types/mail';
 import * as mailer from '../../lib/core/mailer';
@@ -518,7 +519,7 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
             );
             // A delivery's sync can coalesce with a watcher's and miss the file, so a read drives another.
             for (let i = 0; i < 40 && !home.mail.messageGetSummary(id); i++) {
-                await home.mail.mailboxGet('');
+                await home.mail.mailboxGet(MAILBOX_INBOX);
                 await Bun.sleep(25);
             }
             return id;

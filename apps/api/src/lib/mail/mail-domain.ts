@@ -1,5 +1,5 @@
 import { MAIL_PREVIEW_CHARS, MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
-import { canonicalMailbox, MAILBOX_DRAFTS, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
+import { canonicalMailbox, MAILBOX_DRAFTS, MAILBOX_INBOX, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import {
     type AddressObject,
@@ -98,7 +98,7 @@ export class Mail {
         if (isNew) {
             const welcome = await welcomeMail(this.home.user.name, this.home.user.email);
             // Seeded, not delivered: the first sync indexes it without announcing new mail.
-            if (welcome) await this.store.append('', welcome, { skipReconcile: true, arrival: false });
+            if (welcome) await this.store.append(MAILBOX_INBOX, welcome, { skipReconcile: true, arrival: false });
         }
         await this.store.watch();
         this.store.cleanupStaleDraftTemps().catch((err) => console.error('mail: stale draft temp cleanup failed', err));
@@ -122,7 +122,7 @@ export class Mail {
     }
 
     async mailboxDeliver(message: Buffer): Promise<string> {
-        const uniqueId = await this.store.append('', message);
+        const uniqueId = await this.store.append(MAILBOX_INBOX, message);
 
         // Process iMIP calendar attachments (blocking so event exists before client queries)
         try {
@@ -160,7 +160,7 @@ export class Mail {
         }
         await enforceHomeDataQuota(this.home.user.id, bytes.byteLength);
 
-        const id = await this.store.append('', bytes, { arrival: false });
+        const id = await this.store.append(MAILBOX_INBOX, bytes, { arrival: false });
         return { id };
     }
 

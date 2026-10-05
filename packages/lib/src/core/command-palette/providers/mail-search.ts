@@ -41,9 +41,7 @@ export function useMailSearchResults(
         const encodedQ = parsed.q ? encodeURIComponent(parsed.q) : '';
         return data.mail.map((email, i) => {
             // The mail route lives at /_auth/$filterType/$filterId — `box/<mailbox>` is
-            // its canonical shape. Inbox is stored as the empty string in mail.db; route
-            // segments need 'inbox'. Other mailboxes are lowercased because useEmails
-            // lowercases the URL path on the wire (and the sidebar URLs match).
+            // its canonical shape, with a standard mailbox lowercased as the sidebar URLs are.
             const filterId = mailboxRouteSegment(email.mailbox);
             return {
                 kind: 'mail' as const,

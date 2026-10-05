@@ -36,7 +36,7 @@ export function EmailContextMenu({
     messageIds,
     isSingleSelect,
     mailboxes = [],
-    currentMailboxId = '',
+    currentMailboxId,
     onReply,
     onReplyAll,
     onForward,

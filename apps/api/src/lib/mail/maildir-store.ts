@@ -4,7 +4,6 @@ import {
     isStandardMailbox,
     MAILBOX_DRAFTS,
     MAILBOX_INBOX,
-    MAILBOX_INBOX_IMAP,
     mailboxListFlags,
     STANDARD_MAILBOXES,
 } from '@workspace/lib/constants/mailboxes';
@@ -22,6 +21,7 @@ import {
     buildRecipientSummary,
     createUniqueMessageId,
     getMailIDfromFileName,
+    mailboxDir,
     parseFlagsFromFilename,
     rebuildFlagsSuffix,
 } from './mailutils';
@@ -780,11 +780,9 @@ export class MaildirStore implements MailStore {
         await this.storage.renameDurable(path.join(curPath, oldFilename), path.join(curPath, newFilename));
     }
 
-    // Either delimiter addresses one directory: `Clients/Acme` and `Clients.Acme` are both `.Clients.Acme`.
     private mailboxDir(mailbox: string): string {
-        if (mailbox === MAILBOX_INBOX || mailbox === MAILBOX_INBOX_IMAP) return this.basePath;
         if (!isValidMailboxPath(mailbox)) throw new ApiError(400, `Invalid mailbox name: ${mailbox}`);
-        return `${this.basePath}/.${mailbox.replaceAll('/', '.')}`;
+        return mailboxDir(this.basePath, mailbox);
     }
 
     // -- Private helpers --

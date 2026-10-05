@@ -26,7 +26,7 @@ describe('Mail-arrival notification dedupe', () => {
         await deliverEmail(ctx.alice.user.email, 'two@external.com', 'Second', 'two');
 
         // Sync inbox to trigger notification persistence.
-        await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox/`);
+        await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox/inbox`);
 
         const res = await authedRequest(ctx.alice.user.sessionToken, `/notifications/${ctx.alice.user.id}`);
         const data = await res.json();
