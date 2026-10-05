@@ -58,7 +58,7 @@ A mount's capture copies its `metadata.db` first, and every row in the archive c
 | A file is renamed, moved or trashed | Holds it, at the path its archived row gives |
 | A file is created after its drive's database was copied | Does not hold it |
 | A file or a version is deleted for good | Holds neither its row nor its bytes, since the archive lists no file it holds no bytes for. A folder above it that was deleted with it goes too, unless it holds something the archive took, which then comes back in it |
-| A file is overwritten before the backup reads it | Holds the new content, with the size and date of the old row until the next save |
+| A file is overwritten before the backup reads it | Holds the new content, and its row gives the new size, hash and date. A restored home rebuilds its search text from those bytes |
 | An upload over a file is in flight when the backup reaches it | Holds the whole new file: the backup waits for the upload |
 | A document is edited | Holds its database as it was at its own copy, one committed state that verify checks |
 | An image is added to a document after the database copy | Holds the reference without the image |
@@ -125,7 +125,7 @@ A backup reaches a home through `pullHomeSnapshot` (`apps/api/src/lib/home/home-
 Every home archive is verified after the backup that wrote it, on **Verify**, and again before every restore:
 
 1. Transport: every file the manifest lists has exactly its size and sha256, and the folder holds nothing it does not list.
-2. Structure: `PRAGMA quick_check` on every database the archive owns, opened read-only. Only Eigen's own: a user's upload that happens to be SQLite is stored byte for byte and is not verify's to open.
+2. Structure: `PRAGMA quick_check` on every database the archive owns, opened read-only. Only Eigen's own: a user's upload that happens to be SQLite is stored byte for byte and is not verify's to open. A plain file whose row gives another size or sha256 than the manifest is a warning in the log, not a failure: an archive written before the capture rewrote such a row must still restore.
 3. Content: for the ten largest collab documents plus ten more, a sample that is the same on every run, every Yjs blob decodes and a document with blobs decodes to shared types. Chat containers are skipped, since their `data.db` is not Yjs.
 
 The verdict goes into the sidecar, which the admin pane's list reads. The manifest inside the archive is canonical; the sidecar is a cache.
