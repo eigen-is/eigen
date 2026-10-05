@@ -14,6 +14,7 @@ import {
     useUpdateEvent,
 } from '@workspace/lib/calendar';
 import { usePublicUser } from '@workspace/lib/public';
+import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { DeleteDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -59,8 +60,9 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const sharedCalendars = useMemo(() => (sharedCalendar ? [sharedCalendar] : []), [sharedCalendar]);
     const sharedCalendarLabel = useSharedCalendarLabel(sharedCalendars);
     const ownerIsViewer = eventOwnerId === user?.id;
-    // The owner's address tells their own organized events from invitations; a team owner has none.
-    const { data: owner } = usePublicUser(ownerIsViewer ? undefined : eventOwnerId);
+    // The owner's address tells their own organized events from invitations; a team owner has none to ask for.
+    const ownerIsTeam = parseOwnerId(eventOwnerId).type === 'team';
+    const { data: owner } = usePublicUser(ownerIsViewer || ownerIsTeam ? undefined : eventOwnerId);
 
     if (!event) return null;
 

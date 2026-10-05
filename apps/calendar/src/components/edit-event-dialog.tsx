@@ -18,6 +18,7 @@ import {
     viewerTimeZone,
 } from '@workspace/lib/calendar';
 import { usePublicUser } from '@workspace/lib/public';
+import { parseOwnerId } from '@workspace/lib/types';
 import type { Attendee, CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { ConfirmDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -97,8 +98,9 @@ export function EditEventDialog({
     const deleteEventOnSource = useDeleteEvent(eventOwnerId);
     const moveEvent = useMoveEvent(eventOwnerId);
     const ownerIsViewer = eventOwnerId === user?.id;
-    // The owner's address tells their own organized events from invitations; a team owner has none.
-    const { data: owner } = usePublicUser(ownerIsViewer ? undefined : eventOwnerId);
+    // The owner's address tells their own organized events from invitations; a team owner has none to ask for.
+    const ownerIsTeam = parseOwnerId(eventOwnerId).type === 'team';
+    const { data: owner } = usePublicUser(ownerIsViewer || ownerIsTeam ? undefined : eventOwnerId);
     // A series is saved on its master, and only the master's own row says which date the series starts on.
     const { data: master } = useEvent(
         eventOwnerId,

@@ -162,7 +162,7 @@ On a linked copy, `updateEvent` keeps changes to reminders and color and drops t
 
 Whether an event is somebody else's invitation is `isInvitationFromOthers` (`packages/lib/src/core/calendar/calendar-utils.ts`). It compares the stored organizer address with the Home user's, case-insensitively. A stored `ORGANIZER` alone means nothing: Apple Calendar and Thunderbird write the account's own address on every event they create with guests, and that event is the owner's own. The guard, `deleteEvent`, `rsvp()`, the inbound REPLY lookup and both calendar dialogs all use this one rule. A CalDAV PUT reads the stamp instead ([CALDAV.md](CALDAV.md#a-put-is-judged-inside-the-write-lock)).
 
-On a calendar another user shared, both dialogs compare with that owner's address, which `usePublicUser` resolves. A team Home has no address, so on a team calendar the rule reads Eigen's organizer stamp (`organizerEventId`), as a CalDAV PUT does: an event a member organized carries only the member's address and stays the team's own.
+On a calendar another user shared, both dialogs compare with that owner's address, which `usePublicUser` resolves. A team Home has no address, so the dialogs ask for none, and on a team calendar the rule reads Eigen's organizer stamp (`organizerEventId`), as a CalDAV PUT does: an event a member organized carries only the member's address and stays the team's own.
 
 ## The organizer's writes fan out, and only the organizer's
 
