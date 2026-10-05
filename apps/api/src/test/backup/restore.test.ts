@@ -1,8 +1,8 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import * as fsp from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import {
     COLLAB_HOME_REPLACED_CLOSE,
     COLLAB_HOME_REPLACED_REASON,
@@ -18,6 +18,7 @@ import { eq } from 'drizzle-orm';
 import { apikey as apikeyScheme, user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
+import { MAILDIR_ROOT } from '../../lib/backup/archive-layout';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
 import * as pathsModule from '../../lib/backup/paths';
 import { ARCHIVE_AVATAR_DIR, buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
@@ -1342,6 +1343,42 @@ describe('Backup round trip of a home that stores files by name', () => {
         await restoreHome(await backUp(user.id), user.id, `restore-real-shape-${Date.now()}`);
         expectRealShape(join(TEST_DATA_DIR, 'home', user.id), shape);
         await expectRealShapeServed(shape);
+    });
+
+    // Dovecot dates a message by its file's mtime: a restore that dated every file to itself would put every message
+    // of the home at the restore in a client that sorts by received date.
+    test('a restore puts a Maildir message back with its mtime, through a rename and through a copy', async () => {
+        const { user } = await realShapeHome();
+        await deliverMail(user.email, 'Received long ago');
+        const homeDir = join(TEST_DATA_DIR, 'home', user.id);
+        const maildir = join(homeDir, MAILDIR_ROOT);
+        const received = new Date('2021-03-04T05:06:07Z');
+        const [delivered] = [...new Bun.Glob('{cur,new}/*').scanSync({ cwd: maildir })];
+        utimesSync(join(maildir, delivered), received, received);
+        const unique = basename(delivered).split(':')[0];
+        const receivedAt = () => {
+            const [message] = [...new Bun.Glob(`{cur,new}/${unique}*`).scanSync({ cwd: maildir })];
+            return statSync(join(maildir, message)).mtime;
+        };
+        const artifact = await backUp(user.id);
+
+        await restoreHome(artifact, user.id, `restore-mtime-${Date.now()}`);
+        expect(receivedAt()).toEqual(received);
+
+        const rename = fsp.rename;
+        let crossed = false;
+        const spy = spyOn(fsp, 'rename').mockImplementation(async (from, to) => {
+            if (to !== homeDir) return rename(from, to);
+            crossed = true;
+            throw Object.assign(new Error('cross-device link not permitted'), { code: 'EXDEV' });
+        });
+        try {
+            await restoreHome(artifact, user.id, `restore-mtime-copy-${Date.now()}`);
+        } finally {
+            spy.mockRestore();
+        }
+        expect(crossed).toBe(true);
+        expect(receivedAt()).toEqual(received);
     });
 
     test('the home moves in through a copy when the backups folder is another disk than data/', async () => {

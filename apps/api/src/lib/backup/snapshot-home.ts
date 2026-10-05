@@ -287,12 +287,16 @@ export async function snapshotHome(
     if (unlisted) throw new Error(`snapshotHome: unlisted home database ${unlisted} — add it to HOME_DATABASES`);
     for (const rel of tree.dirs) fs.mkdirSync(path.join(folder, ARCHIVE_HOME_DIR, rel), { recursive: true });
     const taken = new Set(tree.files);
-    const capture = (rel: string) =>
-        captureUnlessGone(
-            Bun.file(path.join(home.homeDir, rel)),
-            path.join(folder, ARCHIVE_HOME_DIR, rel),
-            archiveHomePath(rel),
-        );
+    // The copy keeps its source's mtime, which the tar carries and the extract puts back: Dovecot dates a Maildir
+    // message by it. Read before the copy, which a file gone by then fails anyway.
+    const capture = async (rel: string) => {
+        const source = Bun.file(path.join(home.homeDir, rel));
+        const modified = new Date(source.lastModified);
+        const destPath = path.join(folder, ARCHIVE_HOME_DIR, rel);
+        const captured = await captureUnlessGone(source, destPath, archiveHomePath(rel));
+        if (captured) await fsp.utimes(destPath, modified, modified);
+        return captured;
+    };
     for (const [index, rel] of tree.files.entries()) {
         let captured = await capture(rel);
         const renamed = captured ? null : renamedMessage(home.homeDir, rel);

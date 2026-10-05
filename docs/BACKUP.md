@@ -94,9 +94,9 @@ The warnings are in the home manifest's `warnings`, one line per mount and kind 
 - Other homes. A team's data lives in the team's home, which has its own archive.
 - Guest and org homes. Guest homes are disposable (guest cleanup deletes them) and an org home holds no databases, so the per-home routes answer a guest or org ownerId with 400. A server archive takes the org folder as plain files and leaves guest homes out: after a Full restore a guest keeps their account and gets a new home on their next visit, and a Light restore leaves guest homes as they are.
 
-## A restore does not put mtimes back
+## A restore puts the mtimes of the home's own files back
 
-The extractor writes every file with the clock of the restore. Mail is the only domain that reads a file's stats, and its first pass re-reads what looks drifted.
+Dovecot dates a Maildir message, its INTERNALDATE, by its file's mtime, so a restore that wrote every file with its own clock would put every message at the restore in a client that sorts by received date. The capture gives each file of the home outside its drives, the Maildir included, the mtime of its source, the tar carries it, and the extractor puts every file's back, as `tar -x` does. A copy between two disks keeps them too (`movePathAsync` in `apps/api/src/lib/backup/materialize-mount.ts`). A drive's file and a database carry the time of the backup, which nothing reads.
 
 ## Archives live outside data/
 

@@ -282,6 +282,8 @@ type TarEntry = {
     path: string;
     typeflag: string;
     mode: number;
+    // Seconds since the epoch.
+    mtime: number;
     size: number;
     offset: number;
     body: AsyncGenerator<Uint8Array>;
@@ -431,7 +433,8 @@ async function* tarEntries(bytes: AsyncIterable<Uint8Array>): AsyncGenerator<Tar
             }
             if (typeflag === '' || typeflag === '0' || typeflag === '5') {
                 const mode = headerNumber(header, 100, 8);
-                yield { path: entryPath, typeflag, mode, size, offset: position, body: body() };
+                const mtime = headerNumber(header, 136, 12);
+                yield { path: entryPath, typeflag, mode, mtime, size, offset: position, body: body() };
             }
             await skip(bodyLeft + padLength(size));
         }
@@ -515,6 +518,8 @@ export async function extractArtifact(source: ArtifactSource, targetDir: string)
                 Readable.from(entry.body),
                 fs.createWriteStream(target, { mode: entry.mode & PERMISSION_BITS }),
             );
+            // As `tar -x` does: Dovecot dates a Maildir message by its file's mtime.
+            await fsp.utimes(target, entry.mtime, entry.mtime);
         }
     } catch (error) {
         // Half an unpacked archive is worse than none — nothing downstream can tell the two apart.
