@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../../lib/core/errors';
+import { ICS_IMPORT_MAX_EVENTS } from '../../lib/core/transfer';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import {
     buildIcsPreviewPayload,
@@ -315,6 +316,18 @@ describe('buildIcsPreviewPayload', () => {
 
         expect(payload.events[0]?.rrule).toBeNull();
         expect(performance.now() - startedAt).toBeLessThan(1000);
+    });
+
+    // ical.js caches a TZID it found, never one it missed, so every event naming an undefined zone rescans the file.
+    test('a file past the import event ceiling is refused before it is parsed', () => {
+        const zone = 'TZID=Nowhere/Unknown';
+        const text = vcal(
+            Array.from({ length: ICS_IMPORT_MAX_EVENTS + 1 }, (_, i) =>
+                event(`zone-${i}@eigen`, [`DTSTART;${zone}:20260601T100000`, `DTEND;${zone}:20260601T110000`]),
+            ).flat(),
+        );
+
+        expect(() => payloadOf(text)).toThrow(new ApiError(413, 'Too many events to preview'));
     });
 
     test('a file the parser refuses is a controlled failure, not a throw the runner reports as a crash', () => {
