@@ -128,8 +128,8 @@ Outbound mail goes on without mailboxes, as long as a relay is set. Share notifi
 
 ## What a server without hosted mail leaves out
 
-- No Mail app, no IMAP and no inbound mail. Every Home still builds its Maildir and watcher, an idle cost.
-- The `/mail/:ownerId/*` routes stay live, apart from the send route and the two imports, which answer 403 (`requireMailEnabled()`, `apps/api/src/lib/core/access.ts`). The UI hides them.
+- No Mail app, no IMAP and no inbound mail. A Home opens no Maildir and starts no watcher, and a mail search finds nothing.
+- Every `/mail/` route, the local delivery route included, answers 403 (`requireMailEnabled()`, `apps/api/src/lib/core/access.ts`). The UI hides them.
 - No welcome mail, since nobody would ever read it.
 - Calendar invitations go out, but an outside attendee's reply goes to the organizer's own mailbox and Eigen never updates their status, because inbound iMIP needs hosted mail.
 - The role addresses `postmaster@`, `abuse@` and `noreply@` stay unclaimable, and an address on the server's own mail domain is never a guest, even when its mailbox lives elsewhere.

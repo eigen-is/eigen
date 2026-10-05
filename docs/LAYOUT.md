@@ -47,7 +47,7 @@ Below 769px (`useIsMobile`, [MOBILE.md](MOBILE.md)) a `ColumnLayout` with a `mob
 
 ## The command palette is the one shell surface with its own engine
 
-The engine, parsers, providers and commands live in `packages/lib/src/core/command-palette/`, the dialog and rows in `packages/ui/src/components/layout/app/command-palette/`. Its New commands come from the shared `apps` registry and the EigenDocType registries (`EIGEN_DOC_TYPE_INFO`, `EIGEN_DOC_ICONS`), so a new EigenDocType appears in the palette with no palette change. A route publishes what is selected and what can be done with it through `usePaletteSelection` and `usePaletteSelectionActions`. Design and open work: [the proposal](proposals/PROPOSAL_COMMAND_PALETTE.md).
+The engine, parsers, providers and commands live in `packages/lib/src/core/command-palette/`, the dialog and rows in `packages/ui/src/components/layout/app/command-palette/`. Its New commands come from the shared `apps` registry and the EigenDocType registries (`EIGEN_DOC_TYPE_INFO`, `EIGEN_DOC_ICONS`), so a new EigenDocType appears in the palette with no palette change. A route publishes what is selected and what can be done with it through `usePaletteSelection` and `usePaletteSelectionActions`. How it merges, scopes, ranks and takes a published selection: [COMMAND-PALETTE.md](COMMAND-PALETTE.md).
 
 ## One `DriveCapabilities` value gates every Drive action
 

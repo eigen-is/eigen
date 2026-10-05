@@ -63,6 +63,10 @@ A revoked read would otherwise keep receiving broadcasts until the socket drops.
 
 `CollabDocument.scheduleClose` waits `CLOSE_LINGER_MS` (60 s) after the last connection drops before tearing the document down, so a reload or a brief disconnect reattaches to the loaded document instead of re-paying the load. A new subscribe cancels the timer.
 
+## A drive that is shutting down refuses a new open
+
+Once `Drive.destruct` has destructed the open documents, the registry (`apps/api/src/lib/drive/collab-registry.ts`) refuses any new open with a 503. A document that registered after that sweep would never be destructed, and the mount teardown that follows would close its database under it.
+
 ## Modified moves for an update, never for an open or a close
 
 The `update` handler stamps the container's Modified time at most once a minute (`TOUCH_THROTTLE_MS`), since typing fires many updates a second. An update the throttle skips is stamped when the document closes, with its own time. So a document that was only read keeps its Modified time, and the last edit is not dated a linger after the last viewer left. `apps/api/src/test/collab/collab-modified-touch.test.ts` pins it.
