@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { Notification, NotificationPersistInput } from '@workspace/lib/types/notification';
-import { desc, eq, sql } from 'drizzle-orm';
+import type { Notification, NotificationPersistInput, NotificationType } from '@workspace/lib/types/notification';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { type ManagedDatabase, PATHS } from '../core';
 import type { Home } from '../home';
@@ -99,6 +99,17 @@ export class NotificationCenter {
         const rows = query.orderBy(desc(schema.notifications.createdAt)).limit(limit).all();
 
         return rows.map(toNotification);
+    }
+
+    // Every unread row of these types, however old: one row per tag, so the set stays small.
+    listUnread(types: readonly NotificationType[]): Notification[] {
+        return this.db
+            .select()
+            .from(schema.notifications)
+            .where(and(eq(schema.notifications.read, false), inArray(schema.notifications.type, [...types])))
+            .orderBy(desc(schema.notifications.createdAt))
+            .all()
+            .map(toNotification);
     }
 
     unreadCount(): number {

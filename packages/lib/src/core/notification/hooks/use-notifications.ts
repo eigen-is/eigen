@@ -30,6 +30,20 @@ export function useUnreadNotificationCount(ownerId: string) {
     });
 }
 
+// Every unread chat and comment notification, not just those among the newest 50 the bell loads.
+export function useUnreadChatNotifications(ownerId: string) {
+    return useQuery({
+        queryKey: notificationKeys.unreadChat(ownerId),
+        queryFn: async () => {
+            const response = await notificationApi({ ownerId })['unread-chat'].get();
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        enabled: !!ownerId,
+        staleTime: STALE_TIME.ONE_MINUTE,
+    });
+}
+
 export function useMarkNotificationRead(ownerId: string) {
     const queryClient = useQueryClient();
     return useMutation({
