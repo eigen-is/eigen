@@ -33,7 +33,7 @@ Each handler starts with `getSharedDrive(ownerId, user)`, so WebDAV enforces the
 
 An Eigen document (every type `isDocumentType` names) is a drive folder holding `data.db` and `media/` ([STORAGE.md](STORAGE.md)). Over WebDAV it lists as a folder with its real children, and `GET Report.eigendoc/data.db` returns the SQLite file byte for byte. So rclone or rsync backs up every document losslessly.
 
-A write inside one is a `423 Locked`: PUT, MKCOL, DELETE and PROPPATCH on anything inside, a LOCK that would create a file there, a MOVE from or to inside, and a COPY into one. The drive layer owns that state, and a client write would corrupt it or orphan its rows. The container as a whole moves, renames, copies and trashes like any folder. `enclosingDocumentContainer` (`container-guard.ts`) makes the call over the breadcrumb each handler fetches anyway for the lock check. `container-guard.test.ts` pins every method.
+A write inside one is a `423 Locked`: PUT, MKCOL, DELETE and PROPPATCH on anything inside, a MOVE from or to inside, and a COPY into one. The drive layer owns that state, and a client write would corrupt it or orphan its rows. The container as a whole moves, renames, copies and trashes like any folder. `enclosingDocumentContainer` (`container-guard.ts`) makes the call over the breadcrumb each handler fetches anyway for the lock check. `container-guard.test.ts` pins every method.
 
 There is no export view: a document is never offered as `.docx` or `.xlsx` over WebDAV, so editing one goes through the web app. The converters that could back such a view are in [EXPORT.md](EXPORT.md).
 
@@ -51,7 +51,6 @@ An overwrite trashes the target first. So a request whose source and destination
 - A depth-infinity lock on a folder gates writes on everything below it. Each write walks its breadcrumb for covering locks (`coveringLocks`).
 - The TTL is 600 s unless the client asks, and never over 24 h, so a client can't pin lock state for years.
 - DELETE and an overwrite release the replaced path's locks.
-- A LOCK on a missing name creates an empty file under it and answers 201 (RFC 4918 §9.10.4), because Office and the Windows redirector lock a new name before its first PUT. It takes the checks a PUT takes, and a missing parent is a 409.
 - LOCK reads its two elements (`owner`, `lockscope`) by regex, not a parser: the owner is opaque client XML that must echo back as sent.
 
 ## PUT stages the body before the row

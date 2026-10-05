@@ -155,8 +155,8 @@ export async function handleProppatch(args: {
     const refused = ops.some(isProtected);
 
     // Apply all ops in memory first, then write once. RFC 4918 §9.2 requires
-    // ops to be processed in document order; replaceMatching preserves the
-    // existing element's slot when we hit a set on an existing prop.
+    // ops to be processed in document order; a set on an existing prop keeps
+    // that prop's slot.
     if (!refused) {
         let webdavProps = path.details?.webdavProps ? [...path.details.webdavProps] : [];
         let mutated = false;
