@@ -155,10 +155,11 @@ export async function snapshotMountData(
                 if (live?.size) recordLost(live.size, await mount.getStorageKey(row.id));
             }
         } else {
-            // Path lock, then shared: an overwrite rewrites the file in place, so it and the copy wait for each other,
-            // and no rename moves the bytes between the key and the copy.
-            const entry = await mount.withPathLock(row.id, () =>
-                mount.withTreeShared(async () => {
+            // The path lock for the whole copy: an overwrite rewrites the file in place, so it and the copy wait for
+            // each other. The shared tree lock only until the file is open, so no rename moves the bytes between the
+            // key and the open, and a rename after it waits for no copy: captureFile opens before its first await.
+            const entry = await mount.withPathLock(row.id, async () => {
+                const opened = await mount.withTreeShared(async () => {
                     const live = await mount.getPath(row.id);
                     if (!live) return null;
                     const storageKey = await mount.getStorageKey(row.id);
@@ -172,17 +173,18 @@ export async function snapshotMountData(
                         if (live.size && !(await isGone())) recordLost(live.size, storageKey);
                         return null;
                     }
-                    const captured = await captureFile(file, destPath, entryPath, true).catch(
-                        async (error: unknown) => {
-                            if (!isMissingObjectCause(error) || !(await isGone())) fail(error);
-                            fs.rmSync(destPath, { force: true });
-                            return null;
-                        },
-                    );
-                    if (captured && fromStorage) stored++;
-                    return captured;
-                }),
-            );
+                    const copy = captureFile(file, destPath, entryPath, true).catch(async (error: unknown) => {
+                        if (!isMissingObjectCause(error) || !(await isGone())) fail(error);
+                        fs.rmSync(destPath, { force: true });
+                        return null;
+                    });
+                    return { copy, fromStorage };
+                });
+                if (!opened) return null;
+                const captured = await opened.copy;
+                if (captured && opened.fromStorage) stored++;
+                return captured;
+            });
             if (entry) {
                 entries.push(entry);
                 held.add(row.id);

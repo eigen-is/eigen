@@ -270,6 +270,60 @@ describe('a capture on a by-name mount takes a file the user moves meanwhile', (
         expect((await verifyFolder(folder)).status).toBe('verified');
     });
 
+    test('a rename during the copy of a large file runs to its end before the copy does', async () => {
+        const user = await raceUser('local-fullnames');
+        const { projects, root } = await seed(user);
+        const size = 8 * 1024 * 1024;
+        const big = await driveUpload(
+            user.sessionToken,
+            user.id,
+            M,
+            root.id,
+            new File([new Uint8Array(size).fill(1)], 'big.bin'),
+        );
+        const bigKey = await (await defaultMount(user)).getStorageKey(big.id);
+        // The copy hands over its first chunk, then waits for the rename it started, up to a bound.
+        let renamed: Promise<unknown> | undefined;
+        let renamedMidCopy = false;
+        const readKey = Mount.prototype.readKey;
+        const read = spyOn(Mount.prototype, 'readKey').mockImplementation(async function (this: Mount, key: string) {
+            const file = await readKey.call(this, key);
+            if (key !== bigKey || !file) return file;
+            const stream = file.stream.bind(file);
+            file.stream = () => {
+                const reader = stream().getReader();
+                let chunks = 0;
+                renamed = drivePut(user.sessionToken, user.id, M, `path/${projects.id}/rename`, {
+                    newName: 'Projects 2026',
+                });
+                const done = renamed.then(() => true);
+                return new ReadableStream<Uint8Array<ArrayBuffer>>({
+                    async pull(controller) {
+                        if (chunks++ === 1)
+                            renamedMidCopy = await Promise.race([done, Bun.sleep(2_000).then(() => false)]);
+                        const { done: end, value } = await reader.read();
+                        if (end) controller.close();
+                        else controller.enqueue(value);
+                    },
+                });
+            };
+            return file;
+        });
+        let result: Awaited<ReturnType<typeof snapshotInto>>;
+        try {
+            result = await snapshotInto(await getHome(user.id), 'full');
+            await renamed;
+        } finally {
+            read.mockRestore();
+        }
+        expect(renamedMidCopy).toBe(true);
+        expect(archivedRow(result.folder, projects.id)?.name).toBe('Projects');
+        expect(archivedReports(result.folder)).toEqual(reportBodies);
+        const archived = readFileSync(join(result.folder, 'home/mounts', M, 'data/big.bin'));
+        expect(archived.equals(Buffer.alloc(size, 1))).toBe(true);
+        expect((await verifyFolder(result.folder)).status).toBe('verified');
+    });
+
     test('a large file overwritten in place during its copy is archived whole', async () => {
         const user = await raceUser('local-fullnames');
         const { root } = await seed(user);
