@@ -1,5 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
-import { asNode, isXmlNode, type XmlNode } from '../dav/xml-node';
+import { asArray, asNode, isXmlNode, type XmlNode } from '../dav/xml-node';
 import {
     assertSupportedCollation,
     type ParamFilter,
@@ -37,9 +37,6 @@ export type CardReportRequest =
       }
     | { type: 'sync-collection'; syncToken: string | undefined; wantsData: boolean };
 
-// fast-xml-parser collapses a single repeated child to the value itself; the filter grammar's `*`/`?` children
-// are normalized to arrays here rather than via isArray so the config comment above stays about `href`/`prop`.
-const asArray = (v: unknown): unknown[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
 const attr = (node: XmlNode, name: string): string | null => {
     const v = node[`@_${name}`];
     return v == null ? null : String(v);
