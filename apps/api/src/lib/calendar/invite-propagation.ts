@@ -81,18 +81,12 @@ export async function propagateInvitation(
     const removed = oldAttendees.filter((a) => !newEmails.has(a.email.toLowerCase()));
     const existing = newAttendees.filter((a) => oldEmails.has(a.email.toLowerCase()));
 
-    const organizerEmail = user.email.toLowerCase();
-    // A collaborator writes in the owner's calendar, so the owner already holds the event: they attend it, and nothing is relayed to them.
-    const ownerEmail = organizerHome.user.email.toLowerCase();
+    // The acting user organizes. A collaborator writes in the owner's calendar, so the owner already holds the event: nothing is relayed to them, and the answer stays theirs to give.
+    const selves = new Set([user.email.toLowerCase(), organizerHome.user.email.toLowerCase()]);
 
     for (const attendee of added) {
-        if (attendee.email.toLowerCase() === organizerEmail) continue;
+        if (selves.has(attendee.email.toLowerCase())) continue;
         try {
-            if (attendee.email.toLowerCase() === ownerEmail) {
-                await organizerHome.calendar.receiveAttendeeStatus(event.id, attendee.email, 'accepted');
-                organizerHome.calendar.announce(SSEventType.CALENDAR_EVENT_UPDATED, event.calendarId);
-                continue;
-            }
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
                 await addRegistryEntry(organizerHome.user.id, attendee.email);
@@ -143,7 +137,7 @@ export async function propagateInvitation(
     }
 
     for (const attendee of removed) {
-        if (attendee.email.toLowerCase() === organizerEmail || attendee.email.toLowerCase() === ownerEmail) continue;
+        if (selves.has(attendee.email.toLowerCase())) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
@@ -164,7 +158,7 @@ export async function propagateInvitation(
     }
 
     for (const attendee of existing) {
-        if (attendee.email.toLowerCase() === organizerEmail || attendee.email.toLowerCase() === ownerEmail) continue;
+        if (selves.has(attendee.email.toLowerCase())) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
@@ -231,6 +225,11 @@ export async function propagateCancellation(
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
+                // A team Home has no address, and a CANCEL with an empty organizer names no one a client could match.
+                if (!organizerHome.user.email) {
+                    console.warn(`Skipped the iMIP cancel to ${attendee.email}: the organizer has no address`);
+                    continue;
+                }
                 const organizer = {
                     userId: organizerHome.user.id,
                     email: organizerHome.user.email,

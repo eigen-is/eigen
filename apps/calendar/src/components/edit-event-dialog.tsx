@@ -1,6 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
 import {
-    isInvitationFromOthers,
     isSeriesOccurrence,
     occurrenceDateToString,
     parseOccurrenceDate,
@@ -12,13 +11,12 @@ import {
     useCreateEvent,
     useDeleteEvent,
     useEvent,
+    useIsInvitationFromOthers,
     useMoveEvent,
     useSharedCalendars,
     useUpdateEvent,
     viewerTimeZone,
 } from '@workspace/lib/calendar';
-import { usePublicUser } from '@workspace/lib/public';
-import { parseOwnerId } from '@workspace/lib/types';
 import type { Attendee, CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { ConfirmDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -97,10 +95,7 @@ export function EditEventDialog({
     const createEvent = useCreateEvent(selectedCal?.ownerId || eventOwnerId);
     const deleteEventOnSource = useDeleteEvent(eventOwnerId);
     const moveEvent = useMoveEvent(eventOwnerId);
-    const ownerIsViewer = eventOwnerId === user?.id;
-    // The owner's address tells their own organized events from invitations; a team owner has none to ask for.
-    const ownerIsTeam = parseOwnerId(eventOwnerId).type === 'team';
-    const { data: owner } = usePublicUser(ownerIsViewer || ownerIsTeam ? undefined : eventOwnerId);
+    const isFromOthers = useIsInvitationFromOthers(eventOwnerId);
     // A series is saved on its master, and only the master's own row says which date the series starts on.
     const { data: master } = useEvent(
         eventOwnerId,
@@ -151,7 +146,7 @@ export function EditEventDialog({
     // An override of one occurrence carries no rule of its own: sending one back saves over the whole series.
     const isOverride = !!event.parentEventId;
     const isPartOfSeries = isSeriesOccurrence(event);
-    const isLinkedEvent = isInvitationFromOthers(event, ownerIsViewer ? user?.email : owner?.email);
+    const isLinkedEvent = isFromOthers(event);
     // An invitation from someone else is read-only except for which calendar holds the copy.
     const canSave = !isLinkedEvent || calendarChanged;
 

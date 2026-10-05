@@ -5,7 +5,7 @@ import { normalizeResourceUri } from '../core';
 import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
 import { type DataBudget, multigetRows, REPORT_DATA_BUDGET_BYTES, resourceDataRow } from '../dav/report-row';
 import { handleSyncCollection } from '../dav/sync-collection';
-import { davError, multistatusResponse, notFoundRow } from '../dav/xml';
+import { davError, multistatusResponse, notFoundRow, removedRow } from '../dav/xml';
 import { parseVCardLines } from '../vcard';
 import type { VCardLine } from '../vcard/types';
 import { projectAddressData } from './address-data';
@@ -40,7 +40,7 @@ export async function handleCardReport(contacts: Contacts, ownerId: string, body
                 changedSince: (ctag) => contacts.getChangedCardsSince(ctag),
                 deletedSince: (ctag) => contacts.getDeletedCardsSince(ctag),
                 href: (uri) => cardHref(ownerId, uri),
-                row: (card, vanished) => cardRow(contacts, ownerId, card, report.wantsData, null, budget, vanished),
+                row: (card) => cardRow(contacts, ownerId, card, report.wantsData, null, budget, removedRow),
             });
         case 'addressbook-query':
             return handleQuery(contacts, ownerId, report, budget);

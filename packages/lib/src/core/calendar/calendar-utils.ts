@@ -1,6 +1,6 @@
 import { RRule } from 'rrule';
 import { DEFAULT_CALENDAR_COLOR } from '../../constants/calendar';
-import type { CalendarEventOccurrence, CalendarItem, EventData, SharedCalendar } from '../../types/calendar';
+import type { Attendee, CalendarEventOccurrence, CalendarItem, EventData, SharedCalendar } from '../../types/calendar';
 import { dateFormatter, formatDayMonth, formatTime } from '../date';
 import { WINDOWS_ZONES } from './windows-zones';
 
@@ -186,6 +186,14 @@ export function isInvitationFromOthers(event: { data?: EventData | null }, owner
     if (!organizer) return false;
     if (!ownerEmail) return !!event.data?.organizerEventId;
     return organizer.email.toLowerCase() !== ownerEmail.toLowerCase();
+}
+
+// An override that states no guests holds its series' list: a stored VEVENT cannot tell "no list" from "nobody".
+export function heldAttendees(
+    override: { data?: EventData | null } | null | undefined,
+    series: { data?: EventData | null } | null | undefined,
+): Attendee[] {
+    return override?.data?.attendees?.length ? override.data.attendees : (series?.data?.attendees ?? []);
 }
 
 export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: string): 'pending' | 'declined' | null {

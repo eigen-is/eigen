@@ -1,5 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
 import ICAL from 'ical.js';
+import { asArray, asciiLower } from '../dav/xml-node';
 
 // <C:time-range> bounds are RFC 5545 BASIC format, which `new Date()` reads as Invalid Date and empties the REPORT; RFC 4791 makes them UTC either way.
 function parseCalDavDate(value: string): Date | undefined {
@@ -47,8 +48,6 @@ function named(filters: CompFilter[], name: string): CompFilter | undefined {
     return filters.find((filter) => String(filter['@_name'] ?? '').toUpperCase() === name);
 }
 
-const asciiLower = (text: string) => text.replace(/[A-Z]/g, (c) => c.toLowerCase());
-
 // RFC 4791 § 9.7.5: a substring match, i;ascii-casemap unless the client names i;octet. Another collation narrows nothing.
 function uidMatcher(textMatch: TextMatch): ((uid: string) => boolean) | null {
     const node = typeof textMatch === 'string' ? { '#text': textMatch } : textMatch;
@@ -75,8 +74,7 @@ function readFilter(filter: CompFilter | undefined): {
     const vevent = named(components, 'VEVENT');
     if (!vevent || vevent['is-not-defined'] !== undefined) return { matchesEvents: false };
 
-    const props = vevent['prop-filter'];
-    const uidMatchers = (Array.isArray(props) ? props : props ? [props] : [])
+    const uidMatchers = asArray(vevent['prop-filter'])
         .filter((prop) => String(prop['@_name'] ?? '').toUpperCase() === 'UID')
         .map((prop) => (prop['text-match'] === undefined ? null : uidMatcher(prop['text-match'])))
         .filter((match) => match !== null);
@@ -98,7 +96,7 @@ export type ReportRequest =
           type: 'calendar-query';
           matchesEvents: boolean;
           timeRange?: { start: Date; end: Date };
-          matchesUid?: (uid: string) => boolean;
+          matchesUid: (uid: string) => boolean;
           wantsData: boolean;
       }
     | { type: 'calendar-multiget'; hrefs: string[]; wantsData: boolean }
@@ -129,5 +127,6 @@ export function parseReport(xml: string): ReportRequest {
         return { type, syncToken: syncToken ? String(syncToken) : undefined, wantsData };
     }
 
-    return { type, ...readFilter(root['filter']), wantsData };
+    // A filter that names no UID matches every one.
+    return { type, matchesUid: () => true, ...readFilter(root['filter']), wantsData };
 }

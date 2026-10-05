@@ -213,7 +213,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyGestureContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (296)
+## Hooks (297)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -284,6 +284,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useImportCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
 | `useImportCalendarFromDevice` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
 | `useImportToCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-transfer.ts |
+| `useIsInvitationFromOthers` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useMoveEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useRsvp` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useSharedCalendarLabel` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
@@ -1004,6 +1005,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getMonthRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `getWeekRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `handleCalendarSSEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/sse-handlers.ts |
+| `heldAttendees` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `ICS_METHOD_LABEL` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/preview-lines.ts |
 | `isFreeBusyEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `isInvitationFromOthers` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
