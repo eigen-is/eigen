@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, type Mock, spyOn, test } from 'bun:test';
+import { afterEach, beforeAll, beforeEach, describe, expect, type Mock, setSystemTime, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { ICS_MAX_BYTES } from '@workspace/lib/constants/calendar';
 import { VCARD_MAX_BYTES } from '@workspace/lib/constants/contact';
@@ -297,6 +297,50 @@ describe.skipIf(isWindows)('Mail attachment routes', () => {
         const revalidated = await authedRequest(token, partUrl, { headers: { 'if-none-match': staleEtag } });
         expect(revalidated.status).toBe(200);
         expect(await revalidated.text()).toBe('BBBBBB');
+    });
+
+    // The row's date has second precision, so a rewrite in the same second at the same size moves neither.
+    test('a same-size draft rewrite within one second serves a new ETag', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        setSystemTime(new Date('2026-09-15T10:00:00.000Z'));
+        try {
+            const uploadA = await uploadDraftAttachment(
+                token,
+                ownerId,
+                new File(['AAA'], 'a.txt', { type: 'text/plain' }),
+            );
+            const draft = await putDraft(
+                token,
+                ownerId,
+                { subject: 'Same-size draft', text: 'first', html: '<p>first</p>', isDraft: true, mailbox: 'Drafts' },
+                { tempAttachmentIds: [uploadA.tempId] },
+            );
+            const partUrl = `/mail/${ownerId}/message/${draft.id}/attachment/0/part.txt`;
+            const before = await authedRequest(token, partUrl);
+            expect(await before.text()).toBe('AAA');
+            const staleEtag = before.headers.get('etag') ?? '';
+
+            const uploadB = await uploadDraftAttachment(
+                token,
+                ownerId,
+                new File(['BBB'], 'a.txt', { type: 'text/plain' }),
+            );
+            const resaved = await putDraft(
+                token,
+                ownerId,
+                { ...draft, text: 'other', html: '<p>other</p>' },
+                { tempAttachmentIds: [uploadB.tempId], keepAttachmentIndexes: [] },
+            );
+            expect(resaved.size).toBe(draft.size);
+            expect(new Date(resaved.date).getTime()).toBe(new Date(draft.date).getTime());
+
+            const revalidated = await authedRequest(token, partUrl, { headers: { 'if-none-match': staleEtag } });
+            expect(revalidated.status).toBe(200);
+            expect(await revalidated.text()).toBe('BBB');
+        } finally {
+            setSystemTime();
+        }
     });
 
     test('the download route serves a range as 206', async () => {

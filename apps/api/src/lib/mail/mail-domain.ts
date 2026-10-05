@@ -215,6 +215,10 @@ export class Mail {
         return this.store.getSummary(messageId);
     }
 
+    messageGetModifiedAt(messageId: string): Promise<number> {
+        return this.store.getModifiedAt(messageId);
+    }
+
     async messageGetAttachment(messageId: string, index: number): Promise<Attachment> {
         const attachments = await this.store.getAttachments(messageId);
         if (index < 0 || index >= attachments.length) {

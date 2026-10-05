@@ -4,7 +4,8 @@ import { ApiError, answerRevalidated, contentDisposition, rangeResponse, scripta
 import type { Mail } from './mail-domain';
 
 // What a mail route answers for one part, or a 304 answered off the summary row before the .eml is parsed.
-// no-cache: the URL has no version stamp, and a draft save rewrites the message under its id (date + size move).
+// no-cache: the URL has no version stamp, and a draft save rewrites the message under its id. The row's date has
+// second precision, so the file's mtime is what tells two same-size saves within one second apart.
 // A preview route passes its renderer's format tag, so a payload or sanitizer fix is not answered with a 304
 // on a message that has not changed; the two byte routes serve the part itself and have none.
 export async function answerMailPart<T>(
@@ -19,7 +20,8 @@ export async function answerMailPart<T>(
     const summary = mail.messageGetSummary(messageId);
     if (!summary) throw new ApiError(404, `Message '${messageId}' not found`);
 
-    const etag = `"${summary.id}-${index}-${summary.date.getTime()}-${summary.size}${format ? `-${format}` : ''}"`;
+    const modifiedAt = await mail.messageGetModifiedAt(messageId);
+    const etag = `"${summary.id}-${index}-${modifiedAt}-${summary.size}${format ? `-${format}` : ''}"`;
     return answerRevalidated(request, set, etag, async () => serve(await mail.messageGetAttachment(messageId, index)));
 }
 

@@ -33,7 +33,7 @@ const STALE_MAILDIR_TEMP_MAX_AGE_MS = 36 * 60 * 60 * 1000;
 const BACKGROUND_RECONCILE_INTERVAL_MS = 60 * 1000;
 // Sibling of the Maildir tree (not inside it) so Dovecot IMAP doesn't see it as a folder.
 const DRAFT_ATTACHMENTS_DIR = 'draft-attachments';
-// Keyed by id and trusted only while the row's size and date match, the same inputs a part's ETag hashes.
+// Keyed by id and trusted only while the row's size and date match; saveDraft drops the entry a rewrite outdates.
 const PARSED_MESSAGE_CACHE_ENTRIES = 8;
 const PARSED_MESSAGE_CACHE_BYTES = 32 * 1024 * 1024;
 
@@ -282,6 +282,13 @@ export class MaildirStore implements MailStore {
             bytes -= entry.size;
         }
         return parsed.attachments;
+    }
+
+    async getModifiedAt(messageId: string): Promise<number> {
+        const email = this.db.getEmail(messageId);
+        if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
+        const filePath = path.join(this.mailboxDir(email.mailbox), PATHS.MAIL.CUR, email.filename);
+        return (await this.storage.stat(filePath)).mtimeMs;
     }
 
     async append(
