@@ -1,7 +1,7 @@
 import type { IcsPreview, IcsPreviewEvent } from '@workspace/lib/types/preview';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
-import { decodeUtf8Strict } from '../core/transfer';
+import { countVEvents, decodeUtf8Strict, ICS_IMPORT_MAX_EVENTS } from '../core/transfer';
 import { parseIcs } from '../ical';
 import type { IcsParseResult, ParsedEvent } from '../ical/ical-parse';
 
@@ -55,6 +55,9 @@ export function buildIcsPreviewPayload(data: ArrayBuffer): IcsPreview {
     // encoding is not a calendar stored with replacement characters.
     const text = decodeUtf8Strict(data);
     if (text === null) throw new ApiError(422, 'Could not read this file');
+    // The import's own ceiling, before the parser: ical.js caches a TZID it found but never one it missed, so a file of
+    // events naming an undefined zone rescans itself once per event.
+    if (countVEvents(text) > ICS_IMPORT_MAX_EVENTS) throw new ApiError(413, 'Too many events to preview');
 
     let parsed: IcsParseResult;
     try {

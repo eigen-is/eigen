@@ -5,6 +5,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import ICAL from 'ical.js';
 import {
     ApiError,
+    countVEvents,
     decodeUtf8Strict,
     ICS_IMPORT_MAX_EVENTS,
     NOT_A_CALENDAR_FILE,
@@ -68,10 +69,7 @@ export async function importEvents(
     const text = decodeUtf8Strict(bytes);
     if (text === null) throw new ApiError(400, NOT_UTF8_FILE);
 
-    // Counted on the text before ical.js builds a tree: a folded line starts with a space, so a line starting with the name is its own VEVENT.
-    if ((text.match(/^BEGIN:VEVENT\r?$/gim)?.length ?? 0) > ICS_IMPORT_MAX_EVENTS) {
-        throw new ApiError(413, 'Too many events');
-    }
+    if (countVEvents(text) > ICS_IMPORT_MAX_EVENTS) throw new ApiError(413, 'Too many events');
 
     let roots: ICAL.Component[];
     try {

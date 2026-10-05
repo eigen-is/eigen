@@ -21,3 +21,8 @@ export const VCARD_IMPORT_MAX_CARDS = 1000;
 
 // Counts every VEVENT of one FILE, not a calendar, and sits above what `ICS_MAX_BYTES` holds (~9 600 typical events) so the byte ceiling binds first.
 export const ICS_IMPORT_MAX_EVENTS = 10_000;
+
+// Counted on the text before ical.js builds a tree: a folded line starts with a space, so a line starting with the name is its own VEVENT.
+export function countVEvents(text: string): number {
+    return text.match(/^BEGIN:VEVENT\r?$/gim)?.length ?? 0;
+}

@@ -108,11 +108,13 @@ describe('isInvitationFromOthers', () => {
         expect(isInvitationFromOthers(event, 'alice@example.com')).toBe(false);
     });
 
-    test('an owner without an address matches nobody', () => {
-        // A team Home's synthetic user has no address, so a member-organized event on its calendar
-        // stays a locked invitation rather than silently becoming the team's own event.
-        const event = withOrganizer({ userId: 'team_7', email: 'someone@example.com' });
-        expect(isInvitationFromOthers(event, '')).toBe(true);
+    test("an owner without an address goes by Eigen's organizer stamp", () => {
+        // A team Home's synthetic user has no address: a member-organized event on its calendar is the
+        // team's own, and only a copy the relay filed carries the organizer's event id.
+        const organizer = { userId: '', email: 'member@example.com' };
+        expect(isInvitationFromOthers({ data: { organizer } }, '')).toBe(false);
+        expect(isInvitationFromOthers({ data: { organizer } })).toBe(false);
+        expect(isInvitationFromOthers({ data: { organizer, organizerEventId: 'evt-1' } }, '')).toBe(true);
     });
 
     test('another address is an invitation, and an event without an organizer never is', () => {

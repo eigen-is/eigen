@@ -456,6 +456,24 @@ describe('Team calendar administration', () => {
         expect(calendars.some((c) => c.id === extra.id)).toBe(true);
     });
 
+    // Apple Calendar and Thunderbird stamp the member's own address as ORGANIZER; a team has none to compare it with.
+    test('an event a member organized on the team calendar stays editable', async () => {
+        const teamHome = await getHome(teamOwnerId(adminTeamId));
+        const event = await teamHome.calendar.createEvent(adminTeamCalId, {
+            title: 'Member Organized',
+            startTime: new Date('2027-03-01T09:00:00Z'),
+            endTime: new Date('2027-03-01T10:00:00Z'),
+            allDay: false,
+            data: {
+                organizer: { userId: '', email: ctx.bob.user.email, name: 'Bob' },
+                attendees: [{ email: ctx.charlie.user.email, status: 'pending', role: 'required' }],
+            },
+        });
+
+        const updated = await teamHome.calendar.updateEvent(adminTeamCalId, event.id, { title: 'Member Renamed' });
+        expect(updated.title).toBe('Member Renamed');
+    });
+
     // The Admin app's team detail: the list is what it reads the default calendar and its shares off.
     test('an org admin who is not a team member reads the team calendar list and sets its shares', async () => {
         const listRes = await authedRequest(

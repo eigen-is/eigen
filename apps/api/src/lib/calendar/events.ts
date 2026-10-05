@@ -315,7 +315,9 @@ async function patchStoredEvent(
         await editResource(calendar, resource, (component) => {
             addExclusion(component, parent, existing, writeContext(actorIsOrganizer(parent)));
         });
-        return { updated: eventById(calendar, id)!, oldAttendees };
+        // The EXDATE row sits at the original slot; the guests last saw the occurrence at its moved one.
+        const cancelled = eventById(calendar, id)!;
+        return { updated: { ...cancelled, startTime: existing.startTime, endTime: existing.endTime }, oldAttendees };
     }
 
     // A save form restates the times on every edit, so only the bounds that really moved reach the patch.
@@ -364,13 +366,13 @@ export async function deleteEvent(calendar: Calendar, calendarId: string, id: st
                 console.error,
             );
         }
-    } else if (!invitation && existing.data?.attendees?.length) {
+    } else if (!invitation) {
         // An event with no foreign organizer makes this user its organizer, and an organizer's delete cancels.
         // An override's cancellation names its series, as propagateWrite's does: only the series knows the original instant.
         const series = existing.parentEventId ? eventById(calendar, existing.parentEventId) : null;
-        propagateCancellation(calendar.home, existing, existing.data.attendees, series ?? undefined).catch(
-            console.error,
-        );
+        // An override that states no guests holds the series' list.
+        const held = existing.data?.attendees?.length ? existing.data.attendees : (series?.data?.attendees ?? []);
+        if (held.length) propagateCancellation(calendar.home, existing, held, series ?? undefined).catch(console.error);
     }
 
     calendar.announce(SSEventType.CALENDAR_EVENT_DELETED, calendarId);

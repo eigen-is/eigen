@@ -380,6 +380,46 @@ describe('Calendar Invites', () => {
             );
             expect(selfInviteCopies).toHaveLength(0);
         });
+
+        // The event lands in the owner's own calendar, so the owner attends it rather than being invited to it.
+        test("a collaborator inviting the calendar's owner marks the owner accepted", async () => {
+            const home = await getHome(ctx.alice.user.id);
+            const shared = await home.calendar.createCalendar({ name: 'Shared with Bob', color: '#ccbbaa' });
+            await home.calendar.updateCalendar(shared.id, {
+                shares: [{ targetId: ctx.bob.user.email, permission: 'write' }],
+            });
+
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${shared.id}/events`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Owner Invited By Bob',
+                        startTime: new Date(Date.now() + 3600_000),
+                        endTime: new Date(Date.now() + 7200_000),
+                        allDay: false,
+                        data: {
+                            attendees: [ctx.alice.user.email, ctx.charlie.user.email].map((email) => ({
+                                email,
+                                status: 'pending',
+                                role: 'required',
+                            })),
+                        },
+                    }),
+                },
+            );
+            expect(res.status).toBe(200);
+
+            const stored = await aliceEvent(
+                (e) =>
+                    e.title === 'Owner Invited By Bob' &&
+                    !!e.data?.attendees?.some((a) => a.email === ctx.alice.user.email && a.status === 'accepted'),
+            );
+            expect(stored.calendarId).toBe(shared.id);
+            expect((await aliceEvents()).filter((e) => e.title === 'Owner Invited By Bob')).toHaveLength(1);
+        });
     });
 
     describe('Per-occurrence RSVP', () => {
