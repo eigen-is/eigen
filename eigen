@@ -140,8 +140,8 @@ EOF
             cat <<EOF
 Usage: ./eigen stop
 
-Stops Eigen, once a server backup that runs, and its upload to the backup bucket, has ended.
-./eigen restart starts it again.
+Stops Eigen. When a server backup or its upload to the backup bucket is running, it
+waits for that to end first. ./eigen restart starts it again.
 EOF
             ;;
     esac
