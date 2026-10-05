@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import * as fs from 'node:fs';
+import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/backup';
 import { type S3Config, teamOwnerId } from '@workspace/lib/types';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -65,6 +66,19 @@ describe('Server Settings', () => {
         });
         const data = await assertJson<ServerSettings>(res);
         expect(data.defaults.mount.storageType).toBe('local-fullnames');
+    });
+
+    // The server refuses any request body over 1 GiB, so a cap at or above it promises an upload it cannot take.
+    test('the upload cap stops below the largest request the server accepts', async () => {
+        const put = (maxUploadSizeMB: number) =>
+            authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quotas: { maxUploadSizeMB } }),
+            });
+        expect((await put(1024)).status).toBe(422);
+        const data = await assertJson<ServerSettings>(await put(UPLOAD_CAP_MAX_MB));
+        expect(data.quotas.maxUploadSizeMB).toBe(UPLOAD_CAP_MAX_MB);
     });
 
     test('non-admin cannot update server settings', async () => {

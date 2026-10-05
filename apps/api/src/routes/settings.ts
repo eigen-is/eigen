@@ -1,4 +1,4 @@
-import { BACKUP_KEEP_MAX } from '@workspace/lib/constants/backup';
+import { BACKUP_KEEP_MAX, UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/backup';
 import type { AdminUser, AdminUserRow } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type {
@@ -93,7 +93,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                     t.Object({
                         mailAndContactsMaxMB: t.Optional(t.Number({ minimum: 10 })),
                         defaultMountMaxSizeMB: t.Optional(t.Number({ minimum: 10 })),
-                        maxUploadSizeMB: t.Optional(t.Number({ minimum: 1 })),
+                        maxUploadSizeMB: t.Optional(t.Number({ minimum: 1, maximum: UPLOAD_CAP_MAX_MB })),
                         trashRetentionDays: t.Optional(t.Number({ minimum: 1 })),
                     }),
                 ),

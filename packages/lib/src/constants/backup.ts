@@ -8,6 +8,10 @@ export const BACKUP_UPLOAD_MAX_BYTES = 1024 * 1024 * 1024;
 // route's 413 and the admin pane's refusal both read from here.
 export const BACKUP_UPLOAD_MAX_LABEL = `${BACKUP_UPLOAD_MAX_BYTES / 1024 ** 3} GB`;
 
+// The highest per-file upload cap the server can honour. The API's maxRequestBodySize is this same
+// bound for every route, and a multipart body carries framing past the file, so the cap stays 1 MB under.
+export const UPLOAD_CAP_MAX_MB = BACKUP_UPLOAD_MAX_BYTES / 1024 ** 2 - 1;
+
 // The most archives the owner can keep, on this server and in the bucket alike.
 export const BACKUP_KEEP_MAX = 365;
 

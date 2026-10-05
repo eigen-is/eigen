@@ -5,7 +5,7 @@ type: reference
 tags: [admin, settings, quotas, storage, notifications, mail, backup]
 related: [admin/get-started, admin/storage-quotas, self-hosting/back-up-and-restore]
 order: 80
-updated: 2026-10-02
+updated: 2026-10-05
 ---
 
 The **Settings** page in Admin is where the server owner sets up the organization, mail, storage, backups, and notifications. Only the owner sees it in the sidebar.
@@ -52,7 +52,7 @@ These four limits apply by default to every user. A changed **Default Mount (MB)
 |---|---|---|
 | **Mail, Contacts & Calendar (MB)** | Combined storage for all a user's email, contacts, and calendars. On a server without mailboxes it reads **Contacts & Calendar (MB)**. | 100 MB |
 | **Default Mount (MB)** | Storage for a user's primary Drive | 500 MB |
-| **Max Upload (MB)** | Largest single file a user can upload | 35 MB |
+| **Max Upload (MB)** | Largest single file a user can upload, at most 1023 MB | 35 MB |
 | **Trash Retention (days)** | How long deleted files stay in the Trash before being permanently removed | 30 days |
 
 Enter a number in each field. The **Save** button appears at the bottom of the page once you have made a change.

@@ -1,3 +1,4 @@
+import { UPLOAD_CAP_MAX_MB } from '@workspace/lib/constants/backup';
 import { defaultSenderAddress } from '@workspace/lib/constants/mail';
 import { useHomeDataLabel, useMailEnabled, usePublicConfig } from '@workspace/lib/public';
 import {
@@ -271,9 +272,13 @@ export function ServerSettingsPage() {
                         <Input
                             type="number"
                             min={1}
+                            max={UPLOAD_CAP_MAX_MB}
                             value={current.quotas.maxUploadSizeMB}
                             onChange={(e) => updateQuota('maxUploadSizeMB', e.target.valueAsNumber)}
                         />
+                        <p className="text-xs text-muted-foreground">
+                            At most {UPLOAD_CAP_MAX_MB} MB, the largest upload the server takes.
+                        </p>
                     </div>
                     <div className="space-y-1.5">
                         <Label>Trash Retention (days)</Label>

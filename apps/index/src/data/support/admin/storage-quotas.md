@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, quotas, storage, settings]
 related: [admin/server-settings, admin/teams]
 order: 60
-updated: 2026-10-02
+updated: 2026-10-05
 ---
 
 Storage quotas control how much space each user and team can use. You set server-wide defaults on the [**Settings**](/admin/settings) page, and you can raise those defaults for specific teams without changing the server-wide values. Only the server owner can access the **Settings** page.
@@ -17,7 +17,7 @@ Storage quotas control how much space each user and team can use. You set server
 3. Under **Storage Quotas**, update the fields you want to change:
    - **Mail, Contacts & Calendar (MB)**: the combined storage limit for each user's email, contacts, and calendars. On a server without mailboxes, this field is **Contacts & Calendar (MB)**.
    - **Default Mount (MB)**: the storage limit for each user's primary Drive.
-   - **Max Upload (MB)**: the largest single file any user can upload.
+   - **Max Upload (MB)**: the largest single file any user can upload, at most 1023 MB.
    - **Trash Retention (days)**: how long deleted files stay in the Trash before they are permanently removed.
 4. Click **Save**.
 
