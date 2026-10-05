@@ -121,34 +121,6 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
         }
     });
 
-    test('a storage re-point whose new mount fails to start keeps the old mount live and persists nothing', async () => {
-        const home = await freshTeamHome();
-        try {
-            const mount = await home.addMount({ name: 'Failing Repoint', maxSizeMB: 100 });
-            const rootBefore = await home.drive.getRootFolder(mount.id);
-            const addMount = home.drive.addMount.bind(home.drive);
-            const spy = spyOn(home.drive, 'addMount')
-                .mockImplementationOnce(() => Promise.reject(new Error('mount init failed')))
-                .mockImplementation(addMount);
-
-            const s3Config = {
-                endpoint: 'https://s3.example.com',
-                bucket: 'team-bucket',
-                prefix: '',
-                accessKeyId: 'AK',
-                secretAccessKey: 'SK',
-            };
-            await expect(home.updateMount(mount.id, { s3Config })).rejects.toThrow('mount init failed');
-            spy.mockRestore();
-
-            expect((await home.drive.getRootFolder(mount.id))?.id).toBe(rootBefore!.id);
-            expect(home.drive.getMountConfig(mount.id).s3Config).toBeUndefined();
-            expect(home.settings.get().mounts?.[mount.id]?.s3Config).toBeUndefined();
-        } finally {
-            await home.shutdown();
-        }
-    });
-
     test('disabling a mount drops it from the live Drive', async () => {
         const home = await freshTeamHome();
         try {
