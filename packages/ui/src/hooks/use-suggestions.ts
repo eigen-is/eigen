@@ -22,6 +22,8 @@ type UseSuggestionsResult = {
     onItemsChange: (count: number, items: string[]) => void;
     // Returns true when the key was consumed; callers should early-return in that case.
     handleKeyDown: (e: React.KeyboardEvent) => boolean;
+    // Whether handleKeyDown takes keys right now, for a listener that must claim a key before React sees it.
+    isActive: () => boolean;
 };
 
 export function useSuggestions({
@@ -49,11 +51,15 @@ export function useSuggestions({
         if (!visible) setSelectedIndex(0);
     }, [visible]);
 
+    const isActive = useCallback(
+        () => visible && !(passthroughWhenEmpty && countRef.current === 0),
+        [visible, passthroughWhenEmpty],
+    );
+
     const handleKeyDown = useCallback(
         (e: React.KeyboardEvent): boolean => {
-            if (!visible) return false;
+            if (!isActive()) return false;
             const count = countRef.current;
-            if (passthroughWhenEmpty && count === 0) return false;
 
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
@@ -85,8 +91,8 @@ export function useSuggestions({
             }
             return false;
         },
-        [visible, passthroughWhenEmpty, acceptShiftEnter, onSelect, onEscape, onCommitEmpty],
+        [isActive, acceptShiftEnter, onSelect, onEscape, onCommitEmpty],
     );
 
-    return { selectedIndex, onItemsChange, handleKeyDown };
+    return { selectedIndex, onItemsChange, handleKeyDown, isActive };
 }

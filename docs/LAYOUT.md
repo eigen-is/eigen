@@ -119,6 +119,8 @@ Global shortcuts use `@tanstack/react-hotkeys` (`useHotkey`), with `formatForDis
 
 **A document-level keymap folds `useDialogOpen()` into its `enabled`.** The library's own guard covers text fields only, so a key pressed on a dialog button otherwise acts on the document behind it: Delete on a confirm button deleting the canvas selection, `#` in Mail's location picker trashing the message. The hook watches the DOM for an open `role="dialog"` or `role="alertdialog"`, so it keeps no registry. An overlay that is a dialog itself (the file preview, Mail's cheat sheet) registers its keys ungated.
 
+**A field inside a dialog that handles Escape itself claims the key on window capture.** Radix dismisses a dialog from a document capture listener, which runs before any React handler, and leaves an Escape alone when its default is already prevented. So `ChatMessageInput` prevents it on window capture while a suggestion list is showing, and Escape closes the @-mention list instead of the card dialog around it.
+
 ## One z-index scale, and app code sets none
 
 | Layer | z-index | Examples |
