@@ -3,26 +3,27 @@ import { useCallback, useEffect, useMemo } from 'react';
 import type { Notification } from '../../../types/notification';
 import { notificationApi } from '../../api';
 import { notificationKeys } from '../../notification/hooks/keys';
-import { useUnreadChatNotifications } from '../../notification/hooks/use-notifications';
+import { useNotifications } from '../../notification/hooks/use-notifications';
 import { chatThreadKey, parseChatNotificationThread } from '../../notification/tags';
 
-function notificationThread(n: Notification) {
-    return n.tag ? parseChatNotificationThread(n.type, n.tag) : null;
+// The thread an unread chat or comment notification names; null for a read row or another type.
+function unreadThread(n: Notification) {
+    return !n.read && n.tag ? parseChatNotificationThread(n.type, n.tag) : null;
 }
 
-function isForThread(n: Notification, key: string): boolean {
-    const thread = notificationThread(n);
+function isUnreadForThread(n: Notification, key: string): boolean {
+    const thread = unreadThread(n);
     return !!thread && chatThreadKey(thread) === key;
 }
 
 // The pathId a row shows its unread dot on: a comment's notification names the container, so the
 // document holding the unread comment lights up, not the comment chat inside it.
 export function useUnreadChatIds(userId: string): Set<string> {
-    const { data: notifications = [] } = useUnreadChatNotifications(userId);
+    const { data: notifications = [] } = useNotifications(userId);
     return useMemo(() => {
         const ids = new Set<string>();
         for (const n of notifications) {
-            const thread = notificationThread(n);
+            const thread = unreadThread(n);
             if (thread) ids.add(thread.pathId);
         }
         return ids;
@@ -32,11 +33,11 @@ export function useUnreadChatIds(userId: string): Set<string> {
 // Auto-mark a single thread's notifications as read when it is being viewed. A comment card passes the
 // container's pathId with its own chat name — the pair its notifications are tagged with.
 export function useAutoMarkChatRead(userId: string, pathId: string, chatName?: string) {
-    const { data: notifications = [] } = useUnreadChatNotifications(userId);
+    const { data: notifications = [] } = useNotifications(userId);
     const markChatRead = useMarkChatRead(userId);
     const key = chatThreadKey({ pathId, chatName });
 
-    const hasUnread = useMemo(() => notifications.some((n) => isForThread(n, key)), [notifications, key]);
+    const hasUnread = useMemo(() => notifications.some((n) => isUnreadForThread(n, key)), [notifications, key]);
 
     useEffect(() => {
         if (hasUnread) markChatRead(pathId, chatName);
@@ -48,19 +49,16 @@ export function useMarkChatRead(userId: string) {
 
     return useCallback(
         (pathId: string, chatName?: string) => {
-            const unread = queryClient.getQueryData<Notification[]>(notificationKeys.unreadChat(userId)) ?? [];
+            const notifications = queryClient.getQueryData<Notification[]>(notificationKeys.list(userId)) ?? [];
             const key = chatThreadKey({ pathId, chatName });
-            const toMark = unread.filter((n) => isForThread(n, key));
+            const toMark = notifications.filter((n) => isUnreadForThread(n, key));
             if (toMark.length === 0) return;
 
             // Optimistically mark as read in cache — prevents loops and flicker
             const toMarkIds = new Set(toMark.map((m) => m.id));
             queryClient.setQueryData<Notification[]>(
-                notificationKeys.unreadChat(userId),
-                (old) => old?.filter((n) => !toMarkIds.has(n.id)) ?? [],
-            );
-            queryClient.setQueryData<Notification[]>(notificationKeys.list(userId), (old) =>
-                old?.map((n) => (toMarkIds.has(n.id) ? { ...n, read: true } : n)),
+                notificationKeys.list(userId),
+                (old) => old?.map((n) => (toMarkIds.has(n.id) ? { ...n, read: true } : n)) ?? [],
             );
             queryClient.setQueryData<number>(notificationKeys.unreadCount(userId), (old) =>
                 Math.max(0, (old ?? 0) - toMark.length),

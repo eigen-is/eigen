@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1614 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1613 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -213,7 +213,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyGestureContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (297)
+## Hooks (296)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -432,7 +432,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useMarkAllNotificationsRead` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
 | `useMarkNotificationRead` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
 | `useNotifications` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
-| `useUnreadChatNotifications` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
 | `useUnreadNotificationCount` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
 | `useEnabledApps` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `useHomeDataLabel` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |

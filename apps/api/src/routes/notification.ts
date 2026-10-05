@@ -1,4 +1,3 @@
-import { CHAT_NOTIFICATION_TYPES } from '@workspace/lib/notification/tags';
 import type { Notification } from '@workspace/lib/types/notification';
 import { Elysia, t } from 'elysia';
 import { requireSelf } from '../lib/core/access';
@@ -23,16 +22,6 @@ export const notificationRouter = new Elysia({ name: 'notification' })
                 before: t.Optional(t.String()),
             }),
         },
-    )
-
-    .get(
-        '/notifications/:ownerId/unread-chat',
-        async ({ params, user }): Promise<Notification[]> => {
-            requireSelf(params.ownerId, user.id);
-            const home = await getHome(params.ownerId);
-            return home.notifications.listUnread(CHAT_NOTIFICATION_TYPES);
-        },
-        { auth: true },
     )
 
     .get(
