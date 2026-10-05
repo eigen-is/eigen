@@ -6,7 +6,7 @@ category: Files
 tags: [drive, versions, history, restore, docs, sheets, slides, stickies, vector]
 related: [drive/get-started, drive/use-the-trash]
 order: 120
-updated: 2026-09-28
+updated: 2026-10-05
 ---
 
 Eigen keeps a history of saved states for every document, spreadsheet, presentation, board, and drawing you own
@@ -35,6 +35,8 @@ manual ones, so the two are listed together in the history.
 
 Eigen saves the current state as a new version before overwriting it, so the version you had open is not lost.
 To undo the restore, open **File → Version history** again and pick that newly saved entry. If the file's stored data could not be found, there is nothing to save, so Eigen restores without saving a version first. The same list of versions also shows on the screen that says the stored data could not be found, as described in [Editing when your connection drops](/support/getting-started/working-offline).
+
+A spreadsheet version saved in an older format can't be restored. Eigen says so, and the spreadsheet stays as it is.
 
 <div class="eigen-callout">
 
