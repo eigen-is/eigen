@@ -10,11 +10,10 @@ The server never runs the editor, yet it renders the doc for the drive preview, 
 
 A figure names its image, and never holds bytes or a URL. The name is a file in the container's `media/` folder, resolved to a URL at render ([MEDIA-REFERENCES.md](MEDIA-REFERENCES.md)). A pending name, `pending:<uuid>`, stands in for an image whose upload has not landed yet. A panel is one of the right-side panes: comments, activity, and the figure and table properties.
 
-The sections cover the schema, figures, the page and its panels, comments, the clipboard, and what keeps content inside the page. Four things in them surprise people:
+The sections cover the schema, figures, the page and its panels, comments, the clipboard, and what keeps content inside the page. Three things in them surprise people:
 
 - The side panels overlay the page instead of taking room from it, and the page slides and scales to stay clear ([§ The page keeps its width](#the-page-keeps-its-width-and-slides-then-scales-clear-of-a-panel)).
 - A figure stores its width in the page's own pixels, so the on-screen scale never leaks into the document ([§ A figure stores a name and a width](#a-figure-stores-a-media-name-and-a-width-in-page-pixels)).
-- A copy inside Docs pastes as ProseMirror's own slice, not as the clipboard's image items ([§ A docs copy pastes as ProseMirror's slice](#a-docs-copy-pastes-as-prosemirrors-slice)).
 - Undo reverts only this tab's edits ([§ Undo is the Yjs binding's](#undo-is-the-yjs-bindings-and-reverts-only-this-tabs-edits)).
 
 ## One schema serves the editor and every server renderer
@@ -59,11 +58,11 @@ Selecting a figure or a table opens its properties panel, for a user who can wri
 
 A comment's card id rides the `comment` mark on text and the `commentCardId` attribute on a figure, because the Yjs binding keeps a mark only on text. `nodeCommentCardId` reads either form. The decorations, the image's own menu and its corner mark are in [COMMENTS.md](COMMENTS.md#each-app-anchors-a-card-in-its-own-content).
 
-## A docs copy pastes as ProseMirror's slice
+## A docs copy writes image items, and a paste places them one by one
 
 A copy whose selection holds a figure writes the eigen clipboard payload: one image item per figure whose file resolves, beside ProseMirror's own HTML and the plain text. A selection with no resolvable figure writes no payload and leaves the copy to ProseMirror. The payload is what lets another app (slides, sheets, a drawing) place the image ([CLIPBOARD.md](CLIPBOARD.md)).
 
-On paste, image items beside rich HTML can only come from Docs, and that HTML already holds the copied text and figures in order. So the editor pastes ProseMirror's slice of it and does not use the items, which hold the images alone. The slice keeps each figure's layout, width and caption, and the `data-comment-id` its text and figures carry. A figure whose file sits in another document's `media/` takes a pending name in the same transaction, so it never shows a same-named file of this document, and gets the name of its re-upload into this `media/` when that lands.
+On paste, a payload with an image item is placed item by item: a figure from another document's `media/` is re-uploaded into this one first and is skipped if that fails. A docs copy of text plus an image therefore pastes the image alone ([ROADMAP](ROADMAP.md)).
 
 ## Pasted content is fitted to the page
 
