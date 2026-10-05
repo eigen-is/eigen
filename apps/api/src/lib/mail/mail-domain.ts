@@ -20,7 +20,7 @@ import {
 import { type SSEventMail, SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
 import { enforceHomeDataQuota } from '../config/enforcement';
-import { isDemo } from '../config/env';
+import { isDemo, isMailAppEnabled } from '../config/env';
 import { getMailDomain, isInternalAddress } from '../config/server-config';
 import { ApiError, isSafePathSegment, NOT_AN_EMAIL_FILE } from '../core';
 import { renderAttachmentLinksText, renderAttachmentPills } from '../core/mail-template';
@@ -72,6 +72,8 @@ export class Mail {
     }
 
     async init(): Promise<void> {
+        // Every user Home carries a Mail; with mail off it builds no Maildir and watches nothing.
+        if (!isMailAppEnabled()) return;
         const isNew = await this.store.init({
             received: (email, isNewMessage) => {
                 this.emit(SSEventType.MAIL_RECEIVED, { messageId: email.id, mailbox: email.mailbox });
@@ -107,6 +109,7 @@ export class Mail {
     }
 
     search(opts: MailSearchOptions): EmailSummary[] {
+        if (!isMailAppEnabled()) return [];
         // The FTS mailbox filter matches the stored value exactly, so any caller casing is canonicalised first.
         const mailboxes = opts.mailboxes?.map(canonicalMailbox);
         return this.store.search({ ...opts, mailboxes });
@@ -632,7 +635,8 @@ export class Mail {
 
     async destruct(): Promise<void> {
         await this.store.unwatch();
-        await this.flushDraftSidecars();
+        // With mail off no index is open for a sidecar to be saved into.
+        if (isMailAppEnabled()) await this.flushDraftSidecars();
         return this.store.destruct();
     }
 

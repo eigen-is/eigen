@@ -332,6 +332,8 @@ describe('Mail transfer routes', () => {
             expect(res.status).toBe(403);
             expect(await res.text()).toBe('Mail is turned off on this server');
         }
+        // The inbox route refuses too while mail is off, so the count is read with it back on.
+        delete process.env['MAIL_ENABLED'];
         expect((await inbox(alice)).length).toBe(before);
     });
 
