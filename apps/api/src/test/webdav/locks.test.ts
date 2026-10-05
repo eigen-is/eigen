@@ -116,6 +116,7 @@ describe('WebDAV LOCK/UNLOCK', () => {
         expect((await webdavRequest(ctx.alice.user.email, 'GET', url)).status).toBe(404);
     });
 
+    // 33 requests, each paying a password hash (ROADMAP: DAV auth per request).
     test('a 33rd shared lock on one path → 423', async () => {
         const url = `${baseHref}/lock-shared-cap.txt`;
         await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
@@ -127,7 +128,7 @@ describe('WebDAV LOCK/UNLOCK', () => {
             });
         for (let i = 0; i < 32; i++) expect((await lockShared()).status).toBe(200);
         expect((await lockShared()).status).toBe(423);
-    });
+    }, 10_000);
 
     test('LOCK body over 64KB → 413', async () => {
         const url = `${baseHref}/lock-big-body.txt`;
