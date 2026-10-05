@@ -493,6 +493,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                             read: t.Boolean(),
                             write: t.Boolean(),
                         }),
+                        { maxItems: MAX_SEND_RECIPIENTS },
                     ),
                 ),
                 remove: t.Optional(t.Array(t.String())),

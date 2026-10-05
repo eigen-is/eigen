@@ -8,7 +8,7 @@ import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 import { encodeHref } from './path';
-import { buildXmlResponse, multistatus, propstatStatus, response } from './xml';
+import { buildXmlResponse, MAX_XML_BODY_BYTES, multistatus, propstatStatus, response } from './xml';
 
 // RFC 4918 §15 classifies these as live properties: their values are derived from
 // the resource itself (size, mtime, etag, locks, quota) or controlled by the
@@ -155,8 +155,8 @@ export async function handleProppatch(args: {
     const refused = ops.some(isProtected);
 
     // Apply all ops in memory first, then write once. RFC 4918 §9.2 requires
-    // ops to be processed in document order; replaceMatching preserves the
-    // existing element's slot when we hit a set on an existing prop.
+    // ops to be processed in document order; a set on an existing prop keeps
+    // that prop's slot.
     if (!refused) {
         let webdavProps = path.details?.webdavProps ? [...path.details.webdavProps] : [];
         let mutated = false;
@@ -171,6 +171,10 @@ export async function handleProppatch(args: {
                 webdavProps = webdavProps.filter((_, i) => i !== idx);
                 mutated = true;
             }
+        }
+        // Dead props live in the path row; one path stores no more than one PROPPATCH body can carry.
+        if (Buffer.byteLength(JSON.stringify(webdavProps)) > MAX_XML_BODY_BYTES) {
+            throw new ApiError(507, 'Insufficient Storage');
         }
         if (mutated) {
             await drive.updatePathDetails(mountId, path.id, {

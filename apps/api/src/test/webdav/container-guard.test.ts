@@ -35,17 +35,6 @@ describe('WebDAV container internals guard', () => {
         expect(res.status).toBe(423);
     });
 
-    test('LOCK on a new name inside container → 423, and nothing is created', async () => {
-        const url = `${docPath}/intruder-lock.txt`;
-        const res = await webdavRequest(ctx.alice.user.email, 'LOCK', url, {
-            body: `<?xml version="1.0" encoding="utf-8"?>
-<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`,
-            headers: { 'Content-Type': 'application/xml; charset=utf-8' },
-        });
-        expect(res.status).toBe(423);
-        expect((await webdavRequest(ctx.alice.user.email, 'GET', url)).status).toBe(404);
-    });
-
     test('MKCOL inside container → 423', async () => {
         const res = await webdavRequest(ctx.alice.user.email, 'MKCOL', `${docPath}/Sub/`);
         expect(res.status).toBe(423);

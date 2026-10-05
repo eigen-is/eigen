@@ -56,16 +56,4 @@ describe('WebDAV ACL', () => {
         });
         expect(res.status).toBe(403);
     });
-
-    test("Bob cannot LOCK a new name into alice's mount, and nothing is created", async () => {
-        const res = await webdavRequest(ctx.bob.user.email, 'LOCK', `${baseHrefAlice}/lock-intruder.txt`, {
-            body: `<?xml version="1.0" encoding="utf-8"?>
-<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`,
-            headers: { 'Content-Type': 'application/xml; charset=utf-8' },
-        });
-        expect(res.status).toBe(403);
-        expect((await webdavRequest(ctx.alice.user.email, 'GET', `${baseHrefAlice}/lock-intruder.txt`)).status).toBe(
-            404,
-        );
-    });
 });

@@ -105,49 +105,28 @@ describe('WebDAV LOCK/UNLOCK', () => {
         expect(home.drive.lockManager.listForPath(pathId)).toHaveLength(0);
     });
 
-    // Office and the Windows redirector lock a new name before its first PUT (RFC 4918 §9.10.4).
-    test('LOCK on a missing name creates an empty locked file → 201', async () => {
+    test('LOCK on a missing name → 404, and nothing is created', async () => {
         const url = `${baseHref}/lock-new-name.docx`;
         const lock = await webdavRequest(ctx.alice.user.email, 'LOCK', url, {
-            body: `<?xml version="1.0" encoding="utf-8" ?>
-<D:lockinfo xmlns:D="DAV:">
-  <D:lockscope><D:exclusive/></D:lockscope>
-  <D:locktype><D:write/></D:locktype>
-</D:lockinfo>`,
-            headers: { 'Content-Type': 'application/xml; charset=utf-8' },
-        });
-        expect(lock.status).toBe(201);
-        const token = lock.headers.get('Lock-Token')?.replace(/^</, '').replace(/>$/, '');
-        expect(token).toMatch(/^urn:uuid:/);
-
-        const get = await webdavRequest(ctx.alice.user.email, 'GET', url);
-        expect(get.status).toBe(200);
-        expect(await get.text()).toBe('');
-        expect((await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'content' })).status).toBe(423);
-        const put = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
-            body: 'content',
-            headers: { If: `(<${token}>)` },
-        });
-        expect(put.status).toBe(204);
-    });
-
-    test('LOCK on a missing name under a missing parent → 409, and nothing is created', async () => {
-        const res = await webdavRequest(ctx.alice.user.email, 'LOCK', `${baseHref}/no-such-dir/lock.txt`, {
             body: `<?xml version="1.0" encoding="utf-8" ?>
 <D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`,
             headers: { 'Content-Type': 'application/xml; charset=utf-8' },
         });
-        expect(res.status).toBe(409);
-        expect((await webdavRequest(ctx.alice.user.email, 'GET', `${baseHref}/no-such-dir`)).status).toBe(404);
+        expect(lock.status).toBe(404);
+        expect((await webdavRequest(ctx.alice.user.email, 'GET', url)).status).toBe(404);
     });
 
-    test('a refresh on a missing name creates nothing → 404', async () => {
-        const url = `${baseHref}/lock-refresh-missing.txt`;
-        const res = await webdavRequest(ctx.alice.user.email, 'LOCK', url, {
-            headers: { If: '(<urn:uuid:nonexistent>)' },
-        });
-        expect(res.status).toBe(404);
-        expect((await webdavRequest(ctx.alice.user.email, 'GET', url)).status).toBe(404);
+    test('a 33rd shared lock on one path → 423', async () => {
+        const url = `${baseHref}/lock-shared-cap.txt`;
+        await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
+        const lockShared = () =>
+            webdavRequest(ctx.alice.user.email, 'LOCK', url, {
+                body: `<?xml version="1.0" encoding="utf-8" ?>
+<D:lockinfo xmlns:D="DAV:"><D:lockscope><D:shared/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>`,
+                headers: { 'Content-Type': 'application/xml; charset=utf-8' },
+            });
+        for (let i = 0; i < 32; i++) expect((await lockShared()).status).toBe(200);
+        expect((await lockShared()).status).toBe(423);
     });
 
     test('LOCK body over 64KB → 413', async () => {

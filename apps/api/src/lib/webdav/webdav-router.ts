@@ -8,6 +8,7 @@ import { decodeHref } from './path';
 import { handleResourcePropfind } from './propfind';
 import { handleProppatch } from './proppatch';
 import { handleDelete, handleGet, handleMkcol, handlePut } from './resource';
+import { MAX_XML_BODY_BYTES } from './xml';
 
 // Default-to-`infinity` matches RFC 4918: when Depth is omitted, it defaults to infinity.
 // handleResourcePropfind then returns 403 with propfind-finite-depth, which is correct.
@@ -29,8 +30,6 @@ function pathStrFromParams(star: string | undefined): string {
 // PROPFIND/PROPPATCH/LOCK bodies are short XML in any real client. Reject anything bigger up front (via the
 // shared bounded reader) so an authenticated user can't park megabytes of input on fast-xml-parser's
 // synchronous path; over-limit is a 413, WebDAV's long-standing behavior.
-const MAX_XML_BODY_BYTES = 65_536;
-
 async function readXmlBody(request: Request): Promise<string> {
     const body = await readBoundedBody(request, MAX_XML_BODY_BYTES);
     if (body === null) throw new ApiError(413, 'Payload Too Large');
