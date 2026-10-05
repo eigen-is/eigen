@@ -345,6 +345,51 @@ describe('Occurrence edits of an invited series', () => {
         expect(findOrFail(occurrences, (e) => e.occurrenceDate === target).title).toBe('Still Bob');
     });
 
+    // Eigen reads that override as inheriting the series' guests, so the mail an external guest gets says so too:
+    // an override with only the organizer on it reads as an occurrence the guest is not invited to.
+    test("an override naming no guests travels with the series' guests", async () => {
+        const CAROL = 'carol.guestless@example.org';
+        const attendees = [...guests(), { email: CAROL, name: 'Carol', status: 'pending', role: 'required' }];
+        const series = await createSeries('Weekly Occurrence Guestless Mail');
+        const put = (body: Record<string, unknown>) =>
+            authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${series.id}`,
+                { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+            );
+        expect((await put({ data: { attendees } })).status).toBe(200);
+        const target = (await untilBob(series.uid, (occ) => occ.length === 4))[1].occurrenceDate;
+
+        const mailer = await import('../../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear();
+        const mailTo = (subject: string) =>
+            eventually(
+                async () =>
+                    spy.mock.calls
+                        .map((call) => call[0])
+                        .find((m) => m.subject === subject && m.to.some((t) => t.address === CAROL)),
+                `the ${subject} to reach Carol`,
+            );
+        await editOccurrence(series.id, target, { title: 'Guestless Override', data: { attendees: [] } });
+        const occurrence = await mailTo('Updated invitation: Guestless Override');
+        expect((await put({ title: 'Guestless Series Renamed', data: { attendees } })).status).toBe(200);
+        const whole = await mailTo('Updated invitation: Guestless Series Renamed');
+        spy.mockRestore();
+
+        for (const mail of [occurrence, whole]) {
+            const vevents = mail
+                .icalEvent!.content.replace(/\r\n[ \t]/g, '')
+                .split('BEGIN:VEVENT')
+                .slice(1);
+            expect(vevents).toHaveLength(mail === whole ? 2 : 1);
+            for (const vevent of vevents) {
+                expect(vevent).toContain(`:mailto:${CAROL}\r\n`);
+                expect(vevent).toContain(`:mailto:${ctx.bob.user.email}\r\n`);
+            }
+        }
+    });
+
     // An external guest has no relay, so the series reaches them as one VCALENDAR holding the master, its EXDATEs and its overrides (RFC 5546).
     test('an external guest gets the series with its overrides and EXDATEs, on invite and on update', async () => {
         const CAROL = 'carol.series@example.org';

@@ -456,11 +456,18 @@ export function serializeEventForImip(
     series?: CalendarEvent,
     exceptions: CalendarEvent[] = [],
 ): string {
-    const vcalendar = series ? newVCalendar() : buildResource([event, ...exceptions]);
+    // An override that states no guests inherits the series' list; the stored bytes keep it as written, but a guest's client would read the bare override as an occurrence they are not invited to.
+    const withGuests = (override: CalendarEvent, master: CalendarEvent): CalendarEvent =>
+        override.data?.attendees
+            ? override
+            : { ...override, data: { ...override.data, attendees: master.data?.attendees } };
+    const vcalendar = series
+        ? newVCalendar()
+        : buildResource([event, ...exceptions.map((exception) => withGuests(exception, event))]);
     if (series) {
         // A RECURRENCE-ID names its instant in the SERIES' zone, which the occurrence's own may not be.
         for (const vtimezone of vtimezoneComponents([event, series])) vcalendar.addSubcomponent(vtimezone);
-        vcalendar.addSubcomponent(buildVEvent(event, { master: series }));
+        vcalendar.addSubcomponent(buildVEvent(withGuests(event, series), { master: series }));
     }
     vcalendar.addPropertyWithValue('method', method);
     for (const vevent of vcalendar.getAllSubcomponents('vevent')) shapeForImip(vevent, method);
