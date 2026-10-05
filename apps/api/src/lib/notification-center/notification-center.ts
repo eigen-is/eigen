@@ -115,6 +115,11 @@ export class NotificationCenter {
         this.home.broadcast(buildNotificationChangedEvent());
     }
 
+    markReadByTag(tag: string): void {
+        this.db.update(schema.notifications).set({ read: true }).where(eq(schema.notifications.tag, tag)).run();
+        this.home.broadcast(buildNotificationChangedEvent());
+    }
+
     markAllRead(): void {
         this.db.update(schema.notifications).set({ read: true }).where(eq(schema.notifications.read, false)).run();
         this.home.broadcast(buildNotificationChangedEvent());

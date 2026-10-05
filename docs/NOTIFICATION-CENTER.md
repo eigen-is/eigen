@@ -36,6 +36,8 @@ The tag also carries the ids the link is built from, so each producer's tag deci
 
 An unshare carries no tag, because the reader has lost access and there is nothing to link to. For the same reason `isClickableNotification` leaves both unshare types out, so their rows are not links.
 
+A producer can also read its own row: `Mail` calls `markReadByTag('mail:new')` once the inbox holds no unread mail, so the bell stops announcing mail the user has already read.
+
 ## A coalesced persist skips the toast, not the row
 
 With `coalesce: true`, `persist()` reads the row with the same tag first. If that row was refreshed less than 30 s ago, the upsert still runs but the broadcast is skipped, so the bell stays correct while a burst of events on one tag doesn't flood the screen with toasts. The window slides: a steady stream faster than 30 s stays silent for its whole length, and the bell catches up on its next refetch. File events, incoming mail and admin alerts set it; everything else toasts every time.

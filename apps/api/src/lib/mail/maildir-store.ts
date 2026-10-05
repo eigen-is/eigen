@@ -246,6 +246,10 @@ export class MaildirStore implements MailStore {
         return this.db.getEmail(messageId);
     }
 
+    unreadCount(mailbox: string): number {
+        return this.db.getEmailsCountUnread(mailbox);
+    }
+
     // null means "no summary row" only: a parse, read or DB fault propagates rather than masking as a missing message.
     async getMessage(messageId: string): Promise<Email | null> {
         const cached = this.db.getEmail(messageId);
