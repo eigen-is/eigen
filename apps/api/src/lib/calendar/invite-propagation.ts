@@ -231,6 +231,11 @@ export async function propagateCancellation(
         try {
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser || targetUser.role === 'guest') {
+                // A team Home has no address, and a CANCEL with an empty organizer names no one a client could match.
+                if (!organizerHome.user.email) {
+                    console.warn(`Skipped the iMIP cancel to ${attendee.email}: the organizer has no address`);
+                    continue;
+                }
                 const organizer = {
                     userId: organizerHome.user.id,
                     email: organizerHome.user.email,

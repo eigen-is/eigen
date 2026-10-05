@@ -7,9 +7,10 @@ import type {
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import { getServerConfig } from '../../lib/config/server-config';
+import * as mailer from '../../lib/core/mailer';
 import { getHome } from '../../lib/home';
 import * as relay from '../../lib/home/home-relay';
-import { addMember, assertJson, authedRequest, createTeam, findOrFail, getTestContext } from '../setup';
+import { addMember, assertJson, authedRequest, createTeam, eventually, findOrFail, getTestContext } from '../setup';
 
 describe('Team Calendar Share (push to existing members)', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -472,6 +473,33 @@ describe('Team calendar administration', () => {
 
         const updated = await teamHome.calendar.updateEvent(adminTeamCalId, event.id, { title: 'Member Renamed' });
         expect(updated.title).toBe('Member Renamed');
+    });
+
+    // A team Home has no address, and a CANCEL from it would name an empty organizer.
+    test('deleting a team event with an external guest mails no CANCEL from an empty address', async () => {
+        const teamHome = await getHome(teamOwnerId(adminTeamId));
+        const event = await teamHome.calendar.createEvent(adminTeamCalId, {
+            title: 'Team Offsite With A Guest',
+            startTime: new Date('2027-03-02T09:00:00Z'),
+            endTime: new Date('2027-03-02T10:00:00Z'),
+            allDay: false,
+            data: { attendees: [{ email: 'dana.team@example.org', status: 'pending', role: 'required' }] },
+        });
+
+        const sent = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        const warned = spyOn(console, 'warn').mockImplementation(() => {});
+        sent.mockClear();
+        warned.mockClear();
+        await teamHome.calendar.deleteEvent(adminTeamCalId, event.id);
+        await eventually(
+            async () => (sent.mock.calls.length || warned.mock.calls.length ? true : undefined),
+            'the cancellation to be handled',
+        );
+        const mails = sent.mock.calls.length;
+        sent.mockRestore();
+        warned.mockRestore();
+
+        expect(mails).toBe(0);
     });
 
     // The Admin app's team detail: the list is what it reads the default calendar and its shares off.
