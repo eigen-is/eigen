@@ -237,41 +237,40 @@ export async function stageManagedDbCopy(
     });
 }
 
-// Replaces the container's data.db with the file at `sourcePath` — a snapshot the
-// caller grabbed into the OS temp dir (downloadToTemp) before the pre-restore
-// snapshot could prune it. Self-locked so a concurrent snapshot can't read a
-// half-written data.db. Closes the live db with skipFinalSnapshot (we're
-// discarding it, and snapshotting here would re-enter this lock), then deletes and
-// recreates — a fresh inode, because overwriting the file in place hands SQLite a
-// stale vnode (SQLITE_IOERR_VNODE) when the db is reopened.
+// Replaces the bytes of the container's data.db with the file at `sourcePath`, a snapshot the caller
+// grabbed into tmp/ (downloadToTemp) before the pre-restore snapshot could prune it. The row stays, so a
+// backup's copy of metadata.db never sees the container without one. Self-locked so a concurrent snapshot
+// can't read a half-written data.db; the close and the write share one slot call, so no open slips between.
 export async function replaceContainerDataDb(mount: Mount, containerId: string, sourcePath: string): Promise<void> {
     return mount.withPathLock(containerId, async () => {
-        // data.db is normally present, but a prior restore that crashed between the
-        // delete and recreate below would leave it absent; tolerate that so simply
-        // re-running restore self-heals instead of 404-ing forever. The fallback
-        // mime matches provisionManagedDbs.
         const dataDb = await mount.getChildByName(containerId, 'data.db');
-        const tempId = randomUUID();
-        try {
-            // Stage + hash the replacement (streamed) before the delete, so a failed source read leaves
-            // data.db intact. Inside the try so a write/hash fault still runs cleanupTemp on the partial.
-            const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), Bun.file(sourcePath));
-            if (dataDb) {
-                await mount.closeDatabase(dataDb.id, { skipFinalSnapshot: true });
-                await mount.deletePath(dataDb.id);
-            }
-            const newId = await mount.createFileFromTemp(
-                containerId,
-                'data.db',
-                dataDb?.mimeType ?? 'application/x-sqlite3',
-                size,
-                hash,
-                tempId,
-            );
-            // createFileFromTemp fires no onSync — mark the container for re-extraction like a synced data.db would.
-            await markContainerContentDirty(mount, newId);
-        } finally {
-            await mount.cleanupTemp(tempId);
-        }
+        if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
+        const { size, hash } = await hashFile(sourcePath);
+        await withDocumentDb(mount, dataDb.id, async (slot) => {
+            // skipFinalSnapshot: the db is being discarded, and snapshotting would re-enter this lock.
+            const db = slot.db;
+            slot.db = null;
+            await db?.close({ skipFinalSnapshot: true });
+            // The next open would adopt a crash temp over the new bytes.
+            await mount.cleanupTemp(dataDb.id);
+            await mount.withTreeShared(async () => {
+                const storageKey = await mount.getStorageKey(dataDb.id);
+                if (mount.uploadQueue) {
+                    // Through the queue, superseding the close's staged copy, whose PUT could land after a direct one.
+                    const staging = mount.uploadQueue.newStagingPath();
+                    fs.copyFileSync(sourcePath, staging);
+                    mount.uploadQueue.enqueueStaged(storageKey, staging, true);
+                } else {
+                    // On local-key the object is the db file itself: overwriting it in place hands SQLite a stale
+                    // vnode (SQLITE_IOERR_VNODE) when the db is reopened, so it gets a fresh inode.
+                    if (!mount.needsTempCopy) await mount.storage.delete(storageKey);
+                    await mount.storage.write(storageKey, Bun.file(sourcePath));
+                }
+            });
+            await mount.db.update(paths).set({ size, hash, updatedAt: new Date() }).where(eq(paths.id, dataDb.id));
+            await mount.invalidateAncestorsOf(dataDb.id);
+        });
+        // No onSync fires: mark the container for re-extraction like a synced data.db would.
+        await markContainerContentDirty(mount, dataDb.id);
     });
 }

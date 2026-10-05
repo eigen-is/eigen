@@ -472,7 +472,7 @@ describe('a capture of a local mount shares the event loop', () => {
 });
 
 describe('a chat whose version is restored during the backup', () => {
-    // A chat with v1 in its saved version and v2 after it, and the call that restores the version.
+    // A chat with v1 in its saved version and v2 after it, the version, and the call that restores it.
     async function seedChat(user: TestUser) {
         const t = user.sessionToken;
         const { root } = await seed(user);
@@ -486,7 +486,7 @@ describe('a chat whose version is restored during the backup', () => {
             authedRequest(t, `/drive/${user.id}/${M}/file/${chat.id}/versions/${saved.name}/restore`, {
                 method: 'POST',
             });
-        return { chat, restoreVersion };
+        return { chat, saved, restoreVersion };
     }
 
     for (const storageType of ['local-fullnames', 'local-id'] as const) {
@@ -503,13 +503,14 @@ describe('a chat whose version is restored during the backup', () => {
             expect(messages.map((message) => message.content)).toContain('v1');
         }, 120_000);
 
-        // Fails until the ROADMAP row "A chat version restored at the instant of a backup's database copy" is done.
-        test.failing(`reopens with its messages when its restore straddles the metadata.db copy, on ${storageType}`, async () => {
+        test(`reopens with its messages when its restore straddles the metadata.db copy, on ${storageType}`, async () => {
             const user = await raceUser(storageType);
             const t = user.sessionToken;
-            const { chat, restoreVersion } = await seedChat(user);
-            // The backup starts after the restore deleted data.db and before it creates the new one, which waits for
-            // the capture's first plain read: metadata.db is staged by then, with neither row.
+            const { chat, saved, restoreVersion } = await seedChat(user);
+            const mount = await defaultMount(user);
+            const version = Buffer.from((await mount.readBytes(saved.id))!);
+            // The backup starts as the restore writes the version's bytes as data.db, which waits for the capture's
+            // first plain read: metadata.db is staged by then.
             const firstRead = Promise.withResolvers<void>();
             let job: ReturnType<typeof backupJob> | undefined;
             const readKey = Mount.prototype.readKey;
@@ -518,25 +519,21 @@ describe('a chat whose version is restored during the backup', () => {
                 if (job) firstRead.resolve();
                 return readKey.call(this, key);
             });
-            const createFileFromTemp = Mount.prototype.createFileFromTemp;
-            const create = spyOn(Mount.prototype, 'createFileFromTemp').mockImplementation(async function (
-                this: Mount,
-                parentId: string,
-                name: string,
-                ...rest: [string, number, string, string]
-            ) {
-                if (parentId === chat.id && name === 'data.db' && !job) {
+            const write = mount.storage.write.bind(mount.storage);
+            const writeSpy = spyOn(mount.storage, 'write').mockImplementation(async (key, data) => {
+                if (!job && data instanceof Blob && version.equals(Buffer.from(await data.arrayBuffer()))) {
                     job = backupJob(user);
                     await firstRead.promise;
                 }
-                return createFileFromTemp.call(this, parentId, name, ...rest);
+                return write(key, data);
             });
             try {
                 expect((await restoreVersion()).status).toBe(200);
             } finally {
-                create.mockRestore();
+                writeSpy.mockRestore();
                 read.mockRestore();
             }
+            expect(job).toBeDefined();
             const done = await job;
             expect(done?.state).toBe('done');
             await restoreHome(done!.artifact!, user.id, `race-${Date.now()}`);

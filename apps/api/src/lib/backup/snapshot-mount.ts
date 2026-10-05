@@ -134,22 +134,13 @@ export async function snapshotMountData(
             fs.mkdirSync(path.dirname(destPath), { recursive: true });
             // A blocking lock: a raw read of the live main file would drop every commit still in the WAL. False is
             // no bytes anywhere. A gone row is never read: on a by-name mount its key resolves to the data/ folder.
-            // A chat's version restore recreates its data.db under a new id: the archived row holds those bytes, as
-            // it holds an overwrite's.
-            let sourceId = row.id;
             const source = await mount
-                .withPathLock(container.id, async () => {
-                    const sourceRow =
-                        (await mount.getPath(row.id)) ??
-                        (row.parentId === container.id ? await mount.getChildByName(container.id, row.name) : null);
-                    if (!sourceRow) return null;
-                    sourceId = sourceRow.id;
-                    return stageManagedDbCopy(mount, sourceId, destPath, 'open-handle-first');
-                })
+                .withPathLock(container.id, async () =>
+                    (await isGone()) ? null : stageManagedDbCopy(mount, row.id, destPath, 'open-handle-first'),
+                )
                 .catch(async (error: unknown) => {
                     // Empty trash takes no path lock, so a row can still go between the check and the read.
-                    if (await mount.getPath(sourceId))
-                        rethrowStorageFailure(mount.id, await mount.getStorageKey(sourceId), error);
+                    if (!(await isGone())) rethrowStorageFailure(mount.id, await mount.getStorageKey(row.id), error);
                     fs.rmSync(destPath, { force: true });
                     return null;
                 });
@@ -160,8 +151,8 @@ export async function snapshotMountData(
                 if (source === 'stored') stored++;
                 databases++;
             } else {
-                const live = await mount.getPath(sourceId);
-                if (live?.size) recordLost(live.size, await mount.getStorageKey(sourceId));
+                const live = await mount.getPath(row.id);
+                if (live?.size) recordLost(live.size, await mount.getStorageKey(row.id));
             }
         } else {
             // Path lock, then shared: an overwrite rewrites the file in place, so it and the copy wait for each other,

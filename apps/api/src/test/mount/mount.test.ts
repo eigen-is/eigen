@@ -183,28 +183,17 @@ describe('replaceContainerDataDb', () => {
         rootId = (await mount.getRootFolder())!.id;
     });
 
-    test('recreates data.db even when it is missing (crash-recovery self-heal)', async () => {
+    test('replaces the bytes of data.db under the same row', async () => {
         const container = await mount.createFolder(rootId, 'replace-container');
-        await mount.createFile(container, 'data.db', 'application/x-sqlite3', 3, Buffer.from('old'));
+        const dataDbId = await mount.createFile(container, 'data.db', 'application/x-sqlite3', 3, Buffer.from('old'));
         const sourcePath = join(TEST_DIR, 'replace-source.db');
         await Bun.write(sourcePath, 'restored-bytes');
 
-        // Normal path: data.db present → replaced with the source content.
         await mount.replaceContainerDataDb(container, sourcePath);
-        let dataDb = await mount.getChildByName(container, 'data.db');
-        expect(dataDb).not.toBeNull();
-        expect(await (await mount.readFile(dataDb!.id))!.text()).toBe('restored-bytes');
-
-        // Simulate a restore that crashed after deleting data.db but before recreating it.
-        await mount.deletePath(dataDb!.id);
-        expect(await mount.getChildByName(container, 'data.db')).toBeNull();
-
-        // Re-running restore must self-heal (recreate data.db), not throw a 404.
-        await mount.replaceContainerDataDb(container, sourcePath);
-        dataDb = await mount.getChildByName(container, 'data.db');
-        expect(dataDb).not.toBeNull();
-        expect(dataDb!.mimeType).toBe('application/x-sqlite3');
-        expect(await (await mount.readFile(dataDb!.id))!.text()).toBe('restored-bytes');
+        const dataDb = await mount.getChildByName(container, 'data.db');
+        expect(dataDb?.id).toBe(dataDbId);
+        expect(dataDb?.size).toBe('restored-bytes'.length);
+        expect(await (await mount.readFile(dataDbId))!.text()).toBe('restored-bytes');
     });
 });
 
