@@ -3,6 +3,41 @@
 All notable user-visible changes to Eigen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [Unreleased]
+
+Small fixes across the apps, from calendar invitations to backups, and limits on WebDAV, sharing and contact labels. The update migrates each user's mail index, `mail.db`, which an older version refuses to open. To go back past this release, restore the backup the update made: `./eigen rollback` right after it, later `./eigen restore` with the `server-pre-update-` backup that `./eigen rollback --help` lists.
+
+### Changed
+
+- **Notifications** — the bell keeps every unread notification, not only those among the newest 50. The new-mail notification goes read once the inbox has no unread mail, read, moved or deleted in Eigen or in a mail client
+- **Mail** — a reply marks the message it answers as answered, also when it is sent later from Drafts. Mail clients show the flag
+- **Calendar** — removing every guest from one occurrence of a series keeps the series' guests, and the event dialog says so. To leave them out of one occurrence, remove that occurrence
+- **Contacts** — when a contact changes elsewhere while you edit it, the form keeps your edits and offers **Reload**. A label name takes at most 100 characters
+- **Limits** — WebDAV stores at most 64 KB of properties and 32 locks per file, and a chunked WebDAV upload stops at the max upload size and at what is left of the drive. One share request adds at most 100 people
+- **Server settings** — **Max Upload** goes up to 1023 MB, and a **Trash Retention** of 0 keeps deleted files until the Trash is emptied
+- **Storage quotas** — a drive has one limit, whoever uploads into it: its owner's team overrides raise it, never the uploader's. A team's own drive keeps its own limit
+- **Admin** — the Guests page shows the Users table, with each guest's name, email and when they were last active
+- **`./eigen stop`** — waits for a running server backup, and its upload to the backup bucket, to end first
+- **`./eigen rollback`** — its `--help`, and its refusal when there is nothing to roll back, list the kept pre-update backups that `./eigen restore` puts back
+- **Landing page** — names the apps, vector drawings included, and says they work with any IMAP, CalDAV, CardDAV or WebDAV app
+
+### Fixed
+
+- **Calendar invitations** — an occurrence without a guest list of its own goes out with the series' guests. Cancelling a moved occurrence mails its moved time, and deleting one in Calendar cancels it for its guests. A cancellation lists the guests it goes to, and putting a cancelled occurrence back sends no cancellation
+- **Calendar editing** — someone the owner shared a calendar with for editing can edit the owner's own events, and an event a member organized on a team calendar stays editable
+- **Dialogs** — Escape in a suggestion list inside a dialog, such as contact suggestions or a chat @-mention, closes the list and leaves the dialog open
+- **Lists** — dragging a row that is not selected drags that row, not the selection, and Space and Enter after Select All act on the top selected row, as Delete does
+- **Print** — ⌘P in an app with nothing to print prints the page instead of a blank sheet
+- **Previews** — an image no longer flashes a checkerboard between its thumbnail and the full image, an `.eml` quick look keeps the message's layout, and an `.ics` with too many events is refused before it can stall the preview
+- **Mail** — a row in Sent names the recipient instead of you, and an attachment no longer fails to load right after a mail client changes its message's flags
+- **Backups** — a restore gives each mail message its own date again, so mail clients show when it arrived. An item whose name a file cannot have is left out with a warning, with what is inside it, instead of failing the backup. A file overwritten during a backup is archived as it was copied, and an older archive with such a file verifies with a warning and restores. Deleting an archive while a backup, verify or restore of the same user or team runs is refused
+- **`./eigen restart`** — writes the launcher and Compose files of the running version after an update or restore stopped while writing them, and `./eigen status` points at it
+- **WebDAV** — a PROPPATCH with a refused change saves nothing
+- **CalDAV** — a calendar query for one event's UID answers that event, not the whole calendar
+- **Drive** — a guest who opens a file they cannot see is told to ask the owner instead of offered a request that fails, and a repeated access request mails the owner at most once an hour
+- **Version history** — a spreadsheet version saved in an older format is refused instead of locking every open editor, and edits recovered after an unclean shutdown get a version
+- **Small fixes** — chat pages back past messages sent in the same second, an imported vCard with your address no longer becomes your own card, a malformed stickies column or card no longer breaks the board, the Docs side panels leave the page's scrollbar visible, and with mail turned off a user's kept mail still counts toward their storage
+
 ## [0.3.2] - 2026-10-05
 
 Fixes from a restore drill, and one inset across the apps. An install still on 0.3.0 updates to 0.3.1 first: `./eigen update 0.3.1`, then `./eigen update`.
