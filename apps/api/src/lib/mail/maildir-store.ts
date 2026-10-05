@@ -10,6 +10,7 @@ import {
 import type { Attachment, DraftAttachmentUpload, Email, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
+import { isMailAppEnabled } from '../config/env';
 import { ApiError, isEnoent, isSafePathSegment, LocalFilesystem, PATHS } from '../core';
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes, parseEmlForReader } from './mail-parse';
@@ -106,6 +107,12 @@ export class MaildirStore implements MailStore {
 
     async init(events: MailStoreEvents): Promise<boolean> {
         this.events = events;
+        // With mail off the store builds no Maildir and opens no index, yet the mail kept on disk still counts.
+        if (!isMailAppEnabled()) {
+            this.indexBytes = readMailIndexSize(this.home.fs.absolutePath(PATHS.MAIL.DB));
+            await this.recountStaged();
+            return false;
+        }
         const isNew = !(await this.exists());
         if (isNew) {
             await this.createStandardMailboxes();
