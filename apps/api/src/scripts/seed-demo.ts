@@ -22,7 +22,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
-import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import { prosemirrorJSONToYDoc, yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { VCARD_CONTENT_TYPE } from '@workspace/lib/constants/contact';
@@ -229,7 +229,7 @@ async function main(): Promise<void> {
     const { resolveContacts } = await import('../lib/contacts/get-contacts');
     const { drainACLFanOuts } = await import('../lib/drive/acl-propagation');
     const { convertToDocument } = await import('../lib/import/import-document');
-    const { writeEigendocToYjs } = await import('../lib/document/doc');
+    const { writeEigendocUpdateToYjs } = await import('../lib/document/doc');
     const { docSchema } = await import('../lib/import/doc/from-docx');
     const { pushTeamAvatar, sendToHome } = await import('../lib/home/home-relay');
     const { generateImagePreview } = await import('../lib/shared/thumbnails');
@@ -520,7 +520,9 @@ async function main(): Promise<void> {
         }
         // One fragment rebuild with the anchored marks; cards land in the comments Y.Map the
         // panel renders from. Both persist through the live collab doc.
-        writeEigendocToYjs(collab.doc, docJson, docSchema);
+        const marked = prosemirrorJSONToYDoc(docSchema, docJson, 'default');
+        writeEigendocUpdateToYjs(collab.doc, Y.encodeStateAsUpdate(marked));
+        marked.destroy();
         collab.doc.transact(() => {
             for (const { card } of cards) writeCommentCard(collab.doc, card);
         });

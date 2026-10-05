@@ -4,9 +4,10 @@ import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
-import { readEigendocFromDoc, writeEigendocToYjs, writeEigendocUpdateToYjs } from '../../lib/document/doc';
+import { readEigendocFromDoc, writeEigendocUpdateToYjs } from '../../lib/document/doc';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
 import { getHome } from '../../lib/home/get-home';
+import { seedEigendoc } from '../fixtures/golden-documents';
 import { readPersistedDoc } from '../fixtures/transform-results';
 import { driveGet, drivePost, getTestContext } from '../setup';
 
@@ -25,7 +26,7 @@ describe('document/doc', () => {
         rootId = root.id;
     });
 
-    test('round-trip: writeEigendocToYjs then a persisted read returns same shape', async () => {
+    test('round-trip: a committed eigendoc reads back the same shape once persisted', async () => {
         const docPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -44,7 +45,7 @@ describe('document/doc', () => {
             ],
         };
 
-        writeEigendocToYjs(collab.doc, json, schema);
+        seedEigendoc(collab.doc, json);
 
         const { mount, path } = await home.drive.resolveFile(mountId, docPath.id);
         const persisted = await readPersistedDoc(mount, path);
@@ -53,33 +54,12 @@ describe('document/doc', () => {
         persisted.destroy();
     });
 
-    test('writeEigendocUpdateToYjs commits a prepared update to the same end state', () => {
-        // The import commit path: the Worker converts ProseMirror JSON to a Yjs
-        // update, the main thread only applies it.
-        const json = {
-            type: 'doc',
-            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'From the Worker.' }] }],
-        };
-        const viaJson = new Y.Doc();
-        writeEigendocToYjs(viaJson, json, schema);
-
-        const tempDoc = prosemirrorJSONToYDoc(schema, json, 'default');
-        const viaUpdate = new Y.Doc();
-        writeEigendocUpdateToYjs(viaUpdate, Y.encodeStateAsUpdate(tempDoc));
-        tempDoc.destroy();
-
-        expect(readEigendocFromDoc(viaUpdate)).toEqual(readEigendocFromDoc(viaJson));
-        viaJson.destroy();
-        viaUpdate.destroy();
-    });
-
     test('writeEigendocUpdateToYjs replaces existing content instead of appending', () => {
         const doc = new Y.Doc();
-        writeEigendocToYjs(
-            doc,
-            { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'PRIOR' }] }] },
-            schema,
-        );
+        seedEigendoc(doc, {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'PRIOR' }] }],
+        });
 
         const tempDoc = prosemirrorJSONToYDoc(
             schema,

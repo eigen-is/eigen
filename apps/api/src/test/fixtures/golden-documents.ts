@@ -1,5 +1,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { getSchema } from '@tiptap/core';
+import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
@@ -22,7 +23,7 @@ import {
 } from '@workspace/lib/vector';
 import { common, createLowlight } from 'lowlight';
 import * as Y from 'yjs';
-import { writeEigendocToYjs } from '../../lib/document/doc';
+import { writeEigendocUpdateToYjs } from '../../lib/document/doc';
 import type { Mount } from '../../lib/mount';
 
 // Deterministic eigendoc + eigenslides fixtures for the document-transform work
@@ -209,7 +210,9 @@ export function buildHeavyDocJson(sections = 300): JSONContent {
 }
 
 export function seedEigendoc(doc: Y.Doc, json: JSONContent): void {
-    writeEigendocToYjs(doc, json, docSchema);
+    const tempDoc = prosemirrorJSONToYDoc(docSchema, json, 'default');
+    writeEigendocUpdateToYjs(doc, Y.encodeStateAsUpdate(tempDoc));
+    tempDoc.destroy();
 }
 
 // A deck is a canvas of frames: one frame per slide, its elements storing frame-relative
