@@ -63,6 +63,29 @@ describe('WebDAV PROPPATCH', () => {
         expect(await res.text()).toContain('HTTP/1.1 403 Forbidden');
     });
 
+    test('PROPPATCH with one refused op saves nothing: 403 for it, 424 for the rest', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-atomic.txt`, { body: 'd' });
+        const body = `<?xml version="1.0"?>
+<D:propertyupdate xmlns:D="DAV:" xmlns:Z="urn:eigen-test">
+  <D:set><D:prop><Z:Tag>kept-out</Z:Tag></D:prop></D:set>
+  <D:set><D:prop><D:getetag>"forged"</D:getetag></D:prop></D:set>
+</D:propertyupdate>`;
+        const res = await webdavRequest(ctx.alice.user.email, 'PROPPATCH', `${baseHref}/proppatch-atomic.txt`, {
+            body,
+            headers: { 'Content-Type': 'application/xml; charset=utf-8' },
+        });
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect(xml).toMatch(/<X:Tag [^>]*\/>\s*<\/D:prop>\s*<D:status>HTTP\/1.1 424 Failed Dependency/);
+        expect(xml).toMatch(/<D:getetag\/>\s*<\/D:prop>\s*<D:status>HTTP\/1.1 403 Forbidden/);
+        expect(xml).not.toContain('200 OK');
+
+        const find = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `${baseHref}/proppatch-atomic.txt`, {
+            headers: { Depth: '0' },
+        });
+        expect(await find.text()).not.toContain('kept-out');
+    });
+
     test('PROPPATCH body over 64KB → 413', async () => {
         await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-big.txt`, { body: 'x' });
         const body = `<?xml version="1.0"?>

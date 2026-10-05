@@ -5,6 +5,8 @@ import { getSharedDrive } from '../drive/get-drive';
 import type { Lock, LockManager, LockScope } from '../drive/lock-manager';
 import { LOCK_DEFAULT_TTL_MS, parseIfHeaderTokens } from '../drive/lock-manager';
 import type { User } from '../user';
+import { enclosingDocumentContainer } from './container-guard';
+import { splitParentAndName } from './path';
 import { lockdiscoveryProp } from './xml';
 
 // Cap at 24h. RFC 4918 §10.7 lets the server ignore the requested timeout, and
@@ -48,11 +50,11 @@ function extractLockScope(body: string): LockScope {
     return /<(?:[A-Za-z][\w]*:)?shared\s*\/?>/i.test(body) ? 'shared' : 'exclusive';
 }
 
-function buildLockResponse(lock: Lock): Response {
+function buildLockResponse(lock: Lock, status = 200): Response {
     const body = `<?xml version="1.0" encoding="utf-8"?>
 <D:prop xmlns:D="DAV:">${lockdiscoveryProp([lock])}</D:prop>`;
     return new Response(body, {
-        status: 200,
+        status,
         headers: {
             'Content-Type': XML_CONTENT_TYPE,
             'Lock-Token': `<${lock.token}>`,
@@ -72,14 +74,14 @@ export async function handleLock(args: {
 }): Promise<Response> {
     const { user, ownerId, mountId, pathStr, body, timeoutHeader, ifHeader, depthHeader } = args;
     const drive = await getSharedDrive(ownerId, user);
-    const path = await drive.resolvePath(mountId, pathStr);
-    if (!path) throw new ApiError(404, 'Not found');
+    const existing = await drive.resolvePath(mountId, pathStr);
 
     const ttlMs = parseTimeoutHeader(timeoutHeader);
     const depth: Lock['depth'] = depthHeader === '0' ? 0 : 'infinity';
 
     // RFC 4918 §9.10.2: empty body + If header refreshes an existing lock token.
     if (!body.trim() && ifHeader) {
+        if (!existing) throw new ApiError(404, 'Not found');
         for (const token of parseIfHeaderTokens(ifHeader)) {
             const refreshed = drive.lockManager.refresh(token, ttlMs);
             if (refreshed) return buildLockResponse(refreshed);
@@ -87,10 +89,26 @@ export async function handleLock(args: {
         throw new ApiError(412, 'No matching lock to refresh');
     }
 
-    // resolvePath only checks read on SharedDrive; a fresh lock implies pending
-    // writes, so reject read-only collaborators before allocating a token.
-    if (!(await drive.canWrite(mountId, path.id, user))) {
-        throw new ApiError(403, 'No write permission');
+    let path = existing;
+    if (path) {
+        // resolvePath only checks read on SharedDrive; a fresh lock implies pending
+        // writes, so reject read-only collaborators before allocating a token.
+        if (!(await drive.canWrite(mountId, path.id, user))) {
+            throw new ApiError(403, 'No write permission');
+        }
+    } else {
+        // RFC 4918 §9.10.4: a LOCK on an unmapped name creates an empty file, as a PUT would, so Office
+        // and the Windows redirector can lock a new name before its first PUT.
+        const { parentStr, name } = splitParentAndName(pathStr);
+        const parent = await drive.resolvePath(mountId, parentStr);
+        if (!parent) throw new ApiError(409, 'Parent not found');
+        const parentCrumb = await drive.breadCrumb(mountId, parent.id);
+        if (enclosingDocumentContainer(parentCrumb, { includeSelf: true })) {
+            throw new ApiError(423, 'Container internals are read-only');
+        }
+        assertWritable(drive.lockManager, parentCrumb, ifHeader, user.id);
+        const mimeType = Bun.file(name).type || 'application/octet-stream';
+        path = await drive.createFileFromData(mountId, parent.id, name, mimeType, Buffer.alloc(0), user);
     }
 
     const ownerHref = extractLockOwner(body);
@@ -107,7 +125,7 @@ export async function handleLock(args: {
         ifHeader,
         ancestorPathIds,
     });
-    return buildLockResponse(lock);
+    return buildLockResponse(lock, existing ? 200 : 201);
 }
 
 export async function handleUnlock(args: {

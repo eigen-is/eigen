@@ -149,40 +149,46 @@ export async function handleProppatch(args: {
     }
     assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
 
+    const ops = extractPropOps(body);
+    const isProtected = (op: PropOp) => op.namespace === 'DAV:' && PROTECTED_PROPS.has(op.name);
+    // RFC 4918 §9.2: all or nothing, so one refused op saves none and fails the rest with 424.
+    const refused = ops.some(isProtected);
+
     // Apply all ops in memory first, then write once. RFC 4918 §9.2 requires
     // ops to be processed in document order; replaceMatching preserves the
     // existing element's slot when we hit a set on an existing prop.
-    const ops = extractPropOps(body);
-    let webdavProps = path.details?.webdavProps ? [...path.details.webdavProps] : [];
-    let mutated = false;
-    const propstats: string[] = [];
-    for (const op of ops) {
+    if (!refused) {
+        let webdavProps = path.details?.webdavProps ? [...path.details.webdavProps] : [];
+        let mutated = false;
+        for (const op of ops) {
+            const idx = webdavProps.findIndex((p) => p.ns === op.namespace && p.name === op.name);
+            if (op.op === 'set') {
+                const next = { ns: op.namespace, name: op.name, value: op.value };
+                if (idx === -1) webdavProps.push(next);
+                else webdavProps = webdavProps.map((p, i) => (i === idx ? next : p));
+                mutated = true;
+            } else if (idx !== -1) {
+                webdavProps = webdavProps.filter((_, i) => i !== idx);
+                mutated = true;
+            }
+        }
+        if (mutated) {
+            await drive.updatePathDetails(mountId, path.id, {
+                ...(path.details ?? {}),
+                webdavProps: webdavProps.length === 0 ? undefined : webdavProps,
+            });
+        }
+    }
+
+    const propstats = ops.map((op) => {
         const safeName = escapeXml(op.name);
         const propEl =
             op.namespace === 'DAV:' ? `<D:${safeName}/>` : `<X:${safeName} xmlns:X="${escapeXml(op.namespace)}"/>`;
-        if (op.namespace === 'DAV:' && PROTECTED_PROPS.has(op.name)) {
-            propstats.push(propstatStatus(403, 'Forbidden', [propEl]));
-            continue;
-        }
-        const idx = webdavProps.findIndex((p) => p.ns === op.namespace && p.name === op.name);
-        if (op.op === 'set') {
-            const next = { ns: op.namespace, name: op.name, value: op.value };
-            if (idx === -1) webdavProps.push(next);
-            else webdavProps = webdavProps.map((p, i) => (i === idx ? next : p));
-            mutated = true;
-        } else if (idx !== -1) {
-            webdavProps = webdavProps.filter((_, i) => i !== idx);
-            mutated = true;
-        }
-        propstats.push(propstatStatus(200, 'OK', [propEl]));
-    }
-    if (mutated) {
-        await drive.updatePathDetails(mountId, path.id, {
-            ...(path.details ?? {}),
-            webdavProps: webdavProps.length === 0 ? undefined : webdavProps,
-        });
-    }
-
+        if (!refused) return propstatStatus(200, 'OK', [propEl]);
+        return isProtected(op)
+            ? propstatStatus(403, 'Forbidden', [propEl])
+            : propstatStatus(424, 'Failed Dependency', [propEl]);
+    });
     const href = `/webdav/${encodeHref(ownerId)}/${encodeHref(mountId)}${encodeHref(pathStr)}`;
     return buildXmlResponse(multistatus([response(href, propstats)]));
 }
