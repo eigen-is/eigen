@@ -6,7 +6,7 @@ import { normalizeResourceUri } from '../core';
 import { MULTIGET_HREF_LIMIT, resolveMultigetHrefs } from '../dav/href';
 import { type DataBudget, multigetRows, REPORT_DATA_BUDGET_BYTES, resourceDataRow } from '../dav/report-row';
 import { handleSyncCollection } from '../dav/sync-collection';
-import { multistatusResponse, notFoundRow } from '../dav/xml';
+import { multistatusResponse, notFoundRow, removedRow } from '../dav/xml';
 import { calendarHref, eventHref } from './discovery';
 import { calendarDataProp } from './xml-builder';
 import { parseReport, type ReportRequest } from './xml-parser';
@@ -40,8 +40,8 @@ export async function handleReport(
                 changedSince: (ctag) => calendar.getChangedResourcesSince(calendarId, ctag),
                 deletedSince: (ctag) => calendar.getDeletedResourcesSince(calendarId, ctag),
                 href: (uri) => eventHref(ownerId, calendarId, uri),
-                row: (resource, vanished) =>
-                    resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget, vanished),
+                row: (resource) =>
+                    resourceRow(calendar, calendarId, ownerId, resource, report.wantsData, budget, removedRow),
             });
     }
 }
